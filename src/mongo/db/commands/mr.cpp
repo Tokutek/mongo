@@ -1352,7 +1352,8 @@ namespace mongo {
                 BSONObj shardCounts = cmdObj["shardCounts"].embeddedObjectUserCheck();
                 BSONObj counts = cmdObj["counts"].embeddedObjectUserCheck();
 
-                ProgressMeterHolder pm( op->setMessage( "m/r: merge sort and reduce" ) );
+                ProgressMeterHolder pm(op->setMessage("m/r: merge sort and reduce",
+                                                      "M/R Merge Sort and Reduce Progress"));
                 set<ServerAndQuery> servers;
                 vector< auto_ptr<DBClientCursor> > shardCursors;
 

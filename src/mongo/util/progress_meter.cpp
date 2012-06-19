@@ -74,7 +74,7 @@ namespace mongo {
         if ( ! _active )
             return "";
         stringstream buf;
-        buf << _done << "/" << _total << " " << (_done*100)/_total << "%";
+        buf << _name << ": " << _done << '/' << _total << ' ' << (_done*100)/_total << '%';
         
         if ( ! _units.empty() ) {
             buf << "\t(" << _units << ")" << endl;

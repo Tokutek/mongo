@@ -127,7 +127,8 @@ public:
         FilePtr f (fopen(outputFile.string().c_str(), "wb"));
         uassert(10262, errnoWithPrefix("couldn't open file"), f);
 
-        ProgressMeter m( conn( true ).count( coll.c_str() , BSONObj() , QueryOption_SlaveOk ) );
+        ProgressMeter m(conn(true).count(coll.c_str(), BSONObj(), QueryOption_SlaveOk));
+        m.setName("Collection File Writing Progress");
         m.setUnits("objects");
 
         doCollection(coll, f, &m);
