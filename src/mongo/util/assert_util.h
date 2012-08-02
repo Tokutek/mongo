@@ -228,9 +228,9 @@ namespace mongo {
     };
 
     /* throws a uassertion with an appropriate msg */
-    MONGO_COMPILER_NORETURN void streamNotGood( int code , std::string msg , std::ios& myios );
+    MONGO_COMPILER_NORETURN void streamNotGood( int code, const std::string& msg, std::ios& myios );
 
-    inline void assertStreamGood(unsigned msgid, std::string msg, std::ios& myios) {
+    inline void assertStreamGood(unsigned msgid, const std::string& msg, std::ios& myios) {
         if( !myios.good() ) streamNotGood(msgid, msg, myios);
     }
 

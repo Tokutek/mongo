@@ -96,7 +96,7 @@ namespace mongo {
                                const shared_ptr<const ParsedQuery> &parsedQuery,
                                const BSONObj &startKey,
                                const BSONObj &endKey,
-                               string special ) {
+                               const std::string& special ) {
         auto_ptr<QueryPlan> ret( new QueryPlan( d, idxNo, frsp, originalQuery, order, parsedQuery,
                                                special ) );
         ret->init( originalFrsp, startKey, endKey );
@@ -109,7 +109,7 @@ namespace mongo {
                          const BSONObj &originalQuery,
                          const BSONObj &order,
                          const shared_ptr<const ParsedQuery> &parsedQuery,
-                         string special ) :
+                         const std::string& special ) :
         _d(d),
         _idxNo(idxNo),
         _frs( frsp.frsForIndex( _d, _idxNo ) ),

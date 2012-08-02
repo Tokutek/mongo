@@ -281,7 +281,7 @@ namespace mongo {
                   _nextMigrateLogId(0),
                   _snapshotTaken(false) {}
 
-        void start( string ns ,
+        void start( const std::string& ns ,
                     const BSONObj& min ,
                     const BSONObj& max ,
                     const BSONObj& shardKeyPattern ) {
@@ -659,7 +659,7 @@ namespace mongo {
     const char MigrateFromStatus::MIGRATE_LOG_REF_NS[] = "local.migratelogref.sh";
 
     struct MigrateStatusHolder {
-        MigrateStatusHolder( string ns ,
+        MigrateStatusHolder( const std::string& ns ,
                              const BSONObj& min ,
                              const BSONObj& max ,
                              const BSONObj& shardKeyPattern ) {

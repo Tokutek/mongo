@@ -84,7 +84,7 @@ namespace mongo {
     /* todo : progress metering to sethbmsg. */
     static bool clone(
         const char *master, 
-        string db,
+        const std::string& db,
         shared_ptr<DBClientConnection> conn,
         bool syncIndexes
         ) 

@@ -196,7 +196,7 @@ namespace mongo {
          */
         struct TagSubgroup : boost::noncopyable {
             ~TagSubgroup(); // never called; not defined
-            TagSubgroup(string nm) : name(nm) { }
+            TagSubgroup(const std::string& nm) : name(nm) { }
             const string name;
             GTID last;
             vector<TagClause*> clauses;

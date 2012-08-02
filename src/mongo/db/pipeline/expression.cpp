@@ -526,7 +526,7 @@ namespace mongo {
     }
 
     void ExpressionCoerceToBool::addToBsonObj(
-            BSONObjBuilder *pBuilder, string fieldName,
+            BSONObjBuilder *pBuilder, const std::string& fieldName,
             bool requireExpression) const {
         // Serializing as an $and expression which will become a CoerceToBool
         BSONObjBuilder sub (pBuilder->subobjStart(fieldName));
@@ -787,7 +787,7 @@ namespace mongo {
     }
 
     void ExpressionConstant::addToBsonObj(
-        BSONObjBuilder *pBuilder, string fieldName,
+        BSONObjBuilder *pBuilder, const std::string& fieldName,
         bool requireExpression) const {
         /*
           If we don't need an expression, but can use a naked scalar,
@@ -1264,7 +1264,7 @@ namespace mongo {
     }
 
     void ExpressionObject::addToBsonObj(
-        BSONObjBuilder *pBuilder, string fieldName,
+        BSONObjBuilder *pBuilder, const std::string& fieldName,
         bool requireExpression) const {
 
         BSONObjBuilder objBuilder (pBuilder->subobjStart(fieldName));
@@ -1377,7 +1377,7 @@ namespace mongo {
     }
 
     void ExpressionFieldPath::addToBsonObj(
-        BSONObjBuilder *pBuilder, string fieldName,
+        BSONObjBuilder *pBuilder, const std::string& fieldName,
         bool requireExpression) const {
         pBuilder->append(fieldName, fieldPath.getPath(true));
     }
@@ -1496,7 +1496,7 @@ namespace mongo {
     }
 
     void ExpressionFieldRange::addToBsonObj(
-        BSONObjBuilder *pBuilder, string fieldName,
+        BSONObjBuilder *pBuilder, const std::string& fieldName,
         bool requireExpression) const {
         BuilderObj builder(pBuilder, fieldName);
         addToBson(&builder);
@@ -2123,7 +2123,7 @@ namespace mongo {
     }
 
     void ExpressionNary::addToBsonObj(
-        BSONObjBuilder *pBuilder, string fieldName,
+        BSONObjBuilder *pBuilder, const std::string& fieldName,
         bool requireExpression) const {
         BSONObjBuilder exprBuilder;
         toBson(&exprBuilder, getOpName());

@@ -176,7 +176,7 @@ namespace mongo {
         }
     }
 
-    string MiniWebServer::getHeader( const char * req , string wanted ) {
+    string MiniWebServer::getHeader( const char * req , const std::string& wanted ) {
         const char * headers = strchr( req , '\n' );
         if ( ! headers )
             return "";

@@ -155,7 +155,7 @@ namespace mongo {
     }
 
     BSONObj CachedBSONObj::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");
-    Client::Context::Context( string ns , Database * db, bool doauth ) :
+    Client::Context::Context( const std::string& ns , Database * db, bool doauth ) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( mongo::dbpath ), // is this right? could be a different db? may need a dassert for this
@@ -168,7 +168,7 @@ namespace mongo {
         checkNsAccess( doauth );
     }
 
-    Client::Context::Context(const string& ns, string path , bool doauth, bool doVersion) :
+    Client::Context::Context(const string& ns, const std::string& path , bool doauth, bool doVersion ) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( path ), 
@@ -182,12 +182,12 @@ namespace mongo {
     /** "read lock, and set my context, all in one operation" 
      *  This handles (if not recursively locked) opening an unopened database.
      */
-    Client::ReadContext::ReadContext(const string& ns, string path, bool doauth)
+    Client::ReadContext::ReadContext(const string& ns, const std::string& path, bool doauth)
         : _lk( ns ) ,
           _c( ns , path , doauth ) {
     }
 
-    Client::WriteContext::WriteContext(const string& ns, string path , bool doauth ) 
+    Client::WriteContext::WriteContext(const string& ns, const std::string& path , bool doauth ) 
         : _lk( ns ) ,
           _c( ns , path , doauth ) {
     }

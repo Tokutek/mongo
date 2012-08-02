@@ -25,7 +25,12 @@
 namespace mongo {
 
     /* throws */
-    bool requestHeartbeat(string setname, string fromHost, string memberFullName, BSONObj& result, int myConfigVersion, bool checkEmpty = false);
+    bool requestHeartbeat(const std::string& setname,
+                          const std::string& fromHost,
+                          const std::string& memberFullName,
+                          BSONObj& result,
+                          int myConfigVersion,
+                          bool checkEmpty = false);
 
     struct HealthOptions {
         HealthOptions() :  

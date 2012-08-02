@@ -39,7 +39,7 @@ namespace mongo {
 
         AtomicUInt Config::JOB_NUMBER;
 
-        JSFunction::JSFunction( string type , const BSONElement& e ) {
+        JSFunction::JSFunction( const std::string& type , const BSONElement& e ) {
             _type = type;
             _code = e._asCode();
 

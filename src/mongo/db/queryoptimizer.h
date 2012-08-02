@@ -52,7 +52,7 @@ namespace mongo {
                                        shared_ptr<const ParsedQuery>(),
                                const BSONObj &startKey = BSONObj(),
                                const BSONObj &endKey = BSONObj(),
-                               string special="" );
+                               const std::string& special="" );
 
         /** Categorical classification of a QueryPlan's utility. */
         enum Utility {
@@ -123,7 +123,7 @@ namespace mongo {
                   const BSONObj &originalQuery,
                   const BSONObj &order,
                   const shared_ptr<const ParsedQuery> &parsedQuery,
-                  string special );
+                  const std::string& special );
         void init( const FieldRangeSetPair *originalFrsp,
                   const BSONObj &startKey,
                   const BSONObj &endKey );

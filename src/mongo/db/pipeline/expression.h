@@ -97,7 +97,7 @@ namespace mongo {
             field specification;  See ExpressionConstant.
          */
         virtual void addToBsonObj(
-            BSONObjBuilder *pBuilder, string fieldName,
+            BSONObjBuilder *pBuilder, const std::string& fieldName,
             bool requireExpression) const = 0;
 
         /*
@@ -226,7 +226,7 @@ namespace mongo {
         // virtuals from Expression
         virtual intrusive_ptr<Expression> optimize();
         virtual void addToBsonObj(
-            BSONObjBuilder *pBuilder, string fieldName,
+            BSONObjBuilder *pBuilder, const std::string& fieldName,
             bool requireExpression) const;
         virtual void addToBsonArray(BSONArrayBuilder *pBuilder) const;
         virtual void addDependencies(set<string>& deps, vector<string>* path=NULL) const;
@@ -370,7 +370,7 @@ namespace mongo {
         virtual intrusive_ptr<const Value> evaluate(
             const intrusive_ptr<Document> &pDocument) const;
         virtual void addToBsonObj(
-            BSONObjBuilder *pBuilder, string fieldName,
+            BSONObjBuilder *pBuilder, const std::string& fieldName,
             bool requireExpression) const;
         virtual void addToBsonArray(BSONArrayBuilder *pBuilder) const;
 
@@ -447,7 +447,7 @@ namespace mongo {
             const intrusive_ptr<Document> &pDocument) const;
         virtual const char *getOpName() const;
         virtual void addToBsonObj(
-            BSONObjBuilder *pBuilder, string fieldName,
+            BSONObjBuilder *pBuilder, const std::string& fieldName,
             bool requireExpression) const;
         virtual void addToBsonArray(BSONArrayBuilder *pBuilder) const;
 
@@ -549,7 +549,7 @@ namespace mongo {
         virtual intrusive_ptr<const Value> evaluate(
             const intrusive_ptr<Document> &pDocument) const;
         virtual void addToBsonObj(
-            BSONObjBuilder *pBuilder, string fieldName,
+            BSONObjBuilder *pBuilder, const std::string& fieldName,
             bool requireExpression) const;
         virtual void addToBsonArray(BSONArrayBuilder *pBuilder) const;
 
@@ -619,7 +619,7 @@ namespace mongo {
         virtual intrusive_ptr<const Value> evaluate(
             const intrusive_ptr<Document> &pDocument) const;
         virtual void addToBsonObj(
-            BSONObjBuilder *pBuilder, string fieldName,
+            BSONObjBuilder *pBuilder, const std::string& fieldName,
             bool requireExpression) const;
         virtual void addToBsonArray(BSONArrayBuilder *pBuilder) const;
         virtual void toMatcherBson(BSONObjBuilder *pBuilder) const;
@@ -839,7 +839,7 @@ namespace mongo {
         virtual intrusive_ptr<const Value> evaluate(
             const intrusive_ptr<Document> &pDocument) const;
         virtual void addToBsonObj(
-            BSONObjBuilder *pBuilder, string fieldName,
+            BSONObjBuilder *pBuilder, const std::string& fieldName,
             bool requireExpression) const;
         virtual void addToBsonArray(BSONArrayBuilder *pBuilder) const;
 

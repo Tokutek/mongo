@@ -47,7 +47,7 @@ namespace mongo {
         pBuilder->append(fieldName, d);
     }
 
-    void BuilderObj::append(string s) {
+    void BuilderObj::append(const std::string& s) {
         pBuilder->append(fieldName, s);
     }
 
@@ -72,7 +72,7 @@ namespace mongo {
     }
 
     BuilderObj::BuilderObj(
-        BSONObjBuilder *pObjBuilder, string theFieldName):
+        BSONObjBuilder *pObjBuilder, const std::string& theFieldName):
         pBuilder(pObjBuilder),
         fieldName(theFieldName) {
     }
@@ -102,7 +102,7 @@ namespace mongo {
         pBuilder->append(d);
     }
 
-    void BuilderArray::append(string s) {
+    void BuilderArray::append(const std::string& s) {
         pBuilder->append(s);
     }
 

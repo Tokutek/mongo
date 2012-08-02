@@ -141,7 +141,7 @@ namespace mongo {
         return true;
     }
     
-    bool OplogReader::connect(string hostName) {
+    bool OplogReader::connect(const std::string& hostName) {
         if (conn() != 0) {
             return true;
         }
