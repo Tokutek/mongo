@@ -38,7 +38,7 @@ def getAllSourceFiles( arr=None , prefix="." ):
 
 
 def getGitBranch():
-    if not os.path.exists( ".git" ):
+    if not os.path.exists( ".git" ) or not os.path.isdir(".git"):
         return None
 
     version = open( ".git/HEAD" ,'r' ).read().strip()
@@ -65,7 +65,7 @@ def getGitBranchString( prefix="" , postfix="" ):
     return prefix + b + postfix
 
 def getGitVersion():
-    if not os.path.exists( ".git" ):
+    if not os.path.exists( ".git" ) or not os.path.isdir(".git"):
         return "nogitversion"
 
     version = open( ".git/HEAD" ,'r' ).read().strip()
