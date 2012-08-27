@@ -780,6 +780,20 @@ namespace mongo {
             out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
         }
         virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
+
+            long long skip = 0;
+            if ( cmdObj["skip"].isNumber() ) {
+                skip = cmdObj["skip"].numberLong();
+                if ( skip < 0 ) {
+                    errmsg = "skip value is negative in count query";
+                    return false;
+                }
+            }
+            else if ( cmdObj["skip"].ok() ) {
+                errmsg = "skip value is not a valid number";
+                return false;
+            }
+
             string ns = parseNs(dbname, cmdObj);
             string err;
             int errCode;

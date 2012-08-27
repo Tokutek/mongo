@@ -1012,6 +1012,11 @@ namespace mongo {
     HostAndPort DBDirectClient::_clientHost = HostAndPort( "0.0.0.0" , 0 );
 
     unsigned long long DBDirectClient::count(const string &ns, const BSONObj& query, int options, int limit, int skip ) {
+        if ( skip < 0 ) {
+            warning() << "setting negative skip value: " << skip
+                << " to zero in query: " << query << endl;
+            skip = 0;
+        }
         string errmsg;
         int errCode;
         long long res = runCount( ns.c_str() , _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
