@@ -36,6 +36,8 @@ namespace mongo {
 
     bool waitForReplication( GTID gtid , int w , int maxSecondsToWait );
 
+    std::vector<std::string> getHostsReplicatedTo(GTID gtid);
+
     void resetSlaveCache();
     unsigned getSlaveCount();
 }

@@ -167,6 +167,19 @@ namespace mongo {
             return numSlaves <= 0;
         }
 
+        std::vector<std::string> getSlavesAtOp(GTID gtid) {
+            std::vector<std::string> result;
+
+            scoped_lock mylk(_mutex);
+            for (map<Ident,OpTime>::iterator i = _slaves.begin(); i != _slaves.end(); i++) {
+                GTID replicatedTo = i->second;
+				if (GTID::cmp(gtid, replicatedTo) <= 0) {
+                    result.push_back(i->first.obj["host"].String());
+                }
+            }
+
+            return result;
+        }
 
         unsigned getSlaveCount() const {
             scoped_lock mylk(_mutex);
@@ -216,6 +229,9 @@ namespace mongo {
         return slaveTracking.waitForReplication( gtid, w, maxSecondsToWait );
     }
 
+    vector<string> getHostsReplicatedTo(GTID gtid) {
+        return slaveTracking.getSlavesAtOp(gtid);
+    }
 
     void resetSlaveCache() {
         slaveTracking.reset();
