@@ -141,6 +141,10 @@ namespace mongo {
         ports.insert(this);
     }
 
+    void MessagingPort::setSocketTimeout(double timeout) {
+        psock->setTimeout(timeout);
+    }
+
     void MessagingPort::shutdown() {
         psock->close();
     }
