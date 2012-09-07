@@ -287,7 +287,11 @@ namespace mongo {
                   _nextMigrateLogId(0),
                   _snapshotTaken(false) {}
 
-        void start( const std::string& ns ,
+        /**
+         * @return false if cannot start. One of the reason for not being able to
+         *     start is there is already an existing migration in progress.
+         */
+        bool start( const std::string& ns ,
                     const BSONObj& min ,
                     const BSONObj& max ,
                     const BSONObj& shardKeyPattern ) {
@@ -300,7 +304,9 @@ namespace mongo {
 
             scoped_lock l(_m); // reads and writes _active
 
-            verify( ! _active );
+            if (_active) {
+                return false;
+            }
 
             verify( ! min.isEmpty() );
             verify( ! max.isEmpty() );
@@ -319,6 +325,7 @@ namespace mongo {
             _snapshotTaken = false;
             clearMigrateLog();
             _active = true;
+            return true;
         }
 
         void done() {
@@ -670,11 +677,20 @@ namespace mongo {
                              const BSONObj& min ,
                              const BSONObj& max ,
                              const BSONObj& shardKeyPattern ) {
-            migrateFromStatus.start( ns , min , max , shardKeyPattern );
+            _isAnotherMigrationActive = !migrateFromStatus.start(ns, min, max, shardKeyPattern);
         }
         ~MigrateStatusHolder() {
-            migrateFromStatus.done();
+            if (!_isAnotherMigrationActive) {
+                migrateFromStatus.done();
+            }
         }
+
+        bool isAnotherMigrationActive() const {
+            return _isAnotherMigrationActive;
+        }
+
+    private:
+        bool _isAnotherMigrationActive;
     };
 
     void _cleanupOldData( OldDataCleanup cleanup ) {
@@ -1033,6 +1049,11 @@ namespace mongo {
             }
 
             MigrateStatusHolder statusHolder( ns , min , max , shardKeyPattern );
+            if (statusHolder.isAnotherMigrationActive()) {
+                errmsg = "moveChunk is already in progress from this shard";
+                return false;
+            }
+
             {
                 scoped_ptr<ScopedDbConnection> connTo(
                         ScopedDbConnection::getScopedDbConnection( toShard.getConnString() ) );
