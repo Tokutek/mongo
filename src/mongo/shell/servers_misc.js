@@ -275,9 +275,9 @@ function startParallelShell( jsCode, port ){
     }
 
     if (TestData) {
-        jsCode = "TestData = " + tojson(TestData)
-            + ";jsTest.authenticate(db.getMongo());db = db.getSiblingDB('" + db.getName() + "');"
-            + jsCode;
+        jsCode = "TestData = " + tojson(TestData) +
+            ";jsTest.authenticate(db.getMongo());db = db.getSiblingDB('" + db.getName() + "');" +
+            jsCode;
     }
 
     args.push("--eval", jsCode);
