@@ -276,7 +276,8 @@ function startParallelShell( jsCode, port ){
 
     if (TestData) {
         jsCode = "TestData = " + tojson(TestData) +
-            ";jsTest.authenticate(db.getMongo());db = db.getSiblingDB('" + db.getName() + "');" +
+            ";jsTest.authenticate(db.getMongo());" +
+            ((typeof(db) != 'undefined') ? "db = db.getSiblingDB('" + db.getName() + "');" : "") +
             jsCode;
     }
 
