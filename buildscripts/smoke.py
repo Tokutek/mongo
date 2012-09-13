@@ -69,6 +69,7 @@ mongod_port = None
 shell_executable = None
 continue_on_failure = None
 file_of_commands_mode = False
+start_mongod = True
 
 tests = []
 winners = []
@@ -542,12 +543,14 @@ def runTest(test, testnum):
     finally:
         tempfile.close()
 
-"""
-    try:
-        c = Connection( "127.0.0.1" , int(mongod_port) )
-    except Exception,e:
-        raise TestServerFailure(path)
-"""
+    if r != 0:
+        raise TestExitFailure(path, r)
+    
+    if start_mongod:
+        try:
+            c = Connection( "127.0.0.1" , int(mongod_port) )
+        except Exception,e:
+            raise TestServerFailure(path)
 
 def run_tests(tests):
     # FIXME: some suites of tests start their own mongod, so don't
@@ -558,7 +561,10 @@ def run_tests(tests):
     # The reason we want to use "with" is so that we get __exit__ semantics
     # but "with" is only supported on Python 2.5+
 
-    master = mongod(small_oplog_rs=small_oplog_rs,small_oplog=small_oplog,no_journal=no_journal,no_preallocj=no_preallocj,auth=auth).__enter__()
+    if start_mongod:
+        master = mongod(small_oplog_rs=small_oplog_rs,small_oplog=small_oplog,no_journal=no_journal,no_preallocj=no_preallocj,auth=auth).__enter__()
+    else:
+        master = Nothing()
     try:
         if small_oplog:
             slave = mongod(slave=True).__enter__()
@@ -735,8 +741,9 @@ def add_exe(e):
     return e
 
 def set_globals(options, tests):
-    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, small_oplog_rs, no_journal, no_preallocj, auth, keyFile, smoke_db_prefix, smoke_server_opts, server_log_file, tests_log, quiet, test_path
+    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, small_oplog_rs, no_journal, no_preallocj, auth, keyFile, smoke_db_prefix, smoke_server_opts, server_log_file, tests_log, quiet, test_path, start_mongod
     global file_of_commands_mode
+    start_mongod = options.start_mongod
     #Careful, this can be called multiple times
     test_path = options.test_path
 
@@ -924,6 +931,8 @@ def main():
     parser.add_option('--skip-until', dest='skip_tests_until', default="",
                       action="store",
                       help='Skip all tests alphabetically less than the given name.')
+    parser.add_option(
+        '--dont-start-mongod', dest='start_mongod', default=True, action='store_false')
 
     # Buildlogger invocation from command line
     parser.add_option('--buildlogger-builder', dest='buildlogger_builder', default=None,
