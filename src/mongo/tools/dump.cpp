@@ -18,8 +18,6 @@
 */
 
 #include "mongo/pch.h"
-#include "mongo/client/dbclientcursor.h"
-#include "mongo/tools/tool.h"
 
 #include <fcntl.h>
 #include <map>
@@ -27,6 +25,10 @@
 
 #include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/convenience.hpp>
+
+#include "mongo/base/initializer.h"
+#include "mongo/client/dbclientcursor.h"
+#include "mongo/tools/tool.h"
 
 using namespace mongo;
 
@@ -374,7 +376,8 @@ public:
     BSONObj _query;
 };
 
-int main( int argc , char ** argv ) {
+int main( int argc , char ** argv, char ** envp ) {
+    mongo::runGlobalInitializersOrDie(argc, argv, envp);
     Dump d;
     return d.main( argc , argv );
 }
