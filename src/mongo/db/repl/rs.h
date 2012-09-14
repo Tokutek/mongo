@@ -509,6 +509,7 @@ namespace mongo {
     public:
         const Member* findById(unsigned id) const;
         void stopReplInfoThread();
+        Member* findByName(const std::string& hostname) const;
     private:
         void _getTargets(list<Target>&, int &configVersion);
         void getTargets(list<Target>&, int &configVersion);

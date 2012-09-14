@@ -339,6 +339,7 @@ namespace mongo {
         return 0;
     }
 
+<<<<<<< HEAD
     const GTID ReplSetImpl::lastOtherGTID() const {
         GTID closest;
         for( Member *m = _members.head(); m; m=m->next() ) {
@@ -351,6 +352,20 @@ namespace mongo {
         }
 
         return closest;
+    }
+
+    Member* ReplSetImpl::findByName(const std::string& hostname) const {
+        if (_self && hostname == _self->fullName()) {
+            return _self;
+        }
+
+        for (Member *m = head(); m; m = m->next()) {
+            if (m->fullName() == hostname) {
+                return m;
+            }
+        }
+
+        return NULL;
     }
 
     const uint64_t ReplSetImpl::lastOtherOpTime() const {
@@ -426,6 +441,7 @@ namespace mongo {
                 bb.append("lastGTID", m->hbinfo().gtid.toString());
             }
             bb.appendTimeT("lastHeartbeat", m->hbinfo().lastHeartbeat);
+            bb.appendTimeT("lastHeartbeatRecv", m->hbinfo().lastHeartbeatRecv);
             bb.append("pingMs", m->hbinfo().ping);
             string s = m->lhb();
             if( !s.empty() )
