@@ -27,7 +27,8 @@ ltokufractaltree = os.getenv('LIBTOKUFRACTALTREE_NAME', 'tokufractaltree')
 ltokuportability = os.getenv('LIBTOKUPORTABILITY_NAME', 'tokuportability')
 tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
 
-env.SConscript(['platform/SConscript',
+env.SConscript(['base/SConscript',
+                'platform/SConscript',
                 'unittest/SConscript'])
 
 def add_exe( v ):
