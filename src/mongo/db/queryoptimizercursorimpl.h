@@ -21,97 +21,14 @@
 
 #include "mongo/db/queryutil.h"
 #include "mongo/db/queryoptimizercursor.h"
+#include "mongo/db/querypattern.h"
 
 namespace mongo {
-    
-    /** Helper class for caching and counting matches during execution of a QueryPlan. */
-    class CachedMatchCounter {
-    public:
-        /**
-         * @param aggregateNscanned - shared count of nscanned for this and othe plans.
-         * @param cumulativeCount - starting point for accumulated count over a series of plans.
-         */
-        CachedMatchCounter( long long &aggregateNscanned, int cumulativeCount ) : _aggregateNscanned( aggregateNscanned ), _nscanned(), _cumulativeCount( cumulativeCount ), _count(), _checkDups(), _match( Unknown ), _counted() {}
-        
-        /** Set whether dup checking is enabled when counting. */
-        void setCheckDups( bool checkDups ) { _checkDups = checkDups; }
-        
-        /**
-         * Usual sequence of events:
-         * 1) resetMatch() - reset stored match value to Unkonwn.
-         * 2) setMatch() - set match value to a definite true/false value.
-         * 3) knowMatch() - check if setMatch() has been called.
-         * 4) countMatch() - increment count if match is true.
-         */
-        
-        void resetMatch() {
-            _match = Unknown;
-            _counted = false;
-        }
-        /** @return true if the match was not previously recorded. */
-        bool setMatch( bool match ) {
-            MatchState oldMatch = _match;
-            _match = match ? True : False;
-            return _match == True && oldMatch != True;
-        }
-        bool knowMatch() const { return _match != Unknown; }
-        void countMatch( const BSONObj &pk ) {
-            if ( !_counted && _match == True && !getsetdup( pk ) ) {
-                ++_cumulativeCount;
-                ++_count;
-                _counted = true;
-            }
-        }
-        bool wouldCountMatch( const BSONObj &pk ) const {
-            return !_counted && _match == True && !getdup( pk );
-        }
 
-        bool enoughCumulativeMatchesToChooseAPlan() const {
-            // This is equivalent to the default condition for switching from
-            // a query to a getMore, which was the historical default match count for
-            // choosing a plan.
-            return _cumulativeCount >= 101;
-        }
-        bool enoughMatchesToRecordPlan() const {
-            // Recording after 50 matches is a historical default (101 default limit / 2).
-            return _count > 50;
-        }
-
-        int cumulativeCount() const { return _cumulativeCount; }
-        int count() const { return _count; }
-        
-        /** Update local and aggregate nscanned counts. */
-        void updateNscanned( long long nscanned ) {
-            _aggregateNscanned += ( nscanned - _nscanned );
-            _nscanned = nscanned;
-        }
-        long long nscanned() const { return _nscanned; }
-        long long &aggregateNscanned() const { return _aggregateNscanned; }
-    private:
-        bool getsetdup( const BSONObj &pk ) {
-            if ( !_checkDups ) {
-                return false;
-            }
-            // We need a copy of the PK because we don't own the caller's BSON
-            pair<set<BSONObj>::iterator, bool> p = _dups.insert( pk.copy() );
-            return !p.second;
-        }
-        bool getdup( const BSONObj &pk ) const {
-            if ( !_checkDups ) {
-                return false;
-            }
-            return _dups.find( pk ) != _dups.end();
-        }
-        long long &_aggregateNscanned;
-        long long _nscanned;
-        int _cumulativeCount;
-        int _count;
-        bool _checkDups;
-        enum MatchState { Unknown, False, True };
-        MatchState _match;
-        bool _counted;
-        set<BSONObj> _dups;
-    };
+    class MultiCursor;
+    class MultiPlanScanner;
+    class QueryPlanRunner;
+    class QueryPlanSummary;
     
     /** Dup tracking class, optimizing one common case with small set and few initial reads. */
     class SmallDupSet {
@@ -122,7 +39,7 @@ namespace mongo {
         /** @return true if @param 'pk' already added to the set, false if adding to the set in this call. */
         bool getsetdup( const BSONObj &pk ) {
             access();
-            return vec() ? getsetdupVec( pk.copy() ) : getsetdupSet( pk.copy() );
+            return vec() ? getsetdupVec( pk ) : getsetdupSet( pk );
         }
         /** @return true when @param pk in the set. */
         bool getdup( const BSONObj &pk ) {
@@ -146,7 +63,7 @@ namespace mongo {
             if ( getdupVec( pk ) ) {
                 return true;
             }
-            _vec.push_back( pk );
+            _vec.push_back( pk.getOwned() );
             return false;
         }
         bool getdupVec( const BSONObj &pk ) const {
@@ -158,7 +75,7 @@ namespace mongo {
             return false;
         }
         bool getsetdupSet( const BSONObj &pk ) {
-            pair<set<BSONObj>::iterator, bool> p = _set.insert(pk);
+            pair<set<BSONObj>::iterator, bool> p = _set.insert(pk.getOwned());
             return !p.second;
         }
         bool getdupSet( const BSONObj &pk ) {
@@ -168,9 +85,123 @@ namespace mongo {
         set<BSONObj> _set;
         long long _accesses;
     };
-    
-    class QueryPlanSummary;
-    class MultiPlanScanner;
+
+    /**
+     * This cursor runs a MultiPlanScanner iteratively and returns results from
+     * the scanner's cursors as they become available.  Once the scanner chooses
+     * a single plan, this cursor becomes a simple wrapper around that single
+     * plan's cursor (called the 'takeover' cursor).
+     */
+    class QueryOptimizerCursorImpl : public QueryOptimizerCursor {
+    public:
+        static QueryOptimizerCursorImpl* make( auto_ptr<MultiPlanScanner>& mps,
+                                               const QueryPlanSelectionPolicy& planPolicy,
+                                               bool requireOrder,
+                                               bool explain );
+        
+        virtual bool ok();
+        
+        virtual BSONObj current();
+        
+        virtual BSONObj currPK() const;
+
+        BSONObj _currPK() const;
+        
+        virtual bool advance();
+        
+        virtual BSONObj currKey() const;
+        
+        virtual BSONObj indexKeyPattern() const;
+        
+        virtual bool supportGetMore() { return true; }
+
+        virtual string toString() const { return "QueryOptimizerCursor"; }
+        
+        virtual bool getsetdup(const BSONObj &pk);
+        
+        /** Matcher needs to know if the the cursor being forwarded to is multikey. */
+        virtual bool isMultiKey() const;
+        
+        // TODO fix
+        virtual bool modifiedKeys() const { return true; }
+
+        virtual bool capped() const;
+
+        virtual long long nscanned() const;
+
+        virtual CoveredIndexMatcher *matcher() const;
+
+        virtual bool currentMatches( MatchDetails* details = 0 );
+        
+        virtual CandidatePlanCharacter initialCandidatePlans() const {
+            return _initialCandidatePlans;
+        }
+        
+        virtual const FieldRangeSet* initialFieldRangeSet() const;
+        
+        virtual bool currentPlanScanAndOrderRequired() const;
+        
+        virtual const Projection::KeyOnly* keyFieldsOnly() const;
+        
+        virtual bool runningInitialInOrderPlan() const;
+
+        virtual bool hasPossiblyExcludedPlans() const;
+
+        virtual bool completePlanOfHybridSetScanAndOrderRequired() const {
+            return _completePlanOfHybridSetScanAndOrderRequired;
+        }
+        
+        virtual void clearIndexesForPatterns();
+        
+        virtual void abortOutOfOrderPlans();
+
+        virtual void noteIterate( bool match, bool loadedDocument, bool chunkSkip );
+        
+        virtual shared_ptr<ExplainQueryInfo> explainQueryInfo() const {
+            return _explainQueryInfo;
+        }
+        
+    private:
+        
+        QueryOptimizerCursorImpl( auto_ptr<MultiPlanScanner>& mps,
+                                  const QueryPlanSelectionPolicy& planPolicy,
+                                  bool requireOrder );
+        
+        void init( bool explain );
+
+        /**
+         * Advances the QueryPlanSet::Runner.
+         * @param force - advance even if the current query op is not valid.  The 'force' param should only be specified
+         * when there are plans left in the runner.
+         */
+        bool _advance( bool force );
+
+        /** Forward an exception when the runner errs out. */
+        void rethrowOnError( const shared_ptr< QueryPlanRunner >& runner );
+        
+        void assertOk() const {
+            massert( 14809, "Invalid access for cursor that is not ok()", !_currPK().isEmpty() );
+        }
+
+        /** Insert and check for dups before takeover occurs */
+        bool getsetdupInternal(const BSONObj& pk);
+
+        /** Just check for dups - after takeover occurs */
+        bool getdupInternal(const BSONObj& pk);
+        
+        bool _requireOrder;
+        auto_ptr<MultiPlanScanner> _mps;
+        CandidatePlanCharacter _initialCandidatePlans;
+        shared_ptr<QueryPlanRunner> _originalRunner;
+        QueryPlanRunner* _currRunner;
+        bool _completePlanOfHybridSetScanAndOrderRequired;
+        shared_ptr<MultiCursor> _takeover;
+        long long _nscanned;
+        // Using a SmallDupSet seems a bit hokey, but I've measured a 5% performance improvement
+        // with ~100 document non multi key scans.
+        SmallDupSet _dups;
+        shared_ptr<ExplainQueryInfo> _explainQueryInfo;
+    };
     
     /**
      * Helper class for generating a simple Cursor or QueryOptimizerCursor from a set of query
