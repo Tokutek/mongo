@@ -403,7 +403,7 @@ namespace mongo {
                 // note (one day) we may be able to fresh build less versions than we can use
                 // isASupportedIndexVersionNumber() is what we can use
                 uassert(14803, str::stream() << "this version of mongod cannot build new indexes of version number " << vv, 
-                    vv == 0 || vv == 1 || v == 2);
+                    vv == 0 || vv == 1 || vv == 2);
                 v = (int) vv;
             }
             // idea is to put things we use a lot earlier
