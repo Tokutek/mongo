@@ -203,7 +203,8 @@ namespace toku {
         invariant(r == 0);
 
         e = info["blocksize"];
-        if (!e.isNull()) {
+        if (e.ok() && !e.isNull()) {
+            std::cout << "blocksize obj: " << e.toString() << std::endl;
             size = e.numberInt();
             uassert(16430, "blocksize must be a number > 0. drop this index and try again.", e.isNumber() && size > 0);
             r = db->set_pagesize(db, size);
@@ -211,7 +212,7 @@ namespace toku {
             printf("tokudb: db %s, set blocksize to %u\n", db_name.c_str(), size);
         }
         e = info["basementsize"];
-        if (!e.isNull()) {
+        if (e.ok() && !e.isNull()) {
             size = e.numberInt();
             uassert(16431, "basementsize must be a number > 0. drop this index and try again.", e.isNumber () && size > 0);
             r = db->set_readpagesize(db, size);
@@ -219,7 +220,7 @@ namespace toku {
             printf("tokudb: db %s, set basementsize to %u\n", db_name.c_str(), size);
         }
         e = info["compression"];
-        if (!e.isNull()) {
+        if (e.ok() && !e.isNull()) {
             std::string method_str = e.String();
             TOKU_COMPRESSION_METHOD method = string_to_compression_method(method_str);
             r = db->set_compression_method(db, method);
