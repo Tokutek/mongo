@@ -780,6 +780,11 @@ if not use_system_version_of_library("boost"):
 env.Append( CPPPATH=['$EXTRACPPPATH'],
             LIBPATH=['$EXTRALIBPATH'] )
 
+# tokudb
+env.Append(CPPPATH=['/home/esmet/tokudb/release/include'])
+env.Append(LIBPATH=['/home/esmet/tokudb/release/lib'])
+env.Append(LIBS=['libtokudb_static.a', 'libtokuportability_static.a', 'dl', 'z'])
+
 # --- check system ---
 
 def doConfigure(myenv):

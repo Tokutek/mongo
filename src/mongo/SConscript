@@ -289,6 +289,12 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/dbcommands.cpp",
                     "db/dbcommands_admin.cpp",
 
+                    # tokudb
+                    "db/toku/env.cpp",
+                    "db/toku/index.cpp",
+                    "db/toku/cursor.cpp",
+                    "db/toku/row_buffer.cpp",
+
                     # most commands are only for mongod
                     "db/commands/fsync.cpp",
                     "db/commands/distinct.cpp",

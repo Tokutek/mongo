@@ -27,8 +27,15 @@
 #include "ops/delete.h"
 #include "mongo/util/scopeguard.h"
 
+#include "db/toku/env.h"
+#include "db/toku/index.h"
 
 namespace mongo {
+
+    // tokudb: shutdown the environment
+    void IndexInterface::shutdown() {
+        toku::env_shutdown();
+    }
 
     IndexInterface::IndexInserter::IndexInserter() {}
     IndexInterface::IndexInserter::~IndexInserter() {
@@ -140,8 +147,9 @@ namespace mongo {
 
     IndexInterfaceImpl<V0> iii_v0;
     IndexInterfaceImpl<V1> iii_v1;
+    IndexInterfaceTokuDB iii_tokudb;
 
-    IndexInterface *IndexDetails::iis[] = { &iii_v0, &iii_v1 };
+    IndexInterface *IndexDetails::iis[] = { &iii_v0, &iii_v1, &iii_tokudb };
 
     int removeFromSysIndexes(const char *ns, const char *idxName) {
         string system_indexes = cc().database()->name + ".system.indexes";
@@ -200,6 +208,9 @@ namespace mongo {
             NamespaceDetailsTransient::get( pns.c_str() ).deletedIndex();
 
             string name = indexName();
+            
+            // tokudb: ensure the db is dropped in the environment using dropIndex
+            idxInterface().dropIndex(*this);
 
             /* important to catch exception here so we can finish cleanup below. */
             try {
@@ -392,7 +403,7 @@ namespace mongo {
                 // note (one day) we may be able to fresh build less versions than we can use
                 // isASupportedIndexVersionNumber() is what we can use
                 uassert(14803, str::stream() << "this version of mongod cannot build new indexes of version number " << vv, 
-                    vv == 0 || vv == 1);
+                    vv == 0 || vv == 1 || v == 2);
                 v = (int) vv;
             }
             // idea is to put things we use a lot earlier

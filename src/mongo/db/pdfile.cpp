@@ -1094,6 +1094,9 @@ namespace mongo {
         d->paddingFits();
 
         /* have any index keys changed? */
+        // tokudb: mark which indexed have been updated, so we don't waste
+        // time doing a double update on a clustering index below.
+        vector<bool> index_updated(d->nIndexesBeingBuilt());
         {
             int keyUpdates = 0;
             int z = d->nIndexesBeingBuilt();
@@ -1117,12 +1120,21 @@ namespace mongo {
                 BSONObj idxKey = idx.info.obj().getObjectField("key");
                 Ordering ordering = Ordering::make(idxKey);
                 keyUpdates += changes[x].added.size();
+                index_updated[x] = false;
                 for ( unsigned i = 0; i < changes[x].added.size(); i++ ) {
                     try {
                         /* we did the dupCheck() above.  so we don't have to worry about it here. */
-                        ii.bt_insert(
-                            idx.head,
-                            dl, *changes[x].added[i], ordering, /*dupsAllowed*/true, idx);
+                        // tokudb: if this is clustering, then pass the new object with the insert
+                        index_updated[x] = true;
+                        if (idx.info.obj()["clustering"].trueValue()) {
+                            ii.bt_insert_clustering(
+                                idx.head,
+                                dl, *changes[x].added[i], ordering, /*dupsAllowed*/true, idx, objNew);
+                        } else {
+                            ii.bt_insert(
+                                idx.head,
+                                dl, *changes[x].added[i], ordering, /*dupsAllowed*/true, idx);
+                        }
                     }
                     catch (AssertionException& e) {
                         debug.extra << " exception update index ";
@@ -1132,6 +1144,32 @@ namespace mongo {
             }
             
             debug.keyUpdates = keyUpdates;
+        }
+
+        // for every clustering index over this collection, make sure we insert
+        // the new object as the clustered data. we can get the necessary keys
+        // using the IndexSpec and extracting the keys from the new object.
+        //
+        // this makes update({"a":1}, {$inc:{"b":1}}) work when there is
+        // a clustering index on "a". normally the "a" index would not
+        // get any updates about a change to "b", but it needs one here.
+        //
+        // we need to check if the index was not already updated though, otherwise
+        // we'd do duplicate work for something like update({"a":1}, {$inc:{"a":1}}).
+        for (int i = 0; i < d->nIndexesBeingBuilt(); i++) {
+            IndexDetails &other_idx = d->idx(i);
+            // update the clustered value only if it wasn't updated already
+            if (other_idx.info.obj()["clustering"].trueValue() && !index_updated[i]) {
+                BSONObjSet key_set;
+                other_idx.getKeysFromObject(objNew, key_set); 
+                for (BSONObjSet::iterator key_i = key_set.begin(); key_i != key_set.end(); key_i++) {
+                    BSONObj idxKey = other_idx.info.obj().getObjectField("key");
+                    Ordering ordering = Ordering::make(idxKey);
+                    other_idx.idxInterface().bt_insert_clustering(
+                        other_idx.head,
+                        dl, *key_i, ordering, /*dupsAllowed*/ true, other_idx, objNew);
+                }
+            }
         }
 
         //  update in place

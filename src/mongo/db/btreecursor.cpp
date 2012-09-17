@@ -23,6 +23,8 @@
 #include "curop-inl.h"
 #include "queryutil.h"
 
+#include "db/toku/cursor.h"
+
 namespace mongo {
 
     template< class V >
@@ -206,6 +208,9 @@ namespace mongo {
     BtreeCursor* BtreeCursor::make( NamespaceDetails * nsd , int idxNo , const IndexDetails& indexDetails ) {
         int v = indexDetails.version();
         
+        if( v == 2 ) 
+            return new TokuDBCursor( nsd , idxNo , indexDetails );
+
         if( v == 1 ) 
             return new BtreeCursorImpl<V1>( nsd , idxNo , indexDetails );
         

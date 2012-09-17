@@ -35,6 +35,14 @@ namespace mongo {
     protected:
         virtual ~IndexInterface() { }
     public:
+
+        // tokudb: shut down the environment. used when the server shuts down
+        static void shutdown(void);
+
+        // tokudb: remove an index from the environment. used during kill_idx()
+        // so the environment can properly cleanup when mongodb drops an index.
+        virtual void dropIndex(const IndexDetails &idx) { }
+
         class IndexInserter : private boost::noncopyable {
         public:
             IndexInserter();
@@ -59,6 +67,12 @@ namespace mongo {
         virtual int bt_insert(const DiskLoc thisLoc, const DiskLoc recordLoc,
             const BSONObj& key, const Ordering &order, bool dupsAllowed,
             IndexDetails& idx, bool toplevel = true) const = 0;
+        // tokudb: bt_insert interface for clustering keys. defaults to regular bt_insert
+        virtual int bt_insert_clustering(const DiskLoc thisLoc, const DiskLoc recordLoc,
+            const BSONObj& key, const Ordering &order, bool dupsAllowed,
+            IndexDetails& idx, const BSONObj &obj, bool toplevel = true) const {
+            return bt_insert(thisLoc, recordLoc, key, order, dupsAllowed, idx, toplevel);
+        }
         virtual DiskLoc addBucket(const IndexDetails&) = 0;
         virtual void uassertIfDups(IndexDetails& idx, vector<BSONObj*>& addedKeys, DiskLoc head, 
             DiskLoc self, const Ordering& ordering) = 0;
@@ -226,7 +240,8 @@ namespace mongo {
                     it may not mean we can build the index version in question: we may not maintain building 
                     of indexes in old formats in the future.
         */
-        static bool isASupportedIndexVersionNumber(int v) { return (v&1)==v; } // v == 0 || v == 1
+        // tokudb: tokudb indexes are version 2
+        static bool isASupportedIndexVersionNumber(int v) { return (v&3)==v; } // v == 0 || v == 1 || v == 
 
         /** @return the interface for this interface, which varies with the index version.
             used for backward compatibility of index versions/formats.
@@ -234,7 +249,7 @@ namespace mongo {
         IndexInterface& idxInterface() const { 
             int v = version();
             dassert( isASupportedIndexVersionNumber(v) );
-            return *iis[v&1];
+            return *iis[v&3];
         }
 
         static IndexInterface *iis[];

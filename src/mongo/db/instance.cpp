@@ -52,6 +52,7 @@
 #include <boost/filesystem/operations.hpp>
 #include "dur_commitjob.h"
 #include "mongo/db/commands/fsync.h"
+#include "index.h"
 
 namespace mongo {
     
@@ -994,6 +995,9 @@ namespace mongo {
         stringstream ss3;
         MemoryMappedFile::closeAllFiles( ss3 );
         log() << ss3.str() << endl;
+
+        log() << "shutdown: shutting down the index interface..." << endl;
+        IndexInterface::shutdown();
 
         if( cmdLine.dur ) {
             dur::journalCleanup(true);

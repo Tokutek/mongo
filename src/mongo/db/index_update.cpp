@@ -110,11 +110,45 @@ namespace mongo {
         }
     }
 
+    static void addKeysToIndex(const char *ns, NamespaceDetails *d, int idxNo, BSONObj& obj,
+                               DiskLoc recordLoc, bool dupsAllowed);
+
+    // tokudb: this is oldIndexRecord__notused.
+    // it doesn't do a search before inserting so it's what we need for tokudb indexes
+    // some comments in pdfile.cpp say that the old version is possibly just as fast
+    // as indexRecordUsingTwoSteps even on mongodb's btree, so we'll just use this all the time.
+    static void indexRecordWithoutReading(const char *ns, NamespaceDetails *d, BSONObj obj, DiskLoc loc) {
+        int n = d->nIndexesBeingBuilt();
+        for ( int i = 0; i < n; i++ ) {
+            try {
+                bool unique = d->idx(i).unique();
+                addKeysToIndex(ns, d, i, obj, loc, /*dupsAllowed*/!unique);
+            }
+            catch( DBException& ) {
+                /* try to roll back previously added index entries
+                   note <= i (not < i) is important here as the index we were just attempted
+                   may be multikey and require some cleanup.
+                */
+                for( int j = 0; j <= i; j++ ) {
+                    try {
+                        _unindexRecord(d->idx(j), obj, loc, false);
+                    }
+                    catch(...) {
+                        log(3) << "unindex fails on rollback after unique failure\n";
+                    }
+                }
+                throw;
+            }
+        }
+    }
+
     /** add index keys for a newly inserted record 
         done in two steps/phases to allow potential deferal of write lock portion in the future
     */
     void indexRecordUsingTwoSteps(const char *ns, NamespaceDetails *d, BSONObj obj,
                                          DiskLoc loc, bool shouldBeUnlocked) {
+        return indexRecordWithoutReading(ns, d, obj, loc);
+#if 0
         vector<int> multi;
         vector<BSONObjSet> multiKeys;
 
@@ -170,6 +204,7 @@ namespace mongo {
                 }
             }
         }
+#endif
     }
 
     /* add keys to index idxNo for a new record */
@@ -190,7 +225,13 @@ namespace mongo {
             }
             verify( !recordLoc.isNull() );
             try {
-                ii.bt_insert(idx.head, recordLoc, *i, ordering, dupsAllowed, idx);
+                if (idx.info.obj()["clustering"].trueValue()) {
+                    // tokudb: call the clustering version. if the underlying index doesn't
+                    // support clustering indexes, the interface defaults to regular bt_insert
+                    ii.bt_insert_clustering(idx.head, recordLoc, *i, ordering, dupsAllowed, idx, obj);
+                } else {
+                    ii.bt_insert(idx.head, recordLoc, *i, ordering, dupsAllowed, idx);
+                }
             }
             catch (AssertionException& e) {
                 if( e.getCode() == 10287 && idxNo == d->nIndexes ) {
@@ -207,6 +248,38 @@ namespace mongo {
     }
 
     SortPhaseOne *precalced = 0;
+
+    // tokudb: build an index using plain old insertions
+    void buildIndexUsingInsertions(bool dupsAllowed, IndexDetails& idx, BSONObjExternalSorter& sorter, 
+        bool dropDups, set<DiskLoc> &dupsToDrop, CurOp * op, SortPhaseOne *phase1, ProgressMeterHolder &pm,
+        Timer& t
+        )
+    {
+        BSONObj keyLast;
+        auto_ptr<BSONObjExternalSorter::Iterator> i = sorter.iterator();
+        verify( pm == op->setMessage( "index: building index using regular insertions" , phase1->nkeys , 10 ) );
+        while( i->more() ) {
+            RARELY killCurrentOp.checkForInterrupt();
+            BSONObjExternalSorter::Data d = i->next();
+            const BSONObj key = d.first;
+            DiskLoc loc = d.second;
+            Ordering ordering = Ordering::make(idx.keyPattern());
+            int r = 0;
+            if (idx.info.obj()["clustering"].trueValue()) {
+                // tokudb: call the clustering version. if the underlying index doesn't
+                // support clustering indexes, the interface defaults to regular bt_insert
+                BSONObj obj = loc.obj(); // this gives us the document at the diskloc
+                r = idx.idxInterface().bt_insert_clustering(DiskLoc(), loc, key, ordering, true, idx, obj);
+            } else {
+                r = idx.idxInterface().bt_insert(DiskLoc(), loc, key, ordering, true, idx);
+            }
+            if (r != 0) {
+                problem() << " got error code " << r << " while building and index with insertions\n";
+            }
+            pm.hit();
+        }
+        pm.finished();
+    }
 
     template< class V >
     void buildBottomUpPhases2And3(bool dupsAllowed, IndexDetails& idx, BSONObjExternalSorter& sorter, 
@@ -321,6 +394,9 @@ namespace mongo {
             buildBottomUpPhases2And3<V0>(dupsAllowed, idx, sorter, dropDups, dupsToDrop, op, phase1, pm, t);
         else if( idx.version() == 1 ) 
             buildBottomUpPhases2And3<V1>(dupsAllowed, idx, sorter, dropDups, dupsToDrop, op, phase1, pm, t);
+        else if( idx.version() == 2 )
+            // tokudb: to build our index, just trickle load rows using insertions
+            buildIndexUsingInsertions(dupsAllowed, idx, sorter, dropDups, dupsToDrop, op, phase1, pm, t);
         else
             verify(false);
 
@@ -494,7 +570,10 @@ namespace mongo {
 
         if( inDBRepair || !background ) {
             n = fastBuildIndex(ns.c_str(), d, idx, idxNo);
-            verify( !idx.head.isNull() );
+            // tokudb: we don't care if idx.head is null, so only verify if idx is not v2
+            if (idx.version() != 2) {
+                verify( !idx.head.isNull() );
+            }
         }
         else {
             BackgroundIndexBuildJob j(ns.c_str());

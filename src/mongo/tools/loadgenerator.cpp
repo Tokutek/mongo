@@ -184,8 +184,8 @@ mongo::BSONArray generateFindOneOps() {
                                             << ".sampledata";
 
         // select a random document among all the documents
-        unsigned long long centerQueryKey =
-                ( randomBetweenRange(0, 100 ) *  globalLoadGenOption.docsPerDB ) / 100;
+        unsigned long long centerQueryKey = (unsigned long long)
+                (( randomBetweenRange(0, 100 ) *  globalLoadGenOption.docsPerDB ) / 100);
 
         // cast to long long from unsigned long long as BSON didn't have the overloaded method
         mongo::BSONObj query =
@@ -296,7 +296,7 @@ void runTest() {
 
         BenchRunner runner( createBenchRunConfig() );
         runner.start();
-        sleepmillis( 1000 * globalLoadGenOption.durationSeconds );
+        sleepmillis((long long) (1000 * globalLoadGenOption.durationSeconds));
         runner.stop();
         BenchRunStats stats;
         runner.populateStats(&stats);

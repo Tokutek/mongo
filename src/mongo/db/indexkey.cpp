@@ -406,6 +406,8 @@ namespace mongo {
                 g.getKeys( obj, keys );
                 break;
             }
+            // tokudb: use btree v1 key format
+            case 2:
             case 1: {
                 KeyGeneratorV1 g( *this );
                 g.getKeys( obj, keys );
