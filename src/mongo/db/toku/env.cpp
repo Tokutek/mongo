@@ -189,7 +189,7 @@ namespace toku {
         } else if (s == "none") {
             return TOKU_NO_COMPRESSION;
         } else {
-            uassert(16400, "compression must be one of: lzma, quicklz, zlib, none. drop this index and try again.", false);
+            uassert(16429, "compression must be one of: lzma, quicklz, zlib, none. drop this index and try again.", false);
         }
         return TOKU_DEFAULT_COMPRESSION_METHOD;
     }
@@ -205,7 +205,7 @@ namespace toku {
         e = info["blocksize"];
         if (!e.isNull()) {
             size = e.numberInt();
-            uassert(16401, "blocksize must be a number > 0. drop this index and try again.", e.isNumber() && size > 0);
+            uassert(16430, "blocksize must be a number > 0. drop this index and try again.", e.isNumber() && size > 0);
             r = db->set_pagesize(db, size);
             invariant(r == 0);
             printf("tokudb: db %s, set blocksize to %u\n", db_name.c_str(), size);
@@ -213,7 +213,7 @@ namespace toku {
         e = info["basementsize"];
         if (!e.isNull()) {
             size = e.numberInt();
-            uassert(16402, "basementsize must be a number > 0. drop this index and try again.", e.isNumber () && size > 0);
+            uassert(16431, "basementsize must be a number > 0. drop this index and try again.", e.isNumber () && size > 0);
             r = db->set_readpagesize(db, size);
             invariant(r == 0);
             printf("tokudb: db %s, set basementsize to %u\n", db_name.c_str(), size);
