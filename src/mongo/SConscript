@@ -70,6 +70,7 @@ env.CppUnitTest( "stringutils_test", [ "util/stringutils_test.cpp" ],
                  LIBDEPS=["stringutils"] )
 
 env.StaticLibrary('bson', [
+        'util/safe_num.cpp',
         'bson/oid.cpp',
         'db/nonce.cpp',
         'db/jsobj.cpp',
@@ -83,6 +84,8 @@ env.StaticLibrary('bson', [
 env.CppUnitTest('string_map_test', ['util/string_map_test.cpp'],
                 LIBDEPS=['bson','foundation'])
 
+env.CppUnitTest('safe_num_test', ['util/safe_num_test.cpp'],
+                LIBDEPS=['bson'])
 
 commonFiles = [ "pch.cpp",
                 "buildinfo.cpp",
