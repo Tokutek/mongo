@@ -674,15 +674,21 @@ namespace mongo {
 
     ReplSetConfig::ReplSetConfig() :
         version(EMPTYCONFIG),
+        _chainingAllowed(true),
         protocolVersion(CURRENT_PROTOCOL_VERSION),
         _ok(false),
         _majority(-1),
         _heartbeatTimeout(DEFAULT_HB_TIMEOUT) {
     }
 
-    ReplSetConfig::ReplSetConfig(BSONObj cfg, bool force) :
-        _ok(false),_chainingAllowed(true),_majority(-1)
-    {
+
+    ReplSetConfig* ReplSetConfig::make(BSONObj cfg, bool force) {
+        auto_ptr<ReplSetConfig> ret(new ReplSetConfig());
+        ret->init(cfg, force);
+        return ret.release();
+    }
+
+    void ReplSetConfig::init(BSONObj cfg, bool force) {
         _constructed = false;
         clear();
         from(cfg);
@@ -696,9 +702,13 @@ namespace mongo {
         _constructed = true;
     }
 
-    ReplSetConfig::ReplSetConfig(const HostAndPort& h) :
-        _ok(false),_chainingAllowed(true),_majority(-1)
-    {
+    ReplSetConfig* ReplSetConfig::make(const HostAndPort& h) {
+        auto_ptr<ReplSetConfig> ret(new ReplSetConfig());
+        ret->init(h);
+        return ret.release();
+    }
+
+    void ReplSetConfig::init(const HostAndPort& h) {
         LOG(2) << "ReplSetConfig load " << h.toString() << rsLog;
 
         _constructed = false;
