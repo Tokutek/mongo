@@ -991,7 +991,7 @@ namespace QueryUtilTests {
         class ElemMatchRegex {
         public:
             void run() {
-                FieldRangeSet frs( "", fromjson( "{a:{$elemMatch:{$regex:'^x'}}}" ), true, true );
+                FieldRangeSet frs( "", BSON( "a" << BSON( "$elemMatch" << BSON("$regex" << "^x") ) ), true, true );
                 ASSERT( !frs.range( "a" ).universal() );
                 ASSERT_EQUALS( "x", frs.range( "a" ).min().String() );
             }
@@ -1034,7 +1034,11 @@ namespace QueryUtilTests {
             };
 
             struct UntypedRegex : public NotExactMatchRepresentation {
-                UntypedRegex() : NotExactMatchRepresentation( fromjson( "{a:{$regex:/^a/}}" ) ) {}
+                UntypedRegex() : NotExactMatchRepresentation( BSON( "a" << BSONObjBuilder().appendRegex("$regex", "^a", "").obj() ) ) {}
+            };
+
+            struct UntypedRegexString : public NotExactMatchRepresentation {
+                UntypedRegexString() : NotExactMatchRepresentation( BSON( "a" << BSON( "$regex" << "^a" ) ) ) {}
             };
 
             struct NotIn : public NotExactMatchRepresentation {
@@ -1437,9 +1441,13 @@ namespace QueryUtilTests {
             struct Regex : public NotExactMatchRepresentation {
                 Regex() : NotExactMatchRepresentation( fromjson( "{a:/^a/}" ) ) {}
             };
-            
+
             struct UntypedRegex : public NotExactMatchRepresentation {
-                UntypedRegex() : NotExactMatchRepresentation( fromjson( "{a:{$regex:'^a'}}" ) ) {}
+                UntypedRegex() : NotExactMatchRepresentation( BSON( "a" << BSONObjBuilder().appendRegex("$regex", "^a", "").obj() ) ) {}
+            };
+
+            struct UntypedRegexString : public NotExactMatchRepresentation {
+                UntypedRegexString() : NotExactMatchRepresentation( BSON( "a" << BSON( "$regex" << "^a" ) ) ) {}
             };
             
             struct And : public ExactMatchRepresentation {
@@ -2579,6 +2587,7 @@ namespace QueryUtilTests {
             add<FieldRangeTests::ExactMatchRepresentation::InRegex>();
             add<FieldRangeTests::ExactMatchRepresentation::Exists>();
             add<FieldRangeTests::ExactMatchRepresentation::UntypedRegex>();
+            add<FieldRangeTests::ExactMatchRepresentation::UntypedRegexString>();
             add<FieldRangeTests::ExactMatchRepresentation::NotIn>();
             add<FieldRangeTests::ExactMatchRepresentation::NotGt>();
             add<FieldRangeTests::ExactMatchRepresentation::GtArray>();
@@ -2611,6 +2620,7 @@ namespace QueryUtilTests {
             add<FieldRangeSetTests::ExactMatchRepresentation::Not>();
             add<FieldRangeSetTests::ExactMatchRepresentation::Regex>();
             add<FieldRangeSetTests::ExactMatchRepresentation::UntypedRegex>();
+            add<FieldRangeSetTests::ExactMatchRepresentation::UntypedRegexString>();
             add<FieldRangeSetTests::ExactMatchRepresentation::And>();
             add<FieldRangeSetTests::ExactMatchRepresentation::Or>();
             add<FieldRangeSetTests::ExactMatchRepresentation::All>();
