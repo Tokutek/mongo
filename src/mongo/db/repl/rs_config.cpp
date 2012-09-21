@@ -40,6 +40,7 @@ using namespace bson;
 namespace mongo {
 
     mongo::mutex ReplSetConfig::groupMx("RS tag group");
+    const int ReplSetConfig::DEFAULT_HB_TIMEOUT = 10;
 
     void assertOnlyHas(BSONObj o, const set<string>& fields) {
         BSONObj::iterator i(o);
@@ -140,6 +141,11 @@ namespace mongo {
 
         if (!getLastErrorDefaults.isEmpty()) {
             settings << "getLastErrorDefaults" << getLastErrorDefaults;
+            empty = false;
+        }
+
+        if (_heartbeatTimeout != DEFAULT_HB_TIMEOUT) {
+            settings << "heartbeatTimeoutSecs" << _heartbeatTimeout;
             empty = false;
         }
 
@@ -637,6 +643,12 @@ namespace mongo {
             try { getLastErrorDefaults = settings["getLastErrorDefaults"].Obj().copy(); }
             catch(...) { }
 
+            if (settings.hasField("heartbeatTimeoutSecs")) {
+                int timeout = settings["heartbeatTimeoutSecs"].numberInt();
+                uassert(16438, "Heartbeat timeout must be non-negative", timeout >= 0);
+                _heartbeatTimeout = timeout;
+            }
+
             // If the config explicitly sets chaining to false, turn it off.
             if (settings.hasField("chainingAllowed") &&
                 !settings["chainingAllowed"].trueValue()) {
@@ -652,13 +664,27 @@ namespace mongo {
         return _chainingAllowed;
     }
 
+    int ReplSetConfig::getHeartbeatTimeout() const {
+        return _heartbeatTimeout;
+    }
+
     static inline void configAssert(bool expr) {
         uassert(13122, "bad repl set config?", expr);
     }
 
     ReplSetConfig::ReplSetConfig() :
-        version(EMPTYCONFIG),protocolVersion(CURRENT_PROTOCOL_VERSION),_ok(false),_majority(-1)
-    {}
+        version(EMPTYCONFIG),
+        protocolVersion(CURRENT_PROTOCOL_VERSION),
+        _ok(false),
+        _majority(-1),
+        _heartbeatTimeout(DEFAULT_HB_TIMEOUT) {
+    }
+
+    ReplSetConfig* ReplSetConfig::make(BSONObj cfg, bool force) {
+        auto_ptr<ReplSetConfig> ret(new ReplSetConfig());
+        ret->init(cfg, force);
+        return ret.release();
+    }
 
     ReplSetConfig::ReplSetConfig(BSONObj cfg, bool force) :
         _ok(false),_chainingAllowed(true),_majority(-1)
