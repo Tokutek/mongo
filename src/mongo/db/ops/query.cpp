@@ -319,7 +319,8 @@ namespace mongo {
         _buf.skip( sizeof( QueryResult ) );
     }
 
-    BSONObj ResponseBuildStrategy::current( bool allowCovered ) const {
+    BSONObj ResponseBuildStrategy::current( bool allowCovered,
+                                            ResultDetails* resultDetails ) const {
         if ( _parsedQuery.returnKey() ) {
             BSONObjBuilder bob;
             bob.appendKeys( _cursor->indexKeyPattern(), _cursor->currKey() );
@@ -331,6 +332,7 @@ namespace mongo {
                 return keyFieldsOnly->hydrate( _cursor->currKey(), _cursor->currPK() );
             }
         }
+        resultDetails->loadedRecord = true;
         BSONObj ret = _cursor->current();
         verify( ret.isValid() );
         return ret;
@@ -353,10 +355,11 @@ namespace mongo {
             --_skip;
             return false;
         }
+        BSONObj currentDocument = current( true, resultDetails );
         // Explain does not obey soft limits, so matches should not be buffered.
         if ( !_parsedQuery.isExplain() ) {
             fillQueryResultFromObj( _buf, _parsedQuery.getFields(),
-                                    current( true ), &resultDetails->matchDetails );
+                                    currentDocument, &resultDetails->matchDetails );
             ++_bufferedMatches;
         }
         resultDetails->match = true;
@@ -388,13 +391,13 @@ namespace mongo {
         if ( _cursor->getsetdup( _cursor->currPK() ) ) {
             return false;
         }
-        _handleMatchNoDedup();
+        _handleMatchNoDedup( resultDetails );
         resultDetails->match = true;
         return true;
     }
     
-    void ReorderBuildStrategy::_handleMatchNoDedup() {
-        _scanAndOrder->add( current( false ) );
+    void ReorderBuildStrategy::_handleMatchNoDedup( ResultDetails* resultDetails ) {
+        _scanAndOrder->add( current( false, resultDetails ) );
     }
 
     int ReorderBuildStrategy::rewriteMatches() {
@@ -459,7 +462,7 @@ namespace mongo {
         }
         resultDetails->match = true;
         try {
-            _reorderBuild->_handleMatchNoDedup();
+            _reorderBuild->_handleMatchNoDedup( resultDetails );
         } catch ( const UserException &e ) {
             if ( e.getCode() == ScanAndOrderMemoryLimitExceededAssertionCode ) {
                 if ( _queryOptimizerCursor->hasPossiblyExcludedPlans() ) {
@@ -527,18 +530,11 @@ namespace mongo {
             resultDetails.matchDetails.requestElemMatchKey();
         }
 
-        if ( !currentMatches( &resultDetails ) ) {
-            resultDetails.loadedRecord = resultDetails.matchDetails.hasLoadedRecord();
-            _explain->noteIterate( resultDetails );
-            return false;
-        }
-        if ( !chunkMatches( &resultDetails ) ) {
-            resultDetails.loadedRecord = true;
-            _explain->noteIterate( resultDetails );
-            return false;
-        }
-        bool match = _builder->handleMatch( &resultDetails );
-        resultDetails.loadedRecord = true;
+        bool match =
+                currentMatches( &resultDetails ) &&
+                chunkMatches( &resultDetails ) &&
+                _builder->handleMatch( &resultDetails );
+
         _explain->noteIterate( resultDetails );
         return match;
     }
@@ -632,10 +628,11 @@ namespace mongo {
     }
 
     bool QueryResponseBuilder::currentMatches( ResultDetails* resultDetails ) {
-        if ( _cursor->currentMatches( &resultDetails->matchDetails ) ) {
-            return true;
+        bool matches = _cursor->currentMatches( &resultDetails->matchDetails );
+        if ( resultDetails->matchDetails.hasLoadedRecord() ) {
+            resultDetails->loadedRecord = true;
         }
-        return false;
+        return matches;
     }
 
     bool QueryResponseBuilder::chunkMatches( ResultDetails* resultDetails ) {
@@ -643,6 +640,7 @@ namespace mongo {
             return true;
         }
         // TODO: should make this covered at some point
+        resultDetails->loadedRecord = true;
         if ( _chunkManager->belongsToMe( _cursor->current() ) ) {
             return true;
         }
