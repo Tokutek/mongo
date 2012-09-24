@@ -102,7 +102,8 @@ namespace mongo {
             return true;
         }
 
-        uassert( 9517 , "writeback" , ( d.reservedField() & Reserved_FromWriteback ) == 0 );
+        uassert(9517, "cannot queue a writeback operation to the writeback queue",
+                (d.reservedField() & Reserved_FromWriteback) == 0);
 
         const OID& clientID = ShardedConnectionInfo::get(false)->getID();
         massert( 10422 ,  "write with bad shard config and no server id!" , clientID.isSet() );
