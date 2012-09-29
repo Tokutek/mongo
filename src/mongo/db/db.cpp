@@ -343,7 +343,7 @@ namespace mongo {
         unsigned long long missingRepl = checkIfReplMissingFromCommandLine();
         if (missingRepl) {
             log() << startupWarningsLog;
-            log() << "** warning: mongod started without --replSet yet " << missingRepl
+            log() << "** WARNING: mongod started without --replSet yet " << missingRepl
                   << " documents are present in local.system.replset" << startupWarningsLog;
             log() << "**          Restart with --replSet unless you are doing maintenance and no"
                   << " other clients are connected." << startupWarningsLog;
@@ -372,11 +372,7 @@ namespace mongo {
         d.clientCursorMonitor.go();
         PeriodicTask::theRunner->go();
         if (missingRepl) {
-            log() << "** warning: not starting TTL monitor" << startupWarningsLog;
-            log() << "**          if this member is not part of a replica set and you want to use "
-                  << startupWarningsLog;
-            log() << "**          TTL collections, remove local.system.replset and restart"
-                  << startupWarningsLog;
+            // a warning was logged earlier
         }
         else {
             startTTLBackgroundJob();
