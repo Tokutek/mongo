@@ -234,8 +234,8 @@ namespace mongo {
                 cerr << endl << "If you are running a mongod on the same "
                      "path you should connect to that instead of direct data "
                      "file access" << endl << endl;
-                dbexit( EXIT_CLEAN );
-                ::_exit(-1);
+                dbexit( EXIT_FS );
+                ::_exit(EXIT_FAILURE);
             }
 
             // the last thing we do before initializing storage is to install the
