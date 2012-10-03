@@ -73,6 +73,7 @@ exampleSourceMap = [
         ]
 
 clientHeaderDirectories = [
+    "base/",
     "bson/",
     "bson/util/",
     "client/",
