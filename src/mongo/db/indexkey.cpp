@@ -129,7 +129,7 @@ namespace mongo {
     void assertParallelArrays( const char *first, const char *second ) {
         stringstream ss;
         ss << "cannot index parallel arrays [" << first << "] [" << second << "]";
-        uasserted( 16452 ,  ss.str() );
+        uasserted( 16771 ,  ss.str() );
     }
 
     class KeyGenerator {

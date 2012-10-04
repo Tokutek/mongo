@@ -77,7 +77,12 @@ namespace mongo {
         bool minIsInf() const;
         bool maxIsInf() const;
 
-        bool contains( const BSONObj& obj ) const;
+        // Returns true if this chunk contains the given point, and false otherwise
+        //
+        // Note: this function takes an extracted *key*, not an original document
+        // (the point may be computed by, say, hashing a given field or projecting
+        //  to a subset of fields).
+        bool containsPoint( const BSONObj& point ) const;
 
         string genID() const;
         static string genID( const string& ns , const BSONObj& min );
@@ -191,6 +196,8 @@ namespace mongo {
         string toString() const;
 
         friend ostream& operator << (ostream& out, const Chunk& c) { return (out << c.toString()); }
+
+        // chunk equality is determined by comparing the min and max bounds of the chunk
         bool operator==(const Chunk& s) const;
         bool operator!=(const Chunk& s) const { return ! ( *this == s ); }
 
@@ -218,7 +225,11 @@ namespace mongo {
 
         // methods, etc..
 
-        /**
+        /** Returns the highest or lowest existing value in the shard-key space.
+         *  Warning: this assumes that the shard key is not "special"- that is, the shardKeyPattern
+         *           is simply an ordered list of ascending/descending field names. Examples:
+         *           {a : 1, b : -1} is not special. {a : "hashed"} is.
+         *
          * if sort 1, return lowest key
          * if sort -1, return highest key
          * will return empty object if have none
@@ -240,7 +251,12 @@ namespace mongo {
         const BSONObj& getMax() const { return _max; }
 
         // clones of Chunk methods
-        bool contains(const BSONObj& obj) const;
+        // Returns true if this ChunkRange contains the given point, and false otherwise
+        //
+        // Note: this function takes an extracted *key*, not an original document
+        // (the point may be computed by, say, hashing a given field or projecting
+        //  to a subset of fields).
+        bool containsPoint( const BSONObj& point ) const;
 
         ChunkRange(ChunkMap::const_iterator begin, const ChunkMap::const_iterator end)
             : _manager(begin->second->getManager())
@@ -360,7 +376,25 @@ namespace mongo {
 
         int numChunks() const { return _chunkMap.size(); }
 
-        ChunkPtr findChunk( const BSONObj& obj ) const;
+        /** Given a document, returns the chunk which contains that document.
+         *  This works by extracting the shard key part of the given document, then
+         *  calling findIntersectingChunk() on the extracted key.
+         *
+         *  See also the description for findIntersectingChunk().
+         */
+        ChunkPtr findChunkForDoc( const BSONObj& doc ) const;
+
+        /** Given a key that has been extracted from a document, returns the
+         *  chunk that contains that key.
+         *
+         *  For instance, to locate the chunk for document {a : "foo" , b : "bar"}
+         *  when the shard key is {a : "hashed"}, you can call
+         *      findChunkForDoc() on {a : "foo" , b : "bar"}, or
+         *      findIntersectingChunk() on {a : hash("foo") }
+         */
+        ChunkPtr findIntersectingChunk( const BSONObj& point ) const;
+
+
         ChunkPtr findChunkOnServer( const Shard& shard ) const;
 
         void getShardsForQuery( set<Shard>& shards , const BSONObj& query ) const;

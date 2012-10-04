@@ -114,6 +114,7 @@ env.StaticLibrary("coredb", [
         "db/dbcommands_generic.cpp",
         "db/dbpath.cpp",
         "db/dbwebserver.cpp",
+        "db/keypattern.cpp",
         "db/matcher.cpp",
         "db/txn_context.cpp",
         "db/gtid.cpp",
