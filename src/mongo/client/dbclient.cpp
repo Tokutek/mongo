@@ -1201,7 +1201,15 @@ namespace mongo {
         return ss.str();
     }
 
-    bool DBClientWithCommands::ensureIndex( const string &ns , BSONObj keys , bool unique, bool clustering, const string & name , bool cache, bool background, int version ) {
+    bool DBClientWithCommands::ensureIndex( const string &ns,
+                                            BSONObj keys,
+                                            bool unique,
+                                            bool clustering,
+                                            const string & name,
+                                            bool cache,
+                                            bool background,
+                                            int version,
+                                            int ttl ) {
         BSONObjBuilder toSave;
         toSave.append( "ns" , ns );
         toSave.append( "key" , keys );
@@ -1237,6 +1245,9 @@ namespace mongo {
 
         if ( cache )
             _seenIndexes.insert( cacheKey );
+
+        if ( ttl > 0 )
+            toSave.append( "expireAfterSeconds", ttl );
 
         insert( getSisterNS( ns, "system.indexes" ).c_str() , toSave.obj() );
         return 1;
