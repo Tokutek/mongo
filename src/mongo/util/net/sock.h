@@ -126,6 +126,8 @@ namespace mongo {
      * will be stale */
     string getHostNameCached();
 
+    string prettyHostName();
+
     /**
      * thrown by Socket and SockAddr
      */

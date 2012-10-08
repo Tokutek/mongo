@@ -186,8 +186,6 @@ namespace mongo {
     void setupLaunchSignals();
     void setupCoreSignals();
 
-    std::string prettyHostName();
-
     void printCommandLineOpts();
 
     /**
