@@ -31,6 +31,7 @@
 #include "mongo/db/d_globals.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/dbwebserver.h"
+#include "mongo/db/fail_point_service.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/json.h"
@@ -988,6 +989,9 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
         // exits directly and so never reaches here either.
 #endif
 
+        if (params.count("enableFaultInjection")) {
+            enableFailPointCmd();
+        }
     }
 
     setupSignals( false );
