@@ -23,6 +23,7 @@
 
 #include "mongo/base/initializer.h"
 #include "mongo/db/commands/fail_point_cmd.h"
+#include "mongo/db/initialize_server_global_state.h"
 #include "../util/net/message.h"
 #include "../util/startup_test.h"
 #include "../client/connpool.h"
@@ -388,7 +389,10 @@ int _main(int argc, char* argv[]) {
     // parse options
     po::variables_map params;
     if ( ! CmdLine::store( argc, argv, visible_options, hidden_options, positional_options, params ) )
-        return 0;
+        return EXIT_FAILURE;
+
+    if (!initializeServerGlobalState())
+        return EXIT_FAILURE;
 
     if ( params.count( "help" ) ) {
         cout << visible_options << endl;

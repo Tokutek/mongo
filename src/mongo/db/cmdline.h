@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "mongo/db/jsobj.h"
+#include "mongo/util/net/listen.h"
 
 #include "mongo/base/units.h"
 
@@ -103,7 +104,14 @@ namespace mongo {
         bool doFork;           // --fork
         std::string socket;    // UNIX domain socket directory
 
-        bool keyFile;
+        int maxConns;          // Maximum number of simultaneous open connections.
+
+        std::string keyFile;   // Path to keyfile, or empty if none.
+        std::string pidFile;   // Path to pid file, or empty if none.
+
+        std::string logpath;   // Path to log file, if logging to a file; otherwise, empty.
+        bool logAppend;        // True if logging to a file in append mode.
+        bool logWithSyslog;    // True if logging to syslog; must not be set if logpath is set.
 
 #ifndef _WIN32
         pid_t parentProc;      // --fork pid of initial process
@@ -156,6 +164,9 @@ namespace mongo {
                            boost::program_options::positional_options_description& positional,
                            boost::program_options::variables_map &output );
 
+        static BSONArray getArgvArray();
+        static BSONObj getParsedOpts();
+
         time_t started;
     };
 
@@ -168,7 +179,8 @@ namespace mongo {
         expireOplogDays(0), expireOplogHours(0), // default of 0 means never purge entries from oplog
         objcheck(false), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), moveParanoia( true ),
-        syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
+        syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"), maxConns(DEFAULT_MAX_CONN),
+        logAppend(false), logWithSyslog(false),
         directio(false), cacheSize(0), locktreeMaxMemory(0), checkpointPeriod(60), cleanerPeriod(2),
         cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""), gdbPath(""),
         txnMemLimit(1ULL<<20), pluginsDir(), plugins()
@@ -180,11 +192,8 @@ namespace mongo {
         sslServerManager = 0;
 #endif
     }
-            
-    extern CmdLine cmdLine;
 
-    void setupLaunchSignals();
-    void setupCoreSignals();
+    extern CmdLine cmdLine;
 
     void printCommandLineOpts();
 
