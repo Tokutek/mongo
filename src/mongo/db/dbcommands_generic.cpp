@@ -421,4 +421,18 @@ namespace mongo {
 
     } getLogCmd;
 
+    class CmdGetCmdLineOpts : InformationCommand {
+    public:
+        CmdGetCmdLineOpts() : InformationCommand("getCmdLineOpts") {}
+        void help(stringstream& h) const { h << "get argv"; }
+        virtual bool adminOnly() const { return true; }
+
+        virtual bool run(const string&, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            result.append("argv", CmdLine::getArgvArray());
+            result.append("parsed", CmdLine::getParsedOpts());
+            return true;
+        }
+
+    } cmdGetCmdLineOpts;
+
 }
