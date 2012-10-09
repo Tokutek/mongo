@@ -33,6 +33,7 @@ ltokuportability = os.getenv('LIBTOKUPORTABILITY_NAME', 'tokuportability')
 tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
 
 env.SConscript(['base/SConscript',
+                'db/auth/SConscript',
                 'platform/SConscript',
                 'unittest/SConscript'])
 
@@ -435,8 +436,13 @@ env.StaticLibrary("coreserver", coreServerFiles, LIBDEPS=["mongocommon", "script
 # main db target
 mongod = env.Install(
     '#/', env.Program( "mongod", mongodOnlyFiles, LIBS=['HotBackup'] + env['LIBS'] + tokulibs,
-                       LIBDEPS=["coreserver", "serveronly", "coredb", "ntservice",
-                                "mongodandmongos"] + env['MODULE_LIBDEPS_MONGOD'] ) )
+                       LIBDEPS=["coredb",
+                                "coreserver",
+                                "db/auth/auth",
+                                "mongodandmongos",
+                                "ntservice",
+                                "serveronly",
+                                ] + env['MODULE_LIBDEPS_MONGOD'] ) )
 Default( mongod )
 
 # tools
@@ -466,7 +472,7 @@ env.Install( '#/', [
 mongos = env.Program(
     "mongos", [ "s/server.cpp"] ,
     LIBS=env['LIBS'] + tokulibs, LIBDEPS=["mongoscore", "coreserver", "coredb", "mongocommon", "coreshard", "dbcmdline", "ntservice",
-             "mongodandmongos"] + env['MODULE_LIBDEPS_MONGOS'])
+             "mongodandmongos", "db/auth/auth"] + env['MODULE_LIBDEPS_MONGOS'])
 env.Install( '#/', mongos )
 
 env.Library("clientandshell", ["client/authentication_table_client.cpp",
