@@ -41,6 +41,7 @@
 #include "mongo/db/database.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/parsed_query.h"

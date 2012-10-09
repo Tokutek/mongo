@@ -340,6 +340,7 @@ if has_option( "asio" ):
 # TokuMX: Commented out files have been deleted - they were used to implement the old storage/durability layer.
 # mongod files - also files used in tools. present in dbtests, but not in mongos and not in client libs.
 serverOnlyFiles = [ "db/curop.cpp",
+                    "db/kill_current_op.cpp",
                     "db/interrupt_status_mongod.cpp",
                     "db/d_globals.cpp",
                     "db/ttl.cpp",

@@ -35,6 +35,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/json.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/module.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/rs.h"

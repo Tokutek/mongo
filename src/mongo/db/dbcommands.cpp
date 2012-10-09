@@ -38,6 +38,7 @@
 #include "mongo/db/introspect.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/json.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/replutil.h"

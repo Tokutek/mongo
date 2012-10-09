@@ -25,6 +25,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/ops/insert.h"

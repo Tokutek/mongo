@@ -17,7 +17,7 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
 #include <fstream>
 #if !defined(_WIN32)
@@ -40,6 +40,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/db/json.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/d_concurrency.h"

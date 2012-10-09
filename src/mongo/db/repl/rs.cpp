@@ -41,6 +41,7 @@
 #include "mongo/s/d_logic.h"
 #include "mongo/util/net/sock.h"
 #include "mongo/db/query_optimizer.h"
+#include "mongo/db/kill_current_op.h"
 
 using namespace std;
 
