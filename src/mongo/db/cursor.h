@@ -110,8 +110,6 @@ namespace mongo {
 
         // Used when we want fast matcher lookup
         virtual CoveredIndexMatcher *matcher() const { return 0; }
-        // Used when we need to share this matcher with someone else
-        virtual shared_ptr< CoveredIndexMatcher > matcherPtr() const { return shared_ptr< CoveredIndexMatcher >(); }
 
         virtual bool currentMatches( MatchDetails *details = 0 ) {
             return !matcher() || matcher()->matchesCurrent( this, details );
@@ -233,24 +231,18 @@ namespace mongo {
 
         BSONObj currPK() const { return _currPK; }
         BSONObj currKey() const { return _currKey; }
+        BSONObj current();
         BSONObj indexKeyPattern() const { return _idx.keyPattern(); }
 
-        BSONObj current();
         string toString() const;
-
+        BSONObj prettyIndexBounds() const;
         BSONObj prettyKey( const BSONObj &key ) const {
             return key.replaceFieldNames( indexKeyPattern() ).clientReadable();
         }
 
-        BSONObj prettyIndexBounds() const;
-
         CoveredIndexMatcher *matcher() const { return _matcher.get(); }
-        shared_ptr< CoveredIndexMatcher > matcherPtr() const { return _matcher; }
-
         void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { _matcher = matcher;  }
-
         const Projection::KeyOnly *keyFieldsOnly() const { return _keyFieldsOnly.get(); }
-        
         void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
             _keyFieldsOnly = keyFieldsOnly;
         }

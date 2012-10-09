@@ -323,14 +323,6 @@ namespace mongo {
 
         virtual long long nscanned() const { return _takeover ? _takeover->nscanned() : _nscanned; }
 
-        virtual shared_ptr<CoveredIndexMatcher> matcherPtr() const {
-            if ( _takeover ) {
-                return _takeover->matcherPtr();
-            }
-            assertOk();
-            return _currOp->queryPlan().matcher();
-        }
-
         virtual CoveredIndexMatcher *matcher() const {
             if ( _takeover ) {
                 return _takeover->matcher();
