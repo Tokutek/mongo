@@ -241,6 +241,7 @@ namespace mongo {
 
         CoveredIndexMatcher *matcher() const { return _matcher.get(); }
         void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { _matcher = matcher;  }
+        bool currentMatches( MatchDetails *details = NULL );
         const Projection::KeyOnly *keyFieldsOnly() const { return _keyFieldsOnly.get(); }
         void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
             _keyFieldsOnly = keyFieldsOnly;
@@ -290,6 +291,13 @@ namespace mongo {
         bool checkCurrentAgainstBounds();
         void skipPrefix(const BSONObj &key, const int k);
         int skipToNextKey(const BSONObj &currentKey);
+        /**
+         * Attempt to locate the next index key matching _bounds.  This may mean advancing to the
+         * next successive key in the index, or skipping to a new position in the index.  If an
+         * internal iteration cutoff is reached before a matching key is found, then the search for
+         * a matching key will be aborted, leaving the cursor pointing at a key that is not within
+         * bounds.
+         */
         bool skipOutOfRangeKeysAndCheckEnd();
         void checkEnd();
 
@@ -306,6 +314,10 @@ namespace mongo {
         const int _direction;
         shared_ptr< FieldRangeVector > _bounds; // field ranges to iterate over, if non-null
         auto_ptr< FieldRangeVectorIterator > _boundsIterator;
+        bool _boundsMustMatch; // If iteration is aborted before a key matching _bounds is
+                               // identified, the cursor may be left pointing at a key that is not
+                               // within bounds (_bounds->matchesKey( currKey() ) may be false).
+                               // _boundsMustMatch will be set to false accordingly.
         shared_ptr< CoveredIndexMatcher > _matcher;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
         long long _nscanned;
