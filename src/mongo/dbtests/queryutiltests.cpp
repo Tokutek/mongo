@@ -1753,6 +1753,9 @@ namespace QueryUtilTests {
                 // with range 'a.b', hence 'false' expected.
                 ASSERT( !rangesRepresented( BSON( "a.b" << 1 << "a.c" << 1 ), false,
                                             BSON( "a.b" << 2 << "a.c" << 3 ) ) );
+                // TokuMX: Determine if $elemMatch operators are hanlded different in 2.2
+                //         vs 2.4, because this test fails and it's not clear why. I think
+                //         returning false instead of true is a 'benign' bug (performance-only bug).
                 // Compound multikey index without conflicts due to use of the $elemMatch operator.
                 ASSERT( rangesRepresented( BSON( "a.b" << 1 << "a.c" << 1 ), false,
                                            BSON( "a" << BSON( "$elemMatch" <<

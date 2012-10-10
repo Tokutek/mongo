@@ -219,6 +219,7 @@ namespace mongo {
         _multiKey(_d->isMultikey(_d->idxNo(_idx))),
         _direction(direction),
         _bounds(),
+        _boundsMustMatch(true),
         _nscanned(0),
         _numWanted(numWanted),
         _cursor(_idx, cursor_flags()),
@@ -243,6 +244,7 @@ namespace mongo {
         _multiKey(_d->isMultikey(_d->idxNo(_idx))),
         _direction(direction),
         _bounds(bounds),
+        _boundsMustMatch(true),
         _nscanned(0),
         _numWanted(numWanted),
         _cursor(_idx, cursor_flags()),
@@ -557,10 +559,19 @@ namespace mongo {
                 ++_nscanned;
             }
         } else {
-            long long startNscanned = _nscanned;
+            // If nscanned is increased by more than 20 before a matching key is found, abort
+            // skipping through the index to find a matching key.  This iteration cutoff
+            // prevents unbounded internal iteration within IndexCursor::initializeDBC and
+            // IndexCursor::advance(). See SERVER-3448.
+            const long long startNscanned = _nscanned;
             if ( skipOutOfRangeKeysAndCheckEnd() ) {
                 do {
                     if ( _nscanned > startNscanned + 20 ) {
+                        // If iteration is aborted before a key matching _bounds is identified, the
+                        // cursor may be left pointing at a key that is not within bounds
+                        // (_bounds->matchesKey( currKey() ) may be false).  Set _boundsMustMatch to
+                        // false accordingly.
+                        _boundsMustMatch = false;
                         break;
                     }
                 } while ( skipOutOfRangeKeysAndCheckEnd() );
@@ -729,6 +740,10 @@ again:      while ( !allInclusive && ok() ) {
     }
 
     void IndexCursor::_advance() {
+        // Reset this flag at the start of a new iteration.
+        // See IndexCursor::checkCurrentAgainstBounds()
+        _boundsMustMatch = true;
+
         // first try to get data from the bulk fetch buffer
         _ok = _buffer.next();
         // if there is not data remaining in the bulk fetch buffer,
@@ -806,6 +821,16 @@ again:      while ( !allInclusive && ok() ) {
             return b.obj();
         }
         return _currObj;
+    }
+
+    bool IndexCursor::currentMatches( MatchDetails *details ) {
+         // If currKey() might not match the specified _bounds, check whether or not it does.
+         if ( !_boundsMustMatch && _bounds && !_bounds->matchesKey( currKey() ) ) {
+             // If the key does not match _bounds, it does not match the query.
+             return false;
+         }
+         // Forward to the base class implementation, which may utilize a Matcher.
+         return Cursor::currentMatches( details );
     }
 
     string IndexCursor::toString() const {

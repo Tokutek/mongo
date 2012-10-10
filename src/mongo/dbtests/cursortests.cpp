@@ -280,7 +280,11 @@ namespace CursorTests {
             }
             virtual BSONObj idx() const { return BSON( "a" << 1 << "b" << 1 ); }
         };
-        
+
+        /**
+         * IndexCursor::advance() may skip to new index positions multiple times.  A cutoff (tested
+         * here) has been implemented to avoid excessive iteration in such cases.  See SERVER-3448.
+         */
         class AbortImplicitScan : public Base {
         public:
             void run() {
@@ -289,21 +293,66 @@ namespace CursorTests {
                 IndexSpec idx( BSON( "a" << 1 << "b" << 1 ) );
                 _c.ensureIndex( ns(), idx.keyPattern );
                 for( int i = 0; i < 300; ++i ) {
-                    _c.insert( ns(), BSON( "a" << i << "b" << 5 ) );
+                    _c.insert( ns(), BSON( "a" << i << "b" << i ) );
                 }
-                FieldRangeSet frs( ns(), BSON( "b" << 3 ), true, true );
+                _c.insert( ns(), BSON( "a" << 300 << "b" << 30 ) );
+
+                // Set up a cursor on the { a:1, b:1 } index, the same cursor that would be created
+                // for the query { b:30 }.  Because this query has no constraint on 'a' (the
+                // first field of the compound index), the cursor will examine every distinct value
+                // of 'a' in the index and check for an index key with that value for 'a' and 'b'
+                // equal to 30.
+                FieldRangeSet frs( ns(), BSON( "b" << 30 ), true, true );
                 boost::shared_ptr<FieldRangeVector> frv( new FieldRangeVector( frs, idx, 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns() );
                 {
-                    shared_ptr<IndexCursor> c( IndexCursor::make( nsdetails( ns() ), nsdetails( ns() )->idx(1), frv, 0, 1 ) );
-                    long long initialNscanned = c->nscanned();
-                    ASSERT( initialNscanned < 200 );
+                    shared_ptr<IndexCursor> c( IndexCursor::make( nsdetails( ns() ),
+                                                                  nsdetails( ns() )->idx(1),
+                                                                  frv,
+                                                                  0, 1 ) );
+
+                    // IndexCursor::init() and IndexCursor::advance() attempt to advance the cursor to
+                    // the next matching key, which may entail examining many successive distinct values
+                    // of 'a' having no index key where b equals 30.  To prevent excessive iteration
+                    // within init() and advance(), examining distinct 'a' values is aborted once an
+                    // nscanned cutoff is reached.  We test here that this cutoff is applied, and that
+                    // if it is applied before a matching key is found, then
+                    // IndexCursor::currentMatches() returns false appropriately.
+
                     ASSERT( c->ok() );
-                    c->advance();
-                    ASSERT( c->nscanned() > initialNscanned );
+                    // The starting iterate found by IndexCursor::init() does not match.  This is a key
+                    // before the {'':30,'':30} key, because init() is aborted prematurely.
+                    ASSERT( !c->currentMatches() );
+                    // And init() stopped iterating before scanning the whole index (with ~300 keys).
                     ASSERT( c->nscanned() < 200 );
-                    ASSERT( c->ok() );
+
+                    ASSERT( c->advance() );
+                    // The next iterate matches (this is the {'':30,'':30} key).
+                    ASSERT( c->currentMatches() );
+
+                    int oldNscanned = c->nscanned();
+                    ASSERT( c->advance() );
+                    // Check that nscanned has increased ...
+                    ASSERT( c->nscanned() > oldNscanned );
+                    // ... but that advance() stopped iterating before the whole index (with ~300 keys)
+                    // was scanned.
+                    ASSERT( c->nscanned() < 200 );
+                    // Because advance() is aborted prematurely, the current iterate does not match.
+                    ASSERT( !c->currentMatches() );
+
+                    // Iterate through the remainder of the index.
+                    bool foundLastMatch = false;
+                    while( c->advance() ) {
+                        bool bMatches = ( c->current()[ "b" ].number() == 30 );
+                        // The current iterate only matches if it has the proper 'b' value.
+                        ASSERT_EQUALS( bMatches, c->currentMatches() );
+                        if ( bMatches ) {
+                            foundLastMatch = true;
+                        }
+                    }
+                    // Check that the final match, on key {'':300,'':30}, is found.
+                    ASSERT( foundLastMatch );
                 }
                 transaction.commit();
             }
@@ -312,7 +361,7 @@ namespace CursorTests {
         /**
          * An IndexCursor typically moves from one index match to another when its advance() method
          * is called.  However, to prevent excessive iteration advance() may bail out early before
-         * the next index match is identified (SERVER-3448).  The BtreeCursor must indicate that
+         * the next index match is identified (SERVER-3448).  The IndexCursor must indicate that
          * these iterates are not matches in matchesCurrent() to prevent them from being matched
          * when requestMatcher == false.
          */
@@ -334,33 +383,37 @@ namespace CursorTests {
                 }
                 BSONObj query = BSON( "a" << BSON( "$in" << inVals.arr() ) );
                 int matchCount = 0;
-                Client::ReadContext ctx( ns() );
-                shared_ptr<Cursor> c =
-                        NamespaceDetailsTransient::getCursor( ns(),
-                                                              query,
-                                                              BSONObj(),
-                                                              QueryPlanSelectionPolicy::any(),
-                                                              /* requestMatcher */ false );
-                // The BtreeCursor attempts to find each of the values 0, 1, 2, ... etc in the
-                // btree.  Because the values 0.5, 1.5, etc are present in the btree, the
-                // BtreeCursor will explicitly look for all the values in the $in list during
-                // successive calls to advance().  Because there are a large number of $in values to
-                // iterate over, BtreeCursor::advance() will bail out on intermediate values of 'a'
-                // (for example 20.5) that do not match the query if nscanned increases by more than
-                // 20.  We test here that these intermediate results are not matched.  Only the two
-                // correct matches a:0 and a:99 are matched.
-                while( c->ok() ) {
-                    ASSERT( !c->matcher() );
-                    if ( c->currentMatches() ) {
-                        double aVal = c->current()[ "a" ].number();
-                        // Only the expected values of a are matched.
-                        ASSERT( aVal == 0 || aVal == 99 );
-                        ++matchCount;
+                Client::Transaction transaction(DB_SERIALIZABLE);
+                {
+                    Client::ReadContext ctx( ns() );
+                    shared_ptr<Cursor> c =
+                            NamespaceDetailsTransient::getCursor( ns(),
+                                                                  query,
+                                                                  BSONObj(),
+                                                                  QueryPlanSelectionPolicy::any(),
+                                                                  /* requestMatcher */ false );
+                    // The IndexCursor attempts to find each of the values 0, 1, 2, ... etc in the
+                    // index.  Because the values 0.5, 1.5, etc are present in the index, the
+                    // IndexCursor will explicitly look for all the values in the $in list during
+                    // successive calls to advance().  Because there are a large number of $in values to
+                    // iterate over, IndexCursor::advance() will bail out on intermediate values of 'a'
+                    // (for example 20.5) that do not match the query if nscanned increases by more than
+                    // 20.  We test here that these intermediate results are not matched.  Only the two
+                    // correct matches a:0 and a:99 are matched.
+                    while( c->ok() ) {
+                        ASSERT( !c->matcher() );
+                        if ( c->currentMatches() ) {
+                            double aVal = c->current()[ "a" ].number();
+                            // Only the expected values of a are matched.
+                            ASSERT( aVal == 0 || aVal == 99 );
+                            ++matchCount;
+                        }
+                        c->advance();
                     }
-                    c->advance();
+                    // Only the two expected documents a:0 and a:99 are matched.
+                    ASSERT_EQUALS( 2, matchCount );
                 }
-                // Only the two expected documents a:0 and a:99 are matched.
-                ASSERT_EQUALS( 2, matchCount );
+                transaction.commit();
             }
         };
 
@@ -378,24 +431,28 @@ namespace CursorTests {
                 _c.ensureIndex( ns(), BSON( "a" << 1 ) );
                 _c.insert( ns(), BSON( "_id" << 0 << "a" << BSON_ARRAY( 1 << 2 ) ) );
                 _c.insert( ns(), BSON( "_id" << 1 << "a" << 9 ) );
-                Client::ReadContext ctx( ns() );
-                shared_ptr<Cursor> c =
-                        NamespaceDetailsTransient::getCursor( ns(),
-                                                              BSON( "a" << GT << 0 << LT << 5 ),
-                                                              BSONObj(),
-                                                              QueryPlanSelectionPolicy::any(),
-                                                              /* requestMatcher */ false );
-                while( c->ok() ) {
-                    // A Matcher is provided even though 'requestMatcher' is false.
-                    ASSERT( c->matcher() );
-                    if ( c->currentMatches() ) {
-                        // Even though a:9 is in the field range [[ 0, max_number ]], that result
-                        // does not match because the Matcher rejects it.  Only the _id:0 document
-                        // matches.
-                        ASSERT_EQUALS( 0, c->current()[ "_id" ].number() );
+                Client::Transaction transaction(DB_SERIALIZABLE);
+                {
+                    Client::ReadContext ctx( ns() );
+                    shared_ptr<Cursor> c =
+                            NamespaceDetailsTransient::getCursor( ns(),
+                                                                  BSON( "a" << GT << 0 << LT << 5 ),
+                                                                  BSONObj(),
+                                                                  QueryPlanSelectionPolicy::any(),
+                                                                  /* requestMatcher */ false );
+                    while( c->ok() ) {
+                        // A Matcher is provided even though 'requestMatcher' is false.
+                        ASSERT( c->matcher() );
+                        if ( c->currentMatches() ) {
+                            // Even though a:9 is in the field range [[ 0, max_number ]], that result
+                            // does not match because the Matcher rejects it.  Only the _id:0 document
+                            // matches.
+                            ASSERT_EQUALS( 0, c->current()[ "_id" ].number() );
+                        }
+                        c->advance();
                     }
-                    c->advance();
                 }
+                transaction.commit();
             }
         };
 
@@ -414,22 +471,26 @@ namespace CursorTests {
                 _c.ensureIndex( ns(), BSON( "a.b" << 1 << "a.c" << 1 ) );
                 _c.insert( ns(), BSON( "a" << BSON_ARRAY( BSON( "b" << 2 << "c" << 3 ) <<
                                                           BSONObj() ) ) );
-                Client::ReadContext ctx( ns() );
-                shared_ptr<Cursor> c =
-                        NamespaceDetailsTransient::getCursor( ns(),
-                                                              BSON( "a.b" << 2 << "a.c" << 2 ),
-                                                              BSONObj(),
-                                                              QueryPlanSelectionPolicy::any(),
-                                                              /* requestMatcher */ false );
-                while( c->ok() ) {
-                    // A Matcher is provided even though 'requestMatcher' is false.
-                    ASSERT( c->matcher() );
-                    // Even though { a:[ { b:2, c:3 } ] } is matched by the field range vector
-                    // [ [[ 2, 2 ]], [[ minkey, maxkey ]] ], that resut is not matched because the
-                    // Matcher rejects the document.
-                    ASSERT( !c->currentMatches() );
-                    c->advance();
-                }                
+                Client::Transaction transaction(DB_SERIALIZABLE);
+                {
+                    Client::ReadContext ctx( ns() );
+                    shared_ptr<Cursor> c =
+                            NamespaceDetailsTransient::getCursor( ns(),
+                                                                  BSON( "a.b" << 2 << "a.c" << 2 ),
+                                                                  BSONObj(),
+                                                                  QueryPlanSelectionPolicy::any(),
+                                                                  /* requestMatcher */ false );
+                    while( c->ok() ) {
+                        // A Matcher is provided even though 'requestMatcher' is false.
+                        ASSERT( c->matcher() );
+                        // Even though { a:[ { b:2, c:3 } ] } is matched by the field range vector
+                        // [ [[ 2, 2 ]], [[ minkey, maxkey ]] ], that resut is not matched because the
+                        // Matcher rejects the document.
+                        ASSERT( !c->currentMatches() );
+                        c->advance();
+                    }                
+                }
+                transaction.commit();
             }
         };
 
@@ -444,21 +505,25 @@ namespace CursorTests {
                 _c.ensureIndex( ns(), BSON( "a" << 1 ) );
                 _c.insert( ns(), BSON( "_id" << 0 << "a" << "a" ) );
                 _c.insert( ns(), BSON( "_id" << 1 << "a" << BSONObj() ) );
-                Client::ReadContext ctx( ns() );
-                shared_ptr<Cursor> c =
-                        NamespaceDetailsTransient::getCursor( ns(),
-                                                              BSON( "a" << GTE << "" ),
-                                                              BSONObj(),
-                                                              QueryPlanSelectionPolicy::any(),
-                                                              /* requestMatcher */ false );
-                while( c->ok() ) {
-                    ASSERT( !c->matcher() );
-                    if ( c->currentMatches() ) {
-                        // Only a:'a' matches, not a:{}.
-                        ASSERT_EQUALS( 0, c->current()[ "_id" ].number() );
+                Client::Transaction transaction(DB_SERIALIZABLE);
+                {
+                    Client::ReadContext ctx( ns() );
+                    shared_ptr<Cursor> c =
+                            NamespaceDetailsTransient::getCursor( ns(),
+                                                                  BSON( "a" << GTE << "" ),
+                                                                  BSONObj(),
+                                                                  QueryPlanSelectionPolicy::any(),
+                                                                  /* requestMatcher */ false );
+                    while( c->ok() ) {
+                        ASSERT( !c->matcher() );
+                        if ( c->currentMatches() ) {
+                            // Only a:'a' matches, not a:{}.
+                            ASSERT_EQUALS( 0, c->current()[ "_id" ].number() );
+                        }
+                        c->advance();
                     }
-                    c->advance();
                 }
+                transaction.commit();
             }
         };
 
@@ -473,21 +538,25 @@ namespace CursorTests {
                 _c.ensureIndex( ns(), BSON( "a" << 1 ) );
                 _c.insert( ns(), BSON( "_id" << 0 << "a" << Date_t( 1 ) ) );
                 _c.insert( ns(), BSON( "_id" << 1 << "a" << true ) );
-                Client::ReadContext ctx( ns() );
-                shared_ptr<Cursor> c =
-                        NamespaceDetailsTransient::getCursor( ns(),
-                                                              BSON( "a" << LTE << Date_t( 1 ) ),
-                                                              BSONObj(),
-                                                              QueryPlanSelectionPolicy::any(),
-                                                              /* requestMatcher */ false );
-                while( c->ok() ) {
-                    ASSERT( !c->matcher() );
-                    if ( c->currentMatches() ) {
-                        // Only a:Date_t( 1 ) matches, not a:true.
-                        ASSERT_EQUALS( 0, c->current()[ "_id" ].number() );
-                    }
-                    c->advance();
-                }                
+                Client::Transaction transaction(DB_SERIALIZABLE);
+                {
+                    Client::ReadContext ctx( ns() );
+                    shared_ptr<Cursor> c =
+                            NamespaceDetailsTransient::getCursor( ns(),
+                                                                  BSON( "a" << LTE << Date_t( 1 ) ),
+                                                                  BSONObj(),
+                                                                  QueryPlanSelectionPolicy::any(),
+                                                                  /* requestMatcher */ false );
+                    while( c->ok() ) {
+                        ASSERT( !c->matcher() );
+                        if ( c->currentMatches() ) {
+                            // Only a:Date_t( 1 ) matches, not a:true.
+                            ASSERT_EQUALS( 0, c->current()[ "_id" ].number() );
+                        }
+                        c->advance();
+                    }                
+                }
+                transaction.commit();
             }
         };
         
