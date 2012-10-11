@@ -177,7 +177,7 @@ namespace mongo {
         result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
     }
 
-    Tee * startupWarningsLog = new RamLog("startupWarnings"); //intentionally leaked
+    Tee* const startupWarningsLog = new RamLog("startupWarnings"); //intentionally leaked
 
     //
     // system warnings
