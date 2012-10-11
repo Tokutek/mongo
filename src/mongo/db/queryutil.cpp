@@ -453,13 +453,27 @@ namespace mongo {
                 BSONObjBuilder b;
                 b.appendMaxForType( lower.fieldName() , lower.type() );
                 upper = addObj( b.obj() ).firstElement();
+                if ( upper.canonicalType() != lower.canonicalType() ) {
+                    // _exactMatchRepresentation will be set if lower.isSimpleType(), requiring that
+                    // this field range exactly describe the values matching its query operator.  If
+                    // lower's max for type is not of the same canonical type as lower, it is
+                    // assumed to be the lowest value of the next canonical type meaning the upper
+                    // bound should be exclusive.
+                    upperInclusive = false;
+                }
             }
             else if ( lower.type() == MinKey && upper.type() != MaxKey && upper.isSimpleType() ) { // TODO: get rid of isSimpleType
-                if( upper.type() == Date ) 
-                    lowerInclusive = false;
                 BSONObjBuilder b;
                 b.appendMinForType( upper.fieldName() , upper.type() );
                 lower = addObj( b.obj() ).firstElement();
+                if ( lower.canonicalType() != upper.canonicalType() ) {
+                    // _exactMatchRepresentation will be set if upper.isSimpleType(), requiring that
+                    // this field range exactly describe the values matching its query operator.  If
+                    // upper's min for type is not of the same canonical type as upper, it is
+                    // assumed to be the highest value of the previous canonical type meaning the
+                    // lower bound should be exclusive.
+                    lowerInclusive = false;
+                }
             }
         }
 
@@ -1110,8 +1124,10 @@ namespace mongo {
     }
 
     FieldRangeVector::FieldRangeVector( const FieldRangeSet &frs, const IndexSpec &indexSpec,
-                                       int direction )
-    :_indexSpec( indexSpec ), _direction( direction >= 0 ? 1 : -1 ) {
+                                        int direction ) :
+        _indexSpec( indexSpec ),
+        _direction( direction >= 0 ? 1 : -1 ),
+        _hasAllIndexedRanges( true ) {
         verify(  frs.matchPossibleForIndex( _indexSpec.keyPattern ) );
         _queries = frs._queries;
         BSONObjIterator i( _indexSpec.keyPattern );
@@ -1127,6 +1143,7 @@ namespace mongo {
                     // constrainted, and with a multikey index we cannot
                     // constrain this field.  SERVER-958
                     range = &frs.universalRange();
+                    _hasAllIndexedRanges = false;
                 }
                 else if ( !range->universal() ) {
                     baseObjectNonUniversalPrefixes.insert( prefix );

@@ -2360,11 +2360,10 @@ namespace QueryOptimizerCursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Lock::GlobalWrite lk;
                 Client::Context ctx( ns() );
-                bool simpleEqualityMatch;
                 if ( expectException() ) {
                     ASSERT_THROWS
                     ( NamespaceDetailsTransient::getCursor
-                     ( ns(), query(), order(), planPolicy(), &simpleEqualityMatch ),
+                     ( ns(), query(), order(), planPolicy() ),
                      MsgAssertionException );
                     return;
                 }
@@ -2377,8 +2376,7 @@ namespace QueryOptimizerCursorTests {
                 }
                 shared_ptr<Cursor> c =
                 NamespaceDetailsTransient::getCursor( ns(), extractedQuery, order(), planPolicy(),
-                                                      &simpleEqualityMatch, _parsedQuery, false );
-                ASSERT_EQUALS( expectSimpleEquality(), simpleEqualityMatch );
+                                                      true, _parsedQuery, false );
                 string type = c->toString().substr( 0, expectedType().length() );
                 ASSERT_EQUALS( expectedType(), type );
                 check( c );
@@ -2387,7 +2385,6 @@ namespace QueryOptimizerCursorTests {
         protected:
             virtual string expectedType() const { return "TESTDUMMY"; }
             virtual bool expectException() const { return false; }
-            virtual bool expectSimpleEquality() const { return false; }
             virtual BSONObj query() const { return BSONObj(); }
             virtual BSONObj order() const { return BSONObj(); }
             virtual int skip() const { return 0; }
@@ -2810,6 +2807,95 @@ namespace QueryOptimizerCursorTests {
             };
 
         } // namespace IdElseNatural
+        
+        /**
+         * Generating a cursor for an invalid query asserts, even if the collection is empty or
+         * missing.
+         */
+        class MatcherValidation : public Base {
+        public:
+            void run() {
+                // Matcher validation with an empty collection.
+                _cli.remove( ns(), BSONObj() );
+                checkInvalidQueryAssertions();
+                
+                // Matcher validation with a missing collection.
+                _cli.dropCollection( ns() );
+                checkInvalidQueryAssertions();
+            }
+        private:
+            static void checkInvalidQueryAssertions() {
+                Client::ReadContext ctx( ns() );
+                
+                // An invalid query generating a single query plan asserts.
+                BSONObj invalidQuery = fromjson( "{$and:[{$atomic:true}]}" );
+                assertInvalidQueryAssertion( invalidQuery );
+                
+                // An invalid query generating multiple query plans asserts.
+                BSONObj invalidIdQuery = fromjson( "{_id:0,$and:[{$atomic:true}]}" );
+                assertInvalidQueryAssertion( invalidIdQuery );
+            }
+            static void assertInvalidQueryAssertion( const BSONObj &query ) {
+                ASSERT_THROWS( NamespaceDetailsTransient::getCursor( ns(), query, BSONObj() ),
+                               UserException );
+            }
+        };
+
+        /**
+         * A Cursor returned by NamespaceDetailsTransient::getCursor() may or may not have a
+         * matcher().  A Matcher will generally exist if required to match the provided query or
+         * if specifically requested.
+         */
+        class MatcherSet : public Base {
+        public:
+            MatcherSet() {
+                _cli.insert( ns(), BSON( "a" << 2 << "b" << 3 ) );
+                _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
+            }
+            void run() {
+                // No matcher is set for an empty query.
+                ASSERT( !hasMatcher( BSONObj(), false ) );
+                // No matcher is set for an empty query, even if a matcher is requested.
+                ASSERT( !hasMatcher( BSONObj(), true ) );
+                // No matcher is set for an exact key match indexed query.
+                ASSERT( !hasMatcher( BSON( "a" << 2 ), false ) );
+                // No matcher is set for an exact key match indexed query, unless one is requested.
+                ASSERT( hasMatcher( BSON( "a" << 2 ), true ) );
+                // A matcher is set for a non exact key match indexed query.
+                ASSERT( hasMatcher( BSON( "a" << 2 << "b" << 3 ), false ) );
+            }
+        private:
+            bool hasMatcher( const BSONObj& query, bool requestMatcher ) {
+                Client::ReadContext ctx( ns() );
+                shared_ptr<Cursor> cursor =
+                        NamespaceDetailsTransient::getCursor( ns(),
+                                                              query,
+                                                              BSONObj(),
+                                                              QueryPlanSelectionPolicy::any(),
+                                                              requestMatcher );
+                return cursor->matcher();
+            }
+        };
+
+        /**
+         * Even though a Matcher may not be used to perform matching when requestMatcher == false, a
+         * Matcher must be created because the Matcher's constructor performs query validation.
+         */
+        class MatcherValidate : public Base {
+        public:
+            void run() {
+                Client::ReadContext ctx( ns() );
+                // An assertion is triggered because { a:undefined } is an invalid query, even
+                // though no matcher is required.
+                ASSERT_THROWS
+                        ( NamespaceDetailsTransient::getCursor( ns(),
+                                                                fromjson( "{a:undefined}" ),
+                                                                BSONObj(),
+                                                                QueryPlanSelectionPolicy::any(),
+                                                                /* requestMatcher */ false ),
+                          UserException );
+            }
+        };
         
     } // namespace GetCursor
     
@@ -3475,6 +3561,8 @@ namespace QueryOptimizerCursorTests {
             //add<GetCursor::IdElseNatural::HintedNaturalForQuery>( BSON( "_id" << 1 << "a" << 1 ) );
             // There's no more $atomic operator, so this test isn't useful anymore.
             //add<GetCursor::MatcherValidation>(); 
+            add<GetCursor::MatcherSet>();
+            add<GetCursor::MatcherValidate>();
             add<Explain::ClearRecordedIndex>();
             add<Explain::Initial>();
             add<Explain::Empty>();
