@@ -294,7 +294,7 @@ public:
         _doimport = true;
         _jsonArray = false;
     }
-
+    ;
     virtual void printExtraHelp( ostream & out ) {
         out << "Import CSV, TSV or JSON data into MongoDB.\n" << endl;
     }
@@ -413,6 +413,7 @@ public:
         LOG(1) << "filesize: " << fileSize << endl;
         ProgressMeter pm( fileSize );
         int num = 0;
+        int lastNumChecked = num;
         int errors = 0;
         lastErrorFailures = 0;
         int len = 0;
@@ -473,6 +474,13 @@ public:
                     else {
                         conn().insert( ns.c_str() , o );
                     }
+
+                    if( num < 10 ) { 
+                        // we absolutely want to check the first and last op of the batch. we do 
+                        // a few more as that won't be too time expensive.
+                        checkLastError();
+                        lastNumChecked = num;
+                    }
                 }
 
                 num++;
@@ -494,7 +502,12 @@ public:
             loader->commit();
         }
 
-        checkLastError();
+        // this is for two reasons: to wait for all operations to reach the server and be processed, and this will wait until all data reaches the server,
+        // and secondly to check if there were an error (on the last op)
+        if( lastNumChecked+1 != num ) { // avoid redundant log message if already reported above
+            log() << "check " << lastNumChecked << " " << num << endl;
+            checkLastError();
+        }
 
         bool hadErrors = lastErrorFailures || errors;
 
