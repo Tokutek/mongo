@@ -51,8 +51,6 @@ def _rpartition(string, sep):
 
 
 
-buildscripts.bb.checkOk()
-
 def findSettingsSetup():
     sys.path.append( "." )
     sys.path.append( ".." )
