@@ -466,7 +466,7 @@ namespace ExpressionTests {
             }
         };
 
-        /** Depdencies forwarded from nested expression. */
+        /** Dependencies forwarded from nested expression. */
         class Dependencies {
         public:
             void run() {
