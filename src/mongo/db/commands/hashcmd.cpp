@@ -1,8 +1,4 @@
-/* hashcmd.cpp
- *
- * Defines a shell command for hashing a BSONElement value
- */
-
+// hashcmd.cpp
 
 /**
 *    Copyright (C) 2012 10gen Inc.
