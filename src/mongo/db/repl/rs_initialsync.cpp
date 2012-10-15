@@ -62,7 +62,7 @@ namespace mongo {
     }
 
     void ReplSetImpl::syncDoInitialSync() {
-        const static int maxFailedAttempts = 10;
+        static const int maxFailedAttempts = 10;
         int failedAttempts = 0;
         bool syncSucceeded = false;
         while ( !syncSucceeded && failedAttempts < maxFailedAttempts ) {
