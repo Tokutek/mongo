@@ -392,6 +392,8 @@ def skipTest(path):
         # These tests fail due to bugs
         if os.path.join(parentDir,basename) in ["sharding/sync_conn_cmd.js"]:
             return True
+        if parentDir == "disk": # SERVER-7356
+            return True
 
         authTestsToSkip = [("sharding", "gle_with_conf_servers.js"), # SERVER-6972
                            ("sharding", "read_pref.js"), # SERVER-6972
