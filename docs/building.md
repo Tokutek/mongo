@@ -69,7 +69,7 @@ For detail information about building, please see [the manual](http://dochub.mon
 
 If you want to build everything (mongod, mongo, tools, etc):
 
-    $ scons .
+    $ scons all
 
 If you only want to build the database:
 
