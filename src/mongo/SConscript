@@ -567,13 +567,18 @@ serverOnlyFiles += [ "s/d_logic.cpp",
 
 env.StaticLibrary("defaultversion", "s/default_version.cpp")
 
+env.StaticLibrary("geometry", [ "db/geo/hash.cpp", "db/geo/shapes.cpp" ], LIBDEPS = [ "bson" ])
+
+env.CppUnitTest("hash_test", [ "db/geo/hash_test.cpp" ], LIBDEPS = ["geometry"],)
+
 env.StaticLibrary("serveronly", serverOnlyFiles,
                   LIBDEPS=["coreshard",
                            "db/auth/authmongod",
                            "db/common",
                            "dbcmdline",
                            "defaultversion",
-                           "index_set"])
+                           "index_set",
+                           "geometry"])
 
 # These files go into mongos and mongod only, not into the shell or any tools.
 mongodAndMongosFiles = [
