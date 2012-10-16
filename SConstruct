@@ -961,7 +961,7 @@ env.AlwaysBuild( "style" )
 
 def doLint( env , target , source ):
     import buildscripts.lint
-    if not buildscripts.lint.run_lint():
+    if not buildscripts.lint.run_lint( [ "src/mongo/" ] ):
         raise Exception( "lint errors" )
 
 env.Alias( "lint" , [] , [ doLint ] )
