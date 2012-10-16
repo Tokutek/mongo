@@ -50,6 +50,7 @@
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/task.h"
 #include "mongo/util/net/message_server.h"
+#include "mongo/util/ntservice.h"
 #include "mongo/util/ramlog.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/startup_test.h"
@@ -57,7 +58,6 @@
 #include "mongo/util/version.h"
 
 #if defined(_WIN32)
-# include "mongo/util/ntservice.h"
 # include <DbgHelp.h>
 #else
 # include <sys/file.h>
@@ -77,7 +77,7 @@ namespace mongo {
     void exitCleanly( ExitCode code );
 
 #ifdef _WIN32
-    ntServiceDefaultStrings defaultServiceStrings = {
+    ntservice::NtServiceDefaultStrings defaultServiceStrings = {
         L"MongoDB",
         L"Mongo DB",
         L"Mongo DB Server"
@@ -427,11 +427,10 @@ namespace mongo {
     }
 
 #if defined(_WIN32)
-    bool initService() {
-        ServiceController::reportStatus( SERVICE_RUNNING );
+    void initService() {
+        ntservice::reportStatus( SERVICE_RUNNING );
         log() << "Service running" << endl;
         initAndListen( cmdLine.port );
-        return true;
     }
 #endif
 
@@ -933,6 +932,14 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
         }
 
 
+#ifdef _WIN32
+        ntservice::configureService(initService,
+                                    params,
+                                    defaultServiceStrings,
+                                    std::vector<std::string>(),
+                                    std::vector<std::string>(argv, argv + argc));
+#endif  // _WIN32
+
 #ifdef __linux__
         if (params.count("shutdown")){
             bool failed = false;
@@ -988,14 +995,10 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
         dataFileSync.go();
 
 #if defined(_WIN32)
-        vector<string> disallowedOptions;
-        if (serviceParamsCheck( params, dbpath, defaultServiceStrings, disallowedOptions, argc, argv )) {
-            return 0;   // this means that we are running as a service, and we won't
-                        // reach this statement until initService() has run and returned,
-                        // but it usually exits directly so we never actually get here
+        if (ntservice::shouldStartService()) {
+            ntservice::startService();
+            // exits directly and so never reaches here either.
         }
-        // if we reach here, then we are not running as a service.  service installation
-        // exits directly and so never reaches here either.
 #endif
 
         if (params.count("enableFaultInjection")) {
