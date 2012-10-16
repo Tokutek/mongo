@@ -708,6 +708,18 @@ namespace mongo {
         return ret.release();
     }
 
+    ReplSetConfig* ReplSetConfig::makeDirect() {
+        DBDirectClient cli;
+        BSONObj config = cli.findOne(rsConfigNs, Query()).getOwned();
+
+        // Check for no local config
+        if (config.isEmpty()) {
+            return new ReplSetConfig();
+        }
+
+        return make(config, false);
+    }
+
     void ReplSetConfig::init(const HostAndPort& h) {
         LOG(2) << "ReplSetConfig load " << h.toString() << rsLog;
 
