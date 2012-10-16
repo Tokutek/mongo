@@ -33,6 +33,7 @@
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/jsobjmanipulator.h"
+#include "mongo/util/elapsed_tracker.h"
 
 namespace mongo {
 

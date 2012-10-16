@@ -24,6 +24,7 @@
 #include "mongo/db/queryutil.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/util/elapsed_tracker.h"
 
 namespace mongo {
 

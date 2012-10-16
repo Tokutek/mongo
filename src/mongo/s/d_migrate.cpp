@@ -59,6 +59,7 @@
 #include "mongo/util/startup_test.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/ramlog.h"
+#include "mongo/util/elapsed_tracker.h"
 
 #include "mongo/s/shard.h"
 #include "mongo/s/d_logic.h"

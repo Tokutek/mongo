@@ -334,7 +334,10 @@ serverOnlyFiles = [ "db/curop.cpp",
                     # Most storage/ files are in coredb, but this is server-only.
                     "db/storage/loader.cpp",
                     "db/storage/indexer.cpp",
-                    "db/storage/dictionary.cpp" ]
+                    "db/storage/dictionary.cpp",
+                    
+                    "util/elapsed_tracker.cpp"
+                  ]
 
 env.Library( "dbcmdline", "db/cmdline.cpp" )
 
