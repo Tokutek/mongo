@@ -219,8 +219,10 @@ public:
               continue;
             }
             
-            // Don't dump indexes
             if (nsToCollectionSubstring(name) == "system.indexes") {
+              // Create system.indexes.bson for compatibility with pre 2.2 mongorestore
+              writeCollectionFile( name.c_str() , outdir / ( filename + ".bson" ) );
+              // Don't dump indexes as *.metadata.json
               continue;
             }
             

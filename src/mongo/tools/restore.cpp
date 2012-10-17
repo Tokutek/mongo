@@ -124,10 +124,7 @@ public:
         return EXIT_CLEAN;
     }
 
-    void drillDown( boost::filesystem::path root,
-                    bool use_db,
-                    bool use_coll,
-                    bool top_level=false) {
+    void drillDown( boost::filesystem::path root, bool use_db, bool use_coll, bool top_level=false ) {
         LOG(2) << "drillDown: " << root.string() << endl;
 
         // skip hidden files and directories
