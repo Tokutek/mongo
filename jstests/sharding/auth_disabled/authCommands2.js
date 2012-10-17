@@ -73,6 +73,11 @@ assert.soon( function() {
     return x < 2 && configDB.locks.findOne({ _id : 'test.foo' }).state == 0;
 }, "no balance happened", 60000 );
 
+assert.soon( function(){
+    print( "Waiting for migration cleanup to occur..." )
+    return testDB.foo.find().itcount() == testDB.foo.count();
+})
+
 var map = function() { emit (this.i, this.j) };
 var reduce = function( key, values ) {
     var jCount = 0;
