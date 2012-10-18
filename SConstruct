@@ -299,6 +299,9 @@ env = Environment( BUILD_DIR=variantDir,
                    DIST_ARCHIVE_SUFFIX='.tgz',
                    EXTRAPATH=get_option("extrapath"),
                    MODULE_BANNERS=[],
+                   MODULE_LIBDEPS_MONGOD=[],
+                   MODULE_LIBDEPS_MONGOS=[],
+                   MODULE_LIBDEPS_MONGOSHELL=[],
                    MODULETEST_LIST='#build/moduletests.txt',
                    MSVS_ARCH=msarch ,
                    PYTHON=utils.find_python(),
@@ -813,7 +816,12 @@ if FindFile('README-TOKUDB', env['TOKUKV_PATH']) is None:
     print( 'tokukv not found in %s!' % env['TOKUKV_PATH'] )
     Exit(1)
 
+# discover modules, and load the (python) module for each module's build.py
+mongo_modules = moduleconfig.discover_modules('src/mongo/db/modules')
+env['MONGO_MODULES'] = [m.name for m in mongo_modules]
+
 # --- check system ---
+
 
 def doConfigure(myenv):
     conf = Configure(myenv)
@@ -876,13 +884,8 @@ def doConfigure(myenv):
 
     myenv.Append(RPATH=[Literal("'%s'" % p) for p in ['$$ORIGIN/../lib', '$$ORIGIN/../lib64']])
 
-    # discover modules (subdirectories of db/modules/), and
-    # load the (python) module for each module's build.py
-    modules = moduleconfig.discover_modules('src/mongo/')
-
-    # ask each module to configure itself, and return a
-    # dictionary of name => list_of_sources for each module.
-    env["MONGO_MODULES"] = moduleconfig.configure_modules(modules, conf, env)
+    # ask each module to configure itself and the build environment.
+    moduleconfig.configure_modules(mongo_modules, conf, env)
 
     return conf.Finish()
 
@@ -958,8 +961,8 @@ def getSystemInstallName():
     if nix and os.uname()[2].startswith( "8." ):
         n += "-tiger"
 
-    if len(env.get("MONGO_MODULES", None)):
-            n += "-" + "-".join(env["MONGO_MODULES"].keys())
+    if len(mongo_modules):
+            n += "-" + "-".join(m.name for m in mongo_modules)
 
     try:
         findSettingsSetup()
@@ -1112,6 +1115,8 @@ if not use_system_version_of_library("boost"):
     clientEnv.Append(LIBS=['boost_thread', 'boost_filesystem', 'boost_system'])
     clientEnv.Prepend(LIBPATH=['$BUILD_DIR/third_party/boost/'])
 
+module_sconscripts = moduleconfig.get_module_sconscripts(mongo_modules)
+
 # The following symbols are exported for use in subordinate SConscript files.
 # Ideally, the SConscript files would be purely declarative.  They would only
 # import build environment objects, and would contain few or no conditional
@@ -1128,10 +1133,11 @@ Export("has_option use_system_version_of_library")
 Export("installSetup")
 Export("usesm usev8")
 Export("darwin windows solaris linux nix")
+Export('module_sconscripts')
 
-env.SConscript( 'src/SConscript', variant_dir='$BUILD_DIR', duplicate=False )
-env.SConscript( 'src/SConscript.client', variant_dir='$BUILD_DIR/client_build', duplicate=False )
-env.SConscript( ['SConscript.buildinfo', 'SConscript.smoke'] )
+env.SConscript('src/SConscript', variant_dir='$BUILD_DIR', duplicate=False)
+env.SConscript('src/SConscript.client', variant_dir='$BUILD_DIR/client_build', duplicate=False)
+env.SConscript(['SConscript.buildinfo', 'SConscript.smoke'])
 
 def clean_old_dist_builds(env, target, source):
     prefix = "mongodb-%s-%s" % (platform, processor)
