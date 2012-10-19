@@ -1249,8 +1249,15 @@ namespace mongo {
             // we need a special command for dropping on the d side
             // this hack works for the moment
 
-            if ( ! setShardVersion( conn->conn(), _ns, ShardChunkVersion( 0, OID() ), true, res ) )
+            if ( ! setShardVersion( conn->conn(),
+                                    _ns,
+                                    ShardChunkVersion( 0, OID() ),
+                                    ChunkManagerPtr(),
+                                    true, res ) )
+            {
                 throw UserException( 8071 , str::stream() << "cleaning up after drop failed: " << res );
+            }
+
             conn->get()->simpleCommand( "admin", 0, "unsetSharding" );
             conn->done();
         }
@@ -1413,7 +1420,13 @@ namespace mongo {
     // NOTE (careful when deprecating)
     //   currently the sharding is enabled because of a write or read (as opposed to a split or migrate), the shard learns
     //   its name and through the 'setShardVersion' command call
-    bool setShardVersion( DBClientBase & conn , const string& ns , ShardChunkVersion version , bool authoritative , BSONObj& result ) {
+    bool setShardVersion( DBClientBase & conn,
+                          const string& ns,
+                          ShardChunkVersion version,
+                          ChunkManagerPtr manager, // Used only for reporting!
+                          bool authoritative ,
+                          BSONObj& result )
+    {
         BSONObjBuilder cmdBuilder;
         cmdBuilder.append( "setShardVersion" , ns.c_str() );
         cmdBuilder.append( "configdb" , configServer.modelServer() );
@@ -1427,7 +1440,14 @@ namespace mongo {
         cmdBuilder.append( "shardHost" , s.getConnString() );
         BSONObj cmd = cmdBuilder.obj();
 
-        LOG(1) << "    setShardVersion  " << s.getName() << " " << conn.getServerAddress() << "  " << ns << "  " << cmd << " " << &conn << endl;
+        LOG(1) << "    setShardVersion  " << s.getName()
+               << " " << conn.getServerAddress()
+               << "  " << ns
+               << "  " << cmd
+               << " " << &conn
+               << (manager.get() ? string(str::stream() << " " << manager->getSequenceNumber()) :
+                                   "")
+               << endl;
 
         return conn.runCommand("admin", cmd, result, 0);
     }
