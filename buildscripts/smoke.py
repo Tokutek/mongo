@@ -42,6 +42,7 @@ import re
 import shutil
 import shlex
 import socket
+import stat
 from subprocess import (Popen,
                         PIPE,
                         call,
@@ -468,6 +469,7 @@ def runTest(test, testnum):
         f = open(keyFile, 'r')
         keyFileData = re.sub(r'\s', '', f.read()) # Remove all whitespace
         f.close()
+        os.chmod(keyFile, stat.S_IRUSR | stat.S_IWUSR)
     else:
         keyFileData = None
 
