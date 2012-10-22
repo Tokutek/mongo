@@ -19,12 +19,15 @@
 
 #pragma once
 
+#include <boost/scoped_ptr.hpp>
+
+#include "mongo/db/auth/authentication_session.h"
 #include "mongo/util/net/hostandport.h"
 
 namespace mongo {
 
     class AuthenticationInfo;
-    
+
     /**
      * this is the base class for Client and ClientInfo
      * Client is for mongod
@@ -37,6 +40,10 @@ namespace mongo {
         virtual ~ClientBasic(){}
         virtual const AuthenticationInfo * getAuthenticationInfo() const = 0;
         virtual AuthenticationInfo * getAuthenticationInfo() = 0;
+        AuthenticationSession* getAuthenticationSession() { return _authenticationSession.get(); }
+        void resetAuthenticationSession(AuthenticationSession* newSession) {
+            _authenticationSession.reset(newSession);
+        }
 
         virtual bool hasRemote() const = 0;
         virtual HostAndPort getRemote() const = 0;
@@ -44,5 +51,7 @@ namespace mongo {
         static ClientBasic* getCurrent();
         static bool hasCurrent();
 
+    private:
+        boost::scoped_ptr<AuthenticationSession> _authenticationSession;
     };
 }
