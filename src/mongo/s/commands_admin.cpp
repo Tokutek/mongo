@@ -1,5 +1,3 @@
-// s/commands_admin.cpp
-
 /**
 *    Copyright (C) 2008 10gen Inc.
 *    Copyright (C) 2013 Tokutek Inc.
@@ -17,15 +15,6 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* TODO
-   _ concurrency control.
-   _ limit() works right?
-   _ KillCursors
-
-   later
-   _ secondary indexes
-*/
-
 #include "pch.h"
 
 #include "mongo/client/connpool.h"
@@ -40,6 +29,15 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/stats/counters.h"
 
+#include "mongo/s/chunk.h"
+#include "mongo/s/client_info.h"
+#include "mongo/s/cluster_constants.h"
+#include "mongo/s/config.h"
+#include "mongo/s/grid.h"
+#include "mongo/s/stats.h"
+#include "mongo/s/strategy.h"
+#include "mongo/s/writeback_listener.h"
+
 #include "mongo/util/net/listen.h"
 #include "mongo/util/net/message.h"
 #include "mongo/util/processinfo.h"
@@ -47,14 +45,6 @@
 #include "mongo/util/stringutils.h"
 #include "mongo/util/timer.h"
 #include "mongo/util/version.h"
-
-#include "config.h"
-#include "chunk.h"
-#include "grid.h"
-#include "strategy.h"
-#include "stats.h"
-#include "writeback_listener.h"
-#include "client_info.h"
 
 namespace mongo {
 
@@ -1098,7 +1088,7 @@ namespace mongo {
                                                                            .getConnString() ) );
 
                 vector<BSONObj> all;
-                auto_ptr<DBClientCursor> cursor = conn->get()->query( "config.shards" , BSONObj() );
+                auto_ptr<DBClientCursor> cursor = conn->get()->query( ConfigNS::shard , BSONObj() );
                 while ( cursor->more() ) {
                     BSONObj o = cursor->next();
                     all.push_back( o );
@@ -1162,8 +1152,8 @@ namespace mongo {
 
                 // maxSize is the space usage cap in a shard in MBs
                 long long maxSize = 0;
-                if ( cmdObj[ ShardFields::maxSize.name() ].isNumber() ) {
-                    maxSize = cmdObj[ ShardFields::maxSize.name() ].numberLong();
+                if ( cmdObj[ ShardFields::maxSize() ].isNumber() ) {
+                    maxSize = cmdObj[ ShardFields::maxSize() ].numberLong();
                 }
 
                 if ( ! grid.addShard( &name , servers , maxSize , errmsg ) ) {
@@ -1206,13 +1196,15 @@ namespace mongo {
                                                                            .getConnString() ) );
                 ScopedDbConnection& conn = *connPtr;
 
-                if (conn->count("config.shards", BSON("_id" << NE << s.getName() << ShardFields::draining(true)))){
+                if (conn->count(ConfigNS::shard,
+                                BSON(ShardFields::name() << NE << s.getName() <<
+                                     ShardFields::draining(true)))){
                     conn.done();
                     errmsg = "Can't have more than one draining shard at a time";
                     return false;
                 }
 
-                if (conn->count("config.shards", BSON("_id" << NE << s.getName())) == 0){
+                if (conn->count(ConfigNS::shard, BSON(ShardFields::name() << NE << s.getName())) == 0){
                     conn.done();
                     errmsg = "Can't remove last shard";
                     return false;
@@ -1238,16 +1230,16 @@ namespace mongo {
                 }
 
                 // If the server is not yet draining chunks, put it in draining mode.
-                BSONObj searchDoc = BSON( "_id" << s.getName() );
-                BSONObj drainingDoc = BSON( "_id" << s.getName() << ShardFields::draining(true) );
-                BSONObj shardDoc = conn->findOne( "config.shards", drainingDoc );
+                BSONObj searchDoc = BSON( ShardFields::name() << s.getName() );
+                BSONObj drainingDoc = BSON( ShardFields::name() << s.getName() << ShardFields::draining(true) );
+                BSONObj shardDoc = conn->findOne( ConfigNS::shard, drainingDoc );
                 if ( shardDoc.isEmpty() ) {
 
                     // TODO prevent move chunks to this shard.
 
                     log() << "going to start draining shard: " << s.getName() << endl;
                     BSONObj newStatus = BSON( "$set" << BSON( ShardFields::draining(true) ) );
-                    conn->update( "config.shards" , searchDoc , newStatus, false /* do no upsert */);
+                    conn->update( ConfigNS::shard , searchDoc , newStatus, false /* do no upsert */);
 
                     errmsg = conn->getLastError();
                     if ( errmsg.size() ) {
@@ -1284,7 +1276,7 @@ namespace mongo {
                 long long dbCount = conn->count( "config.databases" , primaryDoc );
                 if ( ( chunkCount == 0 ) && ( dbCount == 0 ) ) {
                     log() << "going to remove shard: " << s.getName() << endl;
-                    conn->remove( "config.shards" , searchDoc );
+                    conn->remove( ConfigNS::shard , searchDoc );
 
                     errmsg = conn->getLastError();
                     if ( errmsg.size() ) {
@@ -1292,7 +1284,7 @@ namespace mongo {
                         return false;
                     }
 
-                    string shardName = shardDoc[ "_id" ].str();
+                    string shardName = shardDoc[ ShardFields::name() ].str();
                     Shard::removeShard( shardName );
                     shardConnectionPool.removeHost( shardName );
                     ReplicaSetMonitor::remove( shardName, true );
