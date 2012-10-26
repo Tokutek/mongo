@@ -44,28 +44,25 @@ namespace mongo {
 
     bool DocumentSourceCursor::eof() {
         /* if we haven't gotten the first one yet, do so now */
-        if (!pCurrent.get())
+        if (unstarted)
             findNext();
 
-        return (pCurrent.get() == NULL);
+        return !hasCurrent;
     }
 
     bool DocumentSourceCursor::advance() {
         DocumentSource::advance(); // check for interrupts
 
         /* if we haven't gotten the first one yet, do so now */
-        if (!pCurrent.get())
+        if (unstarted)
             findNext();
 
         findNext();
-        return (pCurrent.get() != NULL);
+        return hasCurrent;
     }
 
-    intrusive_ptr<Document> DocumentSourceCursor::getCurrent() {
-        /* if we haven't gotten the first one yet, do so now */
-        if (!pCurrent.get())
-            findNext();
-
+    Document DocumentSourceCursor::getCurrent() {
+        verify(hasCurrent);
         return pCurrent;
     }
 
@@ -87,9 +84,11 @@ namespace mongo {
     }
 
     void DocumentSourceCursor::findNext() {
+        unstarted = false;
 
         if ( !_cursorWithContext ) {
-            pCurrent.reset();
+            pCurrent = Document();
+            hasCurrent = false;
             return;
         }
 
@@ -118,6 +117,7 @@ namespace mongo {
             }
 
             pCurrent = Document::createFromBsonObj(&documentObj);
+            hasCurrent = true;
 
             cursor()->advance();
             return;
@@ -126,7 +126,8 @@ namespace mongo {
         // If we got here, there aren't any more documents.
         // The CursorWithContext (and its read lock) must be released, see SERVER-6123.
         dispose();
-        pCurrent.reset();
+        pCurrent = Document();
+        hasCurrent = false;
     }
 
     void DocumentSourceCursor::setSource(DocumentSource *pSource) {
@@ -176,7 +177,8 @@ namespace mongo {
         const shared_ptr<CursorWithContext>& cursorWithContext,
         const intrusive_ptr<ExpressionContext> &pCtx):
         DocumentSource(pCtx),
-        pCurrent(),
+        unstarted(true),
+        hasCurrent(false),
         _cursorWithContext( cursorWithContext )
     {}
 

@@ -129,6 +129,7 @@ namespace mongo {
         string toString() const { return string(_data, size()); }
         char operator[] ( unsigned pos ) const { return _data[pos]; }
 
+        string toStdString() const { return string(data(), size()); }
     private:
         const char* _data;        // is not guaranted to be null terminated (see "notes" above)
         mutable size_t _size;     // 'size' does not include the null terminator
