@@ -966,10 +966,12 @@ namespace mongo {
                 BSONObj x;
                 BSONObj currChunk;
                 try{
-                    x = conn->get()->findOne( ShardNS::chunk,
-                                              Query( BSON( "ns" << ns ) )
-                                                  .sort( BSON( "lastmod" << -1 ) ) );
-                    currChunk = conn->get()->findOne( ShardNS::chunk , shardId.wrap( "_id" ) );
+                    x = conn->get()->findOne(ConfigNS::chunk,
+                                             Query(BSON(ChunkFields::ns(ns)))
+                                                  .sort(BSON(ChunkFields::lastmod() << -1)));
+
+                    currChunk = conn->get()->findOne(ConfigNS::chunk,
+                                                     shardId.wrap(ChunkFields::name().c_str()));
                 }
                 catch( DBException& e ){
                     errmsg = str::stream() << "aborted moveChunk because could not get chunk data from config server " << shardingState.getConfigServer() << causedBy( e );
@@ -977,15 +979,15 @@ namespace mongo {
                     return false;
                 }
 
-                maxVersion = ShardChunkVersion::fromBSON( x, "lastmod" );
-                verify( currChunk["shard"].type() );
-                verify( currChunk["min"].type() );
-                verify( currChunk["max"].type() );
-                myOldShard = currChunk["shard"].String();
+                maxVersion = ShardChunkVersion::fromBSON(x, ChunkFields::lastmod());
+                verify(currChunk[ChunkFields::shard()].type());
+                verify(currChunk[ChunkFields::min()].type());
+                verify(currChunk[ChunkFields::max()].type());
+                myOldShard = currChunk[ChunkFields::shard()].String();
                 conn->done();
 
-                BSONObj currMin = currChunk["min"].Obj();
-                BSONObj currMax = currChunk["max"].Obj();
+                BSONObj currMin = currChunk[ChunkFields::min()].Obj();
+                BSONObj currMax = currChunk[ChunkFields::max()].Obj();
                 if ( currMin.woCompare( min ) || currMax.woCompare( max ) ) {
                     errmsg = "boundaries are outdated (likely a split occurred)";
                     result.append( "currMin" , currMin );
@@ -1232,14 +1234,14 @@ namespace mongo {
 
                     // Check the precondition
                     BSONObjBuilder b;
-                    b.appendTimestamp("lastmod", maxVersion.toLong());
-                    BSONObj expect = b.obj();
+                    b.appendTimestamp(ChunkFields::lastmod(), maxVersion.toLong());
+                    BSONObj expect = b.done();
                     Matcher m(expect);
 
-                    BSONObj found = conn->get()->findOne(ShardNS::chunk, QUERY("ns" << ns).sort("lastmod", -1));
+                    BSONObj found = conn->get()->findOne(ConfigNS::chunk, QUERY(ChunkFields::ns() << ns).sort(ChunkFields::lastmod(), -1));
                     if (!m.matches(found)) {
                         // TODO(leif): Make sure that this means the sharding algorithm is broken and we should bounce the server.
-                        error() << "moveChunk commit failed: " << ShardChunkVersion::fromBSON(found["lastmod"])
+                        error() << "moveChunk commit failed: " << ShardChunkVersion::fromBSON(found[ChunkFields::lastmod()])
                                 << " instead of " << maxVersion << migrateLog;
                         error() << "TERMINATING" << migrateLog;
                         dbexit(EXIT_SHARDING_ERROR);
@@ -1248,13 +1250,13 @@ namespace mongo {
                     try {
                         // update for the chunk being moved
                         BSONObjBuilder n;
-                        n.append( "_id" , Chunk::genID( ns , min ) );
-                        myVersion.addToBSON( n, "lastmod" );
-                        n.append( "ns" , ns );
-                        n.append( "min" , min );
-                        n.append( "max" , max );
-                        n.append( "shard" , toShard.getName() );
-                        conn->get()->update(ShardNS::chunk, QUERY("_id" << Chunk::genID(ns, min)), n.obj());
+                        n.append(ChunkFields::name(), Chunk::genID(ns, min));
+                        myVersion.addToBSON(n, ChunkFields::lastmod());
+                        n.append(ChunkFields::ns(), ns);
+                        n.append(ChunkFields::min(), min);
+                        n.append(ChunkFields::max(), max);
+                        n.append(ChunkFields::shard(), toShard.getName());
+                        conn->get()->update(ConfigNS::chunk, QUERY(ChunkFields::name() << Chunk::genID(ns, min)), n.done());
                     }
                     catch (DBException &e) {
                         warning() << e << migrateLog;
@@ -1282,13 +1284,13 @@ namespace mongo {
                         nextVersion.incMinor();  // same as used on donateChunk
                         try {
                             BSONObjBuilder n;
-                            n.append( "_id" , Chunk::genID( ns , bumpMin ) );
-                            nextVersion.addToBSON( n, "lastmod" );
-                            n.append( "ns" , ns );
-                            n.append( "min" , bumpMin );
-                            n.append( "max" , bumpMax );
-                            n.append( "shard" , fromShard.getName() );
-                            conn->get()->update(ShardNS::chunk, QUERY("_id" << Chunk::genID(ns, bumpMin)), n.obj());
+                            n.append(ChunkFields::name(), Chunk::genID(ns, bumpMin));
+                            nextVersion.addToBSON(n, ChunkFields::lastmod());
+                            n.append(ChunkFields::ns(), ns);
+                            n.append(ChunkFields::min(), bumpMin);
+                            n.append(ChunkFields::max(), bumpMax);
+                            n.append(ChunkFields::shard(), fromShard.getName());
+                            conn->get()->update(ConfigNS::chunk, QUERY(ChunkFields::name() << Chunk::genID(ns, bumpMin)), n.done());
                             log() << "moveChunk updating self version to: " << nextVersion << " through "
                                   << bumpMin << " -> " << bumpMax << " for collection '" << ns << "'" << migrateLog;
                         }
@@ -1334,10 +1336,12 @@ namespace mongo {
 
                         // look for the chunk in this shard whose version got bumped
                         // we assume that if that mod made it to the config, the applyOps was successful
-                        BSONObj doc = conn->get()->findOne( ShardNS::chunk,
-                                                            Query(BSON( "ns" << ns ))
-                                                                .sort( BSON("lastmod" << -1)));
-                        ShardChunkVersion checkVersion = ShardChunkVersion::fromBSON( doc["lastmod"] );
+                        BSONObj doc = conn->get()->findOne(ConfigNS::chunk,
+                                                           Query(BSON(ChunkFields::ns(ns)))
+                                                               .sort(BSON(ChunkFields::lastmod() << -1)));
+
+                        ShardChunkVersion checkVersion =
+                            ShardChunkVersion::fromBSON(doc[ChunkFields::lastmod()]);
 
                         if ( checkVersion.isEquivalentTo( nextVersion ) ) {
                             log() << "moveChunk commit confirmed" << migrateLog;

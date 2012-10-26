@@ -432,8 +432,8 @@ namespace mongo {
         try {
             // look for the stop balancer marker
             balancerDoc = conn->get()->findOne( ShardNS::settings, BSON( "_id" << "balancer" ) );
-            if( ns.size() > 0 ) collDoc = conn->get()->findOne( ShardNS::collection,
-                                                                BSON( "_id" << ns ) );
+            if( ns.size() > 0 ) collDoc = conn->get()->findOne(ConfigNS::collection,
+                                                               BSON( CollectionFields::name(ns)));
             conn->done();
         }
         catch( DBException& e ){
