@@ -30,6 +30,7 @@
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/client.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/platform/random.h"
@@ -221,5 +222,13 @@ namespace mongo {
         }
 
     } writeBacksQueuedCommand;
+
+    class WriteBacksQueuedSSM : public ServerStatusMetric {
+    public:
+        WriteBacksQueuedSSM() : ServerStatusMetric( ".writeBacksQueued", false ){}
+        virtual void appendAtLeaf( BSONObjBuilder& b ) const {
+            b.appendBool( _leafName, ! writeBackManager.queuesEmpty() );
+        }
+    } writeBacksQueuedSSM;
 
 }  // namespace mongo

@@ -19,6 +19,7 @@
 
 #include "mongo/db/client.h"
 #include "mongo/db/commands/fsync.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/rs_sync.h"
 
@@ -770,5 +771,20 @@ namespace mongo {
             verify(_opSyncShouldRun);
         }
     }
+
+    class ReplNetworkQueueSSS : public ServerStatusSection {
+    public:
+        ReplNetworkQueueSSS() : ServerStatusSection( "replNetworkQueue" ){}
+        virtual bool includeByDefault() const { return true; }
+        virtual bool adminOnly() const { return false; }
+
+        BSONObj generateSection( const BSONElement& configElement, bool userIsAdmin ) const {
+            if ( ! theReplSet )
+                return BSONObj();
+            
+            return BackgroundSync::get()->getCounters();
+        }
+
+    } replNetworkQueueSSS;
 
 } // namespace mongo
