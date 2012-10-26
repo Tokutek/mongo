@@ -110,6 +110,7 @@ commonFiles = [ "pch.cpp",
                 "util/net/message_port.cpp",
                 "util/net/listen.cpp",
                 "util/startup_test.cpp",
+                "util/version.cpp",
                 "client/authentication_table_common.cpp",
                 "client/connpool.cpp",
                 "client/dbclient.cpp",
@@ -120,6 +121,7 @@ commonFiles = [ "pch.cpp",
                 "client/remote_transaction.cpp",
                 "client/syncclusterconnection.cpp",
                 "client/distlock.cpp",
+                "db/dbmessage.cpp"
                 ]
 
 commonSysLibdeps = []
@@ -244,10 +246,8 @@ env.StaticLibrary("coredb", [
                            'plugins/plugins',
                            'server_parameters'])
 
-coreServerFiles = [ "util/version.cpp",
-                    "db/common.cpp",
+coreServerFiles = [ "db/common.cpp",
                     "util/net/miniwebserver.cpp",
-                    "db/dbmessage.cpp",
                     "db/stats/counters.cpp",
                     "db/stats/service_stats.cpp",
                     ]
@@ -572,7 +572,7 @@ if shellEnv is not None:
     mongo_shell = shellEnv.Program(
         "mongo",
         coreShellFiles,
-        LIBDEPS=["coreserver", "clientandshell",
+        LIBDEPS=[ "clientandshell", "mongocommon", "scripting", 
                  "$BUILD_DIR/third_party/pcrecpp"] + env['MODULE_LIBDEPS_MONGOSHELL'] )
 
     shellEnv.Install( '#/', mongo_shell )
