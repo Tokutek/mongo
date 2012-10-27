@@ -1,4 +1,17 @@
-/** @file bsondemo.cpp */
+/** @file bsondemo.cpp
+
+    Example of use of BSON from C++.
+
+    Requires boost (headers only).
+    Works headers only (the parts actually exercised herein that is - some functions require .cpp files).
+
+    To build and run:
+      # "../../.." is the directory mongo/src/
+      g++ -o bsondemo -I ../../.. bsondemo.cpp
+      ./bsondemo
+
+    Windows: project files are available in this directory for bsondemo.cpp for use with Visual Studio.
+*/
 
 /*
  *    Copyright 2010 10gen Inc.
