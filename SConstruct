@@ -218,6 +218,8 @@ add_option("smoke-server-opts", "additional options for the mongod for smoke tes
 add_option("smoke-quiet", "make smoke.py be quiet", 0 , False )
 add_option("smokeauth", "run smoke tests with --auth", 0 , False )
 
+add_option("use-sasl-client", "Support SASL authentication in the client library", 0, False)
+
 add_option( "use-system-tcmalloc", "use system version of tcmalloc library", 0, True )
 
 add_option( "use-system-pcre", "use system version of pcre library", 0, True )
@@ -859,6 +861,12 @@ def doConfigure(myenv):
             v8_lib_choices = ["v8"]
         if not conf.CheckLib( v8_lib_choices ):
             Exit(1)
+
+    env['MONGO_BUILD_SASL_CLIENT'] = bool(has_option("use-sasl-client"))
+    if env['MONGO_BUILD_SASL_CLIENT'] and not conf.CheckLibWithHeader(
+        "gsasl", "gsasl.h", "C", "gsasl_check_version(GSASL_VERSION);", autoadd=False):
+
+        Exit(1)
 
     # requires ports devel/libexecinfo to be installed
     if freebsd or openbsd:

@@ -122,6 +122,13 @@ commonFiles = [ "pch.cpp",
                 "client/distlock.cpp",
                 ]
 
+commonSysLibdeps = []
+
+if env['MONGO_BUILD_SASL_CLIENT']:
+    commonFiles.extend(['client/sasl_client_authenticate.cpp',
+                        'util/gsasl_session.cpp'])
+    commonSysLibdeps.append('gsasl')
+
 # handle processinfo*
 processInfoFiles = [ "util/processinfo.cpp" ]
 
@@ -157,7 +164,8 @@ env.StaticLibrary('mongocommon', commonFiles,
                            'fail_point',
                            '$BUILD_DIR/third_party/pcrecpp',
                            '$BUILD_DIR/third_party/murmurhash3/murmurhash3',
-                           '$BUILD_DIR/third_party/shim_boost'],)
+                           '$BUILD_DIR/third_party/shim_boost'],
+                  SYSLIBDEPS=commonSysLibdeps)
 
 env.StaticLibrary("coredb", [
         "client/authentication_table_server.cpp",
