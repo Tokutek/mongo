@@ -449,6 +449,9 @@ namespace mongo {
         case BSONObj::opGEO_INTERSECTS:
             _special.add("2dsphere", SpecialIndices::INDEX_REQUIRED);
             break;
+        case BSONObj::opINTERSECT:
+            _special = "s2d";
+            break;
         case BSONObj::opEXISTS: {
             if ( !existsSpec ) {
                 lower = upper = staticNull.firstElement();
