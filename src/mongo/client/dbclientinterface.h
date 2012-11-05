@@ -175,6 +175,11 @@ namespace mongo {
         ReadPreference_Nearest,
     };
 
+    /**
+     * @return true if the query object contains a read preference specification object.
+     */
+    bool hasReadPreference(const BSONObj& queryObj);
+
     class DBClientBase;
 
     /**
