@@ -123,7 +123,8 @@ commonFiles = [ "pch.cpp",
 
 env.StaticLibrary("fail_point",
                   ["util/fail_point.cpp",
-                   "util/fail_point_registry.cpp"],
+                   "util/fail_point_registry.cpp",
+                   "util/fail_point_service.cpp"],
                   LIBDEPS=["foundation", "bson"])
 
 env.StaticLibrary('mongocommon', commonFiles,
@@ -143,9 +144,9 @@ env.StaticLibrary("coredb", [
         "db/client_transaction.cpp",
         "db/opsettings.cpp",
         "db/commands.cpp",
+        "db/commands/fail_point_cmd.cpp",
         "db/commands/hashcmd.cpp",
         "db/commands/isself.cpp",
-        "db/fail_point_service.cpp",
         "db/pipeline/pipeline.cpp",
         "db/dbcommands_generic.cpp",
         "db/dbpath.cpp",
