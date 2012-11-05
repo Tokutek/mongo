@@ -62,7 +62,7 @@ namespace mongo {
         // thread.
         bool _opSyncRunning;
 
-        Member* _currentSyncTarget;
+        const Member* _currentSyncTarget;
 
         // double ended queue containing the ops
         // that have been written to the oplog but yet
@@ -123,7 +123,7 @@ namespace mongo {
         // starts the producer thread
         void producerThread();
 
-        virtual Member* getSyncTarget();
+        virtual const Member* getSyncTarget();
 
         // For monitoring
         BSONObj getCounters();

@@ -501,7 +501,7 @@ namespace mongo {
     }
 
     void BackgroundSync::getOplogReader(OplogReader& r) {
-        Member *target = NULL, *stale = NULL;
+        const Member *target = NULL, *stale = NULL;
         BSONObj oldest;
 
         verify(r.conn() == NULL);
@@ -726,7 +726,7 @@ namespace mongo {
         return true;
     }
 
-    Member* BackgroundSync::getSyncTarget() {
+    const Member* BackgroundSync::getSyncTarget() {
         boost::unique_lock<boost::mutex> lock(_mutex);
         return _currentSyncTarget;
     }

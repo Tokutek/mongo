@@ -136,7 +136,7 @@ namespace mongo {
         return hbinfo().up() && (config().buildIndexes || !buildIndexes) && state().readable();
     }
 
-    Member* ReplSetImpl::getMemberToSyncTo() {
+    const Member* ReplSetImpl::getMemberToSyncTo() {
         lock lk(this);
         GTID lastGTID = gtidManager->getLiveState();
 
@@ -149,7 +149,7 @@ namespace mongo {
             return target;
         }
 
-        Member* primary = const_cast<Member*>(box.getPrimary());
+        const Member* primary = box.getPrimary();
 
         // wait for 2N pings before choosing a sync target
         if (_cfg) {

@@ -124,7 +124,7 @@ namespace mongo {
         }
 
         // record the previous member we were syncing from
-        Member *prev = BackgroundSync::get()->getSyncTarget();
+        const Member *prev = BackgroundSync::get()->getSyncTarget();
         if (prev) {
             result.append("prevSyncTarget", prev->fullName());
         }

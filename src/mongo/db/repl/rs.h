@@ -355,7 +355,7 @@ namespace mongo {
         /**
          * Find the closest member (using ping time) with a higher latest GTID.
          */
-        Member* getMemberToSyncTo();
+        const Member* getMemberToSyncTo();
         void veto(const string& host, unsigned secs=10);
         bool gotForceSync();
         void goStale(const Member* stale, GTID remoteGTID);
