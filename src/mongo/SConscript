@@ -200,7 +200,7 @@ env.StaticLibrary("coredb", [
         "db/storage/key.cpp",
         "s/shardconnection.cpp",
         ],
-                  LIBDEPS=['db/auth/serverauth', 'plugins/plugins'])
+                  LIBDEPS=['db/auth/auth', 'db/auth/serverauth', 'plugins/plugins'])
 
 coreServerFiles = [ "util/version.cpp",
                     "db/common.cpp",
@@ -438,7 +438,6 @@ mongod = env.Install(
     '#/', env.Program( "mongod", mongodOnlyFiles, LIBS=['HotBackup'] + env['LIBS'] + tokulibs,
                        LIBDEPS=["coredb",
                                 "coreserver",
-                                "db/auth/auth",
                                 "mongodandmongos",
                                 "ntservice",
                                 "serveronly",
@@ -472,7 +471,7 @@ env.Install( '#/', [
 mongos = env.Program(
     "mongos", [ "s/server.cpp"] ,
     LIBS=env['LIBS'] + tokulibs, LIBDEPS=["mongoscore", "coreserver", "coredb", "mongocommon", "coreshard", "dbcmdline", "ntservice",
-             "mongodandmongos", "db/auth/auth"] + env['MODULE_LIBDEPS_MONGOS'])
+             "mongodandmongos"] + env['MODULE_LIBDEPS_MONGOS'])
 env.Install( '#/', mongos )
 
 env.Library("clientandshell", ["client/authentication_table_client.cpp",
