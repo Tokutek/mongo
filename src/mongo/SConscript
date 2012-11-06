@@ -122,6 +122,25 @@ commonFiles = [ "pch.cpp",
                 "client/distlock.cpp",
                 ]
 
+# handle processinfo*
+processInfoFiles = [ "util/processinfo.cpp" ]
+
+processInfoPlatformFile = env.File( "util/processinfo_${PYSYSPLATFORM}.cpp" )
+# NOTE( schwerin ): This is a very un-scons-y way to make this decision, and prevents one from using
+# code generation to produce util/processinfo_$PYSYSPLATFORM.cpp.
+if not os.path.exists( str( processInfoPlatformFile ) ):
+    processInfoPlatformFile = env.File( "util/processinfo_none.cpp" )
+
+processInfoFiles.append( processInfoPlatformFile )
+
+env.StaticLibrary("processinfo",
+                  processInfoFiles,
+                  LIBDEPS=["foundation", "bson"])
+
+env.CppUnitTest("processinfo_test",
+                ["util/processinfo_test.cpp"],
+                LIBDEPS=["processinfo"])
+
 env.StaticLibrary("fail_point",
                   ["util/fail_point.cpp",
                    "util/fail_point_registry.cpp",
@@ -132,6 +151,7 @@ env.StaticLibrary('mongocommon', commonFiles,
                   LIBDEPS=['bson',
                            'foundation',
                            'md5',
+                           'processinfo',
                            'stacktrace',
                            'stringutils',
                            'fail_point',
@@ -235,19 +255,6 @@ elif usev8:
 else:
     env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_none.cpp'],
                       LIBDEPS=['bson_template_evaluator'])
-
-# handle processinfo*
-processInfoFiles = [ "util/processinfo.cpp" ]
-
-processInfoPlatformFile = env.File( "util/processinfo_${PYSYSPLATFORM}.cpp" )
-# NOTE( schwerin ): This is a very un-scons-y way to make this decision, and prevents one from using
-# code generation to produce util/processinfo_$PYSYSPLATFORM.cpp.
-if not os.path.exists( str( processInfoPlatformFile ) ):
-    processInfoPlatformFile = env.File( "util/processinfo_none.cpp" )
-
-processInfoFiles.append( processInfoPlatformFile )
-
-coreServerFiles += processInfoFiles
 
 # handle systeminfo*
 systemInfoPlatformFile = env.File( "util/systeminfo_${PYSYSPLATFORM}.cpp" )
