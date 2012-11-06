@@ -10,7 +10,6 @@ env.Append(CCFLAGS=['-Isrc/third_party/gflags-2.0/src'])
 env.StaticLibrary(
     "strings",
     [ 
-	"ascii_ctype.cc",
 	"split.cc",
 	"stringprintf.cc",
 	"strutil.cc",
