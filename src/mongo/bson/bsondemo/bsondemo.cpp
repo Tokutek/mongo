@@ -1,17 +1,4 @@
-/** @file bsondemo.cpp
-
-    Example of use of BSON from C++.
-
-    Requires boost (headers only).
-    Works headers only (the parts actually exercised herein that is - some functions require .cpp files).
-
-    To build and run:
-      # "../../.." is the directory mongo/src/
-      g++ -o bsondemo -I ../../.. bsondemo.cpp
-      ./bsondemo
-
-    Windows: project files are available in this directory for bsondemo.cpp for use with Visual Studio.
-*/
+// @file bsondemo.cpp
 
 /*
  *    Copyright 2010 10gen Inc.
@@ -30,13 +17,14 @@
  */
 
 /*
-    Example of use of BSON from C++.
+    Example of use of BSON from C++.  Example is solely BSON, no MongoDB involved.
 
     Requires boost (headers only).
-    Works headers only (the parts actually exercised herein that is - some functions require .cpp files).
+    Works as c++ "headers-only" (the parts actually exercised herein that is - some functions require .cpp files).
 
     To build and run:
-      g++ -o bsondemo bsondemo.cpp
+      # "../../.." is the directory mongo/src/
+      g++ -o bsondemo -I ../../.. bsondemo.cpp
       ./bsondemo
 
     Windows: project files are available in this directory for bsondemo.cpp for use with Visual Studio.
