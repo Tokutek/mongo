@@ -126,6 +126,10 @@ namespace mongo {
             bool fromLastOperation;
         };
 
+        // Used to set up this thread's AuthorizationManager.  Should be called during the
+        // initialization of this ClientInfo.
+        void _setupAuth();
+
         // for getLastError
         void _addWriteBack( vector<WBInfo>& all , const BSONObj& o, bool fromLastOperation );
         vector<BSONObj> _handleWriteBacks( const vector<WBInfo>& all , bool fromWriteBackListener );
