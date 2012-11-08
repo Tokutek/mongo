@@ -70,11 +70,11 @@ namespace mongo {
     }
 
     Client::Client(const char *desc, AbstractMessagingPort *p) :
+        ClientBasic(p),
         _context(0),
         _shutdown(false),
         _desc(desc),
-        _god(0),
-        _mp(p)
+        _god(0)
     {
         _connectionId = p ? p->connectionId() : 0;
         

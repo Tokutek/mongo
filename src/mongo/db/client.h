@@ -40,7 +40,6 @@
 #include "mongo/db/opsettings.h"
 #include "mongo/util/paths.h"
 #include "mongo/util/concurrency/threadlocal.h"
-#include "mongo/util/net/message_port.h"
 #include "mongo/util/concurrency/rwlock.h"
 
 namespace mongo {
@@ -117,11 +116,8 @@ namespace mongo {
         bool isGod() const { return _god; } /* this is for map/reduce writes */
         string toString() const;
         void gotHandshake( const BSONObj& o );
-        bool hasRemote() const { return _mp; }
-        HostAndPort getRemote() const { verify( _mp ); return _mp->remote(); }
         BSONObj getRemoteID() const { return _remoteId; }
         BSONObj getHandshake() const { return _handshake; }
-        AbstractMessagingPort * port() const { return _mp; }
         ConnectionId getConnectionId() const { return _connectionId; }
 
         LockState& lockState() { return _ls; }
@@ -321,7 +317,6 @@ namespace mongo {
         GTID _lastGTID;
         BSONObj _handshake;
         BSONObj _remoteId;
-        AbstractMessagingPort * const _mp;
         OpSettings _opSettings;
 
         // for CmdCopyDb and CmdCopyDbGetNonce

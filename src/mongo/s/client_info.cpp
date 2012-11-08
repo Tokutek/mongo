@@ -37,7 +37,7 @@
 
 namespace mongo {
 
-    ClientInfo::ClientInfo() {
+    ClientInfo::ClientInfo(AbstractMessagingPort* messagingPort) : ClientBasic(messagingPort) {
         _cur = &_a;
         _prev = &_b;
         _autoSplitOk = true;
@@ -74,13 +74,18 @@ namespace mongo {
         _ai.startRequest();
     }
 
+    ClientInfo* ClientInfo::create(AbstractMessagingPort* messagingPort) {
+        ClientInfo * info = _tlInfo.get();
+        massert(16472, "A ClientInfo already exists for this thread", !info);
+        info = new ClientInfo(messagingPort);
+        _tlInfo.reset( info );
+        info->newRequest();
+        return info;
+    }
+
     ClientInfo * ClientInfo::get() {
         ClientInfo * info = _tlInfo.get();
-        if ( ! info ) {
-            info = new ClientInfo();
-            _tlInfo.reset( info );
-            info->newRequest();
-        }
+        massert(16473, "No ClientInfo exists for this thread", info);
         return info;
     }
 

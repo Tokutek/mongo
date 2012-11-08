@@ -47,12 +47,12 @@ namespace mongo {
     LockState::LockState(){} // ugh
 
     Client::Client(const char *desc , AbstractMessagingPort *p) :
+        ClientBasic(p),
         _context(0),
         _shutdown(false),
         _desc(desc),
         _god(0),
-        _lastGTID(),
-        _mp(p) {
+        _lastGTID() {
     }
     Client::~Client() {}
     bool Client::shutdown() { return true; }
