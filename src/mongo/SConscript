@@ -35,6 +35,7 @@ tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
 env.SConscript(['base/SConscript',
                 'db/auth/SConscript',
                 'platform/SConscript',
+                's/SConscript',
                 'unittest/SConscript'])
 
 allPlugins = env.SConscript(['plugins/SConscript'])
