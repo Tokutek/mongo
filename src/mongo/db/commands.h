@@ -22,6 +22,9 @@
 
 #include <vector>
 
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/opsettings.h"
@@ -252,6 +255,10 @@ namespace mongo {
     class DeprecatedCommand : public InformationCommand {
       public:
         DeprecatedCommand(const char *name, bool webUI=false, const char *oldName=NULL) : InformationCommand(name, false, oldName) {}
+        // No auth required
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
         void help(stringstream &h) const { h << name << " is a deprecated command"; }
         bool run(const string&, BSONObj&, int, string &errmsg, BSONObjBuilder &res, bool) {
             stringstream ss;
@@ -274,6 +281,13 @@ namespace mongo {
         }
         virtual bool slaveOk() const {
             return true;
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::shutdown);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
         }
         virtual LockType locktype() const { return NONE; }
         virtual bool requiresSync() const { return false; }
