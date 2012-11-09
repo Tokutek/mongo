@@ -80,7 +80,7 @@ namespace mongo {
              "files in the given path, instead of connecting to a mongod  "
              "server - needs to lock the data directory, so cannot be "
              "used if a mongod is currently accessing the same path" )
-            ("directoryperdb", "if dbpath specified, each db is in a separate directory" )
+            ("directoryperdb", "each db is in a separate directly (relevant only if dbpath specified)" )
             ;
 
         if ( access & SPECIFY_DBCOL )
