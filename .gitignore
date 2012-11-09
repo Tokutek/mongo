@@ -145,6 +145,9 @@ debian/mongodb
 # server logs from smoke.py --quiet (good until at least 2020)
 server.log.201*
 
+#built by Visual Studio
+src/third_party/v8/src/experimental-libraries.cc
+src/third_party/v8/src/libraries.cc
 
 # old things that should be removed
 # maybe remove this mid 2012
