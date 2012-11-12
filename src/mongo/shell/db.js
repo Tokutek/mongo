@@ -361,7 +361,6 @@ DB.prototype.shutdownServer = function(opts) {
 */
 DB.prototype.cloneDatabase = function(from) { 
     assert( isString(from) && from.length );
-    //this.resetIndexCache();
     return this._dbCommand( { clone: from } );
 }
 
@@ -388,7 +387,6 @@ DB.prototype.cloneCollection = function(from, collection, query) {
     assert( isString(collection) && collection.length );
     collection = this._name + "." + collection;
     query = query || {};
-    //this.resetIndexCache();
     return this._dbCommand( { cloneCollection:collection, from:from, query:query } );
 }
 
