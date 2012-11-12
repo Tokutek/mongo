@@ -288,6 +288,7 @@ namespace mongo {
             scoped_lock lk( _mutex );
             list<Scope*> & l = _pools[pool];
             bool oom = s->hasOutOfMemoryException();
+            s->exit();
 
             // do not keep too many contexts, or use them for too long
             if ( l.size() > 10 || s->getTimeUsed() > 10 || oom ) {
@@ -315,6 +316,7 @@ namespace mongo {
             l.pop_back();
             s->reset();
             s->incTimeUsed();
+            s->enter();
             return s;
         }
 
@@ -356,6 +358,7 @@ namespace mongo {
                 // this means that the Scope was killed from a different thread
                 // for example a cursor got timed out that has a $where clause
                 LOG(3) << "warning: scopeCache is empty!" << endl;
+                _real->exit();
                 delete _real;
                 _real = 0;
             }
@@ -474,6 +477,7 @@ namespace mongo {
         Scope * s = scopeCache->get( pool );
         if ( ! s ) {
             s = newScope();
+            s->enter();
         }
 
         auto_ptr<Scope> p;

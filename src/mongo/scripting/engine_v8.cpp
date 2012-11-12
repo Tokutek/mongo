@@ -497,6 +497,14 @@ namespace mongo {
         _isolate->Dispose();
     }
 
+    void V8Scope::enter() {
+        _isolate->Enter();
+    }
+
+    void V8Scope::exit() {
+        _isolate->Exit();
+    }
+
     bool V8Scope::hasOutOfMemoryException() {
         V8_SIMPLE_HEADER
         if (!_context.IsEmpty())
