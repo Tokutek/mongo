@@ -36,7 +36,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/json.h"
 #include "mongo/db/pdfile.h"
-#include "mongo/db/security.h"
+#include "mongo/platform/random.h"
 #include "mongo/util/md5.hpp"
 #include "mongo/util/mongoutils/str.h"
 
@@ -56,14 +56,17 @@ namespace mongo {
 
     class CmdGetNonce : public InformationCommand {
     public:
-        CmdGetNonce() : InformationCommand("getnonce") {}
+        CmdGetNonce() : InformationCommand("getnonce") {
+            _random = SecureRandom::create();
+        }
+
         virtual bool requiresAuth() { return false; }
         void help(stringstream& h) const { h << "internal"; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {} // No auth required
         bool run(const string&, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            nonce64 n = Security::getNonce();
+            nonce64 n = _random->nextInt64();
             stringstream ss;
             ss << hex << n;
             result.append("nonce", ss.str() );
@@ -71,6 +74,8 @@ namespace mongo {
                     new MongoAuthenticationSession(n));
             return true;
         }
+
+        SecureRandom* _random;
     } cmdGetNonce;
 
     CmdLogout cmdLogout;
