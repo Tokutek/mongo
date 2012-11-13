@@ -122,6 +122,8 @@ namespace mongo {
     private:
         mutable mongo::mutex _mutex;
 
+        PseudoRandom _random;
+
         MapSharded _cursors;
         MapNormal _refs; // Maps cursor ID to shard name
         MapNormal _refsNS; // Maps cursor ID to namespace

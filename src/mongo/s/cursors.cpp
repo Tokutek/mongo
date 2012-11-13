@@ -31,6 +31,7 @@
 #include "mongo/client/connpool.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/s/cursors.h"
 #include "mongo/util/concurrency/task.h"
 #include "mongo/util/net/listen.h"
 
@@ -154,8 +155,15 @@ namespace mongo {
 
     long long CursorCache::TIMEOUT = 600000;
 
+    unsigned getCCRandomSeed() {
+        scoped_ptr<SecureRandom> sr( SecureRandom::create() );
+        return sr->nextInt64();
+    }
+
     CursorCache::CursorCache()
-        :_mutex( "CursorCache" ), _shardedTotal(0) {
+        :_mutex( "CursorCache" ),
+         _random( getCCRandomSeed() ),
+         _shardedTotal(0) {
     }
 
     CursorCache::~CursorCache() {
@@ -233,13 +241,17 @@ namespace mongo {
 
     long long CursorCache::genId() {
         while ( true ) {
-            long long x = Security::getNonce();
+            scoped_lock lk( _mutex );
+
+            long long x = Listener::getElapsedTimeMillis() << 32;
+            x |= _random.nextInt32();
+
             if ( x == 0 )
                 continue;
+
             if ( x < 0 )
                 x *= -1;
 
-            scoped_lock lk( _mutex );
             MapSharded::iterator i = _cursors.find( x );
             if ( i != _cursors.end() )
                 continue;
