@@ -44,6 +44,7 @@ env.StaticLibrary('foundation',
                     'util/signal_handlers.cpp',
                     'util/text.cpp',
                     'util/time_support.cpp',
+                    'util/timer.cpp'
                     ],
                   LIBDEPS=['stacktrace',
                            '$BUILD_DIR/mongo/base/base',
@@ -68,6 +69,10 @@ env.StaticLibrary('bson', [
         'stringutils',
         ])
 
+env.CppUnitTest('string_map_test', ['util/string_map_test.cpp'],
+                LIBDEPS=['bson','foundation'])
+
+
 commonFiles = [ "pch.cpp",
                 "buildinfo.cpp",
                 "db/hasher.cpp",
@@ -75,7 +80,6 @@ commonFiles = [ "pch.cpp",
                 "shell/mongo.cpp",
                 "util/background.cpp",
                 "util/intrusive_counter.cpp",
-                "util/timer.cpp",
                 "util/util.cpp",
                 "util/trace.cpp",
                 "util/ramlog.cpp",
