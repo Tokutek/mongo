@@ -80,13 +80,13 @@ env.StaticLibrary('bson', [
         'util/safe_num.cpp',
         'bson/bson_validate.cpp',
         'bson/oid.cpp',
-        'db/nonce.cpp',
         'db/jsobj.cpp',
-        'db/json.cpp',
+        'db/json.cpp'
         ], LIBDEPS=[
         'base/base',
         'md5',
         'stringutils',
+        '$BUILD_DIR/mongo/platform/platform',
         ])
 
 env.CppUnitTest('string_map_test', ['util/string_map_test.cpp'],
