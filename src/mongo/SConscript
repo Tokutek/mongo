@@ -163,7 +163,6 @@ commonFiles = [ "pch.cpp",
                 "client/remote_transaction.cpp",
                 'client/sasl_client_authenticate.cpp',
                 "client/syncclusterconnection.cpp",
-                "client/distlock.cpp",
                 "db/dbmessage.cpp"
                 ]
 
@@ -434,13 +433,14 @@ env.Program('lame_stacktrace_test', 'util/lame_stacktrace_test.cpp',
 
 serverOnlyFiles += [ "db/stats/snapshots.cpp" ]
 
-env.Library( "coreshard", [ "s/cluster_constants.cpp",
+env.Library( "coreshard", [ "client/distlock.cpp",
                             "s/config.cpp",
                             "s/balancer_lock.cpp",
                             "s/grid.cpp",
                             "s/chunk.cpp",
                             "s/shard.cpp",
-                            "s/shardkey.cpp"] )
+                            "s/shardkey.cpp"],
+                            LIBDEPS=['s/config'] )
 
 mongosLibraryFiles = [
     "s/interrupt_status_mongos.cpp",
