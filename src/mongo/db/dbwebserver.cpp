@@ -24,6 +24,10 @@
 #include "mongo/util/net/miniwebserver.h"
 #include "mongo/util/mongoutils/html.h"
 #include "mongo/util/md5.hpp"
+#include "mongo/db/auth/acquired_privilege.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/principal.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/security.h"
 #include "mongo/db/stats/snapshots.h"
@@ -76,8 +80,24 @@ namespace mongo {
             ss << "</pre>";
         }
 
+        void _authorizePrincipal(const std::string& principalName, bool readOnly) {
+            Principal* principal = new Principal(principalName);
+            ActionSet actions = AuthorizationManager::getActionsForOldStyleUser(
+                    "admin", readOnly);
+            AcquiredPrivilege privilege(Privilege("*", actions), principal);
+
+            AuthorizationManager* authorizationManager = cc().getAuthorizationManager();
+            authorizationManager->addAuthorizedPrincipal(principal);
+            Status status = authorizationManager->acquirePrivilege(privilege);
+            verify (status == Status::OK());
+        }
+
         bool allowed( const char * rq , vector<string>& headers, const SockAddr &from ) {
             if ( from.isLocalHost() || !_webUsers->haveAdminUsers() ) {
+                _authorizePrincipal("RestUser", false);
+
+                // TODO: remove this once all auth checking goes through the AuthorizationManager
+                // instead of AuthenticationInfo
                 cmdAuthenticate.authenticate( "admin", "RestUser", false );
                 return true;
             }
@@ -116,7 +136,15 @@ namespace mongo {
                     string r1 = md5simpledigest( r.str() );
 
                     if ( r1 == parms["response"] ) {
-                        cmdAuthenticate.authenticate( "admin", user["user"].str(), user[ "readOnly" ].isBoolean() && user[ "readOnly" ].boolean() );
+                        std::string principalName = user["user"].str();
+                        bool readOnly = user[ "readOnly" ].isBoolean() &&
+                                user[ "readOnly" ].boolean();
+
+                        _authorizePrincipal(principalName, readOnly);
+
+                        // TODO: remove this once all auth checking goes through the
+                        // AuthorizationManager instead of AuthenticationInfo
+                        cmdAuthenticate.authenticate("admin", principalName, readOnly);
                         return true;
                     }
                 }
