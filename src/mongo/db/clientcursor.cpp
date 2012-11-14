@@ -25,13 +25,23 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/clientcursor.h"
+
+#include <string>
 #include <time.h>
+#include <vector>
 
 #include "mongo/client/dbclientinterface.h"
-#include "mongo/db/database.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/introspect.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/database.h"
+#include "mongo/db/introspect.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/repl/rs.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/scanandorder.h"
 #include "mongo/db/repl/rs.h"
@@ -388,6 +398,13 @@ namespace mongo {
         CmdCursorInfo() : WebInformationCommand("cursorInfo") {}
         virtual void help( stringstream& help ) const {
             help << " example: { cursorInfo : 1 }";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::cursorInfo);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
         }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             ClientCursor::appendStats( result );
