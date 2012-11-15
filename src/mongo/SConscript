@@ -183,6 +183,7 @@ env.StaticLibrary("coredb", [
         "db/opsettings.cpp",
         "db/commands.cpp",
         "db/commands/fail_point_cmd.cpp",
+        "db/commands/find_and_modify_common.cpp",
         "db/commands/hashcmd.cpp",
         "db/commands/isself.cpp",
         "db/commands/parameters.cpp",
