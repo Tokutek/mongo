@@ -17,12 +17,22 @@
  */
 
 
-#include "pch.h"
-#include "cursors.h"
-#include "../client/connpool.h"
-#include "../db/commands.h"
-#include "../util/concurrency/task.h"
-#include "../util/net/listen.h"
+#include "mongo/pch.h"
+
+#include "mongo/s/cursors.h"
+
+#include <string>
+#include <vector>
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
+#include "mongo/client/connpool.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/util/concurrency/task.h"
+#include "mongo/util/net/listen.h"
 
 namespace mongo {
     const int ShardedClientCursor::INIT_REPLY_BUFFER_SIZE = 32768;
@@ -325,6 +335,13 @@ namespace mongo {
         CmdCursorInfo() : WebInformationCommand("cursorInfo") {}
         virtual void help( stringstream& help ) const {
             help << " example: { cursorInfo : 1 }";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::cursorInfo);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
         }
         bool run(const string&, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             cursorCache.appendInfo( result );

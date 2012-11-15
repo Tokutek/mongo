@@ -30,8 +30,13 @@
 #include "pch.h"
 
 #include <boost/thread/thread.hpp>
+#include <string>
+#include <vector>
 
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
 #include "jsobj.h"
 #include "../util/goodies.h"
 #include "repl.h"
@@ -119,6 +124,9 @@ namespace mongo {
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {} // No auth required
         CmdIsMaster() : Command("isMaster", true, "ismaster") { }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             /* currently request to arbiter is (somewhat arbitrarily) an ismaster request that is not

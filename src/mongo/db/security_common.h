@@ -40,6 +40,9 @@ namespace mongo {
         CmdAuthenticate() : InformationCommand("authenticate") {}
         virtual bool requiresAuth() { return false; }
         virtual void help(stringstream& ss) const { ss << "internal"; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {} // No auth required
         bool run(const string& dbname , BSONObj& cmdObj, int options, string& errmsg, BSONObjBuilder& result, bool fromRepl);
         void authenticate(const string& dbname, const string& user, const bool readOnly);
     };
@@ -49,6 +52,9 @@ namespace mongo {
     class CmdLogout : public InformationCommand {
     public:
         CmdLogout() : InformationCommand("logout") {}
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {} // No auth required
         void help(stringstream& h) const { h << "de-authenticate"; }
         bool run(const string& dbname , BSONObj& cmdObj, int options, string& errmsg, BSONObjBuilder& result, bool fromRepl);
     };

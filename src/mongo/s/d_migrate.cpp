@@ -23,15 +23,19 @@
    mostly around shard management and checking
  */
 
-
+#include <algorithm>
 #include <map>
 #include <string>
-#include <algorithm>
+#include <vector>
 
 #include <boost/thread/thread.hpp>
 
 #include "mongo/pch.h"
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/database.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/commands.h"
@@ -796,6 +800,13 @@ namespace mongo {
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::moveChunk);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
 
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             // 1. parse options
