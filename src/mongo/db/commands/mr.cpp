@@ -1101,6 +1101,12 @@ namespace mongo {
             virtual bool canRunInMultiStmtTxn() const { return true; }
             virtual OpSettings getOpSettings() const { return OpSettings().setBulkFetch(true); }
 
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                addPrivilegesRequiredForMapReduce(dbname, cmdObj, out);
+            }
+
             bool run(const string& dbname , BSONObj& cmd, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
                 Timer t;
                 Client& client = cc();
