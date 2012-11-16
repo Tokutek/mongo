@@ -24,6 +24,7 @@
 #include <errno.h>
 #endif
 
+#define _CRT_RAND_S
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
