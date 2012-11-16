@@ -494,6 +494,7 @@ namespace mongo {
     }
 
     bool V8Scope::hasOutOfMemoryException() {
+        V8_SIMPLE_HEADER
         if (!_context.IsEmpty())
             return _context->HasOutOfMemoryException();
         return false;
