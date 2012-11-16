@@ -154,7 +154,6 @@ namespace mongo {
          * Issues a migrate request for this chunk
          *
          * @param to shard to move this chunk to
-         * @param chunSize maximum number of bytes beyond which the migrate should no go trhough
          * @param res the object containing details about the migrate execution
          * @return true if move was successful
          */

@@ -1376,7 +1376,22 @@ namespace mongo {
                         // points will be properly sorted using the set
                         for ( set<BSONObj>::iterator it = splitPts.begin() ; it != splitPts.end() ; ++it )
                             sortedSplitPts.push_back( *it );
-                        confOut->shardCollection( finalColLong, sortKey, true, &sortedSplitPts );
+
+                        // pre-split the collection onto all the shards for this database.
+                        // Note that it's not completely safe to pre-split onto non-primary shards
+                        // using the shardcollection method (a conflict may result if multiple
+                        // map-reduces are writing to the same output collection, for instance).
+                        // TODO: pre-split mapReduce output in a safer way.
+                        set<Shard> shardSet;
+                        confOut->getAllShards( shardSet );
+                        vector<Shard> outShards( shardSet.begin() , shardSet.end() );
+
+                        confOut->shardCollection( finalColLong ,
+                                                  sortKey ,
+                                                  true ,
+                                                  &sortedSplitPts ,
+                                                  &outShards );
+
                     }
 
                     map<BSONObj, int> chunkSizes;
