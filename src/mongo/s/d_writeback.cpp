@@ -186,12 +186,13 @@ namespace mongo {
             }
 
 #ifdef _DEBUG
+            PseudoRandom r(static_cast<int64_t>(time(0)));
             // Sleep a short amount of time usually
-            int sleepFor = rand() % 10;
+            int sleepFor = r.nextInt32( 10 );
             sleepmillis( sleepFor );
 
             // Sleep a longer amount of time every once and awhile
-            int sleepLong = rand() % 50;
+            int sleepLong = r.nextInt32( 50 );
             if( sleepLong == 0 ) sleepsecs( 2 );
 #endif
 
