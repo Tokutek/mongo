@@ -92,7 +92,7 @@ namespace mongo {
             rehash();
         }
 
-        return getField(pos);
+        return getField(pos).val;
     }
 
     // Call after adding field to _fields and increasing _numFields
