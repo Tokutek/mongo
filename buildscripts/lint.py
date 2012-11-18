@@ -96,6 +96,7 @@ if __name__ == "__main__":
             arg = arg[2:]
             if arg == "nudge":
                 nudge = True
+                continue
             else:
                 print( "unknown arg [%s]" % arg )
                 sys.exit(-1)
