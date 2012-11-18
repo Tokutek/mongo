@@ -43,7 +43,6 @@
 #include "mongo/util/concurrency/value.h"
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/mongoutils/str.h"
-#include "mongo/util/timer.h"
 #include "mongo/db/cmdline.h"
 
 namespace mongo {
@@ -486,7 +485,7 @@ namespace mongo {
         setsockopt( _fd , SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(int));
 #endif
 
-        _fdCreationMicroSec = getProgramUptimeMicros();
+        _fdCreationMicroSec = curTimeMicros64();
         return true;
     }
 
