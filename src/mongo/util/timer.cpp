@@ -21,6 +21,8 @@
 
 #include <limits>
 
+#include "mongo/base/init.h"
+
 namespace mongo {
 
     unsigned long long Timer::_countsPerSecond;
@@ -65,6 +67,17 @@ namespace mongo {
 #error "Unknown mongo::Timer implementation"
 #endif
 
+        Timer* programUptimeTimer = NULL;
+
+        MONGO_INITIALIZER(ProgramUptimeTimer)(InitializerContext* context) {
+            programUptimeTimer = new Timer();
+            return Status::OK();
+        }
+
     }  // namespace
+
+    unsigned long long getProgramUptimeMicros() {
+        return programUptimeTimer->micros();
+    }
 
 }  // namespace mongo
