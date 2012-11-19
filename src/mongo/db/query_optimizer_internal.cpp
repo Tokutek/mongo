@@ -471,28 +471,26 @@ namespace mongo {
     
     bool QueryPlanGenerator::addSpecialPlan( NamespaceDetails *d ) {
         DEBUGQO( "\t special : " << _qps.frsp().getSpecial() );
-        // If an index exists for the special query component, use it.
-        if ( _qps.frsp().getSpecial().size() ) {
-            string special = _qps.frsp().getSpecial();
+        set<string> special = _qps.frsp().getSpecial();
+        if (!special.empty()) {
             NamespaceDetails::IndexIterator i = d->ii();
             while( i.more() ) {
                 int j = i.pos();
                 IndexDetails& ii = i.next();
-                if ( ii.getSpecialIndexName() == special &&
-                     ii.suitability( _qps.frsp().frsForIndex(d, j), _qps.order() ) !=  IndexDetails::USELESS) {
+                const IndexSpec& spec = ii.getSpec();
+                if ((special.end() != special.find(spec.getTypeName())) && 
+                    spec.suitability( _qps.originalQuery(), _qps.order())) {
                     uassert( 16330, "'special' query operator not allowed", _allowSpecial );
-                    _qps.setSinglePlan( newPlan( d, j, BSONObj(), BSONObj(), special ) );
+                    _qps.setSinglePlan( newPlan( d, j, BSONObj(), BSONObj(), spec.getTypeName()));
                     return true;
                 }
             }
-
-            // If no index exists but the index is not mandatory (Matcher has functionality to
-            // support it), have the caller fall through to using a normal query plan.
-            if (!_qps.frsp().hasSpecialThatNeedsIndex()) { return false; }
-
-            // Otherwise, error.
-            uassert( 13038, (string)"can't find special index: " + special +
-                    " for: " + _qps.originalQuery().toString(), false );
+            stringstream ss;
+            for (set<string>::const_iterator it = special.begin(); it != special.end(); ++it) {
+                ss << *it << ", ";
+            }
+            uassert(13038, "can't find any special indices: " + ss.str()
+                           + " for: " + _qps.originalQuery().toString(), false );
         }
         return false;
     }
