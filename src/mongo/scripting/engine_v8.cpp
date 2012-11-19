@@ -1009,6 +1009,10 @@ namespace mongo {
             return Local< v8::Value >::New( v8::Null() );
         }
         Local< Value > ret = compiled->Run();
+        if (ret.IsEmpty()) {
+            warning() << "Could not assign function: " << codeStr.c_str() << endl;
+            return Local<v8::Value>::New(v8::Null());
+        }
         return ret;
     }
 
