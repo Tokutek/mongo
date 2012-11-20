@@ -47,7 +47,7 @@ namespace mongo {
           @param i the zero based index of the path element.
           @returns the path element
          */
-        string getFieldName(size_t i) const;
+        const string& getFieldName(size_t i) const;
 
         /**
           Get the full path.
@@ -103,7 +103,7 @@ namespace mongo {
         return vFieldName.size();
     }
 
-    inline string FieldPath::getFieldName(size_t i) const {
+    inline const string& FieldPath::getFieldName(size_t i) const {
         verify(i < getPathLength());
         return vFieldName[i];
     }
