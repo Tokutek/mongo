@@ -85,7 +85,7 @@ var doTest = function(conn, hostList) {
     });
 };
 
-var st = new ShardingTest({ verbose: 5, shards: { rs0: { nodes: 2 }}});
+var st = new ShardingTest({ shards: { rs0: { nodes: 2 }}});
 st.stopBalancer();
 ReplSetTest.awaitRSClientHosts(st.s, st.rs0.nodes);
 
