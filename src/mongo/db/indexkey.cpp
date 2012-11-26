@@ -28,8 +28,9 @@ namespace mongo {
 
     /** old (<= v1.8) : 0
      1 is new version
+     2 is tokudb
      */
-    const int DefaultIndexVersionNumber = 1;
+    const int DefaultIndexVersionNumber = 2;
     
     map<string,IndexPlugin*> * IndexPlugin::_plugins;
 
