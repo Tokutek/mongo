@@ -344,7 +344,8 @@ namespace mongo {
                     continue;
                 }
 
-                sleepTime = balancerConfig["_nosleep"].trueValue() ? 30 : 6;
+                sleepTime = balancerConfig[SettingsFields::shortBalancerSleep()].trueValue() ? 30 :
+                                                                                               6;
                 
                 uassert( 13258 , "oids broken after resetting!" , _checkOIDs() );
 

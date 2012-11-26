@@ -39,8 +39,6 @@ namespace mongo {
     int ConfigServer::VERSION = 3;
     Shard Shard::EMPTY;
 
-    string ShardNS::settings = "config.settings";
-
     OID serverID;
 
     /* --- DBConfig --- */
@@ -913,15 +911,15 @@ namespace mongo {
         
         try {
             
-            auto_ptr<DBClientCursor> c = conn->get()->query( ShardNS::settings , BSONObj() );
+            auto_ptr<DBClientCursor> c = conn->get()->query( ConfigNS::settings , BSONObj() );
             verify( c.get() );
             while ( c->more() ) {
                 
                 BSONObj o = c->next();
-                string name = o["_id"].valuestrsafe();
+                string name = o[SettingsFields::key()].valuestrsafe();
                 got.insert( name );
                 if ( name == "chunksize" ) {
-                    int csize = o["value"].numberInt();
+                    int csize = o[SettingsFields::chunksize()].numberInt();
 
                     // validate chunksize before proceeding
                     if ( csize == 0 ) {
@@ -942,9 +940,10 @@ namespace mongo {
             }
 
             if ( ! got.count( "chunksize" ) ) {
-                conn->get()->insert( ShardNS::settings,
-                                     BSON( "_id" << "chunksize"  <<
-                                           "value" << (Chunk::MaxChunkSize / ( 1024 * 1024 ) ) ) );
+                conn->get()->insert(ConfigNS::settings,
+                                     BSON(SettingsFields::key("chunksize") <<
+                                          SettingsFields::chunksize(Chunk::MaxChunkSize /
+                                                                    (1024 * 1024))));
             }
 
             // indexes
