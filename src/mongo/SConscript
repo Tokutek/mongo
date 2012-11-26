@@ -433,6 +433,7 @@ env.Program('lame_stacktrace_test', 'util/lame_stacktrace_test.cpp',
 serverOnlyFiles += [ "db/stats/snapshots.cpp" ]
 
 env.Library( "coreshard", [ "s/config.cpp",
+                            "s/balancer_lock.cpp",
                             "s/grid.cpp",
                             "s/chunk.cpp",
                             "s/shard.cpp",
