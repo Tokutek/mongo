@@ -50,6 +50,22 @@ namespace mongo {
 
     TSP_DEFINE(Client, currentClient)
 
+    void ClientBasic::initializeAuthorizationManager() {
+        // This thread corresponds to an incoming user connection, and thus needs an
+        // AuthorizationManager
+        AuthExternalStateImpl* externalState = new AuthExternalStateImpl();
+        AuthorizationManager* authManager = new AuthorizationManager(externalState);
+        // Go into God scope so that the AuthorizationManager can query the local admin DB
+        // as part of its initialization without needing auth.
+        Client::GodScope gs;
+        Status status = authManager->initialize(new DBDirectClient());
+        massert(16480,
+                mongoutils::str::stream() << "Error initializing AuthorizationManager: "
+                << status.reason(),
+                status == Status::OK());
+        setAuthorizationManager(authManager);
+    }
+
     /* each thread which does db operations has a Client object in TLS.
        call this when your thread starts.
     */
@@ -59,19 +75,7 @@ namespace mongo {
         currentClient.reset(c);
         mongo::lastError.initThread();
         if (mp != NULL) {
-            // This thread corresponds to an incoming user connection, and thus needs an
-            // AuthorizationManager
-            AuthExternalStateImpl* externalState = new AuthExternalStateImpl();
-            AuthorizationManager* authManager = new AuthorizationManager(externalState);
-            // Go into God scope so that the AuthorizationManager can query the local admin DB
-            // as part of its initialization without needing auth.
-            GodScope gs;
-            Status status = authManager->initialize(new DBDirectClient());
-            massert(16480,
-                    mongoutils::str::stream() << "Error initializing AuthorizationManager: "
-                                              << status.reason(),
-                    status == Status::OK());
-            c->setAuthorizationManager(authManager);
+            c->initializeAuthorizationManager();
         }
         return *c;
     }
