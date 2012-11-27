@@ -18,6 +18,7 @@
  */
 
 #include "mongo/pch.h"
+
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/security.h"
 #include "mongo/db/security_common.h"
@@ -122,36 +123,6 @@ namespace mongo {
         if ( !_hadTempAuthFromStart ) {
             _ai->clearTemporaryAuthorization();
         }
-    }
-
-    bool CmdAuthenticate::getUserObj(const string& dbname, const string& user, BSONObj& userObj, string& pwd) {
-        if (user == internalSecurity.user) {
-            uassert(15889, "key file must be used to log in with internal user",
-                    !cmdLine.keyFile.empty());
-            pwd = internalSecurity.pwd;
-        }
-        else {
-            string systemUsers = dbname + ".system.users";
-            {
-                Client::ReadContext tc(systemUsers, dbpath, false);
-                // we want all authentication stuff to happen on an alternate stack
-                Client::AlternateTransactionStack altStack;
-                Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-
-                BSONObjBuilder b;
-                b << "user" << user;
-                BSONObj query = b.done();
-                NamespaceDetails *d = nsdetails(systemUsers.c_str());
-                if( d == NULL || !d->findOne(query, userObj) ) {
-                    log() << "auth: couldn't find user " << user << ", " << systemUsers << endl;
-                    return false;
-                }
-                txn.commit();
-            }
-
-            pwd = userObj.getStringField("pwd");
-        }
-        return true;
     }
 
     bool CmdLogout::run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {

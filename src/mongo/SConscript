@@ -238,8 +238,7 @@ env.StaticLibrary("coredb", [
         "db/storage/key.cpp",
         "s/shardconnection.cpp",
         ],
-                  LIBDEPS=['db/auth/auth',
-                           'db/auth/serverauth',
+                  LIBDEPS=['db/auth/serverauth',
                            'plugins/plugins',
                            'server_parameters'])
 
@@ -405,7 +404,7 @@ mongosLibraryFiles = [
     "s/security.cpp",
     ]
 
-env.Library( "mongoscore" , mongosLibraryFiles )
+env.Library( "mongoscore" , mongosLibraryFiles, LIBDEPS=['db/auth/authmongos'] )
 
 env.CppUnitTest( "balancer_policy_test" , [ "s/balancer_policy_tests.cpp" ] , LIBS=env['LIBS'] + tokulibs,
                  LIBDEPS=["mongoscore", "coreshard","mongocommon","coreserver","coredb","dbcmdline","mongodandmongos"] ,
@@ -438,6 +437,7 @@ env.StaticLibrary("defaultversion", "s/default_version.cpp")
 
 env.StaticLibrary("serveronly", serverOnlyFiles,
                   LIBDEPS=["coreshard",
+                           "db/auth/authmongod",
                            "dbcmdline",
                            "defaultversion"])
 

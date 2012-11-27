@@ -25,7 +25,7 @@
 
 #include "mongo/base/status.h"
 #include "mongo/db/auth/authorization_manager.h"
-#include "mongo/db/auth/auth_external_state_impl.h"
+#include "mongo/db/auth/auth_external_state_d.h"
 #include "mongo/db/client.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/databaseholder.h"
@@ -53,7 +53,7 @@ namespace mongo {
     void ClientBasic::initializeAuthorizationManager() {
         // This thread corresponds to an incoming user connection, and thus needs an
         // AuthorizationManager
-        AuthExternalStateImpl* externalState = new AuthExternalStateImpl();
+        AuthExternalState* externalState = new AuthExternalStateMongod;
         AuthorizationManager* authManager = new AuthorizationManager(externalState);
         // Go into God scope so that the AuthorizationManager can query the local admin DB
         // as part of its initialization without needing auth.

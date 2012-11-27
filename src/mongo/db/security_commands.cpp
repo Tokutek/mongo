@@ -124,10 +124,14 @@ namespace mongo {
 
         BSONObj userObj;
         string pwd;
-        if (!getUserObj(dbname, user, userObj, pwd)) {
-            errmsg = "auth fails";
+        Status status = ClientBasic::getCurrent()->getAuthorizationManager()->getPrivilegeDocument(
+                dbname, user, &userObj);
+        if (!status.isOK()) {
+            log() << status.reason() << std::endl;
+            errmsg = status.reason();
             return false;
         }
+        pwd = userObj["pwd"].String();
 
         md5digest d;
         {
@@ -148,7 +152,7 @@ namespace mongo {
             return false;
         }
 
-        Status status = authenticateAndAuthorizePrincipal(user, dbname, userObj);
+        status = authenticateAndAuthorizePrincipal(user, dbname, userObj);
         uassert(16500,
                 mongoutils::str::stream() << "Problem acquiring privileges for principal \""
                         << user << "\": " << status.reason(),
