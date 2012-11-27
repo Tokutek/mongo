@@ -18,14 +18,15 @@
  */
 
 #include "pch.h"
-#include "shard.h"
-#include "config.h"
-#include "request.h"
-#include "client_info.h"
-#include "../db/commands.h"
 #include "mongo/client/dbclient_rs.h"
 #include "mongo/client/dbclientcursor.h"
 #include <set>
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/commands.h"
+#include "mongo/s/config.h"
+#include "mongo/s/client_info.h"
+#include "mongo/s/request.h"
+#include "mongo/s/shard.h"
 
 namespace mongo {
 

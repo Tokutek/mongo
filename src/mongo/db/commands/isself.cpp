@@ -1,6 +1,8 @@
 // isself.cpp
 
 #include "pch.h"
+
+#include "mongo/db/auth/authorization_manager.h"
 #include "../../util/net/listen.h"
 #include "../commands.h"
 #include "../security.h"

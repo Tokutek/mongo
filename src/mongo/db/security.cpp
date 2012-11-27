@@ -18,6 +18,7 @@
  */
 
 #include "mongo/pch.h"
+#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/security.h"
 #include "mongo/db/security_common.h"
 #include "mongo/db/instance.h"
