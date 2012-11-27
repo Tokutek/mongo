@@ -135,7 +135,49 @@ namespace mongo {
         }
     } cmdismaster;
 
-    extern unsigned replApplyBatchSize;
+    class ReplApplyBatchSize : public ServerParameter {
+    public:
+        ReplApplyBatchSize()
+            : ServerParameter( ServerParameterSet::getGlobal(), "replApplyBatchSize" ),
+              _value( 1 ) {
+        }
+
+        int get() const { return _value; }
+
+        virtual void append( BSONObjBuilder& b ) {
+            b.append( name(), _value );
+        }
+
+        virtual Status set( const BSONElement& newValuElement ) {
+            return set( newValuElement.numberInt() );
+        }
+
+        virtual Status set( int b ) {
+            if( b < 1 || b > 1024 ) {
+                return Status( ErrorCodes::BadValue,
+                               "replApplyBatchSize has to be >= 1 and < 1024" );
+            }
+
+            if ( replSettings.slavedelay != 0 && b > 1 ) {
+                return Status( ErrorCodes::BadValue,
+                               "can't use a batch size > 1 with slavedelay" );
+            }
+            if ( ! replSettings.slave ) {
+                return Status( ErrorCodes::BadValue,
+                               "can't set replApplyBatchSize on a non-slave machine" );
+            }
+
+            _value = b;
+            return Status::OK();
+        }
+
+        virtual Status setFromString( const string& str ) {
+            return set( atoi( str.c_str() ) );
+        }
+
+        int _value;
+
+    } replApplyBatchSize;
 
     void startReplSets(ReplSetCmdline*);
     void startReplication() {
