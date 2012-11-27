@@ -25,6 +25,8 @@
 
 #include <boost/filesystem/operations.hpp>
 
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/database.h"
 #include "mongo/db/databaseholder.h"
@@ -1295,6 +1297,11 @@ namespace mongo {
 
     // Wrapper for offline (write locked) indexing.
     void NamespaceDetails::createIndex(const BSONObj &info) {
+        uassert(16548,
+                mongoutils::str::stream() << "not authorized to create index on " << sourceNS,
+                cc().getAuthorizationManager()->checkAuthorization(sourceNS,
+                                                                   ActionType::ensureIndex));
+
         if (!Lock::isWriteLocked(_ns)) {
             throw RetryWithWriteLock();
         }

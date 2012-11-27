@@ -27,8 +27,12 @@
 #include <boost/thread/thread.hpp>
 #include <boost/filesystem/operations.hpp>
 
+#include "mongo/base/status.h"
+
 #include "mongo/bson/util/atomic_int.h"
 
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/repl.h"
@@ -44,6 +48,7 @@
 #include "mongo/db/index.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/relock.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/query.h"
@@ -58,6 +63,7 @@
 #include "mongo/s/d_logic.h"
 
 #include "mongo/util/goodies.h"
+#include "mongo/util/mongoutils/str.h"
 #include "mongo/util/time_support.h"
 
 namespace mongo {
@@ -126,7 +132,8 @@ namespace mongo {
     void inProgCmd( Message &m, DbResponse &dbresponse ) {
         BSONObjBuilder b;
 
-        if( ! cc().isAdmin() ) {
+        if (!cc().isAdmin() || !cc().getAuthorizationManager()->checkAuthorization(
+                AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::inprog)) {
             b.append("err", "unauthorized");
         }
         else {
@@ -166,7 +173,8 @@ namespace mongo {
 
     void killOp( Message &m, DbResponse &dbresponse ) {
         BSONObj obj;
-        if( ! cc().isAdmin() ) {
+        if (!cc().isAdmin() || !cc().getAuthorizationManager()->checkAuthorization(
+                AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::killop)) {
             obj = fromjson("{\"err\":\"unauthorized\"}");
         }
         /*else if( !dbMutexInfo.isLocked() )
@@ -191,7 +199,8 @@ namespace mongo {
     bool _unlockFsync();
     void unlockFsync(const char *ns, Message& m, DbResponse &dbresponse) {
         BSONObj obj;
-        if ( ! cc().isAdmin() ) { // checks auth
+        if (!cc().isAdmin() || !cc().getAuthorizationManager()->checkAuthorization(
+                AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::unlock)) {
             obj = fromjson("{\"err\":\"unauthorized\"}");
         }
         else if (strncmp(ns, "admin.", 6) != 0 ) {
@@ -222,6 +231,11 @@ namespace mongo {
         shared_ptr<AssertionException> ex;
 
         try {
+            if (!NamespaceString(d.getns()).isCommand()) {
+                // Auth checking for Commands happens later.
+                Status status = cc().getAuthorizationManager()->checkAuthForQuery(d.getns());
+                uassert(16550, status.reason(), status.isOK());
+            }
             dbresponse.exhaustNS = runQuery(m, q, op, *resp);
             verify( !resp->empty() );
         }
@@ -500,7 +514,7 @@ namespace mongo {
             verify( n < 30000 );
         }
 
-        int found = ClientCursor::erase(n, (long long *) x);
+        int found = ClientCursor::eraseIfAuthorized(n, (long long *) x);
 
         if ( logLevel > 0 || found != n ) {
             LOG( found == n ? 1 : 0 ) << "killcursors: found " << found << " of " << n << endl;
@@ -560,6 +574,9 @@ namespace mongo {
         const bool multi = flags & UpdateOption_Multi;
         const bool broadcast = flags & UpdateOption_Broadcast;
 
+        Status status = cc().getAuthorizationManager()->checkAuthForUpdate(ns, upsert);
+        uassert(16538, status.reason(), status.isOK());
+
         OpSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         settings.setJustOne(!multi);
@@ -578,6 +595,10 @@ namespace mongo {
     void receivedDelete(Message& m, CurOp& op) {
         DbMessage d(m);
         const char *ns = d.getns();
+
+        Status status = cc().getAuthorizationManager()->checkAuthForDelete(ns);
+        uassert(16542, status.reason(), status.isOK());
+
         op.debug().ns = ns;
         int flags = d.pullInt();
         verify(d.moreJSObjs());
@@ -648,6 +669,9 @@ namespace mongo {
             try {
                 const NamespaceString nsString( ns );
                 uassert( 16258, str::stream() << "Invalid ns [" << ns << "]", nsString.isValid() );
+
+                Status status = cc().getAuthorizationManager()->checkAuthForGetMore(ns);
+                uassert(16543, status.reason(), status.isOK());
 
                 // I (Zardosht), am not crazy about this, but I cannot think of
                 // better alternatives at the moment. The high level goal is to find
@@ -873,6 +897,9 @@ namespace mongo {
         DbMessage d(m);
         const char *ns = d.getns();
         op.debug().ns = ns;
+
+        Status status = cc().getAuthorizationManager()->checkAuthForInsert(ns);
+        uassert(16544, status.reason(), status.isOK());
 
         if (!d.moreJSObjs()) {
             // strange.  should we complain?
