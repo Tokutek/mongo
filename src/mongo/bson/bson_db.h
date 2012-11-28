@@ -61,25 +61,32 @@ namespace mongo {
         return "";
     }
 
-    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(DateNowLabeler& id) {
+    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(const DateNowLabeler& id) {
         _builder->appendDate(_fieldName, jsTime());
         _fieldName = 0;
         return *_builder;
     }
 
-    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(NullLabeler& id) {
+    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(const NullLabeler& id) {
         _builder->appendNull(_fieldName);
         _fieldName = 0;
         return *_builder;
     }
 
-    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(MinKeyLabeler& id) {
+    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(const UndefinedLabeler& id) {
+        _builder->appendUndefined(_fieldName);
+        _fieldName = 0;
+        return *_builder;
+    }
+
+
+    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(const MinKeyLabeler& id) {
         _builder->appendMinKey(_fieldName);
         _fieldName = 0;
         return *_builder;
     }
 
-    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(MaxKeyLabeler& id) {
+    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(const MaxKeyLabeler& id) {
         _builder->appendMaxKey(_fieldName);
         _fieldName = 0;
         return *_builder;
