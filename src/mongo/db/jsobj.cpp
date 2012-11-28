@@ -58,6 +58,7 @@ namespace mongo {
 
     DateNowLabeler DATENOW;
     NullLabeler BSONNULL;
+    UndefinedLabeler BSONUndefined;
 
     MinKeyLabeler MINKEY;
     MaxKeyLabeler MAXKEY;
