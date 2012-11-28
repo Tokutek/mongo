@@ -281,7 +281,7 @@ namespace mongo {
             BSONObj authParams;
         };
 
-        static void serverThread( shared_ptr<ServerState> state ) {
+        static void serverThread( shared_ptr<ServerState> state , int sleepTime) {
             try {
                 DBClientConnection conn( true );
                 conn._logLevel = 1;
@@ -328,7 +328,7 @@ namespace mongo {
                         state->error = e.what();
                     }
 
-                    sleepsecs( 1 );
+                    sleepsecs( sleepTime );
                 }
 
 
