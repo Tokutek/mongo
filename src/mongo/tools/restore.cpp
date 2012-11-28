@@ -95,7 +95,7 @@ public:
         _drop = hasParam( "drop" );
         _restoreOptions = !hasParam("noOptionsRestore");
         _restoreIndexes = !hasParam("noIndexRestore");
-        _w = getParam( "w" , 1 );
+        _w = getParam( "w" , 0 );
         _doBulkLoad = _w <= 1;
         if (!_doBulkLoad) {
             log() << "warning: not using bulk loader due to --w > 1" << endl;
@@ -310,7 +310,7 @@ public:
             conn().insert( _curns , obj );
 
             // wait for insert to propagate to "w" nodes (doesn't warn if w used without replset)
-            if ( _w > 1 ) {
+            if ( _w > 0 ) {
                 verify( !_doBulkLoad );
                 conn().getLastErrorDetailed(_curdb, false, false, _w);
             }
