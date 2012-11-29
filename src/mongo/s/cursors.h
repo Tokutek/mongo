@@ -20,11 +20,13 @@
 
 #include "mongo/pch.h"
 
-#include "../db/jsobj.h"
-#include "../db/dbmessage.h"
-#include "../client/parallel.h"
+#include <string>
 
-#include "request.h"
+#include "mongo/client/parallel.h"
+#include "mongo/db/dbmessage.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/platform/random.h"
+#include "mongo/s/request.h"
 
 namespace mongo {
 
@@ -100,10 +102,12 @@ namespace mongo {
         void store( ShardedClientCursorPtr cursor );
         void remove( long long id );
 
-        void storeRef( const string& server , long long id );
+        void storeRef(const std::string& server, long long id, const std::string& ns);
 
         /** @return the server for id or "" */
         string getRef( long long id ) const ;
+        /** @return the ns for id or "" */
+        std::string getRefNS(long long id) const ;
         
         void gotKillCursors(Message& m );
 
@@ -117,7 +121,8 @@ namespace mongo {
         mutable mongo::mutex _mutex;
 
         MapSharded _cursors;
-        MapNormal _refs;
+        MapNormal _refs; // Maps cursor ID to shard name
+        MapNormal _refsNS; // Maps cursor ID to namespace
 
         long long _shardedTotal;
 
