@@ -343,12 +343,17 @@ namespace mongo {
             Value pValue(vpOperand[i]->evaluate(pDocument));
 
             BSONType valueType = pValue.getType();
+            // leaving explicit checks for now since these were supported in alpha releases
             uassert(16415, "$add does not support dates",
                     valueType != Date);
             uassert(16416, "$add does not support strings",
                     valueType != String);
 
-            totalType = Value::getWidestNumeric(totalType, pValue.getType());
+            totalType = Value::getWidestNumeric(totalType, valueType);
+
+            uassert(16554, "$add only supports numeric types",
+                    totalType != Undefined);
+
             doubleTotal += pValue.coerceToDouble();
             longTotal += pValue.coerceToLong();
         }
@@ -1072,7 +1077,7 @@ namespace mongo {
                 /*
                    Don't add non-existent values (note:  different from NULL or Undefined);
                    this is consistent with existing selection syntax which doesn't
-                   force the appearnance of non-existent fields.
+                   force the appearance of non-existent fields.
                    */
                 if (!pValue.missing())
                     out.addField(field.first, pValue);
@@ -1843,6 +1848,9 @@ namespace mongo {
             uassert(16375, "$multiply does not support dates", pValue.getType() != Date);
 
             productType = Value::getWidestNumeric(productType, pValue.getType());
+            uassert(16555, "$mutiply only supports numeric types",
+                    productType != Undefined);
+
             doubleProduct *= pValue.coerceToDouble();
             longProduct *= pValue.coerceToLong();
         }
@@ -2404,6 +2412,9 @@ namespace mongo {
         uassert(16376,
                 "$subtract does not support dates",
                 pLeft.getType() != Date && pRight.getType() != Date);
+
+        uassert(16556, "$subtract only supports numeric types",
+                productType != Undefined);
 
         if (productType == NumberDouble) {
             double right = pRight.coerceToDouble();

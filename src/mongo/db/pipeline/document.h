@@ -110,7 +110,10 @@ namespace mongo {
          */
         static int compare(const Document& lhs, const Document& rhs);
 
-        string toString() const; // TODO support streams
+        string toString() const;
+
+        friend
+        ostream& operator << (ostream& out, const Document& doc) { return out << doc.toString(); }
 
         /** Calculate a hash value.
          *
