@@ -70,6 +70,7 @@
 #include "mongo/s/d_logic.h"
 #include "mongo/s/config.h"
 #include "mongo/s/chunk.h"
+#include "mongo/s/type_chunk.h"
 
 using namespace std;
 
@@ -996,12 +997,12 @@ namespace mongo {
                 BSONObj x;
                 BSONObj currChunk;
                 try{
-                    x = conn->get()->findOne(ConfigNS::chunk,
-                                             Query(BSON(ChunkFields::ns(ns)))
-                                                  .sort(BSON(ChunkFields::lastmod() << -1)));
+                    x = conn->get()->findOne(ChunkType::ConfigNS,
+                                             Query(BSON(ChunkType::ns(ns)))
+                                                  .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
 
-                    currChunk = conn->get()->findOne(ConfigNS::chunk,
-                                                     shardId.wrap(ChunkFields::name().c_str()));
+                    currChunk = conn->get()->findOne(ChunkType::ConfigNS,
+                                                     shardId.wrap(ChunkType::name().c_str()));
                 }
                 catch( DBException& e ){
                     errmsg = str::stream() << "aborted moveChunk because could not get chunk data from config server " << shardingState.getConfigServer() << causedBy( e );
@@ -1009,15 +1010,15 @@ namespace mongo {
                     return false;
                 }
 
-                maxVersion = ShardChunkVersion::fromBSON(x, ChunkFields::lastmod());
-                verify(currChunk[ChunkFields::shard()].type());
-                verify(currChunk[ChunkFields::min()].type());
-                verify(currChunk[ChunkFields::max()].type());
-                myOldShard = currChunk[ChunkFields::shard()].String();
+                maxVersion = ShardChunkVersion::fromBSON(x, ChunkType::DEPRECATED_lastmod());
+                verify(currChunk[ChunkType::shard()].type());
+                verify(currChunk[ChunkType::min()].type());
+                verify(currChunk[ChunkType::max()].type());
+                myOldShard = currChunk[ChunkType::shard()].String();
                 conn->done();
 
-                BSONObj currMin = currChunk[ChunkFields::min()].Obj();
-                BSONObj currMax = currChunk[ChunkFields::max()].Obj();
+                BSONObj currMin = currChunk[ChunkType::min()].Obj();
+                BSONObj currMax = currChunk[ChunkType::max()].Obj();
                 if ( currMin.woCompare( min ) || currMax.woCompare( max ) ) {
                     errmsg = "boundaries are outdated (likely a split occurred)";
                     result.append( "currMin" , currMin );
@@ -1264,14 +1265,14 @@ namespace mongo {
 
                     // Check the precondition
                     BSONObjBuilder b;
-                    b.appendTimestamp(ChunkFields::lastmod(), maxVersion.toLong());
+                    b.appendTimestamp(ChunkType::DEPRECATED_lastmod(), maxVersion.toLong());
                     BSONObj expect = b.done();
                     Matcher m(expect);
 
-                    BSONObj found = conn->get()->findOne(ConfigNS::chunk, QUERY(ChunkFields::ns() << ns).sort(ChunkFields::lastmod(), -1));
+                    BSONObj found = conn->get()->findOne(ChunkType::ConfigNS, QUERY(ChunkType::ns(ns)).sort(ChunkType::DEPRECATED_lastmod(), -1));
                     if (!m.matches(found)) {
                         // TODO(leif): Make sure that this means the sharding algorithm is broken and we should bounce the server.
-                        error() << "moveChunk commit failed: " << ShardChunkVersion::fromBSON(found[ChunkFields::lastmod()])
+                        error() << "moveChunk commit failed: " << ShardChunkVersion::fromBSON(found[ChunkType::DEPRECATED_lastmod()])
                                 << " instead of " << maxVersion << migrateLog;
                         error() << "TERMINATING" << migrateLog;
                         dbexit(EXIT_SHARDING_ERROR);
@@ -1280,13 +1281,13 @@ namespace mongo {
                     try {
                         // update for the chunk being moved
                         BSONObjBuilder n;
-                        n.append(ChunkFields::name(), Chunk::genID(ns, min));
-                        myVersion.addToBSON(n, ChunkFields::lastmod());
-                        n.append(ChunkFields::ns(), ns);
-                        n.append(ChunkFields::min(), min);
-                        n.append(ChunkFields::max(), max);
-                        n.append(ChunkFields::shard(), toShard.getName());
-                        conn->get()->update(ConfigNS::chunk, QUERY(ChunkFields::name() << Chunk::genID(ns, min)), n.done());
+                        n.append(ChunkType::name(), Chunk::genID(ns, min));
+                        myVersion.addToBSON(n, ChunkType::DEPRECATED_lastmod());
+                        n.append(ChunkType::ns(), ns);
+                        n.append(ChunkType::min(), min);
+                        n.append(ChunkType::max(), max);
+                        n.append(ChunkType::shard(), toShard.getName());
+                        conn->get()->update(ChunkType::ConfigNS, QUERY(ChunkType::name() << Chunk::genID(ns, min)), n.done());
                     }
                     catch (DBException &e) {
                         warning() << e << migrateLog;
@@ -1314,13 +1315,13 @@ namespace mongo {
                         nextVersion.incMinor();  // same as used on donateChunk
                         try {
                             BSONObjBuilder n;
-                            n.append(ChunkFields::name(), Chunk::genID(ns, bumpMin));
-                            nextVersion.addToBSON(n, ChunkFields::lastmod());
-                            n.append(ChunkFields::ns(), ns);
-                            n.append(ChunkFields::min(), bumpMin);
-                            n.append(ChunkFields::max(), bumpMax);
-                            n.append(ChunkFields::shard(), fromShard.getName());
-                            conn->get()->update(ConfigNS::chunk, QUERY(ChunkFields::name() << Chunk::genID(ns, bumpMin)), n.done());
+                            n.append(ChunkType::name(), Chunk::genID(ns, bumpMin));
+                            nextVersion.addToBSON(n, ChunkType::DEPRECATED_lastmod());
+                            n.append(ChunkType::ns(), ns);
+                            n.append(ChunkType::min(), bumpMin);
+                            n.append(ChunkType::max(), bumpMax);
+                            n.append(ChunkType::shard(), fromShard.getName());
+                            conn->get()->update(ChunkType::ConfigNS, QUERY(ChunkType::name() << Chunk::genID(ns, bumpMin)), n.done());
                             log() << "moveChunk updating self version to: " << nextVersion << " through "
                                   << bumpMin << " -> " << bumpMax << " for collection '" << ns << "'" << migrateLog;
                         }
@@ -1366,12 +1367,12 @@ namespace mongo {
 
                         // look for the chunk in this shard whose version got bumped
                         // we assume that if that mod made it to the config, the applyOps was successful
-                        BSONObj doc = conn->get()->findOne(ConfigNS::chunk,
-                                                           Query(BSON(ChunkFields::ns(ns)))
-                                                               .sort(BSON(ChunkFields::lastmod() << -1)));
+                        BSONObj doc = conn->get()->findOne(ChunkType::ConfigNS,
+                                                           Query(BSON(ChunkType::ns(ns)))
+                                                               .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
 
                         ShardChunkVersion checkVersion =
-                            ShardChunkVersion::fromBSON(doc[ChunkFields::lastmod()]);
+                            ShardChunkVersion::fromBSON(doc[ChunkType::DEPRECATED_lastmod()]);
 
                         if ( checkVersion.isEquivalentTo( nextVersion ) ) {
                             log() << "moveChunk commit confirmed" << migrateLog;
