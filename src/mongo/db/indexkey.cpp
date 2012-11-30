@@ -30,7 +30,7 @@ namespace mongo {
      1 is new version
      2 is tokudb
      */
-    const int DefaultIndexVersionNumber = 2;
+    const int DefaultIndexVersionNumber = 1;
     
     map<string,IndexPlugin*> * IndexPlugin::_plugins;
 
