@@ -140,7 +140,7 @@ namespace MatcherTests {
     class WithinBox {
     public:
         void run() {
-            Matcher m(fromjson("{loc:{$within:{$box:[{x:4,y:4},[6,6]]}}}"));
+            Matcher m(fromjson("{loc:{$within:{$box:[{x: 4, y:4},[6,6]]}}}"));
             ASSERT(!m.matches(fromjson("{loc: [3,4]}")));
             ASSERT(m.matches(fromjson("{loc: [4,4]}")));
             ASSERT(m.matches(fromjson("{loc: [5,5]}")));
@@ -152,7 +152,7 @@ namespace MatcherTests {
     class WithinPolygon {
     public:
         void run() {
-            Matcher m(fromjson("{loc:{$within:{$polygon:[[0,0],[0,5],[5,5],[5,0]]}}}"));
+            Matcher m(fromjson("{loc:{$within:{$polygon:[{x:0,y:0},[0,5],[5,5],[5,0]]}}}"));
             ASSERT(m.matches(fromjson("{loc: [3,4]}")));
             ASSERT(m.matches(fromjson("{loc: [4,4]}")));
             ASSERT(m.matches(fromjson("{loc: {x:5,y:5}}")));
