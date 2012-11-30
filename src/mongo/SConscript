@@ -324,6 +324,7 @@ env.StaticLibrary("coredb", [
                            'db/common',
                            'plugins/plugins',
                            'server_parameters',
+                           'geometry'
                            '$BUILD_DIR/mongo/foundation'])
 
 coreServerFiles = [ "db/client_basic.cpp",
