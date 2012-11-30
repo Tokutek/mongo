@@ -15,8 +15,8 @@
  */
 
 #include "mongo/s/balancer_policy.h"
-#include "mongo/s/type_chunk.h"
 #include "mongo/s/config.h"
+#include "mongo/s/type_chunk.h"
 #include "mongo/unittest/unittest.h"
 
 namespace mongo {

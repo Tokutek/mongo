@@ -24,6 +24,7 @@
  */
 
 #include <algorithm>
+#include <boost/thread/thread.hpp>
 #include <map>
 #include <string>
 #include <vector>
@@ -71,6 +72,11 @@
 #include "mongo/s/config.h"
 #include "mongo/s/chunk.h"
 #include "mongo/s/type_chunk.h"
+#include "mongo/util/elapsed_tracker.h"
+#include "mongo/util/processinfo.h"
+#include "mongo/util/queue.h"
+#include "mongo/util/ramlog.h"
+#include "mongo/util/startup_test.h"
 
 using namespace std;
 

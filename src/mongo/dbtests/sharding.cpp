@@ -19,7 +19,7 @@
 
 #include "pch.h"
 
-#include "dbtests.h"
+#include "mongo/dbtests/dbtests.h"
 
 #include "mongo/client/dbclientmockcursor.h"
 #include "mongo/client/parallel.h"
