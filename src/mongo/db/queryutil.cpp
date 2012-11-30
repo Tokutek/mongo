@@ -450,7 +450,7 @@ namespace mongo {
             _special.add("2dsphere", SpecialIndices::INDEX_REQUIRED);
             break;
         case BSONObj::opINTERSECT:
-            _special.insert("s2d");
+            _special.insert("2dsphere");
             break;
         case BSONObj::opEXISTS: {
             if ( !existsSpec ) {
