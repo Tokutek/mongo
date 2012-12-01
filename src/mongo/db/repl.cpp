@@ -82,8 +82,7 @@ namespace mongo {
 
     bool replAuthenticate(DBClientBase *conn);
 
-    void appendReplicationInfo( BSONObjBuilder& result , bool authed , int level ) {
-
+    void appendReplicationInfo(BSONObjBuilder& result, int level) {
         if ( replSet ) {
             if( theReplSet == 0 || theReplSet->state().shunned() ) {
                 result.append("ismaster", false);
@@ -130,11 +129,8 @@ namespace mongo {
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             /* currently request to arbiter is (somewhat arbitrarily) an ismaster request that is not
                authenticated.
-               we allow unauthenticated ismaster but we aren't as verbose informationally if
-               one is not authenticated for admin db to be safe.
             */
-            bool authed = cc().getAuthenticationInfo()->isAuthorizedReads("admin");
-            appendReplicationInfo( result , authed );
+            appendReplicationInfo(result, 0);
 
             result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
             result.appendDate("localTime", jsTime());

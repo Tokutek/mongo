@@ -558,7 +558,7 @@ namespace mongo {
 
             if ( anyReplEnabled() ) {
                 BSONObjBuilder bb( result.subobjStart( "repl" ) );
-                appendReplicationInfo( bb , authed , cmdObj["repl"].numberInt() );
+                appendReplicationInfo(bb, cmdObj["repl"].numberInt());
                 bb.done();
 
                 if ( ! _isMaster() ) {
