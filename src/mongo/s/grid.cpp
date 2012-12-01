@@ -28,6 +28,7 @@
 #include "mongo/s/grid.h"
 #include "mongo/s/shard.h"
 #include "mongo/s/type_collection.h"
+#include "mongo/s/type_database.h"
 #include "mongo/s/type_shard.h"
 #include "mongo/util/startup_test.h"
 #include "mongo/util/stringutils.h"
