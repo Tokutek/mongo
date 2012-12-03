@@ -97,7 +97,8 @@ namespace mongo {
 
     /**
      * Tests that the ScopedDistributedLock respects the DistributedLock and vice-versa.
-     */TEST_F(ScopedDistLockTests, BasicLockTest) {
+     */
+    TEST_F(ScopedDistLockTests, BasicLockTest) {
 
         ConnectionString configLoc(string("$dummy:10000"));
         string lockName = "fooBar";
@@ -148,7 +149,8 @@ namespace mongo {
 
     /**
      * Tests that the ScopedDistributedLock respects the DistributedLock and vice-versa.
-     */TEST_F(ScopedDistLockTests, WaitForLockTest) {
+     */
+    TEST_F(ScopedDistLockTests, WaitForLockTest) {
 
         ConnectionString configLoc(string("$dummy:10000"));
         string lockName = "fooBar";
