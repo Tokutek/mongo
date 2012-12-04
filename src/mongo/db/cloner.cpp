@@ -18,6 +18,8 @@
 */
 
 #include "mongo/pch.h"
+#include "mongo/base/init.h"
+#include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
 #include "mongo/bson/util/builder.h"
 #include "mongo/client/dbclientinterface.h"
@@ -671,6 +673,7 @@ namespace mongo {
 
     /* Usage:
        mydb.$cmd.findOne( { clone: "fromhost" } );
+       Note: doesn't work with authentication enabled
     */
     class CmdClone : public Command {
     public:
@@ -685,6 +688,13 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << "clone this database from an instance of the db on another host\n";
             help << "{ clone : \"host13\" }";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            // Should never get here because this command shouldn't get registered when auth is
+            // enabled
+            verify(0);
         }
         CmdClone() : Command("clone") { }
         
@@ -763,8 +773,9 @@ namespace mongo {
             return rval;
 
         }
-    } cmdclone;
+    };
 
+    // Note: doesn't work with authentication enabled
     class CmdCloneCollection : public Command {
     public:
         virtual bool slaveOk() const {
@@ -776,6 +787,13 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool requiresSync() const { return true; }
         CmdCloneCollection() : Command("cloneCollection") { }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            // Should never get here because this command shouldn't get registered when auth is
+            // enabled
+            verify(0);
+        }
         virtual void help( stringstream &help ) const {
             help << "{ cloneCollection: <collection>, from: <host> [,query: <query_filter>] [,copyIndexes:<bool>] }"
                  "\nCopies a collection from one server to another. Do not use on a single server as the destination "
@@ -851,11 +869,12 @@ namespace mongo {
 
             return retval;
         }
-    } cmdclonecollection;
+    };
 
 
     /* Usage:
      admindb.$cmd.findOne( { copydbgetnonce: 1, fromhost: <hostname> } );
+     Note: doesn't work with authentication enabled
      */
     class CmdCopyDbGetNonce : public Command {
     public:
@@ -871,6 +890,13 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            // Should never get here because this command shouldn't get registered when auth is
+            // enabled
+            verify(0);
+        }
         virtual void help( stringstream &help ) const {
             help << "get a nonce for subsequent copy db request from secure server\n";
             help << "usage: {copydbgetnonce: 1, fromhost: <hostname>}";
@@ -906,10 +932,11 @@ namespace mongo {
             result.appendElements( ret );
             return true;
         }
-    } cmdcopydbgetnonce;
+    };
 
     /* Usage:
        admindb.$cmd.findOne( { copydb: 1, fromhost: <hostname>, fromdb: <db>, todb: <db>[, username: <username>, nonce: <nonce>, key: <key>] } );
+       Note: doesn't work with authentication enabled
     */
     class CmdCopyDb : public Command {
     public:
@@ -925,6 +952,13 @@ namespace mongo {
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool requiresSync() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            // Should never get here because this command shouldn't get registered when auth is
+            // enabled
+            verify(0);
+        }
         virtual void help( stringstream &help ) const {
             help << "copy a database from another host to this host\n";
             help << "usage: {copydb: 1, fromhost: <hostname>, fromdb: <db>, todb: <db>[, slaveOk: <bool>, username: <username>, nonce: <nonce>, key: <key>]}";
@@ -1045,6 +1079,47 @@ namespace mongo {
             cc().setAuthConn(emptyConn);
             return res;
         }
-    } cmdcopydb;
+    };
+
+    // This will be registered instead of the real implementations of any commands that don't work
+    // when auth is enabled.
+    class NotWithAuthCmd : public Command {
+    public:
+        NotWithAuthCmd(const char* cmdName) : Command(cmdName) { }
+        virtual bool slaveOk() const { return true; }
+        virtual LockType locktype() const { return NONE; }
+        virtual bool requiresAuth() { return false; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
+        virtual void help( stringstream &help ) const {
+            help << name << " is not supported when running with authentication enabled";
+        }
+        virtual bool run(const string&,
+                         BSONObj& cmdObj,
+                         int,
+                         string& errmsg,
+                         BSONObjBuilder& result,
+                         bool fromRepl) {
+            errmsg = name + " is not supported when running with authentication enabled";
+            return false;
+        }
+    };
+
+    MONGO_INITIALIZER(RegisterGodInsertCmd)(InitializerContext* context) {
+        if (noauth) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdClone();
+            new CmdCloneCollection();
+            new CmdCopyDb();
+            new CmdCopyDbGetNonce();
+        } else {
+            new NotWithAuthCmd("clone");
+            new NotWithAuthCmd("cloneCollection");
+            new NotWithAuthCmd("copydb");
+            new NotWithAuthCmd("copydbgetnonce");
+        }
+        return Status::OK();
+    }
 
 } // namespace mongo
