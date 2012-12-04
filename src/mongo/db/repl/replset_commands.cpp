@@ -17,6 +17,8 @@
 
 #include "pch.h"
 
+#include "mongo/base/init.h"
+#include "mongo/base/status.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
@@ -44,11 +46,17 @@ namespace mongo {
     bool replSetBlind = false;
     unsigned replSetForceInitialSyncFailure = 0;
 
+    // Testing only, enabled via command-line.
     class CmdReplSetTest : public ReplSetCommand {
     public:
         virtual void help( stringstream &help ) const {
             help << "Just for regression tests.\n";
         }
+        // No auth needed because it only works when enabled via command line.
+        virtual bool requiresAuth() { return false; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
         CmdReplSetTest() : ReplSetCommand("replSetTest") { }
         virtual bool needsTxn() const { return false; }
         virtual bool canRunInMultiStmtTxn() const { return true; }
@@ -79,7 +87,14 @@ namespace mongo {
 
             return false;
         }
-    } cmdReplSetTest;
+    };
+    MONGO_INITIALIZER(RegisterReplSetTestCmd)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdReplSetTest();
+        }
+        return Status::OK();
+    }
 
     /** get rollback id.  used to check if a rollback happened during some interval of time.
         as consumed, the rollback id is not in any particular order, it simply changes on each rollback.

@@ -189,6 +189,8 @@ namespace mongo {
         static bool runAgainstRegistered(const char *ns, BSONObj& jsobj, BSONObjBuilder& anObjBuilder, int queryOptions = 0);
         static LockType locktype( const string& name );
         static Command * findCommand( const string& name );
+        // Set by command line.  Controls whether or not testing-only commands should be available.
+        static int testCommandsEnabled;
     };
 
     /** A command that modifies metadata in some way. */
