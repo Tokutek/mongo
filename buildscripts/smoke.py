@@ -233,6 +233,8 @@ class mongod(object):
             argv += ['--logpath', server_log_file]
         if len(smoke_server_opts) > 0:
             argv += [smoke_server_opts]
+        if self.kwargs.get('use_ssl'):
+            argv += ['--sslOnNormalPorts', '--sslPEMKeyFile', 'jstests/libs/smoke.pem']
         if not quiet:
             print "running " + " ".join(argv)
         self.proc = self._start(buildlogger(argv, is_global=True))
@@ -441,6 +443,8 @@ def runTest(test, testnum):
             argv += ["--nodb"]
         if small_oplog or small_oplog_rs:
             argv += ["--eval", 'testingReplication = true;']
+        if use_ssl:
+            argv += ["--ssl"]
         argv += [path]
     elif ext in ["", ".exe"]:
         # Blech.
@@ -552,7 +556,7 @@ def runTest(test, testnum):
     
     if start_mongod:
         try:
-            c = Connection( "127.0.0.1" , int(mongod_port) )
+            c = Connection(host="127.0.0.1", port=int(mongod_port), ssl=use_ssl)
         except Exception,e:
             raise TestServerFailure(path)
 
@@ -775,6 +779,7 @@ def set_globals(options, tests):
     global use_ssl
     global file_of_commands_mode
     start_mongod = options.start_mongod
+    use_ssl = options.use_ssl
     #Careful, this can be called multiple times
     test_path = options.test_path
 
@@ -966,8 +971,12 @@ def main():
     parser.add_option('--skip-until', dest='skip_tests_until', default="",
                       action="store",
                       help='Skip all tests alphabetically less than the given name.')
-    parser.add_option(
-        '--dont-start-mongod', dest='start_mongod', default=True, action='store_false')
+    parser.add_option('--dont-start-mongod', dest='start_mongod', default=True, 
+                      action='store_false',
+                      help='Do not start mongod before commencing test running')
+    parser.add_option('--use-ssl', dest='use_ssl', default=False,
+                      action='store_true',
+                      help='Run mongo shell and mongod instances with SSL encryption')
 
     # Buildlogger invocation from command line
     parser.add_option('--buildlogger-builder', dest='buildlogger_builder', default=None,
