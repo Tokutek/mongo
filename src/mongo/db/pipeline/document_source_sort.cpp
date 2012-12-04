@@ -26,7 +26,6 @@
 #include "db/pipeline/expression_context.h"
 #include "db/pipeline/value.h"
 
-
 namespace mongo {
     const char DocumentSourceSort::sortName[] = "$sort";
 
@@ -57,7 +56,7 @@ namespace mongo {
             pCurrent.reset();
             return false;
         }
-        pCurrent = *docIterator;
+        pCurrent = docIterator->doc;
 
         return true;
     }
@@ -205,7 +204,7 @@ namespace mongo {
         docIterator = documents.begin();
 
         if (docIterator != documents.end())
-            pCurrent = *docIterator;
+            pCurrent = docIterator->doc;
         populated = true;
     }
 
@@ -215,8 +214,8 @@ namespace mongo {
 
         /* pull everything from the underlying source */
         for (bool hasNext = !pSource->eof(); hasNext; hasNext = pSource->advance()) {
-            documents.push_back(pSource->getCurrent());
-            dmm.addToTotal(documents.back()->getApproximateSize());
+            documents.push_back(KeyAndDoc(pSource->getCurrent(), vSortKey));
+            dmm.addToTotal(documents.back().doc.getApproximateSize());
         }
 
         /* sort the list */
@@ -228,12 +227,12 @@ namespace mongo {
         if (pSource->eof())
             return;
 
-        Document best = pSource->getCurrent();
+        KeyAndDoc best (pSource->getCurrent(), vSortKey);
         while (pSource->advance()) {
-            Document next = pSource->getCurrent();
+            KeyAndDoc next (pSource->getCurrent(), vSortKey);
             if (compare(next, best) < 0) {
                 // we have a new best
-                best.swap(next);
+                swap(best, next);
             }
         }
 
@@ -246,8 +245,9 @@ namespace mongo {
         size_t limit = limitSrc->getLimit();
 
         // Pull first K documents unconditionally
+        documents.reserve(limit);
         for (; hasNext && documents.size() < limit; hasNext = pSource->advance()) {
-            documents.push_back(pSource->getCurrent());
+            documents.push_back(KeyAndDoc(pSource->getCurrent(), vSortKey));
         }
 
         // We now maintain a MaxHeap of K items. This means that the least-best
@@ -261,13 +261,13 @@ namespace mongo {
         std::make_heap(documents.begin(), documents.end(), comp);
 
         for (; hasNext; hasNext = pSource->advance()) {
-            Document next = pSource->getCurrent();
+            KeyAndDoc next (pSource->getCurrent(), vSortKey);
             if (compare(next, documents.front()) < 0) {
                 // remove least-best from heap
                 std::pop_heap(documents.begin(), documents.end(), comp);
 
                 // add next to heap
-                documents.back().swap(next);
+                swap(documents.back(), next);
                 std::push_heap(documents.begin(), documents.end(), comp);
             }
         }
@@ -275,7 +275,21 @@ namespace mongo {
         std::sort_heap(documents.begin(), documents.end(), comp);
     }
 
-    int DocumentSourceSort::compare(const Document& pL, const Document& pR) const {
+    DocumentSourceSort::KeyAndDoc::KeyAndDoc(const Document& d, const SortPaths& sp) :doc(d) {
+        if (sp.size() == 1) {
+            key = sp[0]->evaluate(d);
+            return;
+        }
+
+        vector<Value> keys;
+        keys.reserve(sp.size());
+        for (size_t i=0; i < sp.size(); i++) {
+            keys.push_back(sp[i]->evaluate(d));
+        }
+        key = Value(keys);
+    }
+
+    int DocumentSourceSort::compare(const KeyAndDoc & lhs, const KeyAndDoc & rhs) const {
 
         /*
           populate() already checked that there is a non-empty sort key,
@@ -285,17 +299,16 @@ namespace mongo {
           present.  In this case, consider the document less.
         */
         const size_t n = vSortKey.size();
-        for(size_t i = 0; i < n; ++i) {
-            /* evaluate the sort keys */
-            ExpressionFieldPath *pE = vSortKey[i].get();
-            Value pLeft(pE->evaluate(pL));
-            Value pRight(pE->evaluate(pR));
+        if (n == 1) { // simple fast case
+            if (vAscending[0])
+                return  Value::compare(lhs.key, rhs.key);
+            else
+                return -Value::compare(lhs.key, rhs.key);
+        }
 
-            /*
-              Compare the two values; if they differ, return.  If they are
-              the same, move on to the next key.
-            */
-            int cmp = Value::compare(pLeft, pRight);
+        // compound sort
+        for (size_t i = 0; i < n; i++) {
+            int cmp = Value::compare(lhs.key[i], rhs.key[i]);
             if (cmp) {
                 /* if necessary, adjust the return value by the key ordering */
                 if (!vAscending[i])
