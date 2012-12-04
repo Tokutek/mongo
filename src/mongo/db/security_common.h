@@ -38,6 +38,8 @@ namespace mongo {
     class CmdAuthenticate : public InformationCommand {
     public:
         CmdAuthenticate() : InformationCommand("authenticate") {}
+
+        static void disableCommand();
         virtual bool requiresAuth() { return false; }
         virtual void help(stringstream& ss) const { ss << "internal"; }
         virtual void addRequiredPrivileges(const std::string& dbname,
