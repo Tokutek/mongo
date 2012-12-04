@@ -991,7 +991,7 @@ namespace mongo {
             {
                 scoped_ptr<ScopedDbConnection> conn(
                         ScopedDbConnection::getInternalScopedDbConnection(
-                                shardingState.getConfigServer() ) );
+                                shardingState.getConfigServer(), 30));
 
                 BSONObj x;
                 BSONObj currChunk;

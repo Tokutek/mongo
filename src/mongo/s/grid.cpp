@@ -344,7 +344,7 @@ namespace mongo {
 
         {
             scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                    configServer.getPrimary().getConnString() ) );
+                    configServer.getPrimary().getConnString(), 30));
 
             // check whether the set of hosts (or single host) is not an already a known shard
             BSONObj old = conn->get()->findOne(ConfigNS::shard,
@@ -384,7 +384,7 @@ namespace mongo {
 
     bool Grid::knowAboutShard( const string& name ) const {
         scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                configServer.getPrimary().getConnString() ) );
+                configServer.getPrimary().getConnString(), 30));
         BSONObj shard = conn->get()->findOne(ConfigNS::shard, BSON(ShardFields::host(name)));
         conn->done();
         return ! shard.isEmpty();
@@ -397,7 +397,7 @@ namespace mongo {
         int count = 0;
 
         scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                configServer.getPrimary().getConnString() ) );
+                configServer.getPrimary().getConnString(), 30));
         BSONObj o = conn->get()->findOne(ConfigNS::shard,
                                          Query(fromjson("{" + ShardFields::name() + ": /^shard/}"))
                                          .sort(BSON(ShardFields::name() << -1 )));
@@ -425,7 +425,7 @@ namespace mongo {
     bool Grid::shouldBalance( const string& ns, BSONObj* balancerDocOut ) const {
 
         scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                configServer.getPrimary().getConnString() ) );
+                configServer.getPrimary().getConnString(), 30));
         BSONObj balancerDoc;
         BSONObj collDoc;
 
@@ -519,7 +519,7 @@ namespace mongo {
 
     unsigned long long Grid::getNextOpTime() const {
         scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                configServer.getPrimary().getConnString() ) );
+                configServer.getPrimary().getConnString(), 30));
 
         BSONObj result;
         massert( 10421,
@@ -541,7 +541,7 @@ namespace mongo {
 
     BSONObj Grid::getConfigSetting( const std::string& name ) const {
         scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                configServer.getPrimary().getConnString() ) );
+                configServer.getPrimary().getConnString(), 30));
         BSONObj result = conn->get()->findOne( ConfigNS::settings,
                                                BSON( SettingsFields::key(name) ) );
         conn->done();

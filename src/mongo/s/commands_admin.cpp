@@ -1100,8 +1100,8 @@ namespace mongo {
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection( configServer.getPrimary()
-                                                                           .getConnString() ) );
+                        ScopedDbConnection::getInternalScopedDbConnection(
+                                configServer.getPrimary().getConnString(), 30));
 
                 vector<BSONObj> all;
                 auto_ptr<DBClientCursor> cursor = conn->get()->query( ConfigNS::shard , BSONObj() );
@@ -1208,8 +1208,8 @@ namespace mongo {
                 }
 
                 scoped_ptr<ScopedDbConnection> connPtr(
-                        ScopedDbConnection::getInternalScopedDbConnection( configServer.getPrimary()
-                                                                           .getConnString() ) );
+                        ScopedDbConnection::getInternalScopedDbConnection(
+                                configServer.getPrimary().getConnString(), 30));
                 ScopedDbConnection& conn = *connPtr;
 
                 if (conn->count(ConfigNS::shard,
@@ -1535,8 +1535,8 @@ namespace mongo {
             
             { // get config db from the config servers (first one)
                 scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection( configServer.getPrimary()
-                                                                           .getConnString() ) );
+                        ScopedDbConnection::getInternalScopedDbConnection(
+                                configServer.getPrimary().getConnString(), 30));
                 BSONObj x;
                 if ( conn->get()->simpleCommand( "config" , &x , "dbstats" ) ){
                     BSONObjBuilder b;

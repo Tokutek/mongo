@@ -746,7 +746,7 @@ namespace mongo {
             {
                 scoped_ptr<ScopedDbConnection> conn(
                         ScopedDbConnection::getInternalScopedDbConnection(
-                                shardingState.getConfigServer() ) );
+                                shardingState.getConfigServer(), 30));
 
                 BSONObj x = conn->get()->findOne(ConfigNS::chunk,
                                                  Query(BSON(ChunkFields::ns(ns)))
@@ -821,7 +821,7 @@ namespace mongo {
             vector<ChunkInfo> newChunks;
 
             try {
-                scoped_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer()));
+                scoped_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer(), 30));
                 RemoteTransaction txn(conn->conn(), "serializable");
 
                 // Check the precondition

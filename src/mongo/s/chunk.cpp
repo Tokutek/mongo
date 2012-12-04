@@ -526,7 +526,8 @@ namespace mongo {
 
         try {
             scoped_ptr<ScopedDbConnection> conn(
-                    ScopedDbConnection::getInternalScopedDbConnection( configServer.modelServer() ) );
+                    ScopedDbConnection::getInternalScopedDbConnection(
+                            configServer.modelServer(), 30));
 
             conn->get()->update(ConfigNS::chunk,
                                 BSON(ChunkFields::name(genID())),
@@ -988,7 +989,7 @@ namespace mongo {
               << " using new epoch " << version.epoch() << endl;
         
         scoped_ptr<ScopedDbConnection> conn(
-                ScopedDbConnection::getInternalScopedDbConnection( config ) );
+                ScopedDbConnection::getInternalScopedDbConnection(config, 30));
 
         // Make sure we don't have any chunks that already exist here
         unsigned long long existingChunks =
