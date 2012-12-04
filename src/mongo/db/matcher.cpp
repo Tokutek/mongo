@@ -356,45 +356,45 @@ namespace mongo {
         case BSONObj::opWITHIN: {
             BSONObj shapeObj = fe.embeddedObject();
             BSONObjIterator argIt(shapeObj);
-            uassert(16481, "Empty obj for $within: " + shapeObj.toString(), argIt.more());
+            uassert(16515, "Empty obj for $within: " + shapeObj.toString(), argIt.more());
 
             BSONElement elt = argIt.next();
-            uassert(16466, "Within must be provided a BSONObj: " + elt.toString(),
+            uassert(16516, "Within must be provided a BSONObj: " + elt.toString(),
                     elt.isABSONObj());
             BSONObj obj = elt.Obj();
             BSONObjIterator coordIt(elt.Obj());
-            uassert(16482, "Malformed $within: ", coordIt.more());
+            uassert(16517, "Malformed $within: ", coordIt.more());
 
             if (str::equals(elt.fieldName(), "$box")) {
                 BSONElement minE = coordIt.next();
-                uassert(16467, "Malformed $box: " + obj.toString(), minE.isABSONObj());
-                uassert(16468, "Malformed $box: " + obj.toString(), coordIt.more());
+                uassert(16518, "Malformed $box: " + obj.toString(), minE.isABSONObj());
+                uassert(16519, "Malformed $box: " + obj.toString(), coordIt.more());
                 BSONElement maxE = coordIt.next();
-                uassert(16469, "Malformed $box: " + obj.toString(), minE.isABSONObj());
+                uassert(16520, "Malformed $box: " + obj.toString(), minE.isABSONObj());
                 _geo.push_back(GeoMatcher::makeBox(e.fieldName(), minE.Obj(), maxE.Obj()));
             } else if (str::equals(elt.fieldName(), "$center")) {
                 BSONElement center = coordIt.next();
-                uassert(16473, "Malformed $center: " + obj.toString(), center.isABSONObj());
-                uassert(16474, "Malformed $center: " + obj.toString(), coordIt.more());
+                uassert(16521, "Malformed $center: " + obj.toString(), center.isABSONObj());
+                uassert(16522, "Malformed $center: " + obj.toString(), coordIt.more());
                 BSONElement radius = coordIt.next();
-                uassert(16475, "Malformed $center: " + obj.toString(), radius.isNumber());
+                uassert(16523, "Malformed $center: " + obj.toString(), radius.isNumber());
                 _geo.push_back(
                         GeoMatcher::makeCircle(e.fieldName(), center.Obj(), radius.number()));
             } else if (str::equals(elt.fieldName(), "$polygon")) {
                 while (coordIt.more()) {
                     BSONElement coord = coordIt.next();
-                    uassert(16476, "Malformed $polygon: " + obj.toString(), coord.isABSONObj());
+                    uassert(16524, "Malformed $polygon: " + obj.toString(), coord.isABSONObj());
                     BSONObjIterator numIt(coord.Obj());
-                    uassert(16477, "Malformed $polygon: " + obj.toString(), numIt.more());
+                    uassert(16525, "Malformed $polygon: " + obj.toString(), numIt.more());
                     BSONElement x = numIt.next();
-                    uassert(16478, "Malformed $polygon: " + obj.toString(), x.isNumber());
-                    uassert(16484, "Malformed $polygon: " + obj.toString(), numIt.more());
+                    uassert(16526, "Malformed $polygon: " + obj.toString(), x.isNumber());
+                    uassert(16527, "Malformed $polygon: " + obj.toString(), numIt.more());
                     BSONElement y = numIt.next();
-                    uassert(16479, "Malformed $polygon: " + obj.toString(), y.isNumber());
+                    uassert(16528, "Malformed $polygon: " + obj.toString(), y.isNumber());
                 }
                 _geo.push_back(GeoMatcher::makePolygon(e.fieldName(), elt.Obj()));
             } else {
-                uasserted(16483, "Couldn't pull any geometry out of $within query: " + obj.toString());
+                uasserted(16529, "Couldn't pull any geometry out of $within query: " + obj.toString());
             }
             break;
         }
