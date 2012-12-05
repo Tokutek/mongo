@@ -1380,7 +1380,7 @@ namespace mongo {
         ConnectionString connStr(_masterHost);
 
         string errmsg;
-        DBClientConnection* newConn;
+        DBClientConnection* newConn = NULL;
 
         try {
             // Needs to perform a dynamic_cast because we need to set the replSet
