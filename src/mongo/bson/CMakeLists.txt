@@ -1,8 +1,6 @@
 add_library(bson STATIC
-  mutable/mutable_bson
-  mutable/mutable_bson_builder
-  mutable/mutable_bson_heap
-  mutable/mutable_bson_internal
+  mutable/document
+  mutable/element
   util/bson_extract
   ../util/safe_num
   bson_validate

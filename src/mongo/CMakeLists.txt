@@ -351,8 +351,6 @@ if (BUILD_TESTING)
       util/builder_test
       util/bson_extract_test
       mutable/mutable_bson_test
-      mutable/mutable_bson_heap_test
-      mutable/mutable_bson_builder_test
       mutable/mutable_bson_algo_test
       bson_field_test
       bson_validate_test
@@ -955,8 +953,6 @@ if (BUILD_TESTING)
       builder_test
       bson_extract_test
       mutable_bson_test
-      mutable_bson_heap_test
-      mutable_bson_builder_test
       mutable_bson_algo_test
       bson_field_test
       bson_validate_test
