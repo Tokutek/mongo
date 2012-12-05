@@ -701,6 +701,8 @@ at the end of testing:"""
     if losers or lost_in_slave or lost_in_master or screwy_in_slave:
         raise Exception("Test failures")
 
+# Keys are the suite names (passed on the command line to smoke.py)
+# Values are pairs: (filenames, <start mongod before running tests>)
 suiteGlobalConfig = {"js": ("[!_]*.js", True),
                      "quota": ("quota/*.js", True),
                      "jsPerf": ("perf/*.js", True),
@@ -716,7 +718,8 @@ suiteGlobalConfig = {"js": ("[!_]*.js", True),
                      "sharding": ("sharding/*.js", False),
                      "tool": ("tool/*.js", False),
                      "aggregation": ("aggregation/*.js", True),
-                     "multiVersion": ("multiVersion/*.js", True )
+                     "multiVersion": ("multiVersion/*.js", True),
+                     "ssl": ("ssl/*.js", True)
                      }
 
 def expand_suites(suites,expandUseDB=True):
