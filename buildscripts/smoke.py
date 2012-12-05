@@ -799,7 +799,8 @@ def set_globals(options, tests):
     global file_of_commands_mode
     global valgrind, drd
     start_mongod = options.start_mongod
-    use_ssl = options.use_ssl
+    if hasattr(options, 'use_ssl'):
+        use_ssl = options.use_ssl
     #Careful, this can be called multiple times
     test_path = options.test_path
 
