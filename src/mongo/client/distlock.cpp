@@ -73,6 +73,12 @@ namespace mongo {
         return s;
     }
 
+    // Used for disabling the lock pinger during tests
+    // Should *always* be true otherwise.
+    static bool lockPingerEnabled = true;
+
+    bool isLockPingerEnabled() { return lockPingerEnabled; }
+    void setLockPingerEnabled(bool enabled) { lockPingerEnabled = enabled; }
 
     class DistributedLockPinger {
     public:
@@ -242,6 +248,8 @@ namespace mongo {
 
         string got( DistributedLock& lock, unsigned long long sleepTime ) {
 
+            if (!lockPingerEnabled) return "";
+
             // Make sure we don't start multiple threads for a process id
             scoped_lock lk( _mutex );
 
@@ -305,6 +313,8 @@ namespace mongo {
             _seen.erase( pingId );
 
         }
+
+        static bool _pingerEnabled;
 
         set<string> _kill;
         set<string> _seen;
