@@ -33,6 +33,10 @@ namespace toku {
     // effect: creates db if it didn't exist
     DB *env_get_db_handle_by_idx(const mongo::IndexDetails &idx);
 
+    // given an idx, what's the total uncompressed user data size?
+    // return: true if the idx is a toku index and its size is in *data_size, false otherwise
+    bool env_get_db_data_size(const mongo::IndexDetails &idx, uint64_t *data_size);
+
     // given an idx, drop the associated db from the environment
     void env_drop_index(const mongo::IndexDetails &idx);
 

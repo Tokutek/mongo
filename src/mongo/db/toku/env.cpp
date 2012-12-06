@@ -302,6 +302,19 @@ namespace toku {
         return db;
     }
 
+    bool env_get_db_data_size(const mongo::IndexDetails &idx, uint64_t *data_size) {
+        DB *db = env_get_db_handle_by_idx(idx);
+        if (db) {
+            TOKU_DB_FRAGMENTATION_S fragmentation;
+            int r = db->get_fragmentation(db, &fragmentation);
+            invariant(r == 0);
+            *data_size = fragmentation.data_bytes;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     // TODO: this index should be 'closed' by the caller first, not here.
     // drop the index by removing the db
     void env_drop_index(const mongo::IndexDetails &idx) {

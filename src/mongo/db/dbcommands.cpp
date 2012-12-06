@@ -52,6 +52,8 @@
 #include "mongo/db/index_update.h"
 #include "mongo/db/repl/bgsync.h"
 
+#include "db/toku/env.h"
+
 namespace mongo {
 
     namespace dur { 
@@ -1310,13 +1312,24 @@ namespace mongo {
                 IndexDetails& d = ii.next();
                 string collNS = d.indexNamespace();
                 NamespaceDetails * mine = nsdetails( collNS.c_str() );
+                long long datasize;
                 if ( ! mine ) {
-                    log() << "error: have index ["  << collNS << "] but no NamespaceDetails" << endl;
-                    continue;
+                    uint64_t size;
+                    if (!toku::env_get_db_data_size(d, &size)) {
+                        // neither mongo nor toku recognize the index
+                        log() << "error: have index ["  << collNS << "] but no NamespaceDetails" << endl;
+                        continue;
+                    } else {
+                        // mongo didn't recognize the index, but toku did
+                        datasize = size;
+                    }
+                } else {
+                    // valid mongo index, capture its size from the namespace details
+                    datasize = mine->stats.datasize;
                 }
-                totalSize += mine->stats.datasize;
+                totalSize += datasize;
                 if ( details )
-                    details->appendNumber( d.indexName() , mine->stats.datasize / scale );
+                    details->appendNumber( d.indexName() , datasize / scale );
             }
             return totalSize;
         }
