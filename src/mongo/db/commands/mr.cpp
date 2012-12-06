@@ -1287,6 +1287,13 @@ namespace mongo {
             virtual bool canRunInMultiStmtTxn() const { return true; }
             virtual OpSettings getOpSettings() const { return OpSettings().setBulkFetch(true); }
 
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::mapReduceShardedFinish);
+                out->push_back(Privilege(dbname, actions));
+            }
             bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 ShardedConnectionInfo::addHook();
                 // legacy name
