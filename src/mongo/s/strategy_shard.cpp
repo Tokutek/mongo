@@ -1023,6 +1023,16 @@ namespace mongo {
             // TODO: This block goes away, system.indexes needs to handle better
             if( isIndexWrite ){
 
+                if (op == dbInsert) {
+                    // Insert is the only write op allowed on system.indexes, so it's the only one
+                    // we check auth for.
+                    AuthorizationManager* authManager =
+                            ClientBasic::getCurrent()->getAuthorizationManager();
+                    uassert(16547,
+                            mongoutils::str::stream() << "not authorized to create index on " << ns,
+                            authManager->checkAuthorization(ns, ActionType::ensureIndex));
+                }
+
                 if ( r.getConfig()->isShardingEnabled() ){
                     LOG(1) << "sharded index write for " << ns << endl;
                     handleIndexWrite( op , r );
@@ -1066,12 +1076,6 @@ namespace mongo {
                 while( d.moreJSObjs() ) {
                     BSONObj o = d.nextJsObj();
                     const char * ns = o["ns"].valuestr();
-
-                    AuthorizationManager* authManager =
-                            ClientBasic::getCurrent()->getAuthorizationManager();
-                    uassert(16547,
-                            mongoutils::str::stream() << "not authorized to create index on " << ns,
-                            authManager->checkAuthorization(ns, ActionType::ensureIndex));
 
                     if ( r.getConfig()->isSharded( ns ) ) {
                         BSONObj newIndexKey = o["key"].embeddedObjectUserCheck();
