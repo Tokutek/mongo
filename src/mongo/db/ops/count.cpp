@@ -75,7 +75,10 @@ namespace mongo {
                 // NOTE In the distant past we used a min/max bounded BtreeCursor with a shallow
                 // equality comparison to check for matches in the simple match case.  That may be
                 // more performant, but I don't think we've measured the performance.
-                if ( simpleEqualityMatch ||
+                //
+                // tokudb: simpleEqualityMatch breaks toku indexes but seems to be unnecessary even for
+                // mongo indexes, according to the above comment
+                if ( //simpleEqualityMatch ||
                     ( cursor->currentMatches() && !cursor->getsetdup( cursor->currLoc() ) ) ) {
                     
                     if ( skip > 0 ) {
