@@ -692,9 +692,9 @@ namespace mongo {
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
-            // Should never get here because this command shouldn't get registered when auth is
-            // enabled
-            verify(0);
+            ActionSet actions;
+            actions.addAction(ActionType::clone);
+            out->push_back(Privilege(dbname, actions));
         }
         CmdClone() : Command("clone") { }
         
@@ -773,7 +773,7 @@ namespace mongo {
             return rval;
 
         }
-    };
+    } cmdClone;
 
     // Note: doesn't work with authentication enabled
     class CmdCloneCollection : public Command {
@@ -1109,12 +1109,10 @@ namespace mongo {
     MONGO_INITIALIZER(RegisterNotWithAuthCommands)(InitializerContext* context) {
         if (noauth) {
             // Leaked intentionally: a Command registers itself when constructed.
-            new CmdClone();
             new CmdCloneCollection();
             new CmdCopyDb();
             new CmdCopyDbGetNonce();
         } else {
-            new NotWithAuthCmd("clone");
             new NotWithAuthCmd("cloneCollection");
             new NotWithAuthCmd("copydb");
             new NotWithAuthCmd("copydbgetnonce");
