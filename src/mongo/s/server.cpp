@@ -50,6 +50,7 @@
 #include "mongo/plugins/loader.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/log.h"
+#include "mongo/util/exception_filter_win32.h"
 
 #if defined(_WIN32)
 # include "../util/ntservice.h"
@@ -216,6 +217,7 @@ namespace mongo {
         sigaddset( &asyncSignals, SIGUSR1 );
         startSignalProcessingThread();
 #endif
+        setWindowsUnhandledExceptionFilter();
         set_new_handler( my_new_handler );
     }
 
