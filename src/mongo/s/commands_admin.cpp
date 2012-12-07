@@ -1148,7 +1148,7 @@ namespace mongo {
                 errmsg.clear();
 
                 if ( !ClientBasic::getCurrent()->getAuthenticationInfo()->isAuthorized("admin") ) {
-                    errmsg = "unauthorized. Need admin authentication to add a shard ";
+                    errmsg = "unauthorized. Need admin authentication to add a shard";
                     log() << "addshard request " << cmdObj << " failed:" << errmsg << endl;
                     return false;
                 }

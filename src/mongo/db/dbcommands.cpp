@@ -1488,6 +1488,7 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << "{whatsmyuri:1}";
         }
+        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {} // No auth required
