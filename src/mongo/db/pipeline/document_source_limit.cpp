@@ -28,11 +28,12 @@
 namespace mongo {
     const char DocumentSourceLimit::limitName[] = "$limit";
 
-    DocumentSourceLimit::DocumentSourceLimit(const intrusive_ptr<ExpressionContext> &pExpCtx):
-        SplittableDocumentSource(pExpCtx),
-        limit(0),
-        count(0) {
-    }
+    DocumentSourceLimit::DocumentSourceLimit(const intrusive_ptr<ExpressionContext> &pExpCtx,
+                                             long long limit)
+        : SplittableDocumentSource(pExpCtx)
+        , limit(limit)
+        , count(0)
+    {}
 
     DocumentSourceLimit::~DocumentSourceLimit() {
     }
@@ -84,10 +85,11 @@ namespace mongo {
     }
 
     intrusive_ptr<DocumentSourceLimit> DocumentSourceLimit::create(
-        const intrusive_ptr<ExpressionContext> &pExpCtx) {
-        intrusive_ptr<DocumentSourceLimit> pSource(
-            new DocumentSourceLimit(pExpCtx));
-        return pSource;
+            const intrusive_ptr<ExpressionContext> &pExpCtx,
+            long long limit) {
+        uassert(15958, "the limit must be positive",
+                limit > 0);
+        return new DocumentSourceLimit(pExpCtx, limit);
     }
 
     intrusive_ptr<DocumentSource> DocumentSourceLimit::createFromBson(
@@ -96,13 +98,7 @@ namespace mongo {
         uassert(15957, "the limit must be specified as a number",
                 pBsonElement->isNumber());
 
-        intrusive_ptr<DocumentSourceLimit> pLimit(
-            DocumentSourceLimit::create(pExpCtx));
-
-        pLimit->limit = (int)pBsonElement->numberLong();
-        uassert(15958, "the limit must be positive",
-                pLimit->limit > 0);
-
-        return pLimit;
+        long long limit = pBsonElement->numberLong();
+        return DocumentSourceLimit::create(pExpCtx, limit);
     }
 }
