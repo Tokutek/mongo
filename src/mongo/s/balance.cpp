@@ -30,6 +30,7 @@
 #include "mongo/s/shard.h"
 #include "mongo/s/type_chunk.h"
 #include "mongo/s/type_collection.h"
+#include "mongo/s/type_settings.h"
 #include "mongo/util/version.h"
 
 namespace mongo {
@@ -343,8 +344,8 @@ namespace mongo {
                     continue;
                 }
 
-                sleepTime = balancerConfig[SettingsFields::shortBalancerSleep()].trueValue() ? 30 :
-                                                                                               6;
+                sleepTime = balancerConfig[SettingsType::shortBalancerSleep()].trueValue() ? 30 :
+                                                                                             6;
                 
                 uassert( 13258 , "oids broken after resetting!" , _checkOIDs() );
 
@@ -371,7 +372,13 @@ namespace mongo {
                         _balancedLastTime = 0;
                     }
                     else {
+<<<<<<< HEAD
                         _balancedLastTime = _moveChunks( &candidateChunks );
+=======
+                        _balancedLastTime = _moveChunks(&candidateChunks,
+                                balancerConfig[SettingsType::secondaryThrottle()].trueValue(),
+                                balancerConfig["_waitForDelete"].trueValue());
+>>>>>>> 5e91da2... SERVER-939 Changed SettingsFields to SettingsType
                     }
                     
                     LOG(1) << "*** end of balancing round" << endl;

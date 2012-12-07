@@ -33,6 +33,7 @@
 #include "mongo/s/type_chunk.h"
 #include "mongo/s/type_collection.h"
 #include "mongo/s/type_database.h"
+#include "mongo/s/type_settings.h"
 #include "mongo/s/type_shard.h"
 #include "mongo/util/net/message.h"
 #include "mongo/util/stringutils.h"
@@ -914,15 +915,15 @@ namespace mongo {
         
         try {
             
-            auto_ptr<DBClientCursor> c = conn->get()->query( ConfigNS::settings , BSONObj() );
+            auto_ptr<DBClientCursor> c = conn->get()->query( SettingsType::ConfigNS , BSONObj() );
             verify( c.get() );
             while ( c->more() ) {
                 
                 BSONObj o = c->next();
-                string name = o[SettingsFields::key()].valuestrsafe();
+                string name = o[SettingsType::key()].valuestrsafe();
                 got.insert( name );
                 if ( name == "chunksize" ) {
-                    int csize = o[SettingsFields::chunksize()].numberInt();
+                    int csize = o[SettingsType::chunksize()].numberInt();
 
                     // validate chunksize before proceeding
                     if ( csize == 0 ) {
@@ -943,9 +944,9 @@ namespace mongo {
             }
 
             if ( ! got.count( "chunksize" ) ) {
-                conn->get()->insert(ConfigNS::settings,
-                                     BSON(SettingsFields::key("chunksize") <<
-                                          SettingsFields::chunksize(Chunk::MaxChunkSize /
+                conn->get()->insert(SettingsType::ConfigNS,
+                                     BSON(SettingsType::key("chunksize") <<
+                                          SettingsType::chunksize(Chunk::MaxChunkSize /
                                                                     (1024 * 1024))));
             }
 
