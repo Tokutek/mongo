@@ -1254,9 +1254,9 @@ namespace mongo {
         else
             sigaddset( &asyncSignals, SIGHUP );
 
-        sigaddset( &asyncSignals, SIGINT );
-        sigaddset( &asyncSignals, SIGTERM );
-        verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
+        //sigaddset( &asyncSignals, SIGINT );
+        //sigaddset( &asyncSignals, SIGTERM );
+        //verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
         boost::thread it( interruptThread );
 
         set_terminate( myterminate );
