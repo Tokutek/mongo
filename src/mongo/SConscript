@@ -98,6 +98,9 @@ env.CppUnitTest('string_map_test', ['util/string_map_test.cpp'],
 
 env.CppUnitTest('partitioned_counter_test', ['util/concurrency/partitioned_counter_test.cpp'])
 
+env.CppUnitTest('builder_test', ['bson/util/builder_test.cpp'],
+                LIBDEPS=['bson'])
+
 env.CppUnitTest('mutable_bson_test', ['bson/mutable/mutable_bson_test.cpp'],
                  LIBDEPS=['bson'])
 
