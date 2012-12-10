@@ -49,27 +49,26 @@
 
 namespace mongo {
 
-    NamespaceIndex *nsindex(const char *ns) {
+    NamespaceIndex *nsindex(const StringData& ns) {
         Database *database = cc().database();
         verify( database );
         DEV {
-            char buf[256];
-            nsToDatabase(ns, buf);
-            if ( database->name() != buf ) {
+            StringData db = nsToDatabaseSubstring(ns);
+            if ( db != database->name() ) {
                 out() << "ERROR: attempt to write to wrong database\n";
                 out() << " ns:" << ns << '\n';
                 out() << " database->name:" << database->name() << endl;
-                verify( database->name() == buf );
+                verify( db == database->name() );
             }
         }
         return &database->_nsIndex;
     }
 
-    NamespaceDetails *nsdetails(const char *ns) {
+    NamespaceDetails *nsdetails(const StringData& ns) {
         return nsindex(ns)->details(ns);
     }
 
-    NamespaceDetails *nsdetails_maybe_create(const char *ns, BSONObj options) {
+    NamespaceDetails *nsdetails_maybe_create(const StringData& ns, BSONObj options) {
         NamespaceIndex *ni = nsindex(ns);
         if (!ni->allocated()) {
             // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
@@ -138,7 +137,7 @@ namespace mongo {
 
     class IndexedCollection : public NamespaceDetails {
     public:
-        IndexedCollection(const string &ns, const BSONObj &options) :
+        IndexedCollection(const StringData &ns, const BSONObj &options) :
             NamespaceDetails(ns, fromjson("{\"_id\":1}"), options) {
         }
         IndexedCollection(const BSONObj &serialized) :
@@ -173,7 +172,7 @@ namespace mongo {
 
     class OplogCollection : public IndexedCollection {
     public:
-        OplogCollection(const string &ns, const BSONObj &options) :
+        OplogCollection(const StringData &ns, const BSONObj &options) :
             IndexedCollection(ns, options) {
         } 
         OplogCollection(const BSONObj &serialized) :
@@ -210,7 +209,7 @@ namespace mongo {
 
     class NaturalOrderCollection : public NamespaceDetails {
     public:
-        NaturalOrderCollection(const string &ns, const BSONObj &options) :
+        NaturalOrderCollection(const StringData &ns, const BSONObj &options) :
             NamespaceDetails(ns, fromjson("{\"$_\":1}"), options),
             _nextPK(0) {
         }
@@ -253,7 +252,7 @@ namespace mongo {
 
     class SystemCatalogCollection : public NaturalOrderCollection {
     public:
-        SystemCatalogCollection(const string &ns, const BSONObj &options) :
+        SystemCatalogCollection(const StringData &ns, const BSONObj &options) :
             NaturalOrderCollection(ns, options) {
         }
         SystemCatalogCollection(const BSONObj &serialized) :
@@ -318,7 +317,7 @@ namespace mongo {
     // work is done under the _deleteMutex.
     class CappedCollection : public NaturalOrderCollection {
     public:
-        CappedCollection(const string &ns, const BSONObj &options) :
+        CappedCollection(const StringData &ns, const BSONObj &options) :
             NaturalOrderCollection(ns, options),
             _maxSize(options["size"].numberLong()),
             _maxObjects(options["max"].numberLong()),
@@ -415,7 +414,7 @@ namespace mongo {
 
             BSONObj pk = getNextPK();
             _insertObject(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
-            OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, obj, &cc().txn());
+            OpLogHelpers::logInsertForCapped(_ns.rawData(), pk, obj, &cc().txn());
 
             // If the collection is gorged, we need to do some trimming work.
             checkGorged(obj, true);
@@ -485,7 +484,7 @@ namespace mongo {
         // requires: _mutex is held
         void noteUncommittedPK(const BSONObj &pk) {
             CappedCollectionRollback &rollback = cc().txn().cappedRollback();
-            if (!rollback.hasNotedInsert(_ns)) {
+            if (!rollback.hasNotedInsert(_ns.rawData())) {
                 // This transaction has not noted an insert yet, so we save this
                 // as a minimum uncommitted PK. The next insert by this txn won't be
                 // the minimum, and rollback.hasNotedInsert() will be true, so
@@ -546,7 +545,7 @@ namespace mongo {
         void _insertObject(BSONObj &pk, BSONObj &obj, uint64_t flags, bool checkPk) {
             // Note the insert we're about to do.
             CappedCollectionRollback &rollback = cc().txn().cappedRollback();
-            rollback.noteInsert(_ns, pk, obj.objsize());
+            rollback.noteInsert(_ns.rawData(), pk, obj.objsize());
             _currentObjects.addAndFetch(1);
             _currentSize.addAndFetch(obj.objsize());
 
@@ -566,7 +565,7 @@ namespace mongo {
             // Note the delete we're about to do.
             size_t size = obj.objsize();
             CappedCollectionRollback &rollback = cc().txn().cappedRollback();
-            rollback.noteDelete(_ns, pk, size);
+            rollback.noteDelete(_ns.rawData(), pk, size);
             _currentObjects.subtractAndFetch(1);
             _currentSize.subtractAndFetch(size);
 
@@ -596,7 +595,7 @@ namespace mongo {
                     trimmedBytes += oldestPK.objsize();
                     
                     if (logop) {
-                        OpLogHelpers::logDeleteForCapped(_ns.c_str(), oldestPK, oldestObj, &cc().txn());
+                        OpLogHelpers::logDeleteForCapped(_ns.rawData(), oldestPK, oldestObj, &cc().txn());
                     }
                     
                     // Delete the object, reload the current objects/size
@@ -672,16 +671,16 @@ namespace mongo {
         return b.obj();
     }
 
-    static bool isSystemCatalog(const string &ns) {
-        return str::contains(ns, ".system.indexes") || str::contains(ns, ".system.namespaces");
+    static bool isSystemCatalog(const StringData &ns) {
+        return ns.find(".system.indexes") != string::npos || ns.find(".system.namespaces") != string::npos;
     }
 
-    static bool isOplog(const string &ns) {
-        return str::equals(ns.c_str(), rsoplog);
+    static bool isOplog(const StringData &ns) {
+        return ns == rsoplog;
     }
 
     // Construct a brand new NamespaceDetails with a certain primary key and set of options.
-    NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
+    NamespaceDetails::NamespaceDetails(const StringData &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
         _ns(ns),
         _options(options.copy()),
         _pk(pkIndexPattern.copy()),
@@ -689,7 +688,7 @@ namespace mongo {
         _nIndexes(0),
         _multiKeyIndexBits(0) {
 
-        massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns.c_str()));
+        massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns.rawData()));
 
         TOKULOG(1) << "Creating NamespaceDetails " << ns << endl;
 
@@ -699,7 +698,7 @@ namespace mongo {
 
         addNewNamespaceToCatalog(ns, !options.isEmpty() ? &options : NULL);
     }
-    shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
+    shared_ptr<NamespaceDetails> NamespaceDetails::make(const StringData &ns, const BSONObj &options) {
         if (isOplog(ns)) {
             return shared_ptr<NamespaceDetails>(new OplogCollection(ns, options));
         } else if (isSystemCatalog(ns)) {
@@ -729,9 +728,9 @@ namespace mongo {
         }
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
-        if (isOplog(serialized["ns"])) {
+        if (isOplog(serialized["ns"].String())) {
             return shared_ptr<NamespaceDetails>(new OplogCollection(serialized));
-        } else if (isSystemCatalog(serialized["ns"])) {
+        } else if (isSystemCatalog(serialized["ns"].String())) {
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(serialized));
         } else if (serialized["options"]["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(serialized));
@@ -764,7 +763,7 @@ namespace mongo {
             IndexDetails *index = it->get();
             indexes_array.append(index->info());
         }
-        return serialize(_ns.c_str(), _options, _pk, _multiKeyIndexBits, indexes_array.arr());
+        return serialize(_ns.rawData(), _options, _pk, _multiKeyIndexBits, indexes_array.arr());
     }
 
     struct findByPKCallbackExtra {
@@ -829,7 +828,7 @@ namespace mongo {
                 BSONObjSet keys;
                 idx.getKeysFromObject(obj, keys);
                 if (keys.size() > 1) {
-                    setIndexIsMultikey(_ns.c_str(), i);
+                    setIndexIsMultikey(_ns.rawData(), i);
                 }
                 for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
                     idx.insertPair(*ki, &pk, obj, flags);
@@ -898,7 +897,7 @@ namespace mongo {
                 idx.getKeysFromObject(oldObj, oldKeys);
                 idx.getKeysFromObject(newObj, newKeys);
                 if (newKeys.size() > 1) {
-                    setIndexIsMultikey(_ns.c_str(), i);
+                    setIndexIsMultikey(_ns.rawData(), i);
                 }
 
                 // Delete the keys that exist in oldKeys but do not exist in newKeys
@@ -954,7 +953,7 @@ namespace mongo {
             BSONObjSet keys;
             index->getKeysFromObject(obj, keys);
             if (keys.size() > 1) {
-                setIndexIsMultikey(_ns.c_str(), indexNum);
+                setIndexIsMultikey(_ns.rawData(), indexNum);
             }
             for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
                 builder.insertPair(*ki, &pk, obj);
@@ -1016,7 +1015,7 @@ namespace mongo {
         // Note this ns in the rollback so if this transaction aborts, we'll
         // close this ns, forcing the next user to reload in-memory metadata.
         NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(_ns.c_str());
+        rollback.noteNs(_ns.rawData());
 
         shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
         // Ensure we initialize the spec in case the collection is empty.
@@ -1064,7 +1063,7 @@ namespace mongo {
         // Note this ns in the rollback so if this transaction aborts, we'll
         // close this ns, forcing the next user to reload in-memory metadata.
         NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(_ns.c_str());
+        rollback.noteNs(_ns.rawData());
 
         NamespaceDetails *d = nsdetails(ns);
         ClientCursor::invalidate(ns);
@@ -1189,12 +1188,10 @@ namespace mongo {
             return;
         }
 
-        char database[256];
-        nsToDatabase(indexns.c_str(), database);
-        string s = string(database) + ".system.indexes";
-        const char *ns = s.c_str();
+        StringData database = nsToDatabaseSubstring(indexns);
+        string ns = database.toString() + ".system.indexes";
         NamespaceDetails *d = nsdetails_maybe_create(ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns.c_str());
         BSONObj objMod = info;
         insertOneObject(d, nsdt, objMod);
     }
@@ -1271,7 +1268,7 @@ namespace mongo {
 
     void NamespaceDetailsTransient::computeIndexKeys() {
         _indexKeys.clear();
-        NamespaceDetails *d = nsdetails(_ns.c_str());
+        NamespaceDetails *d = nsdetails(_ns);
         if ( ! d )
             return;
         NamespaceDetails::IndexIterator i = d->ii();
@@ -1282,20 +1279,19 @@ namespace mongo {
 
     // TODO: All global functions manipulating namespaces should be static in NamespaceDetails
 
-    static void checkConfigNS(const char *ns) {
+    static void checkConfigNS(const StringData& ns) {
         if ( cmdLine.configsvr &&
-             !( mongoutils::str::startsWith( ns, "config." ) ||
-                mongoutils::str::startsWith( ns, "local." ) ||
-                mongoutils::str::startsWith( ns, "admin." ) ) ) {
+             !( ns.startsWith( "config." ) ||
+                ns.startsWith( "local." ) ||
+                ns.startsWith( "admin." ) ) ) {
             uasserted(14037, "can't create user databases on a --configsvr instance");
         }
     }
 
-    bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication) {
-        const char *coll = strchr( ns, '.' ) + 1;
-        massert( 16451 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns));
-        char cl[ 256 ];
-        nsToDatabase( ns, cl );
+    bool userCreateNS(const StringData& ns, BSONObj options, string& err, bool logForReplication) {
+        StringData coll = ns.substr(ns.find('.') + 1);
+        massert( 16451 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns.rawData()));
+        StringData cl = nsToDatabaseSubstring( ns );
         if (nsdetails(ns) != NULL) {
             // Namespace already exists
             err = "collection already exists";
@@ -1321,14 +1317,14 @@ namespace mongo {
                 b.appendElements( options );
                 options = b.obj();
             }
-            string logNs = string( cl ) + ".$cmd";
+            string logNs = cl.toString() + ".$cmd";
             OpLogHelpers::logCommand(logNs.c_str(), options, &cc().txn());
         }
         // TODO: Identify error paths for this function
         return true;
     }
 
-    NamespaceDetails* getAndMaybeCreateNS(const char *ns, bool logop) {
+    NamespaceDetails* getAndMaybeCreateNS(const StringData& ns, bool logop) {
         NamespaceDetails* details = nsdetails(ns);
         if (details == NULL) {
             string err;
@@ -1354,7 +1350,7 @@ namespace mongo {
             uasserted(16777, "Cannot dropDatabase in a multi-statement transaction.");
         }
 
-        nsindex(name.c_str())->drop();
+        nsindex(name)->drop();
         Database::closeDatabase(d->name().c_str(), d->path());
     }
 
@@ -1395,9 +1391,9 @@ namespace mongo {
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).
        options: { capped : ..., size : ... }
     */
-    void addNewNamespaceToCatalog(const string &ns, const BSONObj *options) {
+    void addNewNamespaceToCatalog(const StringData& ns, const BSONObj *options) {
         LOG(1) << "New namespace: " << ns << endl;
-        if (mongoutils::str::contains(ns, ".system.namespaces") ) {
+        if (ns.find(".system.namespaces") != string::npos) {
             // system.namespaces holds all the others, so it is not explicitly listed in the catalog.
             return;
         }
@@ -1409,17 +1405,15 @@ namespace mongo {
         }
         BSONObj info = b.done();
 
-        char database[256];
-        nsToDatabase(ns.c_str(), database);
-        string s = string(database) + ".system.namespaces";
-        const char *system_ns = s.c_str();
+        StringData database = nsToDatabaseSubstring(ns);
+        string system_ns = database.toString() + ".system.namespaces";
         NamespaceDetails *d = nsdetails_maybe_create(system_ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(system_ns);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(system_ns.c_str());
         insertOneObject(d, nsdt, info);
     }
 
-    void removeNamespaceFromCatalog(const string &ns) {
-        if (!mongoutils::str::contains(ns, ".system.namespaces")) {
+    void removeNamespaceFromCatalog(const StringData& ns) {
+        if (ns.find(".system.namespaces") == string::npos) {
             string system_namespaces = cc().database()->name() + ".system.namespaces";
             _deleteObjects(system_namespaces.c_str(), BSON("name" << ns), false, false);
         }

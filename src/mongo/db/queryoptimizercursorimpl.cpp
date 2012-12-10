@@ -46,7 +46,7 @@ namespace mongo {
     bool QueryPlanSelectionPolicy::IdElseNatural::permitPlan( const QueryPlan &plan ) const {
         return !plan.indexed() || plan.index()->isIdIndex();
     }
-    BSONObj QueryPlanSelectionPolicy::IdElseNatural::planHint( const char *ns ) const {
+    BSONObj QueryPlanSelectionPolicy::IdElseNatural::planHint( const StringData& ns ) const {
         NamespaceDetails *nsd = nsdetails( ns );
         if ( !nsd || !nsd->hasIdIndex() ) {
             return BSON( "$hint" << BSON( "$natural" << 1 ) );
@@ -535,7 +535,7 @@ namespace mongo {
     }
     
     shared_ptr<Cursor>
-    NamespaceDetailsTransient::getCursor( const char *ns,
+    NamespaceDetailsTransient::getCursor( const StringData &ns,
                                          const BSONObj &query,
                                          const BSONObj &order,
                                          const QueryPlanSelectionPolicy &planPolicy,
@@ -561,7 +561,7 @@ namespace mongo {
         }
     }
     
-    CursorGenerator::CursorGenerator( const char *ns,
+    CursorGenerator::CursorGenerator( const StringData &ns,
                                      const BSONObj &query,
                                      const BSONObj &order,
                                      const QueryPlanSelectionPolicy &planPolicy,
@@ -596,7 +596,7 @@ namespace mongo {
             if ( d ) {
                 int i = d->findIdIndex();
                 if( i < 0 ) {
-                    if ( strstr( _ns , ".system." ) == 0 )
+                    if ( _ns.find( ".system." ) == string::npos )
                         log() << "warning: no _id index on $snapshot query, ns:" << _ns << endl;
                 }
                 else {

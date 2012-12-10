@@ -52,11 +52,11 @@ namespace mongo {
     */
     bool legalClientSystemNS( const string& ns , bool write );
 
-    bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication);
+    bool userCreateNS(const StringData& ns, BSONObj options, string& err, bool logForReplication);
 
     // used for operations that are supposed to create the namespace if it does not exist,
     // such as insert, some updates, and create index
-    NamespaceDetails* getAndMaybeCreateNS(const char *ns, bool logop);
+    NamespaceDetails* getAndMaybeCreateNS(const StringData& ns, bool logop);
 
     void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system = false);
 
@@ -65,9 +65,9 @@ namespace mongo {
     /**
      * Record that a new namespace exists in <dbname>.system.namespaces.
      */
-    void addNewNamespaceToCatalog(const string &name, const BSONObj *options = NULL);
+    void addNewNamespaceToCatalog(const StringData& name, const BSONObj *options = NULL);
 
-    void removeNamespaceFromCatalog(const string &name);
+    void removeNamespaceFromCatalog(const StringData& name);
 
     int removeFromSysIndexes(const char *ns, const char *name);
 
@@ -99,7 +99,7 @@ namespace mongo {
         static const uint64_t NO_UNIQUE_CHECKS = 2; // skip uniqueness checks
 
         // Creates the appropriate NamespaceDetails implementation based on options.
-        static shared_ptr<NamespaceDetails> make(const string &ns, const BSONObj &options);
+        static shared_ptr<NamespaceDetails> make(const StringData &ns, const BSONObj &options);
         static shared_ptr<NamespaceDetails> make(const BSONObj &serialized);
 
         virtual ~NamespaceDetails() {
@@ -308,7 +308,7 @@ namespace mongo {
         }
 
     protected:
-        NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
+        NamespaceDetails(const StringData& ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit NamespaceDetails(const BSONObj &serialized);
 
         void buildIndex(shared_ptr<IndexDetails> &index);
@@ -331,7 +331,7 @@ namespace mongo {
         // indexStats is an array of length nIndexes
         void fillIndexStats(std::vector<IndexStats> &indexStats) const;
 
-        const string _ns;
+        const StringData _ns;
         // The options used to create this namespace details. We serialize
         // this (among other things) to disk on close (see serialize())
         const BSONObj _options;
@@ -418,15 +418,16 @@ namespace mongo {
          * - covered indexes
          * - in memory sorting
          */
-        static shared_ptr<Cursor> getCursor( const char *ns, const BSONObj &query,
-                                            const BSONObj &order = BSONObj(),
-                                            const QueryPlanSelectionPolicy &planPolicy =
-                                            QueryPlanSelectionPolicy::any(),
-                                            bool *simpleEqualityMatch = 0,
-                                            const shared_ptr<const ParsedQuery> &parsedQuery =
-                                            shared_ptr<const ParsedQuery>(),
-                                            bool requireOrder = true,
-                                            QueryPlanSummary *singlePlanSummary = 0 );
+        static shared_ptr<Cursor> getCursor( const StringData& ns,
+                                             const BSONObj& query,
+                                             const BSONObj& order = BSONObj(),
+                                             const QueryPlanSelectionPolicy& planPolicy =
+                                                 QueryPlanSelectionPolicy::any(),
+                                             bool *simpleEqualityMatch = 0,
+                                             const shared_ptr<const ParsedQuery>& parsedQuery =
+                                                 shared_ptr<const ParsedQuery>(),
+                                             bool requireOrder = true,
+                                             QueryPlanSummary* singlePlanSummary = NULL );
 
         /**
          * @return a single cursor that may work well for the given query.  A $or style query will
@@ -536,21 +537,21 @@ namespace mongo {
         void init(bool may_create = false);
 
         // @return true if the ns existed and was closed, false otherwise.
-        bool close_ns(const char *ns);
+        bool close_ns(const StringData& ns);
 
         // The index entry for ns is removed and brought up-to-date with the nsdb on txn abort.
-        void add_ns(const char *ns, shared_ptr<NamespaceDetails> details);
+        void add_ns(const StringData& ns, shared_ptr<NamespaceDetails> details);
 
         // The index entry for ns is removed and brought up-to-date with the nsdb on txn abort.
-        void kill_ns(const char *ns);
+        void kill_ns(const StringData& ns);
 
         // If something changes that causes details->serialize() to be different,
         // call this to persist it to the nsdb.
-        void update_ns(const char *ns, const BSONObj &serialized, bool overwrite);
+        void update_ns(const StringData& ns, const BSONObj &serialized, bool overwrite);
 
         // Find an NamespaceDetails in the nsindex.
         // Will not open the if its closed, unlike nsdetails()
-        NamespaceDetails *find_ns(const char *ns) {
+        NamespaceDetails *find_ns(const StringData& ns) {
             init();
             if (!allocated()) {
                 return NULL;
@@ -564,7 +565,7 @@ namespace mongo {
         // entries may be "closed" in the sense that the key exists but the
         // value is null. If the desired namespace is closed, we open it,
         // which must succeed, by the first invariant.
-        NamespaceDetails *details(const char *ns) {
+        NamespaceDetails *details(const StringData& ns) {
             init();
             if (!allocated()) {
                 return NULL;
@@ -600,7 +601,7 @@ namespace mongo {
 
         // @return NamespaceDetails object is the ns is currently open, NULL otherwise.
         // requires: openRWLock is locked, either shared or exclusively.
-        NamespaceDetails *find_ns_locked(const char *ns) {
+        NamespaceDetails *find_ns_locked(const StringData& ns) {
             Namespace n(ns);
             NamespaceDetailsMap::iterator it = _namespaces.find(n);
             if (it != _namespaces.end()) {
@@ -612,7 +613,7 @@ namespace mongo {
 
         // @return NamespaceDetails object if the ns existed and is now open, NULL otherwise.
         // requires: _openRWLock is locked, exclusively.
-        NamespaceDetails *open_ns(const char *ns);
+        NamespaceDetails *open_ns(const StringData& ns);
 
         DB *_nsdb;
         NamespaceDetailsMap _namespaces;
@@ -625,9 +626,9 @@ namespace mongo {
 
     // Defined in database.cpp
     // Gets the namespace objects for this client threads' current database.
-    NamespaceIndex *nsindex(const char *ns);
-    NamespaceDetails *nsdetails(const char *ns);
-    NamespaceDetails *nsdetails_maybe_create(const char *ns, BSONObj options = BSONObj());
+    NamespaceIndex *nsindex(const StringData& ns);
+    NamespaceDetails *nsdetails(const StringData& ns);
+    NamespaceDetails *nsdetails_maybe_create(const StringData& ns, BSONObj options = BSONObj());
 
     inline IndexDetails& NamespaceDetails::idx(int idxNo) const {
         if ( idxNo < NIndexesMax ) {

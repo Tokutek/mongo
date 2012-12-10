@@ -80,7 +80,7 @@ namespace mongo {
         ~Database(); // closes files and other cleanup see below.
 
         friend class NamespaceIndex;
-        friend NamespaceIndex *nsindex(const char *);
+        friend NamespaceIndex *nsindex(const StringData&);
     };
 
 } // namespace mongo

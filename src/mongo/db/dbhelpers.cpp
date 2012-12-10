@@ -88,7 +88,7 @@ namespace mongo {
     */
     BSONObj Helpers::findOne(const char *ns, const BSONObj &query, bool requireIndex) {
         shared_ptr<Cursor> c =
-            NamespaceDetailsTransient::getCursor( ns , query, BSONObj(),
+            NamespaceDetailsTransient::getCursor( ns, query, BSONObj(),
                                                   requireIndex ?
                                                   QueryPlanSelectionPolicy::indexOnly() :
                                                   QueryPlanSelectionPolicy::any() );

@@ -126,7 +126,7 @@ namespace mongo {
         }
     }
 
-    void NamespaceIndex::kill_ns(const char *ns) {
+    void NamespaceIndex::kill_ns(const StringData& ns) {
         init();
         if (!allocated()) { // that's ok, may dropping something that doesn't exist
             return;
@@ -141,7 +141,7 @@ namespace mongo {
             // Might not be in the _namespaces map if the ns exists but is closed.
             // Note this ns in the rollback, since we are about to modify its entry.
             NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-            rollback.noteNs(ns);
+            rollback.noteNs(ns.rawData());
             shared_ptr<NamespaceDetails> d = it->second;
             _namespaces.erase(it);
             d->close();
@@ -166,7 +166,7 @@ namespace mongo {
         return 0;
     }
 
-    NamespaceDetails *NamespaceIndex::open_ns(const char *ns) {
+    NamespaceDetails *NamespaceIndex::open_ns(const StringData& ns) {
         init();
         if (!allocated()) {
             return NULL;
@@ -191,7 +191,7 @@ namespace mongo {
         return NULL;
     }
 
-    bool NamespaceIndex::close_ns(const char *ns) {
+    bool NamespaceIndex::close_ns(const StringData& ns) {
         Lock::assertWriteLocked(ns);
         // No need to initialize first. If the nsdb is null at this point,
         // we simply say that the ns you want to close wasn't open.
@@ -211,7 +211,7 @@ namespace mongo {
         return false;
     }
 
-    void NamespaceIndex::add_ns(const char *ns, shared_ptr<NamespaceDetails> details) {
+    void NamespaceIndex::add_ns(const StringData& ns, shared_ptr<NamespaceDetails> details) {
         if (!Lock::isWriteLocked(ns)) {
             throw RetryWithWriteLock();
         }
@@ -221,7 +221,7 @@ namespace mongo {
 
         // Note this ns in the rollback, since we are about to modify its entry.
         NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(ns);
+        rollback.noteNs(ns.rawData());
 
         Namespace n(ns);
         std::pair<NamespaceDetailsMap::iterator, bool> ret;
@@ -229,7 +229,7 @@ namespace mongo {
         dassert(ret.second == true);
     }
 
-    void NamespaceIndex::update_ns(const char *ns, const BSONObj &serialized, bool overwrite) {
+    void NamespaceIndex::update_ns(const StringData& ns, const BSONObj &serialized, bool overwrite) {
         if (!Lock::isWriteLocked(ns)) {
             throw RetryWithWriteLock();
         }
@@ -241,7 +241,7 @@ namespace mongo {
         // _namespaces directly. But we know this operation is part of
         // a scheme to create this namespace or change something about it.
         NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(ns);
+        rollback.noteNs(ns.rawData());
 
         BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
