@@ -384,7 +384,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::dropDatabase);
-            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            out->push_back(Privilege(dbname, actions));
         }
 
         // this is suboptimal but oplogCheckCloseDatabase is called from dropDatabase, and that 

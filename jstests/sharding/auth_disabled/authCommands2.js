@@ -1,4 +1,3 @@
-if (0) { // SERVER-7881
 /**
  * This tests using DB commands with authentication enabled when sharded.
  */
@@ -126,7 +125,6 @@ var checkReadOps = function( hasReadAuth ) {
     } else {
         print( "Checking read operations, should fail" );
         assert.throws( function() { testDB.foo.find().itcount(); } );
-        assert.eq(0, testDB.runCommand({getlasterror : 1}).ok);
         checkCommandFailed( testDB, {dbstats : 1} );
         checkCommandFailed( testDB, {collstats : 'foo'} );
         checkCommandFailed( testDB, {mapreduce : 'foo', map : map, reduce : reduce,
@@ -320,4 +318,3 @@ adminDB.printShardingStatus();
 
 
 st.stop();
-}
