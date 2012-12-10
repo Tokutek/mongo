@@ -414,7 +414,11 @@ namespace mongo {
         }
         /** Append a string element */
         BSONObjBuilder& append(const StringData& fieldName, const StringData& str) {
-            return append(fieldName, str.rawData(), (int) str.size()+1);
+            _b.appendNum((char) String);
+            _b.appendStr(fieldName);
+            _b.appendNum((int)str.size()+1);
+            _b.appendStr(str, true);
+            return *this;
         }
 
         BSONObjBuilder& appendSymbol(const StringData& fieldName, const StringData& symbol) {
