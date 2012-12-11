@@ -1223,6 +1223,20 @@ namespace mongo {
             cc().setAuthConn(emptyConn);
             return res;
         }
-    } cmdCopyDB;
+    };
+
+    MONGO_INITIALIZER(RegisterNotWithAuthCommands)(InitializerContext* context) {
+        if (noauth) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdCloneCollection();
+            new CmdCopyDb();
+            new CmdCopyDbGetNonce();
+        } else {
+            new NotWithAuthCmd("cloneCollection");
+            new NotWithAuthCmd("copydb");
+            new NotWithAuthCmd("copydbgetnonce");
+        }
+        return Status::OK();
+    }
 
 } // namespace mongo

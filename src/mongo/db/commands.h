@@ -305,6 +305,29 @@ namespace mongo {
         }
     };
 
+    // This will be registered instead of the real implementations of any commands that don't work
+    // when auth is enabled.
+    class NotWithAuthCmd : public InformationCommand {
+    public:
+        NotWithAuthCmd(const char* cmdName) : InformationCommand(cmdName) { }
+        virtual bool requiresAuth() { return false; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
+        virtual void help( stringstream &help ) const {
+            help << name << " is not supported when running with authentication enabled";
+        }
+        virtual bool run(const string&,
+                         BSONObj& cmdObj,
+                         int,
+                         string& errmsg,
+                         BSONObjBuilder& result,
+                         bool fromRepl) {
+            errmsg = name + " is not supported when running with authentication enabled";
+            return false;
+        }
+    };
+
     class CmdShutdown : public Command {
     public:
         virtual bool requiresAuth() { return true; }
