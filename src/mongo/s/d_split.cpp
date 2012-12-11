@@ -19,9 +19,13 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "mongo/pch.h"
 
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/dbhelpers.h"
@@ -50,6 +54,10 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << "Deprecated internal command. Use splitVector command instead. \n";
         }
+        // No auth required as this command no longer does anything.
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             errmsg = "medianKey command no longer supported. Calling this indicates mismatch between mongo versions.";
             return false;
@@ -63,7 +71,13 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << "Internal command.\n";
         }
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::find);
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+        }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
 
             const char* ns = jsobj.getStringField( "checkShardingIndex" );
@@ -356,6 +370,13 @@ namespace mongo {
                  "  'force' will produce one split point even if data is small; defaults to false\n"
                  "NOTE: This command may take a while to run";
         }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::splitVector);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
 
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
 
@@ -619,6 +640,13 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
 
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::splitChunk);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
 
             //

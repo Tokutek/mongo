@@ -18,6 +18,9 @@
 */
 
 #include "mongo/pch.h"
+
+#include <vector>
+
 #include "mongo/db/oplog.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/repl_block.h"

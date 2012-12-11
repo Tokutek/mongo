@@ -16,6 +16,12 @@
 */
 
 #include "mongo/pch.h"
+
+#include <vector>
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/namespace_details.h"
@@ -32,7 +38,13 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << "http://dochub.mongodb.org/core/aggregation";
         }
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::find);
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+        }
         BSONObj getKey( const BSONObj& obj , const BSONObj& keyPattern , ScriptingFunction func , double avgSize , Scope * s ) {
             if ( func ) {
                 BSONObjBuilder b( obj.objsize() + 32 );
