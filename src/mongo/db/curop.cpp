@@ -82,16 +82,6 @@ namespace mongo {
         return _progressMeter;
     }
 
-
-    BSONObj CurOp::info() {
-        if( ! cc().getAuthenticationInfo()->isAuthorized("admin") ) {
-            BSONObjBuilder b;
-            b.append("err", "unauthorized");
-            return b.obj();
-        }
-        return infoNoauth();
-    }
-
     CurOp::~CurOp() {
         if ( _wrapped ) {
             scoped_lock bl(Client::clientsMutex);
@@ -122,7 +112,7 @@ namespace mongo {
         }
     }
 
-    BSONObj CurOp::infoNoauth() {
+    BSONObj CurOp::info() {
         BSONObjBuilder b;
         b.append("opid", _opNum);
         bool a = _active && _start;

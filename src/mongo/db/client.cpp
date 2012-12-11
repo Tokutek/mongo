@@ -306,7 +306,7 @@ namespace mongo {
     string Client::toString() const {
         stringstream ss;
         if ( _curOp )
-            ss << _curOp->infoNoauth().jsonString();
+            ss << _curOp->info().jsonString();
         return ss.str();
     }
 
