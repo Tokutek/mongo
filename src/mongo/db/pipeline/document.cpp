@@ -35,7 +35,7 @@ namespace mongo {
             Position pos = _hashTab[bucket];
             while (pos.found()) {
                 const ValueElement& elem = getField(pos);
-                if (str::equals(requested.data(), elem.name))
+                if (requested == elem.nameSD())
                     return pos;
 
                 // possible collision
@@ -45,7 +45,7 @@ namespace mongo {
         else if (_numFields) { // linear scan
             for (DocumentStorageIterator it = iteratorAll(); !it.atEnd(); it.advance()) {
                 if (size_t(it->nameLen) == requested.size()
-                    && str::equals(it->name, requested.data())) {
+                    && requested == it->nameSD()) {
                     return it.position();
                 }
             }
