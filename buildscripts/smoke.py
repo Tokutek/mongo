@@ -470,7 +470,9 @@ def runTest(test, testnum):
         if small_oplog or small_oplog_rs:
             argv += ["--eval", 'testingReplication = true;']
         if use_ssl:
-            argv += ["--ssl"]
+            argv += ["--ssl",
+                     "--sslPEMKeyFile", "jstests/libs/client.pem",
+                     "--sslCAFile", "jstests/libs/ca.pem"]
         argv += [path]
     elif ext in ["", ".exe"]:
         # Blech.
@@ -485,7 +487,7 @@ def runTest(test, testnum):
             argv = [test_path and os.path.abspath(os.path.join(test_path, path)) or path,
                     "--port", mongod_port]
     else:
-        raise Bug("fell off in extenstion case: %s" % path)
+        raise Bug("fell off in extension case: %s" % path)
 
     if keyFile:
         f = open(keyFile, 'r')
