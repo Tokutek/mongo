@@ -1708,6 +1708,29 @@ namespace DocumentSourceTests {
 
     } // namespace DocumentSourceUnwind
 
+    namespace DocumentSourceGeoNear {
+        using mongo::DocumentSourceGeoNear;
+        using mongo::DocumentSourceLimit;
+
+        class LimitCoalesce : public DocumentSourceCursor::Base {
+        public:
+            void run() {
+                intrusive_ptr<DocumentSourceGeoNear> geoNear = DocumentSourceGeoNear::create(ctx());
+
+                ASSERT_EQUALS(geoNear->getLimit(), 100);
+
+                ASSERT(geoNear->coalesce(DocumentSourceLimit::create(ctx(), 200)));
+                ASSERT_EQUALS(geoNear->getLimit(), 100);
+
+                ASSERT(geoNear->coalesce(DocumentSourceLimit::create(ctx(), 50)));
+                ASSERT_EQUALS(geoNear->getLimit(), 50);
+
+                ASSERT(geoNear->coalesce(DocumentSourceLimit::create(ctx(), 30)));
+                ASSERT_EQUALS(geoNear->getLimit(), 30);
+            }
+        };
+    } // namespace DocumentSourceGeoNear
+
     class All : public Suite {
     public:
         All() : Suite( "documentsource" ) {
@@ -1816,6 +1839,8 @@ namespace DocumentSourceTests {
             add<DocumentSourceUnwind::SeveralDocuments>();
             add<DocumentSourceUnwind::SeveralMoreDocuments>();
             add<DocumentSourceUnwind::Dependencies>();
+
+            add<DocumentSourceGeoNear::LimitCoalesce>();
         }
     } myall;
 

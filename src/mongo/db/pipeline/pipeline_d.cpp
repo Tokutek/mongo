@@ -23,6 +23,7 @@
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/pipeline/document_source.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/instance.h"
 
 
 namespace mongo {
@@ -33,6 +34,17 @@ namespace mongo {
         const intrusive_ptr<ExpressionContext> &pExpCtx) {
 
         Pipeline::SourceVector *pSources = &pPipeline->sourceVector;
+
+        if (!sources.empty()) {
+            DocumentSource* first = sources.front().get();
+            DocumentSourceGeoNear* geoNear = dynamic_cast<DocumentSourceGeoNear*>(first);
+            if (geoNear) {
+                geoNear->client.reset(new DBDirectClient);
+                geoNear->db = dbName;
+                geoNear->collection = pPipeline->collectionName;
+                return; // we don't need a DocumentSourceCursor in this case
+            }
+        }
 
         /* look for an initial match */
         BSONObjBuilder queryBuilder;
