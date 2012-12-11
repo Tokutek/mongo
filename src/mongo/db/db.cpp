@@ -27,7 +27,6 @@
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cmdline.h"
-#include "mongo/db/commands/fail_point_cmd.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/d_globals.h"
 #include "mongo/db/dbmessage.h"
@@ -902,10 +901,6 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             }
         }
 
-
-        if (params.count("enableFaultInjection")) {
-            enableFailPointCmd();
-        }
 
         Module::configAll(params);
 
