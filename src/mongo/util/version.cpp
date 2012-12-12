@@ -295,7 +295,7 @@ namespace mongo {
                 return -1;
         }
 
-        return LexNumCmp::cmp(rhs.__data(), lhs.__data(), false);
+        return LexNumCmp::cmp(rhs, lhs, false);
     }
 
     class VersionCmpTest : public StartupTest {
