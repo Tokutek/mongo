@@ -21,7 +21,6 @@
 #include <map>
 #include <string>
 
-#include "mongo/db/auth/acquired_privilege.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/principal.h"
