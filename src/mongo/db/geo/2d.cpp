@@ -2373,15 +2373,13 @@ namespace mongo {
         Geo2dType * g = (Geo2dType*)id.getSpec().getType();
         verify(&id == g->getDetails());
 
-    class Geo2dFindNearCmd : public Command {
-    public:
-        Geo2dFindNearCmd() : Command("geoNear") {}
-        virtual LockType locktype() const { return READ; }
-        bool slaveOk() const { return true; }
-        void help(stringstream& h) const { h << "http://www.mongodb.org/display/DOCS/Geospatial+Indexing#GeospatialIndexing-geoNearCommand"; }
-        bool slaveOverrideOk() const { return true; }
-        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            string ns = dbname + "." + cmdObj.firstElement().valuestr();
+        // We support both "num" and "limit" options to control limit
+        int numWanted = 100;
+        const char* limitName = cmdObj["num"].isNumber() ? "num" : "limit";
+        if (cmdObj[limitName].isNumber()) {
+            numWanted = cmdObj[limitName].numberInt();
+            verify(numWanted >= 0);
+        }
 
         bool uniqueDocs = false;
         if(! cmdObj["uniqueDocs"].eoo()) uniqueDocs = cmdObj["uniqueDocs"].trueValue();

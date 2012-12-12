@@ -89,7 +89,7 @@ function test(db, sharded, indexType) {
     aggCmd.$geoNear.near = queryPoint;
     checkOutput(db.runCommand(geoCmd), db[coll].aggregate(aggCmd), 75);
 
-    // test with limit instead of num (they mean the same thing in $geoNear)
+    // test with limit instead of num (they mean the same thing, but want to test both)
     queryPoint = pointMaker.mkPt(0.25);
     geoCmd.near = queryPoint;
     delete geoCmd.num;
