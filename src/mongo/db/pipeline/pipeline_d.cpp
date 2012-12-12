@@ -81,7 +81,7 @@ namespace mongo {
           will already come sorted in the specified order as a result of the
           index scan.
         */
-        const DocumentSourceSort *pSort = NULL;
+        intrusive_ptr<DocumentSourceSort> pSort;
         BSONObjBuilder sortBuilder;
         if (pSources->size()) {
             const intrusive_ptr<DocumentSource> &pSC = pSources->front();
@@ -152,6 +152,11 @@ namespace mongo {
             if (pSortedCursor.get()) {
                 /* success:  remove the sort from the pipeline */
                 pSources->erase(pSources->begin());
+
+                if (pSort->getLimitSrc()) {
+                    // need to reinsert coalesced $limit after removing $sort
+                    sources.push_front(pSort->getLimitSrc());
+                }
 
                 pCursor = pSortedCursor;
                 initSort = true;

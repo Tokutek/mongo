@@ -908,7 +908,9 @@ namespace mongo {
             const intrusive_ptr<ExpressionContext> &pExpCtx);
 
         /// returns -1 for no limit
-        long long getLimit();
+        long long getLimit() const;
+
+        intrusive_ptr<DocumentSourceLimit> getLimitSrc() const { return limitSrc; }
 
         static const char sortName[];
     protected:
