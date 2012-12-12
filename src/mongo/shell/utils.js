@@ -350,7 +350,6 @@ jsTestOptions = function(){
                             { noJournal : TestData.noJournal,
                               noJournalPrealloc : TestData.noJournalPrealloc,
                               auth : TestData.auth,
-                              authMechanism: TestData.authMechanism || "MONGO-CR",
                               keyFile : TestData.keyFile,
                               authUser : "__system",
                               authPassword : TestData.keyFileData,
