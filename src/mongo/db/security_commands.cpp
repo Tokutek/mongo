@@ -155,7 +155,7 @@ namespace mongo {
         BSONObj userObj;
         string pwd;
         Status status = ClientBasic::getCurrent()->getAuthorizationManager()->getPrivilegeDocument(
-                dbname, user, &userObj);
+                dbname, PrincipalName(user, dbname), &userObj);
         if (!status.isOK()) {
             log() << status.reason() << std::endl;
             errmsg = status.reason();
