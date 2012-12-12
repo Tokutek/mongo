@@ -31,7 +31,8 @@
 namespace mongo {
 
     const char* Mod::modNames[] = { "$inc", "$set", "$push", "$pushAll", "$pull", "$pullAll" , "$pop", "$unset" ,
-                                    "$bitand" , "$bitor" , "$bit" , "$addToSet", "$rename", "$rename"
+                                    "$bitand" , "$bitor" , "$bit" , "$addToSet", "$rename", "$rename" ,
+                                    "$setOnInsert"
                                   };
     unsigned Mod::modNamesNum = sizeof(Mod::modNames)/sizeof(char*);
 
@@ -110,6 +111,12 @@ namespace mongo {
             builder.appendAs( elt , shortFieldName );
             break;
         }
+
+        case SET_ON_INSERT:
+            // $setOnInsert on an existing field should be a no-op (e.g., dontApply should be
+            // set for it), so we should never get here.
+            verify(false);
+            break;
 
         case UNSET: {
             appendUnset( builder );
@@ -449,6 +456,17 @@ namespace mongo {
 
             default:
             case Mod::SET:
+                break;
+
+            case Mod::SET_ON_INSERT:
+                // In-place-ness was set before on the general test for e.eoo() above this
+                // switch. Just for documentation, this is what we'd like for $setOnInsert.
+                // mss->amIInPlacePossible( ! e.eoo() );
+
+                // If the element exists, $setOnInsert becomes a no-op.
+                if ( ! e.eoo() ) {
+                    ms.dontApply = true;
+                }
                 break;
 
             case Mod::PUSH:
