@@ -383,6 +383,21 @@ def skipTest(path):
         # These tests fail due to bugs
         if os.path.join(parentDir,basename) in ["sharding/sync_conn_cmd.js"]:
             return True
+
+        authTestsToSkip = [("sharding", "read_pref_rs_client.js"), # SERVER-6972
+                           ("sharding", "sync_conn_cmd.js"), #SERVER-6327
+                           ("sharding", "gle_with_conf_servers.js"), # SERVER-6972
+                           ("sharding", "features3.js"), # SERVER-7931
+                           ("sharding", "sync3.js"), # SERVER-6388 for this and those below
+                           ("sharding", "sync6.js"),
+                           ("sharding", "parallel.js"),
+                           ("jstests", "bench_test1.js"),
+                           ("jstests", "bench_test2.js"),
+                           ("jstests", "bench_test3.js")]
+
+        if os.path.join(parentDir,basename) in [ os.path.join(*test) for test in authTestsToSkip ]:
+            return True
+
     if _debug:
         # MutexDebugger complains about this test, it's not unique to tokumx though, see #79
         if os.path.join(parentDir,basename) in ["sharding/remove2.js"]:
