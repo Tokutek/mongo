@@ -369,6 +369,10 @@ namespace {
         _authenticatedPrincipals.removeByDBName(dbname);
     }
 
+    PrincipalSet::NameIterator AuthorizationManager::getAuthenticatedPrincipalNames() {
+        return _authenticatedPrincipals.getNames();
+    }
+
     Status AuthorizationManager::acquirePrivilege(const Privilege& privilege,
                                                   const PrincipalName& authorizingPrincipal) {
         if (!_authenticatedPrincipals.lookup(authorizingPrincipal)) {
