@@ -153,6 +153,8 @@ namespace {
         ("sslPEMKeyPassword" , new PasswordValue(&cmdLine.sslPEMKeyPassword) , "PEM file password" )
         ("sslCAFile", po::value<std::string>(&cmdLine.sslCAFile), 
          "Certificate Authority file for SSL")
+        ("sslCRLFile", po::value<std::string>(&cmdLine.sslCRLFile),
+         "Certificate Revocation List file for SSL")
 #endif
         ;
         

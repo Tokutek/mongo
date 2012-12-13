@@ -119,6 +119,7 @@ namespace mongo {
         std::string sslPEMKeyFile;       // --sslPEMKeyFile
         std::string sslPEMKeyPassword;   // --sslPEMKeyPassword
         std::string sslCAFile;      // --sslCAFile
+        std::string sslCRLFile;     // --sslCRLFile
 #endif
         
         // TokuMX variables
