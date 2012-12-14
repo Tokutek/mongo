@@ -337,6 +337,7 @@ namespace mongo {
         double doubleTotal = 0;
         long long longTotal = 0;
         BSONType totalType = NumberInt;
+        bool haveDate = false;
 
         const size_t n = vpOperand.size();
         for (size_t i = 0; i < n; ++i) {
@@ -349,16 +350,36 @@ namespace mongo {
             uassert(16416, "$add does not support strings",
                     valueType != String);
 
-            totalType = Value::getWidestNumeric(totalType, valueType);
+                doubleTotal += val.coerceToDouble();
+                longTotal += val.coerceToLong();
+            }
+            else if (val.getType() == Date) {
+                uassert(16612, "only one Date allowed in an $add expression",
+                        !haveDate);
+                haveDate = true;
 
-            uassert(16554, "$add only supports numeric types",
-                    totalType != Undefined);
+                // We don't manipulate totalType here.
 
-            doubleTotal += pValue.coerceToDouble();
-            longTotal += pValue.coerceToLong();
+                longTotal += val.getDate();
+                doubleTotal += val.getDate();
+            }
+            else if (val.nullish()) {
+                return Value(BSONNULL);
+            }
+            else {
+                // leaving explicit checks for now since these were supported in alpha releases
+                uassert(16416, "$add does not support strings",
+                        val.getType() != String);
+                uasserted(16554, "$add only supports numeric or date types");
+            }
         }
 
-        if (totalType == NumberLong) {
+        if (haveDate) {
+            return Value::createDate(totalType == NumberDouble
+                                        ? doubleTotal
+                                        : longTotal);
+        }
+        else if (totalType == NumberLong) {
             return Value::createLong(longTotal);
         }
         else if (totalType == NumberDouble) {
@@ -2410,9 +2431,33 @@ namespace mongo {
             return Value::createLong(left - right);
         else if (productType == NumberInt)
             return Value::createIntOrLong(left - right);
-        else
-            massert(16413, "$subtract resulted in a non-numeric type", false);
-        
+        }
+        else if (lhs.nullish() || rhs.nullish()) {
+            return Value(BSONNULL);
+        }
+        else if (lhs.getType() == Date) {
+            if (rhs.getType() == Date) {
+                long long timeDelta = lhs.getDate() - rhs.getDate();
+                return Value(timeDelta);
+            }
+            else if (rhs.numeric()) {
+                long long millisSinceEpoch = lhs.getDate() - rhs.coerceToLong();
+                return Value(Date_t(millisSinceEpoch));
+            }
+            else {
+                uasserted(16613, str::stream() << "cant $subtract a "
+                                               << typeName(rhs.getType())
+                                               << " from a Date");
+            }
+        }
+        else {
+            if (rhs.getType()) {
+                uasserted(16614, str::stream() << "cant $subtract a Date from a "
+                                               << typeName(rhs.getType()));
+            }
+
+            uasserted(16556, "$subtract only supports numeric or Date types");
+        }
     }
 
     const char *ExpressionSubtract::getOpName() const {
