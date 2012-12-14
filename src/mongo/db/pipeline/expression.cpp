@@ -351,6 +351,16 @@ namespace mongo {
                 doubleTotal += val.coerceToDouble();
                 longTotal += val.coerceToLong();
             }
+            else if (val.getType() == Date) {
+                uassert(16612, "only one Date allowed in an $add expression",
+                        !haveDate);
+                haveDate = true;
+
+                // We don't manipulate totalType here.
+
+                longTotal += val.getDate();
+                doubleTotal += val.getDate();
+            }
             else if (val.nullish()) {
                 return Value(BSONNULL);
             }
@@ -2484,6 +2494,21 @@ namespace mongo {
         }
         else if (lhs.nullish() || rhs.nullish()) {
             return Value(BSONNULL);
+        }
+        else if (lhs.getType() == Date) {
+            if (rhs.getType() == Date) {
+                long long timeDelta = lhs.getDate() - rhs.getDate();
+                return Value(timeDelta);
+            }
+            else if (rhs.numeric()) {
+                long long millisSinceEpoch = lhs.getDate() - rhs.coerceToLong();
+                return Value(Date_t(millisSinceEpoch));
+            }
+            else {
+                uasserted(16613, str::stream() << "cant $subtract a "
+                                               << typeName(rhs.getType())
+                                               << " from a Date");
+            }
         }
         else {
             uasserted(16556, str::stream() << "cant $subtract a"
