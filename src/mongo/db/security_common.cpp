@@ -44,9 +44,6 @@
 
 namespace mongo {
 
-    // this is a config setting, set at startup and not changing after initialization.
-    bool noauth = true;
-
     bool setUpSecurityKey(const string& filename) {
         struct stat stats;
 

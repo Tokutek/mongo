@@ -24,6 +24,7 @@
 namespace mongo {
 
     // --noauth cmd line option
+    // TODO: Remove this, should be getting this from authorization_manager.h
     extern bool noauth;
 
     /**
