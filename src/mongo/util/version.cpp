@@ -29,6 +29,7 @@
 #include "mongo/base/parse_number.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/scripting/engine.h"
 #include "mongo/util/file.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/ramlog.h"
@@ -122,6 +123,8 @@ namespace mongo {
 #ifndef _SCONS
     // only works in scons
     const char * gitVersion() { return "not-scons"; }
+    const char * loaderFlags() { return ""; }
+    const char * compilerFlags() { return ""; }
 #endif
 
     void printGitVersion() { log() << "git version: " << gitVersion() << endl; }
@@ -141,6 +144,7 @@ namespace mongo {
     }
 #else
     string sysInfo() { return ""; }
+
 #endif
 #endif
 
@@ -155,6 +159,20 @@ namespace mongo {
 
     void printTokukvVersion() { log() << "TokuKV version: " << tokukvVersion() << endl; }
 
+    void appendBuildInfo(BSONObjBuilder& result) {
+        result << "version" << mongodbVersionString
+               << "tokumxVersion" << tokumxVersionString
+               << "gitVersion" << gitVersion()
+               << "tokukvVersion" << tokukvVersion()
+               << "sysInfo" << sysInfo()
+               << "loaderFlags" << loaderFlags()
+               << "compilerFlags" << compilerFlags()
+               << "versionArray" << versionArray
+               << "interpreterVersion" << globalScriptEngine->getInterpreterVersionString()
+               << "bits" << ( sizeof( int* ) == 4 ? 32 : 64 );
+        result.appendBool( "debug" , debug );
+        result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
+    }
 
     Tee * startupWarningsLog = new RamLog("startupWarnings"); //intentionally leaked
 

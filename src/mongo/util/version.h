@@ -20,6 +20,7 @@
 #include <string>
 
 #include "mongo/base/string_data.h"
+#include "mongo/bson/bsonobjbuilder.h"
 
 namespace mongo {
     struct BSONArray;
@@ -38,7 +39,12 @@ namespace mongo {
     // Checks whether another version is the same major version as us
     bool isSameMajorVersion(const char* version);
 
+    void appendBuildInfo(BSONObjBuilder& result);
+
     const char * gitVersion();
+    const char * loaderFlags();
+    const char * compilerFlags();
+
     void printGitVersion();
 
     std::string sysInfo();
