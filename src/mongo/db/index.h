@@ -38,6 +38,7 @@ namespace mongo {
 
     class Cursor; 
     class NamespaceDetails;
+    class FieldRangeSet;
 
     // Represents an index of a collection.
     class IndexDetails : boost::noncopyable {
@@ -73,7 +74,8 @@ namespace mongo {
             HELPFUL = 1,
             OPTIMAL = 2
         };
-        virtual Suitability suitability(const BSONObj &query, const BSONObj &order) const;
+        virtual Suitability suitability(const FieldRangeSet &queryConstraints,
+                                        const BSONObj &order) const;
 
         virtual shared_ptr<mongo::Cursor> newCursor(const BSONObj &query,
                                                     const BSONObj &order,

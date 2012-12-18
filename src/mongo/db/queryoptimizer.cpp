@@ -133,9 +133,9 @@ namespace mongo {
         _index = &_d->idx(_idxNo);
 
         // If the parsing or index indicates this is a special query, don't continue the processing
-        if ( _special.size() ||
+        if ( !_special.empty() ||
             ( _index->special() &&
-              _index->suitability( _originalQuery, _order ) != IndexDetails::USELESS ) ) {
+              _index->suitability( _frs, _order ) != IndexDetails::USELESS ) ) {
 
             if ( _special.empty() ) {
                 _special = _index->getSpecialIndexName();
@@ -908,7 +908,7 @@ doneCheckOrder:
                 int j = i.pos();
                 IndexDetails& ii = i.next();
                 if ( ii.getSpecialIndexName() == special &&
-                     ii.suitability( _qps.originalQuery(), _qps.order() ) ) {
+                     ii.suitability( _qps.frsp().frsForIndex(d, j), _qps.order() ) !=  IndexDetails::USELESS) {
                     uassert( 16330, "'special' query operator not allowed", _allowSpecial );
                     _qps.setSinglePlan( newPlan( d, j, BSONObj(), BSONObj(), special ) );
                     return true;
@@ -1838,13 +1838,8 @@ doneCheckOrder:
             // No matches are possible in the index so the index may be useful.
             return true;   
         }
-        // Hashed index types can't use simplified query bounds, since they could turn equalities
-        // into ranges, e.g.{$in : [1,2] } into {$gte : 1 , $lte : 2}
-        // TODO: refactor suitability to take a FieldRangeSetPair, and get rid of this special case
-        // See SERVER-5858.
-        BSONObj query = ( d->idx( idxNo ).getSpecialIndexName() == "hashed" ) ?
-                        frsp.originalQuery() : frsp.simplifiedQueryForIndex( d, idxNo, keyPattern );
-        return d->idx( idxNo ).suitability( query, order ) != IndexDetails::USELESS;
+        return d->idx( idxNo ).suitability( frsp.frsForIndex( d , idxNo ) , order )
+               != IndexDetails::USELESS;
     }
     
     void QueryUtilIndexed::clearIndexesForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {

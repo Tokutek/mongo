@@ -88,9 +88,9 @@ namespace mongo {
             return true;
         }
 
-        Suitability suitability(const BSONObj &query, const BSONObj &order) const {
-            FieldRangeSet frs( "" , query , true, true );
-            if (frs.isPointIntervalSet(_hashedField)) {
+        Suitability suitability(const FieldRangeSet &queryConstraints,
+                                const BSONObj &order) const {
+            if (queryConstraints.isPointIntervalSet(_hashedField)) {
                 return HELPFUL;
             }
             return USELESS;
@@ -282,9 +282,10 @@ namespace mongo {
         return false;
     }
 
-    IndexDetails::Suitability IndexDetails::suitability(const BSONObj &query, const BSONObj &order) const {
-        if (anyElementNamesMatch( _keyPattern , query ) == 0 &&
-            anyElementNamesMatch( _keyPattern , order ) == 0)  {
+    IndexDetails::Suitability IndexDetails::suitability(const FieldRangeSet &queryConstraints,
+                                                        const BSONObj &order) const {
+        if ( ! anyElementNamesMatch( _keyPattern , queryConstraints.simplifiedQuery(_keyPattern) ) &&
+             ! anyElementNamesMatch( _keyPattern , order ) )  {
             return USELESS;
         }
         return HELPFUL;
