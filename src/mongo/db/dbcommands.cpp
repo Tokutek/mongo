@@ -1774,27 +1774,27 @@ namespace mongo {
                 ai->setTemporaryAuthorization( authObj );
             } else {
                 log() << "command denied: " << cmdObj.toString() << endl;
-                _finishExecCommand(result,
-                                   false,
-                                   "unauthorized: no auth credentials provided for command and "
-                                   "authenticated using internal user.  This is most likely because"
-                                   " you are using an old version of mongos");
+                appendCommandStatus(result,
+                                    false,
+                                    "unauthorized: no auth credentials provided for command and "
+                                    "authenticated using internal user.  This is most likely "
+                                    "because you are using an old version of mongos");
                 return;
             }
         }
 
         if( c->adminOnly() && c->localHostOnlyIfNoAuth( cmdObj ) && noauth && !ai->isLocalHost() ) {
             log() << "command denied: " << cmdObj.toString() << endl;
-            _finishExecCommand(result,
-                               false,
-                               "unauthorized: this command must run from localhost when running db "
-                               "without auth");
+            appendCommandStatus(result,
+                                false,
+                                "unauthorized: this command must run from localhost when running "
+                                "db without auth");
             return;
         }
 
         if ( c->adminOnly() && ! fromRepl && dbname != "admin" ) {
             log() << "command denied: " << cmdObj.toString() << endl;
-            _finishExecCommand(result, false, "access denied; use admin db");
+            appendCommandStatus(result, false, "access denied; use admin db");
             return;
         }
 
@@ -1804,7 +1804,7 @@ namespace mongo {
             Status status = client.getAuthorizationManager()->checkAuthForPrivileges(privileges);
             if (!status.isOK()) {
                 log() << "command denied: " << cmdObj.toString() << endl;
-                _finishExecCommand(result, false, status.reason());
+                appendCommandStatus(result, false, status.reason());
                 return;
             }
         }
@@ -1817,7 +1817,7 @@ namespace mongo {
             result.append( "help" , ss.str() );
             result.append( "lockType" , c->locktype() );
             result.appendBool("requiresSync", c->requiresSync());
-            _finishExecCommand(result, true, "");
+            appendCommandStatus(result, true, "");
             return;
         }
 
@@ -1861,7 +1861,7 @@ namespace mongo {
             }
             Client::Context ctx(ns, dbpath, c->requiresAuth());
             if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
-                _finishExecCommand(result, false, errmsg);
+                appendCommandStatus(result, false, errmsg);
                 return;
             }
 
@@ -1895,7 +1895,7 @@ namespace mongo {
                                             ? static_cast<Lock::ScopedLock*>(new Lock::GlobalWrite())
                                             : static_cast<Lock::ScopedLock*>(new Lock::DBWrite(dbname)));
             if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
-                _finishExecCommand(result, false, errmsg);
+                appendCommandStatus(result, false, errmsg);
                 return;
             }
 
@@ -1914,7 +1914,7 @@ namespace mongo {
             }
         }
 
-        _finishExecCommand(result, retval, errmsg);
+        appendCommandStatus(result, retval, errmsg);
         return;
     }
 
@@ -1966,7 +1966,9 @@ namespace mongo {
             Command::execCommand(c, client, queryOptions, ns, jsobj, anObjBuilder, fromRepl);
         }
         else {
-            anObjBuilder.append("errmsg", str::stream() << "no such cmd: " << e.fieldName() );
+            Command::appendCommandStatus(anObjBuilder,
+                                         false,
+                                         str::stream() << "no such cmd: " << e.fieldName());
             anObjBuilder.append("bad cmd" , _cmdobj );
         }
 

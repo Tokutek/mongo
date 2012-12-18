@@ -206,12 +206,12 @@ namespace mongo {
                                            BSONObj& cmdObj,
                                            BSONObjBuilder& result,
                                            bool fromRepl );
+
+        // Helper for setting errmsg and ok field in command result object.
+        static void appendCommandStatus(BSONObjBuilder& result, bool ok, const std::string& errmsg);
+
         // Set by command line.  Controls whether or not testing-only commands should be available.
         static int testCommandsEnabled;
-
-    private:
-        // Helper for setting errmsg and ok field in command result object.
-        static void _finishExecCommand(BSONObjBuilder& result, bool ok, const std::string& errmsg);
     };
 
     /** A command that modifies metadata in some way. */
