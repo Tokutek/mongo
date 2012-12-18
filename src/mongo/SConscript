@@ -76,6 +76,7 @@ env.StaticLibrary('bson', [
         'bson/mutable/mutable_bson_internal.cpp',
         'bson/util/bson_extract.cpp',
         'util/safe_num.cpp',
+        'bson/bson_validate.cpp',
         'bson/oid.cpp',
         'db/nonce.cpp',
         'db/jsobj.cpp',
@@ -108,9 +109,6 @@ env.CppUnitTest('bson_field_test', ['bson/bson_field_test.cpp'],
                 LIBDEPS=['bson'])
 
 env.CppUnitTest('bson_validate_test', ['bson/bson_validate_test.cpp'],
-                LIBDEPS=['bson'])
-
-env.CppUnitTest('safe_num_test', ['util/safe_num_test.cpp'],
                 LIBDEPS=['bson'])
 
 env.CppUnitTest('bson_extract_test', ['bson/util/bson_extract_test.cpp'], LIBDEPS=['bson'])
