@@ -907,12 +907,14 @@ namespace NamespaceTests {
         public:
             void run() {
                 create();
+                FieldRangeSet frs1( "", BSON( "a" << 2 << "b" << 3 ), true , true );
+                FieldRangeSet frs2( "", BSON( "b" << 3 ), true , true );
                 ASSERT_EQUALS( IndexDetails::HELPFUL,
-                               idx().suitability( BSON( "a" << 2 << "b" << 3 ), BSONObj() ) );
+                               idx().suitability( frs1, BSONObj() ) );
                 ASSERT_EQUALS( IndexDetails::USELESS,
-                               idx().suitability( BSON( "b" << 3 ), BSONObj() ) );
+                               idx().suitability( frs2, BSONObj() ) );
                 ASSERT_EQUALS( IndexDetails::HELPFUL,
-                               idx().suitability( BSON( "b" << 3 ), BSON( "a" << 1 ) ) );
+                               idx().suitability( frs2, BSON( "a" << 1 ) ) );
             }
         protected:
             BSONObj key() const { return BSON( "a" << 1 ); }
@@ -923,12 +925,15 @@ namespace NamespaceTests {
         public:
             void run() {
                 create();
+                FieldRangeSet frs1( "", BSON( "1" << 2 ), true , true );
+                FieldRangeSet frs2( "", BSON( "01" << 3), true , true );
+                FieldRangeSet frs3( "", BSONObj() , true , true );
                 ASSERT_EQUALS( IndexDetails::HELPFUL,
-                               idx().suitability( BSON( "1" << 2 ), BSONObj() ) );
+                               idx().suitability( frs1, BSONObj() ) );
                 ASSERT_EQUALS( IndexDetails::USELESS,
-                               idx().suitability( BSON( "01" << 3 ), BSON( "01" << 1 ) ) );
+                               idx().suitability( frs2, BSON( "01" << 1 ) ) );
                 ASSERT_EQUALS( IndexDetails::HELPFUL,
-                               idx().suitability( BSONObj(), BSON( "1" << 1 ) ) );                
+                               idx().suitability( frs3, BSON( "1" << 1 ) ) );                
             }
         protected:
             BSONObj key() const { return BSON( "1" << 1 ); }
