@@ -118,6 +118,13 @@ namespace mongo {
         }
         virtual LockType locktype() const { return OPLOCK; }
         virtual bool requiresSync() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            // $eval can do pretty much anything, so require all privileges.
+            out->push_back(Privilege(PrivilegeSet::WILDCARD_RESOURCE,
+                                     AuthorizationManager::getAllUserActions()));
+        }
         CmdEval() : Command("eval", false, "$eval") { }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
