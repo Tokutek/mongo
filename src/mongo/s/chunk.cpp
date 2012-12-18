@@ -1428,11 +1428,7 @@ namespace mongo {
 
         LOG(1) << "    setShardVersion  " << s.getName() << " " << conn.getServerAddress() << "  " << ns << "  " << cmd << " " << &conn << endl;
 
-        return conn.runCommand( "admin",
-                                cmd,
-                                result,
-                                0,
-                                &AuthenticationTable::getInternalSecurityAuthenticationTable() );
+        return conn.runCommand("admin", cmd, result, 0);
     }
 
 } // namespace mongo
