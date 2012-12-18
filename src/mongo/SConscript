@@ -246,7 +246,8 @@ env.StaticLibrary("coredb", [
                            'plugins/plugins',
                            'server_parameters'])
 
-coreServerFiles = [ "db/common.cpp",
+coreServerFiles = [ "db/client_basic.cpp",
+                    "db/common.cpp",
                     "util/net/miniwebserver.cpp",
                     "db/stats/counters.cpp",
                     "db/stats/service_stats.cpp",
