@@ -13,11 +13,8 @@
  * 3) Assert that we get the correct error
  */
 
-// Function for checking
-function check_answer(agg_result, errno) {
-    assert.eq(agg_result.ok, 0, 's6240 failed');
-    assert.eq(agg_result.code, errno, 's6240 failed');
-}
+// Load test utilities
+load('jstests/aggregation/extras/utils.js');
 
 // Clear db
 db.s6240.drop();
@@ -27,13 +24,9 @@ db.s6240.save({date:new Date()});
 
 // Aggregate using a date value in various math operations
 // Add
-var s6240add = db.runCommand(
-    { aggregate: "s6240", pipeline: [
-        { $project: {
-            add: { $add: ["$date", "$date"] }
-    }}
-]});
-check_answer(s6240add, 16612);
+assertErrorCode(db.s6240,
+    {$project: {add: {$add: ["$date", "$date"]}}},
+    16612);
 
 // Divide
 assertErrorCode(db.s6240,

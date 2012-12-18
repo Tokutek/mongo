@@ -1,4 +1,6 @@
 // ensure $add asserts on string
+load('jstests/aggregation/extras/utils.js');
+
 c = db.s6570;
 c.drop();
 c.save({x:17, y:"foo"});
