@@ -479,7 +479,6 @@ mongosLibraryFiles = [
     "s/config_server_checker_service.cpp",
     "s/cursors.cpp",
     "s/s_only.cpp",
-    "s/stats.cpp",
     "s/balance.cpp",
     "s/balancer_policy.cpp",
     "s/writeback_listener.cpp",

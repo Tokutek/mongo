@@ -34,7 +34,6 @@
 #include "mongo/s/config.h"
 #include "mongo/s/field_parser.h"
 #include "mongo/s/grid.h"
-#include "mongo/s/stats.h"
 #include "mongo/s/strategy.h"
 #include "mongo/s/type_chunk.h"
 #include "mongo/s/type_database.h"

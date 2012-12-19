@@ -35,7 +35,6 @@
 #include "mongo/s/cursors.h"
 #include "mongo/s/grid.h"
 #include "mongo/s/request.h"
-#include "mongo/s/stats.h"
 #include "mongo/s/version_manager.h"
 #include "mongo/util/mongoutils/str.h"
 
