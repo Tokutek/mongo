@@ -230,8 +230,6 @@ namespace mongo {
                 if (!conn.auth("local", internalSecurity.user, internalSecurity.pwd, errmsg, false)) {
                     return false;
                 }
-                conn.setAuthenticationTable(
-                        AuthenticationTable::getInternalSecurityAuthenticationTable() );
             }
 
             BSONObj out;

@@ -70,10 +70,7 @@ namespace mongo {
             log() << "replauthenticate: can't authenticate to master server, user:" << u << endl;
             return false;
         }
-        if ( internalSecurity.pwd.length() > 0 ) {
-            conn->setAuthenticationTable(
-                    AuthenticationTable::getInternalSecurityAuthenticationTable() );
-        }
+
         return true;
     }
 

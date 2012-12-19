@@ -155,10 +155,6 @@ namespace mongo {
                 c.reset( shardConnectionPool.get( addr ) );
                 s->created++; // After, so failed creation doesn't get counted
             }
-            if ( !noauth ) {
-                c->setAuthenticationTable( ClientBasic::getCurrent()->getAuthenticationInfo()->
-                                           getAuthTable() );
-            }
             return c.release();
         }
 
