@@ -822,6 +822,9 @@ namespace mongo {
     static bool isOplogCollection(const StringData &ns) {
         return ns == rsoplog;
     }
+    static bool isSystemUsersCollection(const StringData &ns) {
+        return ns.find(".system.users") != string::npos;
+    }
 
     // Construct a brand new NamespaceDetails with a certain primary key and set of options.
     NamespaceDetails::NamespaceDetails(const StringData &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
@@ -1075,6 +1078,10 @@ namespace mongo {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
 
+        if (isSystemUsersCollection(_ns)) {
+            uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), obj));
+        }
+
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
         DBTArrays keyArrays(n);
@@ -1203,6 +1210,10 @@ namespace mongo {
         dassert(!pk.isEmpty());
         dassert(!oldObj.isEmpty());
         dassert(!newObj.isEmpty());
+
+        if (isSystemUsersCollection(_ns)) {
+            uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), newObj));
+        }
 
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
