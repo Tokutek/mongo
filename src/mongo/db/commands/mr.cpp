@@ -1151,10 +1151,6 @@ namespace mongo {
                             }
                         }
                         
-                        if (state.isOnDisk() && !client.getAuthenticationInfo()->isAuthorized(dbname)) {
-                            errmsg = "read-only user cannot output mapReduce to collection, use inline instead";
-                            return false;
-                        }
                         state.init();
                         state.prepTempCollection();
                         ON_BLOCK_EXIT_OBJ(state, &State::dropTempCollections);
