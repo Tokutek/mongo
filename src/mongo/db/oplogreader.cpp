@@ -35,7 +35,7 @@ namespace mongo {
         if( noauth ) {
             return true;
         }
-        if (!cc().isAdmin() || !cc().getAuthorizationManager()->hasInternalAuthorization()) {
+        if (!cc().getAuthorizationManager()->hasInternalAuthorization()) {
             log() << "replauthenticate: requires internal authorization, failing" << endl;
             return false;
         }

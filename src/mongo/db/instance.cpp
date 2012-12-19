@@ -132,7 +132,7 @@ namespace mongo {
     void inProgCmd( Message &m, DbResponse &dbresponse ) {
         BSONObjBuilder b;
 
-        if (!cc().isAdmin() || !cc().getAuthorizationManager()->checkAuthorization(
+        if (!cc().getAuthorizationManager()->checkAuthorization(
                 AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::inprog)) {
             b.append("err", "unauthorized");
         }
@@ -173,7 +173,7 @@ namespace mongo {
 
     void killOp( Message &m, DbResponse &dbresponse ) {
         BSONObj obj;
-        if (!cc().isAdmin() || !cc().getAuthorizationManager()->checkAuthorization(
+        if (!cc().getAuthorizationManager()->checkAuthorization(
                 AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::killop)) {
             obj = fromjson("{\"err\":\"unauthorized\"}");
         }
@@ -199,7 +199,7 @@ namespace mongo {
     bool _unlockFsync();
     void unlockFsync(const char *ns, Message& m, DbResponse &dbresponse) {
         BSONObj obj;
-        if (!cc().isAdmin() || !cc().getAuthorizationManager()->checkAuthorization(
+        if (!cc().getAuthorizationManager()->checkAuthorization(
                 AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::unlock)) {
             obj = fromjson("{\"err\":\"unauthorized\"}");
         }
