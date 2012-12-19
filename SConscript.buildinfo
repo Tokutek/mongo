@@ -27,6 +27,7 @@ buildinfo_template = '''
 namespace mongo {
     const char * gitVersion() { return "%(git_version)s"; }
     const char *tokukvVersion() { return "%(tokukv_version)s"; }
+    const char * compiledJSEngine() { return "%(js_engine)s"; }
     const char * loaderFlags() { return "%(loader_flags)s"; }
     const char * compilerFlags() { return "%(compiler_flags)s"; }
     std::string sysInfo() { return "%(sys_info)s BOOST_LIB_VERSION=" BOOST_LIB_VERSION ; }
@@ -47,6 +48,7 @@ def generate_buildinfo(env, target, source, **kw):
 
     contents = str(source[0]) % dict(git_version=git_version,
                                      tokukv_version=tokukv_version,
+                                     js_engine="V8" if GetOption('usev8') else "SpiderMonkey",
                                      sys_info=getSysInfo(),
                                      loader_flags=env.subst('$LINKFLAGS $LDFLAGS',
                                                             source=source, target=target),

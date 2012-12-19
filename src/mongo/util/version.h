@@ -42,6 +42,7 @@ namespace mongo {
     void appendBuildInfo(BSONObjBuilder& result);
 
     const char * gitVersion();
+    const char * compiledJSEngine();
     const char * loaderFlags();
     const char * compilerFlags();
 
