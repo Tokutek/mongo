@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "mongo/base/string_data.h"
 #include "mongo/db/keypattern.h"
 
 namespace mongo {
@@ -76,11 +77,8 @@ namespace mongo {
 
         BSONObj extractKey(const BSONObj& from) const;
 
-        bool partOfShardKey(const char* key ) const {
+        bool partOfShardKey(const StringData& key ) const {
             return pattern.hasField(key);
-        }
-        bool partOfShardKey(const string& key ) const {
-            return pattern.hasField(key.c_str());
         }
 
         /**
