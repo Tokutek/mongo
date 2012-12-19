@@ -19,6 +19,7 @@
 #pragma once
 
 #include <string>
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/platform/atomic_word.h"
@@ -51,17 +52,17 @@ namespace mongo {
         virtual bool includeByDefault() const = 0;
         
         /**
-         * if only admins can view this section
-         * API will change to better auth version
+         * Adds the privileges that are required to view this section
+         * TODO: Remove this empty default implementation and implement for every section.
          */
-        virtual bool adminOnly() const = 0;
+        virtual void addRequiredPrivileges(std::vector<Privilege>* out) {};
 
         /**
          * actually generate the result
          * @param configElement the element from the actual command related to this section
          *                      so if the section is 'foo', this is cmdObj['foo']
          */
-        virtual BSONObj generateSection( const BSONElement& configElement, bool userIsAdmin ) const = 0;
+        virtual BSONObj generateSection(const BSONElement& configElement) const = 0;
 
     private:
         const string _sectionName;
@@ -71,9 +72,8 @@ namespace mongo {
     public:
         OpCounterServerStatusSection( const string& sectionName, OpCounters* counters );
         virtual bool includeByDefault() const { return true; }
-        virtual bool adminOnly() const { return false; }
         
-        virtual BSONObj generateSection( const BSONElement& configElement, bool userIsAdmin ) const;
+        virtual BSONObj generateSection(const BSONElement& configElement) const;
 
     private:
         const OpCounters* _counters;
@@ -87,12 +87,10 @@ namespace mongo {
          *             otherwise it will live under the "counters" namespace
          *             so foo.bar would be serverStatus().counters.foo.bar
          */
-        ServerStatusMetric( const string& name, bool adminOnly );
+        ServerStatusMetric(const string& name);
         virtual ~ServerStatusMetric(){}
 
         string getMetricName() const { return _name; }
-
-        virtual bool adminOnly() const { return _adminOnly; }
 
         virtual void appendAtLeaf( BSONObjBuilder& b ) const = 0;
 
@@ -100,7 +98,6 @@ namespace mongo {
         static string _parseLeafName( const string& name );
 
         const string _name;
-        const bool _adminOnly;
         const string _leafName;
     };
 
@@ -119,8 +116,8 @@ namespace mongo {
     template< typename T >
     class ServerStatusMetricField : public ServerStatusMetric {
     public:
-        ServerStatusMetricField( const string& name, bool adminOnly, const T* t ) 
-            : ServerStatusMetric( name, adminOnly ), _t(t) {
+        ServerStatusMetricField( const string& name, const T* t )
+            : ServerStatusMetric(name), _t(t) {
         }
         
         const T* get() { return _t; }
