@@ -28,6 +28,7 @@
 #include "mongo/db/cloner.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/commands/rename_collection.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/ops/insert.h"
