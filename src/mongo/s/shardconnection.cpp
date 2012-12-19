@@ -207,7 +207,6 @@ namespace mongo {
         }
 
         void release( const string& addr , DBClientBase * conn ) {
-            conn->clearAuthenticationTable();
             shardConnectionPool.release( addr , conn );
         }
 
