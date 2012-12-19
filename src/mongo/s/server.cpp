@@ -48,6 +48,7 @@
 #include "../util/processinfo.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/plugins/loader.h"
+#include "mongo/s/config_upgrade.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/log.h"
 #include "mongo/util/exception_filter_win32.h"
@@ -305,16 +306,22 @@ static bool runMongosServer( bool doUpgrade ) {
         task::repeat(new CheckConfigServers, 60*1000);
     }
 
-    int configError = configServer.checkConfigVersion( doUpgrade );
-    if ( configError ) {
-        if ( configError > 0 ) {
-            log() << "upgrade success!" << endl;
-        }
-        else {
-            log() << "config server error: " << configError << endl;
-        }
+    VersionType initVersionInfo;
+    VersionType versionInfo;
+    string errMsg;
+    bool upgraded = checkAndUpgradeConfigVersion(ConnectionString(configServer.getPrimary()
+                                                         .getConnString()),
+                                                 doUpgrade,
+                                                 &initVersionInfo,
+                                                 &versionInfo,
+                                                 &errMsg);
+
+    if (!upgraded) {
+        error() << "error upgrading config database to v" << CURRENT_CONFIG_VERSION
+                << causedBy(errMsg) << endl;
         return false;
     }
+
     configServer.reloadSettings();
 
     init();

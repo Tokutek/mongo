@@ -91,7 +91,8 @@ namespace mongo {
                      BSON( MongosType::name(_myid) ) ,
                      BSON( "$set" << BSON( MongosType::ping(jsTime()) <<
                                            MongosType::up((int)(time(0)-_started)) <<
-                                           MongosType::waiting(waiting) ) ) ,
+                                           MongosType::waiting(waiting) <<
+                                           MongosType::mongoVersion(mongodbVersionString) ) ) ,
                      true );
 
         conn.setWriteConcern( w);
