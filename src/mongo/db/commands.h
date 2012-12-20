@@ -149,7 +149,7 @@ namespace mongo {
          */
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out);
+                                           std::vector<Privilege>* out) = 0;
 
         /* Return true if command should be permitted when a replica set secondary is in "recovering"
            (unreadable) state.
