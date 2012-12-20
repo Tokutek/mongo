@@ -166,7 +166,6 @@ namespace mongo {
         _db(db)
     {
         _client->_context = this;
-        checkNsAccess( doauth );
     }
 
     Client::Context::Context(const StringData &ns, const StringData &path , bool doauth, bool doVersion ) :
@@ -226,7 +225,6 @@ namespace mongo {
         checkNotStale();
         _client->_context = this;
         _client->_curOp->enter( this );
-        checkNsAccess( doauth );
     }
 
     void Client::Context::_finishInit( bool doauth ) {
@@ -239,22 +237,6 @@ namespace mongo {
         massert( 16107 , str::stream() << "Don't have a lock on: " << _ns , Lock::atLeastReadLocked( _ns ) );
         _client->_context = this;
         _client->_curOp->enter( this );
-        checkNsAccess( doauth, writeLocked ? 1 : 0 );
-    }
-
-    void Client::Context::_auth( int lockState ) {
-        if (lockState <= 0 && str::endsWith(_ns, ".system.users"))
-            lockState = 1; // we don't want read-only users to be able to read system.users SERVER-4692
-
-        if ( _client->_ai.isAuthorizedForLock( _db->name() , lockState ) )
-            return;
-
-        // before we assert, do a little cleanup
-        _client->_context = _oldContext; // note: _oldContext may be null
-
-        stringstream ss;
-        ss << "unauthorized db:" << _db->name() << " ns:" << _ns << " lock type:" << lockState << " client:" << _client->clientAddress();
-        uasserted( 10057 , ss.str() );
     }
     
     Client::Context::~Context() {
@@ -276,18 +258,6 @@ namespace mongo {
             return false;
 
         return  _ns[db.size()] == '.';
-    }
-    
-    void Client::Context::checkNsAccess( bool doauth, int lockState ) {
-        if ( 0 ) { // SERVER-4276
-            uassert( 15929, "client access to index backing namespace prohibited", NamespaceString::normal( _ns.c_str() ) );
-        }
-        if ( doauth ) {
-            _auth( lockState );
-        }
-    }
-    void Client::Context::checkNsAccess( bool doauth ) {
-        checkNsAccess( doauth, Lock::somethingWriteLocked() ? 1 : 0 );
     }
 
     void Client::appendLastGTID( BSONObjBuilder& b ) const {
