@@ -63,26 +63,6 @@
 
 namespace mongo {
 
-    /** @return true if fields found */
-    bool setParmsMongodSpecific(const string& dbname, BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result, bool fromRepl ) { 
-        BSONElement e = cmdObj["ageOutJournalFiles"];
-        if( !e.eoo() ) {
-            problem() << "ageOutJournalFiles is a deprecated parameter, ignoring!" << endl;
-            return true;
-        }
-        if( cmdObj.hasElement( "replIndexPrefetch" ) ) {
-            errmsg = "replIndexPrefetch is deprecated";
-            return false;
-        }
-
-        return false;
-    }
-
-    const char* fetchReplIndexPrefetchParam() {
-        if (!theReplSet) return "uninitialized";
-        return "none";
-    }
-
     /* reset any errors so that getlasterror comes back clean.
 
        useful before performing a long series of operations where we want to

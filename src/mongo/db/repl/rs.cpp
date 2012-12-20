@@ -30,6 +30,7 @@
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/connections.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/platform/bits.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
@@ -1322,5 +1323,39 @@ namespace mongo {
             BackgroundSync::get()->startOpSyncThread();
         }
     }
+
+    class ReplIndexPrefetch : public ServerParameter {
+    public:
+        ReplIndexPrefetch()
+            : ServerParameter( ServerParameterSet::getGlobal(), "replIndexPrefetch" ) {
+        }
+
+        virtual ~ReplIndexPrefetch() {
+        }
+
+        const char * _value() {
+            if (!theReplSet)
+                return "uninitialized";
+            return "none";
+        }
+
+        virtual void append( BSONObjBuilder& b ) {
+            b.append( name(), _value() );
+        }
+
+        virtual Status set( const BSONElement& newValueElement ) {
+            if (!theReplSet) {
+                return Status( ErrorCodes::BadValue, "replication is not enabled" );
+            }
+
+            std::string prefetch = newValueElement.valuestrsafe();
+            return setFromString( prefetch );
+        }
+
+        virtual Status setFromString( const string& prefetch ) {
+            return Status( ErrorCodes::IllegalOperation, "replIndexPrefetch is a deprecated parameter" );
+        }
+
+    } replIndexPrefetch;
 }
 

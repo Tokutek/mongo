@@ -24,8 +24,6 @@
 
 namespace mongo {
 
-    const char* fetchReplIndexPrefetchParam();
-
     class CmdGet : public InformationCommand {
     public:
         CmdGet() : InformationCommand( "getParameter" ) { }
@@ -64,9 +62,6 @@ namespace mongo {
             if( all || cmdObj.hasElement("syncdelay") ) {
                 result.append("syncdelay", cmdLine.syncdelay);
             }
-            if (all || cmdObj.hasElement("replIndexPrefetch")) {
-                result.append("replIndexPrefetch", fetchReplIndexPrefetchParam());
-            }
             if (all || cmdObj.hasElement("releaseConnectionsAfterResponse")) {
                 result.append("releaseConnectionsAfterResponse",
                               ShardConnection::releaseConnectionsAfterResponse);
@@ -86,9 +81,6 @@ namespace mongo {
             return true;
         }
     } cmdGet;
-
-    // tempish
-    bool setParmsMongodSpecific(const string& dbname, BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result, bool fromRepl );
 
     class CmdSet : public InformationCommand {
     public:
@@ -113,8 +105,8 @@ namespace mongo {
         }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             int s = 0;
-            bool found = setParmsMongodSpecific(dbname, cmdObj, errmsg, result, fromRepl);
-            if( cmdObj.hasElement("journalCommitInterval") ) { 
+            bool found = false;
+            if( cmdObj.hasElement("journalCommitInterval") ) {
                 int x = (int) cmdObj["journalCommitInterval"].Number();
                 verify( x > 1 && x < 500 );
                 storage::set_log_flush_interval(x);
