@@ -183,7 +183,7 @@ namespace mongo {
         configsvr(false), quota(false), quotaFiles(8), cpu(false),
         logFlushPeriod(100), // 0 means fsync every transaction, 100 means fsync log once every 100 ms
         expireOplogDays(0), expireOplogHours(0), // default of 0 means never purge entries from oplog
-        objcheck(false), defaultProfile(0),
+        objcheck(true), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"), maxConns(DEFAULT_MAX_CONN),
         logAppend(false), logWithSyslog(false),
