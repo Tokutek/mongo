@@ -17,14 +17,16 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "database.h"
-#include "instance.h"
-#include "introspect.h"
-#include "clientcursor.h"
-#include "databaseholder.h"
+#include "mongo/pch.h"
+
+#include "mongo/db/database.h"
 
 #include <boost/filesystem/operations.hpp>
+
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/databaseholder.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/introspect.h"
 
 namespace mongo {
 

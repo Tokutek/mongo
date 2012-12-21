@@ -36,14 +36,7 @@ namespace mongo {
             // Creating an index creates the collection if it doesn't already exist.
             NamespaceDetails *d = getAndMaybeCreateNS(obj["ns"].Stringdata(), logop);
             return d->ensureIndex(obj);
-        } else if (legalClientSystemNS(ns, true)) {
-            if (mongoutils::str::endsWith(ns, ".system.users")) {
-                uassert( 14051 , "system.users entry needs 'user' field to be a string", obj["user"].type() == String );
-                uassert( 14052 , "system.users entry needs 'pwd' field to be a string", obj["pwd"].type() == String );
-                uassert( 14053 , "system.users entry needs 'user' field to be non-empty", obj["user"].String().size() );
-                uassert( 14054 , "system.users entry needs 'pwd' field to be non-empty", obj["pwd"].String().size() );
-            }
-        } else {
+        } else if (!legalClientSystemNS(ns, true)) {
             uasserted(16459, str::stream() << "attempt to insert in system namespace '" << ns << "'");
         }
         return true;

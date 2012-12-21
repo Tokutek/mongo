@@ -25,6 +25,7 @@
 
 #include <boost/filesystem/operations.hpp>
 
+#include "mongo/base/init.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/cursor.h"
@@ -292,6 +293,70 @@ namespace mongo {
                 }
             }
             return b.obj();
+        }
+    };
+
+    namespace {
+        BSONObj oldSystemUsersKeyPattern;
+        BSONObj extendedSystemUsersKeyPattern;
+        std::string extendedSystemUsersIndexName;
+
+        MONGO_INITIALIZER(AuthIndexKeyPatterns)(InitializerContext*) {
+            oldSystemUsersKeyPattern = BSON(AuthorizationManager::USER_NAME_FIELD_NAME << 1);
+            extendedSystemUsersKeyPattern = BSON(AuthorizationManager::USER_NAME_FIELD_NAME << 1 <<
+                                                 AuthorizationManager::USER_SOURCE_FIELD_NAME << 1);
+            extendedSystemUsersIndexName = std::string(str::stream() <<
+                                                       AuthorizationManager::USER_NAME_FIELD_NAME <<
+                                                       "_1_" <<
+                                                       AuthorizationManager::USER_SOURCE_FIELD_NAME <<
+                                                       "_1");
+            return Status::OK();
+        }
+    }
+
+    static void addIndexToCatalog(const BSONObj &info) {
+        const StringData &indexns = info["ns"].Stringdata();
+        if (indexns.find(".system.indexes") != string::npos) {
+            // system.indexes holds all the others, so it is not explicitly listed in the catalog.
+            return;
+        }
+
+        StringData database = nsToDatabaseSubstring(indexns);
+        string ns = database.toString() + ".system.indexes";
+        NamespaceDetails *d = nsdetails_maybe_create(ns);
+        BSONObj objMod = info;
+        insertOneObject(d, objMod);
+    }
+
+    class SystemUsersCollection : public IndexedCollection {
+        static BSONObj extendedSystemUsersIndexInfo(const StringData &ns) {
+            BSONObjBuilder indexBuilder;
+            indexBuilder.append("key", extendedSystemUsersKeyPattern);
+            indexBuilder.appendBool("unique", true);
+            indexBuilder.append("ns", ns);
+            indexBuilder.append("name", extendedSystemUsersIndexName);
+            return indexBuilder.obj();
+        }
+    public:
+        SystemUsersCollection(const StringData &ns, const BSONObj &options) :
+            IndexedCollection(ns, options) {
+            BSONObj info = extendedSystemUsersIndexInfo(ns);
+            createIndex(info);
+            addIndexToCatalog(info);
+        }
+        SystemUsersCollection(const BSONObj &serialized) :
+            IndexedCollection(serialized) {
+            int idx = findIndexByKeyPattern(extendedSystemUsersKeyPattern);
+            if (idx < 0) {
+                const StringData ns = serialized["ns"].Stringdata();
+                BSONObj info = extendedSystemUsersIndexInfo(ns);
+                createIndex(info);
+                addIndexToCatalog(info);
+            }
+            idx = findIndexByKeyPattern(oldSystemUsersKeyPattern);
+            if (idx >= 0) {
+                dropIndex(idx);
+            }
         }
     };
 
@@ -861,6 +926,8 @@ namespace mongo {
             return shared_ptr<NamespaceDetails>(new OplogCollection(ns, options));
         } else if (isSystemCatalog(ns)) {
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(ns, options));
+        } else if (isSystemUsersCollection(ns)) {
+            return shared_ptr<NamespaceDetails>(new SystemUsersCollection(ns, options));
         } else if (isProfileCollection(ns)) {
             // TokuMX doesn't _necessarily_ need the profile to be capped, but vanilla does.
             // We enforce the restriction because it's easier to implement. See SERVER-6937.
@@ -901,6 +968,9 @@ namespace mongo {
         } else if (isSystemCatalog(ns)) {
             massert( 16869, "bug: Should not bulk load a system catalog collection", !bulkLoad );
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(serialized));
+        } else if (isSystemUsersCollection(ns)) {
+            massert( 0, "bug: Should not bulk load the users collection", !bulkLoad );
+            return shared_ptr<NamespaceDetails>(new SystemUsersCollection(serialized));
         } else if (isProfileCollection(ns)) {
             massert( 16870, "bug: Should not bulk load the profile collection", !bulkLoad );
             return shared_ptr<NamespaceDetails>(new ProfileCollection(serialized));
@@ -1467,20 +1537,6 @@ namespace mongo {
         result->append("indexDetails", index_info.arr());        
 
         fillSpecificStats(result, scale);
-    }
-
-    static void addIndexToCatalog(const BSONObj &info) {
-        const StringData &indexns = info["ns"].Stringdata();
-        if (indexns.find(".system.indexes") != string::npos) {
-            // system.indexes holds all the others, so it is not explicitly listed in the catalog.
-            return;
-        }
-
-        StringData database = nsToDatabaseSubstring(indexns);
-        string ns = database.toString() + ".system.indexes";
-        NamespaceDetails *d = nsdetails_maybe_create(ns);
-        BSONObj objMod = info;
-        insertOneObject(d, objMod);
     }
 
     void NamespaceDetails::addDefaultIndexesToCatalog() {
