@@ -319,7 +319,7 @@ namespace mongo {
     // Profile the current op in an alternate transaction
     void lockedDoProfile(const Client& c, int op, CurOp& currentOp) {
         if ( dbHolder().__isLoaded( nsToDatabase( currentOp.getNS() ) , dbpath ) ) {
-            Client::Context ctx( currentOp.getNS(), dbpath, false );
+            Client::Context ctx(currentOp.getNS(), dbpath);
             Client::AlternateTransactionStack altStack;
             Client::Transaction txn(DB_SERIALIZABLE);
             profile(c, op, currentOp);

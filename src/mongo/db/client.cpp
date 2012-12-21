@@ -157,7 +157,7 @@ namespace mongo {
     }
 
     BSONObj CachedBSONObj::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");
-    Client::Context::Context( const StringData &ns , Database * db, bool doauth ) :
+    Client::Context::Context(const StringData& ns , Database * db) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( mongo::dbpath ), // is this right? could be a different db? may need a dassert for this
@@ -168,28 +168,28 @@ namespace mongo {
         _client->_context = this;
     }
 
-    Client::Context::Context(const StringData &ns, const StringData &path , bool doauth, bool doVersion ) :
-        _client( currentClient.get() ),
+    Client::Context::Context(const StringData& ns, const StringData& path, bool doVersion) :
+        _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( path.toString() ),
         _doVersion(doVersion),
         _ns( ns.toString() ),
         _db(0)
     {
-        _finishInit( doauth );
+        _finishInit();
     }
 
     /** "read lock, and set my context, all in one operation" 
      *  This handles (if not recursively locked) opening an unopened database.
      */
-    Client::ReadContext::ReadContext(const StringData &ns, const StringData &path, bool doauth)
+    Client::ReadContext::ReadContext(const StringData& ns, const StringData& path)
         : _lk( ns ) ,
-          _c( ns , path , doauth ) {
+          _c(ns, path) {
     }
 
-    Client::WriteContext::WriteContext(const StringData &ns, const StringData &path , bool doauth ) 
+    Client::WriteContext::WriteContext(const StringData& ns, const StringData& path)
         : _lk( ns ) ,
-          _c( ns , path , doauth ) {
+          _c(ns, path) {
     }
 
 
@@ -213,8 +213,8 @@ namespace mongo {
     }
 
     // invoked from ReadContext
-    Client::Context::Context(const StringData &path, const StringData &ns, Database *db , bool doauth) :
-        _client( currentClient.get() ),
+    Client::Context::Context(const StringData& path, const StringData& ns, Database *db) :
+        _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( path.toString() ),
         _doVersion( true ),
@@ -227,7 +227,7 @@ namespace mongo {
         _client->_curOp->enter( this );
     }
 
-    void Client::Context::_finishInit( bool doauth ) {
+    void Client::Context::_finishInit() {
         dassert( Lock::isLocked() );
         int writeLocked = Lock::somethingWriteLocked();
 

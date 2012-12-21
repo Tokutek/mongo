@@ -339,16 +339,16 @@ namespace mongo {
         class Context : boost::noncopyable {
         public:
             /** this is probably what you want */
-            Context(const StringData &ns, const StringData &path=dbpath, bool doauth=true, bool doVersion=true );
+            Context(const StringData &ns, const StringData &path=dbpath, bool doVersion=true);
 
             /** note: this does not call finishInit -- i.e., does not call 
                       shardVersionOk() for example. 
                 see also: reset().
             */
-            Context( const StringData &ns , Database * db, bool doauth=true );
+            Context(const StringData &ns , Database * db);
 
             // used by ReadContext
-            Context(const StringData &path, const StringData &ns, Database *db, bool doauth);
+            Context(const StringData &path, const StringData &ns, Database *db);
 
             ~Context();
             Client* getClient() const { return _client; }
@@ -374,7 +374,7 @@ namespace mongo {
 
         private:
             friend class CurOp;
-            void _finishInit( bool doauth=true);
+            void _finishInit();
             void checkNotStale() const;
             void checkNsAccess( bool doauth );
             void checkNsAccess( bool doauth, int lockState );
@@ -392,7 +392,7 @@ namespace mongo {
          */
         class ReadContext : boost::noncopyable { 
         public:
-            ReadContext(const StringData &ns, const StringData &path=dbpath, bool doauth=true);
+            ReadContext(const StringData &ns, const StringData &path=dbpath);
             Context& ctx() { return _c; }
         private:
             Lock::DBRead _lk;
@@ -401,7 +401,7 @@ namespace mongo {
 
         class WriteContext : boost::noncopyable {
         public:
-            WriteContext(const StringData &ns, const StringData &path=dbpath, bool doauth=true );
+            WriteContext(const StringData &ns, const StringData &path=dbpath);
             Context& ctx() { return _c; }
         private:
             Lock::DBWrite _lk;

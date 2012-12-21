@@ -943,14 +943,14 @@ namespace mongo {
             bool capped = false;
             long long size = 0;
             {
-                Client::Context ctx( source ); // auths against source
+                Client::Context ctx( source );
                 NamespaceDetails *nsd = nsdetails( source );
                 uassert( 10026 ,  "source namespace does not exist", nsd );
                 capped = nsd->isCapped();
                 // TODO: Get the capped size
             }
 
-            Client::Context ctx( target ); //auths against target
+            Client::Context ctx( target );
 
             if ( nsdetails( target.c_str() ) ) {
                 uassert( 10027 ,  "target namespace exists", cmdObj["dropTarget"].trueValue() );
@@ -1814,7 +1814,7 @@ namespace mongo {
                 rctx.reset();
                 lk.reset(new Lock::GlobalRead());
             }
-            Client::Context ctx(ns, dbpath, c->requiresAuth());
+            Client::Context ctx(ns, dbpath);
             if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
                 appendCommandStatus(result, false, errmsg);
                 return;
@@ -1854,7 +1854,7 @@ namespace mongo {
                 return;
             }
 
-            Client::Context ctx(dbname, dbpath, c->requiresAuth());
+            Client::Context ctx(dbname, dbpath);
             scoped_ptr<Client::Transaction> transaction((!fromRepl && c->needsTxn())
                                                         ? new Client::Transaction(c->txnFlags())
                                                         : NULL);

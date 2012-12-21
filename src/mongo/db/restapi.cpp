@@ -256,7 +256,7 @@ namespace mongo {
 
         writelocktry wl(10000);
         verify( wl.got() );
-        Client::Context cx( "admin.system.users", dbpath, false );
+        Client::Context cx("admin.system.users", dbpath);
     }
 
     bool RestAdminAccess::haveAdminUsers() const {
@@ -264,7 +264,7 @@ namespace mongo {
         openAdminDb();
         readlocktry rl(/*"admin.system.users", */10000);
         uassert( 16173 , "couldn't get read lock to get admin auth credentials" , rl.got() );
-        Client::Context cx( "admin.system.users", dbpath, false );
+        Client::Context cx("admin.system.users", dbpath);
         BSONObj o;
         NamespaceDetails *d = nsdetails( "admin.system.users" );
         bool ok = d != NULL && d->findOne(BSONObj(), o);
