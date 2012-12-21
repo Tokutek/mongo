@@ -550,7 +550,7 @@ namespace mongo {
                         BSONObj temp = cursor->next();
                         BSONObj old;
 
-                        NamespaceDetails *d = nsdetails( _config.outputOptions.finalNamespace.c_str() );
+                        NamespaceDetails *d = nsdetails(_config.outputOptions.finalNamespace);
                         const bool found = d != NULL && d->findOne( temp["_id"].wrap() , old , true );
                         if ( found ) {
                             // need to reduce

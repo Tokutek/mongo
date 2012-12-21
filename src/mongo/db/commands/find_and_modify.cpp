@@ -141,7 +141,7 @@ namespace mongo {
                                 bool upsert , bool returnNew , bool remove ,
                                 BSONObjBuilder& result , string& errmsg ) {
             BSONObj doc;
-            NamespaceDetails *d = nsdetails( ns.c_str() );
+            NamespaceDetails *d = nsdetails(ns);
             const bool found = d != NULL && d->findOne( queryOriginal , doc );
 
             BSONObj queryModified = queryOriginal;
@@ -227,7 +227,7 @@ namespace mongo {
                             // we do this so that if the update changes the fields, it still matches
                             queryModified = queryModified["_id"].wrap();
                         }
-                        d = nsdetails( ns.c_str() );
+                        d = nsdetails(ns);
                         if ( d == NULL || ! d->findOne( queryModified , doc ) ) {
                             errmsg = str::stream() << "can't find object after modification  " 
                                                    << " ns: " << ns 

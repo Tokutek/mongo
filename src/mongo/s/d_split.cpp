@@ -921,7 +921,7 @@ namespace mongo {
                 // If one of the chunks has only one object in it we should move it
                 for (int i=1; i >= 0 ; i--){ // high chunk more likely to have only one obj
 
-                    NamespaceDetails *d = nsdetails( ns.c_str() );
+                    NamespaceDetails *d = nsdetails(ns);
 
                     const IndexDetails *idx = d->findIndexByPrefix( keyPattern ,
                                                                     true ); /* exclude multikeys */

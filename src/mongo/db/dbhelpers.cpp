@@ -107,7 +107,7 @@ namespace mongo {
         Client::ReadContext ctx(ns);
         Client::Transaction txn(DB_SERIALIZABLE);
 
-        NamespaceDetails *d = nsdetails( ns.c_str() );
+        NamespaceDetails *d = nsdetails(ns);
         IndexDetails &i = d->idx(d->findIndexByKeyPattern(keyPattern));
         // Extend min to get (min, MinKey, MinKey, ....)
         BSONObj newMin = Helpers::modifiedRangeBound( min , keyPattern , -1 );

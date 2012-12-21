@@ -84,7 +84,7 @@ namespace mongo {
 
     BSONObj findShardKeyIndexPattern_locked( const string& ns , const BSONObj& shardKeyPattern ) {
         verify( Lock::isLocked() );
-        NamespaceDetails* nsd = nsdetails( ns.c_str() );
+        NamespaceDetails* nsd = nsdetails( ns );
         verify( nsd );
         const IndexDetails* idx = nsd->findIndexByPrefix( shardKeyPattern , true );  /* require single key */
         verify( idx );
@@ -554,7 +554,7 @@ namespace mongo {
                 _snapshotTaken = true;
                 _txn.reset(new Client::Transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY));
 
-                d = nsdetails(_ns.c_str());
+                d = nsdetails(_ns);
                 if (d == NULL) {
                     errmsg = "ns not found, should be impossible";
                     _txn.reset();
@@ -1515,7 +1515,7 @@ namespace mongo {
                 const string &dbname = cc().database()->name();
 
                 // Only copy if ns doesn't already exist
-                if ( ! nsdetails( ns.c_str() ) ) {
+                if (!nsdetails(ns)) {
                     string system_namespaces = dbname + ".system.namespaces";
                     BSONObj entry = conn->findOne( system_namespaces, BSON( "name" << ns ) );
                     if ( entry["options"].isABSONObj() ) {

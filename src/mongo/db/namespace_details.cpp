@@ -1788,7 +1788,7 @@ namespace mongo {
         BSONObj newSpec;
         {
             BSONObj oldSpec;
-            NamespaceDetails *d = nsdetails( sysNamespaces.c_str() );
+            NamespaceDetails *d = nsdetails(sysNamespaces);
             verify( d != NULL && d->findOne( BSON( "name" << from ), oldSpec ) );
             BSONObjBuilder b;
             BSONObjIterator i( oldSpec.getObjectField( "options" ) );
