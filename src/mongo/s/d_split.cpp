@@ -42,6 +42,7 @@
 #include "mongo/util/timer.h"
 
 #include "mongo/s/chunk.h" // for static genID only
+#include "mongo/s/chunk_version.h"
 #include "mongo/s/config.h"
 #include "mongo/s/d_logic.h"
 #include "mongo/s/type_chunk.h"
@@ -601,10 +602,10 @@ namespace mongo {
     struct ChunkInfo {
         BSONObj min;
         BSONObj max;
-        ShardChunkVersion lastmod;
+        ChunkVersion lastmod;
 
         ChunkInfo() { }
-        ChunkInfo( BSONObj aMin , BSONObj aMax , ShardChunkVersion aVersion ) : min(aMin) , max(aMax) , lastmod(aVersion) {}
+        ChunkInfo( BSONObj aMin , BSONObj aMax , ChunkVersion aVersion ) : min(aMin) , max(aMax) , lastmod(aVersion) {}
         void appendShortVersion( const char* name, BSONObjBuilder& b ) const;
         string toString() const;
     };
@@ -742,7 +743,7 @@ namespace mongo {
 
             // TODO This is a check migrate does to the letter. Factor it out and share. 2010-10-22
 
-            ShardChunkVersion maxVersion;
+            ChunkVersion maxVersion;
             string shard;
             ChunkInfo origChunk;
             {
@@ -754,7 +755,7 @@ namespace mongo {
                                                  Query(BSON(ChunkType::ns(ns)))
                                                      .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
 
-                maxVersion = ShardChunkVersion::fromBSON(x, ChunkType::DEPRECATED_lastmod());
+                maxVersion = ChunkVersion::fromBSON(x, ChunkType::DEPRECATED_lastmod());
 
                 BSONObj currChunk =
                     conn->get()->findOne(ChunkType::ConfigNS,
@@ -802,11 +803,11 @@ namespace mongo {
 
                 origChunk.min = currMin.getOwned();
                 origChunk.max = currMax.getOwned();
-                origChunk.lastmod = ShardChunkVersion::fromBSON(currChunk[ChunkType::DEPRECATED_lastmod()]);
+                origChunk.lastmod = ChunkVersion::fromBSON(currChunk[ChunkType::DEPRECATED_lastmod()]);
 
                 // since this could be the first call that enable sharding we also make sure to have the chunk manager up to date
                 shardingState.gotShardName( shard );
-                ShardChunkVersion shardVersion;
+                ChunkVersion shardVersion;
                 shardingState.trySetVersion( ns , shardVersion /* will return updated */ );
 
                 log() << "splitChunk accepted at version " << shardVersion << endl;
@@ -835,13 +836,13 @@ namespace mongo {
                 BSONObj found = conn->get()->findOne(ChunkType::ConfigNS, QUERY(ChunkType::ns(ns)).sort(ChunkType::DEPRECATED_lastmod(), -1));
                 if (!m.matches(found)) {
                     // TODO(leif): Make sure that this means the sharding algorithm is broken and we should bounce the server.
-                    error() << "splitChunk commit failed: " << ShardChunkVersion::fromBSON(found[ChunkType::DEPRECATED_lastmod()])
+                    error() << "splitChunk commit failed: " << ChunkVersion::fromBSON(found[ChunkType::DEPRECATED_lastmod()])
                             << " instead of " << maxVersion << endl;
                     error() << "TERMINATING" << endl;
                     dbexit(EXIT_SHARDING_ERROR);
                 }
 
-                ShardChunkVersion myVersion = maxVersion;
+                ChunkVersion myVersion = maxVersion;
                 BSONObj startKey = min;
                 splitKeys.push_back( max ); // makes it easier to have 'max' in the next loop. remove later.
 

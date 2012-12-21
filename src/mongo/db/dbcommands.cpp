@@ -56,6 +56,7 @@
 #include "mongo/db/storage/env.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/s/d_writeback.h"
+#include "mongo/s/util.h"  // for SendStaleConfigException
 #include "mongo/scripting/engine.h"
 #include "mongo/util/version.h"
 #include "mongo/util/lruishmap.h"

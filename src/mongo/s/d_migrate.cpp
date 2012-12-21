@@ -67,10 +67,11 @@
 #include "mongo/util/ramlog.h"
 #include "mongo/util/elapsed_tracker.h"
 
-#include "mongo/s/shard.h"
-#include "mongo/s/d_logic.h"
-#include "mongo/s/config.h"
 #include "mongo/s/chunk.h"
+#include "mongo/s/chunk_version.h"
+#include "mongo/s/config.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/s/shard.h"
 #include "mongo/s/type_chunk.h"
 #include "mongo/util/elapsed_tracker.h"
 #include "mongo/util/processinfo.h"
@@ -992,8 +993,8 @@ namespace mongo {
             BSONObj chunkInfo = BSON("min" << min << "max" << max << "from" << fromShard.getName() << "to" << toShard.getName() );
             configServer.logChange( "moveChunk.start" , ns , chunkInfo );
 
-            ShardChunkVersion maxVersion;
-            ShardChunkVersion startingVersion;
+            ChunkVersion maxVersion;
+            ChunkVersion startingVersion;
             string myOldShard;
             {
                 scoped_ptr<ScopedDbConnection> conn(
@@ -1016,7 +1017,7 @@ namespace mongo {
                     return false;
                 }
 
-                maxVersion = ShardChunkVersion::fromBSON(x, ChunkType::DEPRECATED_lastmod());
+                maxVersion = ChunkVersion::fromBSON(x, ChunkType::DEPRECATED_lastmod());
                 verify(currChunk[ChunkType::shard()].type());
                 verify(currChunk[ChunkType::min()].type());
                 verify(currChunk[ChunkType::max()].type());
@@ -1190,7 +1191,7 @@ namespace mongo {
                 // 5.a
                 // we're under the collection lock here, so no other migrate can change maxVersion or ShardChunkManager state
                 migrateFromStatus.setInCriticalSection( true );
-                ShardChunkVersion myVersion = maxVersion;
+                ChunkVersion myVersion = maxVersion;
                 myVersion.incMajor();
 
                 {
@@ -1260,7 +1261,7 @@ namespace mongo {
                 // version at which the next highest lastmod will be set
                 // if the chunk being moved is the last in the shard, nextVersion is that chunk's lastmod
                 // otherwise the highest version is from the chunk being bumped on the FROM-shard
-                ShardChunkVersion nextVersion;
+                ChunkVersion nextVersion;
 
                 // we want to go only once to the configDB but perhaps change two chunks, the one being migrated and another
                 // local one (so to bump version for the entire shard)
@@ -1278,7 +1279,7 @@ namespace mongo {
                     BSONObj found = conn->get()->findOne(ChunkType::ConfigNS, QUERY(ChunkType::ns(ns)).sort(ChunkType::DEPRECATED_lastmod(), -1));
                     if (!m.matches(found)) {
                         // TODO(leif): Make sure that this means the sharding algorithm is broken and we should bounce the server.
-                        error() << "moveChunk commit failed: " << ShardChunkVersion::fromBSON(found[ChunkType::DEPRECATED_lastmod()])
+                        error() << "moveChunk commit failed: " << ChunkVersion::fromBSON(found[ChunkType::DEPRECATED_lastmod()])
                                 << " instead of " << maxVersion << migrateLog;
                         error() << "TERMINATING" << migrateLog;
                         dbexit(EXIT_SHARDING_ERROR);
@@ -1377,8 +1378,8 @@ namespace mongo {
                                                            Query(BSON(ChunkType::ns(ns)))
                                                                .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
 
-                        ShardChunkVersion checkVersion =
-                            ShardChunkVersion::fromBSON(doc[ChunkType::DEPRECATED_lastmod()]);
+                        ChunkVersion checkVersion =
+                            ChunkVersion::fromBSON(doc[ChunkType::DEPRECATED_lastmod()]);
 
                         if ( checkVersion.isEquivalentTo( nextVersion ) ) {
                             log() << "moveChunk commit confirmed" << migrateLog;

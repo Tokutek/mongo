@@ -30,6 +30,7 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/s/client_info.h"
 #include "mongo/s/chunk.h"
+#include "mongo/s/chunk_version.h"
 #include "mongo/s/cursors.h"
 #include "mongo/s/grid.h"
 #include "mongo/s/request.h"
@@ -491,7 +492,7 @@ namespace mongo {
                     LOG(4) << "inserting " << objs.size() << " documents to shard " << shard
                            << " at version "
                            << ( manager.get() ? manager->getVersion().toString() :
-                                                ShardChunkVersion( 0, OID() ).toString() ) << endl;
+                                                ChunkVersion( 0, OID() ).toString() ) << endl;
 
                     // Taken from single-shard bulk insert, should not need multiple methods in future
                     // insert( c->getShard() , r.getns() , objs , flags);

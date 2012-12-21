@@ -45,7 +45,9 @@
 #include "mongo/db/json.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/s/chunk_version.h"
 #include "mongo/s/d_logic.h"
+#include "mongo/s/util.h" // for SendStaleConfigException
 #include "mongo/scripting/engine.h"
 #include "mongo/util/mongoutils/html.h"
 #include "mongo/util/mongoutils/str.h"
@@ -220,8 +222,8 @@ namespace mongo {
             break;
         default: {
             string errmsg;
-            ShardChunkVersion received;
-            ShardChunkVersion wanted;
+            ChunkVersion received;
+            ChunkVersion wanted;
             if ( ! shardVersionOk( _ns , errmsg, received, wanted ) ) {
                 ostringstream os;
                 os << "[" << _ns << "] shard version not ok in Client::Context: " << errmsg;

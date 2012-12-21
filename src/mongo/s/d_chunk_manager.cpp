@@ -104,9 +104,9 @@ namespace mongo {
 
         _fillCollectionKey( collectionDoc );
 
-        map<string,ShardChunkVersion> versionMap;
+        map<string,ChunkVersion> versionMap;
         versionMap[ shardName ] = _version;
-        _collVersion = ShardChunkVersion( 0, OID() );
+        _collVersion = ChunkVersion( 0, OID() );
 
         // Check to see if we have an old ShardChunkManager to use
         if( oldManager && oldManager->_collVersion.isSet() ){
@@ -148,8 +148,8 @@ namespace mongo {
             // No chunks were found for the ns
             warning() << "no chunks found when reloading " << ns << ", previous version was " << _collVersion << endl;
 
-            _version = ShardChunkVersion( 0, OID() );
-            _collVersion = ShardChunkVersion( 0, OID() );
+            _version = ChunkVersion( 0, OID() );
+            _collVersion = ChunkVersion( 0, OID() );
             _chunksMap.clear();
         }
         else{
@@ -192,13 +192,13 @@ namespace mongo {
     void ShardChunkManager::_fillChunks( DBClientCursorInterface* cursor ) {
         verify( cursor );
 
-        ShardChunkVersion version;
+        ChunkVersion version;
         while ( cursor->more() ) {
             BSONObj d = cursor->next();
             _chunksMap.insert(make_pair(d[ChunkType::min()].Obj().getOwned(),
                                         d[ChunkType::max()].Obj().getOwned()));
 
-            ShardChunkVersion currVersion = ShardChunkVersion::fromBSON(d[ChunkType::DEPRECATED_lastmod()]);
+            ChunkVersion currVersion = ChunkVersion::fromBSON(d[ChunkType::DEPRECATED_lastmod()]);
             if ( currVersion > version ) {
                 version = currVersion;
             }
@@ -323,7 +323,7 @@ namespace mongo {
         }
     }
 
-    ShardChunkManager* ShardChunkManager::cloneMinus( const BSONObj& min, const BSONObj& max, const ShardChunkVersion& version ) {
+    ShardChunkManager* ShardChunkManager::cloneMinus( const BSONObj& min, const BSONObj& max, const ChunkVersion& version ) {
 
         // check that we have the exact chunk that will be subtracted
         _assertChunkExists( min , max );
@@ -335,7 +335,7 @@ namespace mongo {
             // if left with no chunks, just reset version
             uassert( 13590 , str::stream() << "setting version to " << version.toString() << " on removing last chunk", ! version.isSet() );
 
-            p->_version = ShardChunkVersion( 0, OID() );
+            p->_version = ChunkVersion( 0, OID() );
             p->_collVersion = _collVersion;
 
         }
@@ -361,7 +361,7 @@ namespace mongo {
         return ! ( ( h1.woCompare( l2 ) <= 0 ) || ( h2.woCompare( l1 ) <= 0 ) );
     }
 
-    ShardChunkManager* ShardChunkManager::clonePlus( const BSONObj& min , const BSONObj& max , const ShardChunkVersion& version ) {
+    ShardChunkManager* ShardChunkManager::clonePlus( const BSONObj& min , const BSONObj& max , const ChunkVersion& version ) {
 
         // it is acceptable to move version backwards (e.g., undoing a migration that went bad during commit)
         // but only cloning away the last chunk may reset the version to 0
@@ -397,7 +397,7 @@ namespace mongo {
     }
 
     ShardChunkManager* ShardChunkManager::cloneSplit( const BSONObj& min , const BSONObj& max , const vector<BSONObj>& splitKeys ,
-            const ShardChunkVersion& version ) {
+            const ChunkVersion& version ) {
 
         // the version required in both resulting chunks could be simply an increment in the minor portion of the current version
         // however, we are enforcing uniqueness over the attributes <ns, lastmod> of the configdb collection 'chunks'

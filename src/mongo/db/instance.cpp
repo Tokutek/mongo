@@ -61,7 +61,7 @@
 #include "mongo/plugins/loader.h"
 
 #include "mongo/s/d_logic.h"
-
+#include "mongo/s/util.h" // for SendStaleConfigException
 #include "mongo/util/goodies.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/time_support.h"
