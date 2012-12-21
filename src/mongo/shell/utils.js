@@ -353,8 +353,8 @@ jsTestOptions = function(){
                               keyFile : TestData.keyFile,
                               authUser : "__system",
                               authPassword : TestData.keyFileData,
-                              adminUser : "admin",
-                              adminPassword : "password" });
+                              adminUser : TestData.adminUser || "admin",
+                              adminPassword : TestData.adminPassword || "password" });
     }
     return _jsTestOptions;
 }
@@ -418,12 +418,13 @@ jsTest.authenticate = function(conn) {
                            // Set authenticated to stop an infinite recursion from getDB calling
                            // back into authenticate.
                            conn.authenticated = true;
-                           print ("Authenticating to admin user with mechanism " +
-                                  jsTestOptions().authMechanism + " on connection: " + conn);
+                           print ("Authenticating to admin database as " +
+                                  jsTestOptions().adminUser + " with mechanism " +
+                                  DB.prototype._defaultAuthenticationMechanism +
+                                  " on connection: " + conn);
                            conn.authenticated = conn.getDB('admin').auth({
                                user: jsTestOptions().adminUser,
-                               pwd: jsTestOptions().adminPassword,
-                               mechanism: jsTestOptions().authMechanism
+                               pwd: jsTestOptions().adminPassword
                            });
                            return conn.authenticated;
                        });
