@@ -40,6 +40,8 @@ namespace mongo {
         // if returns true, then don't log info
         bool vetoLog( const CurOp& curop ) const;
         
+        void recordStats();
+
         string report( const CurOp& curop ) const;
         void append( const CurOp& curop, BSONObjBuilder& b ) const;
 
