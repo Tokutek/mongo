@@ -626,6 +626,7 @@ namespace mongo {
         transaction.commit();
 
         lastError.getSafe()->recordDelete( n );
+        op.debug().ndeleted = n;
     }
 
     QueryResult* emptyMoreResult(long long);
@@ -863,7 +864,7 @@ namespace mongo {
         transaction->commit();
     }
 
-    static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, const bool keepGoing) {
+    static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, CurOp &op, const bool keepGoing) {
         // writelock is used to synchronize stepdowns w/ writes
         uassert(10058, "not master", isMasterNs(ns));
 
@@ -876,7 +877,9 @@ namespace mongo {
         Client::Transaction transaction(DB_SERIALIZABLE);
         insertObjects(ns, objs, keepGoing, 0, true);
         transaction.commit();
-        globalOpCounters.incInsertInWriteLock(objs.size());
+        size_t n = objs.size();
+        globalOpCounters.incInsertInWriteLock(n);
+        op.debug().ninserted = n;
     }
 
     void receivedInsert(Message& m, CurOp& op) {
@@ -917,11 +920,11 @@ namespace mongo {
 
         try {
             Lock::DBRead lk(ns);
-            lockedReceivedInsert(ns, m, objs, keepGoing);
+            lockedReceivedInsert(ns, m, objs, op, keepGoing);
         }
         catch (RetryWithWriteLock &e) {
             Lock::DBWrite lk(ns);
-            lockedReceivedInsert(ns, m, objs, keepGoing);
+            lockedReceivedInsert(ns, m, objs, op, keepGoing);
         }
     }
 
