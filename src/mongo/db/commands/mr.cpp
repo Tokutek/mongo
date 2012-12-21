@@ -16,28 +16,29 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "mongo/pch.h"
-
-#include "mongo/client/connpool.h"
-#include "mongo/client/parallel.h"
-#include "mongo/db/auth/authorization_manager.h"
-#include "mongo/db/instance.h"
-#include "mongo/db/commands.h"
-#include "mongo/db/matcher.h"
-#include "mongo/db/clientcursor.h"
-#include "mongo/db/kill_current_op.h"
-#include "mongo/db/replutil.h"
-#include "mongo/db/query_optimizer.h"
-#include "mongo/db/ops/insert.h"
-#include "mongo/db/ops/update.h"
-#include "mongo/s/d_chunk_manager.h"
-#include "mongo/s/d_logic.h"
-#include "mongo/s/grid.h"
-#include "mongo/scripting/engine.h"
+#include "pch.h"
 
 #include "mongo/db/commands/mr.h"
 
 #include "mongo/util/scopeguard.h"
+
+#include "mongo/client/connpool.h"
+#include "mongo/client/parallel.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/kill_current_op.h"
+#include "mongo/db/matcher.h"
+#include "mongo/db/query_optimizer.h"
+#include "mongo/db/replutil.h"
+#include "mongo/db/ops/insert.h"
+#include "mongo/db/ops/update.h"
+#include "mongo/scripting/engine.h"
+#include "mongo/s/d_chunk_manager.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/s/grid.h"
+#include "mongo/s/stale_exception.h"
 
 namespace mongo {
 

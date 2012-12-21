@@ -47,7 +47,7 @@
 #include "mongo/db/repl/rs.h"
 #include "mongo/s/chunk_version.h"
 #include "mongo/s/d_logic.h"
-#include "mongo/s/util.h" // for SendStaleConfigException
+#include "mongo/s/stale_exception.h" // for SendStaleConfigException
 #include "mongo/scripting/engine.h"
 #include "mongo/util/mongoutils/html.h"
 #include "mongo/util/mongoutils/str.h"
