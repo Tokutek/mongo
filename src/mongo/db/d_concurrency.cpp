@@ -58,8 +58,8 @@ namespace mongo {
 
     class DBTryLockTimeoutException : public std::exception {
     public:
-    	DBTryLockTimeoutException() {}
-    	virtual ~DBTryLockTimeoutException() throw() { }
+        DBTryLockTimeoutException() {}
+        virtual ~DBTryLockTimeoutException() throw() { }
     };
 
     // e.g. externalobjsortmutex uses hlmutex as it can be locked for very long times
@@ -75,7 +75,8 @@ namespace mongo {
        in different directories with the same name, it will be ok but they are sharing a lock 
        then.
     */
-    static mapsf<string,WrapperForRWLock*> dblocks;
+    typedef mapsf< StringMap<WrapperForRWLock*> > DBLocksMap;
+    static DBLocksMap dblocks;
 
     /* we don't want to touch dblocks too much as a mutex is involved.  thus party for that, 
        this is here...
@@ -396,7 +397,7 @@ namespace mongo {
         }
     }
 
-    void Lock::DBWrite::lockOther(const string& db) {
+    void Lock::DBWrite::lockOther(const StringData& db) {
         fassert( 16252, !db.empty() );
         LockState& ls = lockState();
 
@@ -412,10 +413,10 @@ namespace mongo {
 
         if( db != ls.otherName() )
         {
-            mapsf<string,WrapperForRWLock*>::ref r(dblocks);
+            DBLocksMap::ref r(dblocks);
             WrapperForRWLock*& lock = r[db];
             if( lock == 0 )
-                lock = new WrapperForRWLock(db.c_str());
+                lock = new WrapperForRWLock(db);
             ls.lockedOther( db , 1 , lock );
         }
         else { 
@@ -428,10 +429,10 @@ namespace mongo {
         _weLocked = ls.otherLock();
     }
 
-    static Lock::Nestable n(const char *db) { 
-        if( str::equals(db, "local") )
+    static Lock::Nestable n(const StringData& db) { 
+        if( db == "local" )
             return Lock::local;
-        if( str::equals(db, "admin") )
+        if( db == "admin" )
             return Lock::admin;
         return Lock::notnestable;
     }
@@ -451,8 +452,7 @@ namespace mongo {
             return;
 
         if (DB_LEVEL_LOCKING_ENABLED) {
-            char db[MaxDatabaseNameLen];
-            nsToDatabase(ns.data(), db);
+            StringData db = nsToDatabaseSubstring( ns );
             Nestable nested = n(db);
             if( nested == admin ) { 
                 // we can't nestedly lock both admin and local as implemented. so lock_W.
@@ -483,8 +483,7 @@ namespace mongo {
         if ( ls.isRW() )
             return;
         if (DB_LEVEL_LOCKING_ENABLED) {
-            char db[MaxDatabaseNameLen];
-            nsToDatabase(ns.data(), db);
+            StringData db = nsToDatabaseSubstring(ns);
             Nestable nested = n(db);
             if( !nested )
                 lockOther(db);
@@ -587,7 +586,7 @@ namespace mongo {
         }
     }
 
-    void Lock::DBRead::lockOther(const string& db) {
+    void Lock::DBRead::lockOther(const StringData& db) {
         fassert( 16255, !db.empty() );
         LockState& ls = lockState();
 
@@ -603,10 +602,10 @@ namespace mongo {
 
         if( db != ls.otherName() )
         {
-            mapsf<string,WrapperForRWLock*>::ref r(dblocks);
+            DBLocksMap::ref r(dblocks);
             WrapperForRWLock*& lock = r[db];
             if( lock == 0 )
-                lock = new WrapperForRWLock(db.c_str());
+                lock = new WrapperForRWLock(db);
             ls.lockedOther( db , -1 , lock );
         }
         else { 
