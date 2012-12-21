@@ -368,10 +368,7 @@ namespace mongo {
         globalOpCounters.gotOp( op , isCommand );
 
         Client& c = cc();
-        if ( c.getAuthenticationInfo() ) {
-            c.getAuthenticationInfo()->startRequest();
-            c.getAuthorizationManager()->startRequest();
-        }
+        c.getAuthorizationManager()->startRequest();
 
         // initialize the default OpSettings, 
         OpSettings settings;

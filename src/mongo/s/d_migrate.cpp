@@ -683,7 +683,6 @@ namespace mongo {
                                                         OID::gen().toString()).c_str());
 
         if (!noauth) {
-            cc().getAuthenticationInfo()->authorize("local", internalSecurity.user);
             cc().getAuthorizationManager()->grantInternalAuthorization("_cleanupOldData");
         }
 
@@ -1814,7 +1813,6 @@ namespace mongo {
         Client::initThread( "migrateThread" );
         if (!noauth) {
             ShardedConnectionInfo::addHook();
-            cc().getAuthenticationInfo()->authorize("local", internalSecurity.user);
             cc().getAuthorizationManager()->grantInternalAuthorization("_migrateThread");
         }
         migrateStatus.go();
