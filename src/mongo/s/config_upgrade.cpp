@@ -261,7 +261,8 @@ namespace mongo {
         if (isInMongoVersionRanges(mongodbVersionString, excludedRanges)) {
 
             *whyNot = stream() << "not compatible with current config version, version "
-                               << mongodbVersionString << "has been excluded.";
+                               << reinterpret_cast<const char*>(mongodbVersionString)
+                               << "has been excluded.";
 
             return VersionStatus_Incompatible;
         }
