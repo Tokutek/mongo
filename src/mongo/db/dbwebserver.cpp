@@ -28,7 +28,6 @@
 #include "mongo/db/auth/principal.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/instance.h"
-#include "mongo/db/security.h"
 #include "mongo/db/stats/snapshots.h"
 #include "mongo/db/commands.h"
 #include "mongo/util/version.h"

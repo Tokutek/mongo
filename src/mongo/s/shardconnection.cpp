@@ -23,7 +23,6 @@
 #include "request.h"
 #include "mongo/db/client.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/security.h"
 #include <set>
 
 namespace mongo {

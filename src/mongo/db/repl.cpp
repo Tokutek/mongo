@@ -44,7 +44,6 @@
 #include "../util/background.h"
 #include "../client/connpool.h"
 #include "commands.h"
-#include "security.h"
 #include "cmdline.h"
 #include "repl_block.h"
 #include "repl/rs.h"

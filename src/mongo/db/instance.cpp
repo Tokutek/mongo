@@ -39,7 +39,6 @@
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
-#include "mongo/db/security.h"
 #include "mongo/db/json.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/cmdline.h"

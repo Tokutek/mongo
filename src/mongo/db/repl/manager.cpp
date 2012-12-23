@@ -22,7 +22,6 @@
 #include "rs.h"
 #include "connections.h"
 #include "../client.h"
-#include "mongo/db/security.h"
 
 namespace mongo {
 
