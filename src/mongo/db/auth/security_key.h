@@ -1,5 +1,3 @@
-// security.h
-
 /**
 *    Copyright (C) 2009 10gen Inc.
 *    Copyright (C) 2013 Tokutek Inc.
@@ -21,13 +19,15 @@
 
 #include <string>
 
-#include "mongo/db/nonce.h"
-#include "mongo/db/security_common.h"
-#include "mongo/client/authlevel.h"
-#include "mongo/util/concurrency/spin_lock.h"
-
-// this is used by both mongos and mongod
-
 namespace mongo {
+
+    /**
+     * This method checks the validity of filename as a security key, hashes its
+     * contents, and stores it in the internalSecurity variable.  Prints an
+     * error message to the logs if there's an error.
+     * @param filename the file containing the key
+     * @return if the key was successfully stored
+     */
+    bool setUpSecurityKey(const std::string& filename);
 
 } // namespace mongo
