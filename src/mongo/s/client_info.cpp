@@ -74,7 +74,6 @@ namespace mongo {
         _cur = _prev;
         _prev = temp;
         _cur->clear();
-        _ai.startRequest();
         getAuthorizationManager()->startRequest();
     }
 

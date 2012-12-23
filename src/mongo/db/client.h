@@ -90,8 +90,6 @@ namespace mongo {
         bool shutdown();
 
         string clientAddress(bool includePort=false) const;
-        const AuthenticationInfo * getAuthenticationInfo() const { return &_ai; }
-        AuthenticationInfo * getAuthenticationInfo() { return &_ai; }
         CurOp* curop() const { return _curOp; }
         Context* getContext() const { return _context; }
         Database* database() const {  return _context ? _context->db() : 0; }
@@ -312,7 +310,6 @@ namespace mongo {
         bool _shutdown; // to track if Client::shutdown() gets called
         std::string _desc;
         bool _god;
-        AuthenticationInfo _ai;
         GTID _lastGTID;
         BSONObj _handshake;
         BSONObj _remoteId;
