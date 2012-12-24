@@ -28,7 +28,6 @@
 
 #include "db/instance.h"
 #include "db/matcher.h"
-#include "db/security.h"
 #include "client/remote_transaction.h"
 
 using std::string;
