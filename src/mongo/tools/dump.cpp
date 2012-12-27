@@ -326,6 +326,11 @@ public:
         string db = _db;
 
         if ( db == "" ) {
+            if ( _coll != "" ) {
+                error() << "--db must be specified with --collection" << endl;
+                return -1;
+            }
+
             log() << "all dbs" << endl;
 
             BSONObj res = conn( true ).findOne( "admin.$cmd" , BSON( "listDatabases" << 1 ) );
