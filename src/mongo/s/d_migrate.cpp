@@ -571,8 +571,9 @@ namespace mongo {
                     return false;
                 }
                 // Assume both min and max non-empty, append MinKey's to make them fit chosen index
-                BSONObj min = Helpers::modifiedRangeBound( _min , idx->keyPattern() , -1 );
-                BSONObj max = Helpers::modifiedRangeBound( _max , idx->keyPattern() , -1 );
+                KeyPattern kp( idx->keyPattern() );
+                BSONObj min = Helpers::toKeyFormat( kp.extendRangeBound( _min, false ) );
+                BSONObj max = Helpers::toKeyFormat( kp.extendRangeBound( _max, false ) );
 
                 shared_ptr<Cursor> idxCursor(IndexCursor::make( d , *idx , min , max , false , 1 ));
                 _cc.reset(new ClientCursor(QueryOption_NoCursorTimeout, idxCursor, _ns));
@@ -1929,9 +1930,8 @@ namespace mongo {
                 // shardKeyPattern may not be provided if another shard is from pre 2.2
                 // In that case, assume the shard key pattern is the same as the range
                 // specifiers provided.
-                BSONObj keya , keyb;
-                Helpers::toKeyFormat( migrateStatus.min , keya );
-                Helpers::toKeyFormat( migrateStatus.max , keyb );
+                BSONObj keya = Helpers::inferKeyPattern( migrateStatus.min );
+                BSONObj keyb = Helpers::inferKeyPattern( migrateStatus.max );
                 verify( keya == keyb );
 
                 warning() << "No shard key pattern provided by source shard for migration."
