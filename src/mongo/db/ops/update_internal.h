@@ -230,6 +230,52 @@ namespace mongo {
             return elem.embeddedObject();
         }
 
+        bool isTrimAndSort() const {
+            if ( elt.type() != Object )
+                return false;
+            BSONObj obj = elt.embeddedObject();
+            if ( obj.nFields() != 3 )
+                return false;
+            BSONObjIterator i( obj );
+            i.next();
+
+            // Trim and sort may be switched.
+            bool seenTrimTo = false;
+            bool seenSort = false;
+            while ( i.more() ) {
+                BSONElement elem = i.next();
+                if ( str::equals( elem.fieldName(), "$trimTo" ) ) {
+                    if ( seenTrimTo ) return false;
+                    seenTrimTo = true;
+                }
+                else if ( str::equals( elem.fieldName(), "$sort" ) ) {
+                    if ( seenSort ) return false;
+                    seenSort = true;
+                    if ( elem.type() != Object ) return false;
+                }
+                else {
+                    return false;
+                }
+            }
+
+            // If present, the $sort element would have been checked during ModSet construction.
+            return seenTrimTo && seenSort;
+        }
+
+        BSONObj getSort() const {
+            // The $sort may be the second or the third element in the field object.
+            // { <field name>: { $each: [<each array>], $trimTo: N, $sort: <pattern> } }
+            // 'elt' here is the BSONElement above.
+            BSONObj obj = elt.embeddedObject();
+            BSONObjIterator i( obj );
+            i.next();
+            BSONElement elem = i.next();
+            if ( ! str::equals( elem.fieldName(), "$sort" ) ) {
+                elem = i.next();
+            }
+            return elem.embeddedObject();
+        }
+
         const char* renameFrom() const {
             massert( 13492, "mod must be RENAME_TO type", op == Mod::RENAME_TO );
             return elt.fieldName();
@@ -581,8 +627,9 @@ namespace mongo {
                     }
                     else if ( m.isSliceOnly() && ( m.getSlice() >= arr.nFields() ) ) {
                         b.appendArray( m.shortFieldName, arr );
+
                         ms.forceEmptyArray = true;
-                        ms.fixedArray = BSONArray(arr.getOwned());
+                        ms.fixedArray = BSONArray( arr.getOwned() );
                     }
                     else if ( m.isSliceOnly() ) {
                         BSONArrayBuilder arrBuilder( b.subarrayStart( m.shortFieldName ) );
@@ -629,12 +676,13 @@ namespace mongo {
 
                         // Log the full resulting array.
                         ms.forceEmptyArray = true;
-                        ms.fixedArray = BSONArray(arrBuilder.done().getOwned());
+                        ms.fixedArray = BSONArray( arrBuilder.done().getOwned() );
                     }
                 }
                 else {
                     BSONObjBuilder arr( b.subarrayStart( m.shortFieldName ) );
                     arr.appendAs( m.elt, "0" );
+
                     ms.forceEmptyArray = true;
                     ms.fixedArray = BSONArray(arr.done().getOwned());
                 }
