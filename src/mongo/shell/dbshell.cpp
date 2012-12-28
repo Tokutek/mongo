@@ -904,6 +904,10 @@ int _main( int argc, char* argv[], char **envp ) {
            f.close();
         }
 
+        if ( !nodb ) {
+            scope->exec( "shellHelper( 'show', 'startupWarnings' )", "(shellwarnings", false, true, false );
+        }
+
         shellHistoryInit();
 
         string prompt;
