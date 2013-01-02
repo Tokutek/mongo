@@ -61,6 +61,15 @@ try:
 except ImportError:
     import pickle
 
+try:
+    import json
+except:
+    try:
+        import simplejson as json
+    except:
+        json = None
+
+
 # TODO clean this up so we don't need globals...
 mongo_repo = os.getcwd() #'./'
 failfile = os.path.join(mongo_repo, 'failfile.smoke')
@@ -95,6 +104,8 @@ server_log_file = ''
 quiet = False
 
 _debug = False
+
+all_test_results = []
 
 # This class just implements the with statement API, for a sneaky
 # purpose below.
@@ -643,16 +654,25 @@ def run_tests(tests):
             if quiet:
                 sys.stdout.write('1..%d\n' % len(tests))
             for tests_run, test in enumerate(tests):
+                test_result = { "test": test[0], "start": time.time() }
                 try:
                     fails.append(test)
                     runTest(test, tests_run + 1)
                     fails.pop()
                     winners.append(test)
 
+                    test_result["passed"] = True
+                    test_result["end"] = time.time()
+                    all_test_results.append( test_result )
+
                     if small_oplog or small_oplog_rs:
                         master.wait_for_repl()
 
                 except TestFailure, f:
+                    test_result["passed"] = False
+                    test_result["end"] = time.time()
+                    test_result["error"] = str(f)
+                    all_test_results.append( test_result )
                     try:
                         if not quiet:
                             print f
@@ -1108,6 +1128,9 @@ def main():
         add_to_failfile(fails, options)
         report()
 
+    f = open( "smoke-last.json", "wb" )
+    f.write( json.dumps( { "results" : all_test_results } ) )
+    f.close()
 
 if __name__ == "__main__":
     main()
