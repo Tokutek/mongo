@@ -8,7 +8,7 @@ import sys
 
 import buildscripts.utils
 
-Import('env windows')
+Import('env windows usev8 usesm')
 
 def getSysInfo():
     if windows:
@@ -46,9 +46,16 @@ def generate_buildinfo(env, target, source, **kw):
     else:
         tokukv_version = buildscripts.utils.getTokukvVersion(env['TOKUKV_PATH'])
 
+    if usev8:
+        js_engine = "V8"
+    elif usesm:
+        js_engine = "SpiderMonkey"
+    else:
+        js_engine = "Unknown"
+
     contents = str(source[0]) % dict(git_version=git_version,
                                      tokukv_version=tokukv_version,
-                                     js_engine="V8" if GetOption('usev8') else "SpiderMonkey",
+                                     js_engine=js_engine,
                                      sys_info=getSysInfo(),
                                      loader_flags=env.subst('$LINKFLAGS $LDFLAGS',
                                                             source=source, target=target),
