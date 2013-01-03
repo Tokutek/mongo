@@ -552,219 +552,219 @@ namespace UpdateTests {
         }
     };
 
-    class PushTrimBelowFull : public SetBase {
+    class PushSliceBelowFull : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1]}" ) );
-            // { $push : { a : { $each : [ 2 ] , $trimTo : 3 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 2 ) << "$trimTo" << 3 );
+            // { $push : { a : { $each : [ 2 ] , $slice : -3 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 2 ) << "$slice" << -3 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[1,2]}" ) );
         }
     };
 
-    class PushTrimReachedFullExact : public SetBase {
+    class PushSliceReachedFullExact : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1]}" ) );
-            // { $push : { a : { $each : [ 2 ] , $trimTo : 2 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 2 ) << "$trimTo" << 2 );
+            // { $push : { a : { $each : [ 2 ] , $slice : -2 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 2 ) << "$slice" << -2 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[1,2]}" ) );
         }
     };
 
-    class PushTrimReachedFullWithEach : public SetBase {
+    class PushSliceReachedFullWithEach : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1]}" ) );
-            // { $push : { a : { $each : [ 2 , 3 ] , $trimTo : 2 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 2 << 3 ) << "$trimTo" << 2 );
+            // { $push : { a : { $each : [ 2 , 3 ] , $slice : -2 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 2 << 3 ) << "$slice" << -2 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[2,3]}" ) );
         }
     };
 
-    class PushTrimReachedFullWithBoth : public SetBase {
+    class PushSliceReachedFullWithBoth : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1,2]}" ) );
-            // { $push : { a : { $each : [ 3 ] , $trimTo : 2 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 3 ) << "$trimTo" << 2 );
+            // { $push : { a : { $each : [ 3 ] , $slice : -2 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 3 ) << "$slice" << -2 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[2,3]}" ) );
         }
     };
 
-    class PushTrimToZero : public SetBase {
+    class PushSliceToZero : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1,2]}" ) );
-            // { $push : { a : { $each : [ 3 ] , $trimTo : 0 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 3 ) << "$trimTo" << 0 );
+            // { $push : { a : { $each : [ 3 ] , $slice : 0 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 3 ) << "$slice" << 0 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[]}" ) );
         }
     };
 
-    class PushTrimToZeroFromNothing : public SetBase {
+    class PushSliceToZeroFromNothing : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0}" ) );
-            // { $push : { a : { $each : [ 3 ] , $trimTo : 0 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 3 ) << "$trimTo" << 0 );
+            // { $push : { a : { $each : [ 3 ] , $slice : 0 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 3 ) << "$slice" << 0 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[]}" ) );
         }
     };
 
-    class PushTrimFromNothing : public SetBase {
+    class PushSliceFromNothing : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0}" ) );
-            // { $push : { a : { $each : [ 1 , 2 ] , $trimTo : 3 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 1 << 2 ) << "$trimTo" << 3 );
+            // { $push : { a : { $each : [ 1 , 2 ] , $slice : -3 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 1 << 2 ) << "$slice" << -3 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[1,2]}" ) );
         }
     };
 
-    class PushTrimLongerThanTrimFromNothing : public SetBase {
+    class PushSliceLongerThanSliceFromNothing : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0}" ) );
-            // { $push : { a : { $each : [ 1 , 2 , 3 ] , $trimTo : 2 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 1 << 2 << 3 ) << "$trimTo" << 2 );
+            // { $push : { a : { $each : [ 1 , 2 , 3 ] , $slice : -2 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 1 << 2 << 3 ) << "$slice" << -2 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[2,3]}" ) );
         }
     };
 
-    class PushTrimFromEmpty : public SetBase {
+    class PushSliceFromEmpty : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[]}" ) );
-            // { $push : { a : { $each : [ 1 ] , $trimTo : 3 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 1 ) << "$trimTo" << 3 );
+            // { $push : { a : { $each : [ 1 ] , $slice : -3 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 1 ) << "$slice" << -3 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[1]}" ) );
         }
     };
 
-    class PushTrimLongerThanTrimFromEmpty : public SetBase {
+    class PushSliceLongerThanSliceFromEmpty : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[]}" ) );
-            // { $push : { a : { $each : [ 1 , 2 , 3 ] , $trimTo : 2 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 1 << 2 << 3 ) << "$trimTo" << 2 );
+            // { $push : { a : { $each : [ 1 , 2 , 3 ] , $slice : -2 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 1 << 2 << 3 ) << "$slice" << -2 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[2,3]}" ) );
         }
     };
 
-    class PushTrimTwoFields : public SetBase {
+    class PushSliceTwoFields : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1,2],b:[3,4]}" ) );
-            // { $push: { a: { $each: [ 5 ] , $trimTo : 2 }, { b: $each: [ 6 ] , $trimTo: 1 } } }
-            BSONObj objA = BSON( "$each" << BSON_ARRAY( 5 ) << "$trimTo" << 2 );
-            BSONObj objB = BSON( "$each" << BSON_ARRAY( 6 ) << "$trimTo" << 1 );
+            // { $push: { a: { $each: [ 5 ] , $slice : -2 }, { b: $each: [ 6 ] , $slice: -1 } } }
+            BSONObj objA = BSON( "$each" << BSON_ARRAY( 5 ) << "$slice" << -2 );
+            BSONObj objB = BSON( "$each" << BSON_ARRAY( 6 ) << "$slice" << -1 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << objA << "b" << objB ) ) );
             ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson("{'_id':0,a:[2,5],b:[6]}"));
         }
     };
 
-    class PushTrimAndNormal : public SetBase {
+    class PushSliceAndNormal : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1,2],b:[3]}" ) );
-            // { $push : { a : { $each : [ 5 ] , $trimTo : 2 } , { b : 4 } }
-            BSONObj objA = BSON( "$each" << BSON_ARRAY( 5 ) << "$trimTo" << 2 );
+            // { $push : { a : { $each : [ 5 ] , $slice : -2 } , { b : 4 } }
+            BSONObj objA = BSON( "$each" << BSON_ARRAY( 5 ) << "$slice" << -2 );
             client().update( ns(), Query(), BSON("$push" << BSON("a" << objA << "b" << 4)));
             ASSERT_EQUALS(client().findOne(ns(), Query()) , fromjson("{'_id':0,a:[2,5],b:[3,4]}"));
         }
     };
 
-    class PushTrimTwoFieldsConflict : public SetBase {
+    class PushSliceTwoFieldsConflict : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1],b:[3]}" ) );
-            // { $push: { a: { $each: [ 5 ] , $trimTo: 2 } , { a: $each: [ 6 ] , $trimTo: 1 } } }
-            BSONObj objA = BSON( "$each" << BSON_ARRAY( 5 ) << "$trimTo" << 2 );
-            BSONObj other = BSON( "$each" << BSON_ARRAY( 6 ) << "$trimTo" << 1 );
+            // { $push: { a: { $each: [ 5 ] , $slice: -2 } , { a: $each: [ 6 ] , $slice: -1 } } }
+            BSONObj objA = BSON( "$each" << BSON_ARRAY( 5 ) << "$slice" << -2 );
+            BSONObj other = BSON( "$each" << BSON_ARRAY( 6 ) << "$slice" << -1 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << objA << "a" << other ) ) );
             ASSERT(client().findOne( ns(), Query()).woCompare(fromjson("{'_id':0,a:[1],b:[3]}"))==0);
         }
     };
 
-    class PushTrimAndNormalConflict : public SetBase {
+    class PushSliceAndNormalConflict : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1],b:[3]}" ) );
-            // { $push : { a : { $each : [ 5 ] , $trimTo : 2 } , { a : 4 } } }
-            BSONObj objA = BSON( "$each" << BSON_ARRAY( 5 ) << "$trimTo" << 2 );
+            // { $push : { a : { $each : [ 5 ] , $slice : -2 } , { a : 4 } } }
+            BSONObj objA = BSON( "$each" << BSON_ARRAY( 5 ) << "$slice" << -2 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << objA << "a" << 4 ) ) );
             ASSERT(client().findOne( ns(), Query()).woCompare(fromjson("{'_id':0,a:[1],b:[3]}"))==0);
         }
     };
 
-    class PushTrimInvalidEachType : public SetBase {
+    class PushSliceInvalidEachType : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1,2]}" ) );
-            // { $push : { a : { $each : 3 , $trimTo : 2 } } }
-            BSONObj pushObj = BSON( "$each" << 3 << "$trimTo" << 2 );
+            // { $push : { a : { $each : 3 , $slice : -2 } } }
+            BSONObj pushObj = BSON( "$each" << 3 << "$slice" << -2 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT( client().findOne(ns(), Query()).woCompare(fromjson("{'_id':0,a:[1,2]}")) == 0);
         }
     };
 
-    class PushTrimInvalidTrimType : public SetBase {
+    class PushSliceInvalidSliceType : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1,2]}" ) );
-            // { $push : { a : { $each : [ 3 ], $trimTo : [ 2 ] } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY(3) << "$trimTo" << BSON_ARRAY(2) );
+            // { $push : { a : { $each : [ 3 ], $slice : [ -2 ] } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY(3) << "$slice" << BSON_ARRAY(-2) );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT( client().findOne( ns(), Query() ).woCompare(fromjson("{'_id':0,a:[1,2]}")) == 0);
         }
     };
 
-    class PushTrimInvalidTrimValue : public SetBase {
+    class PushSliceInvalidSliceValue : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1,2]}" ) );
-            // { $push : { a : { $each : [ 3 ], $trimTo : - 2 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY(3) << "$trimTo" << -2 );
+            // { $push : { a : { $each : [ 3 ], $slice : 2 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY(3) << "$slice" << 2 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT( client().findOne( ns(), Query() ).woCompare(fromjson("{'_id':0,a:[1,2]}")) == 0);
         }
     };
 
 
-    class PushTrimInvalidTrimDouble : public SetBase {
+    class PushSliceInvalidSliceDouble : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1,2]}" ) );
-            // { $push : { a : { $each : [ 3 ], $trimTo : 2.1 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY(3) << "$trimTo" << 2.1 );
+            // { $push : { a : { $each : [ 3 ], $slice : -2.1 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY(3) << "$slice" << -2.1 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT( client().findOne( ns(), Query() ).woCompare(fromjson("{'_id':0,a:[1,2]}")) == 0);
         }
     };
 
-    class PushTrimValidTrimDouble : public SetBase {
+    class PushSliceValidSliceDouble : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1,2]}" ) );
-            // { $push : { a : { $each : [ 3 ], $trimTo : 2.0 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY(3) << "$trimTo" << 2.0 );
+            // { $push : { a : { $each : [ 3 ], $slice : -2.0 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY(3) << "$slice" << -2.0 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT_EQUALS(client().findOne(ns(), Query()) , fromjson("{'_id':0,a:[2,3]}"));
         }
     };
 
-    class PushTrimInvalidTrim : public SetBase {
+    class PushSliceInvalidSlice : public SetBase {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,a:[1,2]}" ) );
@@ -772,6 +772,780 @@ namespace UpdateTests {
             BSONObj pushObj = BSON( "$each" << BSON_ARRAY(3) << "$xxxx" << 2 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
             ASSERT( client().findOne( ns(), Query() ).woCompare(fromjson("{'_id':0,a:[1,2]}")) == 0);
+        }
+    };
+
+    //
+    // We'd like to test the ability of $push with $sort in the following sequence of tests. We
+    // try to enumerate all the possibilities of where the final element would come from: the
+    // document, the $push itself, or both.
+    //
+
+    class PushSortBase : public ClientBase {
+    public:
+        ~PushSortBase() {
+            client().dropCollection( ns() );
+        }
+
+    protected:
+        enum UpdateType {
+            // Sorts ascending and slices the back of the array.
+            TOPK_ASC = 0,
+
+            // Sorts descending and slices the front of the array.
+            TOPK_DESC = 1,
+
+            // Sorts ascending and slices the back of the array.
+            BOTTOMK_ASC = 2,
+
+            // Sorts descending and slices the front of the array.
+            BOTTOMK_DESC = 3
+        };
+
+        const char* ns() {
+            return "unittest.updatetests.PushSortBase";
+        }
+
+        void setParams( const BSONArray& fields,
+                        const BSONArray& values,
+                        const BSONArray& sort,
+                        int size ) {
+            _fieldNames = fields;
+            _fieldValues = values;
+            _sortFields = sort;
+            _sliceSize = size;
+        }
+
+        /**
+         * Generates the update expression portion of an update command given one of the
+         * possible types of update.
+         */
+        BSONObj getUpdate( int updateType ) {
+            BSONObjBuilder updateBuilder;
+            BSONObjBuilder pushBuilder( updateBuilder.subobjStart( "$push" ) );
+            BSONObjBuilder fieldBuilder( pushBuilder.subobjStart( "x" ) );
+
+            // Builds $each: [ {a:1,b:1,...}, {a:2,b:2,...}, ... ]
+            BSONArrayBuilder eachBuilder( fieldBuilder.subarrayStart( "$each" ) );
+            BSONObjIterator itVal( _fieldValues );
+            while ( itVal.more() ) {
+                BSONObjBuilder eachObjBuilder;
+                BSONElement val = itVal.next();
+                BSONObjIterator itName( _fieldNames );
+                while ( itName.more() ) {
+                    BSONElement name = itName.next();
+                    eachObjBuilder.append( name.String(), val.Int() );
+                }
+                eachBuilder.append( eachObjBuilder.done() );
+            }
+            eachBuilder.done();
+
+            // Builds $slice portion.
+            fieldBuilder.append( "$slice",
+                                 updateType < 2 ? -_sliceSize : _sliceSize);
+
+            // Builds $sort: <sort pattern> portion
+            BSONObjBuilder patternBuilder( fieldBuilder.subobjStart( "$sort" ) );
+            BSONObjIterator itSort( _sortFields );
+            while ( itSort.more() ) {
+                BSONElement sortField = itSort.next();
+                patternBuilder.append( sortField.String(),
+                                       updateType%2 ? -1 : 1 );
+            }
+            patternBuilder.done();
+
+            fieldBuilder.done();
+            pushBuilder.done();
+
+            return updateBuilder.obj();
+        }
+
+        void check( BSONObj expected ) {
+            std::cout << expected.toString() << std::endl;
+            std::cout << client().findOne( ns(), Query() ) << std::endl;
+            ASSERT( client().findOne( ns(), Query() ).woCompare( expected ) == 0 );
+        }
+
+    private:
+        BSONArray _fieldNames;
+        BSONArray _fieldValues;
+        BSONArray _sortFields;
+        int _sliceSize;
+    };
+
+    class PushSortBelowFull : public PushSortBase {
+    public:
+        void run() {
+            // With the following parameters
+            //            fields in              values in
+            //          the each array           each array       field to sort   size
+            setParams( BSON_ARRAY( "a" << "b" ), BSON_ARRAY( 2 ), BSON_ARRAY( "b" ), 3 );
+
+            // Generates the four variations below (but for now we're only using negative slice).
+            // TOPK_ASC:     $push: { x: { $each: [ {a:2,b:2} ], $slice:-3, $sort: { b:1 } } }
+            // TOPK_DESC:    $push: { x: { $each: [ {a:2,b:2} ], $slice:-3, $sort: { b:-1 } } }
+            // BOTTOMK_ASC:  $push: { x: { $each: [ {a:2,b:2} ], $slice:3, $sort: { b:1 } } }
+            // BOTTOMK_DESC: $push: { x: { $each: [ {a:2,b:2} ], $slice:3, $sort: { b:-1 } } }
+
+            for ( int i = 0; i < 2; i++ ) { // i < 4 when we have positive $slice
+                client().dropCollection( ns() );
+                client().insert( ns(), fromjson( "{'_id':0,x:[{a:1,b:1}]}" ) );
+
+                BSONObj result;
+                BSONObj expected;
+                switch ( i ) {
+                case TOPK_ASC:
+                case BOTTOMK_ASC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:1,b:1},{a:2,b:2}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+
+                case TOPK_DESC:
+                case BOTTOMK_DESC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected =  fromjson( "{'_id':0,x:[{a:2,b:2},{a:1,b:1}]}" ) ;
+                    ASSERT_EQUALS( result, expected );
+                    break;
+                }
+            }
+        }
+    };
+
+    class PushSortReachedFullExact : public PushSortBase {
+    public:
+        void run() {
+            // With the following parameters
+            //            fields in           values in
+            //          the each array        each array       field to sort   size
+            setParams(BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 ), BSON_ARRAY( "b" ), 2 );
+
+            // Generates the four variations below (but for now we're only using negative slice).
+            // TOPK_ASC:     $push: { x: { $each: [ {a:2,b:2} ], $slice:-2, $sort: { b:1 } } }
+            // TOPK_DESC:    $push: { x: { $each: [ {a:2,b:2} ], $slice:-2, $sort: { b:-1 } } }
+            // BOTTOMK_ASC:  $push: { x: { $each: [ {a:2,b:2} ], $slice:2, $sort: { b:1 } } }
+            // BOTTOMK_DESC: $push: { x: { $each: [ {a:2,b:2} ], $slice:2, $sort: { b:-1 } } }
+
+            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
+                client().dropCollection( ns() );
+                client().insert( ns(), fromjson( "{'_id':0,x:[{a:1,b:1}]}" ) );
+
+                BSONObj result;
+                BSONObj expected;
+                switch (i) {
+                case TOPK_ASC:
+                case BOTTOMK_ASC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:1,b:1},{a:2,b:2}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+
+                case TOPK_DESC:
+                case BOTTOMK_DESC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:2,b:2},{a:1,b:1}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+                }
+            }
+        }
+    };
+
+    class PushSortReachedFullWithBoth : public PushSortBase {
+    public:
+        void run() {
+            // With the following parameters
+            //            fields in            values in
+            //          the each array         each array       field to sort   size
+            setParams( BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 ), BSON_ARRAY( "b" ), 2 );
+
+            // Generates the four variations below (but for now we're only using negative slice).
+            // TOPK_ASC:     $push: { x: { $each: [ {a:2,b:2} ], $slice:-2, $sort: { b:1 } } }
+            // TOPK_DESC:    $push: { x: { $each: [ {a:2,b:2} ], $slice:-2, $sort: { b:-1 } } }
+            // BOTTOMK_ASC:  $push: { x: { $each: [ {a:2,b:2} ], $slice:2, $sort: { b:1 } } }
+            // BOTTOMK_DESC: $push: { x: { $each: [ {a:2,b:2} ], $slice:2, $sort: { b:-1 } } }
+
+            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
+                client().dropCollection( ns() );
+                client().insert( ns(), fromjson( "{'_id':0,x:[{a:1,b:1},{a:3,b:3}]}" ) );
+
+                BSONObj result;
+                BSONObj expected;
+                switch ( i ) {
+                case TOPK_ASC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:2,b:2},{a:3,b:3}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+
+                case TOPK_DESC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:2,b:2},{a:1,b:1}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+
+                case BOTTOMK_ASC:
+                case BOTTOMK_DESC:
+                    // Implement me.
+                    break;
+                }
+            }
+        }
+    };
+
+    class PushSortToZero : public PushSortBase {
+    public:
+        void run() {
+            // With the following parameters
+            //            fields in           values in
+            //          the each array        each array      field to sort      size
+            setParams( BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 ), BSON_ARRAY( "b" ), 0 );
+
+            // Generates the four variations below (but for now we're only using negative slice).
+            // TOPK_ASC:     $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:1 } } }
+            // TOPK_DESC:    $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:-1 } } }
+            // BOTTOMK_ASC:  $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:1 } } }
+            // BOTTOMK_DESC: $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:-1 } } }
+
+            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
+                client().dropCollection( ns() );
+                client().insert( ns(), fromjson( "{'_id':0,x:[{a:1,b:1},{a:3,b:3}]}" ) );
+
+                BSONObj result;
+                BSONObj expected;
+                switch ( i ) {
+                default:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+                }
+            }
+        }
+    };
+
+    class PushSortToZeroFromNothing : public PushSortBase {
+    public:
+        void run() {
+            // With the following parameters
+            //            fields in           values in
+            //          the each array        each array      field to sort       size
+            setParams( BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 ), BSON_ARRAY( "b" ), 0 );
+
+            // Generates the four variations below (but for now we're only using negative slice).
+            // TOPK_ASC:     $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:1 } } }
+            // TOPK_DESC:    $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:-1 } } }
+            // BOTTOMK_ASC:  $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:1 } } }
+            // BOTTOMK_DESC: $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:-1 } } }
+
+            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
+                client().dropCollection( ns() );
+                client().insert( ns(), fromjson( "{'_id':0}" ) );
+
+                BSONObj result;
+                BSONObj expected;
+                switch ( i ) {
+                default:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+                }
+            }
+        }
+    };
+
+    class PushSortFromNothing : public PushSortBase {
+    public:
+        void run() {
+            // With the following parameters
+            //            fields in           values in
+            //          the each array        each array            field to sort     size
+            setParams(BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 << 1 ), BSON_ARRAY( "b" ), 2 );
+
+            // Generates the four variations below (but for now we're only using negative slice).
+            // <genarr> = [ {a:2,b:2}, {a:1,b:1} ]
+            // Generates the four variations below
+            // TOPK_ASC:     $push: { x: { $each: [ <genarray> ], $slice:-2, $sort: { b:1 } } }
+            // TOPK_DESC:    $push: { x: { $each: [ <genarray> ], $slice:-2, $sort: { b:-1 } } }
+            // BOTTOMK_ASC:  $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:1 } } }
+            // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:-1 } } }
+
+            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
+                client().dropCollection( ns() );
+                client().insert( ns(), fromjson( "{'_id':0}" ) );
+
+                BSONObj result;
+                BSONObj expected;
+                switch (i) {
+                case TOPK_ASC:
+                case BOTTOMK_ASC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:1,b:1},{a:2,b:2}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+
+                case TOPK_DESC:
+                case BOTTOMK_DESC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:2,b:2},{a:1,b:1}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+                }
+            }
+        }
+    };
+
+    class PushSortLongerThanSliceFromNothing : public PushSortBase {
+    public:
+        void run() {
+            // With the following parameters
+            //            fields in           values in
+            //          the each array        each array                field to sort     size
+            setParams(BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 << 1 << 3), BSON_ARRAY( "b" ), 2 );
+
+            // Generates the four variations below (but for now we're only using negative slice).
+            // <genarr> = [ {a:2,b:2}, {a:1,b:1}, {a:3,b:3} ]
+            // TOPK_ASC:     $push: { x: { $each: [ <genarray> ], $slice:-2, $sort: { b:1 } } }
+            // TOPK_DESC:    $push: { x: { $each: [ <genarray> ], $slice:-2, $sort: { b:-1 } } }
+            // BOTTOMK_ASC:  $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:1 } } }
+            // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:-1 } } }
+
+            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
+                client().dropCollection( ns() );
+                client().insert( ns(), fromjson( "{'_id':0}" ) );
+
+                BSONObj result;
+                BSONObj expected;
+                switch (i) {
+                case TOPK_ASC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:2,b:2},{a:3,b:3}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+
+                case TOPK_DESC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:2,b:2},{a:1,b:1}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+
+                case BOTTOMK_ASC:
+                case BOTTOMK_DESC:
+                    // Implement me.
+                    break;
+                }
+            }
+        }
+    };
+
+    class PushSortFromEmpty : public PushSortBase {
+    public:
+        void run() {
+            // With the following parameters
+            //            fields in           values in
+            //          the each array        each array            field to sort     size
+            setParams(BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 << 1 ), BSON_ARRAY( "b" ), 2 );
+
+            // Generates the four variations below (but for now we're only using negative slice).
+            // <genarr> = [ {a:2,b:2}, {a:1,b:1} ]
+            // TOPK_ASC:     $push: { x: { $each: [ <genarray> ], $slice:-2, $sort: { b:1 } } }
+            // TOPK_DESC:    $push: { x: { $each: [ <genarray> ], $slice:-2, $sort: { b:-1 } } }
+            // BOTTOMK_ASC:  $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:1 } } }
+            // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:-1 } } }
+
+            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
+                client().dropCollection( ns() );
+                client().insert( ns(), fromjson( "{'_id':0,x:[]}" ) );
+
+                BSONObj result;
+                BSONObj expected;
+                switch (i) {
+                case TOPK_ASC:
+                case BOTTOMK_ASC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:1,b:1},{a:2,b:2}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+
+                case TOPK_DESC:
+                case BOTTOMK_DESC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:2,b:2},{a:1,b:1}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+                }
+            }
+        }
+    };
+
+    class PushSortLongerThanSliceFromEmpty : public PushSortBase {
+    public:
+        void run() {
+            // With the following parameters
+            //            fields in           values in
+            //          the each array        each array                 field to sort   size
+            setParams(BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 << 1 << 3), BSON_ARRAY( "b" ), 2 );
+
+            // Generates the four variations below (but for now we're only using negative slice).
+            // <genarr> = [ {a:2,b:2}, {a:1,b:1}, {a:3,b:3} ]
+            // TOPK_ASC:     $push: { x: { $each: [ <genarray> ], $slice:-2, $sort: { b:1 } } }
+            // TOPK_DESC:    $push: { x: { $each: [ <genarray> ], $slice:-2, $sort: { b:-1 } } }
+            // BOTTOMK_ASC:  $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:1 } } }
+            // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:-1 } } }
+
+            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
+                client().dropCollection( ns() );
+                client().insert( ns(), fromjson( "{'_id':0,x:[]}" ) );
+
+                BSONObj result;
+                BSONObj expected;
+                switch (i) {
+                case TOPK_ASC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:2,b:2},{a:3,b:3}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+
+                case TOPK_DESC:
+                    client().update( ns(), Query(), getUpdate(i) );
+                    result = client().findOne( ns(), Query() );
+                    expected = fromjson( "{'_id':0,x:[{a:2,b:2},{a:1,b:1}]}" );
+                    ASSERT_EQUALS( result, expected );
+                    break;
+
+                case BOTTOMK_ASC:
+                case BOTTOMK_DESC:
+                    // Implement me.
+                    break;
+                }
+            }
+        }
+    };
+
+    class PushSortSortMixed  {
+    public:
+        void run() {
+            BSONObj objs[3];
+            objs[0] = fromjson( "{a:1, b:1}" );
+            objs[1] = fromjson( "{a:3, b:1}" );
+            objs[2] = fromjson( "{a:2, b:3}" );
+
+            vector<BSONObj> workArea;
+            for ( int i = 0; i < 3; i++ ) {
+                workArea.push_back( objs[i] );
+            }
+
+            sort( workArea.begin(), workArea.end(), ProjectKeyCmp( BSON("b" << 1 << "a" << -1) ) );
+
+            ASSERT_EQUALS( workArea[0], objs[1] );
+            ASSERT_EQUALS( workArea[1], objs[0] );
+            ASSERT_EQUALS( workArea[2], objs[2] );
+        }
+    };
+
+    class PushSortSortOutOfOrderFields {
+    public:
+        void run() {
+            BSONObj objs[3];
+            objs[0] = fromjson( "{b:1, a:1}" );
+            objs[1] = fromjson( "{a:3, b:2}" );
+            objs[2] = fromjson( "{b:3, a:2}" );
+
+            vector<BSONObj> workArea;
+            for ( int i = 0; i < 3; i++ ) {
+                workArea.push_back( objs[i] );
+            }
+
+            sort( workArea.begin(), workArea.end(), ProjectKeyCmp( BSON("a" << 1 << "b" << 1) ) );
+
+            ASSERT_EQUALS( workArea[0], objs[0] );
+            ASSERT_EQUALS( workArea[1], objs[2] );
+            ASSERT_EQUALS( workArea[2], objs[1] );
+        }
+    };
+
+    class PushSortSortExtraFields {
+    public:
+        void run() {
+            BSONObj objs[3];
+            objs[0] = fromjson( "{b:1, c:2, a:1}" );
+            objs[1] = fromjson( "{c:1, a:3, b:2}" );
+            objs[2] = fromjson( "{b:3, a:2}" );
+
+            vector<BSONObj> workArea;
+            for ( int i = 0; i < 3; i++ ) {
+                workArea.push_back( objs[i] );
+            }
+
+            sort( workArea.begin(), workArea.end(), ProjectKeyCmp( BSON("a" << 1 << "b" << 1) ) );
+
+            ASSERT_EQUALS( workArea[0], objs[0] );
+            ASSERT_EQUALS( workArea[1], objs[2] );
+            ASSERT_EQUALS( workArea[2], objs[1] );
+        }
+    };
+
+    class PushSortSortMissingFields {
+    public:
+        void run() {
+            BSONObj objs[3];
+            objs[0] = fromjson( "{a:2, b:2}" );
+            objs[1] = fromjson( "{a:1}" );
+            objs[2] = fromjson( "{a:3, b:3, c:3}" );
+
+            vector<BSONObj> workArea;
+            for ( int i = 0; i < 3; i++ ) {
+                workArea.push_back( objs[i] );
+            }
+
+            sort( workArea.begin(), workArea.end(), ProjectKeyCmp( BSON("b" << 1 << "c" << 1) ) );
+
+            ASSERT_EQUALS( workArea[0], objs[1] );
+            ASSERT_EQUALS( workArea[1], objs[0] );
+            ASSERT_EQUALS( workArea[2], objs[2] );
+        }
+    };
+
+    class PushSortSortNestedFields {
+    public:
+        void run() {
+            BSONObj objs[3];
+            objs[0] = fromjson( "{a:{b:{c:2, d:0}}}" );
+            objs[1] = fromjson( "{a:{b:{c:1, d:2}}}" );
+            objs[2] = fromjson( "{a:{b:{c:3, d:1}}}" );
+
+            vector<BSONObj> workArea;
+            for ( int i = 0; i < 3; i++ ) {
+                workArea.push_back( objs[i] );
+            }
+
+            sort( workArea.begin(), workArea.end(), ProjectKeyCmp( fromjson( "{'a.b.d':-1}" ) ) );
+
+            ASSERT_EQUALS( workArea[0], objs[1] );
+            ASSERT_EQUALS( workArea[1], objs[2] );
+            ASSERT_EQUALS( workArea[2], objs[0] );
+
+            sort( workArea.begin(), workArea.end(), ProjectKeyCmp( fromjson( "{'a.b':1}" ) ) );
+
+            ASSERT_EQUALS( workArea[0], objs[1] );
+            ASSERT_EQUALS( workArea[1], objs[0] );
+            ASSERT_EQUALS( workArea[2], objs[2] );
+
+        }
+    };
+
+    class PushSortInvalidSortPattern {
+    public:
+        void run() {
+            vector<BSONObj> dummy;
+
+            ASSERT_THROWS( sort( dummy.begin(),
+                                 dummy.end(),
+                                 ProjectKeyCmp( fromjson( "{'a..d':-1}" ) ) ),
+                           UserException );
+
+            ASSERT_THROWS( sort( dummy.begin(),
+                                 dummy.end(),
+                                 ProjectKeyCmp( fromjson( "{'a.':-1}" ) ) ),
+                           UserException );
+
+            ASSERT_THROWS( sort( dummy.begin(),
+                                 dummy.end(),
+                                 ProjectKeyCmp( fromjson( "{'.b':-1}" ) ) ),
+                           UserException );
+
+            ASSERT_THROWS( sort( dummy.begin(),
+                                 dummy.end(),
+                                 ProjectKeyCmp( fromjson( "{'.':-1}" ) ) ),
+                           UserException );
+
+            ASSERT_THROWS( sort( dummy.begin(),
+                                 dummy.end(),
+                                 ProjectKeyCmp( fromjson( "{'':-1}" ) ) ),
+                           UserException );
+        }
+    };
+
+    class PushSortInvalidEachType : public SetBase {
+    public:
+        void run() {
+            BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
+            client().insert( ns(), expected );
+            // { $push : { x : { $each : [ 3 ], $slice:-2, $sort : {a:1} } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 3 ) <<
+                                    "$slice" << -2 <<
+                                    "$sort" << BSON( "a" << 1 ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
+            BSONObj result = client().findOne( ns(), Query() );
+            ASSERT_EQUALS( result, expected );
+        }
+    };
+
+    class PushSortInvalidBaseArray : public SetBase {
+    public:
+        void run() {
+            BSONObj expected = fromjson( "{'_id':0,x:[1,2]}" );
+            client().insert( ns(), expected );
+            // { $push : { x : { $each : [ {a:3} ], $slice:-2, $sort : {a:1} } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
+                                    "$slice" << -2 <<
+                                    "$sort" << BSON( "a" << 1 ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
+            BSONObj result = client().findOne( ns(), Query() );
+            ASSERT_EQUALS( result, expected );
+        }
+    };
+
+    class PushSortInvalidSortType : public SetBase {
+    public:
+        void run() {
+            BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
+            client().insert( ns(), expected );
+            // { $push : { x : { $each : [ {a:3} ], $slice:-2, $sort : 2} } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
+                                    "$slice" << -2 <<
+                                    "$sort" << 2 );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
+            BSONObj result = client().findOne( ns(), Query() );
+            ASSERT_EQUALS( result, expected );
+        }
+    };
+
+    class PushSortInvalidSortValue : public SetBase {
+    public:
+        void run() {
+            BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
+            client().insert( ns(), expected );
+            // { $push : { x : { $each : [ {a:3} ], $slice:2, $sort : {a:1} } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
+                                    "$slice" << 2 <<
+                                    "$sort" << BSON( "a" << 1 ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
+            BSONObj result = client().findOne( ns(), Query() );
+            ASSERT_EQUALS( result, expected );
+        }
+    };
+
+    class PushSortInvalidSortDouble : public SetBase {
+    public:
+        void run() {
+            BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
+            client().insert( ns(), expected );
+            // { $push : { x : { $each : [ {a:3} ], $slice:-2.1, $sort : {a:1} } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
+                                    "$slice" << -2.1 <<
+                                    "$sort" << BSON( "a" << 1 ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
+            BSONObj result = client().findOne( ns(), Query() );
+            ASSERT_EQUALS( result, expected );
+        }
+    };
+
+    class PushSortValidSortDouble : public SetBase {
+    public:
+        void run() {
+            client().insert( ns(), fromjson( "{'_id':0,x:[{a:1},{a:2}]}" ) );
+            // { $push : { x : { $each : [ {a:3} ], $slice:-2.0, $sort : {a:1} } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
+                                    "$slice" << -2.0 <<
+                                    "$sort" << BSON( "a" << 1 ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
+            BSONObj expected = fromjson( "{'_id':0,x:[{a:2},{a:3}]}" );
+            BSONObj result = client().findOne( ns(), Query() );
+            ASSERT_EQUALS( result, expected );
+        }
+    };
+
+    class PushSortInvalidSortSort : public SetBase {
+    public:
+        void run() {
+            BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
+            client().insert( ns(), expected );
+            // { $push : { x : { $each : [ {a:3} ], $slice:-2.0, $sort : [2, 1] } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
+                                    "$slice" << -2.0 <<
+                                    "$sort" << BSON_ARRAY( 2 << 1 ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
+            BSONObj result = client().findOne( ns(), Query() );
+            ASSERT_EQUALS( result, expected );
+        }
+    };
+
+    class PushSortInvalidSortSortOrder : public SetBase {
+    public:
+        void run() {
+            BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
+            client().insert( ns(), expected );
+            // { $push : { x : { $each : [ {a:3} ], $slice:-2, $sort : {a:10} } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
+                                    "$slice" << -2 <<
+                                    "$sort" << BSON( "a" << 10 ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
+            BSONObj result = client().findOne( ns(), Query() );
+            ASSERT_EQUALS( result, expected );
+        }
+    };
+
+    class PushSortInvertedSortAndSlice : public SetBase {
+    public:
+        void run() {
+            client().insert( ns(), fromjson( "{'_id':0,x:[{a:1},{a:3}]}" ) );
+            // { $push : { x : { $each : [ {a:2} ], $sort: {a:1}, $slice:-2 } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 2 ) ) <<
+                                    "$sort" << BSON( "a" << 1 ) <<
+                                    "$slice" << -2.0 );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
+            BSONObj expected = fromjson( "{'_id':0,x:[{a:2},{a:3}]}" );
+            BSONObj result = client().findOne( ns(), Query() );
+            ASSERT_EQUALS( result, expected );
+
+        }
+    };
+
+    class PushSortInvalidDuplicatedSort : public SetBase {
+    public:
+        void run() {
+            BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:3}]}" );
+            client().insert( ns(), expected );
+            // { $push : { x : { $each : [ {a:2} ], $sort : {a:1}, $sort: {a:1} } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 2 ) ) <<
+                                    "$sort" << BSON( "a" << 1 ) <<
+                                    "$sort" << BSON( "a" << 1 ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
+            BSONObj result = client().findOne( ns(), Query() );
+            ASSERT_EQUALS( result, expected );
+
+        }
+    };
+
+    class PushSortInvalidMissingSliceTo : public SetBase {
+    public:
+        void run() {
+            BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:3}]}" );
+            client().insert( ns(), expected );
+            // { $push : { x : { $each : [ {a:2} ], $sort : {a:1} } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 2 ) ) <<
+                                    "$sort" << BSON( "a" << 1 ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
+            BSONObj result = client().findOne( ns(), Query() );
+            ASSERT_EQUALS( result, expected );
+
         }
     };
 
@@ -1041,18 +1815,39 @@ namespace UpdateTests {
             }
         };
 
-        class PushTrimRewriteExistingField {
+        class PushSliceRewriteExistingField {
         public:
             void run() {
                 BSONObj obj = BSON( "a" << BSON_ARRAY( 1 << 2 ) );
-                // { $push : { a : { $each : [ 3 ] , $trimTo : 2 } } }
-                BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 3 ) << "$trimTo" << 2 );
+                // { $push : { a : { $each : [ 3 ] , $slice :-2 } } }
+                BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 3 ) << "$slice" << -2 );
                 BSONObj mod = BSON( "$push" << BSON( "a" << pushObj ) );
                 ModSet modSet( mod );
                 auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
                 ASSERT_FALSE( modSetState->canApplyInPlace() );
                 modSetState->createNewFromMods();
                 ASSERT_EQUALS( BSON( "$set" << BSON( "a" <<  BSON_ARRAY( 2 << 3 ) ) ),
+                                     modSetState->getOpLogRewrite() );
+            }
+        };
+
+        class PushSortRewriteExistingField {
+        public:
+            void run() {
+                BSONObj obj = BSON( "x" << BSON_ARRAY( BSON( "a" << 1 ) <<
+                                                       BSON( "a" << 2 ) ) );
+                // { $push : { a : { $each : [ {a:3} ], $slice:-2, $sort : {a:1} } } }
+                BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
+                                        "$slice" << -2 <<
+                                        "$sort" << BSON( "a" << 1 ) );
+                BSONObj mod = BSON( "$push" << BSON( "x" << pushObj ) );
+                ModSet modSet( mod );
+                auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
+                ASSERT_FALSE( modSetState->canApplyInPlace() );
+                modSetState->createNewFromMods();
+                ASSERT_EQUALS( BSON( "$set" << BSON( "x" <<
+                                                     BSON_ARRAY( BSON( "a" << 2 ) <<
+                                                                 BSON( "a" << 3 ) ) ) ),
                                      modSetState->getOpLogRewrite() );
             }
         };
@@ -1070,12 +1865,12 @@ namespace UpdateTests {
             }
         };
 
-        class PushTrimRewriteNonExistingField {
+        class PushSliceRewriteNonExistingField {
         public:
             void run() {
                 BSONObj obj = BSON( "b" << 1 );
-                // { $push : { a : { $each : [ 1 , 2 ] , $trimTo : 2 } } }
-                BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 1 << 2) << "$trimTo" << 2 );
+                // { $push : { a : { $each : [ 1 , 2 ] , $slice:-2 } } }
+                BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 1 << 2) << "$slice" << -2 );
                 BSONObj mod = BSON( "$push" << BSON( "a" << pushObj ) );
                 ModSet modSet( mod );
                 auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
@@ -1086,17 +1881,37 @@ namespace UpdateTests {
             }
         };
 
-        class PushTrimRewriteNested {
+        class PushSliceRewriteNested {
         public:
             void run() {
                 BSONObj obj = fromjson( "{ a:{ b:[ 1, 2 ] } }" );
-                BSONObj mod = fromjson( "{ $push: { 'a.b': { $each: [3] , $trimTo: 2 } } }" );
+                BSONObj mod = fromjson( "{ $push: { 'a.b': { $each: [3] , $slice:-2 } } }" );
                 ModSet modSet( mod );
                 auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
                 ASSERT_FALSE( modSetState->canApplyInPlace() );
                 modSetState->createNewFromMods();
                 ASSERT_EQUALS( BSON( "$set" << BSON( "a.b" << BSON_ARRAY( 2 << 3 ) ) ),
                                modSetState->getOpLogRewrite() );
+            }
+        };
+
+        class PushSortRewriteNonExistingField {
+        public:
+            void run() {
+                BSONObj obj = BSON( "b" << 1 );
+                // { $push : { x : { $each : [ {a:1},{a:2} ], $slice:-2,  $sort : {a:1} } } }
+                BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 1 ) <<
+                                                               BSON( "a" << 2 ) ) <<
+                                        "$slice" << -2 <<
+                                        "$sort" << BSON( "a" << 1 ) );
+                BSONObj mod = BSON( "$push" << BSON( "x" << pushObj ) );
+                ModSet modSet( mod );
+                auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
+                ASSERT_FALSE( modSetState->canApplyInPlace() );
+                modSetState->createNewFromMods();
+                ASSERT_EQUALS( BSON( "$set" << BSON( "x" << BSON_ARRAY( BSON( "a" << 1 ) <<
+                                                                        BSON( "a" << 2 ) ) ) ),
+                                     modSetState->getOpLogRewrite() );
             }
         };
 
@@ -1681,26 +2496,52 @@ namespace UpdateTests {
             add< CantPushTwice >();
             add< SetEncapsulationConflictsWithExistingType >();
             add< CantPushToParent >();
-            add< PushTrimBelowFull >();
-            add< PushTrimReachedFullExact >();
-            add< PushTrimReachedFullWithEach >();
-            add< PushTrimReachedFullWithBoth >();
-            add< PushTrimToZero >();
-            add< PushTrimToZeroFromNothing >();
-            add< PushTrimFromNothing >();
-            add< PushTrimLongerThanTrimFromNothing >();
-            add< PushTrimFromEmpty >();
-            add< PushTrimLongerThanTrimFromEmpty >();
-            add< PushTrimTwoFields >();
-            add< PushTrimAndNormal >();
-            add< PushTrimTwoFieldsConflict >();
-            add< PushTrimAndNormalConflict >();
-            add< PushTrimInvalidEachType >();
-            add< PushTrimInvalidTrimType >();
-            add< PushTrimInvalidTrimValue >();
-            add< PushTrimInvalidTrimDouble >();
-            add< PushTrimValidTrimDouble >();
-            add< PushTrimInvalidTrim >();
+            add< PushSliceBelowFull >();
+            add< PushSliceReachedFullExact >();
+            add< PushSliceReachedFullWithEach >();
+            add< PushSliceReachedFullWithBoth >();
+            add< PushSliceToZero >();
+            add< PushSliceToZeroFromNothing >();
+            add< PushSliceFromNothing >();
+            add< PushSliceLongerThanSliceFromNothing >();
+            add< PushSliceFromEmpty >();
+            add< PushSliceLongerThanSliceFromEmpty >();
+            add< PushSliceTwoFields >();
+            add< PushSliceAndNormal >();
+            add< PushSliceTwoFieldsConflict >();
+            add< PushSliceAndNormalConflict >();
+            add< PushSliceInvalidEachType >();
+            add< PushSliceInvalidSliceType >();
+            add< PushSliceInvalidSliceValue >();
+            add< PushSliceInvalidSliceDouble >();
+            add< PushSliceValidSliceDouble >();
+            add< PushSliceInvalidSlice >();
+            add< PushSortBelowFull >();
+            add< PushSortReachedFullExact >();
+            add< PushSortReachedFullWithBoth >();
+            add< PushSortToZero >();
+            add< PushSortToZeroFromNothing >();
+            add< PushSortFromNothing >();
+            add< PushSortLongerThanSliceFromNothing >();
+            add< PushSortFromEmpty >();
+            add< PushSortLongerThanSliceFromEmpty >();
+            add< PushSortSortMixed >();
+            add< PushSortSortOutOfOrderFields >();
+            add< PushSortSortExtraFields >();
+            add< PushSortSortMissingFields >();
+            add< PushSortSortNestedFields >();
+            add< PushSortInvalidSortPattern >();
+            add< PushSortInvalidEachType >();
+            add< PushSortInvalidBaseArray >();
+            add< PushSortInvalidSortType >();
+            add< PushSortInvalidSortValue >();
+            add< PushSortInvalidSortDouble >();
+            add< PushSortValidSortDouble >();
+            add< PushSortInvalidSortSort >();
+            add< PushSortInvalidSortSortOrder >();
+            add< PushSortInvertedSortAndSlice >();
+            add< PushSortInvalidDuplicatedSort >();
+            add< PushSortInvalidMissingSliceTo >();
             add< CantIncParent >();
             add< DontDropEmpty >();
             add< InsertInEmpty >();
@@ -1724,10 +2565,12 @@ namespace UpdateTests {
             add< ModSetTests::IncRewriteNonExistingField >();
             add< ModSetTests::SetOnInsertRewriteExistingField >();
             add< ModSetTests::PushRewriteExistingField >();
-            add< ModSetTests::PushTrimRewriteExistingField >();
+            add< ModSetTests::PushSliceRewriteExistingField >();
+            add< ModSetTests::PushSortRewriteExistingField >();
             add< ModSetTests::PushRewriteNonExistingField >();
-            add< ModSetTests::PushTrimRewriteNonExistingField >();
-            add< ModSetTests::PushTrimRewriteNested >();
+            add< ModSetTests::PushSliceRewriteNonExistingField >();
+            add< ModSetTests::PushSliceRewriteNested >();
+            add< ModSetTests::PushSortRewriteNonExistingField >();
             add< ModSetTests::PushAllRewriteExistingField >();
             add< ModSetTests::PushAllRewriteNonExistingField >();
             add< ModSetTests::PullRewriteForceNotInPlace >();
