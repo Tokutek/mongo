@@ -183,7 +183,7 @@ printjson(config.settings.find().toArray());
 var startTime = new Date();
 
 // Make sure up
-var mongosNew = MongoRunner.runMongos({ binVersion : "latest", configdb : configConnStr, upgrade : "" })
+var mongosNew = MongoRunner.runMongos({ binVersion : "2.4", configdb : configConnStr, upgrade : "" })
 assert.neq(null, mongosNew);
 MongoRunner.stopMongos(mongosNew);
 

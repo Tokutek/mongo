@@ -44,10 +44,10 @@ var configConnStr = st._configDB;
 
 jsTest.log("Starting v2.4 mongos in 2.0 cluster...")
 
-var mongos = MongoRunner.runMongos({ binVersion : "latest", configdb : configConnStr })
+var mongos = MongoRunner.runMongos({ binVersion : "2.4", configdb : configConnStr })
 assert.eq(null, mongos);
 
-var mongos = MongoRunner.runMongos({ binVersion : "latest", configdb : configConnStr, upgrade : "" })
+var mongos = MongoRunner.runMongos({ binVersion : "2.4", configdb : configConnStr, upgrade : "" })
 assert.eq(null, mongos);
 
 jsTest.log("2.4 mongoses did not start or upgrade in 2.0 cluster (which is correct).")
@@ -104,10 +104,10 @@ st.restartMongoses();
 
 jsTest.log("Starting v2.4 mongos in 2.0/2.2 cluster....")
 
-var mongos = MongoRunner.runMongos({ binVersion : "latest", configdb : configConnStr })
+var mongos = MongoRunner.runMongos({ binVersion : "2.4", configdb : configConnStr })
 assert.eq(null, mongos);
 
-var mongos = MongoRunner.runMongos({ binVersion : "latest", configdb : configConnStr, upgrade : "" })
+var mongos = MongoRunner.runMongos({ binVersion : "2.4", configdb : configConnStr, upgrade : "" })
 assert.eq(null, mongos);
 
 jsTest.log("2.4 mongoses did not start or upgrade in 2.0/2.2 cluster (which is correct).")
@@ -141,10 +141,10 @@ st.restartMongoses();
 
 jsTest.log("Starting v2.4 mongos in 2.2 cluster....")
 
-var mongos = MongoRunner.runMongos({ binVersion : "latest", configdb : configConnStr })
+var mongos = MongoRunner.runMongos({ binVersion : "2.4", configdb : configConnStr })
 assert.eq(null, mongos);
 
-var mongos = MongoRunner.runMongos({ binVersion : "latest", configdb : configConnStr, upgrade : "" })
+var mongos = MongoRunner.runMongos({ binVersion : "2.4", configdb : configConnStr, upgrade : "" })
 assert.neq(null, mongos);
 MongoRunner.stopMongos(mongos);
 
