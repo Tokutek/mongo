@@ -62,6 +62,11 @@ except ImportError:
     import pickle
 
 try:
+    from hashlib import md5 # new in 2.5
+except ImportError:
+    from md5 import md5 # deprecated in 2.5
+
+try:
     import json
 except:
     try:
@@ -884,6 +889,9 @@ def set_globals(options, tests):
         print "Both --valgrind and --drd specified: assuming drd..."
         valgrind = False
 
+def file_version():
+    return md5(open(__file__, 'r').read()).hexdigest()
+
 def clear_failfile():
     if os.path.exists(failfile):
         os.remove(failfile)
@@ -893,7 +901,7 @@ def run_old_fails():
 
     try:
         f = open(failfile, 'r')
-        testsAndOptions = pickle.load(f)
+        state = pickle.load(f)
         f.close()
     except Exception:
         try:
@@ -903,6 +911,12 @@ def run_old_fails():
         clear_failfile()
         return # This counts as passing so we will run all tests
 
+    if ('version' not in state or state['version'] != file_version()):
+        print "warning: old version of failfile.smoke detected. skipping recent fails"
+        clear_failfile()
+        return
+
+    testsAndOptions = state['testsAndOptions']
     tests = [x[0] for x in testsAndOptions]
     passed = []
     try:
@@ -930,7 +944,8 @@ def run_old_fails():
 
         if testsAndOptions:
             f = open(failfile, 'w')
-            pickle.dump(testsAndOptions, f)
+            state = {'version':file_version(), 'testsAndOptions':testsAndOptions}
+            pickle.dump(state, f)
         else:
             clear_failfile()
 
@@ -947,8 +962,9 @@ def add_to_failfile(tests, options):
         if (test, options) not in testsAndOptions:
             testsAndOptions.append( (test, options) )
 
+    state = {'version':file_version(), 'testsAndOptions':testsAndOptions}
     f = open(failfile, 'w')
-    pickle.dump(testsAndOptions, f)
+    pickle.dump(state, f)
 
 
 
