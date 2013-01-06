@@ -202,6 +202,9 @@ namespace spidermonkey {
 
         void externalSetup();
 
+        /** check if there is a pending killOp request */
+        bool isKillPending() const;
+
         void localConnect( const char * dbName );
 
         // ----- getters ------
