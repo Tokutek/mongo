@@ -25,6 +25,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/server.h"
+#include "mongo/base/counter.h"
 #include "mongo/base/init.h"
 #include "mongo/base/status.h"
 #include "mongo/bson/util/builder.h"
@@ -44,6 +45,7 @@
 #include "mongo/db/replutil.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/commands/rename_collection.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/db/namespace_details.h"
@@ -52,6 +54,7 @@
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/stats/counters.h"
+#include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/s/d_writeback.h"
@@ -93,6 +96,12 @@ namespace mongo {
        note: once non-null, never goes to null again.
     */
     BSONObj *getLastErrorDefault = 0;
+
+    static TimerStats gleWtimeStats;
+    static ServerStatusMetricField<TimerStats> displayGleLatency( "getLastError.wtime", &gleWtimeStats );
+
+    static Counter64 gleWtimeouts;
+    static ServerStatusMetricField<Counter64> gleWtimeoutsDisplay( "getLastError.wtimeouts", &gleWtimeouts );
 
     class CmdGetLastError : public InformationCommand {
     public:
@@ -171,7 +180,7 @@ namespace mongo {
                     }
 
                     int timeout = cmdObj["wtimeout"].numberInt();
-                    Timer t;
+                    TimerHolder timer( &gleWtimeStats );
 
                     long long passes = 0;
                     char buf[32];
@@ -234,10 +243,11 @@ namespace mongo {
                             return true;
                         }
 
-                        if ( timeout > 0 && t.millis() >= timeout ) {
+                        if ( timeout > 0 && timer.millis() >= timeout ) {
+                            gleWtimeouts.increment();
                             result.append( "wtimeout" , true );
                             errmsg = "timed out waiting for slaves";
-                            result.append( "waited" , t.millis() );
+                            result.append( "waited" , timer.millis() );
                             result.append( "err" , "timeout" );
                             return true;
                         }
@@ -248,7 +258,7 @@ namespace mongo {
                         killCurrentOp.checkForInterrupt();
                     }
 
-                    int myMillis = t.millis();
+                    int myMillis = timer.recordMillis();
                     result.appendNumber( "wtime" , myMillis );
                 }
             }
@@ -262,6 +272,7 @@ namespace mongo {
             result.appendNull( "err" );
             return true;
         }
+
     } cmdGetLastError;
 
     class CmdGetPrevError : public InformationCommand {
