@@ -328,6 +328,8 @@ serverOnlyFiles = [ "db/curop.cpp",
 
 env.Library( "dbcmdline", "db/cmdline.cpp" )
 
+env.CppUnitTest('v8_deadline_monitor_test', 'scripting/v8_deadline_monitor_test.cpp', LIBDEPS=[])
+
 env.Library('stacktrace', 'util/stacktrace.cpp')
 
 env.Program('lame_stacktrace_test', 'util/lame_stacktrace_test.cpp',
