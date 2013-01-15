@@ -523,23 +523,21 @@ inline char intToChar(int i) {
     return '0' + i;
 }
 
-inline uint64 charToInt(char c) {
-    return static_cast<uint64>(c - '0');
-}
-
-
-S2CellId S2CellId::FromString(const string& str) {
-    int face = charToInt(str[0]);
-    int level = str.length() - 2;
-    uint64 pos = 0;
-    for (size_t i = 2; i < str.length(); ++i) {
-        pos |= charToInt(str[i]) << (2 * (kMaxLevel - (i - 1)) + 1);
-    }
-    pos |= (uint64)1 << (2 * (kMaxLevel - level));
-    return FromFacePosLevel(face, pos, level);
-}
-
 string S2CellId::ToString() const {
+  if (!is_valid()) {
+    return StringPrintf("Invalid: %016llx", id());
+  }
+  string out;
+  out.reserve(2 + level());
+  out.push_back(intToChar(face()));
+  out.push_back('f');
+  for (int current_level = 1; current_level <= level(); ++current_level) {
+    out.push_back(intToChar(child_position(current_level)));
+  }
+  return out;
+}
+
+string S2CellId::slowToString() const {
   if (!is_valid()) {
     return StringPrintf("Invalid: %016llx", id());
   }
