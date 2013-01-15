@@ -30,6 +30,10 @@ namespace {
     // Server parameter controlling whether or not user ids are included in log entries.
     MONGO_EXPORT_STARTUP_SERVER_PARAMETER(logUserIds, bool, false);
 
+    /**
+     * Note: When appending new strings to the builder, make sure to pass false to the
+     * includeEndingNull parameter.
+     */
     void appendServerExtraLogContext(BufBuilder& builder) {
         ClientBasic* clientBasic = ClientBasic::getCurrent();
         if (!clientBasic)
@@ -44,7 +48,7 @@ namespace {
             return;
 
         builder.appendStr("user:", false);
-        builder.appendStr(principals.next().toString());
+        builder.appendStr(principals.next().toString(), false);
         while (principals.more()) {
             builder.appendChar(',');
             builder.appendStr(principals.next().toString(), false);
