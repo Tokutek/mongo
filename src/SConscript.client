@@ -18,7 +18,7 @@ env.Command(['mongo/db/auth/action_type.h', 'mongo/db/auth/action_type.cpp'],
             ['mongo/db/auth/generate_action_types.py', 'mongo/db/auth/action_types.txt'],
             '$PYTHON $SOURCES $TARGETS')
 
-clientSource = [
+clientSourceBasic = [
     'mongo/base/configuration_variable_manager.cpp',
     'mongo/base/error_codes.cpp',
     'mongo/base/global_initializer.cpp',
@@ -298,7 +298,7 @@ env.Install(
                  'mongo/db/auth/generate_action_types.py',
                  'mongo/db/auth/action_types.txt',
                  '#buildscripts/make_archive.py',
-                 clientSource,
+                 clientSourceAll,
                  clientHeaders,
                  [source for (target, source) in exampleSourceMap],
                  'mongo/bson/bsondemo/bsondemo.cpp',
