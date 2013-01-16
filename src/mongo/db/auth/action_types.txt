@@ -23,6 +23,7 @@
 "connPoolStats",
 "connPoolSync",
 "convertToCapped",
+"copyDBTarget",
 "cpuProfiler",
 "createCollection",
 "cursorInfo",

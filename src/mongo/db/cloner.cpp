@@ -684,7 +684,8 @@ namespace mongo {
 
     /* Usage:
        mydb.$cmd.findOne( { clone: "fromhost" } );
-       Note: doesn't work with authentication enabled
+       Note: doesn't work with authentication enabled, except as internal operation or for
+       old-style users for backwards compatibility.
     */
     class CmdClone : public Command {
     public:
@@ -703,6 +704,8 @@ namespace mongo {
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
+            // Note: privileges required are currently only granted to old-style users for backwards
+            // compatibility, and to internal connections (used in movePrimary).
             ActionSet actions;
             actions.addAction(ActionType::clone);
             out->push_back(Privilege(dbname, actions));
@@ -786,7 +789,6 @@ namespace mongo {
         }
     } cmdClone;
 
-    // Note: doesn't work with authentication enabled
     class CmdCloneCollection : public Command {
     public:
         virtual bool slaveOk() const {
@@ -801,9 +803,11 @@ namespace mongo {
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
-            // Should never get here because this command shouldn't get registered when auth is
-            // enabled
-            verify(0);
+            // Will fail if source instance has auth on.
+            string collection = cmdObj.getStringField("cloneCollection");
+            ActionSet actions;
+            actions.addAction(ActionType::cloneCollectionTarget);
+            out->push_back(Privilege(collection, actions));
         }
         virtual void help( stringstream &help ) const {
             help << "{ cloneCollection: <collection>, from: <host> [,query: <query_filter>] [,copyIndexes:<bool>] }"
@@ -880,12 +884,11 @@ namespace mongo {
 
             return retval;
         }
-    };
+    } cmdCloneCollection;
 
 
     /* Usage:
      admindb.$cmd.findOne( { copydbgetnonce: 1, fromhost: <hostname> } );
-     Note: doesn't work with authentication enabled
      */
     class CmdCopyDbGetNonce : public Command {
     public:
@@ -903,11 +906,7 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
-            // Should never get here because this command shouldn't get registered when auth is
-            // enabled
-            verify(0);
-        }
+                                           std::vector<Privilege>* out) {} // No auth required
         virtual void help( stringstream &help ) const {
             help << "get a nonce for subsequent copy db request from secure server\n";
             help << "usage: {copydbgetnonce: 1, fromhost: <hostname>}";
@@ -943,11 +942,11 @@ namespace mongo {
             result.appendElements( ret );
             return true;
         }
-    };
+    } cmdCopyDBGetNonce;
 
     /* Usage:
        admindb.$cmd.findOne( { copydb: 1, fromhost: <hostname>, fromdb: <db>, todb: <db>[, username: <username>, nonce: <nonce>, key: <key>] } );
-       Note: doesn't work with authentication enabled
+       Note: doesn't work with authentication enabled, except as old-style users.
     */
     class CmdCopyDb : public Command {
     public:
@@ -966,9 +965,12 @@ namespace mongo {
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
-            // Should never get here because this command shouldn't get registered when auth is
-            // enabled
-            verify(0);
+            // Note: privileges required are currently only granted to old-style users for backwards
+            // compatibility, since we can't properly handle auth checking for the read from the
+            // source DB.
+            ActionSet actions;
+            actions.addAction(ActionType::copyDBTarget);
+            out->push_back(Privilege(dbname, actions));
         }
         virtual void help( stringstream &help ) const {
             help << "copy a database from another host to this host\n";
@@ -1090,20 +1092,6 @@ namespace mongo {
             cc().setAuthConn(emptyConn);
             return res;
         }
-    };
-
-    MONGO_INITIALIZER(RegisterNotWithAuthCommands)(InitializerContext* context) {
-        if (noauth) {
-            // Leaked intentionally: a Command registers itself when constructed.
-            new CmdCloneCollection();
-            new CmdCopyDb();
-            new CmdCopyDbGetNonce();
-        } else {
-            new NotWithAuthCmd("cloneCollection");
-            new NotWithAuthCmd("copydb");
-            new NotWithAuthCmd("copydbgetnonce");
-        }
-        return Status::OK();
-    }
+    } cmdCopyDB;
 
 } // namespace mongo
