@@ -82,7 +82,7 @@ namespace mongo {
         return theReplSet;
     }
 
-    bool replAuthenticate(DBClientBase *conn);
+    bool replAuthenticate(DBClientBase *conn, bool skipAuthCheck);
 
     void appendReplicationInfo(BSONObjBuilder& result, int level) {
         if ( replSet ) {

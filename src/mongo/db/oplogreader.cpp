@@ -22,7 +22,6 @@ namespace mongo {
 
     BSONObj userReplQuery = fromjson("{\"user\":\"repl\"}");
 
-    // copied (only the) comment from mongodb 2.6
     /* Generally replAuthenticate will only be called within system threads to fully authenticate
      * connections to other nodes in the cluster that will be used as part of internal operations.
      * If a user-initiated action results in needing to call replAuthenticate, you can call it
@@ -30,11 +29,11 @@ namespace mongo {
      * checks have already run to ensure that the user is authorized to do everything that this
      * connection will be used for!
      */
-    bool replAuthenticate(DBClientBase *conn) {
+    bool replAuthenticate(DBClientBase *conn, bool skipAuthCheck) {
         if( noauth ) {
             return true;
         }
-        if (!cc().getAuthorizationManager()->hasInternalAuthorization()) {
+        if (!skipAuthCheck && !cc().getAuthorizationManager()->hasInternalAuthorization()) {
             log() << "replauthenticate: requires internal authorization, failing" << endl;
             return false;
         }
@@ -145,7 +144,7 @@ namespace mongo {
                                                                           30 /* tcp timeout */));
             string errmsg;
             if ( !_conn->connect(hostName.c_str(), errmsg) ||
-                 (!noauth && !replAuthenticate(_conn.get())) ) {
+                 (!noauth && !replAuthenticate(_conn.get(), true)) ) {
                 resetConnection();
                 log() << "repl: " << errmsg << endl;
                 return false;
