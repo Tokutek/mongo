@@ -34,7 +34,7 @@ tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
 
 env.SConscript(['base/SConscript',
                 'db/auth/SConscript',
-                'db/ops/SConscript',
+                'db/SConscript',
                 'platform/SConscript',
                 's/SConscript',
                 'unittest/SConscript'])
@@ -291,8 +291,10 @@ env.StaticLibrary("coredb", [
         "s/shardconnection.cpp",
         ],
                   LIBDEPS=['db/auth/serverauth',
+                           'db/common',
                            'plugins/plugins',
-                           'server_parameters'])
+                           'server_parameters',
+                           '$BUILD_DIR/mongo/foundation'])
 
 coreServerFiles = [ "db/client_basic.cpp",
                     "db/common.cpp",
@@ -521,6 +523,7 @@ env.StaticLibrary("defaultversion", "s/default_version.cpp")
 env.StaticLibrary("serveronly", serverOnlyFiles,
                   LIBDEPS=["coreshard",
                            "db/auth/authmongod",
+                           "db/common",
                            "dbcmdline",
                            "defaultversion"])
 
