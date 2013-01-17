@@ -1238,7 +1238,7 @@ namespace mongo {
             case mongo::MinKey: {
                 v8::Local<v8::Object> sub = readOnly ? readOnlyObjects->NewInstance() :
                                                        internalFieldObjects->NewInstance();
-                sub->ForceSet(v8::String::New("$minKey"), v8::Number::New(1));
+                sub->ForceSet(v8::String::New("$MinKey"), v8::Boolean::New(true));
                 sub->SetInternalField(0, v8::Uint32::New(f.type()));
                 o->ForceSet(name, sub);
                 break;
@@ -1246,7 +1246,7 @@ namespace mongo {
             case mongo::MaxKey: {
                 v8::Local<v8::Object> sub = readOnly ? readOnlyObjects->NewInstance() :
                                                        internalFieldObjects->NewInstance();
-                sub->ForceSet(v8::String::New("$maxKey"), v8::Number::New(1));
+                sub->ForceSet(v8::String::New("$MaxKey"), v8::Boolean::New(true));
                 sub->SetInternalField(0, v8::Uint32::New(f.type()));
                 o->ForceSet(name, sub);
                 break;
@@ -1385,12 +1385,12 @@ namespace mongo {
             }
         case mongo::MinKey:
             instance = internalFieldObjects->NewInstance();
-            instance->ForceSet(v8::String::New("$minKey"), v8::Number::New(1));
+            instance->ForceSet(v8::String::New("$MinKey"), v8::Boolean::New(true));
             instance->SetInternalField(0, v8::Uint32::New(elem.type()));
             return instance;
         case mongo::MaxKey:
             instance = internalFieldObjects->NewInstance();
-            instance->ForceSet(v8::String::New("$maxKey"), v8::Number::New(1));
+            instance->ForceSet(v8::String::New("$MaxKey"), v8::Boolean::New(true));
             instance->SetInternalField(0, v8::Uint32::New(elem.type()));
             return instance;
         case mongo::DBRef:
