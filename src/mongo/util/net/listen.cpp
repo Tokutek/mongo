@@ -103,7 +103,7 @@ namespace mongo {
                                    cmdLine.sslPEMKeyPassword,
                                    cmdLine.sslCAFile,
                                    cmdLine.sslCRLFile,
-                                   cmdLine.sslForceCertificateValidation);
+                                   cmdLine.sslWeakCertificateValidation);
             _ssl = new SSLManager(params);
         }
 #endif

@@ -237,7 +237,11 @@ class mongod(object):
         if len(smoke_server_opts) > 0:
             argv += [smoke_server_opts]
         if self.kwargs.get('use_ssl'):
-            argv += ['--sslOnNormalPorts', '--sslPEMKeyFile', 'jstests/libs/smoke.pem']
+            argv += ['--sslOnNormalPorts',
+                     '--sslPEMKeyFile', 'jstests/libs/server.pem',
+                     '--sslCAFile', 'jstests/libs/ca.pem',
+                     '--sslWeakCertificateValidation']
+        
         if not quiet:
             print "running " + " ".join(argv)
         self.proc = self._start(buildlogger(argv, is_global=True))
