@@ -348,7 +348,7 @@ namespace mongo {
                 bool check = ! e["check"].eoo();
                 if( check ){
                     if ( e["check"].type() == CodeWScope || e["check"].type() == Code || e["check"].type() == String ) {
-                        scope = globalScriptEngine->getPooledScope( ns );
+                        scope = globalScriptEngine->getPooledScope( ns + "benchrun" );
                         verify( scope.get() );
 
                         if ( e.type() == CodeWScope ) {
@@ -791,7 +791,7 @@ namespace mongo {
      /**
       * benchRun( { ops : [] , host : XXX , db : XXXX , parallel : 5 , seconds : 5 }
       */
-     BSONObj benchRunSync( const BSONObj& argsFake, void* data ) {
+     BSONObj BenchRunner::benchRunSync( const BSONObj& argsFake, void* data ) {
 
          BSONObj start = benchStart( argsFake, data );
 
@@ -805,7 +805,7 @@ namespace mongo {
      /**
       * benchRun( { ops : [] , host : XXX , db : XXXX , parallel : 5 , seconds : 5 }
       */
-     BSONObj benchStart( const BSONObj& argsFake, void* data ) {
+     BSONObj BenchRunner::benchStart( const BSONObj& argsFake, void* data ) {
 
          verify( argsFake.firstElement().isABSONObj() );
          BSONObj args = argsFake.firstElement().Obj();
@@ -820,7 +820,7 @@ namespace mongo {
     /**
      * benchRun( { ops : [] , host : XXX , db : XXXX , parallel : 5 , seconds : 5 }
      */
-    BSONObj benchFinish( const BSONObj& argsFake, void* data ) {
+    BSONObj BenchRunner::benchFinish( const BSONObj& argsFake, void* data ) {
 
         OID oid = OID( argsFake.firstElement().String() );
 
@@ -832,11 +832,4 @@ namespace mongo {
         return BSON( "" << finalObj );
     }
 
-    void installBenchmarkSystem( Scope& scope ) {
-        scope.injectNative( "benchRun" , benchRunSync );
-        scope.injectNative( "benchRunSync" , benchRunSync );
-        scope.injectNative( "benchStart" , benchStart );
-        scope.injectNative( "benchFinish" , benchFinish );
-    }
-
-}
+} // namespace mongo

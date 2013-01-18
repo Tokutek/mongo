@@ -73,6 +73,8 @@ namespace mongo {
 
         virtual bool hasOutOfMemoryException() = 0;
 
+        virtual void installBenchRun();
+
         virtual bool isKillPending() const = 0;
 
         virtual void gc() = 0;
