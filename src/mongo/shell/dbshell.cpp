@@ -1039,15 +1039,16 @@ int _main( int argc, char* argv[], char **envp ) {
 #ifdef _WIN32
 int wmain( int argc, wchar_t* argvW[] ) {
     static mongo::StaticObserver staticObserver;
-    int returnValue = -1;
+    int returnCode;
     try {
         WindowsCommandLine wcl( argc, argvW );
-        returnValue = _main( argc, wcl.argv(), NULL );  // TODO: Convert wide env to utf8 env.
+        returnCode = _main( argc, wcl.argv(), NULL );  // TODO: Convert wide env to utf8 env.
     }
     catch ( mongo::DBException& e ) {
         cerr << "exception: " << e.what() << endl;
+        returnCode = 1;
     }
-    ::_exit(returnValue);
+    ::_exit(returnCode);
 }
 #else // #ifdef _WIN32
 int main( int argc, char* argv[], char **envp ) {
