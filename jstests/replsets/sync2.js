@@ -3,6 +3,7 @@ var replTest = new ReplSetTest({ name: 'testSet', nodes: 5 });
 var nodes = replTest.startSet({ oplogSize: "2" });
 replTest.initiate();
 
+jsTestLog("Replica set test initialized, reconfiguring to give one node higher priority");
 var master = replTest.getMaster();
 var config = master.getDB("local").system.replset.findOne();
 config.version++;
@@ -15,10 +16,12 @@ catch(e) {
     print(e);
 }
 
+replTest.awaitSecondaryNodes();
 // initial sync
 master.getDB("foo").bar.insert({x:1});
 replTest.awaitReplication();
 
+jsTestLog("Bridging replica set");
 master = replTest.bridge();
 
 replTest.partition(0,4);
@@ -30,6 +33,7 @@ replTest.partition(3,1);
 replTest.partition(4,1);
 replTest.partition(4,3);
 
+jsTestLog("Checking that ops still replicate correctly");
 master.getDB("foo").bar.insert({x:1});
 replTest.awaitReplication();
 
