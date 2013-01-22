@@ -539,7 +539,4 @@ namespace mongo {
         return processed;
     }
 
-
-
-    void setupSignals( bool inFork ) {}
 }

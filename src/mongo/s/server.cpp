@@ -167,35 +167,11 @@ namespace mongo {
         ::_exit(EXIT_ABRUPT);
     }
 
-#ifndef _WIN32
-    sigset_t asyncSignals;
+    void setupSignalHandlers() {
+        setupSIGTRAPforGDB();
+        setupCoreSignals();
 
-    void signalProcessingThread() {
-        while (true) {
-            int actualSignal = 0;
-            int status = sigwait( &asyncSignals, &actualSignal );
-            fassert(16856, status == 0);
-            switch (actualSignal) {
-            case SIGUSR1:
-                // log rotate signal
-                fassert(16857, rotateLogs());
-                break;
-            default:
-                // no one else should be here
-                fassertFailed(16858);
-                break;
-            }
-        }
-    }
-
-    void startSignalProcessingThread() {
-        verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
-        boost::thread it( signalProcessingThread );
-    }
-#endif  // not _WIN32
-
-    void setupSignals( bool inFork ) {
-        if ( !cmdLine.debug ) {
+        if (!cmdLine.debug) {
             signal(SIGTERM, sighandler);
             signal(SIGINT, sighandler);
 
@@ -225,9 +201,7 @@ namespace mongo {
 
     void init() {
         serverID.init();
-        setupSIGTRAPforGDB();
-        setupCoreSignals();
-
+        setupSignalHandlers();
         Logstream::get().addGlobalTee( new RamLog("global") );
     }
 
