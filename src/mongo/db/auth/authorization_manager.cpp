@@ -123,6 +123,7 @@ namespace {
 
         // DB admin role
         dbAdminRoleActions.addAction(ActionType::clean);
+        dbAdminRoleActions.addAction(ActionType::cloneCollectionLocalSource);
         dbAdminRoleActions.addAction(ActionType::collMod);
         dbAdminRoleActions.addAction(ActionType::collStats);
         dbAdminRoleActions.addAction(ActionType::compact);
