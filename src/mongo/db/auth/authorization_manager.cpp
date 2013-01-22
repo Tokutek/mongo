@@ -102,6 +102,7 @@ namespace {
         readRoleActions.addAction(ActionType::dbHash);
         readRoleActions.addAction(ActionType::dbStats);
         readRoleActions.addAction(ActionType::find);
+        readRoleActions.addAction(ActionType::killCursors);
 
         // Read-write role
         readWriteRoleActions.addAllActionsFromSet(readRoleActions);
@@ -176,6 +177,7 @@ namespace {
 
         serverAdminRoleActions.addAllActionsFromSet(serverAdminRoleReadActions);
         serverAdminRoleActions.addAllActionsFromSet(serverAdminRoleWriteActions);
+        serverAdminRoleActions.addAction(ActionType::killCursors);
 
         // Cluster admin role
         clusterAdminRoleReadActions.addAction(ActionType::getShardVersion);

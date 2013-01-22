@@ -457,7 +457,8 @@ namespace mongo {
         recursive_scoped_lock lock(ccmutex);
         ClientCursor* cursor = find_inlock(id);
 
-        if (!cc().getAuthorizationManager()->checkAuthorization(cursor->ns(), ActionType::find)) {
+        if (!cc().getAuthorizationManager()->checkAuthorization(cursor->ns(),
+                                                                ActionType::killCursors)) {
             return false;
         }
 
