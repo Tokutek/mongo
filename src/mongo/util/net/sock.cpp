@@ -619,7 +619,7 @@ namespace mongo {
         int retries = 0;
         while( len > 0 ) {
             int ret = unsafe_recv( buf , len );
-            if ( ret <= 0 ) {
+            if ( ret <= 0 || MONGO_FAIL_POINT(throwSockExcep)) {
                 _handleRecvError(ret, len, &retries);
                 continue;
             }
@@ -678,7 +678,7 @@ namespace mongo {
     }
 
     void Socket::_handleRecvError(int ret, int len, int* retries) {
-        if (ret == 0 || MONGO_FAIL_POINT(throwSockExcep)) {
+        if (ret == 0) {
             LOG(3) << "Socket recv() conn closed? " << remoteString() << endl;
             throw SocketException(SocketException::CLOSED , remoteString());
         }
