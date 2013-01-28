@@ -32,6 +32,12 @@ namespace mongo {
     std::string mongodVersion();
     int versionCmp(StringData rhs, StringData lhs); // like strcmp
 
+    // Convert a version string into a numeric array
+    BSONArray toVersionArray(const char* version);
+    
+    // Checks whether another version is the same major version as us
+    bool isSameMajorVersion(const char* version);
+
     const char * gitVersion();
     void printGitVersion();
 
