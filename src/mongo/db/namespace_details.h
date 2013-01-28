@@ -26,6 +26,7 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/index.h"
+#include "mongo/db/index_set.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/query_plan_selection_policy.h"
@@ -98,8 +99,8 @@ namespace mongo {
         virtual ~NamespaceDetails() {
         }
 
-        const set<string> &indexKeys() const {
-            return _indexKeys;
+        const IndexPathSet &indexKeys() const {
+            return _indexedPaths;
         }
 
         void clearQueryCache();
@@ -477,7 +478,7 @@ namespace mongo {
         void dropIndex(const int idxNum);
 
     private:
-        set<string> _indexKeys;
+        IndexPathSet _indexedPaths;
         void resetTransient();
         void computeIndexKeys();
 
