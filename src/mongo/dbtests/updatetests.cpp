@@ -552,6 +552,30 @@ namespace UpdateTests {
         }
     };
 
+    class PushEachSimple : public SetBase {
+    public:
+        void run() {
+            client().insert( ns(), fromjson( "{'_id':0,a:[1]}" ) );
+            // { $push : { a : { $each : [ 2, 3 ] } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 2 << 3 ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
+            ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[1,2,3]}" ) );
+        }
+
+    };
+
+    class PushEachFromEmpty : public SetBase {
+    public:
+        void run() {
+            client().insert( ns(), fromjson( "{'_id':0,a:[]}" ) );
+            // { $push : { a : { $each : [ 1, 2, 3 ] } } }
+            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 1 << 2 << 3 ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "a" << pushObj ) ) );
+            ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[1,2,3]}" ) );
+        }
+
+    };
+
     class PushSliceBelowFull : public SetBase {
     public:
         void run() {
@@ -2718,6 +2742,11 @@ namespace UpdateTests {
             add< SetEncapsulationConflictsWithExistingType >();
             add< CantPushToParent >();
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+            add< PushEachSimple >();
+            add< PushEachFromEmpty >();
+>>>>>>> 2b94e0e... SERVER-8303 Fix $push with a single $each clause behavior.
             add< PushSliceBelowFull >();
             add< PushSliceReachedFullExact >();
             add< PushSliceReachedFullWithEach >();
