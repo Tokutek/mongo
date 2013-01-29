@@ -22,7 +22,13 @@
 #include "mongo/platform/cstdint.h"
 
 namespace mongo {
-
+    /**
+     * A 64bit (atomic) counter.
+     *
+     * The constructor allows setting the start value, and increment([int]) is used to change it.
+     *
+     * The value can be returned using get() or the (long long) function operator.
+     */
     class Counter64 {
     public:
 

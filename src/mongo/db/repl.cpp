@@ -126,7 +126,6 @@ namespace mongo {
         }
     } replicationInfoServerStatus;
 
-
     class CmdIsMaster : public Command {
     public:
         virtual bool requiresAuth() { return false; }
