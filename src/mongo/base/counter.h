@@ -24,9 +24,11 @@ namespace mongo {
 
     class Counter64 {
     public:
-        
-        void increment() { _counter.addAndFetch(1); }
-        
+
+        /** Atomically increment (or decrement via negative value). */
+        void increment( uint64_t n = 1 ) { _counter.addAndFetch(n); }
+
+        /** Return the current value */
         long long get() const { return _counter.load(); }
         
         operator long long() const { return get(); }
