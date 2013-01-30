@@ -181,7 +181,7 @@ namespace mongo {
             error()  << "13601 Couldn't remap private view: " << errnoWithDescription(err) << endl;
             log() << "aborting" << endl;
             printMemInfo();
-            abort();
+            ::abort();
         }
         verify( x == oldPrivateAddr );
         return x;

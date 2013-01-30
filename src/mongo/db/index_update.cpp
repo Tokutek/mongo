@@ -357,7 +357,7 @@ namespace mongo {
         if( phase1 == 0 ) {
             phase1 = &_ours;
             SortPhaseOne& p1 = *phase1;
-            shared_ptr<Cursor> c = theDataFileMgr.findAll(ns);
+            Cursor *c = NULL; ::abort(); //theDataFileMgr.findAll(ns);
             p1.sorter.reset( new BSONObjExternalSorter(idx.idxInterface(), order) );
             p1.sorter->hintNumObjects( d->stats.nrecords );
             const IndexSpec& spec = idx.getSpec();
@@ -404,7 +404,7 @@ namespace mongo {
             log() << "\t fastBuildIndex dupsToDrop:" << dupsToDrop.size() << endl;
 
         for( set<DiskLoc>::iterator i = dupsToDrop.begin(); i != dupsToDrop.end(); i++ ){
-            theDataFileMgr.deleteRecord( ns, i->rec(), *i, false /* cappedOk */ , true /* noWarn */ , isMaster( ns ) /* logOp */ );
+            ::abort(); //theDataFileMgr.deleteRecord( ns, i->rec(), *i, false /* cappedOk */ , true /* noWarn */ , isMaster( ns ) /* logOp */ );
             getDur().commitIfNeeded();
         }
 
@@ -423,8 +423,9 @@ namespace mongo {
             unsigned long long numDropped = 0;
             auto_ptr<ClientCursor> cc;
             {
-                shared_ptr<Cursor> c = theDataFileMgr.findAll(ns);
-                cc.reset( new ClientCursor(QueryOption_NoCursorTimeout, c, ns) );
+                ::abort();
+                //Cursor *c = NULL; //theDataFileMgr.findAll(ns);
+                //cc.reset( new ClientCursor(QueryOption_NoCursorTimeout, c, ns) );
             }
 
             while ( cc->ok() ) {
@@ -451,7 +452,7 @@ namespace mongo {
                         bool ok = cc->advance();
                         ClientCursor::YieldData yieldData;
                         massert( 16093, "after yield cursor deleted" , cc->prepareToYield( yieldData ) );
-                        theDataFileMgr.deleteRecord( ns, toDelete.rec(), toDelete, false, true , true );
+                        ::abort(); //theDataFileMgr.deleteRecord( ns, toDelete.rec(), toDelete, false, true , true );
                         if( !cc->recoverFromYield( yieldData ) ) {
                             cc.release();
                             if( !ok ) {
@@ -636,7 +637,7 @@ namespace mongo {
         BSONObj o = b.done();
 
         /* edge case: note the insert could fail if we have hit maxindexes already */
-        theDataFileMgr.insert(system_indexes.c_str(), o.objdata(), o.objsize(), true);
+        ::abort(); //theDataFileMgr.insert(system_indexes.c_str(), o.objdata(), o.objsize(), true);
     }
 
     /* remove bit from a bit array - actually remove its slot, not a clear

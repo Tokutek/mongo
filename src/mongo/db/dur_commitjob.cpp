@@ -125,7 +125,7 @@ namespace mongo {
                 return;
             log() << "assertAlreadyDeclared fails " << (void*)p << " len:" << len << ' ' << commitJob.wi()._debug[p] << endl;
             printStackTrace();
-            abort();
+            ::abort();
         }
 #endif
 

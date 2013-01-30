@@ -163,7 +163,8 @@ namespace mongo {
         vector<MongoDataFile *> files;
     };
 
-    extern DataFileMgr theDataFileMgr;
+    // TODO: Get rid of theDataFileMgr
+    //extern DataFileMgr theDataFileMgr;
 
 #pragma pack(1)
 

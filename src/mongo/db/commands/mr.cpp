@@ -569,7 +569,7 @@ namespace mongo {
 
             Client::WriteContext ctx( ns );
 
-            theDataFileMgr.insertAndLog( ns.c_str() , o , false );
+            ::abort(); //theDataFileMgr.insertAndLog( ns.c_str() , o , false );
         }
 
         /**
@@ -577,7 +577,7 @@ namespace mongo {
          */
         void State::_insertToInc( BSONObj& o ) {
             verify( _onDisk );
-            theDataFileMgr.insertWithObjMod( _config.incLong.c_str() , o , true );
+            ::abort(); //theDataFileMgr.insertWithObjMod( _config.incLong.c_str() , o , true );
             getDur().commitIfNeeded();
         }
 

@@ -154,7 +154,9 @@ namespace mongo {
     string repairpath;
     string pidfilepath;
 
-    DataFileMgr theDataFileMgr;
+    // TODO: Get rid of the data theDataFileMgr.
+    //DataFileMgr theDataFileMgr;
+
     DatabaseHolder _dbHolder;
     int MAGIC = 0x1000;
 

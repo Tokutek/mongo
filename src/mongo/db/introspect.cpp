@@ -74,7 +74,7 @@ namespace mongo {
         NamespaceDetails *details = getOrCreateProfileCollection(db);
         if (details) {
             int len = p.objsize();
-            Record *r = theDataFileMgr.fast_oplog_insert(details, ns, len);
+            Record *r = NULL; //theDataFileMgr.fast_oplog_insert(details, ns, len); TODO: Get rid of theDataFileMgr
             memcpy(getDur().writingPtr(r->data(), len), p.objdata(), len);
         }
     }

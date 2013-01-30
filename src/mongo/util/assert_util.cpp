@@ -98,7 +98,7 @@ namespace mongo {
 #if defined(_DEBUG) || defined(_DURABLEDEFAULTON) || defined(_DURABLEDEFAULTOFF)
         // this is so we notice in buildbot
         log() << "\n\n***aborting after wassert() failure in a debug/test build\n\n" << endl;
-        abort();
+        ::abort();
 #endif
     }
 
@@ -114,7 +114,7 @@ namespace mongo {
 #if defined(_DEBUG) || defined(_DURABLEDEFAULTON) || defined(_DURABLEDEFAULTOFF)
         // this is so we notice in buildbot
         log() << "\n\n***aborting after verify() failure as this is a debug/test build\n\n" << endl;
-        abort();
+        ::abort();
 #endif
         throw e;
     }
@@ -124,7 +124,7 @@ namespace mongo {
         logContext();
         breakpoint();
         log() << "\n\n***aborting after fassert() failure\n\n" << endl;
-        abort();
+        ::abort();
     }
 
     void uasserted(int msgid , const string &msg) {

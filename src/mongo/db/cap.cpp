@@ -258,7 +258,9 @@ namespace mongo {
             }
 
             DiskLoc fr = theCapExtent()->firstRecord;
-            theDataFileMgr.deleteRecord(ns, fr.rec(), fr, true); // ZZZZZZZZZZZZ
+            //theDataFileMgr.deleteRecord(ns, fr.rec(), fr, true); // ZZZZZZZZZZZZ
+            // TODO: Get rid of this
+            ::abort();
             compact();
             if( ++passes > maxPasses ) {
                 log() << "passes ns:" << ns << " len:" << len << " maxPasses: " << maxPasses << '\n';
@@ -353,7 +355,8 @@ namespace mongo {
 
             // Delete the newest record, and coalesce the new deleted
             // record with existing deleted records.
-            theDataFileMgr.deleteRecord(ns, curr.rec(), curr, true);
+            //theDataFileMgr.deleteRecord(ns, curr.rec(), curr, true);
+            ::abort();
             compact();
 
             // This is the case where we have not yet had to remove any
@@ -473,7 +476,8 @@ namespace mongo {
         }
 
         for ( unsigned i=0; i<indexes.size(); i++ ) {
-            theDataFileMgr.insertWithObjMod( Namespace( ns ).getSisterNS( "system.indexes" ).c_str() , indexes[i] , true );
+            //theDataFileMgr.insertWithObjMod( Namespace( ns ).getSisterNS( "system.indexes" ).c_str() , indexes[i] , true );
+            ::abort();
         }
         
     }

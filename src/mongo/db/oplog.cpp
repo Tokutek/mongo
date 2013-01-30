@@ -75,7 +75,7 @@ namespace mongo {
             Client::Context ctx( logns , localDB, false );
             {
                 int len = op.objsize();
-                Record *r = theDataFileMgr.fast_oplog_insert(rsOplogDetails, logns, len);
+                Record *r = NULL; ::abort(); //theDataFileMgr.fast_oplog_insert(rsOplogDetails, logns, len);
                 memcpy(getDur().writingPtr(r->data(), len), op.objdata(), len);
             }
             /* todo: now() has code to handle clock skew.  but if the skew server to server is large it will get unhappy.
@@ -183,7 +183,7 @@ namespace mongo {
                 massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
             }
             Client::Context ctx( logns , localDB, false );
-            r = theDataFileMgr.fast_oplog_insert(rsOplogDetails, logns, len);
+            r = NULL; ::abort(); (void) len; //theDataFileMgr.fast_oplog_insert(rsOplogDetails, logns, len);
             /* todo: now() has code to handle clock skew.  but if the skew server to server is large it will get unhappy.
                      this code (or code in now() maybe) should be improved.
                      */
@@ -272,13 +272,13 @@ namespace mongo {
                 verify( localOplogMainDetails );
             }
             Client::Context ctx( logNS , localDB, false );
-            r = theDataFileMgr.fast_oplog_insert(localOplogMainDetails, logNS, len);
+            r = NULL; ::abort(); (void) len; //theDataFileMgr.fast_oplog_insert(localOplogMainDetails, logNS, len);
         }
         else {
             Client::Context ctx( logNS, dbpath, false );
             verify( nsdetails( logNS ) );
             // first we allocate the space, then we fill it below.
-            r = theDataFileMgr.fast_oplog_insert( nsdetails( logNS ), logNS, len);
+            r = NULL; ::abort(); //theDataFileMgr.fast_oplog_insert( nsdetails( logNS ), logNS, len);
         }
 
         append_O_Obj(r->data(), partial, obj);
@@ -709,7 +709,7 @@ namespace mongo {
             return false;
         }
         else {
-            DiskLoc d = theDataFileMgr.insert(ns, (void*) missingObj.objdata(), missingObj.objsize());
+            DiskLoc d = minDiskLoc; ::abort(); //theDataFileMgr.insert(ns, (void*) missingObj.objdata(), missingObj.objsize());
             uassert(15917, "Got bad disk location when attempting to insert", !d.isNull());
 
             LOG(1) << "replication inserted missing doc: " << missingObj.toString() << endl;
@@ -750,7 +750,8 @@ namespace mongo {
             if ( p && strcmp(p, ".system.indexes") == 0 ) {
                 // updates aren't allowed for indexes -- so we will do a regular insert. if index already
                 // exists, that is ok.
-                theDataFileMgr.insert(ns, (void*) o.objdata(), o.objsize());
+                //theDataFileMgr.insert(ns, (void*) o.objdata(), o.objsize());
+                ::abort();
             }
             else {
                 // do upserts for inserts as we might get replayed more than once

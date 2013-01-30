@@ -291,7 +291,9 @@ namespace mongo {
             log() << "compact create index " << info["key"].Obj().toString() << endl;
             try {
                 precalced = &phase1[i];
-                theDataFileMgr.insert(si.c_str(), info.objdata(), info.objsize());
+                // TODO Get rid of theDataFileMgr.
+                //theDataFileMgr.insert(si.c_str(), info.objdata(), info.objsize());
+                ::abort();
             }
             catch(...) { 
                 precalced = 0;

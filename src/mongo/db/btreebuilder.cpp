@@ -168,7 +168,9 @@ namespace mongo {
                 while( !x.isNull() ) {
                     DiskLoc next = x.btree<V>()->tempNext();
                     string ns = idx.indexNamespace();
-                    theDataFileMgr._deleteRecord(nsdetails(ns.c_str()), ns.c_str(), x.rec(), x);
+                    // TODO: Get rid of theDataFileMgr:w
+                    //theDataFileMgr._deleteRecord(nsdetails(ns.c_str()), ns.c_str(), x.rec(), x);
+                    ::abort();
                     x = next;
                     getDur().commitIfNeeded();
                 }

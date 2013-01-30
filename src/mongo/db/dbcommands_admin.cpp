@@ -242,7 +242,7 @@ namespace mongo {
 
                 set<DiskLoc> recs;
                 if( scanData ) {
-                    shared_ptr<Cursor> c = theDataFileMgr.findAll(ns);
+                    Cursor *c = NULL; ::abort(); //theDataFileMgr.findAll(ns);
                     int n = 0;
                     int nInvalid = 0;
                     long long len = 0;

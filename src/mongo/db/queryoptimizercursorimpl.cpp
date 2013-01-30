@@ -779,7 +779,7 @@ namespace mongo {
         }
         
         if ( _planPolicy.permitOptimalNaturalPlan() && _query.isEmpty() && _order.isEmpty() ) {
-            return theDataFileMgr.findAll( _ns );
+            ::abort(); // theDataFileMgr.findAll( _ns );
         }
         if ( _planPolicy.permitOptimalIdPlan() && isSimpleIdQuery( _query ) ) {
             Database *database = cc().database();

@@ -95,7 +95,7 @@ namespace mongo {
                 BSONObj newObj = mss->createNewFromMods();
                 checkTooLarge(newObj);
                 verify(nsdt);
-                theDataFileMgr.updateRecord(ns, d, nsdt, r, loc , newObj.objdata(), newObj.objsize(), debug);
+                ::abort(); //theDataFileMgr.updateRecord(ns, d, nsdt, r, loc , newObj.objdata(), newObj.objsize(), debug);
             }
 
             if ( logop ) {
@@ -125,7 +125,7 @@ namespace mongo {
         BSONElementManipulator::lookForTimestamps( updateobj );
         checkNoMods( updateobj );
         verify(nsdt);
-        theDataFileMgr.updateRecord(ns, d, nsdt, r, loc , updateobj.objdata(), updateobj.objsize(), debug );
+        ::abort(); //theDataFileMgr.updateRecord(ns, d, nsdt, r, loc , updateobj.objdata(), updateobj.objsize(), debug );
         if ( logop ) {
             logOp("u", ns, updateobj, &patternOrig, 0, fromMigrate );
         }
@@ -203,7 +203,7 @@ namespace mongo {
                     checkNoMods( updateobj );
                     debug.upsert = true;
                     BSONObj no = updateobj;
-                    theDataFileMgr.insertWithObjMod(ns, no, su);
+                    ::abort(); //theDataFileMgr.insertWithObjMod(ns, no, su);
                     return UpdateResult( 0 , 0 , 1 , no );
                 }
             }
@@ -384,7 +384,9 @@ namespace mongo {
 
                         BSONObj newObj = mss->createNewFromMods();
                         checkTooLarge(newObj);
-                        DiskLoc newLoc = theDataFileMgr.updateRecord(ns,
+                        DiskLoc newLoc = minDiskLoc; ::abort();
+#if 0
+                        utheDataFileMgr.updateRecord(ns,
                                                                      d,
                                                                      nsdt,
                                                                      r,
@@ -392,6 +394,7 @@ namespace mongo {
                                                                      newObj.objdata(),
                                                                      newObj.objsize(),
                                                                      debug);
+#endif
 
                         if ( newLoc != loc || modsIsIndexed ){
                             // log() << "Moved obj " << newLoc.obj()["_id"] << " from " << loc << " to " << newLoc << endl;
@@ -435,7 +438,7 @@ namespace mongo {
 
                 BSONElementManipulator::lookForTimestamps( updateobj );
                 checkNoMods( updateobj );
-                theDataFileMgr.updateRecord(ns, d, nsdt, r, loc , updateobj.objdata(), updateobj.objsize(), debug, su);
+                ::abort(); //theDataFileMgr.updateRecord(ns, d, nsdt, r, loc , updateobj.objdata(), updateobj.objsize(), debug, su);
                 if ( logop ) {
                     DEV wassert( !su ); // super used doesn't get logged, this would be bad.
                     logOp("u", ns, updateobj, &pattern, 0, fromMigrate );
@@ -453,7 +456,7 @@ namespace mongo {
                 BSONObj newObj = mods->createNewFromQuery( patternOrig );
                 checkNoMods( newObj );
                 debug.fastmodinsert = true;
-                theDataFileMgr.insertWithObjMod(ns, newObj, su);
+                ::abort(); //theDataFileMgr.insertWithObjMod(ns, newObj, su);
                 if ( logop )
                     logOp( "i", ns, newObj, 0, 0, fromMigrate );
 
@@ -463,7 +466,7 @@ namespace mongo {
             checkNoMods( updateobj );
             debug.upsert = true;
             BSONObj no = updateobj;
-            theDataFileMgr.insertWithObjMod(ns, no, su);
+            ::abort(); //theDataFileMgr.insertWithObjMod(ns, no, su);
             if ( logop )
                 logOp( "i", ns, no, 0, 0, fromMigrate );
             return UpdateResult( 0 , 0 , 1 , no );

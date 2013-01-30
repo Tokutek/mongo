@@ -940,7 +940,7 @@ namespace mongo {
             for ( list<BSONObj>::iterator i=all.begin(); i!=all.end(); i++ ) {
                 BSONObj o = *i;
                 log(1) << "reIndex ns: " << toDeleteNs << " index: " << o << endl;
-                theDataFileMgr.insertWithObjMod( Namespace( toDeleteNs.c_str() ).getSisterNS( "system.indexes" ).c_str() , o , true );
+                ::abort(); //theDataFileMgr.insertWithObjMod( Namespace( toDeleteNs.c_str() ).getSisterNS( "system.indexes" ).c_str() , o , true );
             }
 
             result.append( "nIndexes" , (int)all.size() );
@@ -1233,7 +1233,7 @@ namespace mongo {
                     result.append( "millis" , timer.millis() );
                     return 1;
                 }
-                c = theDataFileMgr.findAll( ns.c_str() );
+                ::abort(); //theDataFileMgr.findAll( ns.c_str() );
             }
             else if ( min.isEmpty() || max.isEmpty() ) {
                 errmsg = "only one of min or max specified";
@@ -1567,9 +1567,10 @@ namespace mongo {
 
             CursorId id;
             {
-                shared_ptr<Cursor> c = theDataFileMgr.findAll( fromNs.c_str(), startLoc );
-                ClientCursor *cc = new ClientCursor(0, c, fromNs.c_str());
-                id = cc->cursorid();
+                ::abort();
+                //shared_ptr<Cursor> c = theDataFileMgr.findAll( fromNs.c_str(), startLoc );
+                //ClientCursor *cc = new ClientCursor(0, c, fromNs.c_str());
+                //id = cc->cursorid();
             }
 
             DBDirectClient client;
@@ -1585,7 +1586,7 @@ namespace mongo {
             auto_ptr< DBClientCursor > c = client.getMore( fromNs, id );
             while( c->more() ) {
                 BSONObj obj = c->next();
-                theDataFileMgr.insertAndLog( toNs.c_str(), obj, true );
+                ::abort(); //theDataFileMgr.insertAndLog( toNs.c_str(), obj, true );
                 getDur().commitIfNeeded();
             }
 
@@ -1698,7 +1699,7 @@ namespace mongo {
             {
                 Lock::DBWrite lk(ns);
                 Client::Context ctx( ns );
-                theDataFileMgr.insertWithObjMod( ns.c_str(), obj, true );
+                ::abort(); //theDataFileMgr.insertWithObjMod( ns.c_str(), obj, true );
             }
             return true;
         }

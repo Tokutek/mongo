@@ -66,7 +66,7 @@ namespace mongo {
         b.appendBool("unique", unique);
         BSONObj o = b.done();
 
-        theDataFileMgr.insert(system_indexes.c_str(), o.objdata(), o.objsize());
+        ::abort(); //theDataFileMgr.insert(system_indexes.c_str(), o.objdata(), o.objsize());
     }
 
     /* fetch a single object from collection ns that matches query
@@ -318,7 +318,7 @@ namespace mongo {
                     callback->goingToDelete( obj );
                 
                 logOp( "d" , ns.c_str() , rloc.obj()["_id"].wrap() , 0 , 0 , fromMigrate );
-                theDataFileMgr.deleteRecord(ns.c_str() , rloc.rec(), rloc);
+                ::abort(); // theDataFileMgr.deleteRecord(ns.c_str() , rloc.rec(), rloc);
                 numDeleted++;
             }
             catch( PageFaultException& e ) {

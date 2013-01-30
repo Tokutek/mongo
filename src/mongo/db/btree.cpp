@@ -843,7 +843,9 @@ namespace mongo {
         // defensive:
         this->parent.Null();
         string ns = id.indexNamespace();
-        theDataFileMgr._deleteRecord(nsdetails(ns.c_str()), ns.c_str(), thisLoc.rec(), thisLoc);
+        //TODO Get rid of this
+        //theDataFileMgr._deleteRecord(nsdetails(ns.c_str()), ns.c_str(), thisLoc.rec(), thisLoc);
+        ::abort();
 #endif
     }
 
@@ -1436,7 +1438,8 @@ namespace mongo {
     template< class V >
     DiskLoc BtreeBucket<V>::addBucket(const IndexDetails& id) {
         string ns = id.indexNamespace();
-        DiskLoc loc = theDataFileMgr.insert(ns.c_str(), 0, V::BucketSize, true);
+        DiskLoc loc = minDiskLoc; // TODO Get rid of this theDataFileMgr.insert(ns.c_str(), 0, V::BucketSize, true);
+        ::abort();
         BtreeBucket *b = BTREEMOD(loc);
         b->init();
         return loc;

@@ -420,7 +420,7 @@ namespace mongo {
                         //vector<WriteIntent>& _intents = commitJob.wi()._intents;
                         //(void) _intents; // mark as unused. Useful for inspection in debugger
 
-                        // should we abort() here so this isn't unnoticed in some circumstances?
+                        // should we ::abort() here so this isn't unnoticed in some circumstances?
                         massert(13599, "Written data does not match in-memory view. Missing WriteIntent?", false);
                     }
                 }

@@ -1447,7 +1447,7 @@ namespace mongo {
                     BSONObj idx = all[i];
                     Client::WriteContext ct( ns );
                     string system_indexes = cc().database()->name + ".system.indexes";
-                    theDataFileMgr.insertAndLog( system_indexes.c_str() , idx, true /* flag fromMigrate in oplog */ );
+                    ::abort(); //theDataFileMgr.insertAndLog( system_indexes.c_str() , idx, true /* flag fromMigrate in oplog */ );
                 }
 
                 timing.done(1);
