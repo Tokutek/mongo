@@ -142,7 +142,7 @@ namespace mongo {
         // probably was not called.
         fassert(17017, !_secOkCmdList.empty());
 
-        if (!hasReadPreference(queryObj)) {
+        if (!Query::hasReadPreference(queryObj)) {
             return false;
         }
 
@@ -276,7 +276,7 @@ namespace mongo {
      * @throws AssertionException if the read preference object is malformed
      */
     TagSet* _extractReadPref(const BSONObj& query, ReadPreference* pref) {
-        if (!hasReadPreference(query)) {
+        if (!Query::hasReadPreference(query)) {
             *pref = mongo::ReadPreference_SecondaryPreferred;
         }
         else {

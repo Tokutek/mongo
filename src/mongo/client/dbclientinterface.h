@@ -173,11 +173,6 @@ namespace mongo {
         ReadPreference_Nearest,
     };
 
-    /**
-     * @return true if the query object contains a read preference specification object.
-     */
-    bool hasReadPreference(const BSONObj& queryObj);
-
     class DBClientBase;
     class DBClientConnection;
 
@@ -416,11 +411,17 @@ namespace mongo {
          * @return true if this query has an orderby, hint, or some other field
          */
         bool isComplex( bool * hasDollar = 0 ) const;
+        static bool isComplex(const BSONObj& obj, bool* hasDollar = 0);
 
         BSONObj getFilter() const;
         BSONObj getSort() const;
         BSONObj getHint() const;
         bool isExplain() const;
+
+        /**
+         * @return true if the query object contains a read preference specification object.
+         */
+        static bool hasReadPreference(const BSONObj& queryObj);
 
         string toString() const;
         operator string() const { return toString(); }
