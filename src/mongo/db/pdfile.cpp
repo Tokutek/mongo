@@ -544,6 +544,7 @@ namespace mongo {
         return e;
     }
 
+#if 0
     Extent* DataFileMgr::allocFromFreeList(const char *ns, int approxSize, bool capped) {
         string s = cc().database()->name + FREELIST_NS;
         NamespaceDetails *f = nsdetails(s.c_str());
@@ -632,6 +633,7 @@ namespace mongo {
         return 0;
         //        return createExtent(ns, approxSize, capped);
     }
+#endif
 
     /*---------------------------------------------------------------------*/
 
@@ -671,7 +673,7 @@ namespace mongo {
         getEmptyLoc(nsname, myLoc, length, capped, emptyLoc, delRecLength);
 
         // todo: some dup code here and below in Extent::init
-        DeletedRecord *empty = DataFileMgr::makeDeletedRecord(emptyLoc, delRecLength);
+        DeletedRecord *empty = NULL; ::abort(); //DataFileMgr::makeDeletedRecord(emptyLoc, delRecLength);
         empty = getDur().writing(empty);
         empty->lengthWithHeaders() = delRecLength;
         empty->extentOfs() = myLoc.getOfs();
@@ -695,7 +697,7 @@ namespace mongo {
         int delRecLength;
         getEmptyLoc(nsname, myLoc, _length, capped, emptyLoc, delRecLength);
 
-        DeletedRecord *empty = getDur().writing( DataFileMgr::makeDeletedRecord(emptyLoc, delRecLength) );
+        DeletedRecord *empty = NULL; ::abort(); //getDur().writing( DataFileMgr::makeDeletedRecord(emptyLoc, delRecLength) );
         empty->lengthWithHeaders() = delRecLength;
         empty->extentOfs() = myLoc.getOfs();
 
@@ -758,6 +760,7 @@ namespace mongo {
 
     /*---------------------------------------------------------------------*/
 
+#if 0
     shared_ptr<Cursor> DataFileMgr::findAll(const char *ns, const DiskLoc &startLoc) {
         NamespaceDetails * d = nsdetails( ns );
         if ( ! d )
@@ -802,6 +805,7 @@ namespace mongo {
         }
         return shared_ptr<Cursor>(new BasicCursor( e->firstRecord ));
     }
+#endif
 
     /* get a table scan cursor, but can be forward or reverse direction.
        order.$natural - if set, > 0 means forward (asc), < 0 backward (desc).
@@ -810,7 +814,7 @@ namespace mongo {
         BSONElement el = order.getField("$natural"); // e.g., { $natural : -1 }
 
         if ( el.number() >= 0 )
-            return DataFileMgr::findAll(ns, startLoc);
+            ::abort(); //return DataFileMgr::findAll(ns, startLoc);
 
         // "reverse natural order"
         NamespaceDetails *d = nsdetails(ns);
@@ -954,6 +958,7 @@ namespace mongo {
     /* deletes a record, just the pdfile portion -- no index cleanup, no cursor cleanup, etc.
        caller must check if capped
     */
+#if 0
     void DataFileMgr::_deleteRecord(NamespaceDetails *d, const char *ns, Record *todelete, const DiskLoc& dl) {
         /* remove ourself from the record next/prev chain */
         {
@@ -1179,6 +1184,7 @@ namespace mongo {
         memcpy(getDur().writingPtr(toupdate->data(), sz), objNew.objdata(), sz);
         return dl;
     }
+#endif
 
     int Extent::followupSize(int len, int lastExtentLen) {
         verify( len < Extent::maxSize() );
@@ -1243,6 +1249,7 @@ namespace mongo {
     } idToInsert;
 #pragma pack()
 
+#if 0
     void DataFileMgr::insertAndLog( const char *ns, const BSONObj &o, bool god, bool fromMigrate ) {
         BSONObj tmp = o;
         insertWithObjMod( ns, tmp, god );
@@ -1258,6 +1265,7 @@ namespace mongo {
             o = BSONObj::make( loc.rec() );
         return loc;
     }
+#endif
 
     bool prepareToBuildIndex(const BSONObj& io, bool god, string& sourceNS, NamespaceDetails *&sourceCollection, BSONObj& fixedIndexObject );
 
@@ -1432,6 +1440,7 @@ namespace mongo {
               if using.
     */
 
+#if 0
     DiskLoc DataFileMgr::insert(const char *ns, const void *obuf, int len, bool god, bool mayAddIndex, bool *addedID) {
         bool wouldAddIndex = false;
         massert( 10093 , "cannot insert into reserved $ collection", god || NamespaceString::normal( ns ) );
@@ -1600,7 +1609,9 @@ namespace mongo {
 
         return loc;
     }
+#endif
 
+#if 0
     /* special version of insert for transaction logging -- streamlined a bit.
        assumes ns is capped and no indexes
     */
@@ -1643,6 +1654,7 @@ namespace mongo {
 
         return r;
     }
+#endif
 
 } // namespace mongo
 

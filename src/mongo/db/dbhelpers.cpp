@@ -156,8 +156,12 @@ namespace mongo {
 
     bool Helpers::isEmpty(const char *ns, bool doAuth) {
         Client::Context context(ns, dbpath, doAuth);
+#if 0
         shared_ptr<Cursor> c = DataFileMgr::findAll(ns);
         return !c->ok();
+#endif
+        ::abort();
+        return false;
     }
 
     /* Get the first object from a collection.  Generally only useful if the collection
@@ -168,6 +172,7 @@ namespace mongo {
     bool Helpers::getSingleton(const char *ns, BSONObj& result) {
         Client::Context context(ns);
 
+#if 0
         shared_ptr<Cursor> c = DataFileMgr::findAll(ns);
         if ( !c->ok() ) {
             context.getClient()->curop()->done();
@@ -176,6 +181,9 @@ namespace mongo {
 
         result = c->current();
         context.getClient()->curop()->done();
+#endif
+
+        ::abort();
         return true;
     }
 

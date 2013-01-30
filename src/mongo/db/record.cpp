@@ -413,7 +413,7 @@ namespace mongo {
     }
     
     Record* DiskLoc::rec() const {
-        Record *r = DataFileMgr::getRecord(*this);
+        Record *r = NULL; ::abort(); //DataFileMgr::getRecord(*this);
         memconcept::is(r, memconcept::concept::record);
         return r;
     }

@@ -64,7 +64,7 @@ namespace mongo {
     /*---------------------------------------------------------------------*/
 
     class MongoDataFile {
-        friend class DataFileMgr;
+        //friend class DataFileMgr;
         friend class BasicCursor;
     public:
         MongoDataFile(int fn) : _mb(0), fileNo(fn) { }
@@ -112,6 +112,8 @@ namespace mongo {
         int fileNo;
     };
 
+    // TODO: Get rid of the datafilemgr
+#if 0
     class DataFileMgr {
         friend class BasicCursor;
     public:
@@ -162,6 +164,7 @@ namespace mongo {
     private:
         vector<MongoDataFile *> files;
     };
+#endif
 
     // TODO: Get rid of theDataFileMgr
     //extern DataFileMgr theDataFileMgr;
@@ -186,7 +189,8 @@ namespace mongo {
         }
         Extent* myExtent(const DiskLoc& myLoc) {
             _accessing();
-            return DataFileMgr::getExtent(DiskLoc(myLoc.a(), _extentOfs));
+            ::abort();
+            return NULL; //DataFileMgr::getExtent(DiskLoc(myLoc.a(), _extentOfs));
         }
     private:
 
@@ -232,7 +236,7 @@ namespace mongo {
         /* use this when a record is deleted. basically a union with next/prev fields */
         DeletedRecord& asDeleted() { return *((DeletedRecord*) this); }
 
-        Extent* myExtent(const DiskLoc& myLoc) { return DataFileMgr::getExtent(DiskLoc(myLoc.a(), extentOfs() ) ); }
+        Extent* myExtent(const DiskLoc& myLoc) { return NULL; ::abort(); /*DataFileMgr::getExtent(DiskLoc(myLoc.a(), extentOfs() ) )*/; }
 
         /* get the next record in the namespace, traversing extents as necessary */
         DiskLoc getNext(const DiskLoc& myLoc);
@@ -370,8 +374,8 @@ namespace mongo {
             return (Record *) (((char *) this) + x);
         }
 
-        Extent* getNextExtent() { return xnext.isNull() ? 0 : DataFileMgr::getExtent(xnext); }
-        Extent* getPrevExtent() { return xprev.isNull() ? 0 : DataFileMgr::getExtent(xprev); }
+        Extent* getNextExtent() { ::abort(); return NULL;/*DataFileMgr::getExtent(xnext);*/ }
+        Extent* getPrevExtent() { ::abort(); return NULL;/*DataFileMgr::getExtent(xprev);*/ }
 
         static int maxSize();
         static int minSize() { return 0x1000; }
@@ -545,7 +549,7 @@ namespace mongo {
         return dr;
     }
     inline Extent* DiskLoc::ext() const {
-        return DataFileMgr::getExtent(*this);
+        ::abort(); return NULL; /*DataFileMgr::getExtent(*this);*/
     }
 
     template< class V >
@@ -592,6 +596,7 @@ namespace mongo {
         return d;
     }
 
+#if 0
     inline Extent* DataFileMgr::getExtent(const DiskLoc& dl) {
         verify( dl.a() != -1 );
         return cc().database()->getFile(dl.a())->getExtent(dl);
@@ -602,13 +607,16 @@ namespace mongo {
         Record* r = cc().database()->getFile(dl.a())->recordAt(dl);
         return r;
     }
+#endif
 
     BOOST_STATIC_ASSERT( 16 == sizeof(DeletedRecord) );
 
+#if 0
     inline DeletedRecord* DataFileMgr::makeDeletedRecord(const DiskLoc& dl, int len) {
         verify( dl.a() != -1 );
         return (DeletedRecord*) cc().database()->getFile(dl.a())->makeRecord(dl, sizeof(DeletedRecord));
     }
+#endif
 
     void ensureHaveIdIndex(const char *ns);
 
