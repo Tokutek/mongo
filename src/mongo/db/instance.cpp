@@ -770,7 +770,8 @@ namespace mongo {
                 uassert( 13511 , "document to insert can't have $ fields" , e.fieldName()[0] != '$' );
             }
         }
-        ::abort(); //theDataFileMgr.insertWithObjMod(ns, js, false); // js may be modified in the call to add an _id field.
+        //theDataFileMgr.insertWithObjMod(ns, js, false); // js may be modified in the call to add an _id field.
+        log() << "TODO: insert this document " << js.toString() << endl;
         logOp("i", ns, js);
     }
 
