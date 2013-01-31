@@ -129,6 +129,7 @@ namespace mongo {
     }
 
     bool NamespaceDetails::inCapExtent( const DiskLoc &dl ) const {
+#if 0
         verify( !dl.isNull() );
         // We could have a rec or drec, doesn't matter.
         bool res = dl.drec()->myExtentLoc(dl) == capExtent;
@@ -137,6 +138,9 @@ namespace mongo {
             verify( res == (dl.drec()->myExtent( dl ) == capExtent.ext()) );
         }
         return res;
+#endif
+        ::abort();
+        return false;
     }
 
     bool NamespaceDetails::nextIsInCapExtent( const DiskLoc &dl ) const {
@@ -148,6 +152,7 @@ namespace mongo {
     }
 
     void NamespaceDetails::advanceCapExtent( const char *ns ) {
+#if 0
         // We want cappedLastDelRecLastExtent() to be the last DeletedRecord of the prev cap extent
         // (or DiskLoc() if new capExtent == firstExtent)
         if ( capExtent == lastExtent )
@@ -165,6 +170,8 @@ namespace mongo {
 
         theCapExtent()->assertOk();
         getDur().writingDiskLoc( capFirstNewRecord ) = DiskLoc();
+#endif
+        ::abort();
     }
 
     DiskLoc NamespaceDetails::__capAlloc( int len ) {
@@ -195,6 +202,7 @@ namespace mongo {
 
     DiskLoc NamespaceDetails::cappedAlloc(const char *ns, int len) {
         
+#if 0
         if ( len > theCapExtent()->length ) {
             // the extent check is a way to try and improve performance
             uassert( 16328 , str::stream() << "document is larger than capped size " 
@@ -274,9 +282,13 @@ namespace mongo {
             getDur().writingDiskLoc(capFirstNewRecord) = loc;
 
         return loc;
+#endif
+        ::abort();
+        return minDiskLoc;
     }
 
     void NamespaceDetails::dumpExtents() {
+#if 0
         cout << "dumpExtents:" << endl;
         for ( DiskLoc i = firstExtent; !i.isNull(); i = i.ext()->xnext ) {
             Extent *e = i.ext();
@@ -284,6 +296,8 @@ namespace mongo {
             e->dump(ss);
             cout << ss.str() << endl;
         }
+#endif
+        ::abort();
     }
 
     void NamespaceDetails::cappedDumpDelInfo() {
@@ -322,6 +336,8 @@ namespace mongo {
     }
 
     void NamespaceDetails::cappedTruncateAfter(const char *ns, DiskLoc end, bool inclusive) {
+        ::abort();
+#if 0
         DEV verify( this == nsdetails(ns) );
         verify( cappedLastDelRecLastExtent().isValid() );
 
@@ -415,6 +431,7 @@ namespace mongo {
                 cappedTruncateLastDelUpdate();
             }
         }
+#endif
     }
 
     void NamespaceDetails::emptyCappedCollection( const char *ns ) {
@@ -466,6 +483,7 @@ namespace mongo {
         memset(t->reserved, 0, sizeof(t->reserved));
 
         // Reset all existing extents and recreate the deleted list.
+#if 0
         for( DiskLoc ext = firstExtent; !ext.isNull(); ext = ext.ext()->xnext ) {
             DiskLoc prev = ext.ext()->xprev;
             DiskLoc next = ext.ext()->xnext;
@@ -474,6 +492,8 @@ namespace mongo {
             ext.ext()->xnext.writing() = next;
             addDeletedRec( empty.drec(), empty );
         }
+#endif
+        ::abort();
 
         for ( unsigned i=0; i<indexes.size(); i++ ) {
             //theDataFileMgr.insertWithObjMod( Namespace( ns ).getSisterNS( "system.indexes" ).c_str() , indexes[i] , true );

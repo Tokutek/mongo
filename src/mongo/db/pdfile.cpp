@@ -54,7 +54,7 @@ _ disallow system* manipulations from the database.
 
 namespace mongo {
 
-    BOOST_STATIC_ASSERT( sizeof(Extent)-4 == 48+128 );
+    //BOOST_STATIC_ASSERT( sizeof(Extent)-4 == 48+128 );
     //BOOST_STATIC_ASSERT( sizeof(DataFileHeader)-4 == 8192 );
 
     void printMemInfo( const char * where ) {
@@ -220,6 +220,7 @@ namespace mongo {
         _applyOpToDataFiles( database, deleter, true );
     }
 
+#if 0
     int Extent::initialSize(int len) {
         long long sz = len * 16;
         if ( len < 1000 ) sz = len * 64;
@@ -229,6 +230,7 @@ namespace mongo {
         verify( z > len );
         return z;
     }
+#endif
 
     void checkConfigNS(const char *ns) {
         if ( cmdLine.configsvr && 
@@ -238,6 +240,9 @@ namespace mongo {
     }
 
     bool _userCreateNS(const char *ns, const BSONObj& options, string& err, bool *deferIdIndex) {
+        ::abort();
+        return false;
+#if 0
         log(1) << "create collection " << ns << ' ' << options << endl;
 
         if ( nsdetails(ns) ) {
@@ -346,6 +351,7 @@ namespace mongo {
         }
 
         return true;
+#endif
     }
 
     /** { ..., capped: true, size: ..., max: ... }
@@ -644,6 +650,7 @@ namespace mongo {
 
     /*---------------------------------------------------------------------*/
 
+#if 0
     void Extent::markEmpty() { 
         xnext.Null();
         xprev.Null();
@@ -764,6 +771,7 @@ namespace mongo {
         }
         return maxExtentSize;
     }
+#endif
 
     /*---------------------------------------------------------------------*/
 
@@ -822,13 +830,15 @@ namespace mongo {
 
         if ( el.number() >= 0 )
             ::abort(); //return DataFileMgr::findAll(ns, startLoc);
+        ::abort();
 
         // "reverse natural order"
-        NamespaceDetails *d = nsdetails(ns);
+        //NamespaceDetails *d = nsdetails(ns);
 
-        if ( !d )
+        //if ( !d )
             return shared_ptr<Cursor>(new BasicCursor(DiskLoc()));
 
+#if 0
         if ( !d->isCapped() ) {
             if ( !startLoc.isNull() )
                 return shared_ptr<Cursor>(new ReverseCursor( startLoc ));
@@ -842,8 +852,10 @@ namespace mongo {
         else {
             return shared_ptr<Cursor>( new ReverseCappedCursor( d, startLoc ) );
         }
+#endif
     }
 
+#if 0
     void printFreeList() {
         string s = cc().database()->name + FREELIST_NS;
         log() << "dump freelist " << s << endl;
@@ -861,11 +873,13 @@ namespace mongo {
 
         log() << "end freelist" << endl;
     }
+#endif
 
     /** free a list of extents that are no longer in use.  this is a double linked list of extents 
         (could be just one in the list)
     */
     void freeExtents(DiskLoc firstExt, DiskLoc lastExt) {
+#if 0
         {
             verify( !firstExt.isNull() && !lastExt.isNull() );
             Extent *f = firstExt.ext();
@@ -897,6 +911,8 @@ namespace mongo {
         }
 
         //printFreeList();
+#endif
+        ::abort();
     }
 
     /* drop a collection/namespace */
@@ -1193,6 +1209,7 @@ namespace mongo {
     }
 #endif
 
+#if 0
     int Extent::followupSize(int len, int lastExtentLen) {
         verify( len < Extent::maxSize() );
         int x = initialSize(len);
@@ -1214,6 +1231,7 @@ namespace mongo {
 
         return sz;
     }
+#endif
 
 #if 0    
     void testSorting() {
@@ -1274,6 +1292,7 @@ namespace mongo {
     }
 #endif
 
+#if 0
     bool prepareToBuildIndex(const BSONObj& io, bool god, string& sourceNS, NamespaceDetails *&sourceCollection, BSONObj& fixedIndexObject );
 
     // We are now doing two btree scans for all unique indexes (one here, and one when we've
@@ -1438,6 +1457,7 @@ namespace mongo {
             throw;
         }
     }
+#endif
 
     /* if god==true, you may pass in obuf of NULL and then populate the returned DiskLoc
          after the call -- that will prevent a double buffer copy in some cases (btree.cpp).

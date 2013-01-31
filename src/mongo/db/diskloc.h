@@ -28,7 +28,7 @@ namespace mongo {
 
     class Record;
     class DeletedRecord;
-    class Extent;
+    //class Extent;
     //class MongoDataFile;
     class DiskLoc;
 
@@ -141,7 +141,7 @@ namespace mongo {
         BSONObj obj() const;
         Record* rec() const;
         DeletedRecord* drec() const;
-        Extent* ext() const;
+        //Extent* ext() const;
 
         template< class V >
         const BtreeBucket<V> * btree() const;

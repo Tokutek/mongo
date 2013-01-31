@@ -410,25 +410,32 @@ namespace mongo {
     }
 
     DiskLoc NamespaceDetails::firstRecord( const DiskLoc &startExtent ) const {
+#if 0
         for (DiskLoc i = startExtent.isNull() ? firstExtent : startExtent;
                 !i.isNull(); i = i.ext()->xnext ) {
             if ( !i.ext()->firstRecord.isNull() )
                 return i.ext()->firstRecord;
         }
+#endif
+        ::abort();
         return DiskLoc();
     }
 
     DiskLoc NamespaceDetails::lastRecord( const DiskLoc &startExtent ) const {
+#if 0
         for (DiskLoc i = startExtent.isNull() ? lastExtent : startExtent;
                 !i.isNull(); i = i.ext()->xprev ) {
             if ( !i.ext()->lastRecord.isNull() )
                 return i.ext()->lastRecord;
         }
+#endif
+        ::abort();
         return DiskLoc();
     }
 
     int n_complaints_cap = 0;
     void NamespaceDetails::maybeComplain( const char *ns, int len ) const {
+#if 0
         if ( ++n_complaints_cap < 8 ) {
             out() << "couldn't make room for new record (len: " << len << ") in capped ns " << ns << '\n';
             int i = 0;
@@ -443,6 +450,7 @@ namespace mongo {
             }
             verify( len * 5 > lastExtentSize ); // assume it is unusually large record; if not, something is broken
         }
+#endif
     }
 
     /* alloc with capped table handling. */
@@ -577,6 +585,7 @@ namespace mongo {
     }
 
     long long NamespaceDetails::storageSize( int * numExtents , BSONArrayBuilder * extentInfo ) const {
+#if 0
         Extent * e = firstExtent.ext();
         verify( e );
 
@@ -597,6 +606,9 @@ namespace mongo {
             *numExtents = n;
 
         return total;
+#endif
+        ::abort();
+        return 0;
     }
 
     NamespaceDetails *NamespaceDetails::writingWithExtra() {

@@ -654,7 +654,8 @@ namespace mongo {
         QueryPlanSummary queryPlan;
         
         if ( pq.hasOption( QueryOption_OplogReplay ) ) {
-            cursor = FindingStartCursor::getCursor( ns.c_str(), query, order );
+            ::abort();
+            //cursor = FindingStartCursor::getCursor( ns.c_str(), query, order );
         }
         else {
             cursor =

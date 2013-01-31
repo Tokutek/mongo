@@ -65,6 +65,7 @@ namespace mongo {
     class QueryPlan;
     
     /** Implements an optimized procedure for finding the first op in the oplog. */
+#if 0
     class FindingStartCursor {
     public:
 
@@ -131,6 +132,7 @@ namespace mongo {
         }
         bool firstDocMatchesOrEmpty() const;
     };
+#endif
 
     class Sync {
     protected:

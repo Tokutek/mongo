@@ -93,11 +93,14 @@ namespace mongo {
             if ( !nsd->capLooped() )
                 start = nsd->firstRecord();
             else {
+#if 0
                 start = nsd->capExtent.ext()->firstRecord;
                 if ( !start.isNull() && start == nsd->capFirstNewRecord ) {
                     start = nsd->capExtent.ext()->lastRecord;
                     start = nextLoop( nsd, start );
                 }
+#endif
+                ::abort();
             }
         }
         curr = start;
@@ -112,6 +115,7 @@ namespace mongo {
 
         DiskLoc i = prev;
         // Last record
+#if 0
         if ( i == nsd->capExtent.ext()->lastRecord )
             return DiskLoc();
         i = nextLoop( nsd, i );
@@ -122,6 +126,8 @@ namespace mongo {
         // If we have just gotten to beginning of capExtent, skip to capFirstNewRecord
         if ( i == nsd->capExtent.ext()->firstRecord )
             i = nsd->capFirstNewRecord;
+#endif
+        ::abort();
         return i;
     }
 
@@ -135,7 +141,10 @@ namespace mongo {
                 start = nsd->lastRecord();
             }
             else {
+#if 0
                 start = nsd->capExtent.ext()->lastRecord;
+#endif
+                ::abort();
             }
         }
         curr = start;
@@ -150,6 +159,7 @@ namespace mongo {
 
         DiskLoc i = prev;
         // Last record
+#if 0
         if ( nsd->capFirstNewRecord == nsd->capExtent.ext()->firstRecord ) {
             if ( i == nextLoop( nsd, nsd->capExtent.ext()->lastRecord ) ) {
                 return DiskLoc();
@@ -171,6 +181,8 @@ namespace mongo {
         if ( i == nsd->capExtent.ext()->lastRecord )
             i = reverse()->next( nsd->capFirstNewRecord );
 
+#endif
+        ::abort();
         return i;
     }
 } // namespace mongo

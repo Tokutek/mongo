@@ -147,7 +147,7 @@ namespace mongo {
         void dumpExtents();
 
     private:
-        Extent *theCapExtent() const { return capExtent.ext(); }
+        //Extent *theCapExtent() const { return capExtent.ext(); }
         void advanceCapExtent( const char *ns );
         DiskLoc __capAlloc(int len);
         DiskLoc cappedAlloc(const char *ns, int len);

@@ -162,6 +162,7 @@ namespace mongo {
         //{ validate: "collectionnamewithoutthedbpart" [, scandata: <bool>] [, full: <bool> } */
 
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
+#if 0
             string ns = dbname + "." + cmdObj.firstElement().valuestrsafe();
             NamespaceDetails * d = nsdetails( ns.c_str() );
             if ( !cmdLine.quiet )
@@ -174,10 +175,13 @@ namespace mongo {
 
             result.append( "ns", ns );
             validateNS( ns.c_str() , d, cmdObj, result);
+#endif
+            ::abort();
             return true;
         }
 
     private:
+#if 0
         void validateNS(const char *ns, NamespaceDetails *d, const BSONObj& cmdObj, BSONObjBuilder& result) {
             const bool full = cmdObj["full"].trueValue();
             const bool scanData = full || cmdObj["scandata"].trueValue();
@@ -396,8 +400,8 @@ namespace mongo {
             if ( !valid ) {
                 result.append("advice", "ns corrupt, requires repair");
             }
-
         }
+#endif
     } validateCmd;
 
 }

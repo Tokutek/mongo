@@ -1556,6 +1556,7 @@ namespace mongo {
             string toNs = dbname + "." + to;
             NamespaceDetails *nsd = nsdetails( fromNs.c_str() );
             massert( 10301 ,  "source collection " + fromNs + " does not exist", nsd );
+#if 0
             long long excessSize = nsd->stats.datasize - size * 2; // datasize and extentSize can't be compared exactly, so add some padding to 'size'
             DiskLoc extent = nsd->firstExtent;
             for( ; excessSize > extent.ext()->length && extent != nsd->lastExtent; extent = extent.ext()->xnext ) {
@@ -1564,6 +1565,8 @@ namespace mongo {
                 log( 6 ) << "excessSize: " << excessSize << endl;
             }
             DiskLoc startLoc = extent.ext()->firstRecord;
+#endif
+            ::abort();
 
             CursorId id;
             {

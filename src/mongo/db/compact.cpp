@@ -36,6 +36,7 @@
 
 namespace mongo {
 
+#if 0
     void addRecordToRecListInExtent(Record *r, DiskLoc loc);
     DiskLoc allocateSpaceForANewRecord(const char *ns, NamespaceDetails *d, int lenWHdr, bool god);
     void freeExtents(DiskLoc firstExt, DiskLoc lastExt);
@@ -247,7 +248,7 @@ namespace mongo {
         d->lastExtentSize=0;
 
         // before dropping indexes, at least make sure we can allocate one extent!
-        uassert(14025, "compact error no space available to allocate", !allocateSpaceForANewRecord(ns, d, Record::HeaderSize+1, false).isNull());
+        //uassert(14025, "compact error no space available to allocate", !allocateSpaceForANewRecord(ns, d, Record::HeaderSize+1, false).isNull());
 
         // note that the drop indexes call also invalidates all clientcursors for the namespace, which is important and wanted here
         log() << "compact dropping indexes" << endl;
@@ -335,6 +336,7 @@ namespace mongo {
         }
         return ok;
     }
+#endif
 
     bool isCurrentlyAReplSetPrimary();
 
@@ -357,6 +359,8 @@ namespace mongo {
         CompactCmd() : Command("compact") { }
 
         virtual bool run(const string& db, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            ::abort();
+#if 0
             string coll = cmdObj.firstElement().valuestr();
             if( coll.empty() || db.empty() ) {
                 errmsg = "no collection name specified";
@@ -409,6 +413,7 @@ namespace mongo {
             bool validate = !cmdObj.hasElement("validate") || cmdObj["validate"].trueValue(); // default is true at the moment
             bool ok = compact(ns, errmsg, validate, result, pf, pb);
             return ok;
+#endif
         }
     };
     static CompactCmd compactCmd;

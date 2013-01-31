@@ -402,6 +402,7 @@ namespace mongo {
 
     // -------------------------------------
 
+#if 0
     FindingStartCursor *FindingStartCursor::make( const QueryPlan &qp ) {
         auto_ptr<FindingStartCursor> ret( new FindingStartCursor( qp ) );
         ret->init();
@@ -568,6 +569,7 @@ namespace mongo {
         ret->setMatcher( matcher );
         return ret;
     }
+#endif
     
     // -------------------------------------
 

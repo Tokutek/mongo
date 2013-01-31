@@ -516,6 +516,7 @@ namespace mongo {
 #endif
 
     inline DiskLoc Record::getNext(const DiskLoc& myLoc) {
+#if 0
         _accessing();
         if ( _nextOfs != DiskLoc::NullOfs ) {
             /* defensive */
@@ -536,8 +537,11 @@ namespace mongo {
             // entire extent could be empty, keep looking
         }
         return e->firstRecord;
+#endif
+        ::abort();
     }
     inline DiskLoc Record::getPrev(const DiskLoc& myLoc) {
+#if 0
         _accessing();
         if ( _prevOfs != DiskLoc::NullOfs )
             return DiskLoc(myLoc.a(), _prevOfs);
@@ -545,6 +549,9 @@ namespace mongo {
         if ( e->xprev.isNull() )
             return DiskLoc();
         return e->xprev.ext()->lastRecord;
+#endif
+        ::abort();
+        return minDiskLoc;
     }
 
     inline BSONObj DiskLoc::obj() const {
@@ -556,9 +563,11 @@ namespace mongo {
         memconcept::is(dr, memconcept::concept::deletedrecord);
         return dr;
     }
+#if 0
     inline Extent* DiskLoc::ext() const {
         ::abort(); return NULL; /*DataFileMgr::getExtent(*this);*/
     }
+#endif
 
     template< class V >
     inline 

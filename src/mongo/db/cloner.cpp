@@ -754,8 +754,11 @@ namespace mongo {
                 uassert( 10026 ,  "source namespace does not exist", nsd );
                 capped = nsd->isCapped();
                 if ( capped )
+                    ::abort();
+#if 0
                     for( DiskLoc i = nsd->firstExtent; !i.isNull(); i = i.ext()->xnext )
                         size += i.ext()->length;
+#endif
             }
 
             Client::Context ctx( target ); //auths against target
