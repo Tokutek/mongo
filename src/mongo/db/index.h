@@ -43,6 +43,7 @@ namespace mongo {
         // so the environment can properly cleanup when mongodb drops an index.
         virtual void dropIndex(const IndexDetails &idx) { }
 
+#if 0
         class IndexInserter : private boost::noncopyable {
         public:
             IndexInserter();
@@ -54,6 +55,7 @@ namespace mongo {
         private:
             std::vector<IndexInsertionContinuation *> _continuations;
         };
+#endif
 
         virtual IndexInsertionContinuation *beginInsertIntoIndex(
             int idxNo,

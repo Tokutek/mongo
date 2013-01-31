@@ -22,6 +22,7 @@
 
 namespace mongo {
     class NamespaceDetails;
+#if 0
     class Record;
 
     // unindex all keys in index for this record. 
@@ -45,6 +46,7 @@ namespace mongo {
                              const BSONObj& obj,
                              DiskLoc recordLoc,
                              const bool allowDups = false);
+#endif
 
     bool dropIndexes( NamespaceDetails *d, const char *ns, const char *name, string &errmsg, BSONObjBuilder &anObjBuilder, bool maydeleteIdIndex );
 

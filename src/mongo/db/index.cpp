@@ -37,6 +37,7 @@ namespace mongo {
         toku::env_shutdown();
     }
 
+#if 0
     IndexInterface::IndexInserter::IndexInserter() {}
     IndexInterface::IndexInserter::~IndexInserter() {
         for (size_t i = 0; i < _continuations.size(); ++i)
@@ -52,6 +53,7 @@ namespace mongo {
             _continuations[i]->doIndexInsertionWrites();
         }
     }
+#endif
 
     IndexInterface& IndexInterface::defaultVersion() {
         return *IndexDetails::iis[ DefaultIndexVersionNumber ];
@@ -239,6 +241,7 @@ namespace mongo {
         getSpec().getKeys( obj, keys );
     }
 
+#if 0
     void setDifference(BSONObjSet &l, BSONObjSet &r, vector<BSONObj*> &diff) {
         // l and r must use the same ordering spec.
         verify( l.key_comp().order() == r.key_comp().order() );
@@ -432,6 +435,7 @@ namespace mongo {
 
         return true;
     }
+#endif
 
     void IndexSpec::reset( const IndexDetails * details ) {
         _details = details;
