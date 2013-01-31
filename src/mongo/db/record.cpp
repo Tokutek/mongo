@@ -446,8 +446,10 @@ namespace mongo {
         throw PageFaultException(this);
     }
 
+#if 0
     void DeletedRecord::_accessing() const {
 
     }
+#endif
 
 }

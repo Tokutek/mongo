@@ -364,7 +364,7 @@ namespace mongo {
         DiskLoc alloc(const char *ns, int lenToAlloc, DiskLoc& extentLoc);
 
         /* add a given record to the deleted chains for this NS */
-        void addDeletedRec(DeletedRecord *d, DiskLoc dloc);
+        //void addDeletedRec(DeletedRecord *d, DiskLoc dloc);
         void dumpDeleted(set<DiskLoc> *extents = 0);
         // Start from firstExtent by default.
         DiskLoc firstRecord( const DiskLoc &startExtent = DiskLoc() ) const;

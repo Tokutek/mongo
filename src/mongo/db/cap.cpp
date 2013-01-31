@@ -55,6 +55,7 @@ namespace mongo {
        (or 3...there will be a little unused sliver at the end of the extent.)
     */
     void NamespaceDetails::compact() {
+#if 0
         verify( isCapped() );
 
         list<DiskLoc> drecs;
@@ -95,16 +96,23 @@ namespace mongo {
             addDeletedRec(a.drec(), a);
             a = b;
         }
+#endif
+        ::abort();
     }
 
     DiskLoc &NamespaceDetails::cappedFirstDeletedInCurExtent() {
+        ::abort();
+            return cappedListOfAllDeletedRecords();
+#if 0
         if ( cappedLastDelRecLastExtent().isNull() )
             return cappedListOfAllDeletedRecords();
         else
             return cappedLastDelRecLastExtent().drec()->nextDeleted();
+#endif
     }
 
     void NamespaceDetails::cappedCheckMigrate() {
+#if 0
         // migrate old NamespaceDetails format
         verify( isCapped() );
         if ( capExtent.a() == 0 && capExtent.getOfs() == 0 ) {
@@ -126,6 +134,8 @@ namespace mongo {
             // Last, in case we're killed before getting here
             capExtent.writing() = firstExtent;
         }
+#endif
+        ::abort();
     }
 
     bool NamespaceDetails::inCapExtent( const DiskLoc &dl ) const {
@@ -144,11 +154,15 @@ namespace mongo {
     }
 
     bool NamespaceDetails::nextIsInCapExtent( const DiskLoc &dl ) const {
+#if 0
         verify( !dl.isNull() );
         DiskLoc next = dl.drec()->nextDeleted();
         if ( next.isNull() )
             return false;
         return inCapExtent( next );
+#endif
+        ::abort();
+        return false;
     }
 
     void NamespaceDetails::advanceCapExtent( const char *ns ) {
@@ -175,6 +189,7 @@ namespace mongo {
     }
 
     DiskLoc NamespaceDetails::__capAlloc( int len ) {
+#if 0
         DiskLoc prev = cappedLastDelRecLastExtent();
         DiskLoc i = cappedFirstDeletedInCurExtent();
         DiskLoc ret;
@@ -198,6 +213,9 @@ namespace mongo {
         }
 
         return ret;
+#endif
+        ::abort();
+        return minDiskLoc;
     }
 
     DiskLoc NamespaceDetails::cappedAlloc(const char *ns, int len) {
@@ -301,15 +319,19 @@ namespace mongo {
     }
 
     void NamespaceDetails::cappedDumpDelInfo() {
+#if 0
         cout << "dl[0]: " << deletedList[0].toString() << endl;
         for( DiskLoc z = deletedList[0]; !z.isNull(); z = z.drec()->nextDeleted() ) {
             cout << "  drec:" << z.toString() << " dreclen:" << hex << z.drec()->lengthWithHeaders() <<
                  " ext:" << z.drec()->myExtent(z)->myLoc.toString() << endl;
         }
         cout << "dl[1]: " << deletedList[1].toString() << endl;
+#endif
+        ::abort();
     }
 
     void NamespaceDetails::cappedTruncateLastDelUpdate() {
+#if 0
         if ( capExtent == firstExtent ) {
             // Only one extent of the collection is in use, so there
             // is no deleted record in a previous extent, so nullify
@@ -333,6 +355,8 @@ namespace mongo {
             verify( !i.drec()->nextDeleted().isNull() );
             cappedLastDelRecLastExtent().writing() = i;
         }
+#endif
+        ::abort();
     }
 
     void NamespaceDetails::cappedTruncateAfter(const char *ns, DiskLoc end, bool inclusive) {

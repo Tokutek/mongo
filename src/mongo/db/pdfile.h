@@ -173,6 +173,7 @@ namespace mongo {
 
 #pragma pack(1)
 
+#if 0
     class DeletedRecord {
     public:
 
@@ -202,6 +203,7 @@ namespace mongo {
         int _extentOfs;
         DiskLoc _nextDeleted;
     };
+#endif
 
     /* Record is a record in a datafile.  DeletedRecord is similar but for deleted space.
 
@@ -236,7 +238,7 @@ namespace mongo {
         int netLength() const { _accessing(); return _netLength(); }
 
         /* use this when a record is deleted. basically a union with next/prev fields */
-        DeletedRecord& asDeleted() { return *((DeletedRecord*) this); }
+        //DeletedRecord& asDeleted() { return *((DeletedRecord*) this); }
 
         Extent* myExtent(const DiskLoc& myLoc) { return NULL; ::abort(); /*DataFileMgr::getExtent(DiskLoc(myLoc.a(), extentOfs() ) )*/; }
 
@@ -557,13 +559,13 @@ namespace mongo {
     inline BSONObj DiskLoc::obj() const {
         return BSONObj::make(rec()->accessed());
     }
+#if 0
     inline DeletedRecord* DiskLoc::drec() const {
         verify( _a != -1 );
         DeletedRecord* dr = (DeletedRecord*) rec();
         memconcept::is(dr, memconcept::concept::deletedrecord);
         return dr;
     }
-#if 0
     inline Extent* DiskLoc::ext() const {
         ::abort(); return NULL; /*DataFileMgr::getExtent(*this);*/
     }
@@ -624,11 +626,9 @@ namespace mongo {
         Record* r = cc().database()->getFile(dl.a())->recordAt(dl);
         return r;
     }
-#endif
 
     BOOST_STATIC_ASSERT( 16 == sizeof(DeletedRecord) );
 
-#if 0
     inline DeletedRecord* DataFileMgr::makeDeletedRecord(const DiskLoc& dl, int len) {
         verify( dl.a() != -1 );
         return (DeletedRecord*) cc().database()->getFile(dl.a())->makeRecord(dl, sizeof(DeletedRecord));

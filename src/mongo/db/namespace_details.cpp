@@ -212,12 +212,13 @@ namespace mongo {
             ht->iterAll( namespaceGetNamespacesCallback , (void*)&tofill );
     }
 
+#if 0
     void NamespaceDetails::addDeletedRec(DeletedRecord *d, DiskLoc dloc) {
         BOOST_STATIC_ASSERT( sizeof(NamespaceDetails::Extra) <= sizeof(NamespaceDetails) );
 
         {
             Record *r = (Record *) getDur().writingPtr(d, sizeof(Record));
-            d = &r->asDeleted();
+            //d = &r->asDeleted();
             // defensive code: try to make us notice if we reference a deleted record
             reinterpret_cast<unsigned*>( r->data() )[0] = 0xeeeeeeee;
         }
@@ -249,6 +250,7 @@ namespace mongo {
             d->nextDeleted() = oldHead;
         }
     }
+#endif
 
     /* predetermine location of the next alloc without actually doing it. 
         if cannot predetermine returns null (so still call alloc() then)
@@ -267,6 +269,7 @@ namespace mongo {
         @return null diskloc if no room - allocate a new extent then
     */
     DiskLoc NamespaceDetails::alloc(const char *ns, int lenToAlloc, DiskLoc& extentLoc) {
+#if 0
         {
             // align very slightly.  
             // note that if doing more coarse-grained quantization (really just if it isn't always
@@ -309,9 +312,12 @@ namespace mongo {
         newDelW->lengthWithHeaders() = left;
         newDelW->nextDeleted().Null();
 
-        addDeletedRec(newDel, newDelLoc);
+        //addDeletedRec(newDel, newDelLoc);
 
         return loc;
+#endif
+        ::abort();
+        return minDiskLoc;
     }
 
     /* for non-capped collections.
@@ -319,6 +325,7 @@ namespace mongo {
        returned item is out of the deleted list upon return
     */
     DiskLoc NamespaceDetails::__stdAlloc(int len, bool peekOnly) {
+#if 0
         DiskLoc *prev;
         DiskLoc *bestprev = 0;
         DiskLoc bestmatch;
@@ -389,9 +396,13 @@ namespace mongo {
         }
 
         return bestmatch;
+#endif
+        ::abort();
+        return minDiskLoc;
     }
 
     void NamespaceDetails::dumpDeleted(set<DiskLoc> *extents) {
+#if 0
         for ( int i = 0; i < Buckets; i++ ) {
             DiskLoc dl = deletedList[i];
             while ( !dl.isNull() ) {
@@ -407,6 +418,8 @@ namespace mongo {
                 dl = r->nextDeleted();
             }
         }
+#endif
+        ::abort();
     }
 
     DiskLoc NamespaceDetails::firstRecord( const DiskLoc &startExtent ) const {
