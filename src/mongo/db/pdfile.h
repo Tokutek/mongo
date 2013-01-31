@@ -574,18 +574,18 @@ namespace mongo {
     }
 #endif
 
+#if 0
     template< class V >
     inline 
     const BtreeBucket<V> * DiskLoc::btree() const {
         verify( _a != -1 );
         ::abort();
         return NULL;
-#if 0
         Record *r = rec();
         memconcept::is(r, memconcept::concept::btreebucket, "", 8192);
         return (const BtreeBucket<V> *) r->data();
-#endif
     }
+#endif
 
 } // namespace mongo
 

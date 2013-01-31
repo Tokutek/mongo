@@ -143,12 +143,14 @@ namespace mongo {
         //DeletedRecord* drec() const;
         //Extent* ext() const;
 
+#if 0
         template< class V >
         const BtreeBucket<V> * btree() const;
 
         // Explicitly signals we are writing and casts away const
         template< class V >
         BtreeBucket<V> * btreemod() const;
+#endif
 
         /*MongoDataFile& pdf() const;*/
     };
