@@ -878,8 +878,8 @@ namespace mongo {
     /** free a list of extents that are no longer in use.  this is a double linked list of extents 
         (could be just one in the list)
     */
-    void freeExtents(DiskLoc firstExt, DiskLoc lastExt) {
 #if 0
+    void freeExtents(DiskLoc firstExt, DiskLoc lastExt) {
         {
             verify( !firstExt.isNull() && !lastExt.isNull() );
             Extent *f = firstExt.ext();
@@ -911,9 +911,8 @@ namespace mongo {
         }
 
         //printFreeList();
-#endif
-        ::abort();
     }
+#endif
 
     /* drop a collection/namespace */
     void dropNS(const string& nsToDrop) {
@@ -941,7 +940,8 @@ namespace mongo {
 
         // free extents
         if( !d->firstExtent.isNull() ) {
-            freeExtents(d->firstExtent, d->lastExtent);
+            ::abort();
+            //freeExtents(d->firstExtent, d->lastExtent);
             getDur().writingDiskLoc( d->firstExtent ).setInvalid();
             getDur().writingDiskLoc( d->lastExtent ).setInvalid();
         }

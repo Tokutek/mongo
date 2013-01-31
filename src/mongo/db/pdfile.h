@@ -43,7 +43,7 @@ namespace mongo {
     //const int PDFILE_VERSION_MINOR = 5;
 
     //class DataFileHeader;
-    class Extent;
+    //class Extent;
     class Record;
     class Cursor;
     class OpDebug;
@@ -240,7 +240,7 @@ namespace mongo {
         /* use this when a record is deleted. basically a union with next/prev fields */
         //DeletedRecord& asDeleted() { return *((DeletedRecord*) this); }
 
-        Extent* myExtent(const DiskLoc& myLoc) { return NULL; ::abort(); /*DataFileMgr::getExtent(DiskLoc(myLoc.a(), extentOfs() ) )*/; }
+        //Extent* myExtent(const DiskLoc& myLoc) { return NULL; ::abort(); /*DataFileMgr::getExtent(DiskLoc(myLoc.a(), extentOfs() ) )*/; }
 
         /* get the next record in the namespace, traversing extents as necessary */
         DiskLoc getNext(const DiskLoc& myLoc);
@@ -321,6 +321,7 @@ namespace mongo {
     (11:12:35 AM) dm10gen: when the extent is allocated, all its empty space is stuck into one big DeletedRecord
     (11:12:55 AM) dm10gen: and that is placed on the free list
     */
+#if 0
     class Extent {
     public:
         unsigned magic;
@@ -408,6 +409,7 @@ namespace mongo {
     private:
         DiskLoc _reuse(const char *nsname, bool newUseIsAsCapped); // recycle an extent and reuse it for a different ns
     };
+#endif
 
     /*  a datafile - i.e. the "dbname.<#>" files :
 
