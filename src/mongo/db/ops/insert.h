@@ -18,6 +18,8 @@
 
 #include "pch.h"
 
+#include "mongo/bson/bsonobj.h"
+
 namespace mongo {
 
     // Insert an object into the given namespace.

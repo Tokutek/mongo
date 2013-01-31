@@ -55,9 +55,6 @@ namespace mongo {
             IndexDetails& idx, const BSONObj &obj, bool toplevel = true) const {
             return bt_insert(thisLoc, recordLoc, key, order, dupsAllowed, idx, toplevel);
         }
-        virtual DiskLoc addBucket(const IndexDetails&) = 0;
-        virtual void uassertIfDups(IndexDetails& idx, vector<BSONObj*>& addedKeys, DiskLoc head, 
-            DiskLoc self, const Ordering& ordering) = 0;
 
         // these are for geo
         virtual bool isUsed(DiskLoc thisLoc, int pos) = 0;
@@ -202,11 +199,6 @@ namespace mongo {
                    isIdIndex();
         }
 
-        /** return true if dropDups was set when building index (if any duplicates, dropdups drops the duplicating objects) */
-        bool dropDups() const {
-            return info.obj().getBoolField( "dropDups" );
-        }
-
         /** delete this index.  does NOT clean up the system catalog
             (system.indexes or system.namespaces) -- only NamespaceIndex.
         */
@@ -223,7 +215,7 @@ namespace mongo {
                     of indexes in old formats in the future.
         */
         // tokudb: tokudb indexes are version 2
-        static bool isASupportedIndexVersionNumber(int v) { return (v&3)==v; } // v == 0 || v == 1 || v == 
+        static bool isASupportedIndexVersionNumber(int v) { return v == 2; } // only tokudb indexes are supported
 
         /** @return the interface for this interface, which varies with the index version.
             used for backward compatibility of index versions/formats.
@@ -231,37 +223,10 @@ namespace mongo {
         IndexInterface& idxInterface() const { 
             int v = version();
             dassert( isASupportedIndexVersionNumber(v) );
-            return *iis[v&3];
+            return *iis[v];
         }
 
         static IndexInterface *iis[];
     };
-
-    struct IndexChanges { /*on an update*/
-        BSONObjSet oldkeys;
-        BSONObjSet newkeys;
-        vector<BSONObj*> removed; // these keys were removed as part of the change
-        vector<BSONObj*> added;   // these keys were added as part of the change
-
-        /** @curObjLoc - the object we want to add's location.  if it is already in the
-                         index, that is allowed here (for bg indexing case).
-        */
-        void dupCheck(IndexDetails& idx, DiskLoc curObjLoc) {
-            if( added.empty() || !idx.unique() )
-                return;
-            const Ordering ordering = Ordering::make(idx.keyPattern());
-            idx.idxInterface().uassertIfDups(idx, added, idx.head, curObjLoc, ordering); // "E11001 duplicate key on update"
-        }
-    };
-
-    class NamespaceDetails;
-    // changedId should be initialized to false
-    void getIndexChanges(vector<IndexChanges>& v, const char *ns, NamespaceDetails& d,
-                         BSONObj newObj, BSONObj oldObj, bool &cangedId);
-    void dupCheck(vector<IndexChanges>& v, NamespaceDetails& d, DiskLoc curObjLoc);
-
-    void assureSysIndexesEmptied(const char *ns, IndexDetails *exceptForIdIndex);
-    int removeFromSysIndexes(const char *ns, const char *idxName);
-
 
 } // namespace mongo

@@ -51,15 +51,6 @@ public:
             const BSONObj& key, const Ordering &order, bool dupsAllowed,
             IndexDetails& idx, const BSONObj &obj, bool toplevel = true) const;
 
-    virtual DiskLoc addBucket(const IndexDetails& id) { 
-        printf("IndexInterfaceTokudb: %s not supported, returning empty diskloc.\n", __FUNCTION__);
-        return DiskLoc();
-    }
-
-    virtual void uassertIfDups(IndexDetails& idx, vector<BSONObj*>& addedKeys, DiskLoc head, DiskLoc self, const Ordering& ordering) { 
-        printf("IndexInterfaceTokudb: %s not supported, doing nothing.\n", __FUNCTION__);
-    }
-
     // for geo: 
     // all unsupported for tokudb
     virtual bool isUsed(DiskLoc thisLoc, int pos) { 

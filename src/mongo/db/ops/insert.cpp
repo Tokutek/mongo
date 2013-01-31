@@ -18,12 +18,13 @@
 
 #include "pch.h"
 
+#include "mongo/util/log.h"
 #include "mongo/db/ops/insert.h"
 
 namespace mongo {
 
-    void insertObject(const char *ns, const BSONObj &doc) {
-        log() << "TODO: insert this object " << js.toString() << endl;
+    void insertObject(const char *ns, const BSONObj &obj) {
+        log() << "TODO: insert this object " << obj.toString() << endl;
     }
     
 } // namespace mongo
