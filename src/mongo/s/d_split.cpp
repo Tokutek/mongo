@@ -156,10 +156,12 @@ namespace mongo {
                 }
                 cc->advance();
 
+#if 0
                 if ( ! cc->yieldSometimes( ClientCursor::DontNeed ) ) {
                     cc.release();
                     break;
                 }
+#endif
             }
 
             return true;
@@ -359,6 +361,7 @@ namespace mongo {
                             break;
                         }
                         
+#if 0
                         if ( ! cc->yieldSometimes( ClientCursor::DontNeed ) ) {
                             // we were near and and got pushed to the end
                             // i think returning the splits we've already found is fine
@@ -368,6 +371,7 @@ namespace mongo {
                             cc.release();
                             break;
                         }
+#endif
                     }
                     
                     if ( splitKeys.size() > 1 || ! force )

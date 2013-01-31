@@ -79,6 +79,7 @@ namespace mongo {
                 cursor()->ok() && cursor()->c()->keyFieldsOnly());
     }
 
+#if 0
     void DocumentSourceCursor::yieldSometimes() {
         try { // SERVER-5752 may make this try unnecessary
             // if we are index only we don't need the recored
@@ -96,6 +97,7 @@ namespace mongo {
             LOG(1) << "aggregation stale config exception: " << e.what() << endl;
         }
     }
+#endif
 
     void DocumentSourceCursor::findNext() {
 
@@ -106,11 +108,13 @@ namespace mongo {
 
         for( ; cursor()->ok(); cursor()->advance() ) {
 
+#if 0
             yieldSometimes();
             if ( !cursor()->ok() ) {
                 // The cursor was exhausted during the yield.
                 break;
             }
+#endif
 
             if ( !cursor()->currentMatches() || cursor()->currentIsDup() )
                 continue;

@@ -783,23 +783,25 @@ namespace mongo {
                     // object is same as previous, add to array
                     all.push_back( o );
                     if ( pm->hits() % 100 == 0 ) {
+#if 0
                         if ( ! cursor->yield() ) {
                             cursor.release();
                             break;
                         }
+#endif
                         killCurrentOp.checkForInterrupt();
                     }
                     continue;
                 }
 
-                ClientCursor::YieldLock yield (cursor.get());
+                //ClientCursor::YieldLock yield (cursor.get());
 
                 try {
                     // reduce a finalize array
                     finalReduce( all );
                 }
                 catch (...) {
-                    yield.relock();
+                    //yield.relock();
                     cursor.release();
                     throw;
                 }
@@ -808,10 +810,12 @@ namespace mongo {
                 prev = o;
                 all.push_back( o );
 
+#if 0
                 if ( ! yield.stillOk() ) {
                     cursor.release();
                     break;
                 }
+#endif
 
                 killCurrentOp.checkForInterrupt();
             }
@@ -1124,6 +1128,7 @@ namespace mongo {
 
                             num++;
                             if ( num % 100 == 0 ) {
+#if 0
                                 // try to yield lock regularly
                                 ClientCursor::YieldLock yield (cursor.get());
                                 Timer t;
@@ -1137,6 +1142,7 @@ namespace mongo {
                                 }
 
                                 killCurrentOp.checkForInterrupt();
+#endif
                             }
                             pm.hit();
 

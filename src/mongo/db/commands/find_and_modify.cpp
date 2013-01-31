@@ -72,7 +72,7 @@ namespace mongo {
                 return false;
             }
             
-            PageFaultRetryableSection s;
+            //PageFaultRetryableSection s;
             while ( 1 ) {
                 try {
                     return runNoDirectClient( ns , 
@@ -80,8 +80,10 @@ namespace mongo {
                                               upsert , returnNew , remove , 
                                               result );
                 }
-                catch ( PageFaultException& e ) {
-                    e.touch();
+                //catch ( PageFaultException& e ) {
+                catch ( ... ) {
+                    //e.touch();
+                    ::abort();
                 }
             }
 

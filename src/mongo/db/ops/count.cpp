@@ -40,6 +40,8 @@ namespace mongo {
             return applySkipLimit( d->stats.nrecords , cmd );
         }
         
+        ::abort();
+#if 0
         long long count = 0;
         long long skip = cmd["skip"].numberLong();
         long long limit = cmd["limit"].numberLong();
@@ -110,6 +112,7 @@ namespace mongo {
               << " failed with exception: " << err << " code: " << errCode
               << endl;
         return -2;
+#endif
     }
     
 } // namespace mongo

@@ -209,9 +209,9 @@ namespace mongo {
          */
         virtual long long nscanned() = 0;
         /** Take any steps necessary before the db mutex is yielded. */
-        virtual void prepareToYield() = 0;
+        //virtual void prepareToYield() = 0;
         /** Recover once the db mutex is regained. */
-        virtual void recoverFromYield() = 0;
+        //virtual void recoverFromYield() = 0;
         
         /**
          * @return true iff the QueryPlan for this QueryOp may be registered
@@ -425,8 +425,8 @@ namespace mongo {
             /** @return true if done iterating. */
             bool done() const { return _done; }
             
-            void prepareToYield();
-            void recoverFromYield();
+            //void prepareToYield();
+            //void recoverFromYield();
             
             /** @return an ExplainClauseInfo object that will be updated as the query runs. */
             shared_ptr<ExplainClauseInfo> generateExplainInfo() {
@@ -439,8 +439,8 @@ namespace mongo {
             QueryPlanSet &_plans;
             static void initOp( QueryOp &op );
             static void nextOp( QueryOp &op );
-            static void prepareToYieldOp( QueryOp &op );
-            static void recoverFromYieldOp( QueryOp &op );
+            //static void prepareToYieldOp( QueryOp &op );
+            //static void recoverFromYieldOp( QueryOp &op );
             
             /** Initialize the Runner. */
             shared_ptr<QueryOp> init();
@@ -488,7 +488,7 @@ namespace mongo {
         CandidatePlanCharacter _cachedPlanCharacter;
         BSONObj _order;
         long long _oldNScanned;
-        ElapsedTracker _yieldSometimesTracker;
+        //ElapsedTracker _yieldSometimesTracker;
         bool _allowSpecial;
     };
 
@@ -540,8 +540,8 @@ namespace mongo {
         
         /** Yield the runner member. */
         
-        void prepareToYield();
-        void recoverFromYield();
+        //void prepareToYield();
+        //void recoverFromYield();
         
         /** Clear the runner member. */
         void clearRunner();
@@ -655,7 +655,7 @@ namespace mongo {
                     const QueryOp &op, long long nscanned );
 
         virtual bool ok() { return _c->ok(); }
-        virtual Record* _current() { return _c->_current(); }
+        //virtual Record* _current() { return _c->_current(); }
         virtual BSONObj current() { return _c->current(); }
         virtual DiskLoc currLoc() { return _c->currLoc(); }
         virtual bool advance();
@@ -663,9 +663,9 @@ namespace mongo {
         virtual DiskLoc refLoc() { return _c->refLoc(); }
         virtual void noteLocation() { _c->noteLocation(); }
         virtual void checkLocation() { _c->checkLocation(); }
-        virtual void recoverFromYield();
+        //virtual void recoverFromYield();
         virtual bool supportGetMore() { return true; }
-        virtual bool supportYields() { return true; }
+        //virtual bool supportYields() { return true; }
         virtual BSONObj indexKeyPattern() { return _c->indexKeyPattern(); }
 
         /** Deduping documents from a prior cursor is handled by the matcher. */

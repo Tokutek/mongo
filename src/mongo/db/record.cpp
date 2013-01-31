@@ -11,6 +11,7 @@
 
 namespace mongo {
 
+#if 0
     RecordStats recordStats;
 
     void RecordStats::record( BSONObjBuilder& b ) {
@@ -22,6 +23,7 @@ namespace mongo {
     void Record::appendStats( BSONObjBuilder& b ) {
         recordStats.record( b );
     }
+#endif
 
     namespace ps {
         
@@ -312,6 +314,7 @@ namespace mongo {
     }
 #endif
 
+#if 0
     bool Record::MemoryTrackingEnabled = true;
     
     volatile int __record_touch_dummy = 1; // this is used to make sure the compiler doesn't get too smart on us
@@ -446,7 +449,6 @@ namespace mongo {
         throw PageFaultException(this);
     }
 
-#if 0
     void DeletedRecord::_accessing() const {
 
     }

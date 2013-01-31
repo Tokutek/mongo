@@ -204,7 +204,8 @@ namespace mongo {
         } else {
             // non-clustering indexes should store an empty obj
             invariant(obj.isEmpty());
-            obj = BSONObj::make(_current()); 
+            //obj = BSONObj::make(_current()); 
+            ::abort();
         }
         return obj;
     }

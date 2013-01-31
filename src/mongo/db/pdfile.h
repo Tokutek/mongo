@@ -44,7 +44,7 @@ namespace mongo {
 
     //class DataFileHeader;
     //class Extent;
-    class Record;
+    //class Record;
     class Cursor;
     class OpDebug;
 
@@ -216,6 +216,7 @@ namespace mongo {
     (11:04:43 AM) dm10gen: so that is how Record::myExtent() works
     (11:04:53 AM) dm10gen: on an alloc(), when we build a new Record, we must populate its extentOfs then
     */
+#if 0
     class Record {
     public:
         enum HeaderSizeValue { HeaderSize = 16 };
@@ -314,6 +315,7 @@ namespace mongo {
 
         static bool MemoryTrackingEnabled;
     };
+#endif
 
     /* extents are datafile regions where all the records within the region
        belong to the same namespace.
@@ -519,8 +521,8 @@ namespace mongo {
     }
 #endif
 
-    inline DiskLoc Record::getNext(const DiskLoc& myLoc) {
 #if 0
+    inline DiskLoc Record::getNext(const DiskLoc& myLoc) {
         _accessing();
         if ( _nextOfs != DiskLoc::NullOfs ) {
             /* defensive */
@@ -541,11 +543,9 @@ namespace mongo {
             // entire extent could be empty, keep looking
         }
         return e->firstRecord;
-#endif
-        ::abort();
     }
+
     inline DiskLoc Record::getPrev(const DiskLoc& myLoc) {
-#if 0
         _accessing();
         if ( _prevOfs != DiskLoc::NullOfs )
             return DiskLoc(myLoc.a(), _prevOfs);
@@ -553,13 +553,14 @@ namespace mongo {
         if ( e->xprev.isNull() )
             return DiskLoc();
         return e->xprev.ext()->lastRecord;
-#endif
         ::abort();
         return minDiskLoc;
     }
+#endif
 
     inline BSONObj DiskLoc::obj() const {
-        return BSONObj::make(rec()->accessed());
+        ::abort(); return BSONObj();
+        //return BSONObj::make(rec()->accessed());
     }
 #if 0
     inline DeletedRecord* DiskLoc::drec() const {
@@ -577,9 +578,13 @@ namespace mongo {
     inline 
     const BtreeBucket<V> * DiskLoc::btree() const {
         verify( _a != -1 );
+        ::abort();
+        return NULL;
+#if 0
         Record *r = rec();
         memconcept::is(r, memconcept::concept::btreebucket, "", 8192);
         return (const BtreeBucket<V> *) r->data();
+#endif
     }
 
 } // namespace mongo
@@ -639,8 +644,10 @@ namespace mongo {
 
     void ensureHaveIdIndex(const char *ns);
 
+#if 0
     inline BSONObj BSONObj::make(const Record* r ) {
         return BSONObj( r->data() );
     }
+#endif
     
 } // namespace mongo

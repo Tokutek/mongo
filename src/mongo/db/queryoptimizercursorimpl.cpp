@@ -100,7 +100,7 @@ namespace mongo {
 
             // All candidate cursors must support yields for QueryOptimizerCursorImpl's
             // prepareToYield() and prepareToTouchEarlierIterate() to work.
-            verify( _c->supportYields() );
+            //verify( _c->supportYields() );
             _capped = _c->capped();
 
             // TODO This violates the current Cursor interface abstraction, but for now it's simpler to keep our own set of
@@ -116,6 +116,7 @@ namespace mongo {
             return _c ? _c->nscanned() : _matchCounter.nscanned();
         }
         
+#if 0
         virtual void prepareToYield() {
             if ( _c && !_cc ) {
                 _cc.reset( new ClientCursor( QueryOption_NoCursorTimeout, _c, queryPlan().ns() ) );
@@ -149,6 +150,7 @@ namespace mongo {
                 checkCursorAdvanced();
             }
         }
+#endif
 
         void prepareToTouchEarlierIterate() {
             recordCursorLocation();
@@ -292,7 +294,7 @@ namespace mongo {
         shared_ptr<Cursor> _c;
         ClientCursor::Holder _cc;
         DiskLoc _posBeforeYield;
-        ClientCursor::YieldData _yieldData;
+        //ClientCursor::YieldData _yieldData;
         const QueryPlanSelectionPolicy &_selectionPolicy;
         const bool &_requireOrder; // TODO don't use a ref for this, but signal change explicitly
         shared_ptr<ExplainPlanInfo> _explainPlanInfo;
@@ -340,6 +342,7 @@ namespace mongo {
         
         virtual bool ok() { return _takeover ? _takeover->ok() : !currLoc().isNull(); }
         
+#if 0
         virtual Record* _current() {
             if ( _takeover ) {
                 return _takeover->_current();
@@ -347,6 +350,7 @@ namespace mongo {
             assertOk();
             return currLoc().rec();
         }
+#endif
         
         virtual BSONObj current() {
             if ( _takeover ) {
@@ -394,7 +398,7 @@ namespace mongo {
         
         virtual bool supportGetMore() { return true; }
 
-        virtual bool supportYields() { return true; }
+        //virtual bool supportYields() { return true; }
         
         virtual void prepareToTouchEarlierIterate() {
             if ( _takeover ) {
@@ -408,7 +412,8 @@ namespace mongo {
                 else {
                     // With multiple plans, the 'earlier iterate' could be the current iterate of one of
                     // the component plans.  We do a full yield of all plans, using ClientCursors.
-                    _mps->prepareToYield();
+                    //_mps->prepareToYield();
+                    ::abort();
                 }
             }
         }
@@ -422,11 +427,13 @@ namespace mongo {
                     _currOp->recoverFromTouchingEarlierIterate();
                 }
                 else {
-                    recoverFromYield();
+                    //recoverFromYield();
+                    ::abort();
                 }
             }
         }
 
+#if 0
         virtual void prepareToYield() {
             if ( _takeover ) {
                 _takeover->prepareToYield();
@@ -451,6 +458,7 @@ namespace mongo {
                 }
             }
         }
+#endif
         
         virtual string toString() { return "QueryOptimizerCursor"; }
         
@@ -573,11 +581,13 @@ namespace mongo {
             }
         }
         
+#if 0
         virtual void noteYield() {
             if ( _explainQueryInfo ) {
                 _explainQueryInfo->noteYield();
             }
         }
+#endif
         
         virtual shared_ptr<ExplainQueryInfo> explainQueryInfo() const {
             return _explainQueryInfo;

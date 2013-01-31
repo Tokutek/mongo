@@ -204,6 +204,7 @@ namespace mongo {
          *         if false is returned, then this ClientCursor should be considered deleted -
          *         in fact, the whole database could be gone.
          */
+#if 0
         bool yield( int microsToSleep = -1 , Record * recordToLoad = 0 );
 
         enum RecordNeeds {
@@ -244,6 +245,7 @@ namespace mongo {
             YieldData _data;
             scoped_ptr<dbtempreleasecond> _unlock;
         };
+#endif
 
         // --- some pass through helpers for Cursor ---
 
@@ -384,7 +386,7 @@ namespace mongo {
 
         CCByLoc& byLoc() { return _db->ccByLoc; }
         
-        Record* _recordForYield( RecordNeeds need );
+        //Record* _recordForYield( RecordNeeds need );
 
     private:
 
@@ -412,7 +414,7 @@ namespace mongo {
         unsigned _pinValue;
 
         bool _doingDeletes; // when true we are the delete and aboutToDelete shouldn't manipulate us
-        ElapsedTracker _yieldSometimesTracker;
+        //ElapsedTracker _yieldSometimesTracker;
 
         ShardChunkManagerPtr _chunkManager;
 

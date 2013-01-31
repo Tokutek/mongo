@@ -41,13 +41,13 @@ namespace mongo {
     /* these will be used outside of mutexes - really functors - thus the const */
     class Forward : public AdvanceStrategy {
         virtual DiskLoc next( const DiskLoc &prev ) const {
-            return prev.rec()->getNext( prev );
+            ::abort(); return minDiskLoc; //return prev.rec()->getNext( prev );
         }
     } _forward;
 
     class Reverse : public AdvanceStrategy {
         virtual DiskLoc next( const DiskLoc &prev ) const {
-            return prev.rec()->getPrev( prev );
+            ::abort(); return minDiskLoc; //return prev.rec()->getPrev( prev );
         }
     } _reverse;
 

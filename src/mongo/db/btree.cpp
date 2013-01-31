@@ -34,8 +34,8 @@
 
 namespace mongo {
 
-    BOOST_STATIC_ASSERT( Record::HeaderSize == 16 );
-    BOOST_STATIC_ASSERT( Record::HeaderSize + BtreeData_V1::BucketSize == 8192 );
+    //BOOST_STATIC_ASSERT( Record::HeaderSize == 16 );
+    //BOOST_STATIC_ASSERT( Record::HeaderSize + BtreeData_V1::BucketSize == 8192 );
 
     NOINLINE_DECL void checkFailed(unsigned line) {
         static time_t last;

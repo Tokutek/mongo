@@ -9,6 +9,7 @@
 
 namespace mongo { 
 
+#if 0
     PageFaultException::PageFaultException(const Record *_r)
     {
         verify( cc().allowedToThrowPageFaultException() );
@@ -29,7 +30,7 @@ namespace mongo {
             dlog(2) << "era changed" << endl;
             return;
         }
-        r->touch();
+        //r->touch();
     }
 
     PageFaultRetryableSection::~PageFaultRetryableSection() {
@@ -59,4 +60,5 @@ namespace mongo {
     NoPageFaultsAllowed::~NoPageFaultsAllowed() {
         cc()._pageFaultRetryableSection = _saved;
     }
+#endif
 }

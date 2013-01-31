@@ -65,7 +65,7 @@ namespace mongo {
 
         CursorId id = cc->cursorid();
 
-        bool canYield = !god && !(creal->matcher() && creal->matcher()->docMatcher().atomic());
+        //bool canYield = !god && !(creal->matcher() && creal->matcher()->docMatcher().atomic());
 
         do {
             // TODO: we can generalize this I believe
@@ -80,6 +80,7 @@ namespace mongo {
                     willNeedRecord = true;
             }
             
+#if 0
             if ( canYield && ! cc->yieldSometimes( willNeedRecord ? ClientCursor::WillNeed : ClientCursor::MaybeCovered ) ) {
                 cc.release(); // has already been deleted elsewhere
                 // TODO should we assert or something?
@@ -88,6 +89,8 @@ namespace mongo {
             if ( !cc->ok() ) {
                 break; // if we yielded, could have hit the end
             }
+#endif
+            ::abort();
 
             // this way we can avoid calling prepareToYield() every time (expensive)
             // as well as some other nuances handled
@@ -117,6 +120,7 @@ namespace mongo {
             }
 
             if ( logop ) {
+#if 0
                 BSONElement e;
                 if( BSONObj::make( rloc.rec() ).getObjectID( e ) ) {
                     BSONObjBuilder b;
@@ -127,6 +131,8 @@ namespace mongo {
                 else {
                     problem() << "deleted object without id, not logging" << endl;
                 }
+#endif
+                ::abort();
             }
 
             if ( rs )

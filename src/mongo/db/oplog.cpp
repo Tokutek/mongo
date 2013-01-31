@@ -74,9 +74,12 @@ namespace mongo {
             }
             Client::Context ctx( logns , localDB, false );
             {
+                ::abort();
+#if 0
                 int len = op.objsize();
                 Record *r = NULL; ::abort(); //theDataFileMgr.fast_oplog_insert(rsOplogDetails, logns, len);
                 memcpy(getDur().writingPtr(r->data(), len), op.objdata(), len);
+#endif
             }
             /* todo: now() has code to handle clock skew.  but if the skew server to server is large it will get unhappy.
                      this code (or code in now() maybe) should be improved.
@@ -167,6 +170,8 @@ namespace mongo {
             b.appendBool("b", *bb);
         if ( o2 )
             b.append("o2", *o2);
+        ::abort();
+#if 0
         BSONObj partial = b.done();
         int posz = partial.objsize();
         int len = posz + obj.objsize() + 1 + 2 /*o:*/;
@@ -203,6 +208,7 @@ namespace mongo {
         if ( logLevel >= 6 ) {
             log( 6 ) << "logOp:" << BSONObj::make(r) << endl;
         }
+#endif
     }
 
     /* we write to local.oplog.$main:
@@ -256,11 +262,13 @@ namespace mongo {
             b.appendBool("b", *bb);
         if ( o2 )
             b.append("o2", *o2);
-        BSONObj partial = b.done(); // partial is everything except the o:... part.
 
+#if 0
+        ::abort();
+
+        BSONObj partial = b.done(); // partial is everything except the o:... part.
         int po_sz = partial.objsize();
         int len = po_sz + obj.objsize() + 1 + 2 /*o:*/;
-
         Record *r;
         if( logNS == 0 ) {
             logNS = "local.oplog.$main";
@@ -286,6 +294,7 @@ namespace mongo {
         context.getClient()->setLastOp( ts );
 
         LOG( 6 ) << "logging op:" << BSONObj::make(r) << endl;
+#endif
     } 
 
     static void (*_logOp)(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) = _logOpOld;

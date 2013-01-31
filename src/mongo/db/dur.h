@@ -148,7 +148,7 @@ namespace mongo {
              It's very easy to manipulate Record::data open ended.  Thus a call to writing(Record*) is suspect.
              This will override the templated version and yield an unresolved external.
              */
-            Record* writing(Record* r);
+            //Record* writing(Record* r);
             /** Intentionally unimplemented method. BtreeBuckets are allocated in buffers larger than sizeof( BtreeBucket ). */
 //            BtreeBucket* writing( BtreeBucket* );
             /** Intentionally unimplemented method. NamespaceDetails may be based on references to 'Extra' objects. */

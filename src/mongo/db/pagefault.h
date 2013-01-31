@@ -4,6 +4,7 @@
 
 namespace mongo {
 
+#if 0
     class Record;
 
     class PageFaultException /*: public DBException*/ { 
@@ -55,5 +56,6 @@ namespace mongo {
         }
         // ...
     }
+#endif
 #endif
 }

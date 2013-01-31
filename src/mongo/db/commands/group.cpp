@@ -93,20 +93,24 @@ namespace mongo {
 
             while ( cursor->ok() ) {
                 
+#if 0
                 if ( !ccPointer->yieldSometimes( ClientCursor::MaybeCovered ) ||
                     !cursor->ok() ) {
                     break;
                 }
+#endif
                 
                 if ( !cursor->currentMatches() || cursor->getsetdup( cursor->currLoc() ) ) {
                     cursor->advance();
                     continue;
                 }
 
+#if 0
                 if ( !ccPointer->yieldSometimes( ClientCursor::WillNeed ) ||
                     !cursor->ok() ) {
                     break;
                 }
+#endif
                 
                 BSONObj obj = cursor->current();
                 cursor->advance();

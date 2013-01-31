@@ -652,7 +652,7 @@ namespace mongo {
             
             {
                 BSONObjBuilder record( result.subobjStart( "recordStats" ) );
-                Record::appendStats( record );
+                //Record::appendStats( record );
 
                 set<string> dbs;
                 {
@@ -664,7 +664,7 @@ namespace mongo {
                     string db = *i;
                     Client::ReadContext ctx( db );
                     BSONObjBuilder temp( record.subobjStart( db ) );
-                    ctx.ctx().db()->recordStats().record( temp );
+                    //ctx.ctx().db()->recordStats().record( temp );
                     temp.done();
                 }
 
@@ -1130,6 +1130,7 @@ namespace mongo {
                     uassert( 10040 ,  "chunks out of order" , n == myn );
                 }
 
+#if 0
                 // make a copy of obj since we access data in it while yielding
                 BSONObj owned = obj.getOwned();
                 int len;
@@ -1162,8 +1163,8 @@ namespace mongo {
                     LOG(1) << "filemd5 stale config exception: " << e.what() << endl;
                     break;
                 }
+#endif
             }
-
 
             if (partialOk)
                 result.appendBinData("md5state", sizeof(st), BinDataGeneral, &st);
@@ -1270,7 +1271,7 @@ namespace mongo {
                 if ( estimate )
                     size += avgObjSize;
                 else
-                    size += c->currLoc().rec()->netLength();
+                    ::abort(); //size += c->currLoc().rec()->netLength();
 
                 numObjects++;
 

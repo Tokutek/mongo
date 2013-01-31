@@ -476,11 +476,12 @@ namespace mongo {
 
                 // we can afford to yield here because any change to the base data that we might miss is already being
                 // queued and will be migrated in the 'transferMods' stage
+#if 0
                 if ( ! cc->yieldSometimes( ClientCursor::DontNeed ) ) {
                     cc.release();
                     break;
                 }
-
+#endif
                 if ( ++recCount > maxRecsWhenFull ) {
                     isLargeChunk = true;
                 }
@@ -520,8 +521,9 @@ namespace mongo {
                 scoped_spinlock lk( _trackerLocks );
                 allocSize = std::min(BSONObjMaxUserSize, (int)((12 + d->averageObjectSize()) * _cloneLocs.size()));
             }
+            ::abort();
+#if 0 
             BSONArrayBuilder a (allocSize);
-            
             while ( 1 ) {
                 bool filledBuffer = false;
                 
@@ -570,10 +572,10 @@ namespace mongo {
                     recordToTouch->touch();
                     recordToTouch = 0;
                 }
-                
             }
 
             result.appendArray( "objects" , a.arr() );
+#endif 
             return true;
         }
 
@@ -1493,15 +1495,17 @@ namespace mongo {
                     while( i.more() ) {
                         BSONObj o = i.next().Obj();
                         {
-                            PageFaultRetryableSection pgrs;
+                            //PageFaultRetryableSection pgrs;
                             while ( 1 ) {
                                 try {
                                     Lock::DBWrite lk( ns );
                                     Helpers::upsert( ns, o, true );
                                     break;
                                 }
-                                catch ( PageFaultException& e ) {
-                                    e.touch();
+                                //catch ( PageFaultException& e ) {
+                                catch ( ... ) {
+                                    //e.touch();
+                                    ::abort();
                                 }
                             }
                         }

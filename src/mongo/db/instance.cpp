@@ -563,7 +563,7 @@ namespace mongo {
         op.debug().query = query;
         op.setQuery(query);
 
-        PageFaultRetryableSection s;
+        //PageFaultRetryableSection s;
         while ( 1 ) {
             try {
                 Lock::DBWrite lk(ns);
@@ -582,8 +582,10 @@ namespace mongo {
                 lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
                 break;
             }
-            catch ( PageFaultException& e ) {
-                e.touch();
+            //catch ( PageFaultException& e ) {
+            catch ( ... ) {
+                ::abort();
+                //e.touch();
             }
         }
     }
@@ -601,7 +603,7 @@ namespace mongo {
         op.debug().query = pattern;
         op.setQuery(pattern);
 
-        PageFaultRetryableSection s;
+        //PageFaultRetryableSection s;
         while ( 1 ) {
             try {
                 Lock::DBWrite lk(ns);
@@ -619,9 +621,11 @@ namespace mongo {
                 lastError.getSafe()->recordDelete( n );
                 break;
             }
-            catch ( PageFaultException& e ) {
-                LOG(2) << "recordDelete got a PageFaultException" << endl;
-                e.touch();
+            //catch ( PageFaultException& e ) {
+            catch ( ... ) {
+                //LOG(2) << "recordDelete got a PageFaultException" << endl;
+                //e.touch();
+                ::abort();
             }
         }
     }
@@ -798,7 +802,7 @@ namespace mongo {
             multi.push_back( d.nextJsObj() );
         }
 
-        PageFaultRetryableSection s;
+        //PageFaultRetryableSection s;
         while ( true ) {
             try {
                 Lock::DBWrite lk(ns);
@@ -822,8 +826,10 @@ namespace mongo {
                 globalOpCounters.incInsertInWriteLock(1);
                 return;
             }
-            catch ( PageFaultException& e ) {
-                e.touch();
+            //catch ( PageFaultException& e ) {
+            catch ( ... ) {
+                //e.touch();
+                ::abort();
             }
         }
     }

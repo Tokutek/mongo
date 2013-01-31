@@ -26,7 +26,7 @@
 
 namespace mongo {
 
-    class Record;
+    //class Record;
     //class DeletedRecord;
     //class Extent;
     //class MongoDataFile;
@@ -139,7 +139,7 @@ namespace mongo {
            Note: set your Context first so that the database to which the diskloc applies is known.
         */
         BSONObj obj() const;
-        Record* rec() const;
+        //Record* rec() const;
         //DeletedRecord* drec() const;
         //Extent* ext() const;
 

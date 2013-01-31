@@ -63,9 +63,11 @@ namespace mongo {
 //zzz
     /* unindex all keys in all indexes for this record. */
     void unindexRecord(NamespaceDetails *d, 
-                       Record *todelete, 
+                       //Record *todelete, 
                        const DiskLoc& dl, 
                        bool noWarn /* = false */) {
+        ::abort();
+#if 0
         BSONObj obj = BSONObj::make(todelete);
         int n = d->nIndexes;
         for ( int i = 0; i < n; i++ )
@@ -74,6 +76,7 @@ namespace mongo {
             // always pass nowarn here, as this one may be missing for valid reasons as we are concurrently building it
             _unindexRecord(d->idx(n), obj, dl, false);
         }
+#endif
     }
 
     /* step one of adding keys to index idxNo for a new record
@@ -448,6 +451,8 @@ namespace mongo {
                     }
 
                     if ( dropDups ) {
+                        ::abort();
+#if 0
                         DiskLoc toDelete = cc->currLoc();
                         bool ok = cc->advance();
                         ClientCursor::YieldData yieldData;
@@ -464,6 +469,7 @@ namespace mongo {
                             break;
                         }
                         numDropped++;
+#endif
                     }
                     else {
                         log() << "background addExistingToIndex exception " << e.what() << endl;
@@ -475,6 +481,8 @@ namespace mongo {
 
                 getDur().commitIfNeeded();
 
+                ::abort();
+#if 0
                 if ( cc->yieldSometimes( ClientCursor::WillNeed ) ) {
                     progress.setTotalWhileRunning( d->stats.nrecords );
                 }
@@ -483,6 +491,7 @@ namespace mongo {
                     uasserted(12584, "cursor gone during bg index");
                     break;
                 }
+#endif
             }
             progress.finished();
             if ( dropDups )

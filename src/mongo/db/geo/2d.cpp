@@ -1511,7 +1511,7 @@ namespace mongo {
             _noted = false;
         }
 
-        virtual Record* _current() { verify(ok()); LOG( CDEBUG + 1 ) << "_current " << _cur._loc.obj()["_id"] << endl; return _cur._loc.rec(); }
+        //virtual Record* _current() { verify(ok()); LOG( CDEBUG + 1 ) << "_current " << _cur._loc.obj()["_id"] << endl; return _cur._loc.rec(); }
         virtual BSONObj current() { verify(ok()); LOG( CDEBUG + 1 ) << "current " << _cur._o << endl; return _cur._o; }
         virtual DiskLoc currLoc() { verify(ok()); LOG( CDEBUG + 1 ) << "currLoc " << _cur._loc << endl; return _cur._loc; }
         virtual BSONObj currKey() const { return _cur._key; }
@@ -2447,7 +2447,7 @@ namespace mongo {
             return _cur != _end;
         }
 
-        virtual Record* _current() { verify(ok()); return _cur->_loc.rec(); }
+        //virtual Record* _current() { verify(ok()); return _cur->_loc.rec(); }
         virtual BSONObj current() { verify(ok()); return _cur->_o; }
         virtual DiskLoc currLoc() { verify(ok()); return _cur->_loc; }
         virtual bool advance() {

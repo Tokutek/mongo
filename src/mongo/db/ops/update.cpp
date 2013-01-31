@@ -75,11 +75,13 @@ namespace mongo {
                 return UpdateResult( 0 , 0 , 0 , BSONObj() );
             }
         }
+#if 0
         Record* r = loc.rec();
 
         if ( cc().allowedToThrowPageFaultException() && ! r->likelyInPhysicalMemory() ) {
             throw PageFaultException( r );
         }
+#endif
 
         /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
            regular ones at the moment. */
@@ -223,12 +225,14 @@ namespace mongo {
             auto_ptr<ClientCursor> cc;
             do {
 
+#if 0
                 if ( cc.get() == 0 &&
                      client.allowedToThrowPageFaultException() &&
                      ! c->currLoc().isNull() &&
                      ! c->currLoc().rec()->likelyInPhysicalMemory() ) {
                     throw PageFaultException( c->currLoc().rec() );
                 }
+#endif
 
                 bool atomic = c->matcher() && c->matcher()->docMatcher().atomic();
 
@@ -239,6 +243,7 @@ namespace mongo {
                         cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , cPtr , ns ) );
                     }
 
+#if 0
                     bool didYield;
                     if ( ! cc->yieldSometimes( ClientCursor::WillNeed, &didYield ) ) {
                         cc.release();
@@ -263,6 +268,7 @@ namespace mongo {
                         }
 
                     }
+#endif
 
                 } // end yielding block
 
@@ -281,7 +287,7 @@ namespace mongo {
                     continue;
                 }
 
-                Record* r = c->_current();
+                //Record* r = c->_current();
                 DiskLoc loc = c->currLoc();
 
                 if ( c->getsetdup( loc ) && autoDedup ) {
@@ -289,7 +295,7 @@ namespace mongo {
                     continue;
                 }
 
-                BSONObj js = BSONObj::make(r);
+                //BSONObj js = BSONObj::make(r);
 
                 BSONObj pattern = patternOrig;
 
@@ -300,6 +306,7 @@ namespace mongo {
                     // with the original pattern.  This isn't replay-safe.
                     // It might make sense to suppress the log instead
                     // if there's no id.
+#if 0
                     if ( js.getObjectID( id ) ) {
                         idPattern.append( id );
                         pattern = idPattern.obj();
@@ -307,6 +314,8 @@ namespace mongo {
                     else {
                         uassert( 10157 ,  "multi-update requires all modified objects to have an _id" , ! multi );
                     }
+#endif
+                    ::abort();
                 }
 
                 /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some

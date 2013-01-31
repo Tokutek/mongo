@@ -73,9 +73,12 @@ namespace mongo {
         // get or create the profiling collection
         NamespaceDetails *details = getOrCreateProfileCollection(db);
         if (details) {
+            ::abort();
+#if 0
             int len = p.objsize();
             Record *r = NULL; //theDataFileMgr.fast_oplog_insert(details, ns, len); TODO: Get rid of theDataFileMgr
             memcpy(getDur().writingPtr(r->data(), len), p.objdata(), len);
+#endif
         }
     }
 

@@ -280,7 +280,7 @@ namespace mongo {
         Client& c = cc();
 
         long long numDeleted = 0;
-        PageFaultRetryableSection pgrs;
+        //PageFaultRetryableSection pgrs;
         
         long long millisWaitingForReplication = 0;
 
@@ -329,8 +329,10 @@ namespace mongo {
                 ::abort(); // theDataFileMgr.deleteRecord(ns.c_str() , rloc.rec(), rloc);
                 numDeleted++;
             }
-            catch( PageFaultException& e ) {
-                e.touch();
+            //catch( PageFaultException& e ) {
+            catch( ... ) {
+                ::abort();
+                //e.touch();
                 continue;
             }
 

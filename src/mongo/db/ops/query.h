@@ -58,7 +58,7 @@ namespace mongo {
         virtual void noteIterate( bool match, bool orderedMatch, bool loadedRecord,
                                  bool chunkSkip ) {}
         /** Note that the query yielded. */
-        virtual void noteYield() {}
+        //virtual void noteYield() {}
         /** @return number of ordered matches noted. */
         virtual long long orderedMatches() const { return 0; }
         /** @return ExplainQueryInfo for a complete query. */
@@ -101,7 +101,7 @@ namespace mongo {
         virtual void notePlan( bool scanAndOrder, bool indexOnly );
         virtual void _noteIterate( bool match, bool orderedMatch, bool loadedRecord,
                                   bool chunkSkip );
-        virtual void noteYield();
+        //virtual void noteYield();
         virtual shared_ptr<ExplainQueryInfo> _doneQueryInfo();
         shared_ptr<Cursor> _cursor;
         shared_ptr<ExplainSinglePlanQueryInfo> _explainInfo;
@@ -118,7 +118,7 @@ namespace mongo {
     private:
         virtual void _noteIterate( bool match, bool orderedMatch, bool loadedRecord,
                                   bool chunkSkip );
-        virtual void noteYield();
+        //virtual void noteYield();
         virtual shared_ptr<ExplainQueryInfo> _doneQueryInfo();
         shared_ptr<QueryOptimizerCursor> _cursor;
     };
@@ -256,7 +256,7 @@ namespace mongo {
         /** @return true if the current iterate matches and is added. */
         bool addMatch();
         /** Note that a yield occurred. */
-        void noteYield();
+        //void noteYield();
         /** @return true if there are enough results to return the first batch. */
         bool enoughForFirstBatch() const;
         /** @return true if there are enough results to return the full result set. */

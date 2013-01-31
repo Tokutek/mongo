@@ -128,10 +128,12 @@ namespace mongo {
 
                 cursor->advance();
 
+#if 0
                 if (!cc->yieldSometimes( ClientCursor::MaybeCovered )) {
                     cc.release();
                     break;
                 }
+#endif
 
                 RARELY killCurrentOp.checkForInterrupt();
             }

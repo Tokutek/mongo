@@ -26,7 +26,7 @@
 namespace mongo {
 
     class NamespaceDetails;
-    class Record;
+    //class Record;
     class CoveredIndexMatcher;
 
     /**
@@ -87,7 +87,7 @@ namespace mongo {
         virtual ~Cursor() {}
         virtual bool ok() = 0;
         bool eof() { return !ok(); }
-        virtual Record* _current() = 0;
+        //virtual Record* _current() = 0;
         virtual BSONObj current() = 0;
         virtual DiskLoc currLoc() = 0;
         virtual bool advance() = 0; /*true=ok*/
@@ -137,13 +137,13 @@ namespace mongo {
         /** Recover from a previous call to prepareToTouchEarlierIterate(). */
         virtual void recoverFromTouchingEarlierIterate() { checkLocation(); }
 
-        virtual bool supportYields() = 0;
+        //virtual bool supportYields() = 0;
 
         /** Called before a ClientCursor yield. */
-        virtual void prepareToYield() { noteLocation(); }
+        //virtual void prepareToYield() { noteLocation(); }
         
         /** Called after a ClientCursor yield.  Recovers from a previous call to prepareToYield(). */
-        virtual void recoverFromYield() { checkLocation(); }
+        //virtual void recoverFromYield() { checkLocation(); }
 
         virtual string toString() { return "abstract?"; }
 
@@ -241,13 +241,18 @@ namespace mongo {
             init();
         }
         bool ok() { return !curr.isNull(); }
+#if 0
         Record* _current() {
             verify( ok() );
             return curr.rec();
         }
+#endif
         BSONObj current() {
+#if 0
             Record *r = _current();
             return BSONObj::make(r);
+#endif
+            ::abort(); return BSONObj();
         }
         virtual DiskLoc currLoc() { return curr; }
         virtual DiskLoc refLoc()  { return curr.isNull() ? last : curr; }
@@ -262,7 +267,7 @@ namespace mongo {
         virtual bool isMultiKey() const { return false; }
         virtual bool modifiedKeys() const { return false; }
         virtual bool supportGetMore() { return true; }
-        virtual bool supportYields() { return true; }
+        //virtual bool supportYields() { return true; }
         virtual CoveredIndexMatcher *matcher() const { return _matcher.get(); }
         virtual shared_ptr< CoveredIndexMatcher > matcherPtr() const { return _matcher; }
         virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { _matcher = matcher; }

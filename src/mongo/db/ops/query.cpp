@@ -111,7 +111,7 @@ namespace mongo {
 
             start = cc->pos();
             Cursor *c = cc->c();
-            c->recoverFromYield();
+            //c->recoverFromYield();
             DiskLoc last;
 
             // This manager may be stale, but it's the state of chunking when the cursor was created.
@@ -172,6 +172,7 @@ namespace mongo {
                 }
                 c->advance();
 
+#if 0
                 if ( ! cc->yieldSometimes( ( c->ok() && c->keyFieldsOnly() ) ?
                                           ClientCursor::DontNeed : ClientCursor::WillNeed ) ) {
                     ClientCursor::erase(cursorid);
@@ -179,9 +180,12 @@ namespace mongo {
                     cc = 0;
                     break;
                 }
+#endif
+                ::abort();
             }
             
             if ( cc ) {
+#if 0
                 if ( c->supportYields() ) {
                     ClientCursor::YieldData data;
                     verify( cc->prepareToYield( data ) );
@@ -192,6 +196,8 @@ namespace mongo {
                 cc->mayUpgradeStorage();
                 cc->storeOpForSlave( last );
                 exhaust = cc->queryOptions() & QueryOption_Exhaust;
+#endif
+                ::abort();
             }
         }
 
@@ -258,9 +264,11 @@ namespace mongo {
         _explainInfo->noteIterate( match, loadedRecord, chunkSkip, *_cursor );
     }
 
+#if 0
     void SimpleCursorExplainStrategy::noteYield() {
         _explainInfo->noteYield();
     }
+#endif
 
     shared_ptr<ExplainQueryInfo> SimpleCursorExplainStrategy::_doneQueryInfo() {
         _explainInfo->noteDone( *_cursor );
@@ -281,9 +289,11 @@ namespace mongo {
         _cursor->noteIterate( orderedMatch, loadedRecord, chunkSkip );
     }
 
+#if 0
     void QueryOptimizerCursorExplainStrategy::noteYield() {
         _cursor->noteYield();
     }
+#endif
 
     shared_ptr<ExplainQueryInfo> QueryOptimizerCursorExplainStrategy::_doneQueryInfo() {
         return _cursor->explainQueryInfo();
@@ -523,9 +533,11 @@ namespace mongo {
         return match;
     }
 
+#if 0
     void QueryResponseBuilder::noteYield() {
         _explain->noteYield();
     }
+#endif
 
     bool QueryResponseBuilder::enoughForFirstBatch() const {
         return _parsedQuery.enoughForFirstBatch( _builder->bufferedMatches(), _buf.len() );
@@ -645,8 +657,8 @@ namespace mongo {
                                     const shared_ptr<ParsedQuery> &pq_shared,
                                     const BSONObj &oldPlan,
                                     const ConfigVersion &shardingVersionAtStart,
-                                    scoped_ptr<PageFaultRetryableSection>& parentPageFaultSection,
-                                    scoped_ptr<NoPageFaultsAllowed>& noPageFault,
+                                    //scoped_ptr<PageFaultRetryableSection>& parentPageFaultSection,
+                                    //scoped_ptr<NoPageFaultsAllowed>& noPageFault,
                                     Message &result ) {
 
         const ParsedQuery &pq( *pq_shared );
@@ -673,6 +685,7 @@ namespace mongo {
         
         for( ; cursor->ok(); cursor->advance() ) {
 
+#if 0
             bool yielded = false;
             if ( !ccPointer->yieldSometimes( ClientCursor::MaybeCovered, &yielded ) ||
                 !cursor->ok() ) {
@@ -692,6 +705,7 @@ namespace mongo {
             if ( yielded ) {
                 queryResponseBuilder->noteYield();
             }
+#endif
             
             if ( pq.getMaxScan() && cursor->nscanned() > pq.getMaxScan() ) {
                 break;
@@ -746,8 +760,8 @@ namespace mongo {
             throw SendStaleConfigException( ns , "version changed during initial query", shardingVersionAtStart, shardingState.getVersion( ns ) );
         }
         
-        parentPageFaultSection.reset(0);
-        noPageFault.reset( new NoPageFaultsAllowed() );
+        //parentPageFaultSection.reset(0);
+        //noPageFault.reset( new NoPageFaultsAllowed() );
 
         int nReturned = queryResponseBuilder->handoff( result );
 
@@ -759,6 +773,7 @@ namespace mongo {
                                               jsobj.getOwned() ) );
             cursorid = ccPointer->cursorid();
             DEV tlog(2) << "query has more, cursorid: " << cursorid << endl;
+#if 0
             if ( cursor->supportYields() ) {
                 ClientCursor::YieldData data;
                 ccPointer->prepareToYield( data );
@@ -766,6 +781,7 @@ namespace mongo {
             else {
                 ccPointer->c()->noteLocation();
             }
+#endif
             
             // Save slave's position in the oplog.
             if ( pq.hasOption( QueryOption_OplogReplay ) && !slaveReadTill.isNull() ) {
@@ -820,9 +836,9 @@ namespace mongo {
             // this extra bracing is not strictly needed
             // but makes it clear what the rules are in different spots
  
-            scoped_ptr<PageFaultRetryableSection> pgfs;
-            if ( ! currentClient.getPageFaultRetryableSection() )
-                pgfs.reset( new PageFaultRetryableSection() );
+            //scoped_ptr<PageFaultRetryableSection> pgfs;
+            //if ( ! currentClient.getPageFaultRetryableSection() )
+            //    pgfs.reset( new PageFaultRetryableSection() );
             while ( 1 ) {
                 try {
                     
@@ -874,8 +890,10 @@ namespace mongo {
                     
                     break;
                 }
-                catch ( PageFaultException& e ) {
-                    e.touch();
+                //catch ( PageFaultException& e ) {
+                catch ( ... ) {
+                    //e.touch();
+                    ::abort();
                 }
             }
         }
@@ -974,14 +992,16 @@ namespace mongo {
         order = order.getOwned();
 
         bool hasRetried = false;
-        scoped_ptr<PageFaultRetryableSection> pgfs;
-        scoped_ptr<NoPageFaultsAllowed> npfe;
+        //scoped_ptr<PageFaultRetryableSection> pgfs;
+        //scoped_ptr<NoPageFaultsAllowed> npfe;
         while ( 1 ) {
 
+#if 0
             if ( ! cc().getPageFaultRetryableSection() ) {
                 verify( ! pgfs );
                 pgfs.reset( new PageFaultRetryableSection() );
             }
+#endif
                 
             try {
                 Client::ReadContext ctx( ns , dbpath ); // read locks
@@ -1013,15 +1033,17 @@ namespace mongo {
    
                 return queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query, order,
                                                 pq_shared, oldPlan, shardingVersionAtStart, 
-                                                pgfs, npfe, result );
-            }
-            catch ( PageFaultException& e ) {
-                e.touch();
+                                                /*pgfs, npfe,*/ result );
             }
             catch ( const QueryRetryException & ) {
                 // In some cases the query may be retried if there is an in memory sort size assertion.
                 verify( ! hasRetried );
                 hasRetried = true;
+            }
+            //catch ( PageFaultException& e ) {
+            catch ( ... ) {
+                //e.touch();
+                ::abort();
             }
         }
     }

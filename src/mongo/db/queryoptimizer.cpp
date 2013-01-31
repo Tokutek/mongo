@@ -816,7 +816,7 @@ doneCheckOrder:
         _usingCachedPlan(),
         _order( order.getOwned() ),
         _oldNScanned( 0 ),
-        _yieldSometimesTracker( 256, 20 ),
+        /*_yieldSometimesTracker( 256, 20 ),*/
         _allowSpecial( allowSpecial ) {
     }
 
@@ -1002,6 +1002,7 @@ doneCheckOrder:
         _done() {
     }
 
+#if 0
     void QueryPlanSet::Runner::prepareToYield() {
         for( vector<shared_ptr<QueryOp> >::const_iterator i = _ops.begin(); i != _ops.end(); ++i ) {
             prepareToYieldOp( **i );
@@ -1013,6 +1014,7 @@ doneCheckOrder:
             recoverFromYieldOp( **i );
         }        
     }
+#endif
 
     shared_ptr<QueryOp> QueryPlanSet::Runner::init() {
         massert( 10369 ,  "no plans", _plans._plans.size() > 0 );
@@ -1133,20 +1135,26 @@ doneCheckOrder:
 
 
     void QueryPlanSet::Runner::initOp( QueryOp &op ) {
-        GUARD_OP_EXCEPTION( op, op.init() );
+        ::abort();
+        //GUARD_OP_EXCEPTION( op, op.init() );
     }
 
     void QueryPlanSet::Runner::nextOp( QueryOp &op ) {
-        GUARD_OP_EXCEPTION( op, if ( !op.error() ) { op.next(); } );
+        ::abort();
+        //GUARD_OP_EXCEPTION( op, if ( !op.error() ) { op.next(); } );
     }
 
+#if 0
     void QueryPlanSet::Runner::prepareToYieldOp( QueryOp &op ) {
-        GUARD_OP_EXCEPTION( op, if ( !op.error() ) { op.prepareToYield(); } );
+        ::abort();
+        //GUARD_OP_EXCEPTION( op, if ( !op.error() ) { op.prepareToYield(); } );
     }
 
     void QueryPlanSet::Runner::recoverFromYieldOp( QueryOp &op ) {
-        GUARD_OP_EXCEPTION( op, if ( !op.error() ) { op.recoverFromYield(); } );
+        ::abort();
+        //GUARD_OP_EXCEPTION( op, if ( !op.error() ) { op.recoverFromYield(); } );
     }
+#endif
 
     /**
      * NOTE on our $or implementation: In our current qo implementation we don't
@@ -1288,6 +1296,7 @@ doneCheckOrder:
         return bestGuess.get();
     }
     
+#if 0
     void MultiPlanScanner::prepareToYield() {
         if ( _runner ) {
             _runner->prepareToYield();
@@ -1299,6 +1308,7 @@ doneCheckOrder:
             _runner->recoverFromYield();   
         }
     }
+#endif
 
     void MultiPlanScanner::clearRunner() {
         if ( _runner ) {
@@ -1392,10 +1402,12 @@ doneCheckOrder:
         return ok();
     }
 
+#if 0
     void MultiCursor::recoverFromYield() {
         Cursor::recoverFromYield();
         advanceExhaustedClauses();
     }
+#endif
     
     void MultiCursor::advanceClause() {
         _nscanned += _c->nscanned();
@@ -1408,7 +1420,7 @@ doneCheckOrder:
             // The basic and btree cursors used by this implementation support deduplication.
             verify( _c->autoDedup() );
             // All sub cursors must support yields.
-            verify( _c->supportYields() );
+            //verify( _c->supportYields() );
             if ( _explainPlanInfo ) {
                 _explainPlanInfo.reset( new ExplainPlanInfo() );
                 _explainPlanInfo->notePlan( *_c, _queryPlan->scanAndOrderRequired(),

@@ -79,7 +79,8 @@ namespace mongo {
         void btree( char * node ) {
             if ( ! _memSupported )
                 return;
-            btree( Record::likelyInPhysicalMemory( node ) );
+            ::abort();
+            //btree( Record::likelyInPhysicalMemory( node ) );
         }
 
         void btree( bool memHit ) {

@@ -209,7 +209,7 @@ namespace mongo {
 
     /* must call this on a delete so we clean up the cursors. */
     void ClientCursor::aboutToDelete(const DiskLoc& dl) {
-        NoPageFaultsAllowed npfa;
+        //NoPageFaultsAllowed npfa;
 
         recursive_scoped_lock lock(ccmutex);
 
@@ -267,7 +267,7 @@ namespace mongo {
                 continue;
             }
 
-            c->recoverFromYield();
+            //c->recoverFromYield();
             DiskLoc tmp1 = c->refLoc();
             if ( tmp1 != dl ) {
                 // This might indicate a failure to call ClientCursor::prepareToYield() but it can
@@ -304,7 +304,7 @@ namespace mongo {
         _c(c), _pos(0),
         _query(query),  _queryOptions(queryOptions),
         _idleAgeMillis(0), _pinValue(0),
-        _doingDeletes(false), _yieldSometimesTracker(128,10) {
+        _doingDeletes(false) /* _yieldSometimesTracker(128,10)*/ {
 
         Lock::assertAtLeastReadLocked(ns);
 
@@ -442,7 +442,7 @@ namespace mongo {
     void ClientCursor::updateLocation() {
         verify( _cursorid );
         _idleAgeMillis = 0;
-        _c->prepareToYield();
+        //_c->prepareToYield();
         DiskLoc cl = _c->refLoc();
         if ( lastLoc() == cl ) {
             //log() << "info: lastloc==curloc " << ns << '\n';
@@ -453,6 +453,7 @@ namespace mongo {
         }
     }
 
+#if 0
     int ClientCursor::suggestYieldMicros() {
         int writers = 0;
         int readers = 0;
@@ -623,8 +624,10 @@ namespace mongo {
         cc->_c->recoverFromYield();
         return true;
     }
+#endif
 
     /** @return true if cursor is still ok */
+#if 0
     bool ClientCursor::yield( int micros , Record * recordToLoad ) {
 
         if ( ! _c->supportYields() ) // so me cursors (geo@oct2011) don't support yielding
@@ -635,6 +638,7 @@ namespace mongo {
         staticYield( micros , _ns , recordToLoad );
         return ClientCursor::recoverFromYield( data );
     }
+#endif
 
     // See SERVER-5726.
     long long ctmLast = 0; // so we don't have to do find() which is a little slow very often.
@@ -814,6 +818,7 @@ namespace mongo {
 
     }
 
+#if 0
     ClientCursor::YieldLock::YieldLock( ptr<ClientCursor> cc )
         : _canYield(cc->_c->supportYields()) {
      
@@ -841,7 +846,7 @@ namespace mongo {
     void ClientCursor::YieldLock::relock() {
         _unlock.reset();
     }
-
+#endif
 
     ClientCursorMonitor clientCursorMonitor;
 

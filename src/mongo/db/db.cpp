@@ -913,13 +913,15 @@ static int mongoDbMain(int argc, char* argv[]) {
                 return EXIT_BADOPTIONS;
             }
 
-            Record::MemoryTrackingEnabled = false;
+            //Record::MemoryTrackingEnabled = false;
+            ::abort();
             shouldRepairDatabases = 1;
             forceRepair = 1;
             cmdLine.dur = false;
         }
         if (params.count("upgrade")) {
-            Record::MemoryTrackingEnabled = false;
+            //Record::MemoryTrackingEnabled = false;
+            ::abort();
             shouldRepairDatabases = 1;
         }
         if (params.count("notablescan")) {

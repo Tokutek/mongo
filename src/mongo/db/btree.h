@@ -1085,8 +1085,8 @@ namespace mongo {
 
         virtual DiskLoc currLoc() = 0; //  { return !bucket.isNull() ? _currKeyNode().recordLoc : DiskLoc();  }
         virtual DiskLoc refLoc()   { return currLoc(); }
-        virtual Record* _current() { return currLoc().rec(); }
-        virtual BSONObj current()  { return BSONObj::make(_current()); }
+        //virtual Record* _current() { return currLoc().rec(); }
+        virtual BSONObj current()  { ::abort(); return BSONObj(); } //return BSONObj::make(_current()); }
         virtual string toString();
 
         BSONObj prettyKey( const BSONObj &key ) const {
