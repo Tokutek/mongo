@@ -295,8 +295,6 @@ public:
                 }
             }
 
-            auth("local");
-
             BSONObj op = conn(true).findOne(opLogName, Query().sort("$natural", -1), 0, QueryOption_SlaveOk);
             if (op.isEmpty()) {
                 log() << "No operations in oplog. Please ensure you are connecting to a master." << endl;
@@ -310,7 +308,6 @@ public:
         string out = getParam("out");
         if ( out == "-" ) {
             if ( _db != "" && _coll != "" ) {
-                auth( _db );
                 writeCollectionStdout( _db+"."+_coll );
                 return 0;
             }
@@ -327,7 +324,6 @@ public:
 
         if ( db == "" ) {
             log() << "all dbs" << endl;
-            auth( "admin" );
 
             BSONObj res = conn( true ).findOne( "admin.$cmd" , BSON( "listDatabases" << 1 ) );
             if ( ! res["databases"].isABSONObj() ) {
@@ -355,7 +351,6 @@ public:
             }
         }
         else {
-            auth( db );
             go( db , root / db );
         }
 

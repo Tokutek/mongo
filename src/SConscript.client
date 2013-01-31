@@ -37,6 +37,7 @@ clientSource = [
     'mongo/client/model.cpp',
     'mongo/client/remote_loader.cpp',
     'mongo/client/remote_transaction.cpp',
+    'mongo/client/sasl_client_authenticate.cpp',
     'mongo/client/syncclusterconnection.cpp',
     'mongo/db/jsobj.cpp',
     'mongo/db/json.cpp',
@@ -76,6 +77,11 @@ clientSource = [
     'mongo/util/trace.cpp',
     'mongo/util/util.cpp',
     ]
+
+clientSourceSasl = ['mongo/client/sasl_client_authenticate_impl.cpp',
+                    'mongo/util/gsasl_session.cpp']
+
+clientSourceAll = clientSourceBasic + clientSourceSasl
 
 if env['MONGO_BUILD_SASL_CLIENT']:
     clientSource.extend(['mongo/client/sasl_client_authenticate.cpp',

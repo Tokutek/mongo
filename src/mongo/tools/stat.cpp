@@ -200,8 +200,6 @@ namespace mongo {
             int rowCount = getParam( "rowcount" , 0 );
             int rowNum = 0;
 
-            auth();
-
             BSONObj prev = stats();
             if ( prev.isEmpty() )
                 return -1;
@@ -280,8 +278,7 @@ namespace mongo {
             string error;
             bool mongos;
 
-            string username;
-            string password;
+            BSONObj authParams;
         };
 
         static void serverThread( shared_ptr<ServerState> state ) {
@@ -293,8 +290,8 @@ namespace mongo {
                     state->error = errmsg;
                 long long cycleNumber = 0;
 
-                if (! (state->username.empty() && state->password.empty()))
-                    conn.auth("admin", state->username, state->password, errmsg);
+                if (! (state->authParams["user"].str().empty()) )
+                    conn.auth(state->authParams);
 
                 while ( ++cycleNumber ) {
                     try {
@@ -353,10 +350,14 @@ namespace mongo {
 
             state.reset( new ServerState() );
             state->host = host;
-            state->thr.reset( new boost::thread( boost::bind( serverThread , state ) ) );
-            state->username = _username;
-            state->password = _password;
-
+            /* For each new thread, pass in a thread state object and the delta between samples */
+            state->thr.reset( new boost::thread( boost::bind( serverThread,
+                                                              state,
+                                                              (int)ceil(_statUtil.getSeconds()) ) ) );
+            state->authParams = BSON( "user" << _username <<
+                                      "pwd" << _password <<
+                                      "userSource" << _authenticationDatabase <<
+                                      "mechanism" << _authenticationMechanism );
             return true;
         }
 

@@ -150,8 +150,11 @@ namespace mongo {
         int run() {
             _sleep = getParam( "sleep" , _sleep );
 
-            auth();
-            
+            if (isMongos()) {
+                log() << "mongotop only works on instances of mongod." << endl;
+                return EXIT_FAILURE;
+            }
+
             NamespaceStats prev = getData();
 
             while ( true ) {

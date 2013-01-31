@@ -103,7 +103,6 @@ namespace mongo {
     protected:
 
         mongo::DBClientBase &conn( bool slaveIfPaired = false );
-        void auth( string db = "",  Auth::Level * level = NULL);
 
         string _name;
 
@@ -113,6 +112,8 @@ namespace mongo {
 
         string _username;
         string _password;
+        string _authenticationDatabase;
+        string _authenticationMechanism;
 
         bool _usesstdout;
         bool _noconnection;
@@ -139,6 +140,8 @@ namespace mongo {
 
         boost::program_options::variables_map _params;
 
+    private:
+        void auth();
     };
 
     class BSONTool : public Tool {
