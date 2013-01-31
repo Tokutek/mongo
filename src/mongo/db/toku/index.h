@@ -33,15 +33,6 @@ public:
         return k1.woCompare(k2, ordering, false);    
     }
 
-    IndexInsertionContinuation *beginInsertIntoIndex(
-            int idxNo, IndexDetails &_idx,
-            DiskLoc _recordLoc, const BSONObj &_key,
-            const Ordering& _order, bool dupsAllowed) {
-
-        printf("IndexInterfaceTokudb: %s not supported\n", __FUNCTION__);
-        return NULL;
-    }
-
     virtual long long fullValidate(const DiskLoc& thisLoc, const BSONObj &order) { 
         printf("IndexInterfaceTokudb: %s not supported, doing nothing.\n", __FUNCTION__);
         return true;

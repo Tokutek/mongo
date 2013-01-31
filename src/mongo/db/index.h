@@ -23,7 +23,6 @@
 #include <vector>
 
 #include "mongo/db/diskloc.h"
-#include "mongo/db/index_insertion_continuation.h"
 #include "mongo/db/indexkey.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/key.h"
@@ -42,25 +41,6 @@ namespace mongo {
         // tokudb: remove an index from the environment. used during kill_idx()
         // so the environment can properly cleanup when mongodb drops an index.
         virtual void dropIndex(const IndexDetails &idx) { }
-
-#if 0
-        class IndexInserter : private boost::noncopyable {
-        public:
-            IndexInserter();
-            ~IndexInserter();
-
-            void addInsertionContinuation(IndexInsertionContinuation *c);
-            void finishAllInsertions();
-
-        private:
-            std::vector<IndexInsertionContinuation *> _continuations;
-        };
-#endif
-
-        virtual IndexInsertionContinuation *beginInsertIntoIndex(
-            int idxNo,
-            IndexDetails &_idx, DiskLoc _recordLoc, const BSONObj &_key,
-            const Ordering& _order, bool dupsAllowed) = 0;
 
         virtual int keyCompare(const BSONObj& l,const BSONObj& r, const Ordering &ordering) = 0;
         virtual long long fullValidate(const DiskLoc& thisLoc, const BSONObj &order) = 0;
