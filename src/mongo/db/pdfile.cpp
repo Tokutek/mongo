@@ -25,7 +25,6 @@ _ disallow system* manipulations from the database.
 
 #include "pch.h"
 #include "pdfile.h"
-#include "mongo/db/pdfile_private.h"
 #include "db.h"
 #include "../util/mmap.h"
 #include "../util/hashtab.h"
