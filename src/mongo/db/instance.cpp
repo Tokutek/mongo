@@ -40,8 +40,8 @@
 #endif
 #include "stats/counters.h"
 #include "background.h"
-#include "dur_journal.h"
-#include "dur_recover.h"
+//#include "dur_journal.h"
+//#include "dur_recover.h"
 #include "d_concurrency.h"
 #include "ops/count.h"
 #include "ops/delete.h"
@@ -50,7 +50,7 @@
 #include "pagefault.h"
 #include <fstream>
 #include <boost/filesystem/operations.hpp>
-#include "dur_commitjob.h"
+//#include "dur_commitjob.h"
 #include "mongo/db/commands/fsync.h"
 #include "index.h"
 
@@ -117,22 +117,33 @@ namespace mongo {
         }
     }
     void BSONElementManipulator::SetNumber(double d) {
+        ::abort();
+#if 0
         if ( _element.type() == NumberDouble )
             *getDur().writing( reinterpret_cast< double * >( value() )  ) = d;
         else if ( _element.type() == NumberInt )
             *getDur().writing( reinterpret_cast< int * >( value() ) ) = (int) d;
         else verify(0);
+#endif
     }
     void BSONElementManipulator::SetLong(long long n) {
+        ::abort();
+#if 0
         verify( _element.type() == NumberLong );
         *getDur().writing( reinterpret_cast< long long * >(value()) ) = n;
+#endif
     }
     void BSONElementManipulator::SetInt(int n) {
+        ::abort();
+#if 0
         verify( _element.type() == NumberInt );
         getDur().writingInt( *reinterpret_cast< int * >( value() ) ) = n;
+#endif
     }
     /* dur:: version */
     void BSONElementManipulator::ReplaceTypeAndValue( const BSONElement &e ) {
+        ::abort();
+#if 0
         char *d = data();
         char *v = value();
         int valsize = e.valuesize();
@@ -141,6 +152,7 @@ namespace mongo {
         char *p = (char *) getDur().writingPtr(d, valsize + ofs);
         *p = e.type();
         memcpy( p + ofs, e.value(), valsize );
+#endif
     }
 
     void inProgCmd( Message &m, DbResponse &dbresponse ) {
@@ -771,7 +783,7 @@ namespace mongo {
         for (i=0; i<objs.size(); i++){
             try {
                 checkAndInsert(ns, objs[i]);
-                getDur().commitIfNeeded();
+                //getDur().commitIfNeeded();
             } catch (const UserException&) {
                 if (!keepGoing || i == objs.size()-1){
                     globalOpCounters.incInsertInWriteLock(i);
@@ -888,7 +900,7 @@ namespace mongo {
         verify( dbResponse.response );
         dbResponse.response->concat(); // can get rid of this if we make response handling smarter
         response = *dbResponse.response;
-        getDur().commitIfNeeded();
+        //getDur().commitIfNeeded();
         return true;
     }
 
@@ -897,7 +909,7 @@ namespace mongo {
             lastError.startRequest( toSend, lastError._get() );
         DbResponse dbResponse;
         assembleResponse( toSend, dbResponse , _clientHost );
-        getDur().commitIfNeeded();
+        //getDur().commitIfNeeded();
     }
 
     auto_ptr<DBClientCursor> DBDirectClient::query(const string &ns, Query query, int nToReturn , int nToSkip ,
@@ -984,7 +996,7 @@ namespace mongo {
                     readlocktry w(20000);
                     if( w.got() ) { 
                         log() << "shutdown: final commit..." << endl;
-                        getDur().commitNow();
+                        //getDur().commitNow();
                         break;
                     }
                     if( --n <= 0 ) {
@@ -1006,7 +1018,8 @@ namespace mongo {
         IndexInterface::shutdown();
 
         if( cmdLine.dur ) {
-            dur::journalCleanup(true);
+            // TODO: What should TokuDB do here?
+            //dur::journalCleanup(true);
         }
 
 #if !defined(__sunos__)
@@ -1082,7 +1095,7 @@ namespace mongo {
 
         // block the dur thread from doing any work for the rest of the run
         log(2) << "shutdown: groupCommitMutex" << endl;
-        SimpleMutex::scoped_lock lk(dur::commitJob.groupCommitMutex);
+        //SimpleMutex::scoped_lock lk(dur::commitJob.groupCommitMutex);
 
 #ifdef _WIN32
         // Windows Service Controller wants to be told when we are down,
@@ -1152,8 +1165,9 @@ namespace mongo {
             // we check this here because we want to see if we can get the lock
             // if we can't, then its probably just another mongod running
             
+#if 0
             string errmsg;
-            if (doingRepair && dur::haveJournalFiles()) {
+            if (doingRepair && dur::haveJournalFiles()) { // TODO: Get rid of this check for TokuDB - always require the journal
                 errmsg = "************** \n"
                          "You specified --repair but there are dirty journal files. Please\n"
                          "restart without --repair to allow the journal files to be replayed.\n"
@@ -1212,9 +1226,11 @@ namespace mongo {
                 lockFile = 0;
                 uassert( 12596 , "old lock file" , 0 );
             }
+#endif
         }
 
         // Not related to lock file, but this is where we handle unclean shutdown
+#if 0
         if( !cmdLine.dur && dur::haveJournalFiles() ) {
             cout << "**************" << endl;
             cout << "Error: journal files are present in journal directory, yet starting without journaling enabled." << endl;
@@ -1222,6 +1238,7 @@ namespace mongo {
             cout << "**************" << endl;
             uasserted(13597, "can't start without --journal enabled when journal/ files are present");
         }
+#endif
 
 #ifdef _WIN32
         uassert( 13625, "Unable to truncate lock file", _chsize(lockFile, 0) == 0);
@@ -1239,6 +1256,7 @@ namespace mongo {
         // TODO - this is very bad that the code above not running here.
 
         // Not related to lock file, but this is where we handle unclean shutdown
+#if 0
         if( !cmdLine.dur && dur::haveJournalFiles() ) {
             cout << "**************" << endl;
             cout << "Error: journal files are present in journal directory, yet starting without --journal enabled." << endl;
@@ -1247,6 +1265,7 @@ namespace mongo {
             cout << "**************" << endl;
             uasserted(13618, "can't start without --journal enabled when journal/ files are present");
         }
+#endif
     }
 #endif
 
