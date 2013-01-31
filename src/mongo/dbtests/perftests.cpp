@@ -31,14 +31,12 @@
 #include "../db/instance.h"
 #include "../db/json.h"
 #include "../db/lasterror.h"
-#include "../db/taskqueue.h"
 #include "../util/timer.h"
 #include "dbtests.h"
 #include "../db/dur_stats.h"
 #include "../util/checksum.h"
 #include "../util/version.h"
 #include "../db/key.h"
-#include "../util/compress.h"
 #include "../util/concurrency/qlock.h"
 #include <boost/filesystem/operations.hpp>
 

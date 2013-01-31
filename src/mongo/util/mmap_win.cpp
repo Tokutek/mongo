@@ -19,7 +19,6 @@
 #include "mmap.h"
 #include "text.h"
 #include "../db/d_concurrency.h"
-#include "../db/memconcept.h"
 #include "mongo/util/timer.h"
 #include "mongo/util/file_allocator.h"
 
@@ -61,6 +60,7 @@ namespace mongo {
         return reinterpret_cast<void*>( static_cast<uintptr_t>( thisMemoryMappedFileLocation ) );
     }
 
+#if 0
     /** notification on unmapping so we can clear writable bits */
     void MemoryMappedFile::clearWritableBits(void *p) {
         for( unsigned i = ((size_t)p)/ChunkSize; i <= (((size_t)p)+len)/ChunkSize; i++ ) {
@@ -213,6 +213,7 @@ namespace mongo {
         len = length;
         return view;
     }
+#endif
 
     extern mutex mapViewMutex;
 

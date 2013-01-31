@@ -247,7 +247,7 @@ namespace mongo {
 
             FileAllocator::get()->start();
 
-            dur::startup();
+            //dur::startup();
         }
 
         if ( _params.count( "db" ) )
