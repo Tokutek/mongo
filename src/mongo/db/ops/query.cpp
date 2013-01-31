@@ -889,7 +889,7 @@ namespace mongo {
                     
                     break;
                 }
-                //catch ( PageFaultException& e ) {
+                //catch ( PageFaultException& e )
                 catch ( ... ) {
                     //e.touch();
                     ::abort();
@@ -1039,7 +1039,7 @@ namespace mongo {
                 verify( ! hasRetried );
                 hasRetried = true;
             }
-            //catch ( PageFaultException& e ) {
+            //catch ( PageFaultException& e )
             catch ( ... ) {
                 //e.touch();
                 ::abort();

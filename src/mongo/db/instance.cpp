@@ -771,7 +771,7 @@ namespace mongo {
             }
         }
         //theDataFileMgr.insertWithObjMod(ns, js, false); // js may be modified in the call to add an _id field.
-        log() << "TODO: insert this document " << js.toString() << endl;
+        insertObject(ns, js);
         logOp("i", ns, js);
     }
 
