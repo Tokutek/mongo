@@ -25,7 +25,6 @@
 #include "mongo/db/client.h"
 #include "mongo/db/commands/fsync.h"
 #include "mongo/db/d_concurrency.h"
-#include "mongo/db/prefetch.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/rs.h"
@@ -85,13 +84,6 @@ namespace replset {
         getDur().commitIfNeeded();
 
         return ok;
-    }
-
-    void initializePrefetchThread() {
-        if (!ClientBasic::getCurrent()) {
-            Client::initThread("repl prefetch worker");
-            replLocalAuth();
-        }
     }
 
     static AtomicUInt32 replWriterWorkerId;
@@ -158,38 +150,6 @@ namespace replset {
         }
     }
 
-
-    // The pool threads call this to prefetch each op
-    void SyncTail::prefetchOp(const BSONObj& op) {
-        initializePrefetchThread();
-
-        const char *ns = op.getStringField("ns");
-        if (ns && (ns[0] != '\0')) {
-            try {
-                Client::ReadContext ctx(ns);
-                prefetchPagesForReplicatedOp(op);
-            }
-            catch (const DBException& e) {
-                LOG(2) << "ignoring exception in prefetchOp(): " << e.what() << endl;
-            }
-            catch (const std::exception& e) {
-                log() << "Unhandled std::exception in prefetchOp(): " << e.what() << endl;
-                fassertFailed(16397);
-            }
-        }
-    }
-
-    // Doles out all the work to the reader pool threads and waits for them to complete
-    void SyncTail::prefetchOps(const std::deque<BSONObj>& ops) {
-        threadpool::ThreadPool& prefetcherPool = theReplSet->getPrefetchPool();
-        for (std::deque<BSONObj>::const_iterator it = ops.begin();
-             it != ops.end();
-             ++it) {
-            prefetcherPool.schedule(&prefetchOp, *it);
-        }
-        prefetcherPool.join();
-    }
-    
     // Doles out all the work to the writer pool threads and waits for them to complete
     void SyncTail::applyOps(const std::vector< std::vector<BSONObj> >& writerVectors, 
                                      MultiSyncApplyFunc applyFunc) {
@@ -208,7 +168,7 @@ namespace replset {
     void SyncTail::multiApply( std::deque<BSONObj>& ops, MultiSyncApplyFunc applyFunc ) {
 
         // Use a ThreadPool to prefetch all the operations in a batch.
-        prefetchOps(ops);
+        //prefetchOps(ops);
         
         std::vector< std::vector<BSONObj> > writerVectors(theReplSet->replWriterThreadCount);
         fillWriterVectors(ops, &writerVectors);
