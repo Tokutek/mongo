@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "btree.h"
 #include "cursor.h"
 #include "queryutil.h"
 #include "matcher.h"

@@ -17,7 +17,6 @@
 */
 
 #include "pch.h"
-#include "btree.h"
 #include "pdfile.h"
 #include "jsobj.h"
 #include "curop-inl.h"

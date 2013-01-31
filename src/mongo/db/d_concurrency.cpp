@@ -29,7 +29,6 @@
 #include "namespacestring.h"
 #include "d_globals.h"
 #include "server.h"
-#include "dur.h"
 #include "lockstat.h"
 
 // oplog locking
@@ -64,10 +63,12 @@ namespace mongo {
     	virtual ~DBTryLockTimeoutException() throw() { }
     };
 
-    namespace dur { 
+#if 0
+    namespace dur {
         void assertNothingSpooled();
         void releasingWriteLock();
     }
+#endif
 
     // e.g. externalobjsortmutex uses hlmutex as it can be locked for very long times
     // todo : report HLMutex status in db.currentOp() output
@@ -114,7 +115,7 @@ namespace mongo {
         
         void lock_w() { 
             verify( threadState() == 0 );
-            getDur().commitIfNeeded();
+            //getDur().commitIfNeeded();
             lockState().lockedStart( 'w' );
             q.lock_w(); 
         }
@@ -132,7 +133,7 @@ namespace mongo {
                 log() << "can't lock_W, threadState=" << (int) ls.threadState() << endl;
                 fassert(16114,false);
             }
-            getDur().commitIfNeeded(); // check before locking - will use an R lock for the commit if need to do one, which is better than W
+            //getDur().commitIfNeeded(); // check before locking - will use an R lock for the commit if need to do one, which is better than W
             ls.lockedStart( 'W' );
             {
                 q.lock_W();
@@ -807,10 +808,12 @@ namespace mongo {
     }
     void unlocking_w() {
         // we can't commit early in this case; so a bit more to do here.
-        dur::releasingWriteLock();
+        // TODO: What do we do here?
+        //dur::releasingWriteLock();
     }
     void unlocking_W() {
-        dur::releasingWriteLock();
+        // TODO: What do we do here?
+        //dur::releasingWriteLock();
     }
 
 }

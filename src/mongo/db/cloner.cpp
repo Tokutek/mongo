@@ -166,7 +166,7 @@ namespace mongo {
                     if ( logForRepl )
                         logOp("i", to_collection, js);
 
-                    getDur().commitIfNeeded();
+                    //getDur().commitIfNeeded();
                 }
                 catch( UserException& e ) {
                     error() << "error: exception cloning object in " << from_collection << ' ' << e.what() << " obj:" << js.toString() << '\n';
@@ -227,7 +227,7 @@ namespace mongo {
                     if ( logForRepl )
                         logOp("i", to_collection, js);
 
-                    getDur().commitIfNeeded();
+                    //getDur().commitIfNeeded();
                 }
                 catch( UserException& e ) {
                     error() << "error: exception cloning object in " << from_collection << ' ' << e.what() << " obj:" << js.toString() << '\n';
@@ -277,7 +277,7 @@ namespace mongo {
             string temp = ctx.ctx().db()->name + ".system.indexes";
             copy( temp.c_str() , temp.c_str() , /*isindex*/true , logForRepl , false , true , mayYield, mayBeInterrupted, BSON( "ns" << ns ) );
         }
-        getDur().commitIfNeeded();
+        //getDur().commitIfNeeded();
         return true;
     }
 

@@ -18,13 +18,14 @@
 
 #pragma once
 
+#include <boost/filesystem.hpp>
+
 #include "mongo/pch.h"
 
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/diskloc.h"
 #include "mongo/db/index.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/mongommf.h"
 #include "mongo/db/namespace.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/querypattern.h"
@@ -123,7 +124,7 @@ namespace mongo {
                 if( _next == 0 ) return 0;
                 return (Extra*) (((char *) d) + _next);
             }
-            void setNext(long ofs) { *getDur().writing(&_next) = ofs;  }
+            void setNext(long ofs) { _next = ofs; } // TODO Transactional  *getDur().writing(&_next) = ofs;  }
             void copy(NamespaceDetails *d, const Extra& e) {
                 memcpy(this, &e, sizeof(Extra));
                 _next = 0;
@@ -247,7 +248,7 @@ namespace mongo {
         double paddingFactor() const { return _paddingFactor; }
 
         void setPaddingFactor( double paddingFactor ) {
-            *getDur().writing(&_paddingFactor) = paddingFactor;
+            _paddingFactor = paddingFactor; // TODO Transactional // *getDur().writing(&_paddingFactor) = paddingFactor;
         }
 
         /* called to indicate that an update fit in place.  
@@ -379,7 +380,9 @@ namespace mongo {
         }
 
         NamespaceDetails *writingWithoutExtra() {
-            return ( NamespaceDetails* ) getDur().writingPtr( this, sizeof( NamespaceDetails ) );
+            ::abort();
+            return NULL;
+            //return ( NamespaceDetails* ) getDur().writingPtr( this, sizeof( NamespaceDetails ) );
         }
         /** Make all linked Extra objects writeable as well */
         NamespaceDetails *writingWithExtra();
@@ -634,13 +637,13 @@ namespace mongo {
 
         boost::filesystem::path path() const;
 
-        unsigned long long fileLength() const { return f.length(); }
+        unsigned long long fileLength() const { ::abort(); return 0; } //f.length(); }
 
     private:
         void _init();
         void maybeMkdir() const;
 
-        MongoMMF f;
+        //MongoMMF f;
         HashTable<Namespace,NamespaceDetails> *ht;
         string dir_;
         string database_;

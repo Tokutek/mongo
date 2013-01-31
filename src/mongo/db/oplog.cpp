@@ -110,7 +110,7 @@ namespace mongo {
         const int size1 = partial.objsize() - 1;  // less the EOO char
         const int oOfs = size1+3;                 // 3 = byte BSONOBJTYPE + byte 'o' + byte \0
 
-        void *p = getDur().writingPtr(dst, oOfs+o.objsize()+1);
+        void *p = (char*)dst + oOfs; //getDur().writingPtr(dst, oOfs+o.objsize()+1);
 
         memcpy(p, partial.objdata(), size1);
 

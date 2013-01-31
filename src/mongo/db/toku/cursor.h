@@ -20,7 +20,6 @@
 #include <tokudb.h>
 
 #include "db/btree.h"
-
 #include "db/toku/invariant.h"
 #include "db/toku/row_buffer.h"
 

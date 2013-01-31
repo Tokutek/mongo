@@ -26,7 +26,7 @@
 #include "mongo/db/btree.h"
 #include "mongo/db/db.h"
 #include "mongo/db/json.h"
-#include "mongo/db/mongommf.h"
+//#include "mongo/db/mongommf.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/pdfile.h"
@@ -132,14 +132,16 @@ namespace mongo {
             verify( Lock::isW() ); // TODO(erh) should this be per db?
             if( indexBuildInProgress ) {
                 log() << "indexBuildInProgress was " << indexBuildInProgress << " for " << k << ", indicating an abnormal db shutdown" << endl;
-                getDur().writingInt( indexBuildInProgress ) = 0;
+                indexBuildInProgress = 0; // TODO: Transactional //getDur().writingInt( indexBuildInProgress ) = 0;
             }
         }
     }
 
+#if 0
     static void namespaceOnLoadCallback(const Namespace& k, NamespaceDetails& v) {
         v.onLoad(k);
     }
+#endif
 
     bool checkNsFilesOnLoad = true;
 
@@ -159,6 +161,7 @@ namespace mongo {
         }
         */
 
+#if 0
         unsigned long long len = 0;
         boost::filesystem::path nsPath = path();
         string pathString = nsPath.string();
@@ -179,7 +182,8 @@ namespace mongo {
             maybeMkdir();
             unsigned long long l = lenForNewNsFiles;
             if( f.create(pathString, l, true) ) {
-                getDur().createdFile(pathString, l); // always a new file
+                // TODO: Log a new file create?
+                //getDur().createdFile(pathString, l); // always a new file
                 len = l;
                 verify( len == lenForNewNsFiles );
                 p = f.getView();
@@ -197,6 +201,8 @@ namespace mongo {
         ht = new HashTable<Namespace,NamespaceDetails>(p, (int) len, "namespace index");
         if( checkNsFilesOnLoad )
             ht->iterAll(namespaceOnLoadCallback);
+#endif
+        ::abort();
     }
 
     static void namespaceGetNamespacesCallback( const Namespace& k , NamespaceDetails& v , void * extra ) {
@@ -526,7 +532,7 @@ namespace mongo {
         long ofs = e->ofsFrom(this);
         if( i == 0 ) {
             verify( extraOffset == 0 );
-            *getDur().writing(&extraOffset) = ofs;
+            extraOffset = ofs; //*getDur().writing(&extraOffset) = ofs;
             verify( extra() == e );
         }
         else {
@@ -541,7 +547,7 @@ namespace mongo {
         dassert( i < NIndexesMax );
         unsigned long long x = ((unsigned long long) 1) << i;
         if( multiKeyIndexBits & x ) return;
-        *getDur().writing(&multiKeyIndexBits) |= x;
+        multiKeyIndexBits |= x; //*getDur().writing(&multiKeyIndexBits) |= x;
         NamespaceDetailsTransient::get(thisns).clearQueryCache();
     }
 
@@ -556,7 +562,7 @@ namespace mongo {
             id = &idx(nIndexes,false);
         }
 
-        (*getDur().writing(&nIndexes))++;
+        nIndexes++; //(*getDur().writing(&nIndexes))++;
         if ( resetTransient )
             NamespaceDetailsTransient::get(thisns).addedIndex();
         return *id;
@@ -630,7 +636,7 @@ namespace mongo {
         for( Extra *e = extra(); e; e = e->next( this ) ) {
             writeRanges.push_back( make_pair( (char*)e - (char*)this, sizeof( Extra ) ) );
         }
-        return reinterpret_cast< NamespaceDetails* >( getDur().writingRangesAtOffsets( this, writeRanges ) );
+        ::abort(); return NULL; //return reinterpret_cast< NamespaceDetails* >( getDur().writingRangesAtOffsets( this, writeRanges ) );
     }
 
     void NamespaceDetails::setMaxCappedDocs( long long max ) {
@@ -718,11 +724,11 @@ namespace mongo {
     }
 
     void NamespaceDetails::setSystemFlag( int flag ) {
-        getDur().writingInt(_systemFlags) |= flag;
+        _systemFlags |= flag; // TODO: Transactional //getDur().writingInt(_systemFlags) |= flag;
     }
 
     void NamespaceDetails::clearSystemFlag( int flag ) {
-        getDur().writingInt(_systemFlags) &= ~flag;
+        _systemFlags &= ~flag; // TODO: Transactional //getDur().writingInt(_systemFlags) &= ~flag;
     }
     
     /**
@@ -748,7 +754,7 @@ namespace mongo {
         if ( ( _userFlags & flags ) == flags )
             return false;
         
-        getDur().writingInt(_userFlags) |= flags;
+        _userFlags |= flags; // TODO: Transactional // getDur().writingInt(_userFlags) |= flags;
         return true;
     }
 
@@ -756,7 +762,7 @@ namespace mongo {
         if ( ( _userFlags & flags ) == 0 )
             return false;
 
-        getDur().writingInt(_userFlags) &= ~flags;
+        _userFlags &= ~flags; // TODO: Transactional //getDur().writingInt(_userFlags) &= ~flags;
         return true;
     }
 
@@ -764,7 +770,7 @@ namespace mongo {
         if ( flags == _userFlags )
             return false;
 
-        getDur().writingInt(_userFlags) = flags;
+        _userFlags = flags; // TODO: Transactional //getDur().writingInt(_userFlags) = flags;
         return true;
     }
 

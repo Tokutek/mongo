@@ -87,6 +87,8 @@ namespace mongo {
         virtual void help(stringstream& h) const { h << "test how long to write and fsync to a test file in the journal/ directory"; }
 
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
+            ::abort();
+#if 0
             boost::filesystem::path p = dur::getJournalDir();
             p /= "journalLatencyTest";
         
@@ -144,6 +146,7 @@ namespace mongo {
             catch(...) { }
 
             return 1;
+#endif
         }
     } journalLatencyTestCmd;
 

@@ -466,7 +466,7 @@ namespace mongo {
                     continue;
                 }
 
-                getDur().commitIfNeeded();
+                //getDur().commitIfNeeded();
 
                 /* keep an archive of items rolled back */
                 shared_ptr<RemoveSaver>& rs = removeSavers[d.ns];

@@ -30,7 +30,6 @@
 #include "mongo/db/db.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/dbwebserver.h"
-#include "mongo/db/dur.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/json.h"
@@ -62,10 +61,6 @@
 #endif
 
 namespace mongo {
-
-    namespace dur {
-        extern unsigned long long DataLimitPerJournalFile;
-    }
 
     /* only off if --nohints */
     extern bool useHints;
@@ -502,7 +497,8 @@ namespace mongo {
 
         MONGO_ASSERT_ON_EXCEPTION_WITH_MSG( clearTmpFiles(), "clear tmp files" );
 
-        dur::startup();
+        // TODO: What does TokuDB need to do here?
+        //dur::startup();
 
         if( cmdLine.durOptions & CmdLine::DurRecoverOnly )
             return;
@@ -892,8 +888,11 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
         if (params.count("smallfiles")) {
             cmdLine.smallfiles = true;
+#if 0
             verify( dur::DataLimitPerJournalFile >= 128 * 1024 * 1024 );
             dur::DataLimitPerJournalFile = 128 * 1024 * 1024;
+#endif
+            ::abort();
         }
         if (params.count("diaglog")) {
             int x = params["diaglog"].as<int>();
@@ -1024,7 +1023,7 @@ static int mongoDbMain(int argc, char* argv[]) {
         if ( params.count("configsvr" ) ) {
             cmdLine.configsvr = true;
             cmdLine.smallfiles = true; // config server implies small files
-            dur::DataLimitPerJournalFile = 128 * 1024 * 1024;
+            //dur::DataLimitPerJournalFile = 128 * 1024 * 1024;
             if (cmdLine.usingReplSets() || replSettings.master || replSettings.slave) {
                 log() << "replication should not be enabled on a config server" << endl;
                 ::_exit(-1);

@@ -40,8 +40,6 @@
 #endif
 #include "stats/counters.h"
 #include "background.h"
-//#include "dur_journal.h"
-//#include "dur_recover.h"
 #include "d_concurrency.h"
 #include "ops/count.h"
 #include "ops/delete.h"
@@ -50,7 +48,6 @@
 #include "pagefault.h"
 #include <fstream>
 #include <boost/filesystem/operations.hpp>
-//#include "dur_commitjob.h"
 #include "mongo/db/commands/fsync.h"
 #include "index.h"
 

@@ -1038,7 +1038,7 @@ namespace mongo {
                     }
                     op = oplogReader.next();
 
-                    getDur().commitIfNeeded();
+                    //getDur().commitIfNeeded();
                 }
             }
         }

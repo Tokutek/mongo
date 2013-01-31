@@ -6,7 +6,6 @@
 
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/dur.h"
 #include "mongo/db/client.h"
 #include "mongo/util/background.h"
 
@@ -88,11 +87,13 @@ namespace mongo {
                 // the simple fsync command case
                 if (sync) {
                     Lock::GlobalWrite w; // can this be GlobalRead? and if it can, it should be nongreedy.
-                    getDur().commitNow();
+                    // TODO: What do we do here?
+                    //getDur().commitNow();
                 }
                 // question : is it ok this is not in the dblock? i think so but this is a change from past behavior, 
                 // please advise.
-                result.append( "numFiles" , MemoryMappedFile::flushAll( sync ) );
+                //result.append( "numFiles" , MemoryMappedFile::flushAll( sync ) );
+                ::abort();
             }
             return 1;
         }
@@ -107,7 +108,8 @@ namespace mongo {
         
         verify( ! fsyncCmd.locked ); // impossible to get here if locked is true
         try { 
-            getDur().syncDataAndTruncateJournal();
+            // TODO: What do we do here?
+            //getDur().syncDataAndTruncateJournal();
         } 
         catch( std::exception& e ) { 
             error() << "error doing syncDataAndTruncateJournal: " << e.what() << endl;
@@ -120,7 +122,9 @@ namespace mongo {
         global.downgrade();
         
         try {
-            MemoryMappedFile::flushAll(true);
+            //MemoryMappedFile::flushAll(true);
+            // TODO: Checkpoint TokuDB?
+            ::abort();
         }
         catch( std::exception& e ) { 
             error() << "error doing flushAll: " << e.what() << endl;

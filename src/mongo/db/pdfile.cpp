@@ -428,8 +428,8 @@ namespace mongo {
         if( !d->firstExtent.isNull() ) {
             ::abort();
             //freeExtents(d->firstExtent, d->lastExtent);
-            getDur().writingDiskLoc( d->firstExtent ).setInvalid();
-            getDur().writingDiskLoc( d->lastExtent ).setInvalid();
+            //getDur().writingDiskLoc( d->firstExtent ).setInvalid();
+            //getDur().writingDiskLoc( d->lastExtent ).setInvalid();
         }
 
         // remove from the catalog hashtable
@@ -502,7 +502,8 @@ namespace mongo {
         //
         //  RWLockRecursive::Exclusive lk(MongoFile::mmmutex);
 
-        getDur().syncDataAndTruncateJournal();
+        // TODO: What does TokuDB do here?
+        //getDur().syncDataAndTruncateJournal();
 
         Database::closeDatabase( d->name.c_str(), d->path );
         d = 0; // d is now deleted
@@ -625,7 +626,8 @@ namespace mongo {
 
         BackgroundOperation::assertNoBgOpInProgForDb(dbName);
 
-        getDur().syncDataAndTruncateJournal(); // Must be done before and after repair
+        // TODO: What does tokudb do here?
+        //getDur().syncDataAndTruncateJournal(); // Must be done before and after repair
 
         boost::intmax_t totalSize = dbSize( dbName );
         boost::intmax_t freeSize = File::freeSpace(repairpath);
@@ -658,7 +660,7 @@ namespace mongo {
             Database::closeDatabase( dbName, reservedPathString.c_str() );
         }
 
-        getDur().syncDataAndTruncateJournal(); // Must be done before and after repair
+        //getDur().syncDataAndTruncateJournal(); // Must be done before and after repair
         MongoFile::flushAll(true); // need both in case journaling is disabled
 
         if ( !res ) {
@@ -729,7 +731,8 @@ namespace mongo {
     bool DatabaseHolder::closeAll( const string& path , BSONObjBuilder& result , bool force ) {
         log() << "DatabaseHolder::closeAll path:" << path << endl;
         verify( Lock::isW() );
-        getDur().commitNow(); // bad things happen if we close a DB with outstanding writes
+        // TODO: Tokudb close
+        //getDur().commitNow(); // bad things happen if we close a DB with outstanding writes
 
         map<string,Database*>& m = _paths[path];
         _size -= m.size();

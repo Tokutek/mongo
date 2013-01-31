@@ -81,7 +81,7 @@ namespace replset {
         // For non-initial-sync, we convert updates to upserts
         // to suppress errors when replaying oplog entries.
         bool ok = !applyOperation_inlock(op, true, convertUpdateToUpsert);
-        getDur().commitIfNeeded();
+        //getDur().commitIfNeeded(); // TODO: TokuDB - anything to do here?
 
         return ok;
     }

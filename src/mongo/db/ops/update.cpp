@@ -438,7 +438,8 @@ namespace mongo {
                     if ( willAdvanceCursor )
                         c->recoverFromTouchingEarlierIterate();
 
-                    getDur().commitIfNeeded();
+                    // TODO: What do we do here?
+                    ::abort(); //getDur().commitIfNeeded();
 
                     continue;
                 }

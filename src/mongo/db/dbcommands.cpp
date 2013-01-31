@@ -47,7 +47,6 @@
 #include "background.h"
 #include "../util/version.h"
 #include "../s/d_writeback.h"
-#include "dur_stats.h"
 #include "../server.h"
 #include "mongo/db/repl/bgsync.h"
 
@@ -55,16 +54,16 @@
 
 namespace mongo {
 
-    namespace dur { 
-        void setAgeOutJournalFiles(bool rotate);
-    }
     /** @return true if fields found */
     bool setParmsMongodSpecific(const string& dbname, BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result, bool fromRepl ) { 
         BSONElement e = cmdObj["ageOutJournalFiles"];
         if( !e.eoo() ) {
+#if 0
             bool r = e.trueValue();
             log() << "ageOutJournalFiles " << r << endl;
             dur::setAgeOutJournalFiles(r);
+#endif
+            ::abort();
             return true;
         }
         if( cmdObj.hasElement( "replIndexPrefetch" ) ) {
@@ -187,10 +186,13 @@ namespace mongo {
             }
 
             if ( cmdObj["j"].trueValue() ) { 
+                ::abort();
+#if 0
                 if( !getDur().awaitCommit() ) {
                     // --journal is off
                     result.append("jnote", "journaling not enabled on this server");
                 }
+#endif
                 if( cmdObj["fsync"].trueValue() ) { 
                     errmsg = "fsync and j options are not used together";
                     return false;
@@ -198,6 +200,8 @@ namespace mongo {
             }
             else if ( cmdObj["fsync"].trueValue() ) {
                 Timer t;
+                ::abort();
+#if 0
                 if( !getDur().awaitCommit() ) {
                     // if get here, not running with --journal
                     log() << "fsync from getlasterror" << endl;
@@ -207,6 +211,7 @@ namespace mongo {
                     // this perhaps is temp.  how long we wait for the group commit to occur.
                     result.append( "waited", t.millis() );
                 }
+#endif
             }
 
             if ( err ) {
@@ -645,9 +650,12 @@ namespace mongo {
 
             result.append( "writeBacksQueued" , ! writeBackManager.queuesEmpty() );
 
+            // TODO: TokuDB durability stats?
+#if 0
             if( cmdLine.dur ) {
                 result.append("dur", dur::stats.asObj());
             }
+#endif
             
             {
                 BSONObjBuilder record( result.subobjStart( "recordStats" ) );
@@ -1594,7 +1602,7 @@ namespace mongo {
             while( c->more() ) {
                 BSONObj obj = c->next();
                 ::abort(); //theDataFileMgr.insertAndLog( toNs.c_str(), obj, true );
-                getDur().commitIfNeeded();
+                //getDur().commitIfNeeded();
             }
 
             return true;

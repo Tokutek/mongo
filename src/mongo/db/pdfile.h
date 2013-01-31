@@ -29,7 +29,6 @@
 #include "mongo/db/diskloc.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/memconcept.h"
-#include "mongo/db/mongommf.h"
 #include "mongo/db/namespace-inl.h"
 #include "mongo/db/namespace_details-inl.h"
 #include "mongo/db/namespacestring.h"
