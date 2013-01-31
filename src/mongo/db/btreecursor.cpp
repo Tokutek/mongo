@@ -27,8 +27,9 @@
 
 namespace mongo {
 
+#if 0
     template< class V >
-    class BtreeCursorImpl : public BtreeCursor { 
+    class BtreeCursorImpl : public BtreeCursor {
     public:
         typedef typename BucketBasics<V>::KeyNode KeyNode;
         typedef typename V::Key Key;
@@ -118,7 +119,7 @@ namespace mongo {
                     int x = 0;
                     while( 1 ) {
                         //  if ( b->keyAt(keyOfs).woEqual(keyAtKeyOfs) &&
-                        //       b->k(keyOfs).recordLoc == locAtKeyOfs ) {
+                        //       b->k(keyOfs).recordLoc == locAtKeyOfs )
                         if ( keyAt(keyOfs).binaryEqual(keyAtKeyOfs) ) {
                             const _KeyNode& kn = keyNode(keyOfs);
                             if( kn.recordLoc == locAtKeyOfs ) {
@@ -189,6 +190,7 @@ namespace mongo {
 
     template class BtreeCursorImpl<V0>;
     template class BtreeCursorImpl<V1>;
+#endif
 
     BtreeCursor* BtreeCursor::make(
         NamespaceDetails *_d, const IndexDetails& _id,
@@ -211,11 +213,13 @@ namespace mongo {
         if( v == 2 ) 
             return new TokuDBCursor( nsd , idxNo , indexDetails );
 
+#if 0
         if( v == 1 ) 
             return new BtreeCursorImpl<V1>( nsd , idxNo , indexDetails );
         
         if( v == 0 ) 
             return new BtreeCursorImpl<V0>( nsd , idxNo , indexDetails );
+#endif
 
         dassert( IndexDetails::isASupportedIndexVersionNumber(v) );
         uasserted(14800, str::stream() << "unsupported index version " << v);

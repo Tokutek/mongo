@@ -30,6 +30,7 @@ namespace mongo {
 
     // prefetch for an oplog operation
     void prefetchPagesForReplicatedOp(const BSONObj& op) {
+#if 0
         const char *opField;
         const char *opType = op.getStringField("op");
         switch (*opType) {
@@ -63,9 +64,12 @@ namespace mongo {
             !nsd->isCapped()) {
             prefetchRecordPages(ns, obj);
         }
+#endif
+        ::abort();
     }
 
     void prefetchIndexPages(NamespaceDetails *nsd, const BSONObj& obj) {
+#if 0
         DiskLoc unusedDl; // unused
         IndexInterface::IndexInserter inserter;
         BSONObjSet unusedKeys;
@@ -117,10 +121,13 @@ namespace mongo {
         default:
             fassertFailed(16427);
         }
+#endif
+        ::abort();
     }
 
 
     void prefetchRecordPages(const char* ns, const BSONObj& obj) {
+#if 0
         BSONElement _id;
         if( obj.getObjectID(_id) ) {
             BSONObjBuilder builder;
@@ -142,5 +149,7 @@ namespace mongo {
                 LOG(2) << "ignoring exception in prefetchRecordPages(): " << e.what() << endl;
             }
         }
+#endif
+        ::abort();
     }
 }

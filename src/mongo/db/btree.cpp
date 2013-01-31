@@ -34,6 +34,7 @@
 
 namespace mongo {
 
+#if 0
     //BOOST_STATIC_ASSERT( Record::HeaderSize == 16 );
     //BOOST_STATIC_ASSERT( Record::HeaderSize + BtreeData_V1::BucketSize == 8192 );
 
@@ -1980,4 +1981,6 @@ namespace mongo {
 
 
     IndexInsertionContinuation::~IndexInsertionContinuation() {}
+#endif
+
 }

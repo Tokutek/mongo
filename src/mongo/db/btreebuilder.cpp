@@ -31,6 +31,7 @@
 
 namespace mongo {
 
+#if 0 
     /* --- BtreeBuilder --- */
 
     template<class V>
@@ -182,5 +183,6 @@ namespace mongo {
 
     template class BtreeBuilder<V0>;
     template class BtreeBuilder<V1>;
+#endif
 
 }

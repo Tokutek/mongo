@@ -79,6 +79,7 @@ namespace mongo {
 #endif
     }
 
+#if 0
     /* step one of adding keys to index idxNo for a new record
        @return true means done.  false means multikey involved and more work to do
     */
@@ -112,6 +113,7 @@ namespace mongo {
             }
         }
     }
+#endif
 
     static void addKeysToIndex(const char *ns, NamespaceDetails *d, int idxNo, BSONObj& obj,
                                DiskLoc recordLoc, bool dupsAllowed);
@@ -284,6 +286,7 @@ namespace mongo {
         pm.finished();
     }
 
+#if 0
     template< class V >
     void buildBottomUpPhases2And3(bool dupsAllowed, IndexDetails& idx, BSONObjExternalSorter& sorter, 
         bool dropDups, set<DiskLoc> &dupsToDrop, CurOp * op, SortPhaseOne *phase1, ProgressMeterHolder &pm,
@@ -336,6 +339,7 @@ namespace mongo {
             warning() << "not all entries were added to the index, probably some keys were too large" << endl;
         }
     }
+#endif
 
     // throws DBException
     unsigned long long fastBuildIndex(const char *ns, NamespaceDetails *d, IndexDetails& idx, int idxNo) {
@@ -394,9 +398,9 @@ namespace mongo {
 
         /* build index --- */
         if( idx.version() == 0 )
-            buildBottomUpPhases2And3<V0>(dupsAllowed, idx, sorter, dropDups, dupsToDrop, op, phase1, pm, t);
+            ::abort(); //buildBottomUpPhases2And3<V0>(dupsAllowed, idx, sorter, dropDups, dupsToDrop, op, phase1, pm, t);
         else if( idx.version() == 1 ) 
-            buildBottomUpPhases2And3<V1>(dupsAllowed, idx, sorter, dropDups, dupsToDrop, op, phase1, pm, t);
+            ::abort(); //buildBottomUpPhases2And3<V1>(dupsAllowed, idx, sorter, dropDups, dupsToDrop, op, phase1, pm, t);
         else if( idx.version() == 2 )
             // tokudb: to build our index, just trickle load rows using insertions
             buildIndexUsingInsertions(dupsAllowed, idx, sorter, dropDups, dupsToDrop, op, phase1, pm, t);

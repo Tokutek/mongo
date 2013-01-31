@@ -58,8 +58,9 @@ namespace mongo {
     }
 
 
+#if 0
     template< class V >
-    class IndexInterfaceImpl : public IndexInterface { 
+    class IndexInterfaceImpl : public IndexInterface {
     public:
         typedef typename V::KeyOwned KeyOwned;
         virtual int keyCompare(const BSONObj& l,const BSONObj& r, const Ordering &ordering);
@@ -147,9 +148,11 @@ namespace mongo {
 
     IndexInterfaceImpl<V0> iii_v0;
     IndexInterfaceImpl<V1> iii_v1;
+#endif
     IndexInterfaceTokuDB iii_tokudb;
 
-    IndexInterface *IndexDetails::iis[] = { &iii_v0, &iii_v1, &iii_tokudb };
+    //IndexInterface *IndexDetails::iis[] = { &iii_v0, &iii_v1, &iii_tokudb };
+    IndexInterface *IndexDetails::iis[] = { NULL, NULL, &iii_tokudb };
 
     int removeFromSysIndexes(const char *ns, const char *idxName) {
         string system_indexes = cc().database()->name + ".system.indexes";

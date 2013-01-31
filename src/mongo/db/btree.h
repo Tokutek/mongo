@@ -26,6 +26,7 @@
 
 namespace mongo {
 
+#if 0
     /**
      * Our btree implementation generally follows the standard btree algorithm,
      * which is described in many places.  The nodes of our btree are referred to
@@ -998,6 +999,7 @@ namespace mongo {
     };
 #pragma pack()
 
+#endif
     class FieldRangeVector;
     class FieldRangeVectorIterator;
     
@@ -1166,6 +1168,7 @@ namespace mongo {
         long long _nscanned;
     };
 
+#if 0
     /**
      * give us a writable version of the btree bucket (declares write intent).
      * note it is likely more efficient to declare write intent on something smaller when you can.
@@ -1182,5 +1185,5 @@ namespace mongo {
         prevChildBucket(k.prevChildBucket),
         recordLoc(k.recordLoc), key(bb.data+k.keyDataOfs())
     { }
-
+#endif
 } // namespace mongo;

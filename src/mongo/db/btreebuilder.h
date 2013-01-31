@@ -3,6 +3,7 @@
 #include "btree.h"
 
 namespace mongo {
+#if 0
 
     /**
      * build btree from the bottom up
@@ -49,5 +50,5 @@ namespace mongo {
 
         unsigned long long getn() { return n; }
     };
-
+#endif
 }
