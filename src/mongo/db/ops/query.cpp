@@ -29,7 +29,6 @@
 #include "../../s/d_logic.h"
 #include "../../server.h"
 #include "../queryoptimizercursor.h"
-#include "../pagefault.h"
 
 namespace mongo {
 

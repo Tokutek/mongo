@@ -22,7 +22,6 @@
 #include "btree.h"
 #include "cmdline.h"
 #include "../server.h"
-#include "pagefault.h"
 
 //#define DEBUGQO(x) cout << x << endl;
 #define DEBUGQO(x)

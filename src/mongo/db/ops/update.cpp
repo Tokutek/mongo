@@ -19,7 +19,6 @@
 #include "pch.h"
 
 #include "mongo/db/oplog.h"
-#include "mongo/db/pagefault.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/client/dbclientinterface.h"
 

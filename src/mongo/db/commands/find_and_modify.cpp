@@ -19,7 +19,6 @@
 #include "../commands.h"
 #include "../instance.h"
 #include "../clientcursor.h"
-#include "../pagefault.h"
 #include "../dbhelpers.h"
 #include "../ops/delete.h"
 #include "../ops/update.h"

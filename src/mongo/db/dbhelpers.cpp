@@ -27,7 +27,6 @@
 #include "ops/delete.h"
 #include "queryoptimizercursor.h"
 #include "mongo/client/dbclientinterface.h"
-#include "mongo/db/pagefault.h"
 #include "mongo/db/repl_block.h"
 
 #include <fstream>

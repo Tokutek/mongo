@@ -33,7 +33,6 @@
 #include "../util/timer.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/scanandorder.h"
-#include "pagefault.h"
 #include "mongo/db/repl/rs.h"
 
 namespace mongo {

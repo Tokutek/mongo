@@ -45,7 +45,6 @@
 #include "ops/delete.h"
 #include "ops/query.h"
 #include "ops/update.h"
-#include "pagefault.h"
 #include <fstream>
 #include <boost/filesystem/operations.hpp>
 #include "mongo/db/commands/fsync.h"

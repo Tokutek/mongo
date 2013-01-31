@@ -35,7 +35,6 @@
 #include "../util/file_allocator.h"
 #include "repl/rs.h"
 #include "../scripting/engine.h"
-#include "pagefault.h"
 
 namespace mongo {
   
