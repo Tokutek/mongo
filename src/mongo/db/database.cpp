@@ -368,9 +368,9 @@ namespace mongo {
 #endif
 
 
+#if 0
     Extent* Database::allocExtent( const char *ns, int size, bool capped, bool enforceQuota ) {
         // todo: when profiling, these may be worth logging into profile collection
-#if 0
         bool fromFreeList = true;
         Extent *e = NULL; ::abort(); //DataFileMgr::allocFromFreeList( ns, size, capped );
         if( e == 0 ) {
@@ -379,10 +379,10 @@ namespace mongo {
         }
         LOG(1) << "allocExtent " << ns << " size " << size << ' ' << fromFreeList << endl; 
         return e;
-#endif
         ::abort();
         return NULL;
     }
+#endif
 
 
     bool Database::setProfilingLevel( int newLevel , string& errmsg ) {

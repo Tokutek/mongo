@@ -20,11 +20,10 @@
 
 #include "mongo/db/cmdline.h"
 #include "mongo/db/namespace_details.h"
-#include "mongo/db/record.h"
 
 namespace mongo {
 
-    class Extent;
+    //class Extent;
     //class MongoDataFile;
     class ClientCursor;
     struct ByLocKey;
@@ -90,7 +89,7 @@ namespace mongo {
 
         //MongoDataFile* suitableFile( const char *ns, int sizeNeeded, bool preallocate, bool enforceQuota );
 
-        Extent* allocExtent( const char *ns, int size, bool capped, bool enforceQuota );
+        //Extent* allocExtent( const char *ns, int size, bool capped, bool enforceQuota );
 
         //MongoDataFile* newestFile();
 
@@ -111,8 +110,8 @@ namespace mongo {
             return ns[name.size()] == '.';
         }
 
-        const RecordStats& recordStats() const { return _recordStats; }
-        RecordStats& recordStats() { return _recordStats; }
+        //const RecordStats& recordStats() const { return _recordStats; }
+        //RecordStats& recordStats() { return _recordStats; }
 
     private:
         /**
@@ -147,7 +146,7 @@ namespace mongo {
         int magic; // used for making sure the object is still loaded in memory
 
     private:
-        RecordStats _recordStats;
+        //RecordStats _recordStats;
         
     };
 
