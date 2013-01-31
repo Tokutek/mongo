@@ -1248,7 +1248,8 @@ namespace mongo {
                         timingBuilder.appendNumber( "mapTime" , mapTime / 1000 );
                         timingBuilder.append( "emitLoop" , t.millis() );
 
-                        op->setMessage( "m/r: (2/3) final reduce in memory" );
+                        op->setMessage("m/r: (2/3) final reduce in memory",
+                                       "M/R: (2/3) Final In-Memory Reduce Progress");
                         Timer rt;
                         // do reduce in memory
                         // this will be the last reduce needed for inline mode
