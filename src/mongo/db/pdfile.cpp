@@ -45,7 +45,6 @@ _ disallow system* manipulations from the database.
 #include "ops/delete.h"
 #include "instance.h"
 #include "replutil.h"
-#include "memconcept.h"
 #include "mongo/db/lasterror.h"
 
 #include <boost/filesystem/operations.hpp>

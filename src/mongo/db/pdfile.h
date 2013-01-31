@@ -28,7 +28,6 @@
 #include "mongo/db/client.h"
 #include "mongo/db/diskloc.h"
 #include "mongo/db/jsobjmanipulator.h"
-#include "mongo/db/memconcept.h"
 #include "mongo/db/namespace-inl.h"
 #include "mongo/db/namespace_details-inl.h"
 #include "mongo/db/namespacestring.h"
@@ -75,7 +74,6 @@ namespace mongo {
 } // namespace mongo
 
 #include "database.h"
-#include "memconcept.h"
 
 namespace mongo {
 
@@ -84,7 +82,7 @@ namespace mongo {
     inline NamespaceIndex* nsindex(const char *ns) {
         Database *database = cc().database();
         verify( database );
-        memconcept::is(database, memconcept::concept::database, ns, sizeof(Database));
+        //memconcept::is(database, memconcept::concept::database, ns, sizeof(Database));
         DEV {
             char buf[256];
             nsToDatabase(ns, buf);
@@ -102,7 +100,7 @@ namespace mongo {
         // if this faults, did you set the current db first?  (Client::Context + dblock)
         NamespaceDetails *d = nsindex(ns)->details(ns);
         if( d ) {
-            memconcept::is(d, memconcept::concept::nsdetails, ns, sizeof(NamespaceDetails));
+            //memconcept::is(d, memconcept::concept::nsdetails, ns, sizeof(NamespaceDetails));
         }
         return d;
     }
