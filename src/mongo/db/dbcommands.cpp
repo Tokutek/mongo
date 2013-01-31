@@ -49,7 +49,6 @@
 #include "../s/d_writeback.h"
 #include "dur_stats.h"
 #include "../server.h"
-#include "mongo/db/index_update.h"
 #include "mongo/db/repl/bgsync.h"
 
 #include "db/toku/env.h"
@@ -863,6 +862,8 @@ namespace mongo {
         }
         CmdDropIndexes() : Command("dropIndexes", false, "deleteIndexes") { }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
+            ::abort();
+#if 0
             BSONElement e = jsobj.firstElement();
             string toDeleteNs = dbname + '.' + e.valuestr();
             NamespaceDetails *d = nsdetails(toDeleteNs.c_str());
@@ -895,6 +896,7 @@ namespace mongo {
                 errmsg = "ns not found";
                 return false;
             }
+#endif
         }
     } cmdDropIndexes;
 
@@ -931,7 +933,8 @@ namespace mongo {
             }
 
 
-            bool ok = dropIndexes( d, toDeleteNs.c_str(), "*" , errmsg, result, true );
+            ::abort();
+            bool ok = false; //dropIndexes( d, toDeleteNs.c_str(), "*" , errmsg, result, true );
             if ( ! ok ) {
                 errmsg = "dropIndexes failed";
                 return false;

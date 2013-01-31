@@ -780,7 +780,8 @@ namespace mongo {
                 else {
                     // probably don't need this since all replicated colls have _id indexes now
                     // but keep it just in case
-                    RARELY if ( nsd && !nsd->isCapped() ) { ensureHaveIdIndex(ns); }
+                    // TODO: Should we care about this period assert? Sounds like no.
+                    //RARELY if ( nsd && !nsd->isCapped() ) { ensureHaveIdIndex(ns); }
 
                     /* todo : it may be better to do an insert here, and then catch the dup key exception and do update
                               then.  very few upserts will not be inserts...
@@ -797,7 +798,8 @@ namespace mongo {
 
             // probably don't need this since all replicated colls have _id indexes now
             // but keep it just in case
-            RARELY if ( nsd && !nsd->isCapped() ) { ensureHaveIdIndex(ns); }
+            // TODO: Should we care about this period assert? Sounds like no.
+            //RARELY if ( nsd && !nsd->isCapped() ) { ensureHaveIdIndex(ns); }
 
             OpDebug debug;
             BSONObj updateCriteria = op.getObjectField("o2");

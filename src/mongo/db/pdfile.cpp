@@ -48,7 +48,6 @@ _ disallow system* manipulations from the database.
 #include "replutil.h"
 #include "memconcept.h"
 #include "mongo/db/lasterror.h"
-#include "mongo/db/index_update.h"
 
 #include <boost/filesystem/operations.hpp>
 
@@ -169,7 +168,8 @@ namespace mongo {
         if ( ( strstr( ns, ".system." ) == 0 || legalClientSystemNS( ns , false ) ) &&
                 strstr( ns, FREELIST_NS ) == 0 ) {
             log( 1 ) << "adding _id index for collection " << ns << endl;
-            ensureHaveIdIndex( ns );
+            //ensureHaveIdIndex( ns );
+            ::abort();
         }
     }
 
@@ -446,7 +446,8 @@ namespace mongo {
 
         if ( d->nIndexes != 0 ) {
             try {
-                verify( dropIndexes(d, name.c_str(), "*", errmsg, result, true) );
+                ::abort();
+                //verify( dropIndexes(d, name.c_str(), "*", errmsg, result, true) );
             }
             catch( DBException& e ) {
                 stringstream ss;

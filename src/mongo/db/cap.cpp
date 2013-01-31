@@ -28,7 +28,6 @@
 #include <list>
 #include "json.h"
 #include "clientcursor.h"
-#include "index_update.h"
 
 /*
  capped collection layout
@@ -471,7 +470,8 @@ namespace mongo {
         if ( nIndexes ) {
             string errmsg;
             BSONObjBuilder note;
-            bool res = dropIndexes( this , ns , "*" , errmsg , note , true );
+            ::abort();
+            bool res = false ; //dropIndexes( this , ns , "*" , errmsg , note , true );
             massert( 13426 , str::stream() << "failed during index drop: " << errmsg , res );
         }
 
