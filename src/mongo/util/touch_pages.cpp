@@ -44,6 +44,8 @@ namespace mongo {
             NamespaceDetails *nsd = nsdetails(ns.c_str());
             uassert( 16154, "namespace does not exist", nsd );
             
+            ::abort();
+#if 0
             for( DiskLoc L = nsd->firstExtent; !L.isNull(); L = L.ext()->xnext )  {
                 MongoDataFile* mdf = cc().database()->getFile( L.a() );
                 massert( 16238, "can't fetch extent file structure", mdf );
@@ -55,6 +57,7 @@ namespace mongo {
                 
                 ranges.push_back(tl);                
             }
+#endif
 
         }
         LockMongoFilesShared lk;
