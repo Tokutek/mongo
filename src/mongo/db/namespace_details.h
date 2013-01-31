@@ -88,7 +88,7 @@ namespace mongo {
     public:
         DiskLoc capExtent;
         DiskLoc capFirstNewRecord;
-        unsigned short dataFileVersion;       // NamespaceDetails version.  So we can do backward compatibility in the future. See filever.h
+        unsigned short dataFileVersion;       // NamespaceDetails version.  So we can do backward compatibility in the future. See filever.h XXX: This does not exist
         unsigned short indexFileVersion;
         unsigned long long multiKeyIndexBits;
     private:
