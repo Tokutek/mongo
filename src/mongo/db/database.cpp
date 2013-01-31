@@ -49,6 +49,8 @@ namespace mongo {
     }
 
     Database::~Database() {
+        ::abort();
+#if 0
         verify( Lock::isW() );
         magic = 0;
         size_t n = _files.size();
@@ -57,6 +59,7 @@ namespace mongo {
         if( ccByLoc.size() ) {
             log() << "\n\n\nWARNING: ccByLoc not empty on database close! " << ccByLoc.size() << ' ' << name << endl;
         }
+#endif
     }
 
     Database::Database(const char *nm, bool& newDb, const string& _path )
@@ -108,10 +111,12 @@ namespace mongo {
                 log() << e.what() << endl;
             }
             // since destructor won't be called:
+#if 0
             for ( size_t i = 0; i < _files.size(); i++ ) {
                 delete _files[i];
             }
             _files.clear();
+#endif
             throw;
         }
     }
@@ -173,6 +178,8 @@ namespace mongo {
     }
 
     bool Database::openExistingFile( int n ) { 
+        ::abort();
+#if 0
         verify(this);
         Lock::assertWriteLocked(name);
         {
@@ -217,6 +224,7 @@ namespace mongo {
             _files[n] = df;
         }
 
+#endif
         return true;
     }
 
@@ -232,6 +240,7 @@ namespace mongo {
     }
 
     // todo: this is called a lot. streamline the common case
+#if 0
     MongoDataFile* Database::getFile( int n, int sizeNeeded , bool preallocateOnly) {
         verify(this);
         DEV assertDbAtLeastReadLocked(this);
@@ -266,10 +275,11 @@ namespace mongo {
             string fullNameString = fullName.string();
             p = new MongoDataFile(n);
             int minSize = 0;
-            if ( n != 0 && _files[ n - 1 ] )
-                minSize = _files[ n - 1 ]->getHeader()->fileLength;
-            if ( sizeNeeded + DataFileHeader::HeaderSize > minSize )
-                minSize = sizeNeeded + DataFileHeader::HeaderSize;
+            if ( n != 0 && 0) //_files[ n - 1 ] )
+                minSize = 0;//_files[ n - 1 ]->getHeader()->fileLength;
+            if ( sizeNeeded ) //+ DataFileHeader::HeaderSize > minSize )
+                minSize = 0;//sizeNeeded + DataFileHeader::HeaderSize;
+            ::abort();
             try {
                 p->open( fullNameString.c_str(), minSize, preallocateOnly );
             }
@@ -280,11 +290,13 @@ namespace mongo {
             if ( preallocateOnly )
                 delete p;
             else
-                _files[n] = p;
+                ; //_files[n] = p;
         }
         return preallocateOnly ? 0 : p;
     }
+#endif
 
+#if 0
     MongoDataFile* Database::addAFile( int sizeNeeded, bool preallocateNextFile ) {
         assertDbWriteLocked(this);
         int n = (int) _files.size();
@@ -293,6 +305,7 @@ namespace mongo {
             preallocateAFile();
         return ret;
     }
+#endif
 
     bool fileIndexExceedsQuota( const char *ns, int fileIndex, bool enforceQuota ) {
         return
@@ -305,12 +318,14 @@ namespace mongo {
             NamespaceString( ns ).db != "local";
     }
     
+#if 0
     MongoDataFile* Database::suitableFile( const char *ns, int sizeNeeded, bool preallocate, bool enforceQuota ) {
 
         // check existing files
         for ( int i=numFiles()-1; i>=0; i-- ) {
             MongoDataFile* f = getFile( i );
-            if ( f->getHeader()->unusedLength >= sizeNeeded ) {
+            ::abort();
+            if ( 0 ) { //f->getHeader()->unusedLength >= sizeNeeded ) {
                 if ( fileIndexExceedsQuota( ns, i-1, enforceQuota ) ) // NOTE i-1 is the value used historically for this check.
                     ;
                 else
@@ -331,10 +346,12 @@ namespace mongo {
         for ( int i = 0; i < 8; i++ ) {
             MongoDataFile* f = addAFile( sizeNeeded, preallocate );
 
-            if ( f->getHeader()->unusedLength >= sizeNeeded )
+            ::abort();
+            if ( 0 ) //f->getHeader()->unusedLength >= sizeNeeded )
                 return f;
 
-            if ( f->getHeader()->fileLength >= MongoDataFile::maxSize() ) // this is as big as they get so might as well stop
+            ::abort();
+            if ( 0 ) //f->getHeader()->fileLength >= MongoDataFile::maxSize() ) // this is as big as they get so might as well stop
                 return f;
         }
 
@@ -348,10 +365,12 @@ namespace mongo {
             return 0;
         return getFile(n-1);
     }
+#endif
 
 
     Extent* Database::allocExtent( const char *ns, int size, bool capped, bool enforceQuota ) {
         // todo: when profiling, these may be worth logging into profile collection
+#if 0
         bool fromFreeList = true;
         Extent *e = NULL; ::abort(); //DataFileMgr::allocFromFreeList( ns, size, capped );
         if( e == 0 ) {
@@ -360,6 +379,9 @@ namespace mongo {
         }
         LOG(1) << "allocExtent " << ns << " size " << size << ' ' << fromFreeList << endl; 
         return e;
+#endif
+        ::abort();
+        return NULL;
     }
 
 
@@ -391,16 +413,23 @@ namespace mongo {
     }
 
     int Database::numFiles() const { 
+#if 0
         DEV assertDbAtLeastReadLocked(this);
         return (int) _files.size(); 
+#endif
+        ::abort();
+        return 0;
     }
 
     void Database::flushFiles( bool sync ) {
+        ::abort();
+#if 0
         assertDbAtLeastReadLocked(this);
         for( vector<MongoDataFile*>::iterator i = _files.begin(); i != _files.end(); i++ ) { 
             MongoDataFile *f = *i;
             f->flush(sync);
         }
+#endif
     }
 
     long long Database::fileSize() const {

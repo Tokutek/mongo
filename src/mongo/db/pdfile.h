@@ -42,7 +42,7 @@ namespace mongo {
     const int PDFILE_VERSION = 4;
     const int PDFILE_VERSION_MINOR = 5;
 
-    class DataFileHeader;
+    //class DataFileHeader;
     class Extent;
     class Record;
     class Cursor;
@@ -63,6 +63,7 @@ namespace mongo {
 
     /*---------------------------------------------------------------------*/
 
+#if 0
     class MongoDataFile {
         //friend class DataFileMgr;
         friend class BasicCursor;
@@ -81,7 +82,7 @@ namespace mongo {
         */
         Extent* createExtent(const char *ns, int approxSize, bool capped = false, int loops = 0);
 
-        DataFileHeader *getHeader() { return header(); }
+        //DataFileHeader *getHeader() { return header(); }
         HANDLE getFd() { return mmf.getFd(); }
         unsigned long long length() const { return mmf.length(); }
 
@@ -105,12 +106,13 @@ namespace mongo {
         void grow(DiskLoc dl, int size);
 
         char* p() const { return (char *) _mb; }
-        DataFileHeader* header() { return (DataFileHeader*) _mb; }
+        //DataFileHeader* header() { return (DataFileHeader*) _mb; }
 
         MongoMMF mmf;
         void *_mb; // the memory mapped view
         int fileNo;
     };
+#endif
 
     // TODO: Get rid of the datafilemgr
 #if 0
@@ -418,6 +420,7 @@ namespace mongo {
           more Extents...
           ----------------------
     */
+#if 0
     class DataFileHeader {
     public:
         int version;
@@ -473,9 +476,11 @@ namespace mongo {
             return uninitialized() || ( unusedLength == fileLength - HeaderSize - 16 );
         }
     };
+#endif
 
 #pragma pack()
 
+#if 0
     inline Extent* MongoDataFile::_getExtent(DiskLoc loc) const {
         loc.assertOk();
         Extent *e = (Extent *) (p()+loc.getOfs());
@@ -488,6 +493,7 @@ namespace mongo {
         memconcept::is(e, memconcept::concept::extent);
         return e;
     }
+#endif
 
 } // namespace mongo
 
@@ -495,17 +501,19 @@ namespace mongo {
 
 namespace mongo {
 
+#if 0
     inline Record* MongoDataFile::recordAt(DiskLoc dl) {
         int ofs = dl.getOfs();
-        if( ofs < DataFileHeader::HeaderSize ) badOfs(ofs); // will uassert - external call to keep out of the normal code path
+        //if( ofs < DataFileHeader::HeaderSize ) badOfs(ofs); // will uassert - external call to keep out of the normal code path
         return (Record*) (p()+ofs);
     }
 
     inline Record* MongoDataFile::makeRecord(DiskLoc dl, int size) {
         int ofs = dl.getOfs();
-        if( ofs < DataFileHeader::HeaderSize ) badOfs(ofs); // will uassert - external call to keep out of the normal code path
+        //if( ofs < DataFileHeader::HeaderSize ) badOfs(ofs); // will uassert - external call to keep out of the normal code path
         return (Record*) (p()+ofs);
     }
+#endif
 
     inline DiskLoc Record::getNext(const DiskLoc& myLoc) {
         _accessing();

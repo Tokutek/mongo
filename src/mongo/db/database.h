@@ -25,7 +25,7 @@
 namespace mongo {
 
     class Extent;
-    class MongoDataFile;
+    //class MongoDataFile;
     class ClientCursor;
     struct ByLocKey;
     typedef map<ByLocKey, ClientCursor*> CCByLoc;
@@ -78,21 +78,21 @@ namespace mongo {
         /**
          * return file n.  if it doesn't exist, create it
          */
-        MongoDataFile* getFile( int n, int sizeNeeded = 0, bool preallocateOnly = false );
+        //MongoDataFile* getFile( int n, int sizeNeeded = 0, bool preallocateOnly = false );
 
-        MongoDataFile* addAFile( int sizeNeeded, bool preallocateNextFile );
+        //MongoDataFile* addAFile( int sizeNeeded, bool preallocateNextFile );
 
         /**
          * makes sure we have an extra file at the end that is empty
          * safe to call this multiple times - the implementation will only preallocate one file
          */
-        void preallocateAFile() { getFile( numFiles() , 0, true ); }
+        //void preallocateAFile() { getFile( numFiles() , 0, true ); }
 
-        MongoDataFile* suitableFile( const char *ns, int sizeNeeded, bool preallocate, bool enforceQuota );
+        //MongoDataFile* suitableFile( const char *ns, int sizeNeeded, bool preallocate, bool enforceQuota );
 
         Extent* allocExtent( const char *ns, int size, bool capped, bool enforceQuota );
 
-        MongoDataFile* newestFile();
+        //MongoDataFile* newestFile();
 
         /**
          * @return true if success.  false if bad level or error creating profile ns
@@ -136,7 +136,7 @@ namespace mongo {
         // must be in the dbLock when touching this (and write locked when writing to of course)
         // however during Database object construction we aren't, which is ok as it isn't yet visible
         //   to others and we are in the dbholder lock then.
-        vector<MongoDataFile*> _files;
+        //vector<MongoDataFile*> _files;
 
     public: // this should be private later
 

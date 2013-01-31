@@ -55,7 +55,7 @@ _ disallow system* manipulations from the database.
 namespace mongo {
 
     BOOST_STATIC_ASSERT( sizeof(Extent)-4 == 48+128 );
-    BOOST_STATIC_ASSERT( sizeof(DataFileHeader)-4 == 8192 );
+    //BOOST_STATIC_ASSERT( sizeof(DataFileHeader)-4 == 8192 );
 
     void printMemInfo( const char * where ) {
         cout << "mem info: ";
@@ -283,7 +283,8 @@ namespace mongo {
                 // $nExtents is just for testing - always allocate new extents
                 // rather than reuse existing extents so we have some predictibility
                 // in the extent size used by our tests
-                database->suitableFile( ns, (int) size, false, false )->createExtent( ns, (int) size, newCapped );
+                ::abort();
+                //database->suitableFile( ns, (int) size, false, false )->createExtent( ns, (int) size, newCapped );
             }
         }
         else if ( int( e.number() ) > 0 ) {
@@ -295,7 +296,8 @@ namespace mongo {
                 // $nExtents is just for testing - always allocate new extents
                 // rather than reuse existing extents so we have some predictibility
                 // in the extent size used by our tests
-                database->suitableFile( ns, (int) size, false, false )->createExtent( ns, (int) size, newCapped );
+                ::abort();
+                //database->suitableFile( ns, (int) size, false, false )->createExtent( ns, (int) size, newCapped );
             }
         }
         else {
@@ -371,6 +373,7 @@ namespace mongo {
 
     /*---------------------------------------------------------------------*/
 
+#if 0
     int MongoDataFile::maxSize() {
         if ( sizeof( int* ) == 4 ) {
             return 512 * 1024 * 1024;
@@ -437,7 +440,8 @@ namespace mongo {
             }
         }
         check(_mb);
-        if( header()->uninitialized() )
+        ::abort();
+        if( 0 ) //header()->uninitialized() )
             return false;
         return true;
     }
@@ -474,7 +478,8 @@ namespace mongo {
             size = (int) sz;
         }
         check(_mb);
-        header()->init(fileNo, size, filename);
+        ::abort();
+        //header()->init(fileNo, size, filename);
     }
 
     void MongoDataFile::flush( bool sync ) {
@@ -513,10 +518,11 @@ namespace mongo {
             if( newSize < Extent::maxSize() )
                 approxSize = newSize;
         }
+        ::abort();
         massert( 10357 ,  "shutdown in progress", ! inShutdown() );
         massert( 10358 ,  "bad new extent size", approxSize >= Extent::minSize() && approxSize <= Extent::maxSize() );
-        massert( 10359 ,  "header==0 on new extent: 32 bit mmap space exceeded?", header() ); // null if file open failed
-        int ExtentSize = min(header()->unusedLength, approxSize);
+        massert( 10359 ,  "header==0 on new extent: 32 bit mmap space exceeded?", 0 /*header()*/ ); // null if file open failed
+        int ExtentSize = 0;//min(header()->unusedLength, approxSize);
         DiskLoc loc;
         if ( ExtentSize < Extent::minSize() ) {
             /* note there could be a lot of looping here is db just started and
@@ -528,11 +534,11 @@ namespace mongo {
             log() << "newExtent: " << ns << " file " << fileNo << " full, adding a new file\n";
             return cc().database()->addAFile( 0, true )->createExtent(ns, approxSize, newCapped, loops+1);
         }
-        int offset = header()->unused.getOfs();
+        int offset = 0;//header()->unused.getOfs();
 
-        DataFileHeader *h = header();
-        h->unused.writing().set( fileNo, offset + ExtentSize );
-        getDur().writingInt(h->unusedLength) = h->unusedLength - ExtentSize;
+        //DataFileHeader *h = header();
+        //h->unused.writing().set( fileNo, offset + ExtentSize );
+        //getDur().writingInt(h->unusedLength) = h->unusedLength - ExtentSize;
         loc.set(fileNo, offset);
         Extent *e = _getExtent(loc);
         DiskLoc emptyLoc = getDur().writing(e)->init(ns, ExtentSize, fileNo, offset, newCapped);
@@ -543,6 +549,7 @@ namespace mongo {
                     << " emptyLoc:" << hex << emptyLoc.getOfs() << dec << endl;
         return e;
     }
+#endif
 
 #if 0
     Extent* DataFileMgr::allocFromFreeList(const char *ns, int approxSize, bool capped) {

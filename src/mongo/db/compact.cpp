@@ -71,6 +71,8 @@ namespace mongo {
             // sequentially
             log() << "compact paging in len=" << e->length/1000000.0 << "MB" << endl;
             Timer t;
+            ::abort();
+#if 0
             MongoDataFile* mdf = cc().database()->getFile( diskloc.a() );
             HANDLE fd = mdf->getFd();
             int offset = diskloc.getOfs();
@@ -81,6 +83,7 @@ namespace mongo {
             int ms = t.millis();
             if( ms > 1000 ) 
                 log() << "compact end paging in " << ms << "ms " << e->length/1000000.0/ms << "MB/sec" << endl;
+#endif
         }
 
         {

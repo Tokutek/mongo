@@ -29,7 +29,7 @@ namespace mongo {
     class Record;
     class DeletedRecord;
     class Extent;
-    class MongoDataFile;
+    //class MongoDataFile;
     class DiskLoc;
 
     template< class Version > class BtreeBucket;

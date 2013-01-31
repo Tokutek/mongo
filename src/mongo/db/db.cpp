@@ -255,6 +255,7 @@ namespace mongo {
     }
 
 
+#if 0
     bool doDBUpgrade( const string& dbName , string errmsg , DataFileHeader * h ) {
         static DBDirectClient db;
 
@@ -282,9 +283,11 @@ namespace mongo {
         // do this in the general case
         return repairDatabase( dbName.c_str(), errmsg );
     }
+#endif
 
     // ran at startup.
     static void repairDatabasesAndCheckVersion() {
+#if 0
         //        LastError * le = lastError.get( true );
         Client::GodScope gs;
         log(1) << "enter repairDatabases (to check pdfile version #)" << endl;
@@ -342,6 +345,7 @@ namespace mongo {
         }
 
         checkNsFilesOnLoad = true;
+#endif
     }
 
     void clearTmpFiles() {
