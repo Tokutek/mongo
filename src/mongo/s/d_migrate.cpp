@@ -36,9 +36,7 @@
 #include "../db/queryoptimizer.h"
 #include "../db/btree.h"
 #include "../db/repl_block.h"
-#include "../db/dur.h"
 #include "../db/clientcursor.h"
-#include "../db/pagefault.h"
 #include "../db/repl.h"
 
 #include "../client/connpool.h"
@@ -1736,9 +1734,12 @@ namespace mongo {
                 Lock::GlobalRead lk;
 
                 // if durability is on, force a write to journal
+#if 0
                 if ( getDur().commitNow() ) {
                     log() << "migrate commit flushed to journal for '" << ns << "' " << min << " -> " << max << migrateLog;
                 }
+#endif
+                // TODO: TokuDB What do we have to do here?
             }
 
             return true;

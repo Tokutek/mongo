@@ -24,7 +24,6 @@
 
 #include "mongo/pch.h"
 #include <map>
-#include "../db/dur.h"
 
 namespace mongo {
 
@@ -129,7 +128,7 @@ namespace mongo {
             int i = _find(k, found);
             if ( i >= 0 && found ) {
                 Node* n = &nodes(i);
-                n = getDur().writing(n);
+                //n = getDur().writing(n);
                 n->k.kill();
                 n->setUnused();
             }
@@ -141,7 +140,7 @@ namespace mongo {
             int i = _find(k, found);
             if ( i < 0 )
                 return false;
-            Node* n = getDur().writing( &nodes(i) );
+            Node* n = &nodes(i); //getDur().writing( &nodes(i) );
             if ( !found ) {
                 n->k = k;
                 n->hash = k.hash();

@@ -18,7 +18,6 @@
 #include "pch.h"
 #include "mmap.h"
 #include "text.h"
-#include "../db/mongommf.h"
 #include "../db/d_concurrency.h"
 #include "../db/memconcept.h"
 #include "mongo/util/timer.h"
@@ -217,7 +216,9 @@ namespace mongo {
 
     extern mutex mapViewMutex;
 
-    __declspec(noinline) void makeChunkWritable(size_t chunkno) { 
+    __declspec(noinline) void makeChunkWritable(size_t chunkno) {
+        ::abort();
+#if 0
         scoped_lock lk(mapViewMutex);
 
         if( writable.get(chunkno) ) // double check lock
@@ -266,6 +267,7 @@ namespace mongo {
         }
 
         writable.set(chunkno);
+#endif
     }
 
     void* MemoryMappedFile::createPrivateMap() {
