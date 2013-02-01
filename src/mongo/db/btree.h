@@ -89,22 +89,12 @@ namespace mongo {
         virtual bool modifiedKeys() const { return _multikey; }
         virtual bool isMultiKey() const { return _multikey; }
 
-        /*const _KeyNode& _currKeyNode() const {
-            verify( !bucket.isNull() );
-            const _KeyNode& kn = keyNode(keyOfs);
-            verify( kn.isUsed() );
-            return kn;
-        }*/
-
-        /** returns BSONObj() if ofs is out of range */
-        virtual BSONObj keyAt(int ofs) const = 0;
-
         virtual BSONObj currKey() const = 0;
         virtual BSONObj indexKeyPattern() { return _order; }
 
         virtual void aboutToDeleteBucket(const DiskLoc& b) {
-            if ( bucket == b )
-                keyOfs = -1;
+            // TODO: Remove this function
+            ::abort();
         }
 
         virtual DiskLoc currLoc() = 0; //  return !bucket.isNull() ? _currKeyNode().recordLoc : DiskLoc();
@@ -131,20 +121,10 @@ namespace mongo {
         
         virtual long long nscanned() { return _nscanned; }
 
-        /** for debugging only */
-        const DiskLoc getBucket() const { return bucket; }
-        int getKeyOfs() const { return keyOfs; }
-
-        // just for unit tests
-        virtual bool curKeyHasChild() = 0;
-
     protected:
-        /**
-         * Our btrees may (rarely) have "unused" keys when items are deleted.
-         * Skip past them.
-         */
-        virtual bool skipUnusedKeys() = 0;
-
+        // John thinks this means skip any keys that are not
+        // contained between two adjancet field ranges
+        // in this cursor's field range vector.
         bool skipOutOfRangeKeysAndCheckEnd();
         void skipAndCheck();
         void checkEnd();
@@ -177,10 +157,7 @@ namespace mongo {
         BSONObj _order; // this is the same as indexDetails.keyPattern()
         Ordering _ordering;
         DiskLoc bucket;
-        int keyOfs;
         int _direction; // 1=fwd,-1=reverse
-        BSONObj keyAtKeyOfs; // so we can tell if things moved around on us between the query and the getMore call
-        DiskLoc locAtKeyOfs;
         shared_ptr< FieldRangeVector > _bounds;
         auto_ptr< FieldRangeVectorIterator > _boundsIterator;
         shared_ptr< CoveredIndexMatcher > _matcher;

@@ -895,6 +895,9 @@ namespace mongo {
         // Not sure yet the correct thing to do about _seen.
         // Definitely need to re-find our current max/min locations too
         bool unDirty( const Geo2dType* g, DiskLoc& oldLoc ){
+            ::abort();
+            return false;
+#if 0
 
             verify( _dirty );
             verify( ! _id.isEmpty() );
@@ -952,6 +955,7 @@ namespace mongo {
             _dirty = false;
 
             return _loc == oldLoc;
+#endif
         }
 
         bool isDirty(){
@@ -1156,6 +1160,9 @@ namespace mongo {
         }
 
         bool checkAndAdvance( const GeoHash& hash, int& totalFound, GeoAccumulator* all ){
+            ::abort();
+            return true;
+#if 0
             if( ! _cursor->ok() || ! hasPrefix( hash ) ) return false;
 
             if( all ){
@@ -1166,6 +1173,7 @@ namespace mongo {
             _cursor->advance();
 
             return true;
+#endif
         }
 
         void save(){
@@ -1179,10 +1187,14 @@ namespace mongo {
         }
 
         string toString() {
+#if 0
             stringstream ss;
             ss << "bucket: " << _cursor->getBucket().toString() << " pos: " << _cursor->getKeyOfs() <<
                ( _cursor->ok() ? ( str::stream() << " k: " << _cursor->currKey() << " o : " << _cursor->current()["_id"] ) : (string)"[none]" ) << endl;
             return ss.str();
+#endif
+            ::abort();
+            return string();
         }
 
         // Returns the min and max keys which bound a particular location.

@@ -57,14 +57,6 @@ namespace mongo {
             return bt_insert(thisLoc, recordLoc, key, order, dupsAllowed, idx, toplevel);
         }
 
-        // these are for geo
-        virtual bool isUsed(DiskLoc thisLoc, int pos) = 0;
-        virtual void keyAt(DiskLoc thisLoc, int pos, BSONObj&, DiskLoc& recordLoc) = 0;
-        virtual BSONObj keyAt(DiskLoc thisLoc, int pos) = 0;
-        virtual DiskLoc locate(const IndexDetails &idx , const DiskLoc& thisLoc, const BSONObj& key, const Ordering &order,
-                               int& pos, bool& found, const DiskLoc &recordLoc, int direction=1) = 0;
-        virtual DiskLoc advance(const DiskLoc& thisLoc, int& keyOfs, int direction, const char *caller) = 0;
-
         /**
          * @return a static IndexInterface consistent with index version DefaultIndexVersionNumber.
          * An IndexInterface should generally not be retrieved via this function, but from the

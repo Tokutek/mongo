@@ -210,12 +210,6 @@ namespace mongo {
         return obj;
     }
 
-    // it appears this is only used by the btree cursor code for 
-    // checkLocation(), which we don't support, so we do nothing here.
-    BSONObj TokuDBCursor::keyAt(int ofs) const {
-        return BSONObj();
-    }
-
     // get the current key for this cursor. it's probably okay to cache this 
     // for the lifetime of a call to advance(), but no later, since writes 
     // can happen in between calls to advance().

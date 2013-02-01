@@ -118,7 +118,6 @@ namespace mongo {
         _boundsIterator->advance( startKey ); // handles initialization
         _boundsIterator->prepDive();
         bucket = indexDetails.head;
-        keyOfs = 0;
     }
 
     /** Properly destroy forward declared class members. */
@@ -137,29 +136,27 @@ namespace mongo {
         if ( ok() ) {
             _nscanned = 1;
         }
-        skipUnusedKeys();
         checkEnd();
     }
 
     void BtreeCursor::skipAndCheck() {
         long long startNscanned = _nscanned;
-        skipUnusedKeys();
         while( 1 ) {
             if ( !skipOutOfRangeKeysAndCheckEnd() ) {
                 break;
             }
             do {
                 if ( _nscanned > startNscanned + 20 ) {
-                    skipUnusedKeys();
                     return;
                 }
             } while( skipOutOfRangeKeysAndCheckEnd() );
-            if ( !skipUnusedKeys() ) {
-                break;
-            }
+            break;
         }
     }
 
+    // XXX: TokuDB: I think boundsIterator iterates over keybounds like [0,2] [100,200] so you would
+    // need to reposition the cursor each time you hit a new range. that's what skip out of range
+    // keys and check end probably means.
     bool BtreeCursor::skipOutOfRangeKeysAndCheckEnd() {
         if ( !ok() ) {
             return false;
@@ -198,6 +195,8 @@ namespace mongo {
     }
 
     void BtreeCursor::advanceTo( const BSONObj &keyBegin, int keyBeginLen, bool afterKey, const vector< const BSONElement * > &keyEnd, const vector< bool > &keyEndInclusive) {
+        // XXX: TokuDB:  Remove keyOfs param
+        int keyOfs = 0;
         _advanceTo( bucket, keyOfs, keyBegin, keyBeginLen, afterKey, keyEnd, keyEndInclusive, _ordering, _direction );
     }
 
@@ -206,10 +205,11 @@ namespace mongo {
         if ( bucket.isNull() )
             return false;
         
+        // XXX: TokuDB:  Remove keyOfs param
+        int keyOfs = 0;
         bucket = _advance(bucket, keyOfs, _direction, "BtreeCursor::advance");
         
         if ( !_independentFieldRanges ) {
-            skipUnusedKeys();
             checkEnd();
             if ( ok() ) {
                 ++_nscanned;
