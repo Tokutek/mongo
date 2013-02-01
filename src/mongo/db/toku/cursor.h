@@ -77,10 +77,6 @@ namespace mongo {
         // we never skip so we always return false.
         virtual bool skipUnusedKeys();
 
-        // called after a cursor recovers from a yield. that means some
-        // write operations could have occurred: cached data may be stale.
-        virtual void checkLocation();
-
         // this sets keyOfs to something. we don't care. set to zero, do nothing.
         void _advanceTo(DiskLoc &thisLoc, int &keyOfs, const BSONObj &keyBegin,
                 int keyBeginLen, bool afterKey, const vector<const BSONElement *> &keyEnd,

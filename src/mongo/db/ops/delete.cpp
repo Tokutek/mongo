@@ -116,7 +116,7 @@ namespace mongo {
             if ( !foundAllResults ) {
                 // NOTE: Saving and restoring a btree cursor's position was historically described
                 // as slow here.
-                cc->c()->prepareToTouchEarlierIterate();
+                //cc->c()->prepareToTouchEarlierIterate();
             }
 
             if ( logop ) {
@@ -143,7 +143,7 @@ namespace mongo {
             if ( foundAllResults ) {
                 break;
             }
-            cc->c()->recoverFromTouchingEarlierIterate();
+            //cc->c()->recoverFromTouchingEarlierIterate();
          
             if( !god ) 
                 ::abort(); //TODO What do we do here? //getDur().commitIfNeeded();

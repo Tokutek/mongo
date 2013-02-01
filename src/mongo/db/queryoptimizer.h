@@ -209,10 +209,6 @@ namespace mongo {
          * cost to other QueryOps.
          */
         virtual long long nscanned() = 0;
-        /** Take any steps necessary before the db mutex is yielded. */
-        //virtual void prepareToYield() = 0;
-        /** Recover once the db mutex is regained. */
-        //virtual void recoverFromYield() = 0;
         
         /**
          * @return true iff the QueryPlan for this QueryOp may be registered
@@ -426,9 +422,6 @@ namespace mongo {
             /** @return true if done iterating. */
             bool done() const { return _done; }
             
-            //void prepareToYield();
-            //void recoverFromYield();
-            
             /** @return an ExplainClauseInfo object that will be updated as the query runs. */
             shared_ptr<ExplainClauseInfo> generateExplainInfo() {
                 _explainClauseInfo.reset( new ExplainClauseInfo() );
@@ -440,8 +433,6 @@ namespace mongo {
             QueryPlanSet &_plans;
             static void initOp( QueryOp &op );
             static void nextOp( QueryOp &op );
-            //static void prepareToYieldOp( QueryOp &op );
-            //static void recoverFromYieldOp( QueryOp &op );
             
             /** Initialize the Runner. */
             shared_ptr<QueryOp> init();
@@ -489,7 +480,6 @@ namespace mongo {
         CandidatePlanCharacter _cachedPlanCharacter;
         BSONObj _order;
         long long _oldNScanned;
-        //ElapsedTracker _yieldSometimesTracker;
         bool _allowSpecial;
     };
 
@@ -538,11 +528,6 @@ namespace mongo {
             _explainQueryInfo.reset( new ExplainQueryInfo() );
             return _explainQueryInfo;
         }
-        
-        /** Yield the runner member. */
-        
-        //void prepareToYield();
-        //void recoverFromYield();
         
         /** Clear the runner member. */
         void clearRunner();
@@ -662,11 +647,7 @@ namespace mongo {
         virtual bool advance();
         virtual BSONObj currKey() const { return _c->currKey(); }
         virtual DiskLoc refLoc() { return _c->refLoc(); }
-        virtual void noteLocation() { _c->noteLocation(); }
-        virtual void checkLocation() { _c->checkLocation(); }
-        //virtual void recoverFromYield();
         virtual bool supportGetMore() { return true; }
-        //virtual bool supportYields() { return true; }
         virtual BSONObj indexKeyPattern() { return _c->indexKeyPattern(); }
 
         /** Deduping documents from a prior cursor is handled by the matcher. */

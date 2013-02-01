@@ -370,7 +370,7 @@ namespace mongo {
                         if ( cc.get() ) {
                             cc->setDoingDeletes( true );
                         }
-                        c->prepareToTouchEarlierIterate();
+                        //c->prepareToTouchEarlierIterate();
                     }
 
                     if ( modsIsIndexed <= 0 && mss->canApplyInPlace() ) {
@@ -435,7 +435,7 @@ namespace mongo {
                     if ( ! multi )
                         return UpdateResult( 1 , 1 , numModded , BSONObj() );
                     if ( willAdvanceCursor )
-                        c->recoverFromTouchingEarlierIterate();
+                        ; //c->recoverFromTouchingEarlierIterate();
 
                     // TODO: What do we do here?
                     ::abort(); //getDur().commitIfNeeded();

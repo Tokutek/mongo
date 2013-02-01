@@ -69,10 +69,7 @@ namespace mongo {
 
         virtual bool ok() { return !bucket.isNull(); }
         virtual bool advance();
-        virtual void noteLocation(); // updates keyAtKeyOfs...
-        virtual void checkLocation() = 0;
         virtual bool supportGetMore() { return true; }
-        virtual bool supportYields() { return true; }
 
         /**
          * used for multikey index traversal to avoid sending back dups. see Matcher::matches().

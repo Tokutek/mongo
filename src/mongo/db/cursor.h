@@ -81,6 +81,10 @@ namespace mongo {
      *
      * A Cursor may rely on additional callbacks not listed above to relocate its position after a
      * write.
+     *
+     * XXX: TokuDB:
+     * Everything mentioned above is more or less not applicable to our engine. We transactionally
+     * handle * cursor consistency and have fine grained locking, so yielding doesn't do anything.
      */
     class Cursor : boost::noncopyable {
     public:
@@ -119,31 +123,6 @@ namespace mongo {
         }
 
         virtual bool supportGetMore() = 0;
-
-        /* called after every query block is iterated -- i.e. between getMore() blocks
-           so you can note where we are, if necessary.
-           */
-        virtual void noteLocation() { }
-
-        /* called before query getmore block is iterated */
-        virtual void checkLocation() { }
-
-        /**
-         * Called before a document pointed at by an earlier iterate of this cursor is to be
-         * modified.  It is ok if the current iterate also points to the document to be modified.
-         */
-        virtual void prepareToTouchEarlierIterate() { noteLocation(); }
-
-        /** Recover from a previous call to prepareToTouchEarlierIterate(). */
-        virtual void recoverFromTouchingEarlierIterate() { checkLocation(); }
-
-        //virtual bool supportYields() = 0;
-
-        /** Called before a ClientCursor yield. */
-        //virtual void prepareToYield() { noteLocation(); }
-        
-        /** Called after a ClientCursor yield.  Recovers from a previous call to prepareToYield(). */
-        //virtual void recoverFromYield() { checkLocation(); }
 
         virtual string toString() { return "abstract?"; }
 
@@ -267,7 +246,6 @@ namespace mongo {
         virtual bool isMultiKey() const { return false; }
         virtual bool modifiedKeys() const { return false; }
         virtual bool supportGetMore() { return true; }
-        //virtual bool supportYields() { return true; }
         virtual CoveredIndexMatcher *matcher() const { return _matcher.get(); }
         virtual shared_ptr< CoveredIndexMatcher > matcherPtr() const { return _matcher; }
         virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { _matcher = matcher; }

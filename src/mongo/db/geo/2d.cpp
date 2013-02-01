@@ -1169,11 +1169,13 @@ namespace mongo {
         }
 
         void save(){
-            _cursor->noteLocation();
+            ::abort();
+            //_cursor->noteLocation();
         }
 
         void restore(){
-            _cursor->checkLocation();
+            ::abort();
+            //_cursor->checkLocation();
         }
 
         string toString() {

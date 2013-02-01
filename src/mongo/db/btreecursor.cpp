@@ -221,14 +221,6 @@ namespace mongo {
         return ok();
     }
 
-    void BtreeCursor::noteLocation() {
-        if ( !eof() ) {
-            BSONObj o = currKey().getOwned();
-            keyAtKeyOfs = o;
-            locAtKeyOfs = currLoc();
-        }
-    }
-
     string BtreeCursor::toString() {
         string s = string("BtreeCursor ") + indexDetails.indexName();
         if ( _direction < 0 ) s += " reverse";

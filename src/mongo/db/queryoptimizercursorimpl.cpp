@@ -97,9 +97,6 @@ namespace mongo {
             // already.
             fassert( 16249, queryPlan().matcher() );
 
-            // All candidate cursors must support yields for QueryOptimizerCursorImpl's
-            // prepareToYield() and prepareToTouchEarlierIterate() to work.
-            //verify( _c->supportYields() );
             _capped = _c->capped();
 
             // TODO This violates the current Cursor interface abstraction, but for now it's simpler to keep our own set of
@@ -113,56 +110,6 @@ namespace mongo {
         
         virtual long long nscanned() {
             return _c ? _c->nscanned() : _matchCounter.nscanned();
-        }
-        
-#if 0
-        virtual void prepareToYield() {
-            if ( _c && !_cc ) {
-                _cc.reset( new ClientCursor( QueryOption_NoCursorTimeout, _c, queryPlan().ns() ) );
-                // Set 'doing deletes' as deletes may occur; if there are no deletes this has no
-                // effect.
-                _cc->setDoingDeletes( true );
-            }
-            if ( _cc ) {
-                recordCursorLocation();
-                _cc->prepareToYield( _yieldData );
-            }
-        }
-        
-        virtual void recoverFromYield() {
-            if ( _cc && !ClientCursor::recoverFromYield( _yieldData ) ) {
-                // !!! The collection may be gone, and any namespace or index specific memory may
-                // have become invalid.
-                _c.reset();
-                _cc.reset();
-                
-                if ( _capped ) {
-                    msgassertedNoTrace( 13338,
-                                       str::stream() << "capped cursor overrun: "
-                                       << queryPlan().ns() );
-                }
-                msgassertedNoTrace( 15892,
-                                   str::stream() <<
-                                   "QueryOptimizerCursorOp::recoverFromYield() failed to recover" );
-            }
-            else {
-                checkCursorAdvanced();
-            }
-        }
-#endif
-
-        void prepareToTouchEarlierIterate() {
-            recordCursorLocation();
-            if ( _c ) {
-                _c->prepareToTouchEarlierIterate();
-            }
-        }
-
-        void recoverFromTouchingEarlierIterate() {
-            if ( _c ) {
-                _c->recoverFromTouchingEarlierIterate();
-            }
-            checkCursorAdvanced();
         }
         
         virtual void next() {
@@ -265,16 +212,8 @@ namespace mongo {
         }
 
         void recordCursorLocation() {
-            _posBeforeYield = currLoc();
         }
         void checkCursorAdvanced() {
-            // This check will not correctly determine if we are looking at a different document in
-            // all cases, but it is adequate for updating the query plan's match count (just used to pick
-            // plans, not returned to the client) and adjust iteration via _mustAdvance.
-            if ( _posBeforeYield != currLoc() ) {
-                // If the yield advanced our position, the next next() will be a no op.
-                handleCursorAdvanced();
-            }
         }
         void handleCursorAdvanced() {
             _mustAdvance = false;
@@ -292,8 +231,6 @@ namespace mongo {
         bool _capped;
         shared_ptr<Cursor> _c;
         ClientCursor::Holder _cc;
-        DiskLoc _posBeforeYield;
-        //ClientCursor::YieldData _yieldData;
         const QueryPlanSelectionPolicy &_selectionPolicy;
         const bool &_requireOrder; // TODO don't use a ref for this, but signal change explicitly
         shared_ptr<ExplainPlanInfo> _explainPlanInfo;
@@ -397,68 +334,6 @@ namespace mongo {
         
         virtual bool supportGetMore() { return true; }
 
-        //virtual bool supportYields() { return true; }
-        
-        virtual void prepareToTouchEarlierIterate() {
-            if ( _takeover ) {
-                _takeover->prepareToTouchEarlierIterate();
-            }
-            else if ( _currOp ) {
-                if ( _mps->currentNPlans() == 1 ) {
-                    // This single plan version is a bit more performant, so we use it when possible.
-                    _currOp->prepareToTouchEarlierIterate();
-                }
-                else {
-                    // With multiple plans, the 'earlier iterate' could be the current iterate of one of
-                    // the component plans.  We do a full yield of all plans, using ClientCursors.
-                    //_mps->prepareToYield();
-                    ::abort();
-                }
-            }
-        }
-
-        virtual void recoverFromTouchingEarlierIterate() {
-            if ( _takeover ) {
-                _takeover->recoverFromTouchingEarlierIterate();
-            }
-            else if ( _currOp ) {
-                if ( _mps->currentNPlans() == 1 ) {
-                    _currOp->recoverFromTouchingEarlierIterate();
-                }
-                else {
-                    //recoverFromYield();
-                    ::abort();
-                }
-            }
-        }
-
-#if 0
-        virtual void prepareToYield() {
-            if ( _takeover ) {
-                _takeover->prepareToYield();
-            }
-            else if ( _currOp ) {
-                _mps->prepareToYield();
-            }
-        }
-        
-        virtual void recoverFromYield() {
-            if ( _takeover ) {
-                _takeover->recoverFromYield();
-                return;
-            }
-            if ( _currOp ) {
-                _mps->recoverFromYield();
-                if ( _currOp->error() || !ok() ) {
-                    // Advance to a non error op if one of the ops errored out.
-                    // Advance to a following $or clause if the $or clause returned all results.
-                    verify( !_mps->doneOps() );
-                    _advance( true );
-                }
-            }
-        }
-#endif
-        
         virtual string toString() { return "QueryOptimizerCursor"; }
         
         virtual bool getsetdup(DiskLoc loc) {
@@ -579,14 +454,6 @@ namespace mongo {
                 _takeover->noteIterate( match, loadedDocument );
             }
         }
-        
-#if 0
-        virtual void noteYield() {
-            if ( _explainQueryInfo ) {
-                _explainQueryInfo->noteYield();
-            }
-        }
-#endif
         
         virtual shared_ptr<ExplainQueryInfo> explainQueryInfo() const {
             return _explainQueryInfo;

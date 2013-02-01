@@ -238,26 +238,6 @@ namespace mongo {
         return false;
     }
 
-    // called after a cursor recovers from a yield. that means some
-    // write operations could have occurred: cached data may be stale.
-    //
-    // after decoding the btreecursor's implementation of checkLocation,
-    // the following invariants must be held after this call:
-    // - if the key we used to be on was deleted, we've moved forward.
-    // - if the key we used to be on still exists, it's our current.
-    // if we just reposition the toku cursor over the first key >= the
-    // old current key, we satisfy both invariants, because we won't
-    // get any row just deleted and we'll find the old key if its there.
-    void TokuDBCursor::checkLocation() {
-        // empty out the stale row buffer data and reposition the cursor 
-        // using the old current key. if we couldn't reposition, the cursor
-        // must be exhausted and we need to invalidate it.
-        BSONObj old_current_key = row_buffer.currentKey();
-        row_buffer.empty();
-        bool ok = set_cursor(old_current_key);
-        bucket = ok ? minDiskLoc : DiskLoc(); 
-    }
-
     //
     // BtreeCursor specific stuff declared pure virtual
     //
