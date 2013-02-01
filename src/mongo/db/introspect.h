@@ -19,9 +19,11 @@
 
 #pragma once
 
+#include "mongo/db/client.h"
+#include "mongo/db/namespace_details.h"
+
 #include "mongo/pch.h"
 #include "jsobj.h"
-#include "pdfile.h"
 
 namespace mongo {
 

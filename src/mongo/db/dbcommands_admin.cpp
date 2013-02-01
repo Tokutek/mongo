@@ -24,7 +24,6 @@
 
 #include "pch.h"
 #include "jsobj.h"
-#include "pdfile.h"
 #include "namespace-inl.h"
 #include "commands.h"
 #include "cmdline.h"
@@ -35,6 +34,8 @@
 #include "../util/paths.h"
 #include "../scripting/engine.h"
 #include "../util/timer.h"
+
+#include "mongo/db/namespace_details.h"
 
 #include <boost/filesystem/convenience.hpp>
 #include <boost/filesystem/operations.hpp>

@@ -26,10 +26,8 @@
 #include "mongo/db/btree.h"
 #include "mongo/db/db.h"
 #include "mongo/db/json.h"
-//#include "mongo/db/mongommf.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
-#include "mongo/db/pdfile.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/hashtab.h"
 
@@ -79,19 +77,25 @@ namespace mongo {
 
     boost::filesystem::path NamespaceIndex::path() const {
         boost::filesystem::path ret( dir_ );
+        ::abort();
+#if 0
         if ( directoryperdb )
             ret /= database_;
+#endif
         ret /= ( database_ + ".ns" );
         return ret;
     }
 
     void NamespaceIndex::maybeMkdir() const {
+        ::abort();
+#if 0
         if ( !directoryperdb )
             return;
         boost::filesystem::path dir( dir_ );
         dir /= database_;
         if ( !boost::filesystem::exists( dir ) )
             MONGO_ASSERT_ON_EXCEPTION_WITH_MSG( boost::filesystem::create_directory( dir ), "create dir for db " );
+#endif
     }
 
     unsigned lenForNewNsFiles = 16 * 1024 * 1024;

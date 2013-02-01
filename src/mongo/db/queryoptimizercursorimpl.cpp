@@ -19,7 +19,6 @@
 
 #include "pch.h"
 #include "queryoptimizercursorimpl.h"
-#include "pdfile.h"
 #include "clientcursor.h"
 #include "btree.h"
 #include "explain.h"

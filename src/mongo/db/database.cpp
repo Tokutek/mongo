@@ -17,7 +17,6 @@
 */
 
 #include "pch.h"
-#include "pdfile.h"
 #include "database.h"
 #include "instance.h"
 #include "introspect.h"
@@ -171,8 +170,8 @@ namespace mongo {
         ss << name << '.' << n;
         boost::filesystem::path fullName;
         fullName = boost::filesystem::path(path);
-        if ( directoryperdb )
-            fullName /= name;
+        //if ( directoryperdb )
+        //    fullName /= name;
         fullName /= ss.str();
         return fullName;
     }

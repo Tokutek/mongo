@@ -24,7 +24,6 @@
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/curop-inl.h"
 #include "mongo/db/index.h"
-#include "mongo/db/pdfile.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {

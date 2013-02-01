@@ -20,10 +20,10 @@
 #include "introspect.h"
 #include "../bson/util/builder.h"
 #include "../util/goodies.h"
-#include "pdfile.h"
 #include "jsobj.h"
-#include "pdfile.h"
 #include "curop.h"
+
+#include "mongo/db/database.h"
 
 namespace mongo {
 

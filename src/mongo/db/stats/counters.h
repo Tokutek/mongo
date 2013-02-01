@@ -22,7 +22,6 @@
 #include "../../util/net/message.h"
 #include "../../util/processinfo.h"
 #include "../../util/concurrency/spin_lock.h"
-#include "mongo/db/pdfile.h"
 
 namespace mongo {
 

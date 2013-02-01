@@ -20,6 +20,7 @@
 
 #include "mongo/db/json.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/namespace_details.h"
 
 namespace mongo {
 

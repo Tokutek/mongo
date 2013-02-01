@@ -15,8 +15,10 @@
  */
 
 #include "pch.h"
-#include "pdfile.h"
 #include "curop-inl.h"
+
+#include "mongo/db/cursor.h"
+#include "mongo/db/namespace_details.h"
 
 namespace mongo {
 

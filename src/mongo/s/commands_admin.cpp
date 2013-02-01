@@ -35,6 +35,7 @@
 
 #include "../client/connpool.h"
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/db/namespacestring.h"
 
 #include "../db/dbmessage.h"
 #include "../db/commands.h"

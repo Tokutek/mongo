@@ -50,6 +50,7 @@
 #include <boost/filesystem/operations.hpp>
 #include "mongo/db/commands/fsync.h"
 #include "index.h"
+#include "mongo/db/jsobjmanipulator.h"
 
 namespace mongo {
     
@@ -851,7 +852,8 @@ namespace mongo {
         boost::filesystem::path path( usePath );
         for ( boost::filesystem::directory_iterator i( path );
                 i != boost::filesystem::directory_iterator(); ++i ) {
-            if ( directoryperdb ) {
+            if (false) {
+            //if ( directoryperdb )
                 boost::filesystem::path p = *i;
                 string dbName = p.leaf();
                 p /= ( dbName + ".ns" );

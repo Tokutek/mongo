@@ -23,7 +23,6 @@
 #include "mongo/db/matcher.h"
 
 #include "mongo/db/cursor.h"
-#include "mongo/db/pdfile.h"
 #include "mongo/db/queryutil.h"
 
 namespace mongo {

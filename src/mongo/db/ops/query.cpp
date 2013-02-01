@@ -18,7 +18,6 @@
 
 #include "pch.h"
 #include "query.h"
-#include "../pdfile.h"
 #include "../clientcursor.h"
 #include "../oplog.h"
 #include "../../bson/util/builder.h"

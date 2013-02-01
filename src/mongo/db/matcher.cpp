@@ -28,8 +28,6 @@
 #include "queryutil.h"
 #include "client.h"
 
-#include "pdfile.h"
-
 namespace {
     inline pcrecpp::RE_Options flags2options(const char* flags) {
         pcrecpp::RE_Options options;

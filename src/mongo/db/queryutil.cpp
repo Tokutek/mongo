@@ -17,8 +17,10 @@
 
 #include "pch.h"
 
+#include "mongo/db/namespace_details.h"
+#include "mongo/db/querypattern.h"
+#include "mongo/db/matcher.h"
 #include "mongo/db/queryutil.h"
-#include "pdfile.h"
 #include "../util/startup_test.h"
 #include "dbmessage.h"
 #include "../util/mongoutils/str.h"

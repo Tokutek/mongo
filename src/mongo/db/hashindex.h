@@ -21,7 +21,6 @@
 #include "mongo/db/index.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/namespace-inl.h"
-#include "mongo/db/pdfile.h"
 
 namespace mongo {
 

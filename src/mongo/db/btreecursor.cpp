@@ -17,12 +17,12 @@
 */
 
 #include "pch.h"
-#include "pdfile.h"
 #include "jsobj.h"
 #include "curop-inl.h"
 #include "queryutil.h"
 
-#include "db/toku/cursor.h"
+#include "mongo/db/namespace_details.h"
+#include "mongo/db/toku/cursor.h"
 
 namespace mongo {
 

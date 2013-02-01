@@ -22,9 +22,9 @@
 #include "../client/connpool.h"
 #include "../client/model.h"
 #include "mongo/client/dbclientcursor.h"
-#include "../db/pdfile.h"
 #include "../db/cmdline.h"
 
+#include "mongo/db/client.h"
 
 #include "chunk.h"
 #include "config.h"

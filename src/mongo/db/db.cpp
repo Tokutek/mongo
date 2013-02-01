@@ -34,7 +34,6 @@
 #include "mongo/db/introspect.h"
 #include "mongo/db/json.h"
 #include "mongo/db/module.h"
-#include "mongo/db/pdfile.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/restapi.h"
@@ -62,6 +61,19 @@
 
 namespace mongo {
 
+#ifdef _WIN32
+    string dbpath = "\\data\\db\\";
+#else
+    string dbpath = "/data/db/";
+#endif
+
+    DatabaseHolder _dbHolder;
+    //int MAGIC = 0x1000;
+
+    DatabaseHolder& dbHolderUnchecked() {
+        return _dbHolder;
+    }
+
     /* only off if --nohints */
     extern bool useHints;
 
@@ -69,7 +81,7 @@ namespace mongo {
     extern unsigned lenForNewNsFiles;
     extern int lockFile;
     extern bool checkNsFilesOnLoad;
-    extern string repairpath;
+    //extern string repairpath;
 
     void setupSignals( bool inFork );
     void startReplication();
@@ -488,9 +500,11 @@ namespace mongo {
             uassert( 10296 ,  ss.str().c_str(), boost::filesystem::exists( dbpath ) );
         }
         {
+#if 0
             stringstream ss;
             ss << "repairpath (" << repairpath << ") does not exist";
             uassert( 12590 ,  ss.str().c_str(), boost::filesystem::exists( repairpath ) );
+#endif
         }
 
         acquirePathLock(forceRepair);
@@ -656,7 +670,7 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("cpu", "periodically show cpu and iowait utilization")
     ("dbpath", po::value<string>() , dbpathBuilder.str().c_str())
     ("diaglog", po::value<int>(), "0=off 1=W 2=R 3=both 7=W+some reads")
-    ("directoryperdb", "each database will be stored in a separate directory")
+    //("directoryperdb", "each database will be stored in a separate directory")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "enable journaling")
     ("journalCommitInterval", po::value<unsigned>(), "how often to group/batch commit (ms)")
@@ -673,7 +687,7 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("quota", "limits each database to a certain number of files (8 default)")
     ("quotaFiles", po::value<int>(), "number of files allowed per db, requires --quota")
     ("repair", "run repair on all dbs")
-    ("repairpath", po::value<string>() , "root directory for repair files - defaults to dbpath" )
+    //("repairpath", po::value<string>() , "root directory for repair files - defaults to dbpath" )
     ("rest","turn on simple rest api")
 #if defined(__linux__)
     ("shutdown", "kill a running server (for init scripts)")
@@ -808,9 +822,11 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
 #endif
 
+#if 0
         if ( params.count("directoryperdb")) {
             directoryperdb = true;
         }
+#endif
         if (params.count("cpu")) {
             cmdLine.cpu = true;
         }
@@ -855,6 +871,7 @@ static int mongoDbMain(int argc, char* argv[]) {
         if (params.count("journalOptions")) {
             cmdLine.durOptions = params["journalOptions"].as<int>();
         }
+#if 0
         if (params.count("repairpath")) {
             repairpath = params["repairpath"].as<string>();
             if (!repairpath.size()) {
@@ -867,6 +884,7 @@ static int mongoDbMain(int argc, char* argv[]) {
                 dbexit( EXIT_BADOPTIONS );
             }
         }
+#endif
         if (params.count("nohints")) {
             useHints = false;
         }
@@ -1054,8 +1072,10 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
 
         // needs to be after things like --configsvr parsing, thus here.
+#if 0
         if( repairpath.empty() )
             repairpath = dbpath;
+#endif
 
         Module::configAll( params );
         dataFileSync.go();

@@ -22,13 +22,14 @@
 #include "../index.h"
 #include "../../util/startup_test.h"
 #include "../commands.h"
-#include "../pdfile.h"
 #include "../btree.h"
 #include "../curop-inl.h"
 #include "../matcher.h"
 #include "../queryutil.h"
 #include "core.h"
 #include "../../util/timer.h"
+
+#include "mongo/db/namespace_details.h"
 
 // Note: we use indexinterface herein to talk to the btree code. In the future it would be nice to 
 //       be able to use the V1 key class (see key.h) instead of toBson() which has some cost.

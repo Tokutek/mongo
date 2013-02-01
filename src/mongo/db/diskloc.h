@@ -138,21 +138,11 @@ namespace mongo {
            (think of this as an unchecked type cast)
            Note: set your Context first so that the database to which the diskloc applies is known.
         */
-        BSONObj obj() const;
-        //Record* rec() const;
-        //DeletedRecord* drec() const;
-        //Extent* ext() const;
+        BSONObj obj() const {
+            ::abort();
+            return BSONObj();
+        }
 
-#if 0
-        template< class V >
-        const BtreeBucket<V> * btree() const;
-
-        // Explicitly signals we are writing and casts away const
-        template< class V >
-        BtreeBucket<V> * btreemod() const;
-#endif
-
-        /*MongoDataFile& pdf() const;*/
     };
 #pragma pack()
 

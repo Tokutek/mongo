@@ -17,7 +17,8 @@
 #ifndef TOKUDB_ROW_BUFFER_H
 #define TOKUDB_ROW_BUFFER_H
 
-#include "db/pdfile.h"
+#include "mongo/bson/bsonobj.h"
+#include "mongo/db/diskloc.h"
 
 namespace mongo {
 

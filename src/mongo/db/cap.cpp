@@ -18,7 +18,6 @@
 */
 
 #include "pch.h"
-#include "pdfile.h"
 #include "db.h"
 #include "../util/hashtab.h"
 #include "../scripting/engine.h"

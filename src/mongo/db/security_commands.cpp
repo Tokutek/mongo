@@ -23,7 +23,6 @@
 #include "security.h"
 #include "../util/md5.hpp"
 #include "json.h"
-#include "pdfile.h"
 #include "db.h"
 #include "dbhelpers.h"
 #include "commands.h"

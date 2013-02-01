@@ -20,7 +20,6 @@
 
 #include "mongo/db/oplog.h"
 #include "mongo/db/jsobjmanipulator.h"
-#include "mongo/db/pdfile.h"
 
 #include "update_internal.h"
 

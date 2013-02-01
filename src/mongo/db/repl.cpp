@@ -36,7 +36,6 @@
 #include "../util/net/message.h"
 #include "../util/background.h"
 #include "../client/connpool.h"
-#include "pdfile.h"
 #include "db.h"
 #include "commands.h"
 #include "security.h"

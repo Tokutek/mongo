@@ -21,7 +21,6 @@
 #include "dbhelpers.h"
 #include "json.h"
 #include "btree.h"
-#include "pdfile.h"
 #include "oplog.h"
 #include "ops/update.h"
 #include "ops/delete.h"

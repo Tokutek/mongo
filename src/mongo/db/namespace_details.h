@@ -22,6 +22,7 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/diskloc.h"
 #include "mongo/db/index.h"
@@ -649,12 +650,48 @@ namespace mongo {
         string database_;
     };
 
-    extern string dbpath; // --dbpath parm
-    extern bool directoryperdb;
-
     // Rename a namespace within current 'client' db.
     // (Arguments should include db name)
     void renameNamespace( const char *from, const char *to, bool stayTemp);
 
 
 } // namespace mongo
+
+namespace mongo {
+
+    inline NamespaceIndex* nsindex(const char *ns) {
+#if 0
+        Database *database = cc().database();
+        verify( database );
+        //memconcept::is(database, memconcept::concept::database, ns, sizeof(Database));
+        DEV {
+            char buf[256];
+            nsToDatabase(ns, buf);
+            if ( database->name != buf ) {
+                out() << "ERROR: attempt to write to wrong database\n";
+                out() << " ns:" << ns << '\n';
+                out() << " database->name:" << database->name << endl;
+                verify( database->name == buf );
+            }
+        }
+        return &database->namespaceIndex;
+#endif
+        ::abort();
+        return NULL;
+    }
+
+    inline NamespaceDetails* nsdetails(const char *ns) {
+        // if this faults, did you set the current db first?  (Client::Context + dblock)
+        NamespaceDetails *d = nsindex(ns)->details(ns);
+        if( d ) {
+            //memconcept::is(d, memconcept::concept::nsdetails, ns, sizeof(NamespaceDetails));
+        }
+        return d;
+    }
+
+    extern string dbpath; // --dbpath parm
+    //extern bool directoryperdb;
+
+} // namespace mongo
+
+#include "namespace_details-inl.h"

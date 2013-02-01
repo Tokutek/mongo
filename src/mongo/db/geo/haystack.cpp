@@ -21,12 +21,13 @@
 #include "../jsobj.h"
 #include "../index.h"
 #include "../commands.h"
-#include "../pdfile.h"
 #include "../btree.h"
 #include "../curop-inl.h"
 #include "../matcher.h"
 #include "core.h"
 #include "../../util/timer.h"
+
+#include "mongo/db/namespace_details.h"
 
 #define GEOQUADDEBUG(x)
 //#define GEOQUADDEBUG(x) cout << x << endl
