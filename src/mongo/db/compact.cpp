@@ -31,7 +31,6 @@
 #include "mongo/db/pdfile.h"
 #include "mongo/util/concurrency/task.h"
 #include "mongo/util/timer.h"
-#include "mongo/util/touch_pages.h"
 
 namespace mongo {
 

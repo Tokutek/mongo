@@ -26,7 +26,6 @@
 #include "mongo/db/index.h"
 #include "mongo/db/pdfile.h"
 #include "mongo/util/timer.h"
-#include "mongo/util/touch_pages.h"
 
 namespace mongo {
 
@@ -52,6 +51,9 @@ namespace mongo {
                          string& errmsg, 
                          BSONObjBuilder& result, 
                          bool fromRepl) {
+            ::abort();
+            return false;
+#if 0
             string coll = cmdObj.firstElement().valuestr();
             if( coll.empty() || db.empty() ) {
                 errmsg = "no collection name specified";
@@ -73,8 +75,10 @@ namespace mongo {
             }
             bool ok = touch( ns, errmsg, touch_data, touch_indexes, result );
             return ok;
+#endif
         }
 
+#if 0
         bool touch( std::string& ns, 
                     std::string& errmsg, 
                     bool touch_data, 
@@ -84,7 +88,7 @@ namespace mongo {
             if (touch_data) {
                 log() << "touching namespace " << ns << endl;
                 ::abort();
-                //touchNs( ns );
+                touchNs( ns );
                 log() << "touching namespace " << ns << " complete" << endl;
             }
 
@@ -106,11 +110,12 @@ namespace mongo {
                       it != indexes.end(); 
                       it++ ) {
                     ::abort();
-                    //touchNs( *it );
+                    touchNs( *it );
                 }
             }
             return true;
         }
+#endif
         
     };
     static TouchCmd touchCmd;
