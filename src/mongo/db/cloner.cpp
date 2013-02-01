@@ -456,6 +456,8 @@ namespace mongo {
                 /* we need dropDups to be true as we didn't do a true snapshot and this is before applying oplog operations
                    that occur during the initial sync.  inDBRepair makes dropDups be true.
                    */
+                ::abort();
+#if 0
                 bool old = inDBRepair;
                 try {
                     inDBRepair = true;
@@ -466,6 +468,7 @@ namespace mongo {
                     inDBRepair = old;
                     throw;
                 }
+#endif
             }
         }
 

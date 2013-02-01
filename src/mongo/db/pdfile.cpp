@@ -49,19 +49,6 @@ _ disallow system* manipulations from the database.
 
 namespace mongo {
 
-    // TODO SERVER-4328
-    bool inDBRepair = false;
-    struct doingRepair {
-        doingRepair() {
-            verify( ! inDBRepair );
-            inDBRepair = true;
-        }
-        ~doingRepair() {
-            inDBRepair = false;
-        }
-    };
-
-
     /* ----------------------------------------- */
 #ifdef _WIN32
     string dbpath = "\\data\\db\\";
