@@ -35,15 +35,6 @@ namespace mongo {
 
     BSONObj idKeyPattern = fromjson("{\"_id\":1}");
 
-    /* deleted lists -- linked lists of deleted records -- are placed in 'buckets' of various sizes
-       so you can look for a deleterecord about the right size.
-    */
-    int bucketSizes[] = {
-        32, 64, 128, 256, 0x200, 0x400, 0x800, 0x1000, 0x2000, 0x4000,
-        0x8000, 0x10000, 0x20000, 0x40000, 0x80000, 0x100000, 0x200000,
-        0x400000, 0x800000
-    };
-
     NamespaceDetails::NamespaceDetails( const DiskLoc &loc, bool capped ) {
         /* be sure to initialize new fields here -- doesn't default to zeroes the way we use it */
         firstExtent = lastExtent = capExtent = loc;
@@ -776,25 +767,6 @@ namespace mongo {
 
         _userFlags = flags; // TODO: Transactional //getDur().writingInt(_userFlags) = flags;
         return true;
-    }
-
-
-
-    int NamespaceDetails::getRecordAllocationSize( int minRecordSize ) {
-        if ( _paddingFactor == 0 ) {
-            warning() << "implicit updgrade of paddingFactor of very old collection" << endl;
-            setPaddingFactor(1.0);
-        }
-        verify( _paddingFactor >= 1 );
-
-        
-        if ( isUserFlagSet( Flag_UsePowerOf2Sizes ) ) {
-            int x = bucket( minRecordSize );
-            x = bucketSizes[x];
-            return x;
-        }
-
-        return static_cast<int>(minRecordSize * _paddingFactor);
     }
 
     /* ------------------------------------------------------------------------- */

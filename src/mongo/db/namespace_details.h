@@ -239,13 +239,6 @@ namespace mongo {
         /* returns index of the first index in which the field is present. -1 if not present. */
         int fieldIsIndexed(const char *fieldName);
 
-        /**
-         * @return the actual size to create
-         *         will be >= oldRecordSize
-         *         based on padding and any other flags
-         */
-        int getRecordAllocationSize( int minRecordSize );
-
         double paddingFactor() const { return _paddingFactor; }
 
         void setPaddingFactor( double paddingFactor ) {
@@ -347,14 +340,6 @@ namespace mongo {
 
         bool haveIdIndex() { 
             return isSystemFlagSet( NamespaceDetails::Flag_HaveIdIndex ) || findIdIndex() >= 0;
-        }
-
-        /* return which "deleted bucket" for this size object */
-        static int bucket(int n) {
-            for ( int i = 0; i < Buckets; i++ )
-                if ( bucketSizes[i] > n )
-                    return i;
-            return Buckets-1;
         }
 
         /* predetermine location of the next alloc without actually doing it. 
