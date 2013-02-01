@@ -189,23 +189,6 @@ namespace mongo {
         }
     }
 
-    /* must call when a btree bucket going away.
-       note this is potentially slow
-    */
-    void ClientCursor::informAboutToDeleteBucket(const DiskLoc& b) {
-        recursive_scoped_lock lock(ccmutex);
-        Database *db = cc().database();
-        CCByLoc& bl = db->ccByLoc;
-        RARELY if ( bl.size() > 70 ) {
-            log() << "perf warning: byLoc.size=" << bl.size() << " in aboutToDeleteBucket\n";
-        }
-        for ( CCByLoc::iterator i = bl.begin(); i != bl.end(); i++ )
-            i->second->_c->aboutToDeleteBucket(b);
-    }
-    void aboutToDeleteBucket(const DiskLoc& b) {
-        ClientCursor::informAboutToDeleteBucket(b);
-    }
-
     /* must call this on a delete so we clean up the cursors. */
     void ClientCursor::aboutToDelete(const DiskLoc& dl) {
         //NoPageFaultsAllowed npfa;
@@ -289,7 +272,6 @@ namespace mongo {
             cc->updateLocation();
         }
     }
-    void aboutToDelete(const DiskLoc& dl) { ClientCursor::aboutToDelete(dl); }
 
     void ClientCursor::LockedIterator::deleteAndAdvance() {
         ClientCursor *cc = current();

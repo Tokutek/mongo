@@ -92,11 +92,6 @@ namespace mongo {
         virtual BSONObj currKey() const = 0;
         virtual BSONObj indexKeyPattern() { return _order; }
 
-        virtual void aboutToDeleteBucket(const DiskLoc& b) {
-            // TODO: Remove this function
-            ::abort();
-        }
-
         virtual DiskLoc currLoc() = 0; //  return !bucket.isNull() ? _currKeyNode().recordLoc : DiskLoc();
         virtual DiskLoc refLoc()   { return currLoc(); }
         virtual BSONObj current()  { ::abort(); return BSONObj(); } //return BSONObj::make(_current());
