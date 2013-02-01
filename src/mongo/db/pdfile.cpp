@@ -31,7 +31,6 @@ _ disallow system* manipulations from the database.
 #include "../util/processinfo.h"
 #include "../util/file.h"
 #include "btree.h"
-#include "btreebuilder.h"
 #include <algorithm>
 #include <list>
 #include "repl.h"

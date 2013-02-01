@@ -980,6 +980,9 @@ namespace mongo {
             }
         }
 
+        // TokuDB: Only support _id queries for now.
+        ::abort();
+
         // sanity check the query and projection
         if ( pq.getFields() != NULL )
             pq.getFields()->validateQuery( query );
