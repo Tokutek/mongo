@@ -192,13 +192,19 @@ namespace mongo {
         return false;
     }
 
-    bool OplogReader::passthroughHandshake(const BSONObj& rid, const int f) {
+    bool OplogReader::passthroughHandshake(const BSONObj& rid, const int nextOnChainId) {
         BSONObjBuilder cmd;
-        cmd.appendAs( rid["_id"], "handshake" );
-        cmd.append( "member" , f );
+        cmd.appendAs(rid["_id"], "handshake");
+        if (theReplSet) {
+            const Member* chainedMember = theReplSet->findById(nextOnChainId);
+            if (chainedMember != NULL) {
+                cmd.append("config", chainedMember->config().asBson());
+            }
+        }
+        cmd.append("member", nextOnChainId);
 
         BSONObj res;
-        return conn()->runCommand( "admin" , cmd.obj() , res );
+        return conn()->runCommand("admin", cmd.obj(), res);
     }
 
     void OplogReader::tailingQuery(const char *ns, Query& query, const BSONObj* fields ) {
