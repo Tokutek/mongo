@@ -399,6 +399,8 @@ namespace mongo {
     public:
         string name() const { return "DataFileSync"; }
         void run() {
+            // TODO: TokuDB: Is this where we commit a big, minute-long transaction?
+#if 0
             Client::initThread( name().c_str() );
             if( cmdLine.syncdelay == 0 )
                 log() << "warning: --syncdelay 0 is not recommended and can have strange performance" << endl;
@@ -432,6 +434,7 @@ namespace mongo {
                     log() << "flushing mmaps took " << time_flushing << "ms " << " for " << numFiles << " files" << endl;
                 }
             }
+#endif
         }
 
     } dataFileSync;

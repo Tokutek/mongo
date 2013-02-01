@@ -359,7 +359,8 @@ namespace mongo {
             throw e;
         }
 
-        MemoryMappedFile::flushAll(true);
+        // TODO: What should TokuDB do here?
+        //MemoryMappedFile::flushAll(true);
 
         sethbmsg("rollback 3.5");
         if( h.rbid != getRBID(r.conn()) ) {
@@ -564,7 +565,8 @@ namespace mongo {
         removeSavers.clear(); // this effectively closes all of them
 
         sethbmsg(str::stream() << "rollback 5 d:" << deletes << " u:" << updates);
-        MemoryMappedFile::flushAll(true);
+        // TODO: What should TokuDB do here?
+        //MemoryMappedFile::flushAll(true);
         sethbmsg("rollback 6");
 
         // clean up oplog
@@ -576,7 +578,8 @@ namespace mongo {
         loadLastOpTimeWritten();
 
         sethbmsg("rollback 7");
-        MemoryMappedFile::flushAll(true);
+        // TODO: What should TokuDB do here?
+        //MemoryMappedFile::flushAll(true);
 
         // done
         if( warn )

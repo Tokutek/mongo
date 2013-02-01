@@ -408,7 +408,8 @@ namespace mongo {
 #endif
 
         /* sync here so we don't get any surprising lag later when we try to sync */
-        MemoryMappedFile::flushAll(true);
+        // TODO: TokuDB - checkpoint?
+        //MemoryMappedFile::flushAll(true);
         log() << "******" << endl;
     }
 

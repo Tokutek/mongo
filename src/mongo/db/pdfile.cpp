@@ -26,7 +26,6 @@ _ disallow system* manipulations from the database.
 #include "pch.h"
 #include "pdfile.h"
 #include "db.h"
-#include "../util/mmap.h"
 #include "../util/hashtab.h"
 #include "../util/file_allocator.h"
 #include "../util/processinfo.h"

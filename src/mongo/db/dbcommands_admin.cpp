@@ -31,7 +31,6 @@
 #include "btree.h"
 #include "curop-inl.h"
 #include "../util/background.h"
-#include "../util/logfile.h"
 #include "../util/alignedbuilder.h"
 #include "../util/paths.h"
 #include "../scripting/engine.h"

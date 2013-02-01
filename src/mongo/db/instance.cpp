@@ -1007,12 +1007,14 @@ namespace mongo {
                     log() << "shutdown: waiting for write lock..." << endl;
                 }
             }
-            MemoryMappedFile::flushAll(true);
+            // TODO: What should tokudb do here?
+            //MemoryMappedFile::flushAll(true);
         }
 
         log() << "shutdown: closing all files..." << endl;
         stringstream ss3;
-        MemoryMappedFile::closeAllFiles( ss3 );
+        // TODO: What should tokudb do here?
+        //MemoryMappedFile::closeAllFiles( ss3 );
         log() << ss3.str() << endl;
 
         log() << "shutdown: shutting down the index interface..." << endl;

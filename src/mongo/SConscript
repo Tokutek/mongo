@@ -181,13 +181,6 @@ else:
     env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_none.cpp'],
                       LIBDEPS=['bson_template_evaluator'])
 
-mmapFiles = [ "util/mmap.cpp", "util/touch_pages.cpp" ]
-
-if has_option( "mm" ):
-    mmapFiles += [ "util/mmap_mm.cpp" ]
-else:
-    mmapFiles += [ "util/mmap_${OS_FAMILY}.cpp" ]
-
 # handle processinfo*
 processInfoFiles = [ "util/processinfo.cpp" ]
 
@@ -226,8 +219,8 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/lockstate.cpp",
                     "db/key.cpp",
                     #"db/btreebuilder.cpp",
-                    "util/logfile.cpp",
-                    "util/alignedbuilder.cpp",
+                    #"util/logfile.cpp",
+                    #"util/alignedbuilder.cpp",
                     #"db/mongommf.cpp",
                     #"db/dur.cpp",
                     #"db/durop.cpp",
@@ -239,7 +232,7 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/introspect.cpp",
                     #"db/btree.cpp",
                     "db/clientcursor.cpp",
-                    "db/tests.cpp",
+                    #"db/tests.cpp",
                     "db/repl.cpp",
                     "db/repl/rs.cpp",
                     "db/repl/consensus.cpp",
@@ -313,8 +306,6 @@ env.Library('stacktrace', 'util/stacktrace.cpp')
 
 env.Program('lame_stacktrace_test', 'util/lame_stacktrace_test.cpp',
             LIBDEPS=['stacktrace'])
-
-serverOnlyFiles += mmapFiles
 
 serverOnlyFiles += [ "db/stats/snapshots.cpp" ]
 

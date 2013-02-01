@@ -20,7 +20,6 @@
 #include "pch.h"
 #include "pdfile.h"
 #include "db.h"
-#include "../util/mmap.h"
 #include "../util/hashtab.h"
 #include "../scripting/engine.h"
 #include "btree.h"

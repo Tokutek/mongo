@@ -564,7 +564,8 @@ namespace mongo {
 
                 timeBuilder.appendNumber( "middle of mem" , Listener::getElapsedTimeMillis() - start );
 
-                int m = (int) (MemoryMappedFile::totalMappedLength() / ( 1024 * 1024 ));
+                // TODO: What do we do here?
+                int m = 0; //(int) (MemoryMappedFile::totalMappedLength() / ( 1024 * 1024 ));
                 t.appendNumber( "mapped" , m );
                 
                 if ( cmdLine.dur ) {

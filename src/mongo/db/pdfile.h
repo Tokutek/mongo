@@ -32,7 +32,6 @@
 #include "mongo/db/namespace_details-inl.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/util/log.h"
-#include "mongo/util/mmap.h"
 
 #include "mongo/db/cursor.h"
 

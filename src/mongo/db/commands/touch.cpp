@@ -83,7 +83,8 @@ namespace mongo {
 
             if (touch_data) {
                 log() << "touching namespace " << ns << endl;
-                touchNs( ns );
+                ::abort();
+                //touchNs( ns );
                 log() << "touching namespace " << ns << " complete" << endl;
             }
 
@@ -104,7 +105,8 @@ namespace mongo {
                 for ( std::vector<std::string>::const_iterator it = indexes.begin(); 
                       it != indexes.end(); 
                       it++ ) {
-                    touchNs( *it );
+                    ::abort();
+                    //touchNs( *it );
                 }
             }
             return true;

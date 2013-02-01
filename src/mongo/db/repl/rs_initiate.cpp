@@ -20,7 +20,6 @@
 #include "pch.h"
 #include "../cmdline.h"
 #include "../commands.h"
-#include "../../util/mmap.h"
 #include "../../util/mongoutils/str.h"
 #include "health.h"
 #include "rs.h"

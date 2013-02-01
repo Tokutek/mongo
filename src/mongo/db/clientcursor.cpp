@@ -727,6 +727,8 @@ namespace mongo {
 
     /** called once a minute from killcursors thread */
     void sayMemoryStatus() { 
+        // TODO: What should TokuDB do here?
+#if 0
         static time_t last;
         static Mem mlast;
         try {
@@ -761,6 +763,7 @@ namespace mongo {
         catch(const std::exception&) {
             log() << "ProcessInfo exception" << endl;
         }
+#endif
     }
 
     /** thread for timing out old cursors */
