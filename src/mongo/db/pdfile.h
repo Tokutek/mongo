@@ -34,38 +34,11 @@
 #include "mongo/util/log.h"
 #include "mongo/util/mmap.h"
 
-namespace mongo {
-
-    // pdfile versions
-    //const int PDFILE_VERSION = 4;
-    //const int PDFILE_VERSION_MINOR = 5;
-
-    //class DataFileHeader;
-    //class Extent;
-    //class Record;
-    class Cursor;
-    class OpDebug;
-
-    void dropDatabase(string db);
-    bool repairDatabase(string db, string &errmsg, bool preserveClonedFilesOnFailure = false, bool backupOriginalFiles = false);
-
-    /* low level - only drops this ns */
-    void dropNS(const string& dropNs);
-
-    /* deletes this ns, indexes and cursors */
-    void dropCollection( const string &name, string &errmsg, BSONObjBuilder &result );
-    bool userCreateNS(const char *ns, BSONObj j, string& err, bool logForReplication, bool *deferIdIndex = 0);
-    shared_ptr<Cursor> findTableScan(const char *ns, const BSONObj& order, const DiskLoc &startLoc=DiskLoc());
-
-    bool isValidNS( const StringData& ns );
-
-
-} // namespace mongo
-
-#include "cursor.h"
+#include "mongo/db/cursor.h"
 
 namespace mongo {
 
+    // TODO: Get rid of this along with the DiskLoc class
     inline BSONObj DiskLoc::obj() const {
         ::abort(); return BSONObj();
         //return BSONObj::make(rec()->accessed());
@@ -76,8 +49,6 @@ namespace mongo {
 #include "database.h"
 
 namespace mongo {
-
-    boost::intmax_t dbSize( const char *database );
 
     inline NamespaceIndex* nsindex(const char *ns) {
         Database *database = cc().database();
@@ -104,7 +75,5 @@ namespace mongo {
         }
         return d;
     }
-
-    void ensureHaveIdIndex(const char *ns);
 
 } // namespace mongo

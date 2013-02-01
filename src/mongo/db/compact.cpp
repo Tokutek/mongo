@@ -315,7 +315,8 @@ namespace mongo {
         bool ok;
         {
             Lock::DBWrite lk(ns);
-            BackgroundOperation::assertNoBgOpInProgForNs(ns.c_str());
+
+            //BackgroundOperation::assertNoBgOpInProgForNs(ns.c_str());
             Client::Context ctx(ns);
             NamespaceDetails *d = nsdetails(ns.c_str());
             massert( 13660, str::stream() << "namespace " << ns << " does not exist", d );

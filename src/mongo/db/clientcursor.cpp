@@ -588,6 +588,8 @@ namespace mongo {
 
         updateLocation();
 
+        // The code below: Seriously?
+#if 0
         {
             /* a quick test that our temprelease is safe.
              todo: make a YieldingCursor class
@@ -609,6 +611,7 @@ namespace mongo {
                 }
             }
         }
+#endif
         return true;
     }
 

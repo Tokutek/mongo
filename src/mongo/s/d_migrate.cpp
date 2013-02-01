@@ -1423,10 +1423,13 @@ namespace mongo {
                     string system_namespaces = NamespaceString( ns ).db + ".system.namespaces";
                     BSONObj entry = conn->findOne( system_namespaces, BSON( "name" << ns ) );
                     if ( entry["options"].isABSONObj() ) {
+                        ::abort();
+#if 0
                         string errmsg;
                         if ( ! userCreateNS( ns.c_str(), entry["options"].Obj(), errmsg, true, 0 ) )
                             warning() << "failed to create collection with options: " << errmsg
                                       << endl;
+#endif
                     }
                 }
             }

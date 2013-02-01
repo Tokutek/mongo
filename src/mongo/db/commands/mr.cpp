@@ -333,6 +333,8 @@ namespace mongo {
          * Create temporary collection, set up indexes
          */
         void State::prepTempCollection() {
+            ::abort(); // userCreateNS is not implemented
+#if 0
             if ( ! _onDisk )
                 return;
 
@@ -385,6 +387,7 @@ namespace mongo {
 
             }
 
+#endif
         }
 
         /**

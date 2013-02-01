@@ -254,12 +254,15 @@ namespace mongo {
         Client::WriteContext ctx(ns);
 
         {
+#if 0
             // config
             string temp = ctx.ctx().db()->name + ".system.namespaces";
             BSONObj config = conn->findOne( temp , BSON( "name" << ns ) );
             if ( config["options"].isABSONObj() )
                 if ( ! userCreateNS( ns.c_str() , config["options"].Obj() , errmsg, logForRepl , 0 ) )
                     return false;
+#endif
+            ::abort();
         }
 
         {
@@ -281,9 +284,6 @@ namespace mongo {
         return true;
     }
 
-    extern bool inDBRepair;
-    void ensureIdIndexForNewNs(const char *ns);
-
     bool Cloner::go(const char *masterHost, string& errmsg, const string& fromdb, bool logForRepl, bool slaveOk, bool useReplAuth, bool snapshot, bool mayYield, bool mayBeInterrupted, int *errCode) {
 
         CloneOptions opts;
@@ -302,6 +302,9 @@ namespace mongo {
     }
 
     bool Cloner::go(const char *masterHost, const CloneOptions& opts, set<string>& clonedColls, string& errmsg, int* errCode ){
+        ::abort();
+        return false;
+#if 0
 
         if ( errCode ) {
             *errCode = 0;
@@ -435,10 +438,13 @@ namespace mongo {
 
             bool wantIdIndex = false;
             {
+#if 0
                 string err;
                 const char *toname = to_name.c_str();
                 /* we defer building id index for performance - building it in batch is much faster */
                 userCreateNS(toname, options, err, opts.logForRepl, &wantIdIndex);
+#endif
+                ::abort();
             }
             log(1) << "\t\t cloning " << from_name << " -> " << to_name << endl;
             Query q;
@@ -486,6 +492,7 @@ namespace mongo {
             copy(system_indexes_from.c_str(), system_indexes_to.c_str(), true, opts.logForRepl, masterSameProcess, opts.slaveOk, opts.mayYield, opts.mayBeInterrupted, query );
         }
         return true;
+#endif
     }
 
     bool cloneFrom(const char *masterHost, string& errmsg, const string& fromdb, bool logForReplication,
@@ -766,7 +773,8 @@ namespace mongo {
             if ( nsdetails( target.c_str() ) ) {
                 uassert( 10027 ,  "target namespace exists", cmdObj["dropTarget"].trueValue() );
                 BSONObjBuilder bb( result.subobjStart( "dropTarget" ) );
-                dropCollection( target , errmsg , bb );
+                ::abort();
+                //dropCollection( target , errmsg , bb );
                 bb.done();
                 if ( errmsg.size() > 0 )
                     return false;
@@ -795,8 +803,11 @@ namespace mongo {
                 spec.appendBool( "capped", true );
                 spec.append( "size", double( size ) );
             }
+            ::abort();
+#if 0
             if ( !userCreateNS( target.c_str(), spec.done(), errmsg, false ) )
                 return false;
+#endif
 
             auto_ptr< DBClientCursor > c;
             DBDirectClient bridge;
@@ -848,7 +859,8 @@ namespace mongo {
 
             {
                 Client::Context ctx( source );
-                dropCollection( source, errmsg, result );
+                ::abort();
+                //dropCollection( source, errmsg, result );
             }
             return true;
         }

@@ -398,11 +398,14 @@ namespace mongo {
         b.appendBool("capped", 1);
         b.appendBool("autoIndexId", false);
 
+        ::abort();
+#if 0
         string err;
         BSONObj o = b.done();
         userCreateNS(ns, o, err, false);
         if( !rs )
             logOp( "n", "", BSONObj() );
+#endif
 
         /* sync here so we don't get any surprising lag later when we try to sync */
         MemoryMappedFile::flushAll(true);

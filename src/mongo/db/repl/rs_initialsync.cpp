@@ -354,7 +354,8 @@ namespace mongo {
         }
         else {
             sethbmsg("initial sync drop all databases", 0);
-            dropAllDatabasesExceptLocal();
+            ::abort();
+            //dropAllDatabasesExceptLocal();
 
             sethbmsg("initial sync clone all databases", 0);
 

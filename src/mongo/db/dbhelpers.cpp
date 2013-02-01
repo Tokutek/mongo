@@ -187,11 +187,14 @@ namespace mongo {
     }
 
     bool Helpers::getLast(const char *ns, BSONObj& result) {
+#if 0
         Client::Context ctx(ns);
         shared_ptr<Cursor> c = findTableScan(ns, reverseNaturalObj);
         if( !c->ok() )
             return false;
         result = c->current();
+#endif
+        ::abort();
         return true;
     }
 

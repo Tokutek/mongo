@@ -293,7 +293,8 @@ namespace mongo {
                 ss << '\n';
             }
 
-            BackgroundOperation::dump(ss);
+            // TokuDB: Do we care?
+            //BackgroundOperation::dump(ss);
             ss << "</pre>\n";
         }
 

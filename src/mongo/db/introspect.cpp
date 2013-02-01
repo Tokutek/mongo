@@ -83,6 +83,9 @@ namespace mongo {
     }
 
     NamespaceDetails* getOrCreateProfileCollection(Database *db, bool force) {
+        ::abort();
+        return NULL;
+#if 0
         fassert(16372, db);
         const char* profileName = db->profileName.c_str();
         NamespaceDetails* details = db->namespaceIndex.details(profileName);
@@ -106,6 +109,7 @@ namespace mongo {
             }
         }
         return details;
+#endif
     }
 
 } // namespace mongo

@@ -394,7 +394,8 @@ namespace mongo {
             int p = (int) e.number();
             if ( p != 1 )
                 return false;
-            dropDatabase(dbname);
+            ::abort();
+            //dropDatabase(dbname);
             result.append( "dropped" , dbname );
             return true;
         }
@@ -417,6 +418,8 @@ namespace mongo {
         virtual bool lockGlobally() const { return true; }
         CmdRepairDatabase() : Command("repairDatabase") {}
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            ::abort(); return false;
+#if 0
             BSONElement e = cmdObj.firstElement();
             log() << "repairDatabase " << dbname << endl;
             int p = (int) e.number();
@@ -429,6 +432,7 @@ namespace mongo {
             e = cmdObj.getField( "backupOriginalFiles" );
             bool backupOriginalFiles = e.isBoolean() && e.boolean();
             return repairDatabase( dbname, errmsg, preserveClonedFilesOnFailure, backupOriginalFiles );
+#endif
         }
     } cmdRepairDatabase;
 
@@ -782,7 +786,8 @@ namespace mongo {
                 return false;
             }
             uassert( 10039 ,  "can't drop collection with reserved $ character in name", strchr(nsToDrop.c_str(), '$') == 0 );
-            dropCollection( nsToDrop, errmsg, result );
+            ::abort();
+            //dropCollection( nsToDrop, errmsg, result );
             return true;
         }
     } cmdDrop;
@@ -848,7 +853,8 @@ namespace mongo {
             string ns = dbname + '.' + cmdObj.firstElement().valuestr();
             string err;
             uassert(14832, "specify size:<n> when capped is true", !cmdObj["capped"].trueValue() || cmdObj["size"].isNumber() || cmdObj.hasField("$nExtents"));
-            bool ok = userCreateNS(ns.c_str(), cmdObj, err, ! fromRepl );
+            ::abort();
+            bool ok = false; // userCreateNS(ns.c_str(), cmdObj, err, ! fromRepl );
             if ( !ok && !err.empty() )
                 errmsg = err;
             return ok;
@@ -924,7 +930,8 @@ namespace mongo {
             string toDeleteNs = dbname + '.' + e.valuestr();
             NamespaceDetails *d = nsdetails(toDeleteNs.c_str());
             tlog() << "CMD: reIndex " << toDeleteNs << endl;
-            BackgroundOperation::assertNoBgOpInProgForNs(toDeleteNs.c_str());
+            // Tokudb: Do we care?
+            //BackgroundOperation::assertNoBgOpInProgForNs(toDeleteNs.c_str());
 
             if ( ! d ) {
                 errmsg = "ns not found";
@@ -982,6 +989,8 @@ namespace mongo {
             set<string> seen;
             boost::intmax_t totalSize = 0;
             for ( vector< string >::iterator i = dbNames.begin(); i != dbNames.end(); ++i ) {
+                ::abort();
+#if 0
                 BSONObjBuilder b;
                 b.append( "name", *i );
 
@@ -997,6 +1006,7 @@ namespace mongo {
                 dbInfos.push_back( b.obj() );
 
                 seen.insert( i->c_str() );
+#endif
             }
 
             // TODO: erh 1/1/2010 I think this is broken where path != dbpath ??
@@ -1045,7 +1055,9 @@ namespace mongo {
         bool run(const string& dbname , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             bool ok;
             try {
-                ok = dbHolderW().closeAll( dbpath , result, false );
+                ok = false;
+                ::abort();
+                //ok = dbHolderW().closeAll( dbpath , result, false );
             }
             catch(DBException&) { 
                 throw;
@@ -1595,8 +1607,12 @@ namespace mongo {
             spec.append( "size", double( size ) );
             if (jsobj.hasField("temp"))
                 spec.append(jsobj["temp"]);
+
+            ::abort();
+#if 0
             if ( !userCreateNS( toNs.c_str(), spec.done(), errmsg, true ) )
                 return false;
+#endif
 
             auto_ptr< DBClientCursor > c = client.getMore( fromNs, id );
             while( c->more() ) {
@@ -1625,7 +1641,8 @@ namespace mongo {
             help << "{ convertToCapped:<fromCollectionName>, size:<sizeInBytes> }";
         }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
-            BackgroundOperation::assertNoBgOpInProgForDb(dbname.c_str());
+            // Tokudb: Do we care?
+            //BackgroundOperation::assertNoBgOpInProgForDb(dbname.c_str());
 
             string from = jsobj.getStringField( "convertToCapped" );
             long long size = (long long)jsobj.getField( "size" ).number();
@@ -1768,7 +1785,8 @@ namespace mongo {
                     continue;
                 }
                 else if ( nsd->isCapped() ) {
-                    cursor = findTableScan( c.c_str() , BSONObj() );
+                    ::abort();
+                    //cursor = findTableScan( c.c_str() , BSONObj() );
                 }
                 else {
                     log() << "can't find _id index for: " << c << endl;

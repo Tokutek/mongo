@@ -536,9 +536,12 @@ namespace mongo {
 
         oplogCheckCloseDatabase( database ); // oplog caches some things, dirty its caches
 
+        // TokuDB: We need to watch out for this, too.
+#if 0
         if( BackgroundOperation::inProgForDb(db) ) {
             log() << "warning: bg op in prog during close db? " << db << endl;
         }
+#endif
 
         /* important: kill all open cursors on the database */
         string prefix(db);

@@ -30,6 +30,7 @@
 
 namespace mongo {
 
+    // TODO: TokuDB: probably want to devirtualize this interface.
     class IndexInterface {
     protected:
         virtual ~IndexInterface() { }

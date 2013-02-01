@@ -285,7 +285,8 @@ doneCheckOrder:
 
         if ( willScanTable() ) {
             checkTableScanAllowed();
-            return findTableScan( _frs.ns(), _order, startLoc );
+            ::abort();
+            //return findTableScan( _frs.ns(), _order, startLoc );
         }
                 
         massert( 10363 ,  "newCursor() with start location not implemented for indexed plans", startLoc.isNull() );
@@ -309,7 +310,8 @@ doneCheckOrder:
             int orderSpec = _order.getIntField( "$natural" );
             if ( orderSpec == INT_MIN )
                 orderSpec = 1;
-            return findTableScan( _frs.ns(), BSON( "$natural" << -orderSpec ) );
+            ::abort();
+            //return findTableScan( _frs.ns(), BSON( "$natural" << -orderSpec ) );
         }
         massert( 10364 ,  "newReverseCursor() not implemented for indexed plans", false );
         return shared_ptr<Cursor>();

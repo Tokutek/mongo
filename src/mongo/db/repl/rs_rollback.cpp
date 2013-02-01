@@ -390,7 +390,8 @@ namespace mongo {
                 {
                     bob res;
                     string errmsg;
-                    dropCollection(ns, errmsg, res);
+                    ::abort();
+                    //dropCollection(ns, errmsg, res);
                     {
                         dbtemprelease r;
                         bool ok = copyCollectionFromRemote(them->getServerAddress(), ns, errmsg);
@@ -441,7 +442,8 @@ namespace mongo {
                 bob res;
                 string errmsg;
                 log(1) << "replSet rollback drop: " << *i << rsLog;
-                dropCollection(*i, errmsg, res);
+                ::abort();
+                //dropCollection(*i, errmsg, res);
             }
             catch(...) {
                 log() << "replset rollback error dropping collection " << *i << rsLog;
@@ -531,7 +533,8 @@ namespace mongo {
                                     try {
                                         bob res;
                                         string errmsg;
-                                        dropCollection(d.ns, errmsg, res);
+                                        ::abort();
+                                        //dropCollection(d.ns, errmsg, res);
                                     }
                                     catch(...) {
                                         log() << "replset error rolling back collection " << d.ns << rsLog;

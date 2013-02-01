@@ -77,7 +77,8 @@ namespace mongo {
 
             /* important to catch exception here so we can finish cleanup below. */
             try {
-                dropNS(ns.c_str());
+                ::abort();
+                //dropNS(ns.c_str());
             }
             catch(DBException& ) {
                 log(2) << "IndexDetails::kill(): couldn't drop ns " << ns << endl;
