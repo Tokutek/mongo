@@ -376,7 +376,7 @@ namespace mongo {
                     while( i.more() ) {
                         IndexDetails& id = i.next();
                         log() << "validating index " << idxn << ": " << id.indexNamespace() << endl;
-                        long long keys = id.idxInterface().fullValidate(id.head, id.keyPattern());
+                        long long keys = 0; ::abort(): // id.idxInterface().fullValidate(id.head, id.keyPattern());
                         indexes.appendNumber(id.indexNamespace(), keys);
                         idxn++;
                     }

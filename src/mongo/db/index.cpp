@@ -33,6 +33,7 @@
 namespace mongo {
 
     // tokudb: shutdown the environment
+#if 0
     void IndexInterface::shutdown() {
         toku::env_shutdown();
     }
@@ -45,6 +46,7 @@ namespace mongo {
 
     //IndexInterface *IndexDetails::iis[] = { &iii_v0, &iii_v1, &iii_tokudb };
     IndexInterface *IndexDetails::iis[] = { NULL, NULL, &iii_tokudb };
+#endif
 
     int IndexDetails::keyPatternOffset( const string& key ) const {
         BSONObjIterator i( keyPattern() );
@@ -73,7 +75,7 @@ namespace mongo {
             string name = indexName();
             
             // tokudb: ensure the db is dropped in the environment using dropIndex
-            idxInterface().dropIndex(*this);
+            //idxInterface().dropIndex(*this);
 
             /* important to catch exception here so we can finish cleanup below. */
             try {

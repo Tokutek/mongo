@@ -117,7 +117,7 @@ namespace mongo {
 
         BSONObj key = i.getKeyFromQuery( query );
 
-        DiskLoc loc = i.idxInterface().findSingle(i , i.head , key);
+        DiskLoc loc = minDiskLoc; ::abort(); // i.idxInterface().findSingle(i , i.head , key);
         if ( loc.isNull() )
             return false;
         result = loc.obj();
@@ -130,7 +130,8 @@ namespace mongo {
         uassert(13430, "no _id index", idxNo>=0);
         IndexDetails& i = d->idx( idxNo );
         BSONObj key = i.getKeyFromQuery( idquery );
-        return i.idxInterface().findSingle(i , i.head , key);
+        ::abort();
+        return minDiskLoc; //i.idxInterface().findSingle(i , i.head , key);
     }
 
     vector<BSONObj> Helpers::findAll( const string& ns , const BSONObj& query ) {

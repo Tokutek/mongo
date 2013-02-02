@@ -1020,7 +1020,7 @@ namespace mongo {
         log() << ss3.str() << endl;
 
         log() << "shutdown: shutting down the index interface..." << endl;
-        IndexInterface::shutdown();
+        //IndexInterface::shutdown();
 
         if( cmdLine.dur ) {
             // TODO: What should TokuDB do here?

@@ -30,7 +30,7 @@
 #include "db/btree.h"
 
 namespace mongo {
-
+#if 0
     void dump_bson(BSONObj obj) {
         std::cout << obj.toString() << std::endl;
     }
@@ -132,4 +132,5 @@ namespace mongo {
         invariant(r == 0);
         return r == 0 ? true : false;
     }
+#endif
 } /* namespace mongo */

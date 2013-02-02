@@ -30,41 +30,6 @@
 
 namespace mongo {
 
-    // TODO: TokuDB: probably want to devirtualize this interface.
-    class IndexInterface {
-    protected:
-        virtual ~IndexInterface() { }
-    public:
-
-        // tokudb: shut down the environment. used when the server shuts down
-        static void shutdown(void);
-
-        // tokudb: remove an index from the environment. used during kill_idx()
-        // so the environment can properly cleanup when mongodb drops an index.
-        virtual void dropIndex(const IndexDetails &idx) { }
-
-        virtual int keyCompare(const BSONObj& l,const BSONObj& r, const Ordering &ordering) = 0;
-        virtual long long fullValidate(const DiskLoc& thisLoc, const BSONObj &order) = 0;
-        virtual DiskLoc findSingle(const IndexDetails &indexdetails , const DiskLoc& thisLoc, const BSONObj& key) const = 0;
-        virtual bool unindex(const DiskLoc thisLoc, IndexDetails& id, const BSONObj& key, const DiskLoc recordLoc) const = 0;
-        virtual int bt_insert(const DiskLoc thisLoc, const DiskLoc recordLoc,
-            const BSONObj& key, const Ordering &order, bool dupsAllowed,
-            IndexDetails& idx, bool toplevel = true) const = 0;
-        // tokudb: bt_insert interface for clustering keys. defaults to regular bt_insert
-        virtual int bt_insert_clustering(const DiskLoc thisLoc, const DiskLoc recordLoc,
-            const BSONObj& key, const Ordering &order, bool dupsAllowed,
-            IndexDetails& idx, const BSONObj &obj, bool toplevel = true) const {
-            return bt_insert(thisLoc, recordLoc, key, order, dupsAllowed, idx, toplevel);
-        }
-
-        /**
-         * @return a static IndexInterface consistent with index version DefaultIndexVersionNumber.
-         * An IndexInterface should generally not be retrieved via this function, but from the
-         * IndexDetails for an existing index.
-         */
-        static IndexInterface& defaultVersion();
-    };
-
     /* Details about a particular index. There is one of these effectively for each object in
        system.namespaces (although this also includes the head pointer, which is not in that
        collection).
@@ -203,6 +168,7 @@ namespace mongo {
             return info.obj().toString();
         }
 
+#if 0
         /** @return true if supported.  supported means we can use the index, including adding new keys.
                     it may not mean we can build the index version in question: we may not maintain building 
                     of indexes in old formats in the future.
@@ -220,6 +186,7 @@ namespace mongo {
         }
 
         static IndexInterface *iis[];
+#endif
     };
 
 } // namespace mongo

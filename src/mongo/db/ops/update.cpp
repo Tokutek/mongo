@@ -65,6 +65,8 @@ namespace mongo {
                                     bool fromMigrate = false) {
 
         DiskLoc loc;
+        ::abort();
+#if 0
         {
             IndexDetails& i = d->idx(idIdxNo);
             BSONObj key = i.getKeyFromQuery( patternOrig );
@@ -74,7 +76,6 @@ namespace mongo {
                 return UpdateResult( 0 , 0 , 0 , BSONObj() );
             }
         }
-#if 0
         Record* r = loc.rec();
 
         if ( cc().allowedToThrowPageFaultException() && ! r->likelyInPhysicalMemory() ) {

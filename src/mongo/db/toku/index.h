@@ -24,6 +24,7 @@
 
 namespace mongo {
 
+#if 0
 class IndexInterfaceTokuDB : public IndexInterface {
 public:
 
@@ -86,6 +87,7 @@ private:
             const BSONObj& key, const Ordering &order, bool dupsAllowed,
             IndexDetails& idx, const BSONObj *obj, bool toplevel = true) const;
 };
+#endif
 
 } /* namespace mongo */
 
