@@ -56,7 +56,7 @@ namespace mongo {
     */
     class NamespaceDetails {
     public:
-        enum { NIndexesMax = 64, NIndexesExtra = 30, NIndexesBase  = 10 };
+        enum { NIndexesMax = 64, /* NIndexesExtra = 30, */ NIndexesBase  = 10 };
 
         /*-------- data fields, as present on disk : */
 #if 0
@@ -100,7 +100,6 @@ namespace mongo {
     private:
         // ofs 400 (16)
         unsigned long long reservedA;
-        long long extraOffset;                // where the $extra info is located (bytes relative to this)
     public:
         int indexBuildInProgress;             // 1 if in prog
     private:
@@ -109,39 +108,6 @@ namespace mongo {
         /*-------- end data 496 bytes */
     public:
         explicit NamespaceDetails( const DiskLoc &loc, bool _capped );
-
-        class Extra {
-            long long _next;
-        public:
-            IndexDetails details[NIndexesExtra];
-        private:
-            unsigned reserved2;
-            unsigned reserved3;
-            Extra(const Extra&) { verify(false); }
-            Extra& operator=(const Extra& r) { verify(false); return *this; }
-        public:
-            Extra() { }
-            long ofsFrom(NamespaceDetails *d) {
-                return ((char *) this) - ((char *) d);
-            }
-            void init() { memset(this, 0, sizeof(Extra)); }
-            Extra* next(NamespaceDetails *d) {
-                if( _next == 0 ) return 0;
-                return (Extra*) (((char *) d) + _next);
-            }
-            void setNext(long ofs) { _next = ofs; } // TODO Transactional  *getDur().writing(&_next) = ofs;  }
-            void copy(NamespaceDetails *d, const Extra& e) {
-                memcpy(this, &e, sizeof(Extra));
-                _next = 0;
-            }
-        };
-        Extra* extra() {
-            if( extraOffset == 0 ) return 0;
-            return (Extra *) (((char *) this) + extraOffset);
-        }
-        /* add extra space for indexes when more than 10 */
-        Extra* allocExtra(const char *ns, int nindexessofar);
-        void copyingFrom(const char *thisns, NamespaceDetails *src); // must be called when renaming a NS to fix up extra
 
         /* called when loaded from disk */
         void onLoad(const Namespace& k);
@@ -332,30 +298,16 @@ namespace mongo {
             return 10; // TODO: Return something meaningful
         }
 
-        NamespaceDetails *writingWithoutExtra() {
-            ::abort();
-            return NULL;
-            //return ( NamespaceDetails* ) getDur().writingPtr( this, sizeof( NamespaceDetails ) );
-        }
-        /** Make all linked Extra objects writeable as well */
-        NamespaceDetails *writingWithExtra();
-
     private:
         DiskLoc _alloc(const char *ns, int len);
         void maybeComplain( const char *ns, int len ) const;
         DiskLoc __stdAlloc(int len, bool willBeAt);
         void compact(); // combine adjacent deleted records
         friend class NamespaceIndex;
-        struct ExtraOld {
-            // note we could use this field for more chaining later, so don't waste it:
-            unsigned long long reserved1;
-            IndexDetails details[NIndexesExtra];
-            unsigned reserved2;
-            unsigned reserved3;
-        };
+
         /** Update cappedLastDelRecLastExtent() after capExtent changed in cappedTruncateAfter() */
         void cappedTruncateLastDelUpdate();
-        BOOST_STATIC_ASSERT( NIndexesMax <= NIndexesBase + NIndexesExtra*2 );
+        //BOOST_STATIC_ASSERT( NIndexesMax <= NIndexesBase + NIndexesExtra*2 );
         BOOST_STATIC_ASSERT( NIndexesMax <= 64 ); // multiKey bits
         //BOOST_STATIC_ASSERT( sizeof(NamespaceDetails::ExtraOld) == 496 );
         //BOOST_STATIC_ASSERT( sizeof(NamespaceDetails::Extra) == 496 );
@@ -589,8 +541,6 @@ namespace mongo {
         bool allocated() const { return ht != 0; }
 
         void getNamespaces( list<string>& tofill , bool onlyCollections = true ) const;
-
-        NamespaceDetails::Extra* newExtra(const char *ns, int n, NamespaceDetails *d);
 
         boost::filesystem::path path() const;
 

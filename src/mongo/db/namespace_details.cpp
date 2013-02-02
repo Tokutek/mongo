@@ -59,7 +59,6 @@ namespace mongo {
         indexFileVersion = 0;
         multiKeyIndexBits = 0;
         reservedA = 0;
-        extraOffset = 0;
         indexBuildInProgress = 0;
         memset(reserved, 0, sizeof(reserved));
     }
@@ -94,12 +93,6 @@ namespace mongo {
     unsigned lenForNewNsFiles = 16 * 1024 * 1024;
 
     void NamespaceDetails::onLoad(const Namespace& k) {
-
-        if( k.isExtra() ) {
-            /* overflow storage for indexes - so don't treat as a NamespaceDetails object. */
-            return;
-        }
-
         if( indexBuildInProgress ) {
             verify( Lock::isW() ); // TODO(erh) should this be per db?
             if( indexBuildInProgress ) {
@@ -189,46 +182,6 @@ namespace mongo {
         if ( ht )
             ht->iterAll( namespaceGetNamespacesCallback , (void*)&tofill );
     }
-
-#if 0
-    void NamespaceDetails::addDeletedRec(DeletedRecord *d, DiskLoc dloc) {
-        BOOST_STATIC_ASSERT( sizeof(NamespaceDetails::Extra) <= sizeof(NamespaceDetails) );
-
-        {
-            Record *r = (Record *) getDur().writingPtr(d, sizeof(Record));
-            //d = &r->asDeleted();
-            // defensive code: try to make us notice if we reference a deleted record
-            reinterpret_cast<unsigned*>( r->data() )[0] = 0xeeeeeeee;
-        }
-        DEBUGGING log() << "TEMP: add deleted rec " << dloc.toString() << ' ' << hex << d->extentOfs() << endl;
-        if ( isCapped() ) {
-            if ( !cappedLastDelRecLastExtent().isValid() ) {
-                // Initial extent allocation.  Insert at end.
-                d->nextDeleted() = DiskLoc();
-                if ( cappedListOfAllDeletedRecords().isNull() )
-                    getDur().writingDiskLoc( cappedListOfAllDeletedRecords() ) = dloc;
-                else {
-                    DiskLoc i = cappedListOfAllDeletedRecords();
-                    for (; !i.drec()->nextDeleted().isNull(); i = i.drec()->nextDeleted() )
-                        ;
-                    i.drec()->nextDeleted().writing() = dloc;
-                }
-            }
-            else {
-                d->nextDeleted() = cappedFirstDeletedInCurExtent();
-                getDur().writingDiskLoc( cappedFirstDeletedInCurExtent() ) = dloc;
-                // always compact() after this so order doesn't matter
-            }
-        }
-        else {
-            int b = bucket(d->lengthWithHeaders());
-            DiskLoc& list = deletedList[b];
-            DiskLoc oldHead = list;
-            getDur().writingDiskLoc(list) = dloc;
-            d->nextDeleted() = oldHead;
-        }
-    }
-#endif
 
     /* predetermine location of the next alloc without actually doing it. 
         if cannot predetermine returns null (so still call alloc() then)
@@ -459,6 +412,8 @@ namespace mongo {
         Namespace n(ns);
         ht->kill(n);
 
+        ::abort(); // TODO: TokuDB: Understand how ht->kill(extra) works
+#if 0
         for( int i = 0; i<=1; i++ ) {
             try {
                 Namespace extra(n.extraName(i).c_str());
@@ -468,6 +423,7 @@ namespace mongo {
                 dlog(3) << "caught exception in kill_ns" << endl;
             }
         }
+#endif
     }
 
     void NamespaceIndex::add_ns(const char *ns, DiskLoc& loc, bool capped) {
@@ -479,40 +435,6 @@ namespace mongo {
         init();
         Namespace n(ns);
         uassert( 10081 , "too many namespaces/collections", ht->put(n, details));
-    }
-
-    /* extra space for indexes when more than 10 */
-    NamespaceDetails::Extra* NamespaceIndex::newExtra(const char *ns, int i, NamespaceDetails *d) {
-        Lock::assertWriteLocked(ns);
-        verify( i >= 0 && i <= 1 );
-        Namespace n(ns);
-        Namespace extra(n.extraName(i).c_str()); // throws userexception if ns name too long
-
-        massert( 10350 ,  "allocExtra: base ns missing?", d );
-        massert( 10351 ,  "allocExtra: extra already exists", ht->get(extra) == 0 );
-
-        NamespaceDetails::Extra temp;
-        temp.init();
-        uassert( 10082 ,  "allocExtra: too many namespaces/collections", ht->put(extra, (NamespaceDetails&) temp));
-        NamespaceDetails::Extra *e = (NamespaceDetails::Extra *) ht->get(extra);
-        return e;
-    }
-    NamespaceDetails::Extra* NamespaceDetails::allocExtra(const char *ns, int nindexessofar) {
-        NamespaceIndex *ni = nsindex(ns);
-        int i = (nindexessofar - NIndexesBase) / NIndexesExtra;
-        Extra *e = ni->newExtra(ns, i, this);
-        long ofs = e->ofsFrom(this);
-        if( i == 0 ) {
-            verify( extraOffset == 0 );
-            extraOffset = ofs; //*getDur().writing(&extraOffset) = ofs;
-            verify( extra() == e );
-        }
-        else {
-            Extra *hd = extra();
-            verify( hd->next(this) == 0 );
-            hd->setNext(ofs);
-        }
-        return e;
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
@@ -530,34 +452,15 @@ namespace mongo {
             id = &idx(nIndexes,true);
         }
         catch(DBException&) {
-            allocExtra(thisns, nIndexes);
-            id = &idx(nIndexes,false);
+            //allocExtra(thisns, nIndexes);
+            //id = &idx(nIndexes,false);
+            ::abort(); // TODO: TokuDB: what to do?
         }
 
         nIndexes++; //(*getDur().writing(&nIndexes))++;
         if ( resetTransient )
             NamespaceDetailsTransient::get(thisns).addedIndex();
         return *id;
-    }
-
-    // must be called when renaming a NS to fix up extra
-    void NamespaceDetails::copyingFrom(const char *thisns, NamespaceDetails *src) {
-        extraOffset = 0; // we are a copy -- the old value is wrong.  fixing it up below.
-        Extra *se = src->extra();
-        int n = NIndexesBase;
-        if( se ) {
-            Extra *e = allocExtra(thisns, n);
-            while( 1 ) {
-                n += NIndexesExtra;
-                e->copy(this, *se);
-                se = se->next(src);
-                if( se == 0 ) break;
-                Extra *nxt = allocExtra(thisns, n);
-                e->setNext( nxt->ofsFrom(this) );
-                e = nxt;
-            }
-            verify( extraOffset );
-        }
     }
 
     /* returns index of the first index in which the field is present. -1 if not present.
@@ -600,15 +503,6 @@ namespace mongo {
 #endif
         ::abort();
         return 0;
-    }
-
-    NamespaceDetails *NamespaceDetails::writingWithExtra() {
-        vector< pair< long long, unsigned > > writeRanges;
-        writeRanges.push_back( make_pair( 0, sizeof( NamespaceDetails ) ) );
-        for( Extra *e = extra(); e; e = e->next( this ) ) {
-            writeRanges.push_back( make_pair( (char*)e - (char*)this, sizeof( Extra ) ) );
-        }
-        ::abort(); return NULL; //return reinterpret_cast< NamespaceDetails* >( getDur().writingRangesAtOffsets( this, writeRanges ) );
     }
 
     void NamespaceDetails::setMaxCappedDocs( long long max ) {
