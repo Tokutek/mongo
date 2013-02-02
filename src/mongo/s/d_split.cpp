@@ -249,8 +249,8 @@ namespace mongo {
                     max = Helpers::modifiedRangeBound( max , idx->keyPattern() , -1 );
                 }
                 
-                const long long recCount = d->stats.nrecords;
-                const long long dataSize = d->stats.datasize;
+                const long long recCount = 10; ::abort(); //d->stats.nrecords;
+                const long long dataSize = 10; ::abort(); // d->stats.datasize;
                 
                 //
                 // 1.b Now that we have the size estimate, go over the remaining parameters and apply any maximum size

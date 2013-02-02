@@ -349,6 +349,8 @@ namespace mongo {
         if ( nsd ) {
 
             if ( cmdLine.oplogSize != 0 ) {
+                // TODO: Make sure we do this check if it's really necessary
+#if 0
                 int o = (int)(nsd->storageSize() / ( 1024 * 1024 ) );
                 int n = (int)(cmdLine.oplogSize / ( 1024 * 1024 ) );
                 if ( n != o ) {
@@ -357,6 +359,7 @@ namespace mongo {
                     log() << ss.str() << endl;
                     throw UserException( 13257 , ss.str() );
                 }
+#endif
             }
 
             if( rs ) return;

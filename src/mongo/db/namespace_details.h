@@ -83,6 +83,7 @@ namespace mongo {
         int nIndexes;
     private:
         // ofs 192
+        // TODO: TokUDB: Change this array to be of Max size, not Base
         IndexDetails _indexes[NIndexesBase];
 
         // ofs 352 (16 byte aligned)
@@ -92,8 +93,8 @@ namespace mongo {
         // ofs 386 (16)
         int _systemFlags; // things that the system sets/cares about
     public:
-        DiskLoc capExtent;
-        DiskLoc capFirstNewRecord;
+        //DiskLoc capExtent;
+        //DiskLoc capFirstNewRecord;
         unsigned short dataFileVersion;       // NamespaceDetails version.  So we can do backward compatibility in the future. See filever.h XXX: This does not exist
         unsigned short indexFileVersion;
         unsigned long long multiKeyIndexBits;
@@ -119,12 +120,14 @@ namespace mongo {
         void dumpExtents();
 
     private:
+#if 0
         //Extent *theCapExtent() const { return capExtent.ext(); }
         void advanceCapExtent( const char *ns );
         DiskLoc __capAlloc(int len);
         DiskLoc cappedAlloc(const char *ns, int len);
         DiskLoc &cappedFirstDeletedInCurExtent();
         bool nextIsInCapExtent( const DiskLoc &dl ) const;
+#endif
 
     public:
 
@@ -135,17 +138,17 @@ namespace mongo {
 
         //DiskLoc& cappedListOfAllDeletedRecords() { return deletedList[0]; }
         //DiskLoc& cappedLastDelRecLastExtent()    { return deletedList[1]; }
-        void cappedDumpDelInfo();
-        bool capLooped() const { return _isCapped && capFirstNewRecord.isValid();  }
-        bool inCapExtent( const DiskLoc &dl ) const;
-        void cappedCheckMigrate();
+        //void cappedDumpDelInfo();
+        //bool capLooped() const { return _isCapped && capFirstNewRecord.isValid();  }
+        //bool inCapExtent( const DiskLoc &dl ) const;
+        //void cappedCheckMigrate();
         /**
          * Truncate documents newer than the document at 'end' from the capped
          * collection.  The collection cannot be completely emptied using this
          * function.  An assertion will be thrown if that is attempted.
          * @param inclusive - Truncate 'end' as well iff true
          */
-        void cappedTruncateAfter(const char *ns, DiskLoc end, bool inclusive);
+        //void cappedTruncateAfter(const char *ns, DiskLoc end, bool inclusive);
         /** Remove all documents from the capped collection */
         void emptyCappedCollection(const char *ns);
 
@@ -272,6 +275,7 @@ namespace mongo {
             return isSystemFlagSet( NamespaceDetails::Flag_HaveIdIndex ) || findIdIndex() >= 0;
         }
 
+#if 0
         /* predetermine location of the next alloc without actually doing it. 
            if cannot predetermine returns null (so still call alloc() then)
         */
@@ -288,6 +292,7 @@ namespace mongo {
         // Start from lastExtent by default.
         DiskLoc lastRecord( const DiskLoc &startExtent = DiskLoc() ) const;
         long long storageSize( int * numExtents = 0 , BSONArrayBuilder * extentInfo = 0 ) const;
+#endif
 
         int averageObjectSize() {
 #if 0
@@ -299,14 +304,14 @@ namespace mongo {
         }
 
     private:
-        DiskLoc _alloc(const char *ns, int len);
-        void maybeComplain( const char *ns, int len ) const;
-        DiskLoc __stdAlloc(int len, bool willBeAt);
-        void compact(); // combine adjacent deleted records
+        //DiskLoc _alloc(const char *ns, int len);
+        //void maybeComplain( const char *ns, int len ) const;
+        //DiskLoc __stdAlloc(int len, bool willBeAt);
+        //void compact(); // combine adjacent deleted records
         friend class NamespaceIndex;
 
         /** Update cappedLastDelRecLastExtent() after capExtent changed in cappedTruncateAfter() */
-        void cappedTruncateLastDelUpdate();
+        //void cappedTruncateLastDelUpdate();
         //BOOST_STATIC_ASSERT( NIndexesMax <= NIndexesBase + NIndexesExtra*2 );
         BOOST_STATIC_ASSERT( NIndexesMax <= 64 ); // multiKey bits
         //BOOST_STATIC_ASSERT( sizeof(NamespaceDetails::ExtraOld) == 496 );
@@ -469,6 +474,8 @@ namespace mongo {
             _qcWriteCount = 0;
         }
         /* you must notify the cache if you are doing writes, as query plan utility will change */
+        // TODO: TokuDB: John does not understand why 100+ writes necessarily means
+        // the query strategy changes. We need to figure this out eventually.
         void notifyOfWriteOp() {
             if ( _qcCache.empty() )
                 return;
@@ -510,7 +517,7 @@ namespace mongo {
                 _init();
         }
 
-        void add_ns(const char *ns, DiskLoc& loc, bool capped);
+        //void add_ns(const char *ns, DiskLoc& loc, bool capped);
         void add_ns( const char *ns, const NamespaceDetails &details );
 
         NamespaceDetails* details(const char *ns) {
@@ -519,24 +526,24 @@ namespace mongo {
             Namespace n(ns);
             NamespaceDetails *d = ht->get(n);
             if ( d && d->isCapped() )
-                d->cappedCheckMigrate();
+                ::abort(); // TODO What is the right thing to do here? //d->cappedCheckMigrate();
             return d;
         }
 
         void kill_ns(const char *ns);
 
-        bool find(const char *ns, DiskLoc& loc) {
 #if 0
+        bool find(const char *ns, DiskLoc& loc) {
             NamespaceDetails *l = details(ns);
             if ( l ) {
                 loc = l->firstExtent;
                 return true;
             }
             return false;
-#endif
             ::abort(); // TODO: Remove this function, fix the callers
             return false;
         }
+#endif
 
         bool allocated() const { return ht != 0; }
 

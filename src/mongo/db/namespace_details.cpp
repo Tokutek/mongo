@@ -45,15 +45,15 @@ namespace mongo {
         _maxDocsInCapped = 0x7fffffff;
         _systemFlags = 0;
         _userFlags = 0;
+#if 0
         capFirstNewRecord = DiskLoc();
         // Signal that we are on first allocation iteration through extents.
         capFirstNewRecord.setInvalid();
         // For capped case, signal that we are doing initial extent allocation.
-#if 0
-        if ( capped )
-            cappedLastDelRecLastExtent().setInvalid();
 #endif
-        ::abort(); // TODO: Capped collections will need to be re-done in TokuDB
+            
+        if ( capped )
+            ::abort(); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
         verify( sizeof(dataFileVersion) == 2 );
         dataFileVersion = 0;
         indexFileVersion = 0;
@@ -183,228 +183,6 @@ namespace mongo {
             ht->iterAll( namespaceGetNamespacesCallback , (void*)&tofill );
     }
 
-    /* predetermine location of the next alloc without actually doing it. 
-        if cannot predetermine returns null (so still call alloc() then)
-    */
-    DiskLoc NamespaceDetails::allocWillBeAt(const char *ns, int lenToAlloc) {
-        if ( ! isCapped() ) {
-            lenToAlloc = (lenToAlloc + 3) & 0xfffffffc;
-            return __stdAlloc(lenToAlloc, true);
-        }
-        return DiskLoc();
-    }
-
-    /** allocate space for a new record from deleted lists.
-        @param lenToAlloc is WITH header
-        @param extentLoc OUT returns the extent location
-        @return null diskloc if no room - allocate a new extent then
-    */
-    DiskLoc NamespaceDetails::alloc(const char *ns, int lenToAlloc, DiskLoc& extentLoc) {
-#if 0
-        {
-            // align very slightly.  
-            // note that if doing more coarse-grained quantization (really just if it isn't always
-            //   a constant amount but if it varied by record size) then that quantization should 
-            //   NOT be done here but rather in __stdAlloc so that we can grab a deletedrecord that 
-            //   is just big enough if we happen to run into one.
-            lenToAlloc = (lenToAlloc + 3) & 0xfffffffc;
-        }
-
-        DiskLoc loc = _alloc(ns, lenToAlloc);
-        if ( loc.isNull() )
-            return loc;
-
-        DeletedRecord *r = loc.drec();
-        //r = getDur().writing(r);
-
-        /* note we want to grab from the front so our next pointers on disk tend
-        to go in a forward direction which is important for performance. */
-        int regionlen = r->lengthWithHeaders();
-        extentLoc.set(loc.a(), r->extentOfs());
-        verify( r->extentOfs() < loc.getOfs() );
-
-        DEBUGGING out() << "TEMP: alloc() returns " << loc.toString() << ' ' << ns << " lentoalloc:" << lenToAlloc << " ext:" << extentLoc.toString() << endl;
-
-        int left = regionlen - lenToAlloc;
-        if ( ! isCapped() ) {
-            if ( left < 24 || left < (lenToAlloc >> 3) ) {
-                // you get the whole thing.
-                return loc;
-            }
-        }
-
-        /* split off some for further use. */
-        getDur().writingInt(r->lengthWithHeaders()) = lenToAlloc;
-        DiskLoc newDelLoc = loc;
-        newDelLoc.inc(lenToAlloc);
-        DeletedRecord *newDel = NULL; ::abort(); // DataFileMgr::makeDeletedRecord(newDelLoc, left);
-        DeletedRecord *newDelW = getDur().writing(newDel);
-        newDelW->extentOfs() = r->extentOfs();
-        newDelW->lengthWithHeaders() = left;
-        newDelW->nextDeleted().Null();
-
-        //addDeletedRec(newDel, newDelLoc);
-
-        return loc;
-#endif
-        ::abort();
-        return minDiskLoc;
-    }
-
-    /* for non-capped collections.
-       @param peekOnly just look up where and don't reserve
-       returned item is out of the deleted list upon return
-    */
-    DiskLoc NamespaceDetails::__stdAlloc(int len, bool peekOnly) {
-#if 0
-        DiskLoc *prev;
-        DiskLoc *bestprev = 0;
-        DiskLoc bestmatch;
-        int bestmatchlen = 0x7fffffff;
-        int b = bucket(len);
-        DiskLoc cur = deletedList[b];
-        prev = &deletedList[b];
-        int extra = 5; // look for a better fit, a little.
-        int chain = 0;
-        while ( 1 ) {
-            {
-                int a = cur.a();
-                if ( a < -1 || a >= 100000 ) {
-                    problem() << "~~ Assertion - cur out of range in _alloc() " << cur.toString() <<
-                              " a:" << a << " b:" << b << " chain:" << chain << '\n';
-                    logContext();
-                    if ( cur == *prev )
-                        prev->Null();
-                    cur.Null();
-                }
-            }
-            if ( cur.isNull() ) {
-                // move to next bucket.  if we were doing "extra", just break
-                if ( bestmatchlen < 0x7fffffff )
-                    break;
-                b++;
-                if ( b > MaxBucket ) {
-                    // out of space. alloc a new extent.
-                    return DiskLoc();
-                }
-                cur = deletedList[b];
-                prev = &deletedList[b];
-                continue;
-            }
-            DeletedRecord *r = cur.drec();
-            if ( r->lengthWithHeaders() >= len &&
-                 r->lengthWithHeaders() < bestmatchlen ) {
-                bestmatchlen = r->lengthWithHeaders();
-                bestmatch = cur;
-                bestprev = prev;
-            }
-            if ( bestmatchlen < 0x7fffffff && --extra <= 0 )
-                break;
-            if ( ++chain > 30 && b < MaxBucket ) {
-                // too slow, force move to next bucket to grab a big chunk
-                //b++;
-                chain = 0;
-                cur.Null();
-            }
-            else {
-                /*this defensive check only made sense for the mmap storage engine:
-                  if ( r->nextDeleted.getOfs() == 0 ) {
-                    problem() << "~~ Assertion - bad nextDeleted " << r->nextDeleted.toString() <<
-                    " b:" << b << " chain:" << chain << ", fixing.\n";
-                    r->nextDeleted.Null();
-                }*/
-                cur = r->nextDeleted();
-                prev = &r->nextDeleted();
-            }
-        }
-
-        /* unlink ourself from the deleted list */
-        if( !peekOnly ) {
-            DeletedRecord *bmr = bestmatch.drec();
-            *getDur().writing(bestprev) = bmr->nextDeleted();
-            bmr->nextDeleted().writing().setInvalid(); // defensive.
-            verify(bmr->extentOfs() < bestmatch.getOfs());
-        }
-
-        return bestmatch;
-#endif
-        ::abort();
-        return minDiskLoc;
-    }
-
-    void NamespaceDetails::dumpDeleted(set<DiskLoc> *extents) {
-#if 0
-        for ( int i = 0; i < Buckets; i++ ) {
-            DiskLoc dl = deletedList[i];
-            while ( !dl.isNull() ) {
-                DeletedRecord *r = dl.drec();
-                DiskLoc extLoc(dl.a(), r->extentOfs());
-                if ( extents == 0 || extents->count(extLoc) <= 0 ) {
-                    out() << "  bucket " << i << endl;
-                    out() << "   " << dl.toString() << " ext:" << extLoc.toString();
-                    if ( extents && extents->count(extLoc) <= 0 )
-                        out() << '?';
-                    out() << " len:" << r->lengthWithHeaders() << endl;
-                }
-                dl = r->nextDeleted();
-            }
-        }
-#endif
-        ::abort();
-    }
-
-    DiskLoc NamespaceDetails::firstRecord( const DiskLoc &startExtent ) const {
-#if 0
-        for (DiskLoc i = startExtent.isNull() ? firstExtent : startExtent;
-                !i.isNull(); i = i.ext()->xnext ) {
-            if ( !i.ext()->firstRecord.isNull() )
-                return i.ext()->firstRecord;
-        }
-#endif
-        ::abort();
-        return DiskLoc();
-    }
-
-    DiskLoc NamespaceDetails::lastRecord( const DiskLoc &startExtent ) const {
-#if 0
-        for (DiskLoc i = startExtent.isNull() ? lastExtent : startExtent;
-                !i.isNull(); i = i.ext()->xprev ) {
-            if ( !i.ext()->lastRecord.isNull() )
-                return i.ext()->lastRecord;
-        }
-#endif
-        ::abort();
-        return DiskLoc();
-    }
-
-    int n_complaints_cap = 0;
-    void NamespaceDetails::maybeComplain( const char *ns, int len ) const {
-#if 0
-        if ( ++n_complaints_cap < 8 ) {
-            out() << "couldn't make room for new record (len: " << len << ") in capped ns " << ns << '\n';
-            int i = 0;
-            for ( DiskLoc e = firstExtent; !e.isNull(); e = e.ext()->xnext, ++i ) {
-                out() << "  Extent " << i;
-                if ( e == capExtent )
-                    out() << " (capExtent)";
-                out() << '\n';
-                out() << "    magic: " << hex << e.ext()->magic << dec << " extent->ns: " << e.ext()->nsDiagnostic.toString() << '\n';
-                out() << "    fr: " << e.ext()->firstRecord.toString() <<
-                      " lr: " << e.ext()->lastRecord.toString() << " extent->len: " << e.ext()->length << '\n';
-            }
-            verify( len * 5 > lastExtentSize ); // assume it is unusually large record; if not, something is broken
-        }
-#endif
-    }
-
-    /* alloc with capped table handling. */
-    DiskLoc NamespaceDetails::_alloc(const char *ns, int len) {
-        if ( ! isCapped() )
-            return __stdAlloc(len, false);
-
-        return cappedAlloc(ns,len);
-    }
-
     void NamespaceIndex::kill_ns(const char *ns) {
         Lock::assertWriteLocked(ns);
         if ( !ht )
@@ -426,10 +204,6 @@ namespace mongo {
 #endif
     }
 
-    void NamespaceIndex::add_ns(const char *ns, DiskLoc& loc, bool capped) {
-        NamespaceDetails details( loc, capped );
-        add_ns( ns, details );
-    }
     void NamespaceIndex::add_ns( const char *ns, const NamespaceDetails &details ) {
         Lock::assertWriteLocked(ns);
         init();
@@ -476,33 +250,6 @@ namespace mongo {
                 return i;
         }*/
         return -1;
-    }
-
-    long long NamespaceDetails::storageSize( int * numExtents , BSONArrayBuilder * extentInfo ) const {
-#if 0
-        Extent * e = firstExtent.ext();
-        verify( e );
-
-        long long total = 0;
-        int n = 0;
-        while ( e ) {
-            total += e->length;
-            n++;
-
-            if ( extentInfo ) {
-                extentInfo->append( BSON( "len" << e->length << "loc: " << e->myLoc.toBSONObj() ) );
-            }
-
-            e = e->getNextExtent();
-        }
-
-        if ( numExtents )
-            *numExtents = n;
-
-        return total;
-#endif
-        ::abort();
-        return 0;
     }
 
     void NamespaceDetails::setMaxCappedDocs( long long max ) {

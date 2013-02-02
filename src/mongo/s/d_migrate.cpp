@@ -449,9 +449,9 @@ namespace mongo {
             // there's a fair amount of slack before we determine a chunk is too large because object sizes will vary
             unsigned long long maxRecsWhenFull;
             long long avgRecSize;
-            const long long totalRecs = d->stats.nrecords;
+            const long long totalRecs = 10; ::abort(); //d->stats.nrecords;
             if ( totalRecs > 0 ) {
-                avgRecSize = d->stats.datasize / totalRecs;
+                avgRecSize = 10; ::abort(); //d->stats.datasize / totalRecs;
                 maxRecsWhenFull = maxChunkSize / avgRecSize;
                 maxRecsWhenFull = std::min( (unsigned long long)(Chunk::MaxObjectPerChunk + 1) , 130 * maxRecsWhenFull / 100 /* slack */ );
             }

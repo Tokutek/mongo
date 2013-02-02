@@ -60,22 +60,6 @@ namespace mongo {
         return &_reverse;
     }
 
-    DiskLoc nextLoop( NamespaceDetails *nsd, const DiskLoc &prev ) {
-        verify( nsd->capLooped() );
-        DiskLoc next = forward()->next( prev );
-        if ( !next.isNull() )
-            return next;
-        return nsd->firstRecord();
-    }
-
-    DiskLoc prevLoop( NamespaceDetails *nsd, const DiskLoc &curr ) {
-        verify( nsd->capLooped() );
-        DiskLoc prev = reverse()->next( curr );
-        if ( !prev.isNull() )
-            return prev;
-        return nsd->lastRecord();
-    }
-
     ForwardCappedCursor* ForwardCappedCursor::make( NamespaceDetails* nsd,
                                                     const DiskLoc& startLoc ) {
         auto_ptr<ForwardCappedCursor> ret( new ForwardCappedCursor( nsd ) );
@@ -92,18 +76,18 @@ namespace mongo {
             return;
         DiskLoc start = startLoc;
         if ( start.isNull() ) {
+            ::abort();
+#if 0
             if ( !nsd->capLooped() )
                 start = nsd->firstRecord();
             else {
-#if 0
                 start = nsd->capExtent.ext()->firstRecord;
                 if ( !start.isNull() && start == nsd->capFirstNewRecord ) {
                     start = nsd->capExtent.ext()->lastRecord;
                     start = nextLoop( nsd, start );
                 }
-#endif
-                ::abort();
             }
+#endif
         }
         curr = start;
         s = this;
@@ -112,12 +96,14 @@ namespace mongo {
 
     DiskLoc ForwardCappedCursor::next( const DiskLoc &prev ) const {
         verify( nsd );
+        ::abort();
+        return minDiskLoc; // TODO: Redo this class
+#if 0
         if ( !nsd->capLooped() )
             return forward()->next( prev );
 
         DiskLoc i = prev;
         // Last record
-#if 0
         if ( i == nsd->capExtent.ext()->lastRecord )
             return DiskLoc();
         i = nextLoop( nsd, i );
@@ -128,9 +114,8 @@ namespace mongo {
         // If we have just gotten to beginning of capExtent, skip to capFirstNewRecord
         if ( i == nsd->capExtent.ext()->firstRecord )
             i = nsd->capFirstNewRecord;
-#endif
-        ::abort();
         return i;
+#endif
     }
 
     ReverseCappedCursor::ReverseCappedCursor( NamespaceDetails *_nsd, const DiskLoc &startLoc ) :
@@ -139,15 +124,16 @@ namespace mongo {
             return;
         DiskLoc start = startLoc;
         if ( start.isNull() ) {
+            ::abort();
+#if 0
             if ( !nsd->capLooped() ) {
                 start = nsd->lastRecord();
             }
             else {
-#if 0
                 start = nsd->capExtent.ext()->lastRecord;
-#endif
                 ::abort();
             }
+#endif
         }
         curr = start;
         s = this;
@@ -156,12 +142,14 @@ namespace mongo {
 
     DiskLoc ReverseCappedCursor::next( const DiskLoc &prev ) const {
         verify( nsd );
+        ::abort();
+        return minDiskLoc;
+#if 0
         if ( !nsd->capLooped() )
             return reverse()->next( prev );
 
         DiskLoc i = prev;
         // Last record
-#if 0
         if ( nsd->capFirstNewRecord == nsd->capExtent.ext()->firstRecord ) {
             if ( i == nextLoop( nsd, nsd->capExtent.ext()->lastRecord ) ) {
                 return DiskLoc();
@@ -183,8 +171,8 @@ namespace mongo {
         if ( i == nsd->capExtent.ext()->lastRecord )
             i = reverse()->next( nsd->capFirstNewRecord );
 
-#endif
         ::abort();
         return i;
+#endif
     }
 } // namespace mongo

@@ -498,7 +498,8 @@ namespace mongo {
                                 //would be faster but requires index: DiskLoc loc = Helpers::findById(nsd, pattern);
                                 if( !loc.isNull() ) {
                                     try {
-                                        nsd->cappedTruncateAfter(d.ns, loc, true);
+                                        // TODO: TokuDB: Do we need to do this? How?
+                                        //nsd->cappedTruncateAfter(d.ns, loc, true);
                                     }
                                     catch(DBException& e) {
                                         if( e.getCode() == 13415 ) {
@@ -575,7 +576,8 @@ namespace mongo {
         // clean up oplog
         LOG(2) << "replSet rollback truncate oplog after " << h.commonPoint.toStringPretty() << rsLog;
         // todo: fatal error if this throws?
-        oplogDetails->cappedTruncateAfter(rsoplog, h.commonPointOurDiskloc, false);
+        // TODO: TokuDB: Do we need to do this? How?
+        //oplogDetails->cappedTruncateAfter(rsoplog, h.commonPointOurDiskloc, false);
 
         /* reset cached lastoptimewritten and h value */
         loadLastOpTimeWritten();

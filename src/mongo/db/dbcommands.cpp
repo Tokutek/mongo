@@ -1412,7 +1412,7 @@ namespace mongo {
             int numExtents;
             BSONArrayBuilder extents;
 
-            result.appendNumber( "storageSize" , nsd->storageSize( &numExtents , verbose ? &extents : 0  ) / scale );
+            //result.appendNumber( "storageSize" , nsd->storageSize( &numExtents , verbose ? &extents : 0  ) / scale );
             result.append( "numExtents" , numExtents );
             result.append( "nindexes" , nsd->nIndexes );
             //result.append( "lastExtentSize" , nsd->lastExtentSize / scale );
@@ -1522,7 +1522,7 @@ namespace mongo {
             long long ncollections = 0;
             long long objects = 0;
             long long size = 0;
-            long long storageSize = 0;
+            //long long storageSize = 0;
             long long numExtents = 0;
             long long indexes = 0;
             long long indexSize = 0;
@@ -1543,7 +1543,7 @@ namespace mongo {
                 // TODO: Get object count and size from tokudb
 
                 int temp;
-                storageSize += nsd->storageSize( &temp );
+                //storageSize += nsd->storageSize( &temp );
                 numExtents += temp;
 
                 indexes += nsd->nIndexes;
@@ -1555,7 +1555,7 @@ namespace mongo {
             result.appendNumber( "objects" , objects );
             result.append      ( "avgObjSize" , objects == 0 ? 0 : double(size) / double(objects) );
             result.appendNumber( "dataSize" , size / scale );
-            result.appendNumber( "storageSize" , storageSize / scale);
+            //result.appendNumber( "storageSize" , storageSize / scale);
             result.appendNumber( "numExtents" , numExtents );
             result.appendNumber( "indexes" , indexes );
             result.appendNumber( "indexSize" , indexSize / scale );
@@ -1888,7 +1888,9 @@ namespace mongo {
                 massert( 13418, "captrunc invalid n", c.advance() );
             }
             DiskLoc end = c.currLoc();
-            nsd->cappedTruncateAfter( ns.c_str(), end, inc );
+            // TODO: TokuDB: Implement me 
+            (void) inc;
+            //nsd->cappedTruncateAfter( ns.c_str(), end, inc );
             return true;
         }
     } capTruncCmd;
@@ -1907,7 +1909,8 @@ namespace mongo {
             string ns = dbname + "." + coll;
             NamespaceDetails *nsd = nsdetails( ns.c_str() );
             massert( 13429, "emptycapped no such collection", nsd );
-            nsd->emptyCappedCollection( ns.c_str() );
+            // TODO: Implement me in tokudb
+            //nsd->emptyCappedCollection( ns.c_str() );
             return true;
         }
     } emptyCappedCmd;
