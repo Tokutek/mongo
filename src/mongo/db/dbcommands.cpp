@@ -1768,6 +1768,7 @@ namespace mongo {
                 // debug SERVER-761
                 NamespaceDetails::IndexIterator ii = nsd->ii();
                 while( ii.more() ) {
+#if 0
                     const IndexDetails &idx = ii.next();
                     if ( !idx.head.isValid() || !idx.info.isValid() ) {
                         log() << "invalid index for ns: " << c << " " << idx.head << " " << idx.info;
@@ -1775,6 +1776,8 @@ namespace mongo {
                             log() << " " << idx.info.obj();
                         log() << endl;
                     }
+#endif
+                    ::abort(); // TODO: Get idx info properly
                 }
 
                 int idNum = nsd->findIdIndex();

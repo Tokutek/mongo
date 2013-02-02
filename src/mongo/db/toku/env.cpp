@@ -295,7 +295,9 @@ namespace toku {
 
         // open the db for this index name if it isn't already
         if (db == NULL) {
-            db = open_db(db_name, idx.info.obj());
+            ::abort();
+            //db = open_db(db_name, idx.info.obj());
+            db = open_db(db_name, mongo::BSONObj()); // TODO: This prevents unused warning
             set_db_descriptor(db, idx.keyPattern());
         }
         invariant(db);

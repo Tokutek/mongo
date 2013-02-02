@@ -137,12 +137,14 @@ namespace mongo {
            this is a DiscLoc of an IndexDetails info
            should have a key field
          */
+#if 0
         explicit IndexSpec( const DiskLoc& loc ) {
             reset( loc );
         }
+#endif
 
         void reset( const BSONObj& info );
-        void reset( const DiskLoc& infoLoc ) { reset(infoLoc.obj()); }
+        //void reset( const DiskLoc& infoLoc ) { reset(infoLoc.obj()); }
         void reset( const IndexDetails * details );
 
         void getKeys( const BSONObj &obj, BSONObjSet &keys ) const;
@@ -169,8 +171,6 @@ namespace mongo {
 
     protected:
 
-        int indexVersion() const;
-        
         IndexSuitability _suitability( const BSONObj& query , const BSONObj& order ) const ;
 
         BSONSizeTracker _sizeTracker;

@@ -42,11 +42,9 @@ namespace mongo {
 
 
     BtreeCursor* BtreeCursor::make( NamespaceDetails * nsd , int idxNo , const IndexDetails& indexDetails ) {
-        int v = indexDetails.version();
+        //int v = indexDetails.version();
         
-        // TODO: Get rid of version
-
-        if( v == 2 ) 
+        //if( v == 2 ) 
             return new TokuDBCursor( nsd , idxNo , indexDetails );
 
 #if 0
@@ -55,11 +53,11 @@ namespace mongo {
         
         if( v == 0 ) 
             return new BtreeCursorImpl<V0>( nsd , idxNo , indexDetails );
-#endif
 
         dassert( IndexDetails::isASupportedIndexVersionNumber(v) );
         uasserted(14800, str::stream() << "unsupported index version " << v);
         return 0; // not reachable
+#endif
     }
 
     // TODO: Get rid of all but one of these static constructors
@@ -117,7 +115,9 @@ namespace mongo {
         startKey = _bounds->startKey();
         _boundsIterator->advance( startKey ); // handles initialization
         _boundsIterator->prepDive();
-        bucket = indexDetails.head;
+        // TODO: TokuDB: Get rid of the bucket member.
+        //bucket = indexDetails.head;
+        ::abort();
     }
 
     /** Properly destroy forward declared class members. */

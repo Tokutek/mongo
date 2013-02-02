@@ -22,7 +22,6 @@
 
 #include <vector>
 
-#include "mongo/db/diskloc.h"
 #include "mongo/db/indexkey.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/key.h"
@@ -45,7 +44,8 @@ namespace mongo {
          * value.  If we create a btree class, we can provide a btree object
          * to clients instead of 'head'.
          */
-        DiskLoc head;
+        //DiskLoc head;
+        // TODO: TokuDB this will probably be an open DB* object.
 
         /* Location of index info object. Format:
 
@@ -56,7 +56,8 @@ namespace mongo {
            This object is in the system.indexes collection.  Note that since we
            have a pointer to the object here, the object in system.indexes MUST NEVER MOVE.
         */
-        DiskLoc info;
+        //DiskLoc info;
+        // TODO: TokuDB this stuff will probably go in the descriptor
 
         /* extract key value from the query object
            e.g., if key() == { x : 1 },
@@ -79,7 +80,9 @@ namespace mongo {
            e.g., { lastname:1, firstname:1 }
         */
         BSONObj keyPattern() const {
-            return info.obj().getObjectField("key");
+            ::abort();
+            return BSONObj();
+            //return info.obj().getObjectField("key");
         }
 
         /**
@@ -95,6 +98,7 @@ namespace mongo {
         // returns name of this index's storage area
         // database.table.$index
         string indexNamespace() const {
+#if 0
             BSONObj io = info.obj();
             string s;
             s.reserve(Namespace::MaxNsLen);
@@ -103,11 +107,18 @@ namespace mongo {
             s += ".$";
             s += io.getStringField("name");
             return s;
+#endif
+            ::abort();
+            return string();
         }
 
         string indexName() const { // e.g. "ts_1"
+#if 0
             BSONObj io = info.obj();
             return io.getStringField("name");
+#endif
+            ::abort();
+            return string();
         }
 
         static bool isIdIndexPattern( const BSONObj &pattern ) {
@@ -131,30 +142,24 @@ namespace mongo {
            but the collection we index, its name.
            */
         string parentNS() const {
+#if 0
             BSONObj io = info.obj();
             return io.getStringField("ns");
-        }
-
-        static int versionForIndexObj( const BSONObj &obj ) {
-            BSONElement e = obj["v"];
-            if( e.type() == NumberInt ) 
-                return e._numberInt();
-            // should normally be an int.  this is for backward compatibility
-            int v = e.numberInt();
-            uassert(14802, "index v field should be Integer type", v == 0);
-            return v;            
-        }
-        
-        int version() const {
-            return versionForIndexObj( info.obj() );
+#endif
+            ::abort();
+            return string();
         }
 
         /** @return true if index has unique constraint */
         bool unique() const {
+#if 0
             BSONObj io = info.obj();
             return io["unique"].trueValue() ||
                    /* temp: can we juse make unique:true always be there for _id and get rid of this? */
                    isIdIndex();
+#endif
+            ::abort();
+            return false;
         }
 
         /** delete this index.  does NOT clean up the system catalog
@@ -165,7 +170,9 @@ namespace mongo {
         const IndexSpec& getSpec() const;
 
         string toString() const {
-            return info.obj().toString();
+            //return info.obj().toString();
+            ::abort();
+            return string();
         }
 
 #if 0

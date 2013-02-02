@@ -85,12 +85,12 @@ namespace mongo {
             catch(DBException& ) {
                 log(2) << "IndexDetails::kill(): couldn't drop ns " << ns << endl;
             }
+            ::abort();
+#if 0
             head.setInvalid();
             info.setInvalid();
 
             // clean up in system.indexes.  we do this last on purpose.
-            ::abort();
-#if 0
             int n = removeFromSysIndexes(pns.c_str(), name.c_str());
             wassert( n == 1 );
 #endif
@@ -107,15 +107,18 @@ namespace mongo {
 
     const IndexSpec& IndexDetails::getSpec() const {
         SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
-        return NamespaceDetailsTransient::get_inlock( info.obj()["ns"].valuestr() ).getIndexSpec( this );
+        ::abort();
+        return NamespaceDetailsTransient::get_inlock( /* info.obj() */ BSONObj()["ns"].valuestr() ).getIndexSpec( this );
     }
 
     void IndexSpec::reset( const IndexDetails * details ) {
         _details = details;
-        reset( details->info );
+        //reset( details->info );
+        ::abort();
     }
 
     void IndexSpec::reset( const BSONObj& _info ) {
+#if 0
         info = _info;
         keyPattern = info["key"].embeddedObjectUserCheck();
         if ( keyPattern.objsize() == 0 ) {
@@ -123,5 +126,7 @@ namespace mongo {
             verify(false);
         }
         _init();
+#endif
+        ::abort();
     }
 }

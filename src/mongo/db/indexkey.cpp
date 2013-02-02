@@ -31,7 +31,7 @@ namespace mongo {
      1 is new version
      2 is tokudb
      */
-    const int DefaultIndexVersionNumber = 2;
+    //const int DefaultIndexVersionNumber = 2;
     
     map<string,IndexPlugin*> * IndexPlugin::_plugins;
 
@@ -404,6 +404,9 @@ namespace mongo {
     };
     
     void IndexSpec::getKeys( const BSONObj &obj, BSONObjSet &keys ) const {
+        // TODO: TokuDB: We'll probably steal the v1 key format code (case 1)
+        ::abort();
+#if 0
         switch( indexVersion() ) {
             case 0: {
                 KeyGeneratorV0 g( *this );
@@ -420,6 +423,7 @@ namespace mongo {
             default:
                 massert( 15869, "Invalid index version for key generation.", false );
         }
+#endif
     }
 
     bool anyElementNamesMatch( const BSONObj& a , const BSONObj& b ) {
@@ -455,13 +459,6 @@ namespace mongo {
         return _spec->_suitability( query , order );
     }
     
-    int IndexSpec::indexVersion() const {
-        if ( !info.hasField( "v" ) ) {
-            return DefaultIndexVersionNumber;
-        }
-        return IndexDetails::versionForIndexObj( info );
-    }    
-
     bool IndexType::scanAndOrderRequired( const BSONObj& query , const BSONObj& order ) const {
         return ! order.isEmpty();
     }

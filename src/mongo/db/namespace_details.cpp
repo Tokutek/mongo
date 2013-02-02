@@ -769,6 +769,11 @@ namespace mongo {
     }
 
     void renameNamespace( const char *from, const char *to, bool stayTemp) {
+        // TODO: TokuDB: Pay attention to the usage of the NamespaceIndex object.
+        // That's still important. Anything to do with disklocs (ie: storage code)
+        // is probably not.
+        ::abort();
+#if 0
         NamespaceIndex *ni = nsindex( from );
         verify( ni );
         verify( ni->details( from ) );
@@ -844,6 +849,7 @@ namespace mongo {
             renameNamespace( oldIndexNs.c_str(), newIndexNs.c_str(), false );
             deleteObjects( s.c_str(), oldIndexSpec.getOwned(), true, false, true );
         }
+#endif
     }
 
     bool legalClientSystemNS( const string& ns , bool write ) {

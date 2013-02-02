@@ -153,7 +153,8 @@ namespace mongo {
         invariant(r == 0);
 
         // see if this cursor is over a clustering index
-        clustering = indexDetails.info.obj()["clustering"].trueValue();
+        //clustering = indexDetails.info.obj()["clustering"].trueValue();
+        ::abort();
 
         // TODO: prelock range from startKey to endKey to get prefetching
         // position the cursor over the first key >= startKey

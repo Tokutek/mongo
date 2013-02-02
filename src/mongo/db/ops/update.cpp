@@ -358,11 +358,14 @@ namespace mongo {
                     
                     // tokudb: modsIsIndexed must be true if there exists at least one clustering index
                     for (int idx_i = 0; idx_i < d->nIndexesBeingBuilt(); idx_i++) {
+#if 0
                         IndexDetails &idx = d->idx(idx_i);
                         if (idx.info.obj()["clustering"].trueValue()) {
                             modsIsIndexed = true;
                             break;
                         }
+#endif
+                        ::abort(); // TODO: Get clustering value from the index details
                     }
 
                     bool willAdvanceCursor = multi && c->ok() && ( modsIsIndexed || ! mss->canApplyInPlace() );
