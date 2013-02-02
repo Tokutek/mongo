@@ -69,7 +69,6 @@ namespace mongo {
 
     boost::filesystem::path NamespaceIndex::path() const {
         boost::filesystem::path ret( dir_ );
-        ::abort();
 #if 0
         if ( directoryperdb )
             ret /= database_;
@@ -79,7 +78,7 @@ namespace mongo {
     }
 
     void NamespaceIndex::maybeMkdir() const {
-        ::abort();
+        // Directory per db is always false, so this should do nothing
 #if 0
         if ( !directoryperdb )
             return;
