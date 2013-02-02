@@ -97,9 +97,11 @@ namespace mongo {
         ::abort();
     }
 
+    static DiskLoc hackloc;
     DiskLoc &NamespaceDetails::cappedFirstDeletedInCurExtent() {
         ::abort();
-            return cappedListOfAllDeletedRecords();
+        return hackloc;
+            //return cappedListOfAllDeletedRecords();
 #if 0
         if ( cappedLastDelRecLastExtent().isNull() )
             return cappedListOfAllDeletedRecords();
@@ -456,6 +458,8 @@ namespace mongo {
     }
 
     void NamespaceDetails::emptyCappedCollection( const char *ns ) {
+        ::abort(); // TODO: Redo capped collections
+#if 0
         DEV verify( this == nsdetails(ns) );
         massert( 13424, "collection must be capped", isCapped() );
         massert( 13425, "background index build in progress", !indexBuildInProgress );
@@ -481,8 +485,8 @@ namespace mongo {
         // attributes.
         NamespaceDetails *t = writingWithoutExtra();
 
-        t->cappedLastDelRecLastExtent() = DiskLoc();
-        t->cappedListOfAllDeletedRecords() = DiskLoc();
+        //t->cappedLastDelRecLastExtent() = DiskLoc();
+        //t->cappedListOfAllDeletedRecords() = DiskLoc();
 
         // preserve firstExtent/lastExtent
         t->capExtent = firstExtent;
@@ -521,6 +525,7 @@ namespace mongo {
             ::abort();
         }
         
+#endif
     }
 
 }

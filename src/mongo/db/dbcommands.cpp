@@ -1229,6 +1229,8 @@ namespace mongo {
                  "\nnote: This command may take a while to run";
         }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
+            ::abort(); // TODO: Use keyrange or something for this
+#if 0
             Timer timer;
 
             string ns = jsobj.firstElement().String();
@@ -1318,11 +1320,15 @@ namespace mongo {
             result.appendNumber( "numObjects" , numObjects );
             result.append( "millis" , timer.millis() );
             return true;
+#endif
         }
     } cmdDatasize;
 
     namespace {
         long long getIndexSizeForCollection(string db, string ns, BSONObjBuilder* details=NULL, int scale = 1 ) {
+            ::abort();
+            return 0;
+#if 0
             Lock::assertAtLeastReadLocked(ns);
 
             NamespaceDetails * nsd = nsdetails( ns.c_str() );
@@ -1356,6 +1362,7 @@ namespace mongo {
                     details->appendNumber( d.indexName() , datasize / scale );
             }
             return totalSize;
+#endif
         }
     }
 
@@ -1395,11 +1402,12 @@ namespace mongo {
 
             bool verbose = jsobj["verbose"].trueValue();
 
-            long long size = nsd->stats.datasize / scale;
-            result.appendNumber( "count" , nsd->stats.nrecords );
-            result.appendNumber( "size" , size );
-            if( nsd->stats.nrecords )
-                result.append      ( "avgObjSize" , double(size) / double(nsd->stats.nrecords) );
+            //long long size = nsd->stats.datasize / scale;
+            //result.appendNumber( "count" , nsd->stats.nrecords );
+            //result.appendNumber( "size" , size );
+            //if( nsd->stats.nrecords )
+            //    result.append      ( "avgObjSize" , double(size) / double(nsd->stats.nrecords) );
+            // TODO: TokuDB provide our version of stats
 
             int numExtents;
             BSONArrayBuilder extents;
@@ -1407,14 +1415,15 @@ namespace mongo {
             result.appendNumber( "storageSize" , nsd->storageSize( &numExtents , verbose ? &extents : 0  ) / scale );
             result.append( "numExtents" , numExtents );
             result.append( "nindexes" , nsd->nIndexes );
-            result.append( "lastExtentSize" , nsd->lastExtentSize / scale );
+            //result.append( "lastExtentSize" , nsd->lastExtentSize / scale );
             //result.append( "paddingFactor" , nsd->paddingFactor() );
             result.append( "systemFlags" , nsd->systemFlags() );
             result.append( "userFlags" , nsd->userFlags() );
 
-            BSONObjBuilder indexSizes;
-            result.appendNumber( "totalIndexSize" , getIndexSizeForCollection(dbname, ns, &indexSizes, scale) / scale );
-            result.append("indexSizes", indexSizes.obj());
+            //BSONObjBuilder indexSizes;
+            //result.appendNumber( "totalIndexSize" , getIndexSizeForCollection(dbname, ns, &indexSizes, scale) / scale );
+            //result.append("indexSizes", indexSizes.obj());
+            // TODO: Get index sizes for tokudb
 
             if ( nsd->isCapped() ) {
                 result.append( "capped" , nsd->isCapped() );
@@ -1529,8 +1538,9 @@ namespace mongo {
                 }
 
                 ncollections += 1;
-                objects += nsd->stats.nrecords;
-                size += nsd->stats.datasize;
+                //objects += nsd->stats.nrecords;
+                //size += nsd->stats.datasize;
+                // TODO: Get object count and size from tokudb
 
                 int temp;
                 storageSize += nsd->storageSize( &temp );

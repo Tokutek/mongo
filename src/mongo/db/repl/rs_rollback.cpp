@@ -525,6 +525,7 @@ namespace mongo {
                             }
                         }
                         // did we just empty the collection?  if so let's check if it even exists on the source.
+#if 0
                         if( nsd->stats.nrecords == 0 ) {
                             try {
                                 string sys = cc().database()->name + ".system.namespaces";
@@ -547,6 +548,8 @@ namespace mongo {
                                 log() << "replSet warning rollback error querying for existence of " << d.ns << " at the primary, ignoring" << rsLog;
                             }
                         }
+#endif
+                        ::abort(); // TODO: Determine if anything needs to be done above
                     }
                 }
                 else {

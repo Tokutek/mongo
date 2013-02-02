@@ -59,6 +59,7 @@ namespace mongo {
         enum { NIndexesMax = 64, NIndexesExtra = 30, NIndexesBase  = 10 };
 
         /*-------- data fields, as present on disk : */
+#if 0
         DiskLoc firstExtent;
         DiskLoc lastExtent;
         /* NOTE: capped collections v1 override the meaning of deletedList.
@@ -76,6 +77,9 @@ namespace mongo {
             long long nrecords;
         } stats;
         int lastExtentSize;
+#endif
+        // TODO: TokuDB: stats can be replaced with our stats object, and the diskloc
+        // extent info is probably useless.
         int nIndexes;
     private:
         // ofs 192
@@ -163,8 +167,8 @@ namespace mongo {
         void setMaxCappedDocs( long long max );
 
 
-        DiskLoc& cappedListOfAllDeletedRecords() { return deletedList[0]; }
-        DiskLoc& cappedLastDelRecLastExtent()    { return deletedList[1]; }
+        //DiskLoc& cappedListOfAllDeletedRecords() { return deletedList[0]; }
+        //DiskLoc& cappedLastDelRecLastExtent()    { return deletedList[1]; }
         void cappedDumpDelInfo();
         bool capLooped() const { return _isCapped && capFirstNewRecord.isValid();  }
         bool inCapExtent( const DiskLoc &dl ) const;
@@ -320,9 +324,12 @@ namespace mongo {
         long long storageSize( int * numExtents = 0 , BSONArrayBuilder * extentInfo = 0 ) const;
 
         int averageObjectSize() {
+#if 0
             if ( stats.nrecords == 0 )
                 return 5;
             return (int) (stats.datasize / stats.nrecords);
+#endif
+            return 10; // TODO: Return something meaningful
         }
 
         NamespaceDetails *writingWithoutExtra() {
@@ -567,11 +574,15 @@ namespace mongo {
         void kill_ns(const char *ns);
 
         bool find(const char *ns, DiskLoc& loc) {
+#if 0
             NamespaceDetails *l = details(ns);
             if ( l ) {
                 loc = l->firstExtent;
                 return true;
             }
+            return false;
+#endif
+            ::abort(); // TODO: Remove this function, fix the callers
             return false;
         }
 

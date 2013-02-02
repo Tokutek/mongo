@@ -37,7 +37,9 @@ namespace mongo {
         
         // count of all objects
         if ( query.isEmpty() ) {
-            return applySkipLimit( d->stats.nrecords , cmd );
+            // TODO: TokuDB: Return our version of stats.nrecords
+            ::abort();
+            //return applySkipLimit( d->stats.nrecords , cmd );
         }
         
         ::abort();

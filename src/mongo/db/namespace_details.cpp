@@ -37,9 +37,9 @@ namespace mongo {
 
     NamespaceDetails::NamespaceDetails( const DiskLoc &loc, bool capped ) {
         /* be sure to initialize new fields here -- doesn't default to zeroes the way we use it */
-        firstExtent = lastExtent = capExtent = loc;
-        stats.datasize = stats.nrecords = 0;
-        lastExtentSize = 0;
+        //firstExtent = lastExtent = capExtent = loc;
+        //stats.datasize = stats.nrecords = 0;
+        //lastExtentSize = 0;
         nIndexes = 0;
         _isCapped = capped;
         _maxDocsInCapped = 0x7fffffff;
@@ -49,8 +49,11 @@ namespace mongo {
         // Signal that we are on first allocation iteration through extents.
         capFirstNewRecord.setInvalid();
         // For capped case, signal that we are doing initial extent allocation.
+#if 0
         if ( capped )
             cappedLastDelRecLastExtent().setInvalid();
+#endif
+        ::abort(); // TODO: Capped collections will need to be re-done in TokuDB
         verify( sizeof(dataFileVersion) == 2 );
         dataFileVersion = 0;
         indexFileVersion = 0;

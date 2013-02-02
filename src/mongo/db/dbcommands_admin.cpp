@@ -64,8 +64,12 @@ namespace mongo {
                 return 0;
             }
 
+#if 0
             for ( int i = 0; i < Buckets; i++ )
                 d->deletedList[i].Null();
+#endif
+            ::abort();
+            // TODO: TokuDB: Get rid of this, it is almost certainly not necessary
 
             result.append("ns", dropns.c_str());
             return 1;
