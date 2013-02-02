@@ -30,6 +30,7 @@
 #include "mongo/db/namespace.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/querypattern.h"
+
 #include "mongo/util/hashtab.h"
 
 namespace mongo {
@@ -84,7 +85,6 @@ namespace mongo {
         int _isCapped;                         // there is wasted space here if I'm right (ERH)
         int _maxDocsInCapped;                  // max # of objects for a capped table.  TODO: should this be 64 bit?
 
-        double _paddingFactor;                 // 1.0 = no padding.
         // ofs 386 (16)
         int _systemFlags; // things that the system sets/cares about
     public:
@@ -239,46 +239,6 @@ namespace mongo {
         /* returns index of the first index in which the field is present. -1 if not present. */
         int fieldIsIndexed(const char *fieldName);
 
-        double paddingFactor() const { return _paddingFactor; }
-
-        void setPaddingFactor( double paddingFactor ) {
-            _paddingFactor = paddingFactor; // TODO Transactional // *getDur().writing(&_paddingFactor) = paddingFactor;
-        }
-
-        /* called to indicate that an update fit in place.  
-           fits also called on an insert -- idea there is that if you had some mix and then went to
-           pure inserts it would adapt and PF would trend to 1.0.  note update calls insert on a move
-           so there is a double count there that must be adjusted for below.
-
-           todo: greater sophistication could be helpful and added later.  for example the absolute 
-                 size of documents might be considered -- in some cases smaller ones are more likely 
-                 to grow than larger ones in the same collection? (not always)
-        */
-        void paddingFits() {
-            MONGO_SOMETIMES(sometimes, 4) { // do this on a sampled basis to journal less
-                double x = _paddingFactor - 0.001;
-                if ( x >= 1.0 ) {
-                    setPaddingFactor( x );
-                }
-            }
-        }
-        void paddingTooSmall() {            
-            MONGO_SOMETIMES(sometimes, 4) { // do this on a sampled basis to journal less       
-                /* the more indexes we have, the higher the cost of a move.  so we take that into 
-                   account herein.  note on a move that insert() calls paddingFits(), thus
-                   here for example with no inserts and nIndexes = 1 we have
-                   .001*4-.001 or a 3:1 ratio to non moves -> 75% nonmoves.  insert heavy 
-                   can pushes this down considerably. further tweaking will be a good idea but 
-                   this should be an adequate starting point.
-                */
-                double N = min(nIndexes,7) + 3;
-                double x = _paddingFactor + (0.001 * N);
-                if ( x <= 2.0 ) {
-                    setPaddingFactor( x );
-                }
-            }
-        }
-
         // @return offset in indexes[]
         int findIndexByName(const char *name);
 
@@ -413,9 +373,9 @@ namespace mongo {
     // todo: multiple db's with the same name (repairDatbase) is not handled herein.  that may be 
     //       the way to go, if not used by repair, but need some sort of enforcement / asserts.
     class NamespaceDetailsTransient : boost::noncopyable {
-        BOOST_STATIC_ASSERT( sizeof(NamespaceDetails) == 496 );
+        //BOOST_STATIC_ASSERT( sizeof(NamespaceDetails) == 496 );
 
-        //Database *database;
+        Database *database;
         const string _ns;
         void reset();
         static std::map< string, shared_ptr< NamespaceDetailsTransient > > _nsdMap;
@@ -639,43 +599,12 @@ namespace mongo {
     // (Arguments should include db name)
     void renameNamespace( const char *from, const char *to, bool stayTemp);
 
-
-} // namespace mongo
-
-namespace mongo {
-
-    inline NamespaceIndex* nsindex(const char *ns) {
-#if 0
-        Database *database = cc().database();
-        verify( database );
-        //memconcept::is(database, memconcept::concept::database, ns, sizeof(Database));
-        DEV {
-            char buf[256];
-            nsToDatabase(ns, buf);
-            if ( database->name != buf ) {
-                out() << "ERROR: attempt to write to wrong database\n";
-                out() << " ns:" << ns << '\n';
-                out() << " database->name:" << database->name << endl;
-                verify( database->name == buf );
-            }
-        }
-        return &database->namespaceIndex;
-#endif
-        ::abort();
-        return NULL;
-    }
-
-    inline NamespaceDetails* nsdetails(const char *ns) {
-        // if this faults, did you set the current db first?  (Client::Context + dblock)
-        NamespaceDetails *d = nsindex(ns)->details(ns);
-        if( d ) {
-            //memconcept::is(d, memconcept::concept::nsdetails, ns, sizeof(NamespaceDetails));
-        }
-        return d;
-    }
-
     extern string dbpath; // --dbpath parm
-    //extern bool directoryperdb;
+
+    // Defined in database.cpp
+    // Gets the namespace objects for this client threads' current database.
+    NamespaceIndex* nsindex(const char *ns);
+    NamespaceDetails* nsdetails(const char *ns);
 
 } // namespace mongo
 

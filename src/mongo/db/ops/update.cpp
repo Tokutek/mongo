@@ -384,7 +384,7 @@ namespace mongo {
                             seenObjects.insert( loc );
                         }
 
-                        d->paddingFits();
+                        //d->paddingFits();
                     }
                     else {
                         if ( rs )

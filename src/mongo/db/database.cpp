@@ -476,4 +476,26 @@ namespace mongo {
         return db;
     }
 
+    NamespaceIndex* nsindex(const char *ns) {
+        Database *database = cc().database();
+        verify( database );
+        DEV {
+            char buf[256];
+            nsToDatabase(ns, buf);
+            if ( database->name != buf ) {
+                out() << "ERROR: attempt to write to wrong database\n";
+                out() << " ns:" << ns << '\n';
+                out() << " database->name:" << database->name << endl;
+                verify( database->name == buf );
+            }
+        }
+        return &database->namespaceIndex;
+    }
+
+    NamespaceDetails* nsdetails(const char *ns) {
+        // if this faults, did you set the current db first?  (Client::Context + dblock)
+        NamespaceDetails *d = nsindex(ns)->details(ns);
+        return d;
+    }
+
 } // namespace mongo

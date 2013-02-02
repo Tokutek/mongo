@@ -43,7 +43,6 @@ namespace mongo {
         nIndexes = 0;
         _isCapped = capped;
         _maxDocsInCapped = 0x7fffffff;
-        _paddingFactor = 1.0;
         _systemFlags = 0;
         _userFlags = 0;
         capFirstNewRecord = DiskLoc();
@@ -90,31 +89,6 @@ namespace mongo {
     }
 
     unsigned lenForNewNsFiles = 16 * 1024 * 1024;
-
-#if defined(_DEBUG)
-    void NamespaceDetails::dump(const Namespace& k) {
-        if( !cmdLine.dur )
-            cout << "ns offsets which follow will not display correctly with --journal disabled" << endl;
-
-        size_t ofs = 1; // 1 is sentinel that the find call below failed
-        privateViews.find(this, /*out*/ofs);
-
-        cout << "ns" << hex << setw(8) << ofs << ' ';
-        cout << k.toString() << '\n';
-
-        if( k.isExtra() ) {
-            cout << "ns\t extra" << endl;
-            return;
-        }
-
-        cout << "ns         " << firstExtent.toString() << ' ' << lastExtent.toString() << " nidx:" << nIndexes << '\n';
-        cout << "ns         " << stats.datasize << ' ' << stats.nrecords << ' ' << nIndexes << '\n';
-        cout << "ns         " << isCapped() << ' ' << _paddingFactor << ' ' << _systemFlags << ' ' << _userFlags << ' ' << dataFileVersion << '\n';
-        cout << "ns         " << multiKeyIndexBits << ' ' << indexBuildInProgress << '\n';
-        cout << "ns         " << (int) reserved[0] << ' ' << (int) reserved[59];
-        cout << endl;
-    }
-#endif
 
     void NamespaceDetails::onLoad(const Namespace& k) {
 
