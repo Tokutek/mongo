@@ -320,8 +320,8 @@ ReplSetTest.prototype.callIsMaster = function() {
       }
 
     }
-    catch(err) {
-      print("ReplSetTest Could not call ismaster on node " + i);
+    catch (err) {
+      print("ReplSetTest Could not call ismaster on node " + i + ": " + tojson(err));
     }
   }
 
