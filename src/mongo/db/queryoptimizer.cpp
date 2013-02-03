@@ -266,7 +266,9 @@ doneCheckOrder:
         }
     }
 
-    shared_ptr<Cursor> QueryPlan::newCursor( const DiskLoc &startLoc ) const {
+    // XXX This is used by the oplog to start a cursor at some known diskloc, I think.
+    // XXX We removed the startLoc parameter
+    shared_ptr<Cursor> QueryPlan::newCursor() const {
 
         if ( _type ) {
             // hopefully safe to use original query in these contexts - don't think we can mix type with $or clause separation yet
@@ -289,7 +291,8 @@ doneCheckOrder:
             //return findTableScan( _frs.ns(), _order, startLoc );
         }
                 
-        massert( 10363 ,  "newCursor() with start location not implemented for indexed plans", startLoc.isNull() );
+        // TokuDB: There is no startLoc anymore
+        //massert( 10363 ,  "newCursor() with start location not implemented for indexed plans", startLoc.isNull() );
 
         if ( _startOrEndSpec ) {
             // we are sure to spec _endKeyInclusive
