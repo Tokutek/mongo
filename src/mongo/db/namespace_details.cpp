@@ -35,7 +35,9 @@ namespace mongo {
 
     BSONObj idKeyPattern = fromjson("{\"_id\":1}");
 
-    NamespaceDetails::NamespaceDetails( const DiskLoc &loc, bool capped ) {
+    //NamespaceDetails::NamespaceDetails( const DiskLoc &loc, bool capped )
+    NamespaceDetails::NamespaceDetails( bool capped ) {
+
         /* be sure to initialize new fields here -- doesn't default to zeroes the way we use it */
         //firstExtent = lastExtent = capExtent = loc;
         //stats.datasize = stats.nrecords = 0;

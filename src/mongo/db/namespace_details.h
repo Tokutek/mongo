@@ -24,7 +24,6 @@
 
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/d_concurrency.h"
-#include "mongo/db/diskloc.h"
 #include "mongo/db/index.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/namespace.h"
@@ -108,7 +107,8 @@ namespace mongo {
         char reserved[72];
         /*-------- end data 496 bytes */
     public:
-        explicit NamespaceDetails( const DiskLoc &loc, bool _capped );
+        //explicit NamespaceDetails( const DiskLoc &loc, bool _capped );
+        explicit NamespaceDetails( bool _capped );
 
         /* called when loaded from disk */
         void onLoad(const Namespace& k);

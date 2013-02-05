@@ -24,6 +24,9 @@
 #include "queryutil.h"
 #include "projection.h"
 
+// TODO: Remove me soon
+#include "mongo/db/diskloc.h"
+
 namespace mongo {
 
     static const int ScanAndOrderMemoryLimitExceededAssertionCode = 10128;

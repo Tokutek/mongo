@@ -16,7 +16,8 @@
 
 #include <tokudb.h>
 
-#include "bson/bsonobj.h"
+#include "mongo/bson/bsonobj.h"
+#include "mongo/db/diskloc.h"
 
 #define UNUSED __attribute__((__unused__))
 
