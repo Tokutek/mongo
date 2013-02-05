@@ -32,8 +32,6 @@ namespace mongo {
     //class MongoDataFile;
     class DiskLoc;
 
-    template< class Version > class BtreeBucket;
-
 #pragma pack(1)
     /** represents a disk location/offset on disk in a database.  64 bits.
         it is assumed these will be passed around by value a lot so don't do anything to make them large
