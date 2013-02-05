@@ -78,6 +78,7 @@ namespace mongo {
          *   otherwise, marks loc as sent.
          * @return false if the loc has not been seen
          */
+#if 0
         virtual bool getsetdup(DiskLoc loc) {
             if( _multikey ) {
                 pair<set<DiskLoc>::iterator, bool> p = _dups.insert(loc);
@@ -85,6 +86,7 @@ namespace mongo {
             }
             return false;
         }
+#endif
 
         virtual bool modifiedKeys() const { return _multikey; }
         virtual bool isMultiKey() const { return _multikey; }

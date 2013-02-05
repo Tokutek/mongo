@@ -653,7 +653,7 @@ namespace mongo {
         virtual BSONObj indexKeyPattern() { return _c->indexKeyPattern(); }
 
         /** Deduping documents from a prior cursor is handled by the matcher. */
-        virtual bool getsetdup(DiskLoc loc) { return _c->getsetdup( loc ); }
+        //virtual bool getsetdup(DiskLoc loc) { return _c->getsetdup( loc ); }
 
         virtual bool modifiedKeys() const { return true; }
 

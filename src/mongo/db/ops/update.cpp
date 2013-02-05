@@ -291,10 +291,13 @@ namespace mongo {
                 ::abort();
                 DiskLoc loc = minDiskLoc; //c->currLoc();
 
+#if 0
                 if ( c->getsetdup( loc ) && autoDedup ) {
                     c->advance();
                     continue;
                 }
+#endif
+                ::abort();
 
                 //BSONObj js = BSONObj::make(r);
 

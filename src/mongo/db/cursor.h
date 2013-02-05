@@ -129,7 +129,7 @@ namespace mongo {
              if loc has already been sent, returns true.
              otherwise, marks loc as sent.
         */
-        virtual bool getsetdup(DiskLoc loc) = 0;
+        //virtual bool getsetdup(DiskLoc loc) = 0;
 
         virtual bool isMultiKey() const = 0;
 
@@ -248,7 +248,7 @@ namespace mongo {
             ::abort();
         }
         virtual bool tailable() { return tailable_; }
-        virtual bool getsetdup(DiskLoc loc) { return false; }
+        //virtual bool getsetdup(DiskLoc loc) { return false; }
         virtual bool isMultiKey() const { return false; }
         virtual bool modifiedKeys() const { return false; }
         virtual bool supportGetMore() { return true; }

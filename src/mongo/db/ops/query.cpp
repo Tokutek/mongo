@@ -341,11 +341,13 @@ namespace mongo {
     }
     
     bool OrderedBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
-        ::abort();
         DiskLoc loc = minDiskLoc;//_cursor->currLoc();
+#if 0
         if ( _cursor->getsetdup( loc ) ) {
             return orderedMatch = false;
         }
+#endif
+        ::abort();
         if ( _skip > 0 ) {
             --_skip;
             return orderedMatch = false;
@@ -382,10 +384,12 @@ namespace mongo {
 
     bool ReorderBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
         orderedMatch = false;
-        ::abort();
+#if 0
         if ( _cursor->getsetdup( /* _cursor->currLoc() */ minDiskLoc) ) {
             return false;
         }
+#endif
+        ::abort();
         _handleMatchNoDedup();
         return true;
     }
@@ -455,9 +459,12 @@ namespace mongo {
     bool HybridBuildStrategy::handleReorderMatch() {
         ::abort();
         DiskLoc loc = minDiskLoc; //_cursor->currLoc();
+#if 0
         if ( _scanAndOrderDups.getsetdup( loc ) ) {
             return false;
         }
+#endif
+        ::abort();
         try {
             _reorderBuild->_handleMatchNoDedup();
         } catch ( const UserException &e ) {

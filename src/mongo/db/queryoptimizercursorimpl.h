@@ -55,11 +55,14 @@ namespace mongo {
         }
         bool knowMatch() const { return _match != Unknown; }
         void countMatch( const DiskLoc &loc ) {
+#if 0
             if ( !_counted && _match == True && !getsetdup( loc ) ) {
                 ++_cumulativeCount;
                 ++_count;
                 _counted = true;
             }
+#endif
+            ::abort();
         }
         bool wouldCountMatch( const DiskLoc &loc ) const {
             return !_counted && _match == True && !getdup( loc );
@@ -87,6 +90,7 @@ namespace mongo {
         long long nscanned() const { return _nscanned; }
         long long &aggregateNscanned() const { return _aggregateNscanned; }
     private:
+#if 0
         bool getsetdup( const DiskLoc &loc ) {
             if ( !_checkDups ) {
                 return false;
@@ -94,6 +98,7 @@ namespace mongo {
             pair<set<DiskLoc>::iterator, bool> p = _dups.insert( loc );
             return !p.second;
         }
+#endif
         bool getdup( const DiskLoc &loc ) const {
             if ( !_checkDups ) {
                 return false;
@@ -118,10 +123,12 @@ namespace mongo {
             _vec.reserve( 250 );
         }
         /** @return true if @param 'loc' already added to the set, false if adding to the set in this call. */
+#if 0
         bool getsetdup( const DiskLoc &loc ) {
             access();
             return vec() ? getsetdupVec( loc ) : getsetdupSet( loc );
         }
+#endif
         /** @return true when @param loc in the set. */
         bool getdup( const DiskLoc &loc ) {
             access();

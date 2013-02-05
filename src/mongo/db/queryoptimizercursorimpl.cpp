@@ -345,6 +345,7 @@ namespace mongo {
 
         virtual string toString() { return "QueryOptimizerCursor"; }
         
+#if 0
         virtual bool getsetdup(DiskLoc loc) {
             if ( _takeover ) {
                 if ( getdupInternal( loc ) ) {
@@ -355,6 +356,7 @@ namespace mongo {
             assertOk();
             return getsetdupInternal( loc );                
         }
+#endif
         
         /** Matcher needs to know if the the cursor being forwarded to is multikey. */
         virtual bool isMultiKey() const {
@@ -555,9 +557,11 @@ namespace mongo {
         }
 
         /** Insert and check for dups before takeover occurs */
+#if 0
         bool getsetdupInternal(const DiskLoc &loc) {
-            return _dups.getsetdup( loc );
+            //return _dups.getsetdup( loc );
         }
+#endif
 
         /** Just check for dups - after takeover occurs */
         bool getdupInternal(const DiskLoc &loc) {

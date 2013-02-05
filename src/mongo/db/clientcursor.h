@@ -291,7 +291,7 @@ namespace mongo {
 
         void fillQueryResultFromObj( BufBuilder &b, const MatchDetails* details = NULL ) const;
 
-        bool currentIsDup() { /* TODO: Figure out what all this dup stuff is about */ ::abort(); return _c->getsetdup( /* _c->currLoc() */ minDiskLoc ); }
+        bool currentIsDup() { /* TODO: Figure out what all this dup stuff is about */ ::abort(); return false; /* _c->getsetdup(  _c->currLoc() minDiskLoc ); */ }
 
         bool currentMatches() {
             if ( ! _c->matcher() )
