@@ -262,7 +262,7 @@ namespace mongo {
         bool ok() { return _c->ok(); }
         bool advance() { return _c->advance(); }
         BSONObj current() { return _c->current(); }
-        DiskLoc currLoc() { return _c->currLoc(); }
+        //DiskLoc currLoc() { return _c->currLoc(); }
         BSONObj currKey() const { return _c->currKey(); }
 
         /**
@@ -291,7 +291,7 @@ namespace mongo {
 
         void fillQueryResultFromObj( BufBuilder &b, const MatchDetails* details = NULL ) const;
 
-        bool currentIsDup() { return _c->getsetdup( _c->currLoc() ); }
+        bool currentIsDup() { /* TODO: Figure out what all this dup stuff is about */ ::abort(); return _c->getsetdup( /* _c->currLoc() */ minDiskLoc ); }
 
         bool currentMatches() {
             if ( ! _c->matcher() )

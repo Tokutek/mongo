@@ -288,7 +288,8 @@ namespace mongo {
                 }
 
                 //Record* r = c->_current();
-                DiskLoc loc = c->currLoc();
+                ::abort();
+                DiskLoc loc = minDiskLoc; //c->currLoc();
 
                 if ( c->getsetdup( loc ) && autoDedup ) {
                     c->advance();
@@ -336,9 +337,10 @@ namespace mongo {
 
                             // SERVER-5198 Advance past the document to be modified, provided
                             // deduplication is enabled, but see SERVER-5725.
-                            while( c->ok() && loc == c->currLoc() ) {
-                                c->advance();
-                            }
+                            //while( c->ok() && loc == c->currLoc() ) {
+                            //    c->advance();
+                            //}
+                            // TODO: Look up SERVER-5725 and see if it matters to TokuDB
                         }
                     }
 

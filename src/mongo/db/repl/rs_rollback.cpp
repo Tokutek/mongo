@@ -244,7 +244,8 @@ namespace mongo {
                     log() << "replSet rollback found matching events at " << ourTime.toStringPretty() << rsLog;
                     log() << "replSet rollback findcommonpoint scanned : " << scanned << rsLog;
                     h.commonPoint = ourTime;
-                    h.commonPointOurDiskloc = u.currLoc();
+                    ::abort(); // TODO: Why does this code need disklocs?
+                    //h.commonPointOurDiskloc = u.currLoc();
                     return;
                 }
 

@@ -88,9 +88,12 @@ namespace mongo {
                                                   QueryPlanSelectionPolicy::indexOnly() :
                                                   QueryPlanSelectionPolicy::any() );
         while( c->ok() ) {
+#if 0
             if ( c->currentMatches() && !c->getsetdup( c->currLoc() ) ) {
                 return c->currLoc();
             }
+#endif
+            ::abort(); // TODO: Wrangle the dup stuff above
             c->advance();
         }
         return DiskLoc();
@@ -144,9 +147,12 @@ namespace mongo {
         shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor( ns.c_str(), query );
 
         while( c->ok() ) {
+#if 0
             if ( c->currentMatches() && !c->getsetdup( c->currLoc() ) ) {
                 all.push_back( c->current() );
             }
+#endif
+            ::abort();
             c->advance();
         }
 
@@ -318,6 +324,7 @@ namespace mongo {
                     break;
                 }
                 
+#if 0
                 DiskLoc rloc = c->currLoc();
                 BSONObj obj = c->current();
                 
@@ -330,6 +337,8 @@ namespace mongo {
                 logOp( "d" , ns.c_str() , rloc.obj()["_id"].wrap() , 0 , 0 , fromMigrate );
                 ::abort(); // theDataFileMgr.deleteRecord(ns.c_str() , rloc.rec(), rloc);
                 numDeleted++;
+#endif
+                ::abort();
             }
             //catch( PageFaultException& e ) {
             catch( ... ) {

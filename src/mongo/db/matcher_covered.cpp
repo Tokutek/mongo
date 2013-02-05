@@ -54,7 +54,8 @@ namespace mongo {
 
     bool CoveredIndexMatcher::matchesCurrent( Cursor * cursor , MatchDetails * details ) const {
         // bool keyUsable = ! cursor->isMultiKey() && check for $orish like conditions in matcher SERVER-1264
-        return matches( cursor->currKey() , cursor->currLoc() , details ,
+        ::abort();
+        return matches( cursor->currKey() , minDiskLoc /* cursor->currLoc() TODO: Why is currLoc here? */, details ,
                        !cursor->indexKeyPattern().isEmpty() // unindexed cursor
                        && !cursor->isMultiKey() // multikey cursor
                        );

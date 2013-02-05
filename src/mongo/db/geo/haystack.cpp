@@ -210,6 +210,7 @@ namespace mongo {
                     set<DiskLoc> thisPass;
                     scoped_ptr<BtreeCursor> cursor( BtreeCursor::make( nsd , idxNo , *getDetails() , key , key , true , 1 ) );
                     while ( cursor->ok() ) {
+#if 0
                         pair<set<DiskLoc>::iterator, bool> p = thisPass.insert( cursor->currLoc() );
                         if ( p.second ) {
                             hopper.got( cursor->currLoc() );
@@ -217,6 +218,8 @@ namespace mongo {
                             btreeMatches++;
                         }
                         cursor->advance();
+#endif
+                        ::abort();
                     }
                 }
 

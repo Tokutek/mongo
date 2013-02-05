@@ -465,6 +465,9 @@ namespace mongo {
             bool isLargeChunk = false;
             unsigned long long recCount = 0;;
             while ( cc->ok() ) {
+                ::abort();
+                // TODO: Kill the disklocs
+#if 0
                 DiskLoc dl = cc->currLoc();
                 if ( ! isLargeChunk ) {
                     scoped_spinlock lk( _trackerLocks );
@@ -474,7 +477,6 @@ namespace mongo {
 
                 // we can afford to yield here because any change to the base data that we might miss is already being
                 // queued and will be migrated in the 'transferMods' stage
-#if 0
                 if ( ! cc->yieldSometimes( ClientCursor::DontNeed ) ) {
                     cc.release();
                     break;

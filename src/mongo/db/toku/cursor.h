@@ -46,9 +46,6 @@ namespace mongo {
         // - direction: not sure
         virtual void init(const shared_ptr<FieldRangeVector> &bounds, int singleIntervalLimit, int direction);
 
-        // useful function: return the associated diskloc for the current key
-        virtual DiskLoc currLoc();
-
         // get the current key for this cursor. it's probably okay to cache this 
         // for the lifetime of a call to advance(), but no later, since writes 
         // can happen in between calls to advance().

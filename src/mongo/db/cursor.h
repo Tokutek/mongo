@@ -93,13 +93,13 @@ namespace mongo {
         bool eof() { return !ok(); }
         //virtual Record* _current() = 0;
         virtual BSONObj current() = 0;
-        virtual DiskLoc currLoc() = 0;
+        //virtual DiskLoc currLoc() = 0;
         virtual bool advance() = 0; /*true=ok*/
         virtual BSONObj currKey() const { return BSONObj(); }
 
         // DiskLoc the cursor requires for continued operation.  Before this
         // DiskLoc is deleted, the cursor must be incremented or destroyed.
-        virtual DiskLoc refLoc() = 0;
+        //virtual DiskLoc refLoc() = 0;
 
         /* Implement these if you want the cursor to be "tailable" */
 
@@ -231,8 +231,8 @@ namespace mongo {
 #endif
             ::abort(); return BSONObj();
         }
-        virtual DiskLoc currLoc() { return curr; }
-        virtual DiskLoc refLoc()  { return curr.isNull() ? last : curr; }
+        //virtual DiskLoc currLoc() { return curr; }
+        //virtual DiskLoc refLoc()  { return curr.isNull() ? last : curr; }
         bool advance();
         virtual string toString() { return "BasicCursor"; }
         virtual void setTailable() {

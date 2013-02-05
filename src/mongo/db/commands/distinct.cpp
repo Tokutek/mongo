@@ -100,7 +100,8 @@ namespace mongo {
                 nscanned++;
                 bool loadedRecord = false;
 
-                if ( cursor->currentMatches( &md ) && !cursor->getsetdup( cursor->currLoc() ) ) {
+                ::abort();
+                if ( cursor->currentMatches( &md ) && !cursor->getsetdup( /*cursor->currLoc()*/ minDiskLoc ) ) {
                     n++;
 
                     BSONObj holder;

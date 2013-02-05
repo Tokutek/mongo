@@ -152,6 +152,7 @@ namespace mongo {
                     LOG(2) << "cursor skipping document in un-owned chunk: " << c->current() << endl;
                 }
                 else {
+#if 0
                     if( c->getsetdup(c->currLoc()) ) {
                         //out() << "  but it's a dup \n";
                     }
@@ -166,7 +167,10 @@ namespace mongo {
                             cc->incPos( n );
                             break;
                         }
+                        // TODO: Kill the disklocs
                     }
+#endif
+                    ::abort();
                 }
                 c->advance();
 
@@ -337,7 +341,8 @@ namespace mongo {
     }
     
     bool OrderedBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
-        DiskLoc loc = _cursor->currLoc();
+        ::abort();
+        DiskLoc loc = minDiskLoc;//_cursor->currLoc();
         if ( _cursor->getsetdup( loc ) ) {
             return orderedMatch = false;
         }
@@ -377,7 +382,8 @@ namespace mongo {
 
     bool ReorderBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
         orderedMatch = false;
-        if ( _cursor->getsetdup( _cursor->currLoc() ) ) {
+        ::abort();
+        if ( _cursor->getsetdup( /* _cursor->currLoc() */ minDiskLoc) ) {
             return false;
         }
         _handleMatchNoDedup();
@@ -385,7 +391,8 @@ namespace mongo {
     }
     
     void ReorderBuildStrategy::_handleMatchNoDedup() {
-        DiskLoc loc = _cursor->currLoc();
+        ::abort();
+        DiskLoc loc = minDiskLoc; //_cursor->currLoc();
         _scanAndOrder->add( current( false ), _parsedQuery.showDiskLoc() ? &loc : 0 );
     }
 
@@ -446,7 +453,8 @@ namespace mongo {
     }
     
     bool HybridBuildStrategy::handleReorderMatch() {
-        DiskLoc loc = _cursor->currLoc();
+        ::abort();
+        DiskLoc loc = minDiskLoc; //_cursor->currLoc();
         if ( _scanAndOrderDups.getsetdup( loc ) ) {
             return false;
         }

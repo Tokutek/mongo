@@ -645,10 +645,10 @@ namespace mongo {
         virtual bool ok() { return _c->ok(); }
         //virtual Record* _current() { return _c->_current(); }
         virtual BSONObj current() { return _c->current(); }
-        virtual DiskLoc currLoc() { return _c->currLoc(); }
+        //virtual DiskLoc currLoc() { return _c->currLoc(); }
         virtual bool advance();
         virtual BSONObj currKey() const { return _c->currKey(); }
-        virtual DiskLoc refLoc() { return _c->refLoc(); }
+        //virtual DiskLoc refLoc() { return _c->refLoc(); }
         virtual bool supportGetMore() { return true; }
         virtual BSONObj indexKeyPattern() { return _c->indexKeyPattern(); }
 

@@ -133,7 +133,7 @@ namespace mongo {
         virtual QueryOp *createChild() const {
             return new QueryOptimizerCursorOp( _matchCounter.aggregateNscanned(), _selectionPolicy, _requireOrder, _alwaysCountMatches, _matchCounter.cumulativeCount() );
         }
-        DiskLoc currLoc() const { return _c ? _c->currLoc() : DiskLoc(); }
+        //DiskLoc currLoc() const { return _c ? _c->currLoc() : DiskLoc(); }
         BSONObj currKey() const { return _c ? _c->currKey() : BSONObj(); }
         bool currentMatches( MatchDetails *details ) {
             if ( !_c || !_c->ok() ) {
@@ -151,7 +151,8 @@ namespace mongo {
             bool newMatch = _matchCounter.setMatch( match );
 
             if ( _explainPlanInfo ) {
-                bool countableMatch = newMatch && _matchCounter.wouldCountMatch( _c->currLoc() );
+                ::abort();
+                bool countableMatch = newMatch && _matchCounter.wouldCountMatch( /* _c->currLoc() */ minDiskLoc);
                 _explainPlanInfo->noteIterate( countableMatch,
                                               countableMatch || details->hasLoadedRecord(),
                                               *_c );
@@ -188,7 +189,8 @@ namespace mongo {
                 if ( !_matchCounter.knowMatch() ) {
                     currentMatches( 0 );
                 }
-                _matchCounter.countMatch( currLoc() );
+                ::abort();
+                //_matchCounter.countMatch( currLoc() );
             }
             if ( _mustAdvance ) {
                 _c->advance();
@@ -276,7 +278,7 @@ namespace mongo {
             return ret.release();
         }
         
-        virtual bool ok() { return _takeover ? _takeover->ok() : !currLoc().isNull(); }
+        virtual bool ok() { /* TODO: This must fundamentally change. */ ::abort(); return _takeover ? _takeover->ok() : /* !currLoc().isNull() */ true; }
         
 #if 0
         virtual Record* _current() {
@@ -289,19 +291,25 @@ namespace mongo {
 #endif
         
         virtual BSONObj current() {
+#if 0
             if ( _takeover ) {
                 return _takeover->current();
             }
             assertOk();
             return currLoc().obj();
+#endif
+            // TODO: Here's where we read from dbt->val, or ptquery the main index, or read from the clustering val, etc.
+            return BSONObj();
         }
         
-        virtual DiskLoc currLoc() { return _takeover ? _takeover->currLoc() : _currLoc(); }
+        //virtual DiskLoc currLoc() { return _takeover ? _takeover->currLoc() : _currLoc(); }
         
+#if 0
         DiskLoc _currLoc() const {
             dassert( !_takeover );
             return _currOp ? _currOp->currLoc() : DiskLoc();
         }
+#endif
         
         virtual bool advance() {
             return _advance( false );
@@ -322,7 +330,8 @@ namespace mongo {
          * !!! Use care if changing this behavior, as some ClientCursor functionality may not work
          * recursively.
          */
-        virtual DiskLoc refLoc() { return _takeover ? _takeover->refLoc() : DiskLoc(); }
+        // TODO: Again, understand if this is necessary with TokuDB Cursors
+        //virtual DiskLoc refLoc() { return _takeover ? _takeover->refLoc() : DiskLoc(); }
         
         virtual BSONObj indexKeyPattern() {
             if ( _takeover ) {
@@ -539,7 +548,10 @@ namespace mongo {
         }
         
         void assertOk() const {
+#if 0
             massert( 14809, "Invalid access for cursor that is not ok()", !_currLoc().isNull() );
+#endif
+            ::abort();
         }
 
         /** Insert and check for dups before takeover occurs */

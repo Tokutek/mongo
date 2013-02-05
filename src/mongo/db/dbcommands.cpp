@@ -1887,9 +1887,9 @@ namespace mongo {
             for( int i = 0; i < n; ++i ) {
                 massert( 13418, "captrunc invalid n", c.advance() );
             }
-            DiskLoc end = c.currLoc();
             // TODO: TokuDB: Implement me 
             (void) inc;
+            //DiskLoc end = c.currLoc();
             //nsd->cappedTruncateAfter( ns.c_str(), end, inc );
             return true;
         }

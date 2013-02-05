@@ -96,7 +96,7 @@ namespace mongo {
             // as well as some other nuances handled
             cc->setDoingDeletes( true );
 
-            DiskLoc rloc = cc->currLoc();
+            DiskLoc rloc = minDiskLoc; //cc->currLoc();
             BSONObj key = cc->currKey();
 
             bool match = creal->currentMatches();
@@ -107,9 +107,10 @@ namespace mongo {
                 continue;
 
             // SERVER-5198 Advance past the document to be modified, but see SERVER-5725.
-            while( cc->ok() && rloc == cc->currLoc() ) {
-                cc->advance();
-            }
+            //while( cc->ok() && rloc == cc->currLoc() ) {
+                //cc->advance();
+            //}
+            // TODO: Does TokuDB Care about SERVER-5198?
             
             bool foundAllResults = ( justOne || !cc->ok() );
 

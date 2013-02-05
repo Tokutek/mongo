@@ -250,7 +250,8 @@ namespace mongo {
             }
 
             //c->recoverFromYield();
-            DiskLoc tmp1 = c->refLoc();
+            ::abort();
+            DiskLoc tmp1 = minDiskLoc;//c->refLoc();
             if ( tmp1 != dl ) {
                 // This might indicate a failure to call ClientCursor::prepareToYield() but it can
                 // also happen during correct operation, see SERVER-2009.
@@ -259,7 +260,8 @@ namespace mongo {
             else {
                 c->advance();
             }
-            while (!c->eof() && c->refLoc() == dl) {
+            // TODO: TokuDB: Understand if this has any meaning to our cursors. Probably not.
+            while (!c->eof() && /* c->refLoc() */ minDiskLoc == dl) {
                 /* We don't delete at EOF because we want to return "no more results" rather than "no such cursor".
                  * The loop is to handle MultiKey indexes where the deleted record is pointed to by multiple adjacent keys.
                  * In that case we need to advance until we get to the next distinct record or EOF.
@@ -410,7 +412,7 @@ namespace mongo {
             mongo::fillQueryResultFromObj( b, 0, keyFieldsOnly->hydrate( c()->currKey() ), details );
         }
         else {
-            DiskLoc loc = c()->currLoc();
+            DiskLoc loc = minDiskLoc; // TODO: Phase this out once showDiskLoc is always false //c()->currLoc();
             mongo::fillQueryResultFromObj( b, fields.get(), c()->current(), details,
                                           ( ( pq && pq->showDiskLoc() ) ? &loc : 0 ) );
         }
@@ -421,6 +423,9 @@ namespace mongo {
        need to call when you are ready to "unlock".
     */
     void ClientCursor::updateLocation() {
+        ::abort();
+        // TODO: Understand what the cursorsbylocation map is, and why it was/is necessary.
+#if 0
         verify( _cursorid );
         _idleAgeMillis = 0;
         //_c->prepareToYield();
@@ -432,6 +437,7 @@ namespace mongo {
             recursive_scoped_lock lock(ccmutex);
             setLastLoc_inlock(cl);
         }
+#endif
     }
 
 #if 0

@@ -183,12 +183,6 @@ namespace mongo {
         invariant(cursor);
     }
 
-    // useful function: return the associated diskloc for the current key
-    DiskLoc TokuDBCursor::currLoc() {
-        DiskLoc loc = row_buffer.currentLoc();
-        return loc;
-    }
-
     // get the associated document for the cursor's current position.
     //
     // if we're using a clustered index, then we can return the current
@@ -267,7 +261,8 @@ namespace mongo {
     // look for an exact key, loc match in the index. if not found,
     // return an invalid diskloc. the caller will invalidate the cursor.
     DiskLoc TokuDBCursor::_locate(const BSONObj& key, const DiskLoc& loc) {
+        // TODO: This function is probably not necessary once btreecursor internals have been wrangled
         bool ok = set_cursor(key);
-        return ok && currLoc() == loc ? minDiskLoc : DiskLoc();
+        return ok ? minDiskLoc : DiskLoc();
     }
 } /* namespace mongo */
