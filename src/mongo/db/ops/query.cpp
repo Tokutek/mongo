@@ -110,7 +110,7 @@ namespace mongo {
             start = cc->pos();
             Cursor *c = cc->c();
             //c->recoverFromYield();
-            DiskLoc last;
+            //DiskLoc last;
 
             // This manager may be stale, but it's the state of chunking when the cursor was created.
             ShardChunkManagerPtr manager = cc->getChunkManager();
@@ -341,8 +341,8 @@ namespace mongo {
     }
     
     bool OrderedBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
-        DiskLoc loc = minDiskLoc;//_cursor->currLoc();
 #if 0
+        DiskLoc loc = minDiskLoc;//_cursor->currLoc();
         if ( _cursor->getsetdup( loc ) ) {
             return orderedMatch = false;
         }
@@ -356,7 +356,7 @@ namespace mongo {
         if ( !_parsedQuery.isExplain() ) {
             fillQueryResultFromObj( _buf, _parsedQuery.getFields(),
                                     current( true ), &details,
-                                   ( _parsedQuery.showDiskLoc() ? &loc : 0 ) );
+                                   /*( _parsedQuery.showDiskLoc() ? &loc : 0 )*/ 0 );
             ++_bufferedMatches;
         }
         return orderedMatch = true;
@@ -396,8 +396,10 @@ namespace mongo {
     
     void ReorderBuildStrategy::_handleMatchNoDedup() {
         ::abort();
+#if 0
         DiskLoc loc = minDiskLoc; //_cursor->currLoc();
         _scanAndOrder->add( current( false ), _parsedQuery.showDiskLoc() ? &loc : 0 );
+#endif
     }
 
     int ReorderBuildStrategy::rewriteMatches() {
@@ -458,8 +460,8 @@ namespace mongo {
     
     bool HybridBuildStrategy::handleReorderMatch() {
         ::abort();
-        DiskLoc loc = minDiskLoc; //_cursor->currLoc();
 #if 0
+        DiskLoc loc = minDiskLoc; //_cursor->currLoc();
         if ( _scanAndOrderDups.getsetdup( loc ) ) {
             return false;
         }

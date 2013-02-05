@@ -22,7 +22,6 @@
 #include "../../util/net/message.h"
 #include "../dbmessage.h"
 #include "../jsobj.h"
-#include "../diskloc.h"
 #include "../explain.h"
 #include "../../s/d_chunk_manager.h"
 
@@ -203,6 +202,7 @@ namespace mongo {
     };
 
     /** Helper class for deduping DiskLocs */
+#if 0
     class DiskLocDupSet {
     public:
         /** @return true if dup, otherwise return false and insert. */
@@ -213,6 +213,7 @@ namespace mongo {
     private:
         set<DiskLoc> _dups;
     };
+#endif
 
     /**
      * Build strategy for a QueryOptimizerCursor containing some in order and some out of order
@@ -233,7 +234,7 @@ namespace mongo {
         virtual int bufferedMatches() const;
         virtual void finishedFirstBatch();
         bool handleReorderMatch();
-        DiskLocDupSet _scanAndOrderDups;
+        //DiskLocDupSet _scanAndOrderDups;
         OrderedBuildStrategy _orderedBuild;
         scoped_ptr<ReorderBuildStrategy> _reorderBuild;
         bool _reorderedMatches;
