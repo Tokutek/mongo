@@ -19,7 +19,6 @@
 #pragma once
 
 #include "cursor.h"
-#include "diskloc.h"
 
 namespace mongo {
     

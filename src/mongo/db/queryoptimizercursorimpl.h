@@ -19,7 +19,8 @@
 #pragma once
 
 #include "mongo/db/queryutil.h"
-#include "queryoptimizercursor.h"
+#include "mongo/db/queryoptimizercursor.h"
+#include "mongo/db/diskloc.h"
 
 namespace mongo {
     
