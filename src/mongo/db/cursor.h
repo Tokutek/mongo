@@ -210,14 +210,14 @@ namespace mongo {
      */
     class BasicCursor : public Cursor {
     public:
-        BasicCursor(DiskLoc dl, const AdvanceStrategy *_s = forward()) : curr(dl), s( _s ), _nscanned() {
+        BasicCursor(DiskLoc dl, const AdvanceStrategy *_s = forward()) : /* curr(dl), */ s( _s ), _nscanned() {
             incNscanned();
             init();
         }
         BasicCursor(const AdvanceStrategy *_s = forward()) : s( _s ), _nscanned() {
             init();
         }
-        bool ok() { return !curr.isNull(); }
+        bool ok() { ::abort(); return false; /*return !curr.isNull();*/ }
 #if 0
         Record* _current() {
             verify( ok() );
@@ -236,8 +236,11 @@ namespace mongo {
         bool advance();
         virtual string toString() { return "BasicCursor"; }
         virtual void setTailable() {
+#if 0
             if ( !curr.isNull() || !last.isNull() )
                 tailable_ = true;
+#endif
+            ::abort();
         }
         virtual bool tailable() { return tailable_; }
         virtual bool getsetdup(DiskLoc loc) { return false; }
@@ -254,9 +257,9 @@ namespace mongo {
         virtual long long nscanned() { return _nscanned; }
 
     protected:
-        DiskLoc curr, last;
+        //DiskLoc curr, last;
         const AdvanceStrategy *s;
-        void incNscanned() { if ( !curr.isNull() ) { ++_nscanned; } }
+        void incNscanned() { ::abort(); if ( /*!curr.isNull()*/ false ) { ++_nscanned; } }
     private:
         bool tailable_;
         shared_ptr< CoveredIndexMatcher > _matcher;

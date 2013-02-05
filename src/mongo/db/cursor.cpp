@@ -23,6 +23,7 @@
 namespace mongo {
 
     bool BasicCursor::advance() {
+#if 0
         killCurrentOp.checkForInterrupt();
         if ( eof() ) {
             if ( tailable_ && !last.isNull() ) {
@@ -36,6 +37,8 @@ namespace mongo {
             last = curr;
             curr = s->next( curr );
         }
+#endif
+        ::abort();
         incNscanned();
         return ok();
     }
@@ -74,10 +77,10 @@ namespace mongo {
     void ForwardCappedCursor::init( const DiskLoc& startLoc ) {
         if ( !nsd )
             return;
+#if 0
         DiskLoc start = startLoc;
         if ( start.isNull() ) {
             ::abort();
-#if 0
             if ( !nsd->capLooped() )
                 start = nsd->firstRecord();
             else {
@@ -87,9 +90,9 @@ namespace mongo {
                     start = nextLoop( nsd, start );
                 }
             }
-#endif
         }
         curr = start;
+#endif
         s = this;
         incNscanned();
     }
@@ -123,9 +126,9 @@ namespace mongo {
         if ( !nsd )
             return;
         DiskLoc start = startLoc;
+#if 0
         if ( start.isNull() ) {
             ::abort();
-#if 0
             if ( !nsd->capLooped() ) {
                 start = nsd->lastRecord();
             }
@@ -133,9 +136,10 @@ namespace mongo {
                 start = nsd->capExtent.ext()->lastRecord;
                 ::abort();
             }
-#endif
         }
         curr = start;
+#endif
+        ::abort();
         s = this;
         incNscanned();
     }
