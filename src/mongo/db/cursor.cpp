@@ -43,6 +43,7 @@ namespace mongo {
         return ok();
     }
 
+#if 0
     /* these will be used outside of mutexes - really functors - thus the const */
     class Forward : public AdvanceStrategy {
         virtual DiskLoc next( const DiskLoc &prev ) const {
@@ -62,6 +63,7 @@ namespace mongo {
     const AdvanceStrategy *reverse() {
         return &_reverse;
     }
+#endif
 
     ForwardCappedCursor* ForwardCappedCursor::make( NamespaceDetails* nsd,
                                                     const DiskLoc& startLoc ) {
@@ -92,8 +94,8 @@ namespace mongo {
             }
         }
         curr = start;
-#endif
         s = this;
+#endif
         incNscanned();
     }
 
@@ -138,9 +140,9 @@ namespace mongo {
             }
         }
         curr = start;
-#endif
         ::abort();
         s = this;
+#endif
         incNscanned();
     }
 

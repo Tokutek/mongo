@@ -191,15 +191,18 @@ namespace mongo {
         virtual void explainDetails( BSONObjBuilder& b ) { return; }
     };
 
+    // Cute, but not necessary
+#if 0
     // strategy object implementing direction of traversal.
     class AdvanceStrategy {
     public:
         virtual ~AdvanceStrategy() { }
-        virtual DiskLoc next( const DiskLoc &prev ) const = 0;
+        //virtual DiskLoc next( const DiskLoc &prev ) const = 0;
     };
 
     const AdvanceStrategy *forward();
     const AdvanceStrategy *reverse();
+#endif
 
     /**
      * table-scan style cursor
@@ -210,11 +213,11 @@ namespace mongo {
      */
     class BasicCursor : public Cursor {
     public:
-        BasicCursor(DiskLoc dl, const AdvanceStrategy *_s = forward()) : /* curr(dl), */ s( _s ), _nscanned() {
+        BasicCursor(DiskLoc dl /*, const AdvanceStrategy *_s = forward() */) : /* curr(dl), s( _s ), */ _nscanned() {
             incNscanned();
             init();
         }
-        BasicCursor(const AdvanceStrategy *_s = forward()) : s( _s ), _nscanned() {
+        BasicCursor( /*const AdvanceStrategy *_s = forward() */) : /*s( _s ), */ _nscanned() {
             init();
         }
         bool ok() { ::abort(); return false; /*return !curr.isNull();*/ }
@@ -258,7 +261,7 @@ namespace mongo {
 
     protected:
         //DiskLoc curr, last;
-        const AdvanceStrategy *s;
+        //const AdvanceStrategy *s;
         void incNscanned() { ::abort(); if ( /*!curr.isNull()*/ false ) { ++_nscanned; } }
     private:
         bool tailable_;
@@ -271,12 +274,12 @@ namespace mongo {
     /* used for order { $natural: -1 } */
     class ReverseCursor : public BasicCursor {
     public:
-        ReverseCursor(DiskLoc dl) : BasicCursor( dl, reverse() ) { }
-        ReverseCursor() : BasicCursor( reverse() ) { }
+        ReverseCursor(DiskLoc dl) : BasicCursor( dl /*, reverse() */ ) { }
+        ReverseCursor() : BasicCursor( /* reverse() */ ) { }
         virtual string toString() { return "ReverseCursor"; }
     };
 
-    class ForwardCappedCursor : public BasicCursor, public AdvanceStrategy {
+    class ForwardCappedCursor : public BasicCursor /*, public AdvanceStrategy */ {
     public:
         static ForwardCappedCursor* make( NamespaceDetails* nsd = 0,
                                           const DiskLoc& startLoc = DiskLoc() );
@@ -291,7 +294,7 @@ namespace mongo {
         NamespaceDetails *nsd;
     };
 
-    class ReverseCappedCursor : public BasicCursor, public AdvanceStrategy {
+    class ReverseCappedCursor : public BasicCursor /*, public AdvanceStrategy */ {
     public:
         ReverseCappedCursor( NamespaceDetails *nsd = 0, const DiskLoc &startLoc = DiskLoc() );
         virtual string toString() {
