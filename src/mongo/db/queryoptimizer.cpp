@@ -282,7 +282,8 @@ doneCheckOrder:
 
         if ( _utility == Impossible ) {
             // Dummy table scan cursor returning no results.  Allowed in --notablescan mode.
-            return shared_ptr<Cursor>( new BasicCursor( DiskLoc() ) );
+            // TODO: TokuDB: Is this still what needs to happen in this case?
+            return shared_ptr<Cursor>( new BasicCursor( /*DiskLoc()*/ ) );
         }
 
         if ( willScanTable() ) {

@@ -213,13 +213,15 @@ namespace mongo {
      */
     class BasicCursor : public Cursor {
     public:
-        BasicCursor(DiskLoc dl /*, const AdvanceStrategy *_s = forward() */) : /* curr(dl), s( _s ), */ _nscanned() {
+        BasicCursor(/* DiskLoc dl , const AdvanceStrategy *_s = forward() */) : /* curr(dl), s( _s ), */ _nscanned() {
             incNscanned();
             init();
         }
+#if 0
         BasicCursor( /*const AdvanceStrategy *_s = forward() */) : /*s( _s ), */ _nscanned() {
             init();
         }
+#endif
         bool ok() { ::abort(); return false; /*return !curr.isNull();*/ }
 #if 0
         Record* _current() {
@@ -274,33 +276,32 @@ namespace mongo {
     /* used for order { $natural: -1 } */
     class ReverseCursor : public BasicCursor {
     public:
-        ReverseCursor(DiskLoc dl) : BasicCursor( dl /*, reverse() */ ) { }
-        ReverseCursor() : BasicCursor( /* reverse() */ ) { }
+        //ReverseCursor(/* DiskLoc dl */) : BasicCursor( /* dl, reverse() */ ) { }
+        //ReverseCursor() : BasicCursor( /* reverse() */ ) { }
         virtual string toString() { return "ReverseCursor"; }
     };
 
     class ForwardCappedCursor : public BasicCursor /*, public AdvanceStrategy */ {
     public:
-        static ForwardCappedCursor* make( NamespaceDetails* nsd = 0,
-                                          const DiskLoc& startLoc = DiskLoc() );
+        static ForwardCappedCursor* make( NamespaceDetails* nsd = 0 /*, const DiskLoc& startLoc = DiskLoc()*/ );
         virtual string toString() {
             return "ForwardCappedCursor";
         }
-        virtual DiskLoc next( const DiskLoc &prev ) const;
+        //virtual DiskLoc next( const DiskLoc &prev ) const;
         virtual bool capped() const { return true; }
     private:
         ForwardCappedCursor( NamespaceDetails* nsd );
-        void init( const DiskLoc& startLoc );
+        //void init( const DiskLoc& startLoc );
         NamespaceDetails *nsd;
     };
 
     class ReverseCappedCursor : public BasicCursor /*, public AdvanceStrategy */ {
     public:
-        ReverseCappedCursor( NamespaceDetails *nsd = 0, const DiskLoc &startLoc = DiskLoc() );
+        ReverseCappedCursor( NamespaceDetails *nsd = 0 /*, const DiskLoc &startLoc = DiskLoc() */ );
         virtual string toString() {
             return "ReverseCappedCursor";
         }
-        virtual DiskLoc next( const DiskLoc &prev ) const;
+        //virtual DiskLoc next( const DiskLoc &prev ) const;
         virtual bool capped() const { return true; }
     private:
         NamespaceDetails *nsd;

@@ -65,21 +65,24 @@ namespace mongo {
     }
 #endif
 
-    ForwardCappedCursor* ForwardCappedCursor::make( NamespaceDetails* nsd,
-                                                    const DiskLoc& startLoc ) {
+    ForwardCappedCursor* ForwardCappedCursor::make( NamespaceDetails* nsd /*, const DiskLoc& startLoc */ ) {
+#if 0
         auto_ptr<ForwardCappedCursor> ret( new ForwardCappedCursor( nsd ) );
         ret->init( startLoc );
         return ret.release();
+#endif
+        ::abort();
+        return NULL;
     }
 
     ForwardCappedCursor::ForwardCappedCursor( NamespaceDetails* _nsd ) :
         nsd( _nsd ) {
     }
 
+#if 0
     void ForwardCappedCursor::init( const DiskLoc& startLoc ) {
         if ( !nsd )
             return;
-#if 0
         DiskLoc start = startLoc;
         if ( start.isNull() ) {
             ::abort();
@@ -95,15 +98,15 @@ namespace mongo {
         }
         curr = start;
         s = this;
-#endif
         incNscanned();
     }
+#endif
 
+#if 0
     DiskLoc ForwardCappedCursor::next( const DiskLoc &prev ) const {
         verify( nsd );
         ::abort();
         return minDiskLoc; // TODO: Redo this class
-#if 0
         if ( !nsd->capLooped() )
             return forward()->next( prev );
 
@@ -120,15 +123,15 @@ namespace mongo {
         if ( i == nsd->capExtent.ext()->firstRecord )
             i = nsd->capFirstNewRecord;
         return i;
-#endif
     }
+#endif
 
-    ReverseCappedCursor::ReverseCappedCursor( NamespaceDetails *_nsd, const DiskLoc &startLoc ) :
+    ReverseCappedCursor::ReverseCappedCursor( NamespaceDetails *_nsd /*, const DiskLoc &startLoc*/ ) :
         nsd( _nsd ) {
         if ( !nsd )
             return;
-        DiskLoc start = startLoc;
 #if 0
+        DiskLoc start = startLoc;
         if ( start.isNull() ) {
             ::abort();
             if ( !nsd->capLooped() ) {
@@ -146,11 +149,11 @@ namespace mongo {
         incNscanned();
     }
 
+#if 0
     DiskLoc ReverseCappedCursor::next( const DiskLoc &prev ) const {
         verify( nsd );
         ::abort();
         return minDiskLoc;
-#if 0
         if ( !nsd->capLooped() )
             return reverse()->next( prev );
 
@@ -179,6 +182,6 @@ namespace mongo {
 
         ::abort();
         return i;
-#endif
     }
+#endif
 } // namespace mongo
