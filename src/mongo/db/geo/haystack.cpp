@@ -39,6 +39,7 @@
  * should not be used for finding the closest restaurants that are open
  */
 namespace mongo {
+#if 0
 
     string GEOSEARCHNAME = "geoHaystack";
 
@@ -318,4 +319,5 @@ namespace mongo {
 
 
 
+#endif
 }

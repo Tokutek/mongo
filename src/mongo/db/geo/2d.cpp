@@ -37,6 +37,8 @@
 //       might make sense.
 
 namespace mongo {
+    // TODO: Geo indexes have been nuked.
+#if 0
 
     class GeoKeyNode { 
         GeoKeyNode();
@@ -3307,5 +3309,6 @@ namespace mongo {
     } geoUnitTest;
 
 
+#endif
 }
 

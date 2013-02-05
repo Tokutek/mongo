@@ -28,6 +28,7 @@
 #endif
 
 namespace mongo {
+#if 0
 
     class GeoBitSets {
     public:
@@ -547,4 +548,5 @@ namespace mongo {
                );
     }
 
+#endif
 }
