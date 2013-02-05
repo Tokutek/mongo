@@ -70,6 +70,7 @@ namespace mongo {
         // we never skip so we always return false.
         virtual bool skipUnusedKeys();
 
+#if 0
         // this sets keyOfs to something. we don't care. set to zero, do nothing.
         void _advanceTo(DiskLoc &thisLoc, int &keyOfs, const BSONObj &keyBegin,
                 int keyBeginLen, bool afterKey, const vector<const BSONElement *> &keyEnd,
@@ -89,6 +90,7 @@ namespace mongo {
         // for a tokudb cursor. the only thing that matters is that we return
         // the null recordloc if we can't find the key. 
         virtual DiskLoc _locate(const BSONObj& key, const DiskLoc& loc);
+#endif
 
         // close the underlying tokudb cursor, if it exists
         virtual ~TokuDBCursor();

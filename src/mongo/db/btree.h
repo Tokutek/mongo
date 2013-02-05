@@ -20,7 +20,6 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/diskloc.h"
 #include "mongo/db/key.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/index.h"
@@ -67,7 +66,7 @@ namespace mongo {
                                  const shared_ptr< FieldRangeVector > &_bounds,
                                  int singleIntervalLimit, int _direction );
 
-        virtual bool ok() { return !bucket.isNull(); }
+        virtual bool ok() { ::abort(); return false; /* return !bucket.isNull(); */ }
         virtual bool advance();
         virtual bool supportGetMore() { return true; }
 
@@ -129,10 +128,13 @@ namespace mongo {
         /** selective audits on construction */
         void audit();
 
+#if 0
         virtual void _audit() = 0;
         virtual DiskLoc _locate(const BSONObj& key, const DiskLoc& loc) = 0;
         virtual DiskLoc _advance(const DiskLoc& thisLoc, int& keyOfs, int direction, const char *caller) = 0;
         virtual void _advanceTo(DiskLoc &thisLoc, int &keyOfs, const BSONObj &keyBegin, int keyBeginLen, bool afterKey, const vector< const BSONElement * > &keyEnd, const vector< bool > &keyEndInclusive, const Ordering &order, int direction ) = 0;
+
+#endif
 
         /** set initial bucket */
         void initWithoutIndependentFieldRanges();
@@ -146,14 +148,14 @@ namespace mongo {
         const IndexDetails& indexDetails;
 
         // these are all set in init()
-        set<DiskLoc> _dups;
+        //set<DiskLoc> _dups;
         BSONObj startKey;
         BSONObj endKey;
         bool _endKeyInclusive;
         bool _multikey; // this must be updated every getmore batch in case someone added a multikey
         BSONObj _order; // this is the same as indexDetails.keyPattern()
         Ordering _ordering;
-        DiskLoc bucket;
+        //DiskLoc bucket;
         int _direction; // 1=fwd,-1=reverse
         shared_ptr< FieldRangeVector > _bounds;
         auto_ptr< FieldRangeVectorIterator > _boundsIterator;

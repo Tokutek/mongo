@@ -132,7 +132,8 @@ namespace mongo {
             startKey = indexDetails.getSpec().getType()->fixKey( startKey );
             endKey = indexDetails.getSpec().getType()->fixKey( endKey );
         }
-        bucket = _locate(startKey, _direction > 0 ? minDiskLoc : maxDiskLoc);
+        //bucket = _locate(startKey, _direction > 0 ? minDiskLoc : maxDiskLoc);
+        ::abort();
         if ( ok() ) {
             _nscanned = 1;
         }
@@ -163,7 +164,8 @@ namespace mongo {
         }
         int ret = _boundsIterator->advance( currKey() );
         if ( ret == -2 ) {
-            bucket = DiskLoc();
+            //bucket = DiskLoc();
+            ::abort();
             return false;
         }
         else if ( ret == -1 ) {
@@ -184,6 +186,7 @@ namespace mongo {
 
     // Check if the current key is beyond endKey.
     void BtreeCursor::checkEnd() {
+#if 0
         if ( bucket.isNull() )
             return;
         if ( !endKey.isEmpty() ) {
@@ -192,22 +195,29 @@ namespace mongo {
                     ( cmp == 0 && !_endKeyInclusive ) )
                 bucket = DiskLoc();
         }
+#endif
+        ::abort();
     }
 
     void BtreeCursor::advanceTo( const BSONObj &keyBegin, int keyBeginLen, bool afterKey, const vector< const BSONElement * > &keyEnd, const vector< bool > &keyEndInclusive) {
-        // XXX: TokuDB:  Remove keyOfs param
+        // XXX: TokuDB: What do we do here?
+        ::abort();
+#if 0
         int keyOfs = 0;
         _advanceTo( bucket, keyOfs, keyBegin, keyBeginLen, afterKey, keyEnd, keyEndInclusive, _ordering, _direction );
+#endif
     }
 
     bool BtreeCursor::advance() {
         killCurrentOp.checkForInterrupt();
+        // XXX: TokuDB: What do we do here?
+#if 0
         if ( bucket.isNull() )
             return false;
         
-        // XXX: TokuDB:  Remove keyOfs param
         int keyOfs = 0;
         bucket = _advance(bucket, keyOfs, _direction, "BtreeCursor::advance");
+#endif
         
         if ( !_independentFieldRanges ) {
             checkEnd();
@@ -241,7 +251,7 @@ namespace mongo {
 
     struct BtreeCursorUnitTest {
         BtreeCursorUnitTest() {
-            verify( minDiskLoc.compare(maxDiskLoc) < 0 );
+            //verify( minDiskLoc.compare(maxDiskLoc) < 0 );
         }
     } btut;
 

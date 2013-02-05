@@ -88,12 +88,15 @@ namespace mongo {
             struct cursor_getf_cb_extra *info = (struct cursor_getf_cb_extra *) extra;
             RowBuffer *row_buffer = info->row_buffer;
             
+#if 0
             // put this row into the row buffer unconditionally
             BSONObj row_key = toku::init_bson_from_dbt(index_key);
             DiskLoc row_loc = toku::init_diskloc_from_dbt(index_key);
             BSONObj row_obj = toku::init_bson_from_dbt(val);
             row_buffer->append(row_key, row_loc, row_obj);
             info->rows_fetched++;
+#endif
+            ::abort(); // TODO: Unpack the key/val properly
 
             // request more bulk fetching if we are allowed to fetch more rows
             // and the row buffer is not too full.
@@ -113,6 +116,7 @@ namespace mongo {
     //      if there is no such key, set the btree bucket to the null diskloc,
     //      so this cursor is marked as exhausted.
     bool TokuDBCursor::set_cursor(const BSONObj &key) {
+#if 0
         char key_buf[toku::index_key_size(startKey)];
         const mongo::DiskLoc zero_diskloc = mongo::DiskLoc(0, 0);
         DBT index_key = toku::generate_index_key(key_buf, startKey, zero_diskloc);
@@ -123,6 +127,9 @@ namespace mongo {
         invariant(r == 0 || r == DB_NOTFOUND);
         bulk_fetch_iteration++;
         return r == 0 ? true : false;
+#endif
+        ::abort();
+        return false;
     }
 
     // bulk fetch from the cursor and store the rows into the buffer
@@ -158,8 +165,11 @@ namespace mongo {
 
         // TODO: prelock range from startKey to endKey to get prefetching
         // position the cursor over the first key >= startKey
+#if 0
         bool ok = set_cursor(startKey);
         bucket = ok ? minDiskLoc : DiskLoc(); 
+#endif
+        ::abort();
     }
 
     // create cursor, given
@@ -231,6 +241,7 @@ namespace mongo {
     // BtreeCursor specific stuff declared pure virtual
     //
 
+#if 0
     // this sets keyOfs to something. we don't care. set to zero, do nothing.
     void TokuDBCursor::_advanceTo(DiskLoc &thisLoc, int &keyOfs, const BSONObj &keyBegin,
             int keyBeginLen, bool afterKey, const vector< const BSONElement * > &keyEnd,
@@ -265,4 +276,5 @@ namespace mongo {
         bool ok = set_cursor(key);
         return ok ? minDiskLoc : DiskLoc();
     }
+#endif
 } /* namespace mongo */

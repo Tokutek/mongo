@@ -19,7 +19,6 @@
 #include "mongo/pch.h"
 
 #include "jsobj.h"
-#include "diskloc.h"
 #include "matcher.h"
 #include "mongo/db/projection.h"
 
