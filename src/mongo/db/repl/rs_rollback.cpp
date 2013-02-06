@@ -92,7 +92,7 @@ namespace mongo {
         set<string> collectionsToResync;
 
         OpTime commonPoint;
-        DiskLoc commonPointOurDiskloc;
+        //DiskLoc commonPointOurDiskloc;
 
         int rbid; // remote server's current rollback sequence #
     };
@@ -375,7 +375,7 @@ namespace mongo {
 
         bool warn = false;
 
-        verify( !h.commonPointOurDiskloc.isNull() );
+        //verify( !h.commonPointOurDiskloc.isNull() );
         verify( Lock::isW() );
 
         /* we have items we are writing that aren't from a point-in-time.  thus best not to come online

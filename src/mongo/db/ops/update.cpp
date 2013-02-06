@@ -30,6 +30,7 @@
 
 namespace mongo {
 
+    // TODO: Re-enable these when we need them
     void checkNoMods( BSONObj o ) {
         BSONObjIterator i( o );
         while( i.moreWithEOO() ) {
@@ -40,9 +41,11 @@ namespace mongo {
         }
     }
 
+#if 0
     static void checkTooLarge(const BSONObj& newObj) {
         uassert( 12522 , "$ operator made object too large" , newObj.objsize() <= BSONObjMaxUserSize );
     }
+#endif
 
     /* note: this is only (as-is) called for
 
@@ -64,9 +67,9 @@ namespace mongo {
                                     OpDebug& debug,
                                     bool fromMigrate = false) {
 
-        DiskLoc loc;
         ::abort();
 #if 0
+        DiskLoc loc;
         {
             IndexDetails& i = d->idx(idIdxNo);
             BSONObj key = i.getKeyFromQuery( patternOrig );
@@ -86,6 +89,8 @@ namespace mongo {
         /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
            regular ones at the moment. */
         if ( isOperatorUpdate ) {
+            ::abort();
+#if 0
             const BSONObj& onDisk = loc.obj();
             auto_ptr<ModSetState> mss = mods->prepare( onDisk );
 
@@ -121,6 +126,7 @@ namespace mongo {
                 }
             }
             return UpdateResult( 1 , 1 , 1 , BSONObj() );
+#endif
         } // end $operator update
 
         // regular update
@@ -217,22 +223,22 @@ namespace mongo {
             NamespaceDetailsTransient::getCursor( ns, patternOrig, BSONObj(), planPolicy );
         d = nsdetails(ns);
         nsdt = &NamespaceDetailsTransient::get(ns);
-        bool autoDedup = c->autoDedup();
+        //bool autoDedup = c->autoDedup();
 
         if( c->ok() ) {
+            ::abort();
+#if 0
             set<DiskLoc> seenObjects;
             MatchDetails details;
             auto_ptr<ClientCursor> cc;
             do {
 
-#if 0
                 if ( cc.get() == 0 &&
                      client.allowedToThrowPageFaultException() &&
                      ! c->currLoc().isNull() &&
                      ! c->currLoc().rec()->likelyInPhysicalMemory() ) {
                     throw PageFaultException( c->currLoc().rec() );
                 }
-#endif
 
                 bool atomic = c->matcher() && c->matcher()->docMatcher().atomic();
 
@@ -243,7 +249,6 @@ namespace mongo {
                         cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , cPtr , ns ) );
                     }
 
-#if 0
                     bool didYield;
                     if ( ! cc->yieldSometimes( ClientCursor::WillNeed, &didYield ) ) {
                         cc.release();
@@ -268,7 +273,6 @@ namespace mongo {
                         }
 
                     }
-#endif
 
                 } // end yielding block
 
@@ -291,13 +295,10 @@ namespace mongo {
                 ::abort();
                 DiskLoc loc = minDiskLoc; //c->currLoc();
 
-#if 0
                 if ( c->getsetdup( loc ) && autoDedup ) {
                     c->advance();
                     continue;
                 }
-#endif
-                ::abort();
 
                 //BSONObj js = BSONObj::make(r);
 
@@ -463,6 +464,7 @@ namespace mongo {
                 }
                 return UpdateResult( 1 , 0 , 1 , BSONObj() );
             } while ( c->ok() );
+#endif
         } // endif
 
         if ( numModded )

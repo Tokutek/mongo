@@ -33,7 +33,7 @@
 #include "../util/net/message.h"
 #include "../util/net/listen.h"
 #include "../util/background.h"
-#include "diskloc.h"
+//#include "diskloc.h"
 #include "dbhelpers.h"
 #include "matcher.h"
 #include "projection.h"
@@ -48,6 +48,7 @@ namespace mongo {
     class ClientCursor;
     class ParsedQuery;
 
+#if 0
     struct ByLocKey {
 
         ByLocKey( const DiskLoc & l , const CursorId& i ) : loc(l), id(i) {}
@@ -66,12 +67,14 @@ namespace mongo {
         CursorId id;
 
     };
+#endif
 
     /* todo: make this map be per connection.  this will prevent cursor hijacking security attacks perhaps.
      *       ERH: 9/2010 this may not work since some drivers send getMore over a different connection
     */
     typedef map<CursorId, ClientCursor*> CCById;
-    typedef map<ByLocKey, ClientCursor*> CCByLoc;
+    // TODO: TokuDB What do we need this for? What features? How do we do it without disklocs?
+    //typedef map<ByLocKey, ClientCursor*> CCByLoc;
 
     extern BSONObj id_obj;
 
@@ -185,7 +188,7 @@ namespace mongo {
         const BSONObj& query() const { return _query; }
         int queryOptions() const { return _queryOptions; }
 
-        DiskLoc lastLoc() const { return _lastLoc; }
+        //DiskLoc lastLoc() const { return _lastLoc; }
 
         /* Get rid of cursors for namespaces 'ns'. When dropping a db, ns is "dbname."
            Used by drop, dropIndexes, dropDatabase.
@@ -303,7 +306,7 @@ namespace mongo {
         ShardChunkManagerPtr getChunkManager(){ return _chunkManager; }
 
     private:
-        void setLastLoc_inlock(DiskLoc);
+        //void setLastLoc_inlock(DiskLoc);
 
         static ClientCursor* find_inlock(CursorId id, bool warn = true) {
             CCById::iterator it = clientCursorsById.find(id);
@@ -355,7 +358,7 @@ namespace mongo {
          */
         bool shouldTimeout( unsigned millis );
 
-        void storeOpForSlave( DiskLoc last );
+        //void storeOpForSlave( DiskLoc last );
         void updateSlaveLocation( CurOp& curop );
 
         unsigned idleTime() const { return _idleAgeMillis; }
@@ -373,7 +376,7 @@ namespace mongo {
 
         static void appendStats( BSONObjBuilder& result );
         static unsigned numCursors() { return clientCursorsById.size(); }
-        static void aboutToDelete(const DiskLoc& dl);
+        //static void aboutToDelete(const DiskLoc& dl);
         static void find( const string& ns , set<CursorId>& all );
 
 
@@ -383,7 +386,7 @@ namespace mongo {
         // setting this prevents timeout of the cursor in question.
         void noTimeout() { _pinValue++; }
 
-        CCByLoc& byLoc() { return _db->ccByLoc; }
+        //CCByLoc& byLoc() { return _db->ccByLoc; }
         
         //Record* _recordForYield( RecordNeeds need );
 
@@ -403,7 +406,7 @@ namespace mongo {
 
         OpTime _slaveReadTill;
 
-        DiskLoc _lastLoc;                        // use getter and setter not this (important)
+        //DiskLoc _lastLoc;                        // use getter and setter not this (important)
         unsigned _idleAgeMillis;                 // how long has the cursor been around, relative to server idle time
 
         /* 0 = normal

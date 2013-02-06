@@ -26,8 +26,13 @@ namespace mongo {
     //class Extent;
     //class MongoDataFile;
     class ClientCursor;
+    // TODO: TokuDB: We most likely will need something to abstract
+    // the "concept" of a diskloc so we can have a map like the one below.
+    // FIND OUT IF THIS IS TRUE.
+#if 0
     struct ByLocKey;
     typedef map<ByLocKey, ClientCursor*> CCByLoc;
+#endif
 
     /**
      * Database represents a database database
@@ -142,7 +147,8 @@ namespace mongo {
         NamespaceIndex namespaceIndex;
         int profile; // 0=off.
         const string profileName; // "alleyinsider.system.profile"
-        CCByLoc ccByLoc;
+        // TODO: TokuDB Find out how to do this without disklocs and whether it is necessary for us, or for what features.
+        //CCByLoc ccByLoc;
         int magic; // used for making sure the object is still loaded in memory
 
     private:

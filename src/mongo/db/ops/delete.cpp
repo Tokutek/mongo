@@ -89,7 +89,6 @@ namespace mongo {
             if ( !cc->ok() ) {
                 break; // if we yielded, could have hit the end
             }
-#endif
             ::abort();
 
             // this way we can avoid calling prepareToYield() every time (expensive)
@@ -121,7 +120,6 @@ namespace mongo {
             }
 
             if ( logop ) {
-#if 0
                 BSONElement e;
                 if( BSONObj::make( rloc.rec() ).getObjectID( e ) ) {
                     BSONObjBuilder b;
@@ -132,7 +130,6 @@ namespace mongo {
                 else {
                     problem() << "deleted object without id, not logging" << endl;
                 }
-#endif
                 ::abort();
             }
 
@@ -151,6 +148,8 @@ namespace mongo {
 
             if( debug && god && nDeleted == 100 ) 
                 log() << "warning high number of deletes with god=true which could use significant memory" << endl;
+#endif
+            ::abort();
         }
         while ( cc->ok() );
 

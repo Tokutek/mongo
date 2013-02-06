@@ -41,7 +41,7 @@ namespace mongo {
     boost::recursive_mutex& ClientCursor::ccmutex( *(new boost::recursive_mutex()) );
     long long ClientCursor::numberTimedOut = 0;
 
-    void aboutToDeleteForSharding( const Database* db , const DiskLoc& dl ); // from s/d_logic.h
+    //void aboutToDeleteForSharding( const Database* db , const DiskLoc& dl ); // from s/d_logic.h
 
     /*static*/ void ClientCursor::assertNoCursors() {
         recursive_scoped_lock lock(ccmutex);
@@ -55,6 +55,7 @@ namespace mongo {
     }
 
 
+#if 0
     void ClientCursor::setLastLoc_inlock(DiskLoc L) {
         verify( _pos != -2 ); // defensive - see ~ClientCursor
 
@@ -71,6 +72,7 @@ namespace mongo {
             bl[ByLocKey(L,_cursorid)] = this;
         _lastLoc = L;
     }
+#endif
 
     /* ------------------------------------------- */
 
@@ -190,6 +192,7 @@ namespace mongo {
     }
 
     /* must call this on a delete so we clean up the cursors. */
+#if 0
     void ClientCursor::aboutToDelete(const DiskLoc& dl) {
         //NoPageFaultsAllowed npfa;
 
@@ -274,6 +277,7 @@ namespace mongo {
             cc->updateLocation();
         }
     }
+#endif
 
     void ClientCursor::LockedIterator::deleteAndAdvance() {
         ClientCursor *cc = current();
@@ -327,7 +331,8 @@ namespace mongo {
 
         {
             recursive_scoped_lock lock(ccmutex);
-            setLastLoc_inlock( DiskLoc() ); // removes us from bylocation multimap
+            :: abort(); // TODO: Do we need this?
+            //setLastLoc_inlock( DiskLoc() ); // removes us from bylocation multimap
             clientCursorsById.erase(_cursorid);
 
             // defensive:
@@ -412,9 +417,12 @@ namespace mongo {
             mongo::fillQueryResultFromObj( b, 0, keyFieldsOnly->hydrate( c()->currKey() ), details );
         }
         else {
+#if 0
             DiskLoc loc = minDiskLoc; // TODO: Phase this out once showDiskLoc is always false //c()->currLoc();
             mongo::fillQueryResultFromObj( b, fields.get(), c()->current(), details,
                                           ( ( pq && pq->showDiskLoc() ) ? &loc : 0 ) );
+#endif
+            ::abort();
         }
     }
 
@@ -646,6 +654,7 @@ namespace mongo {
         return x;
     }
 
+#if 0
     void ClientCursor::storeOpForSlave( DiskLoc last ) {
         if ( ! ( _queryOptions & QueryOption_OplogReplay ))
             return;
@@ -657,6 +666,7 @@ namespace mongo {
         if ( e.type() == Date || e.type() == Timestamp )
             _slaveReadTill = e._opTime();
     }
+#endif
 
     void ClientCursor::updateSlaveLocation( CurOp& curop ) {
         if ( _slaveReadTill.isNull() )

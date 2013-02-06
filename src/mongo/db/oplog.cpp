@@ -733,8 +733,8 @@ namespace mongo {
             return false;
         }
         else {
-            DiskLoc d = minDiskLoc; ::abort(); //theDataFileMgr.insert(ns, (void*) missingObj.objdata(), missingObj.objsize());
-            uassert(15917, "Got bad disk location when attempting to insert", !d.isNull());
+            ::abort(); //DiskLoc d = //theDataFileMgr.insert(ns, (void*) missingObj.objdata(), missingObj.objsize());
+            //uassert(15917, "Got bad disk location when attempting to insert", !d.isNull());
 
             LOG(1) << "replication inserted missing doc: " << missingObj.toString() << endl;
             return true;
