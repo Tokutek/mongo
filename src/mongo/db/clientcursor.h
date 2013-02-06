@@ -33,7 +33,6 @@
 #include "../util/net/message.h"
 #include "../util/net/listen.h"
 #include "../util/background.h"
-//#include "diskloc.h"
 #include "dbhelpers.h"
 #include "matcher.h"
 #include "projection.h"

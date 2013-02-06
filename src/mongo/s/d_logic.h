@@ -29,7 +29,7 @@
 namespace mongo {
 
     class Database;
-    class DiskLoc;
+    //class DiskLoc;
 
     typedef ShardChunkVersion ConfigVersion;
 
@@ -246,6 +246,6 @@ namespace mongo {
     }
 
     void logOpForSharding( const char * opstr , const char * ns , const BSONObj& obj , BSONObj * patt );
-    void aboutToDeleteForSharding( const Database* db , const DiskLoc& dl );
+    //void aboutToDeleteForSharding( const Database* db , const DiskLoc& dl );
 
 }

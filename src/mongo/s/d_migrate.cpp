@@ -272,7 +272,7 @@ namespace mongo {
             _max = max;
             _shardKeyPattern = shardKeyPattern;
 
-            verify( _cloneLocs.size() == 0 );
+            //verify( _cloneLocs.size() == 0 );
             verify( _deleted.size() == 0 );
             verify( _reload.size() == 0 );
             verify( _memoryUsed == 0 );
@@ -287,7 +287,7 @@ namespace mongo {
                 scoped_spinlock lk( _trackerLocks );
                 _deleted.clear();
                 _reload.clear();
-                _cloneLocs.clear();
+                //_cloneLocs.clear();
             }
             _memoryUsed = 0;
 
@@ -345,10 +345,13 @@ namespace mongo {
                 break;
 
             case 'u':
+#if 0
                 if ( ! Helpers::findById( cc() , _ns.c_str() , ide.wrap() , it ) ) {
                     warning() << "logOpForSharding couldn't find: " << ide << " even though should have" << migrateLog;
                     return;
                 }
+#endif
+                ::abort();
                 break;
 
             }
@@ -374,10 +377,13 @@ namespace mongo {
                 BSONObj t = *i;
                 if ( explode ) {
                     BSONObj it;
+#if 0
                     if ( Helpers::findById( cc() , _ns.c_str() , t, it ) ) {
                         arr.append( it );
                         size += it.objsize();
                     }
+#endif
+                    ::abort();
                 }
                 else {
                     arr.append( t );
@@ -500,12 +506,15 @@ namespace mongo {
 
             {
                 scoped_spinlock lk( _trackerLocks );
-                log() << "moveChunk number of documents: " << _cloneLocs.size() << migrateLog;
+                //log() << "moveChunk number of documents: " << _cloneLocs.size() << migrateLog;
             }
             return true;
         }
 
         bool clone( string& errmsg , BSONObjBuilder& result ) {
+            ::abort();
+            return false;
+#if 0 
             if ( ! _getActive() ) {
                 errmsg = "not active";
                 return false;
@@ -521,8 +530,6 @@ namespace mongo {
                 scoped_spinlock lk( _trackerLocks );
                 allocSize = std::min(BSONObjMaxUserSize, (int)((12 + d->averageObjectSize()) * _cloneLocs.size()));
             }
-            ::abort();
-#if 0 
             BSONArrayBuilder a (allocSize);
             while ( 1 ) {
                 bool filledBuffer = false;
@@ -575,10 +582,11 @@ namespace mongo {
             }
 
             result.appendArray( "objects" , a.arr() );
-#endif 
             return true;
+#endif
         }
 
+#if 0
         void aboutToDelete( const Database* db , const DiskLoc& dl ) {
             verify(db);
             Lock::assertWriteLocked(db->name);
@@ -596,6 +604,7 @@ namespace mongo {
 
             _cloneLocs.erase( dl );
         }
+#endif
 
         long long mbUsed() const { return _memoryUsed / ( 1024 * 1024 ); }
 
@@ -637,7 +646,7 @@ namespace mongo {
         // no locking needed because built initially by 1 thread in a read lock
         // emptied by 1 thread in a read lock
         // updates applied by 1 thread in a write lock
-        set<DiskLoc> _cloneLocs;
+        //set<DiskLoc> _cloneLocs;
 
         list<BSONObj> _reload; // objects that were modified that must be recloned
         list<BSONObj> _deleted; // objects deleted during clone that should be deleted later
@@ -723,9 +732,11 @@ namespace mongo {
         migrateFromStatus.logOp( opstr , ns , obj , patt );
     }
 
+#if 0
     void aboutToDeleteForSharding( const Database* db , const DiskLoc& dl ) {
         migrateFromStatus.aboutToDelete( db , dl );
     }
+#endif
 
     class TransferModsCommand : public ChunkCommandHelper {
     public:
@@ -1677,6 +1688,7 @@ namespace mongo {
 
                     // do not apply deletes if they do not belong to the chunk being migrated
                     BSONObj fullObj;
+#if 0
                     if ( Helpers::findById( cc() , ns.c_str() , id, fullObj ) ) {
                         if ( ! isInRange( fullObj , min , max ) ) {
                             log() << "not applying out of range deletion: " << fullObj << migrateLog;
@@ -1684,6 +1696,8 @@ namespace mongo {
                             continue;
                         }
                     }
+#endif
+                    ::abort();
 
                     Helpers::removeRange( ns ,
                                           id ,

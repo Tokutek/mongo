@@ -89,6 +89,7 @@ namespace toku {
             return 1;
         }
 
+#if 0
         // the bson objs must be equal, so compare by recordloc,
         // which is stored after the bson object in the buffer
         const char *buf1 = reinterpret_cast<char *>(key1->data) + obj1.objsize();
@@ -103,6 +104,8 @@ namespace toku {
         } else {
             return 1;
         }
+#endif
+        ::abort();
     }
 
     static uint64_t calculate_cachesize(void) {

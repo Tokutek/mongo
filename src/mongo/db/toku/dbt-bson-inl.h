@@ -17,12 +17,12 @@
 #include <tokudb.h>
 
 #include "mongo/bson/bsonobj.h"
-#include "mongo/db/diskloc.h"
 
 #define UNUSED __attribute__((__unused__))
 
 namespace toku {
 
+#if 0
 // index keys are big enough to fit the bson object plus a diskloc
 UNUSED
 static size_t index_key_size(const mongo::BSONObj &obj) {
@@ -43,6 +43,7 @@ static DBT generate_index_key(char *key_buf, const mongo::BSONObj &obj, const mo
     memcpy(key_buf + obj.objsize(), &loc, sizeof(mongo::DiskLoc));
     return index_key;
 }
+#endif
 
 // get a dbt whose data buffer and size are borrowed from the given bsonobj
 UNUSED
@@ -66,6 +67,7 @@ static inline mongo::BSONObj init_bson_from_dbt(const DBT *index_key) {
     return obj;
 }
 
+#if 0
 // create a diskloc object from the given index key
 // the recordloc lives at the end of the index key buffer
 UNUSED
@@ -76,6 +78,7 @@ static inline mongo::DiskLoc init_diskloc_from_dbt(const DBT *index_key) {
     memcpy(&loc, buf + index_key->size - size, size);
     return loc;
 }
+#endif
 
 // dump the contents of a dbt in a non-compact, visually pleasing way
 UNUSED
