@@ -27,6 +27,7 @@ namespace mongo {
 
     const unsigned ScanAndOrder::MaxScanAndOrderBytes = 32 * 1024 * 1024;
 
+#if 0
     void ScanAndOrder::add(const BSONObj& o, const DiskLoc* loc) {
         verify( o.isValid() );
         BSONObj k;
@@ -55,7 +56,7 @@ namespace mongo {
         i--;
         _addIfBetter(k, o, i, loc);
     }
-
+#endif
 
     void ScanAndOrder::fill( BufBuilder& b, const ParsedQuery *parsedQuery, int& nout ) const {
         int n = 0;
@@ -85,6 +86,7 @@ namespace mongo {
         nout = nFilled;
     }
 
+#if 0
     void ScanAndOrder::_add(const BSONObj& k, const BSONObj& o, const DiskLoc* loc) {
         BSONObj docToReturn = o;
         if ( loc ) {
@@ -108,6 +110,7 @@ namespace mongo {
             _add(k, o, loc);
         }
     }
+#endif
 
     void ScanAndOrder::_validateAndUpdateApproxSize( const int approxSizeDelta ) {
         // note : adjust when bson return limit adjusts. note this limit should be a bit higher.

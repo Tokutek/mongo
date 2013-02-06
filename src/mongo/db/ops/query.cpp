@@ -355,8 +355,8 @@ namespace mongo {
         // Explain does not obey soft limits, so matches should not be buffered.
         if ( !_parsedQuery.isExplain() ) {
             fillQueryResultFromObj( _buf, _parsedQuery.getFields(),
-                                    current( true ), &details,
-                                   /*( _parsedQuery.showDiskLoc() ? &loc : 0 )*/ 0 );
+                                    current( true ), &details//,
+                                   /*( _parsedQuery.showDiskLoc() ? &loc : 0 ) */ );
             ++_bufferedMatches;
         }
         return orderedMatch = true;
