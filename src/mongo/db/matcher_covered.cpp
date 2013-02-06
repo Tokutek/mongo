@@ -24,7 +24,6 @@
 
 #include "mongo/db/cursor.h"
 #include "mongo/db/queryutil.h"
-#include "mongo/db/diskloc.h"
 
 namespace mongo {
 

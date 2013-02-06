@@ -17,7 +17,6 @@
  */
 
 #include "../jsobj.h"
-#include "../diskloc.h"
 
 namespace mongo {
     

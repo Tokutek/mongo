@@ -20,7 +20,6 @@
 
 #include "mongo/db/queryutil.h"
 #include "mongo/db/queryoptimizercursor.h"
-#include "mongo/db/diskloc.h"
 
 namespace mongo {
     
@@ -55,19 +54,18 @@ namespace mongo {
             return _match == True && oldMatch != True;
         }
         bool knowMatch() const { return _match != Unknown; }
-        void countMatch( const DiskLoc &loc ) {
 #if 0
+        void countMatch( const DiskLoc &loc ) {
             if ( !_counted && _match == True && !getsetdup( loc ) ) {
                 ++_cumulativeCount;
                 ++_count;
                 _counted = true;
             }
-#endif
-            ::abort();
         }
         bool wouldCountMatch( const DiskLoc &loc ) const {
             return !_counted && _match == True && !getdup( loc );
         }
+#endif
 
         bool enoughCumulativeMatchesToChooseAPlan() const {
             // This is equivalent to the default condition for switching from
@@ -99,13 +97,13 @@ namespace mongo {
             pair<set<DiskLoc>::iterator, bool> p = _dups.insert( loc );
             return !p.second;
         }
-#endif
         bool getdup( const DiskLoc &loc ) const {
             if ( !_checkDups ) {
                 return false;
             }
             return _dups.find( loc ) != _dups.end();
         }
+#endif
         long long &_aggregateNscanned;
         long long _nscanned;
         int _cumulativeCount;
@@ -114,22 +112,21 @@ namespace mongo {
         enum MatchState { Unknown, False, True };
         MatchState _match;
         bool _counted;
-        set<DiskLoc> _dups;
+        //set<DiskLoc> _dups;
     };
     
     /** Dup tracking class, optimizing one common case with small set and few initial reads. */
+#if 0
     class SmallDupSet {
     public:
         SmallDupSet() : _accesses() {
             _vec.reserve( 250 );
         }
         /** @return true if @param 'loc' already added to the set, false if adding to the set in this call. */
-#if 0
         bool getsetdup( const DiskLoc &loc ) {
             access();
             return vec() ? getsetdupVec( loc ) : getsetdupSet( loc );
         }
-#endif
         /** @return true when @param loc in the set. */
         bool getdup( const DiskLoc &loc ) {
             access();
@@ -174,6 +171,7 @@ namespace mongo {
         set<DiskLoc> _set;
         long long _accesses;
     };
+#endif
     
     class QueryPlanSummary;
     class MultiPlanScanner;

@@ -148,16 +148,18 @@ namespace mongo {
 
             bool match = queryPlan().matcher()->matchesCurrent( _c.get(), details );
             // Cache the match, so we can count it in mayAdvance().
+            ::abort();
+#if 0
             bool newMatch = _matchCounter.setMatch( match );
 
             if ( _explainPlanInfo ) {
-                ::abort();
                 bool countableMatch = newMatch && _matchCounter.wouldCountMatch( /* _c->currLoc() */ minDiskLoc);
                 _explainPlanInfo->noteIterate( countableMatch,
                                               countableMatch || details->hasLoadedRecord(),
                                               *_c );
             }
 
+#endif
             return match;
         }
         virtual bool mayRecordPlan() const {
@@ -563,11 +565,13 @@ namespace mongo {
         }
 #endif
 
+#if 0
         /** Just check for dups - after takeover occurs */
         bool getdupInternal(const DiskLoc &loc) {
             dassert( _takeover );
             return _dups.getdup( loc );
         }
+#endif
         
         bool _requireOrder;
         auto_ptr<MultiPlanScanner> _mps;
@@ -579,7 +583,7 @@ namespace mongo {
         long long _nscanned;
         // Using a SmallDupSet seems a bit hokey, but I've measured a 5% performance improvement
         // with ~100 document non multi key scans.
-        SmallDupSet _dups;
+        //SmallDupSet _dups;
         shared_ptr<ExplainQueryInfo> _explainQueryInfo;
     };
     
