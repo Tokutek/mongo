@@ -37,6 +37,7 @@ namespace mongo {
     //
     // important note: empty bson objects still take up 5 bytes. so we
     // always write at least 5 bytes to disk for the key and obj
+#if 0
     void RowBuffer::append(const BSONObj &key, const DiskLoc &loc, const BSONObj &obj) {
         size_t key_size = key.objsize();
         size_t loc_size = sizeof(DiskLoc);
@@ -63,6 +64,7 @@ namespace mongo {
         // postcondition: end offset is correctly bounded
         invariant(_end_offset <= _size);
     }
+#endif
 
     // the row buffer is gorged if its current size is greater
     // than the preferred size or is almost full.
@@ -91,7 +93,7 @@ namespace mongo {
 
         // seek passed the current key, loc, and obj.
         size_t key_size = currentKey().objsize();
-        size_t loc_size = sizeof(DiskLoc);
+        size_t loc_size = 0; //sizeof(DiskLoc);
         size_t obj_size = currentObj().objsize();
         _current_offset += key_size + loc_size + obj_size;
 
@@ -111,6 +113,7 @@ namespace mongo {
         return key;
     }
 
+#if 0
     // get the current diskloc from the buffer. the buffer must have
     // valid data in order to call this, assert otherwise.
     DiskLoc RowBuffer::currentLoc() const {
@@ -120,13 +123,14 @@ namespace mongo {
         DiskLoc *loc = (DiskLoc *) (key_buf + key.objsize());
         return *loc;
     }
+#endif
 
     // get the current obj from the buffer.
     BSONObj RowBuffer::currentObj() const {
         invariant(_current_offset < _end_offset);
         const char *key_buf = _buf + _current_offset;
         BSONObj key = BSONObj(key_buf);
-        const char *obj_buf = key_buf + key.objsize() + sizeof(DiskLoc);
+        const char *obj_buf = key_buf + key.objsize() + 0;//sizeof(DiskLoc);
         BSONObj obj = BSONObj(obj_buf);
         return obj;
     }

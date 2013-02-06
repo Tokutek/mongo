@@ -18,7 +18,6 @@
 #define TOKUDB_ROW_BUFFER_H
 
 #include "mongo/bson/bsonobj.h"
-#include "mongo/db/diskloc.h"
 
 namespace mongo {
 
@@ -29,7 +28,7 @@ namespace mongo {
         ~RowBuffer();
 
         // append the given key, loc and obj to the end of the buffer
-        void append(const BSONObj &key, const DiskLoc &loc, const BSONObj &obj);
+        //void append(const BSONObj &key, const DiskLoc &loc, const BSONObj &obj);
 
         // the row buffer is gorged if its current size is greater
         // than or equal to the preferred size.
@@ -53,7 +52,7 @@ namespace mongo {
         BSONObj currentKey() const;
 
         // get the current diskloc from the buffer.
-        DiskLoc currentLoc() const;
+        //DiskLoc currentLoc() const;
 
         // get the current obj from the buffer.
         BSONObj currentObj() const;
