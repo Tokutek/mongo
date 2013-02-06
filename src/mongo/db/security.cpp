@@ -128,10 +128,13 @@ namespace mongo {
                 BSONObjBuilder b;
                 b << "user" << user;
                 BSONObj query = b.done();
+#if 0
                 if( !Helpers::findOne(systemUsers.c_str(), query, userObj) ) {
                     log() << "auth: couldn't find user " << user << ", " << systemUsers << endl;
                     return false;
                 }
+#endif
+                ::abort();
             }
 
             pwd = userObj.getStringField("pwd");

@@ -1080,12 +1080,15 @@ namespace mongo {
             {
                 Lock::GlobalWrite lk;
                 Client::Context ctxt("local.");
+                ::abort();
+#if 0
                 if( !Helpers::findOne("local.system.users", userReplQuery, user) ||
                         // try the first user in local
                         !Helpers::getSingleton("local.system.users", user) ) {
                     log() << "replauthenticate: no user in local.system.users to use for authentication\n";
                     return false;
                 }
+#endif
             }
             u = user.getStringField("user");
             p = user.getStringField("pwd");

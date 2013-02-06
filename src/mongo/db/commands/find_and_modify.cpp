@@ -116,8 +116,8 @@ namespace mongo {
             Client::Context cx( ns );
 
             BSONObj doc;
-            
-            bool found = Helpers::findOne( ns.c_str() , queryOriginal , doc );
+            ::abort(); 
+            bool found = false;// Helpers::findOne( ns.c_str() , queryOriginal , doc );
 
             BSONObj queryModified = queryOriginal;
             if ( found && doc["_id"].type() && ! isSimpleIdQuery( queryOriginal ) ) {
@@ -182,7 +182,8 @@ namespace mongo {
                             queryModified = BSON( "_id" << res.upserted );
                         }
                         log() << "queryModified: " << queryModified << endl;
-                        verify( Helpers::findOne( ns.c_str() , queryModified , doc ) );
+                        // TODO: Do we need to verify this?
+                        //verify( Helpers::findOne( ns.c_str() , queryModified , doc ) );
                         _appendHelper( result , doc , true , fields );
                     }
                     

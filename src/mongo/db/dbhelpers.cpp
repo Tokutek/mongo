@@ -70,6 +70,7 @@ namespace mongo {
     /* fetch a single object from collection ns that matches query
        set your db SavedContext first
     */
+#if 0
     bool Helpers::findOne(const StringData& ns, const BSONObj &query, BSONObj& result, bool requireIndex) {
         DiskLoc loc = findOne( ns, query, requireIndex );
         if ( loc.isNull() )
@@ -77,10 +78,12 @@ namespace mongo {
         result = loc.obj();
         return true;
     }
+#endif
 
     /* fetch a single object from collection ns that matches query
        set your db SavedContext first
     */
+#if 0
     DiskLoc Helpers::findOne(const StringData& ns, const BSONObj &query, bool requireIndex) {
         shared_ptr<Cursor> c =
             NamespaceDetailsTransient::getCursor( ns.data() , query, BSONObj(),
@@ -88,17 +91,17 @@ namespace mongo {
                                                   QueryPlanSelectionPolicy::indexOnly() :
                                                   QueryPlanSelectionPolicy::any() );
         while( c->ok() ) {
-#if 0
             if ( c->currentMatches() && !c->getsetdup( c->currLoc() ) ) {
                 return c->currLoc();
             }
-#endif
             ::abort(); // TODO: Wrangle the dup stuff above
             c->advance();
         }
         return DiskLoc();
     }
+#endif
 
+#if 0
     bool Helpers::findById(Client& c, const char *ns, BSONObj query, BSONObj& result ,
                            bool * nsFound , bool * indexFound ) {
         Lock::assertAtLeastReadLocked(ns);
@@ -126,7 +129,9 @@ namespace mongo {
         result = loc.obj();
         return true;
     }
+#endif
 
+#if 0
     DiskLoc Helpers::findById(NamespaceDetails *d, BSONObj idquery) {
         verify(d);
         int idxNo = d->findIdIndex();
@@ -136,6 +141,7 @@ namespace mongo {
         ::abort();
         return minDiskLoc; //i.idxInterface().findSingle(i , i.head , key);
     }
+#endif
 
     vector<BSONObj> Helpers::findAll( const string& ns , const BSONObj& query ) {
         Lock::assertAtLeastReadLocked( ns );

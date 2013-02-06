@@ -56,16 +56,16 @@ namespace mongo {
     bool CoveredIndexMatcher::matchesCurrent( Cursor * cursor , MatchDetails * details ) const {
         // bool keyUsable = ! cursor->isMultiKey() && check for $orish like conditions in matcher SERVER-1264
         ::abort();
-        return matches( cursor->currKey() , minDiskLoc /* cursor->currLoc() TODO: Why is currLoc here? */, details ,
+        return matches( cursor->currKey() , /* cursor->currLoc(), TODO: Why is currLoc here? */ details ,
                        !cursor->indexKeyPattern().isEmpty() // unindexed cursor
                        && !cursor->isMultiKey() // multikey cursor
                        );
     }
 
-    bool CoveredIndexMatcher::matches( const BSONObj& key, const DiskLoc& recLoc,
+    bool CoveredIndexMatcher::matches( const BSONObj& key, /*const DiskLoc& recLoc, */
                                        MatchDetails* details, bool keyUsable ) const {
 
-        LOG(5) << "CoveredIndexMatcher::matches() " << key.toString() << ' ' << recLoc.toString() << ' ' << keyUsable << endl;
+        //LOG(5) << "CoveredIndexMatcher::matches() " << key.toString() << ' ' << recLoc.toString() << ' ' << keyUsable << endl;
 
         dassert( key.isValid() );
 
@@ -85,7 +85,8 @@ namespace mongo {
         if ( details )
             details->setLoadedRecord( true );
 
-        BSONObj obj = recLoc.obj();
+        ::abort();
+        BSONObj obj = BSONObj(); //recLoc.obj();
         bool res =
             _docMatcher->matches( obj, details ) &&
             !isOrClauseDup( obj );

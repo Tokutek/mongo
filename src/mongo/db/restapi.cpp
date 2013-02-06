@@ -263,8 +263,11 @@ namespace mongo {
         uassert( 16174 , "couldn't get read lock to check admin user" , rl.got() );
         Client::Context cx( "admin.system.users" );
         BSONObj user;
+        ::abort();
+#if 0
         if ( Helpers::findOne( "admin.system.users" , BSON( "user" << username ) , user ) )
             return user.copy();
+#endif
         return BSONObj();
     }
 

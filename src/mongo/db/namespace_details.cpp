@@ -356,7 +356,8 @@ namespace mongo {
         string system_namespaces = NamespaceString( ns ).db + ".system.namespaces";
 
         BSONObj oldEntry;
-        verify( Helpers::findOne( system_namespaces , BSON( "name" << ns ) , oldEntry ) );
+        // TODO: Do we need to verify this?
+        //verify( Helpers::findOne( system_namespaces , BSON( "name" << ns ) , oldEntry ) );
         BSONObj newEntry = applyUpdateOperators( oldEntry , BSON( "$set" << BSON( "options.flags" << userFlags() ) ) );
         
         verify( 1 == deleteObjects( system_namespaces.c_str() , oldEntry , true , false , true ) );

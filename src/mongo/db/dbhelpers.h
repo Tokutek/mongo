@@ -63,7 +63,7 @@ namespace mongo {
            @return true if object found
         */
         static bool findOne(const StringData& ns, const BSONObj &query, BSONObj& result, bool requireIndex = false);
-        static DiskLoc findOne(const StringData& ns, const BSONObj &query, bool requireIndex);
+        //static DiskLoc findOne(const StringData& ns, const BSONObj &query, bool requireIndex);
 
         /**
          * have to be locked already
@@ -79,7 +79,7 @@ namespace mongo {
 
         /* uasserts if no _id index.
            @return null loc if not found */
-        static DiskLoc findById(NamespaceDetails *d, BSONObj query);
+        //static DiskLoc findById(NamespaceDetails *d, BSONObj query);
 
         /** Get/put the first (or last) object from a collection.  Generally only useful if the collection
             only ever has a single object -- which is a "singleton collection".

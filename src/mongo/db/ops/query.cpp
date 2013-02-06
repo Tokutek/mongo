@@ -844,7 +844,7 @@ namespace mongo {
         // notes:
         //  do not touch result inside of PageFaultRetryableSection area
 
-        Client& currentClient = cc(); // only here since its safe and takes time
+        //Client& currentClient = cc(); // only here since its safe and takes time
         auto_ptr< QueryResult > qr;
         
         {
@@ -866,7 +866,8 @@ namespace mongo {
                     Client::ReadContext ctx( ns , dbpath ); // read locks
                     replVerifyReadsOk(&pq);
                     
-                    bool found = Helpers::findById( currentClient, ns, query, resObject, &nsFound, &indexFound );
+                    ::abort();
+                    bool found = false; //Helpers::findById( currentClient, ns, query, resObject, &nsFound, &indexFound );
                     if ( nsFound && ! indexFound ) {
                         // we have to resort to a table scan
                         return false;

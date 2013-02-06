@@ -636,8 +636,11 @@ namespace mongo {
                     b.append(_id);
                     BSONObj result;
                     Client::Context ctx( ns );
+#if 0
                     if( Helpers::findById(cc(), ns, b.done(), result) )
                         _dummy_z += result.objsize(); // touch
+#endif
+                    ::abort();
                 }
             }
             catch( DBException& e ) {
@@ -670,8 +673,11 @@ namespace mongo {
                 b.append(_id);
                 BSONObj result;
                 Client::ReadContext ctx( ns );
+#if 0
                 if( Helpers::findById(cc(), ns, b.done(), result) )
                     _dummy_z += result.objsize(); // touch
+#endif
+                ::abort();
             }
         }
         catch( DBException& ) {
@@ -757,6 +763,7 @@ namespace mongo {
         Lock::assertWriteLocked(ns);
 
         NamespaceDetails *nsd = nsdetails(ns);
+        (void) nsd; // TODO: Suppress unused warning
 
         // operation type -- see logOp() comments for types
         const char *opType = fields[2].valuestrsafe();
@@ -827,6 +834,7 @@ namespace mongo {
                     //   { _id:..., { x : {$size:...} }
                     // thus this is not ideal.
                     else {
+#if 0
                         if (nsd == NULL ||
                             (nsd->findIdIndex() >= 0 && Helpers::findById(nsd, updateCriteria).isNull()) ||
                             // capped collections won't have an _id index
@@ -834,6 +842,8 @@ namespace mongo {
                             failedUpdate = true;
                             log() << "replication couldn't find doc: " << op.toString() << endl;
                         }
+#endif
+                        ::abort();
 
                         // Otherwise, it's present; zero objects were updated because of additional specifiers
                         // in the query for idempotence

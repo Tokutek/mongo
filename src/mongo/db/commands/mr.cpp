@@ -541,7 +541,8 @@ namespace mongo {
                     bool found;
                     {
                         Client::Context tx( _config.finalLong );
-                        found = Helpers::findOne( _config.finalLong.c_str() , temp["_id"].wrap() , old , true );
+                        found = false ;//Helpers::findOne( _config.finalLong.c_str() , temp["_id"].wrap() , old , true );
+                        ::abort();
                     }
 
                     if ( found ) {

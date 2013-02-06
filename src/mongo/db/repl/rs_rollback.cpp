@@ -492,6 +492,8 @@ namespace mongo {
                             try {
                                 /** todo: IIRC cappedTrunateAfter does not handle completely empty.  todo. */
                                 // this will crazy slow if no _id index.
+                                ::abort();
+#if 0
                                 long long start = Listener::getElapsedTimeMillis();
                                 DiskLoc loc = Helpers::findOne(d.ns, pattern, false);
                                 if( Listener::getElapsedTimeMillis() - start > 200 )
@@ -512,6 +514,7 @@ namespace mongo {
                                         }
                                     }
                                 }
+#endif
                             }
                             catch(DBException& e) {
                                 log() << "replSet error rolling back capped collection rec " << d.ns << ' ' << e.toString() << rsLog;
