@@ -1409,7 +1409,7 @@ namespace mongo {
             //    result.append      ( "avgObjSize" , double(size) / double(nsd->stats.nrecords) );
             // TODO: TokuDB provide our version of stats
 
-            int numExtents;
+            int numExtents = 0;
             BSONArrayBuilder extents;
 
             //result.appendNumber( "storageSize" , nsd->storageSize( &numExtents , verbose ? &extents : 0  ) / scale );
@@ -1542,9 +1542,9 @@ namespace mongo {
                 //size += nsd->stats.datasize;
                 // TODO: Get object count and size from tokudb
 
-                int temp;
+                //int temp;
                 //storageSize += nsd->storageSize( &temp );
-                numExtents += temp;
+                //numExtents += temp;
 
                 indexes += nsd->nIndexes;
                 indexSize += getIndexSizeForCollection(dbname, ns);
