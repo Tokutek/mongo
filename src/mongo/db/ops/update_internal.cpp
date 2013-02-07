@@ -406,7 +406,7 @@ namespace mongo {
         return !obj.getField( path ).eoo();
     }
 
-    auto_ptr<ModSetState> ModSet::prepare(const BSONObj& obj) const {
+    auto_ptr<ModSetState> ModSet::prepare(const BSONObj& obj, bool insertion) const {
         DEBUGUPDATE( "\t start prepare" );
         auto_ptr<ModSetState> mss( new ModSetState( obj ) );
 
@@ -445,7 +445,7 @@ namespace mongo {
                 continue;
             }
 
-            if ( e.eoo() ) {
+            if ( m.op != Mod::SET_ON_INSERT && e.eoo() ) {
                 continue;
             }
 
@@ -459,13 +459,14 @@ namespace mongo {
                 break;
 
             case Mod::SET_ON_INSERT:
-                // In-place-ness was set before on the general test for e.eoo() above this
-                // switch. Just for documentation, this is what we'd like for $setOnInsert.
-                // mss->amIInPlacePossible( ! e.eoo() );
-
-                // If the element exists, $setOnInsert becomes a no-op.
-                if ( ! e.eoo() ) {
+                // If the document exist (i.e this is an update, not an insert) $setOnInsert
+                // becomes a no-op.
+                if ( !insertion ) {
                     ms.dontApply = true;
+                    mss->amIInPlacePossible( true );
+                }
+                else {
+                    mss->amIInPlacePossible( false );
                 }
                 break;
 
@@ -879,7 +880,7 @@ namespace mongo {
             newObj = bb.obj();
         }
 
-        auto_ptr<ModSetState> mss = prepare( newObj );
+        auto_ptr<ModSetState> mss = prepare( newObj, true /* this is an insertion */ );
         newObj = mss->createNewFromMods();
 
         return newObj;

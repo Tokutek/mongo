@@ -166,7 +166,7 @@ namespace mongo {
         loud.ns = ns;
         loud.fromMigrate = fromMigrate;
         if ( isOperatorUpdate ) {
-            auto_ptr<ModSetState> mss = mods->prepare( obj );
+            auto_ptr<ModSetState> mss = mods->prepare( obj, false /* not an insertion */ );
 
             // mod set update, ie: $inc: 10 increments by 10.
             updateUsingMods( d, pk, obj, *mss, &loud );
@@ -333,7 +333,8 @@ namespace mongo {
                         mymodset.reset( useMods );
                     }
 
-                    auto_ptr<ModSetState> mss = useMods->prepare( currentObj );
+                    auto_ptr<ModSetState> mss = useMods->prepare( currentObj,
+                                                                  false /* not an insertion */ );
                     updateUsingMods( d, currPK, currentObj, *mss, &loud );
 
                     numModded++;
