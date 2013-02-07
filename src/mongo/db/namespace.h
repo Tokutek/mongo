@@ -25,7 +25,7 @@
 
 namespace mongo {
 
-#pragma pack(1)
+//#pragma pack(1)
     class Namespace {
     public:
         explicit Namespace(const char *ns) { *this = ns; }
@@ -57,6 +57,10 @@ namespace mongo {
     private:
         char buf[MaxNsLen];
     };
-#pragma pack()
+//#pragma pack()
+
+    // TODO: TokuDB: We think this only mattered when mongo used memory mapped files. Does it matter for us?
+    //BOOST_STATIC_ASSERT( sizeof(Namespace) == 128 );
+    //BOOST_STATIC_ASSERT( Namespace::MaxNsLen == MaxDatabaseNameLen );
 
 } // namespace mongo

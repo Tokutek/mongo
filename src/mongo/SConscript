@@ -55,7 +55,7 @@ commonFiles = [ "pch.cpp",
                 "buildinfo.cpp",
                 "db/hasher.cpp",
                 "db/lasterror.cpp",
-                "db/namespace.cpp",
+                #"db/namespace.cpp",
                 "shell/mongo.cpp",
                 "util/background.cpp",
                 "util/intrusive_counter.cpp",
@@ -206,6 +206,7 @@ coreServerFiles.append( systemInfoPlatformFile )
 if has_option( "asio" ):
     coreServerFiles += [ "util/net/message_server_asio.cpp" ]
 
+# TokuDB: Commented out files have been deleted - they were used to implement the old storage/durability layer.
 # mongod files - also files used in tools. present in dbtests, but not in mongos and not in client libs.
 serverOnlyFiles = [ "db/curop.cpp",
                     #"db/memconcept.cpp",
@@ -271,8 +272,11 @@ serverOnlyFiles = [ "db/curop.cpp",
                     #"db/index_update.cpp",
                     "db/scanandorder.cpp",
                     "db/explain.cpp",
-                    "db/geo/2d.cpp",
-                    "db/geo/haystack.cpp",
+
+                    # Geospacial indexes were written using low-level btree APIs.
+                    # TokuDB Will need to rewrite this entirely.
+                    #"db/geo/2d.cpp",
+                    #"db/geo/haystack.cpp",
                     "db/hashindex.cpp",
                     "db/ops/count.cpp",
                     "db/ops/delete.cpp",
