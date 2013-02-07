@@ -56,7 +56,8 @@ public:
     Restore() : BSONTool( "restore" ),
         _drop(false), _restoreOptions(false), _restoreIndexes(false),
         _w(0), _doBulkLoad(false) {
-
+        // Default values set here will show up in help text, but will supercede any default value
+        // used when calling getParam below.
         add_options()
         ("drop" , "drop each collection before import. RECOMMENDED, since only non-existent collections are eligible for the bulk load optimization.")
         ("oplogReplay", "deprecated")
@@ -64,7 +65,7 @@ public:
         ("keepIndexVersion" , "deprecated")
         ("noOptionsRestore" , "don't restore collection options")
         ("noIndexRestore" , "don't restore indexes")
-        ("w" , po::value<int>()->default_value(1) , "minimum number of replicas per write. WARNING, setting w > 0 prevents the bulk load optimization." )
+        ("w" , po::value<int>()->default_value(0) , "minimum number of replicas per write. WARNING, setting w > 1 prevents the bulk load optimization." )
         ;
         add_hidden_options()
         ("dir", po::value<string>()->default_value("dump"), "directory to restore from")
@@ -95,6 +96,7 @@ public:
         _drop = hasParam( "drop" );
         _restoreOptions = !hasParam("noOptionsRestore");
         _restoreIndexes = !hasParam("noIndexRestore");
+        // Make sure default value set here stays in sync with the one set in the constructor above.
         _w = getParam( "w" , 0 );
         _doBulkLoad = _w <= 1;
         if (!_doBulkLoad) {
