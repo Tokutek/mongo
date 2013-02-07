@@ -781,9 +781,9 @@ env.Append( CPPPATH=['$EXTRACPPPATH'],
             LIBPATH=['$EXTRALIBPATH'] )
 
 # tokudb
-env.Append(CPPPATH=['/home/esmet/svn/toku/tokudb/release/include'])
-env.Append(LIBPATH=['/home/esmet/svn/toku/tokudb/release/lib'])
-env.Append(LIBS=['libtokudb_static.a', 'libtokuportability_static.a', 'dl', 'z'])
+env.Append(CPPPATH=['$BUILD_DIR/third_party/tokudb/include'])
+env.Append(LIBPATH=['$BUILD_DIR/third_party/tokudb/lib'])
+env.Append(LIBS=['tokudb_static', 'tokuportability_static', 'dl', 'z'])
 
 # --- check system ---
 
