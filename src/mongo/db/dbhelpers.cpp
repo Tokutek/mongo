@@ -288,7 +288,7 @@ namespace mongo {
                                     const BSONObj& keyPattern ,
                                     bool maxInclusive ,
                                     bool secondaryThrottle ,
-                                    RemoveCallback * callback,
+                                    /* RemoveCallback * callback, */
                                     bool fromMigrate ) {
         
         Client& c = cc();
@@ -384,6 +384,7 @@ namespace mongo {
         deleteObjects(ns, BSONObj(), false);
     }
 
+#if 0
     RemoveSaver::RemoveSaver( const string& a , const string& b , const string& why) : _out(0) {
         static int NUM = 0;
 
@@ -425,6 +426,6 @@ namespace mongo {
         }
         _out->write( o.objdata() , o.objsize() );
     }
-
+#endif
 
 } // namespace mongo

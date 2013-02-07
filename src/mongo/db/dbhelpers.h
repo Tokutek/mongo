@@ -141,11 +141,13 @@ namespace mongo {
                                            const BSONObj& keyPattern ,
                                            int minOrMax );
 
+#if 0
         class RemoveCallback {
         public:
             virtual ~RemoveCallback() {}
             virtual void goingToDelete( const BSONObj& o ) = 0;
         };
+#endif
 
         /**
          * Takes a range, specified by a min and max, and an index, specified by
@@ -165,7 +167,7 @@ namespace mongo {
                                       const BSONObj& keyPattern ,
                                       bool maxInclusive = false , 
                                       bool secondaryThrottle = false , 
-                                      RemoveCallback * callback = 0, 
+                                      /* RemoveCallback * callback = 0, */
                                       bool fromMigrate = false );
 
         /**
@@ -180,6 +182,7 @@ namespace mongo {
     /**
      * user for saving deleted bson objects to a flat file
      */
+#if 0
     class RemoveSaver : public Helpers::RemoveCallback , boost::noncopyable {
     public:
         RemoveSaver( const string& type , const string& ns , const string& why);
@@ -193,6 +196,7 @@ namespace mongo {
         ofstream* _out;
 
     };
+#endif
 
 
 } // namespace mongo

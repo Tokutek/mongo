@@ -190,7 +190,10 @@ namespace mongo {
         void doRemove() {
             ShardForceVersionOkModeBlock sf;
             {
+                // TODO: TokuDB: No need for a removesaver, we have transactions.
+#if 0
                 RemoveSaver rs("moveChunk",ns,"post-cleanup");
+#endif
                 long long numDeleted =
                         Helpers::removeRange( ns ,
                                               min ,
@@ -198,7 +201,7 @@ namespace mongo {
                                               findShardKeyIndexPattern_unlocked( ns , shardKeyPattern ) , 
                                               false , /*maxInclusive*/
                                               secondaryThrottle ,
-                                              cmdLine.moveParanoia ? &rs : 0 , /*callback*/
+                                              /* cmdLine.moveParanoia ? &rs : 0 , */ /*callback*/
                                               true ); /*fromMigrate*/
                 log() << "moveChunk deleted: " << numDeleted << migrateLog;
             }
@@ -1471,14 +1474,17 @@ namespace mongo {
 
             {
                 // 2. delete any data already in range
+                // TODO: TokuDB: No need for a removesaver, we have transactions.
+#if 0
                 RemoveSaver rs( "moveChunk" , ns , "preCleanup" );
+#endif
                 long long num = Helpers::removeRange( ns ,
                                                       min ,
                                                       max ,
                                                       findShardKeyIndexPattern_unlocked( ns , shardKeyPattern ) , 
                                                       false , /*maxInclusive*/
                                                       secondaryThrottle , /* secondaryThrottle */
-                                                      cmdLine.moveParanoia ? &rs : 0 , /*callback*/
+                                                      /* cmdLine.moveParanoia ? &rs : 0 , */ /*callback*/
                                                       true ); /* flag fromMigrate in oplog */
                 if ( num )
                     warning() << "moveChunkCmd deleted data already in chunk # objects: " << num << migrateLog;
@@ -1678,7 +1684,9 @@ namespace mongo {
             bool didAnything = false;
 
             if ( xfer["deleted"].isABSONObj() ) {
+#if 0
                 RemoveSaver rs( "moveChunk" , ns , "removedDuring" );
+#endif
 
                 BSONObjIterator i( xfer["deleted"].Obj() );
                 while ( i.more() ) {
@@ -1705,7 +1713,7 @@ namespace mongo {
                                           findShardKeyIndexPattern_locked( ns , shardKeyPattern ), 
                                           true , /*maxInclusive*/
                                           false , /* secondaryThrottle */
-                                          cmdLine.moveParanoia ? &rs : 0 , /*callback*/
+                                          /* cmdLine.moveParanoia ? &rs : 0 */ /*callback*/
                                           true ); /*fromMigrate*/
 
                     *lastOpApplied = cx.ctx().getClient()->getLastOp().asDate();

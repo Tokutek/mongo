@@ -24,10 +24,10 @@
 
 namespace mongo {
 
-    class RemoveSaver;
+    //class RemoveSaver;
 
     // If justOne is true, deletedId is set to the id of the deleted object.
-    long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop = false, bool god=false, RemoveSaver * rs=0);
+    long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop = false, bool god=false/*, RemoveSaver * rs=0*/);
 
 
 }

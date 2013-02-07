@@ -148,7 +148,7 @@ namespace mongo {
                                  bool multi,
                                  bool logop ,
                                  OpDebug& debug,
-                                 RemoveSaver* rs,
+                                 /*RemoveSaver* rs,*/
                                  bool fromMigrate,
                                  const QueryPlanSelectionPolicy& planPolicy ) {
 
@@ -515,7 +515,7 @@ namespace mongo {
 
         UpdateResult ur = _updateObjects(false, ns, updateobj, patternOrig,
                                          upsert, multi, logop,
-                                         debug, 0, fromMigrate, planPolicy );
+                                         debug, /*0,*/ fromMigrate, planPolicy );
         debug.nupdated = ur.num;
         return ur;
     }

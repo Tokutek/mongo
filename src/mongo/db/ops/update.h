@@ -42,7 +42,7 @@ namespace mongo {
         }
     };
 
-    class RemoveSaver;
+    //class RemoveSaver;
 
     /* returns true if an existing object was updated, false if no existing object was found.
        multi - update multiple objects - mostly useful with things like $set
@@ -66,7 +66,7 @@ namespace mongo {
                                 bool multi,
                                 bool logop,
                                 OpDebug& debug,
-                                RemoveSaver* rs = 0,
+                                /*RemoveSaver* rs = 0,*/
                                 bool fromMigrate = false,
                                 const QueryPlanSelectionPolicy& planPolicy = QueryPlanSelectionPolicy::any());
 

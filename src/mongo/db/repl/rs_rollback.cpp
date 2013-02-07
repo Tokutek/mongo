@@ -457,7 +457,7 @@ namespace mongo {
         NamespaceDetails *oplogDetails = nsdetails(rsoplog);
         uassert(13423, str::stream() << "replSet error in rollback can't find " << rsoplog, oplogDetails);
 
-        map<string,shared_ptr<RemoveSaver> > removeSavers;
+        //map<string,shared_ptr<RemoveSaver> > removeSavers;
 
         unsigned deletes = 0, updates = 0;
         for( list<pair<DocID,bo> >::iterator i = goodVersions.begin(); i != goodVersions.end(); i++ ) {
@@ -473,9 +473,11 @@ namespace mongo {
                 //getDur().commitIfNeeded();
 
                 /* keep an archive of items rolled back */
+#if 0
                 shared_ptr<RemoveSaver>& rs = removeSavers[d.ns];
                 if ( ! rs )
                     rs.reset( new RemoveSaver( "rollback" , "" , d.ns ) );
+#endif
 
                 // todo: lots of overhead in context, this can be faster
                 Client::Context c(d.ns);
@@ -523,7 +525,7 @@ namespace mongo {
                         else {
                             try {
                                 deletes++;
-                                deleteObjects(d.ns, pattern, /*justone*/true, /*logop*/false, /*god*/true, rs.get() );
+                                deleteObjects(d.ns, pattern, /*justone*/true, /*logop*/false, /*god*/true/*, rs.get()*/ );
                             }
                             catch(...) {
                                 log() << "replSet error rollback delete failed ns:" << d.ns << rsLog;
@@ -561,7 +563,7 @@ namespace mongo {
                     // todo faster...
                     OpDebug debug;
                     updates++;
-                    _updateObjects(/*god*/true, d.ns, i->second, pattern, /*upsert=*/true, /*multi=*/false , /*logtheop=*/false , debug, rs.get() );
+                    _updateObjects(/*god*/true, d.ns, i->second, pattern, /*upsert=*/true, /*multi=*/false , /*logtheop=*/false , debug/*, rs.get()*/ );
                 }
             }
             catch(DBException& e) {
@@ -570,7 +572,7 @@ namespace mongo {
             }
         }
 
-        removeSavers.clear(); // this effectively closes all of them
+        //removeSavers.clear(); // this effectively closes all of them
 
         sethbmsg(str::stream() << "rollback 5 d:" << deletes << " u:" << updates);
         // TODO: What should TokuDB do here?
