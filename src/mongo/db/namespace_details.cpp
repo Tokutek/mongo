@@ -37,22 +37,11 @@ namespace mongo {
 
     //NamespaceDetails::NamespaceDetails( const DiskLoc &loc, bool capped )
     NamespaceDetails::NamespaceDetails( bool capped ) {
-
-        /* be sure to initialize new fields here -- doesn't default to zeroes the way we use it */
-        //firstExtent = lastExtent = capExtent = loc;
-        //stats.datasize = stats.nrecords = 0;
-        //lastExtentSize = 0;
         nIndexes = 0;
         _isCapped = capped;
         _maxDocsInCapped = 0x7fffffff;
         _systemFlags = 0;
         _userFlags = 0;
-#if 0
-        capFirstNewRecord = DiskLoc();
-        // Signal that we are on first allocation iteration through extents.
-        capFirstNewRecord.setInvalid();
-        // For capped case, signal that we are doing initial extent allocation.
-#endif
             
         if ( capped )
             ::abort(); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
@@ -71,43 +60,11 @@ namespace mongo {
 
     boost::filesystem::path NamespaceIndex::path() const {
         boost::filesystem::path ret( dir_ );
-#if 0
-        if ( directoryperdb )
-            ret /= database_;
-#endif
         ret /= ( database_ + ".ns" );
         return ret;
     }
 
-    void NamespaceIndex::maybeMkdir() const {
-        // Directory per db is always false, so this should do nothing
-#if 0
-        if ( !directoryperdb )
-            return;
-        boost::filesystem::path dir( dir_ );
-        dir /= database_;
-        if ( !boost::filesystem::exists( dir ) )
-            MONGO_ASSERT_ON_EXCEPTION_WITH_MSG( boost::filesystem::create_directory( dir ), "create dir for db " );
-#endif
-    }
-
     unsigned lenForNewNsFiles = 16 * 1024 * 1024;
-
-    void NamespaceDetails::onLoad(const Namespace& k) {
-        if( indexBuildInProgress ) {
-            verify( Lock::isW() ); // TODO(erh) should this be per db?
-            if( indexBuildInProgress ) {
-                log() << "indexBuildInProgress was " << indexBuildInProgress << " for " << k << ", indicating an abnormal db shutdown" << endl;
-                indexBuildInProgress = 0; // TODO: Transactional //getDur().writingInt( indexBuildInProgress ) = 0;
-            }
-        }
-    }
-
-#if 0
-    static void namespaceOnLoadCallback(const Namespace& k, NamespaceDetails& v) {
-        v.onLoad(k);
-    }
-#endif
 
     bool checkNsFilesOnLoad = true;
 
