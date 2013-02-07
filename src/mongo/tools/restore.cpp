@@ -122,7 +122,11 @@ public:
          * .bson file, or a single .bson file itself (a collection).
          */
         drillDown(root, _db != "", _coll != "", true);
-        conn().getLastError(_db == "" ? "admin" : _db);
+        string err = conn().getLastError(_db == "" ? "admin" : _db);
+        if (!err.empty()) {
+            error() << err;
+        }
+
         return EXIT_CLEAN;
     }
 
@@ -314,7 +318,10 @@ public:
             // wait for insert to propagate to "w" nodes (doesn't warn if w used without replset)
             if ( _w > 0 ) {
                 verify( !_doBulkLoad );
-                conn().getLastErrorDetailed(_curdb, false, false, _w);
+                string err = conn().getLastError(_curdb, false, false, _w);
+                if (!err.empty()) {
+                    error() << err;
+                }
             }
         }
     }
