@@ -40,6 +40,7 @@ namespace mongo {
         }
 
         void Transaction::commit() {
+            verify(cc().transaction() == this);
             int r = _txn->commit(_txn, 0);
             verify(r == 0);
             cc().set_transaction(_parent);
@@ -47,6 +48,7 @@ namespace mongo {
         }
 
         void Transaction::abort() {
+            verify(cc().transaction() == this);
             int r = _txn->abort(_txn);
             verify(r == 0);
             cc().set_transaction(_parent);
