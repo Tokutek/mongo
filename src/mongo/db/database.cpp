@@ -27,7 +27,7 @@
 
 namespace mongo {
 
-    bool Database::_openAllFiles = true;
+    //bool Database::_openAllFiles = true;
 
     void assertDbAtLeastReadLocked(const Database *db) { 
         if( db ) { 
@@ -65,6 +65,7 @@ namespace mongo {
         : name(nm), path(_path), namespaceIndex( path, name ),
           profileName(name + ".system.profile")
     {
+        tokulog() << "opening Database(" << nm << ", " << _path << ")" << endl;
         try {
             {
                 // check db name is valid
@@ -95,9 +96,12 @@ namespace mongo {
             // If already exists, open.  Otherwise behave as if empty until
             // there's a write, then open.
             if (!newDb) {
+                tokulog() << "database already exists" << endl;
                 namespaceIndex.init();
-                if( _openAllFiles )
-                    openAllFiles();
+                //if( _openAllFiles )
+                //    openAllFiles();
+            } else {
+                tokulog() << "behaving as if empty until there's a write" << endl;
             }
             magic = 781231;
         } catch(std::exception& e) {
@@ -165,6 +169,7 @@ namespace mongo {
         return "";
     }
     
+#if 0
     boost::filesystem::path Database::fileName( int n ) const {
         stringstream ss;
         ss << name << '.' << n;
@@ -178,7 +183,6 @@ namespace mongo {
 
     bool Database::openExistingFile( int n ) { 
         ::abort();
-#if 0
         verify(this);
         Lock::assertWriteLocked(name);
         {
@@ -223,7 +227,6 @@ namespace mongo {
             _files[n] = df;
         }
 
-#endif
         return true;
     }
 
@@ -239,7 +242,6 @@ namespace mongo {
     }
 
     // todo: this is called a lot. streamline the common case
-#if 0
     MongoDataFile* Database::getFile( int n, int sizeNeeded , bool preallocateOnly) {
         verify(this);
         DEV assertDbAtLeastReadLocked(this);
@@ -407,18 +409,18 @@ namespace mongo {
         return true;
     }
 
+#if 0
     bool Database::exists(int n) const { 
         return boost::filesystem::exists( fileName( n ) ); 
     }
 
     int Database::numFiles() const { 
-#if 0
         DEV assertDbAtLeastReadLocked(this);
         return (int) _files.size(); 
-#endif
         ::abort();
         return 0;
     }
+#endif
 
     void Database::flushFiles( bool sync ) {
         ::abort();
@@ -433,8 +435,11 @@ namespace mongo {
 
     long long Database::fileSize() const {
         long long size=0;
+        wunimplemented("Database::fileSize");
+#if 0
         for (int n=0; exists(n); n++)
             size += boost::filesystem::file_size( fileName(n) );
+#endif
         return size;
     }
 
@@ -496,6 +501,18 @@ namespace mongo {
         // if this faults, did you set the current db first?  (Client::Context + dblock)
         NamespaceDetails *d = nsindex(ns)->details(ns);
         return d;
+    }
+
+    NamespaceDetails* nsdetails_maybe_create(const char *ns) {
+        NamespaceIndex *ni = nsindex(ns);
+        NamespaceDetails *details = ni->details(ns);
+        if (details == NULL) {
+            Namespace ns_s(ns);
+            NamespaceDetails details_s(false);
+            ni->add_ns(ns, details_s);
+            details = ni->details(ns);
+        }
+        return details;
     }
 
 } // namespace mongo

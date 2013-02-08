@@ -41,6 +41,9 @@ namespace mongo {
             
             Client::GodScope god;
 
+            wunimplemented("doTTLForDB does some point queries");
+
+#if TOKUDB_FINISHED
             vector<BSONObj> indexes;
             {
                 auto_ptr<DBClientCursor> cursor =
@@ -99,6 +102,7 @@ namespace mongo {
                 LOG(1) << "\tTTL deleted: " << n << endl;
             }
             
+#endif // TOKUDB_FINISHED
             
         }
 

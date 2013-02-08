@@ -38,13 +38,11 @@ namespace mongo {
     //NamespaceDetails::NamespaceDetails( const DiskLoc &loc, bool capped )
     NamespaceDetails::NamespaceDetails( bool capped ) {
         nIndexes = 0;
-        _isCapped = capped;
-        _maxDocsInCapped = 0x7fffffff;
         _systemFlags = 0;
         _userFlags = 0;
             
         if ( capped )
-            ::abort(); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
+            unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
         verify( sizeof(dataFileVersion) == 2 );
         dataFileVersion = 0;
         indexFileVersion = 0;
@@ -68,10 +66,50 @@ namespace mongo {
 
     bool checkNsFilesOnLoad = true;
 
+    static int populate_nsindex_ht(const DBT *key, const DBT *val, void *ht_v) {
+        HashTable<Namespace, NamespaceDetails> *ht = static_cast<HashTable<Namespace, NamespaceDetails> *>(ht_v);
+        Namespace n(static_cast<const char *>(key->data));
+        NamespaceDetails *d = static_cast<NamespaceDetails *>(val->data);
+        verify(val->size == (sizeof *d));
+        uassert( 16433 , "too many namespaces/collections during namespace open", ht->put(n, *d));
+        tokulog() << "found namespace " << n << endl;
+        return 0;
+    }
+
     NOINLINE_DECL void NamespaceIndex::_init() {
+        int r;
         verify( !ht );
 
         Lock::assertWriteLocked(database_);
+
+        string nsdbname(database_ + ".ns");
+        nsdb = storage::db_open(NULL, nsdbname.c_str());
+
+        massert( 16432, "bad lenForNewNsFiles", lenForNewNsFiles >= 1024*1024 );
+        void *buf = malloc(lenForNewNsFiles);
+        verify(buf != NULL);
+        ht = new HashTable<Namespace, NamespaceDetails>(buf, lenForNewNsFiles, "namespace index");
+
+        tokulog() << "loading namespaces..." << endl;
+        {
+            DB_TXN *txn;
+            DBC *cursor;
+            r = storage::env->txn_begin(storage::env, NULL, &txn, 0);
+            verify(r == 0);
+            r = nsdb->cursor(nsdb, txn, &cursor, 0);
+            verify(r == 0);
+
+            while (r != DB_NOTFOUND) {
+                r = cursor->c_getf_next(cursor, 0, populate_nsindex_ht, ht);
+                verify(r == 0 || r == DB_NOTFOUND);
+            }
+            verify(r == DB_NOTFOUND);
+
+            r = cursor->c_close(cursor);
+            verify(r == 0);
+            r = txn->commit(txn, 0);
+            verify(r == 0);
+        }
 
         /* if someone manually deleted the datafiles for a database,
            we need to be sure to clear any cached info for the database in
@@ -122,10 +160,7 @@ namespace mongo {
 
         verify( len <= 0x7fffffff );
         ht = new HashTable<Namespace,NamespaceDetails>(p, (int) len, "namespace index");
-        if( checkNsFilesOnLoad )
-            ht->iterAll(namespaceOnLoadCallback);
 #endif
-        ::abort();
     }
 
     static void namespaceGetNamespacesCallback( const Namespace& k , NamespaceDetails& v , void * extra ) {
@@ -166,13 +201,33 @@ namespace mongo {
         Lock::assertWriteLocked(ns);
         init();
         Namespace n(ns);
-        uassert( 10081 , "too many namespaces/collections", ht->put(n, details));
+
+        DB_TXN *txn;
+        int r = storage::env->txn_begin(storage::env, NULL, &txn, 0);
+        verify(r == 0);
+
+        wunimplemented("need to create the new id index and stuff here in the same transaction where we record the new ns to details mapping in nsdb");
+
+        DBT ndbt, ddbt;
+        ndbt.data = const_cast<void *>(static_cast<const void *>(ns));
+        ndbt.size = strlen(ns) + 1;
+        ddbt.data = const_cast<void *>(static_cast<const void *>(&details));
+        ddbt.size = sizeof details;
+        r = nsdb->put(nsdb, txn, &ndbt, &ddbt, 0);
+        verify(r == 0);
+
+        r = txn->commit(txn, 0);
+        verify(r == 0);
+
+        bool ok = ht->put(n, details);
+        uassert( 10081 , "too many namespaces/collections", ok);
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
         dassert( i < NIndexesMax );
         unsigned long long x = ((unsigned long long) 1) << i;
         if( multiKeyIndexBits & x ) return;
+        unimplemented("NamespaceDetails durability");
         multiKeyIndexBits |= x; //*getDur().writing(&multiKeyIndexBits) |= x;
         NamespaceDetailsTransient::get(thisns).clearQueryCache();
     }
@@ -189,6 +244,7 @@ namespace mongo {
             ::abort(); // TODO: TokuDB: what to do?
         }
 
+        unimplemented("NamespaceDetails durability");
         nIndexes++; //(*getDur().writing(&nIndexes))++;
         if ( resetTransient )
             NamespaceDetailsTransient::get(thisns).addedIndex();
@@ -210,10 +266,12 @@ namespace mongo {
         return -1;
     }
 
+#if 0
     void NamespaceDetails::setMaxCappedDocs( long long max ) {
         verify( max <= 0x7fffffffLL ); // TODO: this is temp
         _maxDocsInCapped = static_cast<int>(max);
     }
+#endif
 
     /* ------------------------------------------------------------------------- */
 
@@ -295,10 +353,12 @@ namespace mongo {
     }
 
     void NamespaceDetails::setSystemFlag( int flag ) {
+        unimplemented("NamespaceDetails durability");
         _systemFlags |= flag; // TODO: Transactional //getDur().writingInt(_systemFlags) |= flag;
     }
 
     void NamespaceDetails::clearSystemFlag( int flag ) {
+        unimplemented("NamespaceDetails durability");
         _systemFlags &= ~flag; // TODO: Transactional //getDur().writingInt(_systemFlags) &= ~flag;
     }
     
@@ -325,7 +385,8 @@ namespace mongo {
     bool NamespaceDetails::setUserFlag( int flags ) {
         if ( ( _userFlags & flags ) == flags )
             return false;
-        
+
+        unimplemented("NamespaceDetails durability");
         _userFlags |= flags; // TODO: Transactional // getDur().writingInt(_userFlags) |= flags;
         return true;
     }
@@ -334,6 +395,7 @@ namespace mongo {
         if ( ( _userFlags & flags ) == 0 )
             return false;
 
+        unimplemented("NamespaceDetails durability");
         _userFlags &= ~flags; // TODO: Transactional //getDur().writingInt(_userFlags) &= ~flags;
         return true;
     }
@@ -342,6 +404,7 @@ namespace mongo {
         if ( flags == _userFlags )
             return false;
 
+        unimplemented("NamespaceDetails durability");
         _userFlags = flags; // TODO: Transactional //getDur().writingInt(_userFlags) = flags;
         return true;
     }

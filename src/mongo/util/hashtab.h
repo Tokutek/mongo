@@ -108,10 +108,11 @@ namespace mongo {
             _buf = buf;
             //nodes = (Node *) buf;
 
-            if ( sizeof(Node) != 628 ) {
-                out() << "HashTable() " << _name << " sizeof(node):" << sizeof(Node) << " n:" << n << " sizeof(Key): " << sizeof(Key) << " sizeof(Type):" << sizeof(Type) << endl;
-                verify( sizeof(Node) == 628 );
-            }
+            BOOST_STATIC_ASSERT(sizeof(Node) == 252);
+            /* if ( sizeof(Node) != 252 ) { */
+            /*     out() << "HashTable() " << _name << " sizeof(node):" << sizeof(Node) << " n:" << n << " sizeof(Key): " << sizeof(Key) << " sizeof(Type):" << sizeof(Type) << endl; */
+            /*     verify( sizeof(Node) == 252 ); */
+            /* } */
 
         }
 

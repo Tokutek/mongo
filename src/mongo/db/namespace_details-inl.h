@@ -27,7 +27,7 @@ namespace mongo {
             IndexDetails& id = _indexes[idxNo];
             return id;
         }
-        ::abort(); // TokuDB: Make sure we handle the case where idxNo >= NindexesBase 
+        unimplemented("more than NIndexesBase indexes"); // TokuDB: Make sure we handle the case where idxNo >= NindexesBase 
     }
 
     inline int NamespaceDetails::idxNo(const IndexDetails& idx) {

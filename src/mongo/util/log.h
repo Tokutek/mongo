@@ -396,6 +396,10 @@ namespace mongo {
         return stream;
     }
 
+    inline Nullstream &tokulog(int level=0) {
+        return log(LabeledLevel("tokudb", level));
+    }
+
     inline Nullstream& log() {
         return Logstream::get().prolog();
     }

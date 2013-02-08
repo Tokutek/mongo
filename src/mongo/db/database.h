@@ -41,7 +41,7 @@ namespace mongo {
     */
     class Database {
     public:
-        static bool _openAllFiles;
+        //static bool _openAllFiles;
 
         // you probably need to be in dbHolderMutex when constructing this
         Database(const char *nm, /*out*/ bool& newDb, const string& _path = dbpath);
@@ -53,7 +53,7 @@ namespace mongo {
         */
         static void closeDatabase( const char *db, const string& path );
 
-        void openAllFiles();
+        //void openAllFiles();
 
         /**
          * tries to make sure that this hasn't been deleted
@@ -67,16 +67,16 @@ namespace mongo {
          */
         long long fileSize() const;
 
-        int numFiles() const;
+        //int numFiles() const;
 
         /**
          * returns file valid for file number n
          */
-        boost::filesystem::path fileName( int n ) const;
+        //boost::filesystem::path fileName( int n ) const;
 
     private:
-        bool exists(int n) const;
-        bool openExistingFile( int n );
+        //bool exists(int n) const;
+        //bool openExistingFile( int n );
 
     public:
         /**

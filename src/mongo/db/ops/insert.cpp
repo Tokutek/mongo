@@ -18,13 +18,22 @@
 
 #include "pch.h"
 
-#include "mongo/util/log.h"
+#include "mongo/db/client.h"
+#include "mongo/db/database.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/util/log.h"
 
 namespace mongo {
 
     void insertObject(const char *ns, const BSONObj &obj) {
-        log() << "TODO: insert this object " << obj.toString() << endl;
+        tokulog() << "TODO: insert into " << ns << " object " << obj.toString() << endl;
+        {
+            Client::WriteContext ctx(ns);
+            Database *db = ctx.ctx().db();
+            tokulog() << "Got database " << db << " named " << db->name << " at path " << db->path << endl;
+            NamespaceDetails *details = nsdetails_maybe_create(ns);
+            tokulog() << "Got the deets " << details << endl;
+        }
     }
     
 } // namespace mongo

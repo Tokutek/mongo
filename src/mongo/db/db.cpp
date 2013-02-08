@@ -39,6 +39,7 @@
 #include "mongo/db/restapi.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/stats/snapshots.h"
+#include "mongo/db/storage/env.h"
 #include "mongo/db/ttl.h"
 #include "mongo/s/d_writeback.h"
 #include "mongo/scripting/engine.h"
@@ -464,7 +465,7 @@ namespace mongo {
 
         Client::initThread("initandlisten");
 
-        Database::_openAllFiles = false;
+        //Database::_openAllFiles = false;
 
         Logstream::get().addGlobalTee( new RamLog("global") );
 
@@ -515,6 +516,7 @@ namespace mongo {
         MONGO_ASSERT_ON_EXCEPTION_WITH_MSG( clearTmpFiles(), "clear tmp files" );
 
         // TODO: What does TokuDB need to do here?
+        storage::startup();
         //dur::startup();
 
         if( cmdLine.durOptions & CmdLine::DurRecoverOnly )
@@ -546,7 +548,7 @@ namespace mongo {
         /* we didn't want to pre-open all files for the repair check above. for regular
            operation we do for read/write lock concurrency reasons.
         */
-        Database::_openAllFiles = true;
+        //Database::_openAllFiles = true;
 
         if ( shouldRepairDatabases )
             return;
@@ -579,6 +581,8 @@ namespace mongo {
         }
 
         listen(listenPort);
+
+        storage::shutdown();
 
         // listen() will return when exit code closes its socket.
         exitCleanly(EXIT_NET_ERROR);

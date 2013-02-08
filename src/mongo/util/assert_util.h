@@ -183,6 +183,7 @@ namespace mongo {
 
     /* warning only - keeps going */
 #define MONGO_wassert(_Expression) (void)( MONGO_likely(!!(_Expression)) || (mongo::wasserted(#_Expression, __FILE__, __LINE__), 0) )
+#define MONGO_wunimplemented(msg) (void)(mongo::wasserted("tokudb unimplemented " msg, __FILE__, __LINE__), 0)
 
     /* display a message, no context, and throw assertionexception
 
@@ -192,6 +193,7 @@ namespace mongo {
 #define MONGO_massert(msgid, msg, expr) (void)( MONGO_likely(!!(expr)) || (mongo::msgasserted(msgid, msg), 0) )
     /* same as massert except no msgid */
 #define MONGO_verify(_Expression) (void)( MONGO_likely(!!(_Expression)) || (mongo::verifyFailed(#_Expression, __FILE__, __LINE__), 0) )
+#define MONGO_unimplemented(msg) (void)(mongo::verifyFailed("tokudb unimplemented " msg, __FILE__, __LINE__), 0)
 
     /* dassert is 'debug assert' -- might want to turn off for production as these
        could be slow.
@@ -208,7 +210,9 @@ namespace mongo {
 # define verify MONGO_verify
 # define uassert MONGO_uassert
 # define wassert MONGO_wassert
+# define wunimplemented MONGO_wunimplemented
 # define massert MONGO_massert
+# define unimplemented MONGO_unimplemented
 #endif
 
     // some special ids that we want to duplicate

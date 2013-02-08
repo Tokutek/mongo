@@ -51,6 +51,7 @@
 #include "mongo/db/commands/fsync.h"
 #include "index.h"
 #include "mongo/db/jsobjmanipulator.h"
+#include "mongo/db/storage/env.h"
 
 namespace mongo {
     
@@ -1019,13 +1020,14 @@ namespace mongo {
         //MemoryMappedFile::closeAllFiles( ss3 );
         log() << ss3.str() << endl;
 
-        log() << "shutdown: shutting down the index interface..." << endl;
-        //IndexInterface::shutdown();
+        storage::shutdown();
 
+#if 0
         if( cmdLine.dur ) {
             // TODO: What should TokuDB do here?
             //dur::journalCleanup(true);
         }
+#endif
 
 #if !defined(__sunos__)
         if ( lockFile ) {
@@ -1051,6 +1053,7 @@ namespace mongo {
         if (theReplSet) {
             theReplSet->shutdown();
         }
+
 
         {
             Lock::GlobalWrite lk;

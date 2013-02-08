@@ -18,6 +18,9 @@
 
 #pragma once
 
+#include <limits>
+
+#include <db.h>
 #include <boost/filesystem.hpp>
 
 #include "mongo/pch.h"
@@ -29,6 +32,8 @@
 #include "mongo/db/namespace.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/querypattern.h"
+
+#include "mongo/db/storage/env.h"
 
 #include "mongo/util/hashtab.h"
 
@@ -55,9 +60,11 @@ namespace mongo {
         // ofs 192
         IndexDetails _indexes[NIndexesMax];
 
+#if 0
         // ofs 352 (16 byte aligned)
         int _isCapped;                         // there is wasted space here if I'm right (ERH)
         int _maxDocsInCapped;                  // max # of objects for a capped table.  TODO: should this be 64 bit?
+#endif
 
         // ofs 386 (16)
         int _systemFlags; // things that the system sets/cares about
@@ -90,9 +97,9 @@ namespace mongo {
 
     public:
 
-        bool isCapped() const { return _isCapped; }
-        long long maxCappedDocs() const { verify( isCapped() ); return _maxDocsInCapped; }
-        void setMaxCappedDocs( long long max );
+        bool isCapped() const { return false; /*_isCapped;*/ }
+        long long maxCappedDocs() const { return std::numeric_limits<long long>::max(); /*verify( isCapped() ); return _maxDocsInCapped;*/ }
+        void setMaxCappedDocs( long long max ) { unimplemented("capped collections"); }
 
         /** Remove all documents from the capped collection */
         void emptyCappedCollection(const char *ns);
@@ -411,6 +418,7 @@ namespace mongo {
             ht( 0 ), dir_( dir ), database_( database ) {}
 
         /* returns true if new db will be created if we init lazily */
+        // why
         bool exists() const;
 
         void init() {
@@ -426,8 +434,10 @@ namespace mongo {
                 return 0;
             Namespace n(ns);
             NamespaceDetails *d = ht->get(n);
-            if ( d && d->isCapped() )
-                ::abort(); // TODO What is the right thing to do here? //d->cappedCheckMigrate();
+            if ( d && d->isCapped() ) {
+                // What is the right thing to do here? //d->cappedCheckMigrate();
+                unimplemented("capped collections");
+            }
             return d;
         }
 
@@ -439,11 +449,12 @@ namespace mongo {
 
         boost::filesystem::path path() const;
 
-        unsigned long long fileLength() const { ::abort(); return 0; } //f.length(); }
+        unsigned long long fileLength() const { unimplemented("NamespaceIndex::fileLength"); return 0; } //f.length(); }
 
     private:
         void _init();
 
+        DB *nsdb;
         HashTable<Namespace,NamespaceDetails> *ht;
         string dir_;
         string database_;
@@ -459,6 +470,7 @@ namespace mongo {
     // Gets the namespace objects for this client threads' current database.
     NamespaceIndex* nsindex(const char *ns);
     NamespaceDetails* nsdetails(const char *ns);
+    NamespaceDetails* nsdetails_maybe_create(const char *ns);
 
 } // namespace mongo
 
