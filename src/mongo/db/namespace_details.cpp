@@ -119,46 +119,6 @@ namespace mongo {
             i.dbDropped();
         }
         */
-
-#if 0
-        unsigned long long len = 0;
-        boost::filesystem::path nsPath = path();
-        string pathString = nsPath.string();
-        void *p = 0;
-        if( boost::filesystem::exists(nsPath) ) {
-            if( f.open(pathString, true) ) {
-                len = f.length();
-                if ( len % (1024*1024) != 0 ) {
-                    log() << "bad .ns file: " << pathString << endl;
-                    uassert( 10079 ,  "bad .ns file length, cannot open database", len % (1024*1024) == 0 );
-                }
-                p = f.getView();
-            }
-        }
-        else {
-            // use lenForNewNsFiles, we are making a new database
-            massert( 10343, "bad lenForNewNsFiles", lenForNewNsFiles >= 1024*1024 );
-            maybeMkdir();
-            unsigned long long l = lenForNewNsFiles;
-            if( f.create(pathString, l, true) ) {
-                // TODO: Log a new file create?
-                //getDur().createdFile(pathString, l); // always a new file
-                len = l;
-                verify( len == lenForNewNsFiles );
-                p = f.getView();
-            }
-        }
-
-        if ( p == 0 ) {
-            /** TODO: this shouldn't terminate? */
-            log() << "error couldn't open file " << pathString << " terminating" << endl;
-            dbexit( EXIT_FS );
-        }
-
-
-        verify( len <= 0x7fffffff );
-        ht = new HashTable<Namespace,NamespaceDetails>(p, (int) len, "namespace index");
-#endif
     }
 
     static void namespaceGetNamespacesCallback( const Namespace& k , NamespaceDetails& v , void * extra ) {

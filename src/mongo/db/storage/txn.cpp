@@ -28,7 +28,8 @@ namespace mongo {
     namespace storage {
 
         Transaction::Transaction() : _parent(cc().transaction()), _retired(false) {
-            int r = env->txn_begin(env, _parent->txn(), &_txn, 0);
+            DB_TXN *parent_txn = (_parent == NULL) ? NULL : _parent->txn();
+            int r = env->txn_begin(env, parent_txn, &_txn, 0);
             verify(r == 0);
             cc().set_transaction(this);
         }

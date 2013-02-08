@@ -430,6 +430,7 @@ namespace mongo {
         void add_ns( const char *ns, const NamespaceDetails &details );
 
         NamespaceDetails* details(const char *ns) {
+            tokulog() << "looking for NamespaceDetails for " << ns << endl;
             if ( !ht )
                 return 0;
             Namespace n(ns);
@@ -437,6 +438,11 @@ namespace mongo {
             if ( d && d->isCapped() ) {
                 // What is the right thing to do here? //d->cappedCheckMigrate();
                 unimplemented("capped collections");
+            }
+            if (d != NULL) {
+                tokulog() << "found it" << endl;
+            } else {
+                tokulog() << "didn't find it" << endl;
             }
             return d;
         }
