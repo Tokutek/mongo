@@ -119,6 +119,7 @@ namespace mongo {
     }
 
     Client::Client(const char *desc, AbstractMessagingPort *p) :
+        _transaction(NULL),
         _context(0),
         _shutdown(false),
         _desc(desc),

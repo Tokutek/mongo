@@ -28,6 +28,8 @@
 #include "mongo/db/json.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
+#include "mongo/db/storage/env.h"
+#include "mongo/db/storage/txn.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/hashtab.h"
 
@@ -83,7 +85,8 @@ namespace mongo {
         Lock::assertWriteLocked(database_);
 
         string nsdbname(database_ + ".ns");
-        nsdb = storage::db_open(NULL, nsdbname.c_str());
+        storage::Transaction txn;
+        nsdb = storage::db_open(txn.txn(), nsdbname.c_str());
 
         massert( 16432, "bad lenForNewNsFiles", lenForNewNsFiles >= 1024*1024 );
         void *buf = malloc(lenForNewNsFiles);
@@ -92,11 +95,9 @@ namespace mongo {
 
         tokulog() << "loading namespaces..." << endl;
         {
-            DB_TXN *txn;
+            storage::Transaction scan_txn;
             DBC *cursor;
-            r = storage::env->txn_begin(storage::env, NULL, &txn, 0);
-            verify(r == 0);
-            r = nsdb->cursor(nsdb, txn, &cursor, 0);
+            r = nsdb->cursor(nsdb, scan_txn.txn(), &cursor, 0);
             verify(r == 0);
 
             while (r != DB_NOTFOUND) {
@@ -107,9 +108,10 @@ namespace mongo {
 
             r = cursor->c_close(cursor);
             verify(r == 0);
-            r = txn->commit(txn, 0);
-            verify(r == 0);
+            scan_txn.commit();
         }
+
+        txn.commit();
 
         /* if someone manually deleted the datafiles for a database,
            we need to be sure to clear any cached info for the database in
@@ -199,12 +201,9 @@ namespace mongo {
 
     void NamespaceIndex::add_ns( const char *ns, const NamespaceDetails &details ) {
         Lock::assertWriteLocked(ns);
+        storage::Transaction txn;
         init();
         Namespace n(ns);
-
-        DB_TXN *txn;
-        int r = storage::env->txn_begin(storage::env, NULL, &txn, 0);
-        verify(r == 0);
 
         wunimplemented("need to create the new id index and stuff here in the same transaction where we record the new ns to details mapping in nsdb");
 
@@ -213,14 +212,13 @@ namespace mongo {
         ndbt.size = strlen(ns) + 1;
         ddbt.data = const_cast<void *>(static_cast<const void *>(&details));
         ddbt.size = sizeof details;
-        r = nsdb->put(nsdb, txn, &ndbt, &ddbt, 0);
-        verify(r == 0);
-
-        r = txn->commit(txn, 0);
+        int r = nsdb->put(nsdb, txn.txn(), &ndbt, &ddbt, 0);
         verify(r == 0);
 
         bool ok = ht->put(n, details);
         uassert( 10081 , "too many namespaces/collections", ok);
+
+        txn.commit();
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {

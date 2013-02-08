@@ -289,6 +289,7 @@ serverOnlyFiles = [ "db/curop.cpp",
 
                     # storage
                     "db/storage/env.cpp",
+                    "db/storage/txn.cpp",
 
                     # tokudb
                     "db/toku/env.cpp",

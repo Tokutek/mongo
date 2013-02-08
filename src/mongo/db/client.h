@@ -35,6 +35,7 @@
 #include "../util/concurrency/rwlock.h"
 #include "d_concurrency.h"
 #include "mongo/db/lockstate.h"
+#include "mongo/db/storage/txn.h"
 #include "mongo/util/paths.h"
 
 namespace mongo {
@@ -130,11 +131,15 @@ namespace mongo {
 
         LockState& lockState() { return _ls; }
 
+        inline storage::Transaction *transaction() { return _transaction; }
+        inline void set_transaction(storage::Transaction *t) { _transaction = t; }
+
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
         friend class CurOp;
         ConnectionId _connectionId; // > 0 for things "conn", 0 otherwise
         string _threadId; // "" on non support systems
+        storage::Transaction *_transaction;
         CurOp * _curOp;
         Context * _context;
         bool _shutdown; // to track if Client::shutdown() gets called
