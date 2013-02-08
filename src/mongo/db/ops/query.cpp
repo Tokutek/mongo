@@ -841,79 +841,59 @@ namespace mongo {
     }
 
     bool queryIdHack( const char* ns, const BSONObj& query, const ParsedQuery& pq, CurOp& curop, Message& result ) {
-        // notes:
-        //  do not touch result inside of PageFaultRetryableSection area
-
         //Client& currentClient = cc(); // only here since its safe and takes time
         auto_ptr< QueryResult > qr;
         
-        {
-            // this extra bracing is not strictly needed
-            // but makes it clear what the rules are in different spots
- 
-            //scoped_ptr<PageFaultRetryableSection> pgfs;
-            //if ( ! currentClient.getPageFaultRetryableSection() )
-            //    pgfs.reset( new PageFaultRetryableSection() );
-            while ( 1 ) {
-                try {
-                    
-                    int n = 0;
-                    bool nsFound = false;
-                    bool indexFound = false;
-                    
-                    BSONObj resObject; // put inside since we don't own the memory
-                    
-                    Client::ReadContext ctx( ns , dbpath ); // read locks
-                    replVerifyReadsOk(&pq);
-                    
-                    ::abort();
-                    bool found = false; //Helpers::findById( currentClient, ns, query, resObject, &nsFound, &indexFound );
-                    if ( nsFound && ! indexFound ) {
-                        // we have to resort to a table scan
-                        return false;
-                    }
-                    
-                    if ( shardingState.needShardChunkManager( ns ) ) {
-                        ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
-                        if ( m && ! m->belongsToMe( resObject ) ) {
-                            // I have something this _id
-                            // but it doesn't belong to me
-                            // so return nothing
-                            resObject = BSONObj();
-                            found = false;
-                        }
-                    }
-                    
-                    BufBuilder bb(sizeof(QueryResult)+resObject.objsize()+32);
-                    bb.skip(sizeof(QueryResult));
-                    
-                    curop.debug().idhack = true;
-                    if ( found ) {
-                        n = 1;
-                        fillQueryResultFromObj( bb , pq.getFields() , resObject );
-                    }
-                    
-                    qr.reset( (QueryResult *) bb.buf() );
-                    bb.decouple();
-                    qr->setResultFlagsToOk();
-                    qr->len = bb.len();
-                    
-                    curop.debug().responseLength = bb.len();
-                    qr->setOperation(opReply);
-                    qr->cursorId = 0;
-                    qr->startingFrom = 0;
-                    qr->nReturned = n;
-                    
-                    break;
-                }
-                //catch ( PageFaultException& e )
-                catch ( ... ) {
-                    //e.touch();
-                    ::abort();
-                }
+        // this extra bracing is not strictly needed
+        // but makes it clear what the rules are in different spots
+
+        int n = 0;
+        bool nsFound = false;
+        bool indexFound = false;
+        
+        BSONObj resObject; // put inside since we don't own the memory
+        
+        Client::ReadContext ctx( ns , dbpath ); // read locks
+        replVerifyReadsOk(&pq);
+        
+        ::abort();
+        bool found = false; //Helpers::findById( currentClient, ns, query, resObject, &nsFound, &indexFound );
+        if ( nsFound && ! indexFound ) {
+            // we have to resort to a table scan
+            return false;
+        }
+        
+        if ( shardingState.needShardChunkManager( ns ) ) {
+            ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
+            if ( m && ! m->belongsToMe( resObject ) ) {
+                // I have something this _id
+                // but it doesn't belong to me
+                // so return nothing
+                resObject = BSONObj();
+                found = false;
             }
         }
-
+        
+        BufBuilder bb(sizeof(QueryResult)+resObject.objsize()+32);
+        bb.skip(sizeof(QueryResult));
+        
+        curop.debug().idhack = true;
+        if ( found ) {
+            n = 1;
+            fillQueryResultFromObj( bb , pq.getFields() , resObject );
+        }
+        
+        qr.reset( (QueryResult *) bb.buf() );
+        bb.decouple();
+        qr->setResultFlagsToOk();
+        qr->len = bb.len();
+        
+        curop.debug().responseLength = bb.len();
+        qr->setOperation(opReply);
+        qr->cursorId = 0;
+        qr->startingFrom = 0;
+        qr->nReturned = n;
+        
         result.setData( qr.release(), true );
         return true;
     }
