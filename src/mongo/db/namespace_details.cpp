@@ -64,10 +64,6 @@ namespace mongo {
         return ret;
     }
 
-    unsigned lenForNewNsFiles = 16 * 1024 * 1024;
-
-    bool checkNsFilesOnLoad = true;
-
     static int populate_nsindex_ht(const DBT *key, const DBT *val, void *ht_v) {
         HashTable<Namespace, NamespaceDetails> *ht = static_cast<HashTable<Namespace, NamespaceDetails> *>(ht_v);
         Namespace n(static_cast<const char *>(key->data));
@@ -88,10 +84,10 @@ namespace mongo {
         storage::Transaction txn;
         nsdb = storage::db_open(txn.txn(), nsdbname.c_str());
 
-        massert( 16432, "bad lenForNewNsFiles", lenForNewNsFiles >= 1024*1024 );
-        void *buf = malloc(lenForNewNsFiles);
+        const int ns_file_len = 16 * 1024 * 1024;
+        void *buf = malloc(ns_file_len);
         verify(buf != NULL);
-        ht = new HashTable<Namespace, NamespaceDetails>(buf, lenForNewNsFiles, "namespace index");
+        ht = new HashTable<Namespace, NamespaceDetails>(buf, ns_file_len, "namespace index");
 
         tokulog() << "loading namespaces..." << endl;
         {

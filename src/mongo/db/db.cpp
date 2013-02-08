@@ -69,8 +69,6 @@ namespace mongo {
 #endif
 
     DatabaseHolder _dbHolder;
-    //int MAGIC = 0x1000;
-
     DatabaseHolder& dbHolderUnchecked() {
         return _dbHolder;
     }
@@ -79,10 +77,7 @@ namespace mongo {
     extern bool useHints;
 
     extern int diagLogging;
-    extern unsigned lenForNewNsFiles;
     extern int lockFile;
-    extern bool checkNsFilesOnLoad;
-    //extern string repairpath;
 
     void setupSignals( bool inFork );
     void startReplication();
@@ -100,7 +95,6 @@ namespace mongo {
     static bool scriptingEnabled = true;
     static bool noHttpInterface = false;
     bool shouldRepairDatabases = 0;
-    static bool forceRepair = 0;
     Timer startupSrandTimer;
 
     const char *ourgetns() {
@@ -508,7 +502,9 @@ namespace mongo {
 #endif
         }
 
-        acquirePathLock(forceRepair);
+        // TODO: Remove the repair parameter
+        const bool doing_repair = false;
+        acquirePathLock(doing_repair);
         boost::filesystem::remove_all( dbpath + "/_tmp/" );
 
         FileAllocator::get()->start();
@@ -549,9 +545,6 @@ namespace mongo {
            operation we do for read/write lock concurrency reasons.
         */
         //Database::_openAllFiles = true;
-
-        if ( shouldRepairDatabases )
-            return;
 
         /* this is for security on certain platforms (nonce generation) */
         srand((unsigned) (curTimeMicros() ^ startupSrandTimer.micros()));
@@ -912,12 +905,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             cout << "note: noprealloc may hurt performance in many applications" << endl;
         }
         if (params.count("smallfiles")) {
-            cmdLine.smallfiles = true;
-#if 0
-            verify( dur::DataLimitPerJournalFile >= 128 * 1024 * 1024 );
-            dur::DataLimitPerJournalFile = 128 * 1024 * 1024;
-#endif
-            ::abort();
+            out() << " smallfiles is a deprecated parameter." << endl;
         }
         if (params.count("diaglog")) {
             int x = params["diaglog"].as<int>();
@@ -932,21 +920,10 @@ static int mongoDbMain(int argc, char* argv[]) {
             return 0;
         }
         if (params.count("repair")) {
-            if (journalExplicit && cmdLine.dur) {
-                log() << "Can't specify both --journal and --repair options." << endl;
-                return EXIT_BADOPTIONS;
-            }
-
-            //Record::MemoryTrackingEnabled = false;
-            ::abort();
-            shouldRepairDatabases = 1;
-            forceRepair = 1;
-            cmdLine.dur = false;
+            out() << " repair is a deprecated parameter." << endl;
         }
         if (params.count("upgrade")) {
-            //Record::MemoryTrackingEnabled = false;
-            ::abort();
-            shouldRepairDatabases = 1;
+            out() << " upgrade is a deprecated parameter." << endl;
         }
         if (params.count("notablescan")) {
             cmdLine.noTableScan = true;
@@ -997,13 +974,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             cmdLine.only = params["only"].as<string>().c_str();
         }
         if( params.count("nssize") ) {
-            int x = params["nssize"].as<int>();
-            if (x <= 0 || x > (0x7fffffff/1024/1024)) {
-                out() << "bad --nssize arg" << endl;
-                dbexit( EXIT_BADOPTIONS );
-            }
-            lenForNewNsFiles = x * 1024 * 1024;
-            verify(lenForNewNsFiles > 0);
+            out() << " nssize is a deprecated parameter" << endl;
         }
         if (params.count("oplogSize")) {
             long long x = params["oplogSize"].as<int>();
@@ -1047,7 +1018,6 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
         if ( params.count("configsvr" ) ) {
             cmdLine.configsvr = true;
-            cmdLine.smallfiles = true; // config server implies small files
             //dur::DataLimitPerJournalFile = 128 * 1024 * 1024;
             if (cmdLine.usingReplSets() || replSettings.master || replSettings.slave) {
                 log() << "replication should not be enabled on a config server" << endl;
