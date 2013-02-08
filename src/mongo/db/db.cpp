@@ -68,6 +68,7 @@ namespace mongo {
 #endif
 
     DatabaseHolder _dbHolder;
+    //int MAGIC = 0x1000;
 
     DatabaseHolder& dbHolderUnchecked() {
         return _dbHolder;
@@ -79,6 +80,8 @@ namespace mongo {
     extern int diagLogging;
     extern unsigned lenForNewNsFiles;
     extern int lockFile;
+    extern bool checkNsFilesOnLoad;
+    //extern string repairpath;
 
     void setupSignals( bool inFork );
     void startReplication();
