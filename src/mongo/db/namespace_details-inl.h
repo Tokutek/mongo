@@ -23,11 +23,9 @@
 namespace mongo {
 
     inline IndexDetails& NamespaceDetails::idx(int idxNo, bool missingExpected ) {
-        if( idxNo < NIndexesBase ) {
-            IndexDetails& id = _indexes[idxNo];
-            return id;
-        }
-        ::abort(); // TokuDB: Make sure we handle the case where idxNo >= NindexesBase 
+        verify(idxNo < NIndexesMax);
+        IndexDetails& id = _indexes[idxNo];
+        return id;
     }
 
     inline int NamespaceDetails::idxNo(const IndexDetails& idx) {

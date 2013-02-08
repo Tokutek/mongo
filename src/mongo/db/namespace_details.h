@@ -41,7 +41,6 @@ namespace mongo {
     */
     bool legalClientSystemNS( const string& ns , bool write );
 
-#pragma pack(1)
     /* NamespaceDetails : this is the "header" for a collection that has all its details.
        It's in the .ns file (TokuDB: .ns dictionary) and this is a memory mapped region (thus the pack pragma above).
     */
@@ -51,31 +50,14 @@ namespace mongo {
 
         // TODO: TokuDB: Add in memory stats
         int nIndexes;
-    private:
-        // ofs 192
-        IndexDetails _indexes[NIndexesMax];
 
-        // ofs 352 (16 byte aligned)
-        int _isCapped;                         // there is wasted space here if I'm right (ERH)
-        int _maxDocsInCapped;                  // max # of objects for a capped table.  TODO: should this be 64 bit?
-
-        // ofs 386 (16)
-        int _systemFlags; // things that the system sets/cares about
-    public:
         // TODO: Use 'em or get rid of 'em;
         unsigned short dataFileVersion; 
         unsigned short indexFileVersion;
         unsigned long long multiKeyIndexBits;
-    private:
-        // ofs 400 (16)
-        unsigned long long reservedA;
-    public:
-        int indexBuildInProgress;             // 1 if in prog
-    private:
-        int _userFlags;
-        char reserved[72];
-        /*-------- end data 496 bytes */
-    public:
+
+        bool indexBuildInProgress;             // 1 if in prog
+
         //explicit NamespaceDetails( const DiskLoc &loc, bool _capped );
         explicit NamespaceDetails( bool _capped );
 
@@ -87,8 +69,6 @@ namespace mongo {
 
         /* dump info on all extents for this namespace.  for debugging. */
         void dumpExtents();
-
-    public:
 
         bool isCapped() const { return _isCapped; }
         long long maxCappedDocs() const { verify( isCapped() ); return _maxDocsInCapped; }
@@ -154,9 +134,6 @@ namespace mongo {
             clearSystemFlag( Flag_HaveIdIndex );
         }
 
-        /* returns index of the first index in which the field is present. -1 if not present. */
-        int fieldIsIndexed(const char *fieldName);
-
         // @return offset in indexes[]
         int findIndexByName(const char *name);
 
@@ -178,23 +155,19 @@ namespace mongo {
         const IndexDetails* findIndexByPrefix( const BSONObj &keyPattern ,
                                                bool requireSingleKey );
 
-
         const int systemFlags() const { return _systemFlags; }
         bool isSystemFlagSet( int flag ) const { return _systemFlags & flag; }
         void setSystemFlag( int flag );
         void clearSystemFlag( int flag );
-
         const int userFlags() const { return _userFlags; }
         bool isUserFlagSet( int flag ) const { return _userFlags & flag; }
         
         /*
          * these methods all return true iff only something was modified
          */
-        
         bool setUserFlag( int flag );
         bool clearUserFlag( int flag );
         bool replaceUserFlags( int flags );
-
         void syncUserFlags( const string& ns );
 
         /* @return -1 = not found
@@ -218,9 +191,13 @@ namespace mongo {
         }
 
     private:
+        IndexDetails _indexes[NIndexesMax];
+
+        int _systemFlags; // things that the system sets/cares about
+        int _userFlags;
+
         friend class NamespaceIndex;
     }; // NamespaceDetails
-#pragma pack()
 
     class ParsedQuery;
     class QueryPlanSummary;
@@ -430,8 +407,6 @@ namespace mongo {
                 ::abort(); // TODO What is the right thing to do here? //d->cappedCheckMigrate();
             return d;
         }
-
-        void kill_ns(const char *ns);
 
         bool allocated() const { return ht != 0; }
 

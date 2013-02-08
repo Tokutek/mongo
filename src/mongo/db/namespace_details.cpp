@@ -66,8 +66,6 @@ namespace mongo {
 
     unsigned lenForNewNsFiles = 16 * 1024 * 1024;
 
-    bool checkNsFilesOnLoad = true;
-
     NOINLINE_DECL void NamespaceIndex::_init() {
         verify( !ht );
 
@@ -141,27 +139,6 @@ namespace mongo {
             ht->iterAll( namespaceGetNamespacesCallback , (void*)&tofill );
     }
 
-    void NamespaceIndex::kill_ns(const char *ns) {
-        Lock::assertWriteLocked(ns);
-        if ( !ht )
-            return;
-        Namespace n(ns);
-        ht->kill(n);
-
-        ::abort(); // TODO: TokuDB: Understand how ht->kill(extra) works
-#if 0
-        for( int i = 0; i<=1; i++ ) {
-            try {
-                Namespace extra(n.extraName(i).c_str());
-                ht->kill(extra);
-            }
-            catch(DBException&) { 
-                dlog(3) << "caught exception in kill_ns" << endl;
-            }
-        }
-#endif
-    }
-
     void NamespaceIndex::add_ns( const char *ns, const NamespaceDetails &details ) {
         Lock::assertWriteLocked(ns);
         init();
@@ -177,42 +154,16 @@ namespace mongo {
         NamespaceDetailsTransient::get(thisns).clearQueryCache();
     }
 
-    /* you MUST call when adding an index.  see pdfile.cpp */
+    /* you MUST call when adding an index. */
     IndexDetails& NamespaceDetails::addIndex(const char *thisns, bool resetTransient) {
-        IndexDetails *id;
-        try {
-            id = &idx(nIndexes,true);
-        }
-        catch(DBException&) {
-            //allocExtra(thisns, nIndexes);
-            //id = &idx(nIndexes,false);
-            ::abort(); // TODO: TokuDB: what to do?
-        }
+        IndexDetails &id = idx(nIndexes, true);
 
-        nIndexes++; //(*getDur().writing(&nIndexes))++;
-        if ( resetTransient )
+        // TODO: Transactionally increment this value in the ns dictionary
+        nIndexes++;
+        if (resetTransient) {
             NamespaceDetailsTransient::get(thisns).addedIndex();
-        return *id;
-    }
-
-    /* returns index of the first index in which the field is present. -1 if not present.
-       (aug08 - this method not currently used)
-    */
-    int NamespaceDetails::fieldIsIndexed(const char *fieldName) {
-        massert( 10346 , "not implemented", false);
-        /*
-        for ( int i = 0; i < nIndexes; i++ ) {
-            IndexDetails& idx = indexes[i];
-            BSONObj idxKey = idx.info.obj().getObjectField("key"); // e.g., { ts : -1 }
-            if ( !idxKey.getField(fieldName).eoo() )
-                return i;
-        }*/
-        return -1;
-    }
-
-    void NamespaceDetails::setMaxCappedDocs( long long max ) {
-        verify( max <= 0x7fffffffLL ); // TODO: this is temp
-        _maxDocsInCapped = static_cast<int>(max);
+        }
+        return id;
     }
 
     /* ------------------------------------------------------------------------- */
