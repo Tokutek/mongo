@@ -37,21 +37,17 @@ namespace mongo {
 
     BSONObj idKeyPattern = fromjson("{\"_id\":1}");
 
-    //NamespaceDetails::NamespaceDetails( const DiskLoc &loc, bool capped )
     NamespaceDetails::NamespaceDetails( bool capped ) {
         nIndexes = 0;
         _systemFlags = 0;
         _userFlags = 0;
             
-        if ( capped )
+        if ( capped ) {
             unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
-        verify( sizeof(dataFileVersion) == 2 );
-        dataFileVersion = 0;
-        indexFileVersion = 0;
+        }
+
         multiKeyIndexBits = 0;
-        reservedA = 0;
-        indexBuildInProgress = 0;
-        memset(reserved, 0, sizeof(reserved));
+        indexBuildInProgress = false;
     }
 
     bool NamespaceIndex::exists() const {
@@ -204,28 +200,6 @@ namespace mongo {
             NamespaceDetailsTransient::get(thisns).addedIndex();
         return *id;
     }
-
-    /* returns index of the first index in which the field is present. -1 if not present.
-       (aug08 - this method not currently used)
-    */
-    int NamespaceDetails::fieldIsIndexed(const char *fieldName) {
-        massert( 10346 , "not implemented", false);
-        /*
-        for ( int i = 0; i < nIndexes; i++ ) {
-            IndexDetails& idx = indexes[i];
-            BSONObj idxKey = idx.info.obj().getObjectField("key"); // e.g., { ts : -1 }
-            if ( !idxKey.getField(fieldName).eoo() )
-                return i;
-        }*/
-        return -1;
-    }
-
-#if 0
-    void NamespaceDetails::setMaxCappedDocs( long long max ) {
-        verify( max <= 0x7fffffffLL ); // TODO: this is temp
-        _maxDocsInCapped = static_cast<int>(max);
-    }
-#endif
 
     /* ------------------------------------------------------------------------- */
 

@@ -46,43 +46,22 @@ namespace mongo {
     */
     bool legalClientSystemNS( const string& ns , bool write );
 
-#pragma pack(1)
-    /* NamespaceDetails : this is the "header" for a collection that has all its details.
-       It's in the .ns file (TokuDB: .ns dictionary) and this is a memory mapped region (thus the pack pragma above).
+    /* NamespaceDetails : this is the "header" for a namespace that has all its details.
+       It is stored in the NamespaceIndex (a TokuDB dictionary named foo.ns, for Database foo).
     */
     class NamespaceDetails {
     public:
-        enum { NIndexesMax = 64, /* NIndexesExtra = 30, */ NIndexesBase  = 10 };
+        enum { NIndexesMax = 64 };
 
+        // TODO: Make these private
+        //
         // TODO: TokuDB: Add in memory stats
         int nIndexes;
-    private:
-        // ofs 192
-        IndexDetails _indexes[NIndexesMax];
-
-#if 0
-        // ofs 352 (16 byte aligned)
-        int _isCapped;                         // there is wasted space here if I'm right (ERH)
-        int _maxDocsInCapped;                  // max # of objects for a capped table.  TODO: should this be 64 bit?
-#endif
-
-        // ofs 386 (16)
-        int _systemFlags; // things that the system sets/cares about
-    public:
         // TODO: Use 'em or get rid of 'em;
-        unsigned short dataFileVersion; 
-        unsigned short indexFileVersion;
         unsigned long long multiKeyIndexBits;
-    private:
-        // ofs 400 (16)
-        unsigned long long reservedA;
-    public:
-        int indexBuildInProgress;             // 1 if in prog
-    private:
-        int _userFlags;
-        char reserved[72];
-        /*-------- end data 496 bytes */
-    public:
+        // true if an index is currently being built
+        bool indexBuildInProgress;
+
         //explicit NamespaceDetails( const DiskLoc &loc, bool _capped );
         explicit NamespaceDetails( bool _capped );
 
@@ -92,25 +71,19 @@ namespace mongo {
         /* dump info on this namespace.  for debugging. */
         void dump(const Namespace& k);
 
-        /* dump info on all extents for this namespace.  for debugging. */
-        void dumpExtents();
-
-    public:
-
-        bool isCapped() const { return false; /*_isCapped;*/ }
-        long long maxCappedDocs() const { return std::numeric_limits<long long>::max(); /*verify( isCapped() ); return _maxDocsInCapped;*/ }
+        // TODO: Capped collections need are not yet implemented with TokuDB
+        bool isCapped() const { return false; }
+        long long maxCappedDocs() const { return std::numeric_limits<long long>::max(); }
         void setMaxCappedDocs( long long max ) { unimplemented("capped collections"); }
-
-        /** Remove all documents from the capped collection */
         void emptyCappedCollection(const char *ns);
 
         /* when a background index build is in progress, we don't count the index in nIndexes until
            complete, yet need to still use it in _indexRecord() - thus we use this function for that.
         */
-        int nIndexesBeingBuilt() const { return nIndexes + indexBuildInProgress; }
+        int nIndexesBeingBuilt() const { return nIndexes + (indexBuildInProgress ? 1 : 0); }
 
         /* NOTE: be careful with flags.  are we manipulating them in read locks?  if so,
-                 this isn't thread safe.  TODO
+                 this isn't thread safe.  TODO TokuDB-implemented namespaces always have an _id index. Remove this!
         */
         enum SystemFlags {
             Flag_HaveIdIndex = 1 << 0 // set when we have _id index (ONLY if ensureIdIndex was called -- 0 if that has never been called)
@@ -156,13 +129,6 @@ namespace mongo {
            caller must populate returned object.
          */
         IndexDetails& addIndex(const char *thisns, bool resetTransient=true);
-
-        void aboutToDeleteAnIndex() { 
-            clearSystemFlag( Flag_HaveIdIndex );
-        }
-
-        /* returns index of the first index in which the field is present. -1 if not present. */
-        int fieldIsIndexed(const char *fieldName);
 
         // @return offset in indexes[]
         int findIndexByName(const char *name);
@@ -216,6 +182,7 @@ namespace mongo {
             return -1;
         }
 
+        // TODO: TokuDB-implemented namespaces always have an _id index. remove this.
         bool haveIdIndex() { 
             return isSystemFlagSet( NamespaceDetails::Flag_HaveIdIndex ) || findIdIndex() >= 0;
         }
@@ -225,9 +192,14 @@ namespace mongo {
         }
 
     private:
+        // Each index (including the _id) index has an IndexDetails that describes it.
+        IndexDetails _indexes[NIndexesMax];
+
+        int _systemFlags; // things that the system sets/cares about
+        int _userFlags;
+
         friend class NamespaceIndex;
     }; // NamespaceDetails
-#pragma pack()
 
     class ParsedQuery;
     class QueryPlanSummary;
@@ -455,7 +427,7 @@ namespace mongo {
 
         boost::filesystem::path path() const;
 
-        unsigned long long fileLength() const { unimplemented("NamespaceIndex::fileLength"); return 0; } //f.length(); }
+        unsigned long long fileLength() const { unimplemented("NamespaceIndex::fileLength"); return 0; }
 
     private:
         void _init();
@@ -470,6 +442,7 @@ namespace mongo {
     // (Arguments should include db name)
     void renameNamespace( const char *from, const char *to, bool stayTemp);
 
+    // TODO: Put this in the cmdline abstraction, not extern global.
     extern string dbpath; // --dbpath parm
 
     // Defined in database.cpp

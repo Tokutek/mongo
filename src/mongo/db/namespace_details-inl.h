@@ -23,11 +23,11 @@
 namespace mongo {
 
     inline IndexDetails& NamespaceDetails::idx(int idxNo, bool missingExpected ) {
-        if( idxNo < NIndexesBase ) {
-            IndexDetails& id = _indexes[idxNo];
+        if ( idxNo < NIndexesMax ) {
+            IndexDetails &id = _indexes[idxNo];
             return id;
         }
-        unimplemented("more than NIndexesBase indexes"); // TokuDB: Make sure we handle the case where idxNo >= NindexesBase 
+        unimplemented("more than NIndexesMax indexes"); // TokuDB: Make sure we handle the case where idxNo >= NindexesMax 
     }
 
     inline int NamespaceDetails::idxNo(const IndexDetails& idx) {
