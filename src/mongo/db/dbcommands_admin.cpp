@@ -28,7 +28,7 @@
 #include "commands.h"
 #include "cmdline.h"
 #include "indexcursor.h"
-#include "curop-inl.h"
+#include "curop.h"
 #include "../util/background.h"
 #include "../util/alignedbuilder.h"
 #include "../util/paths.h"

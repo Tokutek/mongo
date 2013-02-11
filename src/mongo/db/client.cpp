@@ -23,7 +23,7 @@
 #include "pch.h"
 #include "db.h"
 #include "client.h"
-#include "curop-inl.h"
+#include "curop.h"
 #include "json.h"
 #include "security.h"
 #include "commands.h"

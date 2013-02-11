@@ -21,7 +21,7 @@
 #include "security_common.h"
 #include "instance.h"
 #include "client.h"
-#include "curop-inl.h"
+#include "curop.h"
 #include "db.h"
 #include "dbhelpers.h"
 

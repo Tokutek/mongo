@@ -27,7 +27,7 @@
 #include "commands.h"
 #include "cmdline.h"
 #include "indexcursor.h"
-#include "curop-inl.h"
+#include "curop.h"
 #include "../util/background.h"
 #include "../scripting/engine.h"
 

@@ -18,7 +18,7 @@
 
 #include "pch.h"
 #include "jsobj.h"
-#include "curop-inl.h"
+#include "curop.h"
 #include "queryutil.h"
 
 #include "mongo/db/namespace_details.h"

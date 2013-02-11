@@ -20,7 +20,7 @@
 #pragma once
 
 
-#include "curop-inl.h"
+#include "curop.h"
 #include "security.h"
 #include "cmdline.h"
 #include "client.h"

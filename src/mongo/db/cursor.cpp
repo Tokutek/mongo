@@ -15,7 +15,7 @@
  */
 
 #include "pch.h"
-#include "curop-inl.h"
+#include "curop.h"
 
 #include "mongo/db/cursor.h"
 #include "mongo/db/namespace_details.h"
