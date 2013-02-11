@@ -45,7 +45,7 @@ namespace mongo {
         //int v = indexDetails.version();
         
         //if( v == 2 ) 
-            return new TokuDBCursor( nsd , idxNo , indexDetails );
+        //    return new TokuDBCursor( nsd , idxNo , indexDetails );
 
 #if 0
         if( v == 1 ) 
@@ -58,6 +58,7 @@ namespace mongo {
         uasserted(14800, str::stream() << "unsupported index version " << v);
         return 0; // not reachable
 #endif
+        return NULL;
     }
 
     // TODO: Get rid of all but one of these static constructors
