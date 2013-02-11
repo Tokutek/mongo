@@ -26,7 +26,7 @@
 
 #include "mongo/pch.h"
 #include "security.h"
-#include "namespace-inl.h"
+#include "namespace.h"
 #include "lasterror.h"
 #include "stats/top.h"
 #include "../db/client_common.h"

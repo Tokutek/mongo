@@ -25,42 +25,60 @@
 
 namespace mongo {
 
-#pragma pack(1)
     class Namespace {
     public:
         explicit Namespace(const char *ns) { *this = ns; }
-        Namespace& operator=(const char *ns);
+        Namespace& operator=(const char *ns) {
+            // we fill the remaining space with all zeroes here.  as the full Namespace struct is in
+            // the datafiles (the .ns files specifically), that is helpful as then they are deterministic
+            // in the bytes they have for a given sequence of operations.  that makes testing and debugging
+            // the data files easier.
+            //
+            // if profiling indicates this method is a significant bottleneck, we could have a version we
+            // use for reads which does not fill with zeroes, and keep the zeroing behavior on writes.
+            //
+            unsigned len = strlen(ns);
+            uassert( 10080 , "ns name too long, max size is 128", len < MaxNsLen);
+            memset(buf, 0, MaxNsLen);
+            memcpy(buf, ns, len);
+            return *this;
+        }
 
         bool hasDollarSign() const { return strchr( buf , '$' ) > 0;  }
         void kill() { buf[0] = 0x7f; }
         bool operator==(const char *r) const { return strcmp(buf, r) == 0; }
         bool operator==(const Namespace& r) const { return strcmp(buf, r.buf) == 0; }
-        int hash() const; // value returned is always > 0
+
+        // value returned is always > 0
+        int hash() const {
+            unsigned x = 0;
+            const char *p = buf;
+            while ( *p ) {
+                x = x * 131 + *p;
+                p++;
+            }
+            return (x & 0x7fffffff) | 0x8000000; // must be > 0
+        }
 
         size_t size() const { return strlen( buf ); }
 
         string toString() const { return buf; }
         operator string() const { return buf; }
 
-        /* NamespaceDetails::Extra was added after fact to allow chaining of data blocks to support more than 10 indexes
-           (more than 10 IndexDetails).  It's a bit hacky because of this late addition with backward
-           file support. */
-        string extraName(int i) const;
-        bool isExtra() const; /* ends with $extr... -- when true an extra block not a normal NamespaceDetails block */
-
         /** ( foo.bar ).getSisterNS( "blah" ) == foo.blah
             perhaps this should move to the NamespaceString helper?
          */
-        string getSisterNS( const char * local ) const;
+        string getSisterNS( const char * local ) const {
+            verify( local && local[0] != '.' );
+            string old(buf);
+            if ( old.find( "." ) != string::npos )
+                old = old.substr( 0 , old.find( "." ) );
+            return old + "." + local;
+        }
 
         enum MaxNsLenValue { MaxNsLen = 128 };
     private:
         char buf[MaxNsLen];
     };
-#pragma pack()
-
-    // TODO: TokuDB: We think this only mattered when mongo used memory mapped files. Does it matter for us?
-    //BOOST_STATIC_ASSERT( sizeof(Namespace) == 128 );
-    //BOOST_STATIC_ASSERT( Namespace::MaxNsLen == MaxDatabaseNameLen );
 
 } // namespace mongo

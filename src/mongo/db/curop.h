@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "namespace-inl.h"
+#include "namespace.h"
 #include "client.h"
 #include "../bson/util/atomic_int.h"
 #include "../util/concurrency/spin_lock.h"

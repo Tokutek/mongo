@@ -24,7 +24,7 @@
 
 #include "pch.h"
 #include "jsobj.h"
-#include "namespace-inl.h"
+#include "namespace.h"
 #include "commands.h"
 #include "cmdline.h"
 #include "indexcursor.h"

@@ -17,7 +17,7 @@
 */
 
 #include "pch.h"
-#include "namespace-inl.h"
+#include "namespace.h"
 #include "index.h"
 #include "background.h"
 #include "../util/stringutils.h"

@@ -19,7 +19,7 @@
 #pragma once
 
 #include "jsobj.h"
-#include "namespace-inl.h"
+#include "namespace.h"
 #include "../util/net/message.h"
 #include "../client/constants.h"
 #include "instance.h"

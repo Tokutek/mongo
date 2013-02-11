@@ -19,7 +19,7 @@
 #include <boost/checked_delete.hpp>
 
 #include "pch.h"
-#include "namespace-inl.h"
+#include "namespace.h"
 #include "index.h"
 #include "indexcursor.h"
 #include "background.h"
