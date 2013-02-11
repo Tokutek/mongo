@@ -694,8 +694,8 @@ if nix:
     env.Append( LINKFLAGS=["-fPIC", "-pthread",  "-rdynamic"] )
     env.Append( LIBS=[] )
 
-    #make scons colorgcc friendly
-    for key in ('HOME', 'TERM'):
+    #make scons colorgcc and ccache and distcc friendly
+    for key in ('HOME', 'TERM', 'PATH', 'CCACHE_PREFIX', 'DISTCC_VERBOSE'):
         try:
             env['ENV'][key] = os.environ[key]
         except KeyError:
