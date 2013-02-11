@@ -65,7 +65,6 @@ namespace mongo {
         : name(nm), path(_path), namespaceIndex( path, name ),
           profileName(name + ".system.profile")
     {
-        tokulog() << "opening Database(" << nm << ", " << _path << ")" << endl;
         try {
             {
                 // check db name is valid
@@ -96,12 +95,9 @@ namespace mongo {
             // If already exists, open.  Otherwise behave as if empty until
             // there's a write, then open.
             if (!newDb) {
-                tokulog() << "database already exists" << endl;
                 namespaceIndex.init();
                 //if( _openAllFiles )
                 //    openAllFiles();
-            } else {
-                tokulog() << "behaving as if empty until there's a write" << endl;
             }
             magic = 781231;
         } catch(std::exception& e) {
