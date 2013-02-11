@@ -20,11 +20,15 @@
 
 #include "mongo/pch.h"
 
+#include <db.h>
 #include <vector>
 
+#include "mongo/db/client.h"
 #include "mongo/db/indexkey.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/namespace.h"
+#include "mongo/db/storage/env.h"
+#include "mongo/db/storage/txn.h"
 
 namespace mongo {
 
@@ -34,32 +38,22 @@ namespace mongo {
      */
     class IndexDetails {
     public:
-        /**
-         * btree head disk location
-         * TODO We should make this variable private, since btree operations
-         * may change its value and we don't want clients to rely on an old
-         * value.  If we create a btree class, we can provide a btree object
-         * to clients instead of 'head'.
-         */
-        //DiskLoc head;
-        // TODO: TokuDB this will probably be an open DB* object.
+        explicit IndexDetails(const BSONObj &info) : _info(info.getOwned()) {
+            const char *name = _info["name"].String().c_str();
 
-        /* Location of index info object. Format:
+            // Need a transaction to have already begun. Cannot open/create in a child transaction.
+            storage::Transaction *txn = cc().transaction();
+            dassert(txn != NULL);
+            dassert(txn->is_root());
 
-             { name:"nameofindex", ns:"parentnsname", key: {keypattobject}
-               [, unique: <bool>, background: <bool>, v:<version>]
-             }
+            // Open the dictionary. Creates it if necessary.
+            _db = storage::db_open(txn->txn(), name);
+        }
 
-           This object is in the system.indexes collection.  Note that since we
-           have a pointer to the object here, the object in system.indexes MUST NEVER MOVE.
-        */
-        //DiskLoc info;
-        // TODO: TokuDB this stuff will probably go in the descriptor
+        ~IndexDetails() {
+            storage::db_close(_db);
+        }
 
-        /* extract key value from the query object
-           e.g., if key() == { x : 1 },
-                 { x : 70, y : 3 } -> { x : 70 }
-        */
         BSONObj getKeyFromQuery(const BSONObj& query) const {
             BSONObj k = keyPattern();
             BSONObj res = query.extractFieldsUnDotted(k);
@@ -77,9 +71,7 @@ namespace mongo {
            e.g., { lastname:1, firstname:1 }
         */
         BSONObj keyPattern() const {
-            ::abort();
-            return BSONObj();
-            //return info.obj().getObjectField("key");
+            return _info.getObjectField("key");
         }
 
         /**
@@ -95,38 +87,28 @@ namespace mongo {
         // returns name of this index's storage area
         // database.table.$index
         string indexNamespace() const {
-#if 0
-            BSONObj io = info.obj();
             string s;
             s.reserve(Namespace::MaxNsLen);
-            s = io.getStringField("ns");
+            s = _info.getStringField("ns");
             verify( !s.empty() );
             s += ".$";
-            s += io.getStringField("name");
+            s += _info.getStringField("name");
             return s;
-#endif
-            ::abort();
-            return string();
         }
 
         string indexName() const { // e.g. "ts_1"
-#if 0
-            BSONObj io = info.obj();
-            return io.getStringField("name");
-#endif
-            ::abort();
-            return string();
+            return _info.getStringField("name");
         }
 
         static bool isIdIndexPattern( const BSONObj &pattern ) {
             BSONObjIterator i(pattern);
             BSONElement e = i.next();
-            //_id index must have form exactly {_id : 1} or {_id : -1}.
-            //Allows an index of form {_id : "hashed"} to exist but
-            //do not consider it to be the primary _id index
-            if(! ( strcmp(e.fieldName(), "_id") == 0
-                    && (e.numberInt() == 1 || e.numberInt() == -1)))
+            // _id index must have form exactly {_id : 1} or {_id : -1}.
+            // Allows an index of form {_id : "hashed"} to exist but
+            // do not consider it to be the primary _id index
+            if (!(strcmp(e.fieldName(), "_id") == 0 && (e.numberInt() == 1 || e.numberInt() == -1))) {
                 return false;
+            }
             return i.next().eoo();
         }
 
@@ -139,24 +121,13 @@ namespace mongo {
            but the collection we index, its name.
            */
         string parentNS() const {
-#if 0
-            BSONObj io = info.obj();
-            return io.getStringField("ns");
-#endif
-            ::abort();
-            return string();
+            return _info.getStringField("ns");
         }
 
         /** @return true if index has unique constraint */
         bool unique() const {
-#if 0
-            BSONObj io = info.obj();
-            return io["unique"].trueValue() ||
-                   /* temp: can we juse make unique:true always be there for _id and get rid of this? */
-                   isIdIndex();
-#endif
-            ::abort();
-            return false;
+            // TODO: Make unique a necessary keyword for the _id index
+            return _info["unique"].trueValue() || isIdIndex();
         }
 
         /** delete this index.  does NOT clean up the system catalog
@@ -167,10 +138,22 @@ namespace mongo {
         const IndexSpec& getSpec() const;
 
         string toString() const {
-            //return info.obj().toString();
-            ::abort();
-            return string();
+            return _info.toString();
         }
+
+    private:
+        // Open dictionary representing the index on disk.
+        DB *_db;
+
+        /* Info about the index. Stored on disk in the .ns file for this database
+         * as a NamespaceDetails object.
+         */
+        /* Currenty known format:
+             { name:"nameofindex", ns:"parentnsname", key: {keypattobject}
+               [, unique: <bool>, background: <bool>, v:<version>]
+             }
+        */
+        BSONObj _info;
     };
 
 } // namespace mongo

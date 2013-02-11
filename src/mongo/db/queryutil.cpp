@@ -1347,7 +1347,7 @@ namespace mongo {
     }    
     
     void FieldRangeSetPair::assertValidIndex( const NamespaceDetails *d, int idxNo ) const {
-        massert( 14048, "FieldRangeSetPair invalid index specified", idxNo >= 0 && idxNo < d->nIndexes );   
+        massert( 14048, "FieldRangeSetPair invalid index specified", idxNo >= 0 && idxNo < d->nIndexes() );   
     }
         
     const FieldRangeSet &FieldRangeSetPair::frsForIndex( const NamespaceDetails* nsd, int idxNo ) const {

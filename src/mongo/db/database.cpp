@@ -503,10 +503,15 @@ namespace mongo {
         NamespaceIndex *ni = nsindex(ns);
         NamespaceDetails *details = ni->details(ns);
         if (details == NULL) {
+            storage::Transaction txn;
+            verify(txn.is_root());
+
             Namespace ns_s(ns);
             NamespaceDetails details_s(false);
             ni->add_ns(ns, details_s);
             details = ni->details(ns);
+
+            txn.commit();
         }
         return details;
     }

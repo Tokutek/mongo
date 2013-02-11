@@ -55,8 +55,11 @@ namespace mongo {
                 ~Transaction();
                 void commit();
                 void abort();
-                inline DB_TXN *txn() {
+                inline DB_TXN *txn() const {
                     return _txn;
+                }
+                inline bool is_root() const {
+                    return _parent == NULL;
                 }
 
             private:

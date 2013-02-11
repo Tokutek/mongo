@@ -546,7 +546,7 @@ doneCheckOrder:
         vector<shared_ptr<QueryPlan> > plans;
         shared_ptr<QueryPlan> optimalPlan;
         shared_ptr<QueryPlan> specialPlan;
-        for( int i = 0; i < d->nIndexes; ++i ) {
+        for( int i = 0; i < d->nIndexes(); ++i ) {
             
             if ( !QueryUtilIndexed::indexUseful( _qps.frsp(), d, i, _qps.order() ) ) {
                 continue;
@@ -1620,7 +1620,7 @@ doneCheckOrder:
             }
             else {
                 bool useful = false;
-                for( int j = 0; j < d->nIndexes; ++j ) {
+                for( int j = 0; j < d->nIndexes(); ++j ) {
                     if ( indexUseful( *i, d, j, BSONObj() ) ) {
                         useful = true;
                         break;

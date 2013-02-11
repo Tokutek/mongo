@@ -1414,7 +1414,7 @@ namespace mongo {
 
             //result.appendNumber( "storageSize" , nsd->storageSize( &numExtents , verbose ? &extents : 0  ) / scale );
             //result.append( "numExtents" , numExtents );
-            result.append( "nindexes" , nsd->nIndexes );
+            result.append( "nindexes" , nsd->nIndexes() );
             //result.append( "lastExtentSize" , nsd->lastExtentSize / scale );
             //result.append( "paddingFactor" , nsd->paddingFactor() );
             //result.append( "systemFlags" , nsd->systemFlags() );
@@ -1551,7 +1551,7 @@ namespace mongo {
                 //storageSize += nsd->storageSize( &temp );
                 //numExtents += temp;
 
-                indexes += nsd->nIndexes;
+                indexes += nsd->nIndexes();
                 indexSize += getIndexSizeForCollection(dbname, ns);
             }
             

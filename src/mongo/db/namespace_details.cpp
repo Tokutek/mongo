@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <list>
+#include <vector>
 
 #include <boost/filesystem/operations.hpp>
 
@@ -37,15 +38,17 @@ namespace mongo {
 
     BSONObj idKeyPattern = fromjson("{\"_id\":1}");
 
-    NamespaceDetails::NamespaceDetails( bool capped ) {
-        nIndexes = 0;
-            
+    NamespaceDetails::NamespaceDetails( bool capped ) : indexBuildInProgress(false), _nIndexes(0), multiKeyIndexBits(0) {
         if ( capped ) {
             unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
         }
+    }
 
-        multiKeyIndexBits = 0;
-        indexBuildInProgress = false;
+    NamespaceDetails::~NamespaceDetails() {
+        // Destroy any open indexes.
+        for (std::vector<IndexDetails *>::iterator i = _indexes.begin(); i != _indexes.end(); i++) {
+            delete *i;
+        }
     }
 
     bool NamespaceIndex::exists() const {
@@ -75,8 +78,9 @@ namespace mongo {
         Lock::assertWriteLocked(database_);
 
         string nsdbname(database_ + ".ns");
-        storage::Transaction txn;
-        nsdb = storage::db_open(txn.txn(), nsdbname.c_str());
+        const storage::Transaction *txn = cc().transaction();
+        dassert(txn->is_root());
+        nsdb = storage::db_open(txn->txn(), nsdbname.c_str());
 
         const int ns_file_len = 16 * 1024 * 1024;
         void *buf = malloc(ns_file_len);
@@ -100,8 +104,6 @@ namespace mongo {
             verify(r == 0);
             scan_txn.commit();
         }
-
-        txn.commit();
 
         /* if someone manually deleted the datafiles for a database,
            we need to be sure to clear any cached info for the database in
@@ -151,7 +153,7 @@ namespace mongo {
 
     void NamespaceIndex::add_ns( const char *ns, const NamespaceDetails &details ) {
         Lock::assertWriteLocked(ns);
-        storage::Transaction txn;
+
         init();
         Namespace n(ns);
 
@@ -162,13 +164,12 @@ namespace mongo {
         ndbt.size = strlen(ns) + 1;
         ddbt.data = const_cast<void *>(static_cast<const void *>(&details));
         ddbt.size = sizeof details;
-        int r = nsdb->put(nsdb, txn.txn(), &ndbt, &ddbt, 0);
+        const storage::Transaction *txn = cc().transaction();
+        int r = nsdb->put(nsdb, txn->txn(), &ndbt, &ddbt, 0);
         verify(r == 0);
 
         bool ok = ht->put(n, details);
         uassert( 10081 , "too many namespaces/collections", ok);
-
-        txn.commit();
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
@@ -184,7 +185,7 @@ namespace mongo {
     IndexDetails& NamespaceDetails::addIndex(const char *thisns, bool resetTransient) {
         IndexDetails *id;
         try {
-            id = &idx(nIndexes,true);
+            id = &idx(nIndexes() ,true);
         }
         catch(DBException&) {
             //allocExtra(thisns, nIndexes);
@@ -193,7 +194,7 @@ namespace mongo {
         }
 
         unimplemented("NamespaceDetails durability");
-        nIndexes++; //(*getDur().writing(&nIndexes))++;
+        _nIndexes++; //(*getDur().writing(&nIndexes))++;
         if ( resetTransient )
             NamespaceDetailsTransient::get(thisns).addedIndex();
         return *id;

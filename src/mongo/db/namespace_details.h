@@ -53,17 +53,10 @@ namespace mongo {
     public:
         enum { NIndexesMax = 64 };
 
-        // TODO: Make these private
-        //
-        // TODO: TokuDB: Add in memory stats
-        int nIndexes;
-        // TODO: Use 'em or get rid of 'em;
-        unsigned long long multiKeyIndexBits;
-        // true if an index is currently being built
-        bool indexBuildInProgress;
-
         //explicit NamespaceDetails( const DiskLoc &loc, bool _capped );
         explicit NamespaceDetails( bool _capped );
+
+        ~NamespaceDetails();
 
         /* called when loaded from disk */
         void onLoad(const Namespace& k);
@@ -77,17 +70,28 @@ namespace mongo {
         void setMaxCappedDocs( long long max ) { unimplemented("capped collections"); }
         void emptyCappedCollection(const char *ns);
 
+        int nIndexes() const {
+            return _nIndexes;
+        }
+
         /* when a background index build is in progress, we don't count the index in nIndexes until
            complete, yet need to still use it in _indexRecord() - thus we use this function for that.
         */
-        int nIndexesBeingBuilt() const { return nIndexes + (indexBuildInProgress ? 1 : 0); }
+        int nIndexesBeingBuilt() const { 
+            if (indexBuildInProgress) {
+                verify(_nIndexes + 1 == (int) _indexes.size());
+            } else {
+                verify(_nIndexes == (int) _indexes.size());
+            }
+            return _indexes.size();
+        }
 
         IndexDetails& idx(int idxNo, bool missingExpected = false );
 
         /** get the IndexDetails for the index currently being built in the background. (there is at most one) */
         IndexDetails& inProgIdx() {
-            DEV verify(indexBuildInProgress);
-            return idx(nIndexes);
+            dassert(indexBuildInProgress);
+            return idx(_nIndexes);
         }
 
         class IndexIterator {
@@ -164,9 +168,17 @@ namespace mongo {
             return 10; // TODO: Return something meaningful based on in-memory stats
         }
 
+        // TODO: Make this private or remove it
+        // true if an index is currently being built
+        bool indexBuildInProgress;
+
     private:
         // Each index (including the _id) index has an IndexDetails that describes it.
-        IndexDetails _indexes[NIndexesMax];
+        int _nIndexes;
+        std::vector<IndexDetails *> _indexes;
+
+        // TODO: TokuDB: Add in memory stats
+        unsigned long long multiKeyIndexBits;
 
         friend class NamespaceIndex;
     }; // NamespaceDetails
@@ -359,6 +371,10 @@ namespace mongo {
         NamespaceIndex(const string &dir, const string &database) :
             ht( 0 ), dir_( dir ), database_( database ) {}
 
+        ~NamespaceIndex() {
+            wunimplemented("NamespaceIndex destructor");
+        }
+
         /* returns true if new db will be created if we init lazily */
         // why
         bool exists() const;
@@ -368,7 +384,6 @@ namespace mongo {
                 _init();
         }
 
-        //void add_ns(const char *ns, DiskLoc& loc, bool capped);
         void add_ns( const char *ns, const NamespaceDetails &details );
 
         NamespaceDetails* details(const char *ns) {
@@ -423,7 +438,7 @@ namespace mongo {
 
     inline IndexDetails& NamespaceDetails::idx(int idxNo, bool missingExpected ) {
         if ( idxNo < NIndexesMax ) {
-            IndexDetails &id = _indexes[idxNo];
+            IndexDetails &id = *_indexes[idxNo];
             return id;
         }
         unimplemented("more than NIndexesMax indexes"); // TokuDB: Make sure we handle the case where idxNo >= NindexesMax 
@@ -481,7 +496,7 @@ namespace mongo {
     inline NamespaceDetails::IndexIterator::IndexIterator(NamespaceDetails *_d) {
         d = _d;
         i = 0;
-        n = d->nIndexes;
+        n = d->nIndexes();
     }
 
 } // namespace mongo

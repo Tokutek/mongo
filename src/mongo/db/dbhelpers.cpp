@@ -50,7 +50,7 @@ namespace mongo {
             }
         }
 
-        if( d->nIndexes >= NamespaceDetails::NIndexesMax ) {
+        if( d->nIndexes() >= NamespaceDetails::NIndexesMax ) {
             problem() << "Helper::ensureIndex fails, MaxIndexes exceeded " << ns << '\n';
             return;
         }

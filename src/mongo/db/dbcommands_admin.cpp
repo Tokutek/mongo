@@ -374,7 +374,7 @@ namespace mongo {
 
                 int idxn = 0;
                 try  {
-                    result.append("nIndexes", d->nIndexes);
+                    result.append("nIndexes", d->nIndexes());
                     BSONObjBuilder indexes; // not using subObjStart to be exception safe
                     NamespaceDetails::IndexIterator i = d->ii();
                     while( i.more() ) {
