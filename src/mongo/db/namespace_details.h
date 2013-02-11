@@ -421,6 +421,67 @@ namespace mongo {
     NamespaceDetails* nsdetails(const char *ns);
     NamespaceDetails* nsdetails_maybe_create(const char *ns);
 
-} // namespace mongo
+    inline IndexDetails& NamespaceDetails::idx(int idxNo, bool missingExpected ) {
+        if ( idxNo < NIndexesMax ) {
+            IndexDetails &id = _indexes[idxNo];
+            return id;
+        }
+        unimplemented("more than NIndexesMax indexes"); // TokuDB: Make sure we handle the case where idxNo >= NindexesMax 
+    }
 
-#include "namespace_details-inl.h"
+    inline int NamespaceDetails::idxNo(const IndexDetails& idx) {
+        IndexIterator i = ii();
+        while( i.more() ) {
+            if( &i.next() == &idx )
+                return i.pos()-1;
+        }
+        massert( 10349 , "E12000 idxNo fails", false);
+        return -1;
+    }
+
+    inline int NamespaceDetails::findIndexByKeyPattern(const BSONObj& keyPattern) {
+        IndexIterator i = ii();
+        while( i.more() ) {
+            if( i.next().keyPattern() == keyPattern )
+                return i.pos()-1;
+        }
+        return -1;
+    }
+
+    inline const IndexDetails* NamespaceDetails::findIndexByPrefix( const BSONObj &keyPattern ,
+                                                                    bool requireSingleKey ) {
+        const IndexDetails* bestMultiKeyIndex = NULL;
+        IndexIterator i = ii();
+        while( i.more() ) {
+            const IndexDetails& currentIndex = i.next();
+            if( keyPattern.isPrefixOf( currentIndex.keyPattern() ) ){
+                if( ! isMultikey( i.pos()-1 ) ){
+                    return &currentIndex;
+                } else {
+                    bestMultiKeyIndex = &currentIndex;
+                }
+            }
+        }
+        return requireSingleKey ? NULL : bestMultiKeyIndex;
+    }
+
+    // @return offset in indexes[]
+    inline int NamespaceDetails::findIndexByName(const char *name) {
+        IndexIterator i = ii();
+        while( i.more() ) {
+#if 0
+            if ( strcmp(i.next().info.obj().getStringField("name"),name) == 0 )
+                return i.pos()-1;
+#endif
+            ::abort();
+        }
+        return -1;
+    }
+
+    inline NamespaceDetails::IndexIterator::IndexIterator(NamespaceDetails *_d) {
+        d = _d;
+        i = 0;
+        n = d->nIndexes;
+    }
+
+} // namespace mongo
