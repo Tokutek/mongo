@@ -216,8 +216,7 @@ namespace mongo {
                     }
                     else if ( e.rawdata() != arrElt.rawdata() ) {
                         // enforce single array path here
-                        // TokuDB: We allow parallel arrays, vanilla Mongo did not.
-                        //assertParallelArrays( e.fieldName(), arrElt.fieldName() );
+                        // TokuDB: We allow parallel arrays. Do nothing.
                     }
                     if ( arrayNestedArray ) {
                         mayExpandArrayUnembedded = false;   

@@ -111,6 +111,7 @@ namespace mongo {
              for a single document. see multikey in wiki.
            for these, we have to do some dedup work on queries.
         */
+        // TODO: Be sure to setIndexIsMultiKey on the insert path when we detect it.
         bool isMultikey(int i) const { return (multiKeyIndexBits & (((unsigned long long) 1) << i)) != 0; }
         void setIndexIsMultikey(const char *thisns, int i);
 

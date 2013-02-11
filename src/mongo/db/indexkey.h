@@ -24,12 +24,6 @@
 
 namespace mongo {
 
-    extern const int DefaultIndexVersionNumber;
-
-    // TODO: TokuDB: I think we need to get rid of this, because
-    // its purpose is to prevent parallel arrays?
-    const int ParallelArraysCode = 10088;
-    
     class Cursor;
     class IndexSpec;
     class IndexType; // TODO: this name sucks TODO: TokuDB: So fix it, eventually.
