@@ -1400,7 +1400,7 @@ namespace mongo {
                 return false;
             }
 
-            bool verbose = jsobj["verbose"].trueValue();
+            //bool verbose = jsobj["verbose"].trueValue();
 
             //long long size = nsd->stats.datasize / scale;
             //result.appendNumber( "count" , nsd->stats.nrecords );
@@ -1409,16 +1409,16 @@ namespace mongo {
             //    result.append      ( "avgObjSize" , double(size) / double(nsd->stats.nrecords) );
             // TODO: TokuDB provide our version of stats
 
-            int numExtents = 0;
-            BSONArrayBuilder extents;
+            //int numExtents = 0;
+            //BSONArrayBuilder extents;
 
             //result.appendNumber( "storageSize" , nsd->storageSize( &numExtents , verbose ? &extents : 0  ) / scale );
-            result.append( "numExtents" , numExtents );
+            //result.append( "numExtents" , numExtents );
             result.append( "nindexes" , nsd->nIndexes );
             //result.append( "lastExtentSize" , nsd->lastExtentSize / scale );
             //result.append( "paddingFactor" , nsd->paddingFactor() );
-            result.append( "systemFlags" , nsd->systemFlags() );
-            result.append( "userFlags" , nsd->userFlags() );
+            //result.append( "systemFlags" , nsd->systemFlags() );
+            //result.append( "userFlags" , nsd->userFlags() );
 
             //BSONObjBuilder indexSizes;
             //result.appendNumber( "totalIndexSize" , getIndexSizeForCollection(dbname, ns, &indexSizes, scale) / scale );
@@ -1430,8 +1430,8 @@ namespace mongo {
                 result.appendNumber( "max" , nsd->maxCappedDocs() );
             }
 
-            if ( verbose )
-                result.appendArray( "extents" , extents.arr() );
+            //if ( verbose )
+            //    result.appendArray( "extents" , extents.arr() );
 
             return true;
         }
@@ -1459,7 +1459,7 @@ namespace mongo {
             }
             
             bool ok = true;
-            int oldFlags = nsd->userFlags();
+            //int oldFlags = nsd->userFlags();
             
             BSONObjIterator i( jsobj );
             while ( i.more() ) {
@@ -1468,6 +1468,7 @@ namespace mongo {
                     // no-op
                 }
                 else if ( str::equals( "usePowerOf2Sizes", e.fieldName() ) ) {
+#if 0
                     result.appendBool( "usePowerOf2Sizes_old" , nsd->isUserFlagSet( NamespaceDetails::Flag_UsePowerOf2Sizes ) );
                     if ( e.trueValue() ) {
                         nsd->setUserFlag( NamespaceDetails::Flag_UsePowerOf2Sizes );
@@ -1475,6 +1476,8 @@ namespace mongo {
                     else {
                         nsd->clearUserFlag( NamespaceDetails::Flag_UsePowerOf2Sizes );
                     }
+#endif
+                    log() << "usesPowerOf2Sizes is a deprecated parameter" << endl;
                 }
                 else {
                     errmsg = str::stream() << "unknown command: " << e.fieldName();
@@ -1482,9 +1485,11 @@ namespace mongo {
                 }
             }
             
+#if 0
             if ( oldFlags != nsd->userFlags() ) {
                 nsd->syncUserFlags( ns );
             }
+#endif
 
             return ok;
         }

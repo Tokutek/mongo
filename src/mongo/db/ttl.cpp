@@ -88,9 +88,12 @@ namespace mongo {
                         // collection was dropped
                         continue;
                     }
+                    // TODO: TokuDB: Confirm that this doesn't matter.
+#if 0
                     if ( nsd->setUserFlag( NamespaceDetails::Flag_UsePowerOf2Sizes ) ) {
                         nsd->syncUserFlags( ns );
                     }
+#endif
                     // only do deletes if on master
                     if ( ! isMasterNs( dbName.c_str() ) ) {
                         continue;

@@ -39,8 +39,6 @@ namespace mongo {
 
     NamespaceDetails::NamespaceDetails( bool capped ) {
         nIndexes = 0;
-        _systemFlags = 0;
-        _userFlags = 0;
             
         if ( capped ) {
             unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
@@ -279,65 +277,6 @@ namespace mongo {
             i.next().keyPattern().getFieldNames(_indexKeys);
         _keysComputed = true;
     }
-
-    void NamespaceDetails::setSystemFlag( int flag ) {
-        unimplemented("NamespaceDetails durability");
-        _systemFlags |= flag; // TODO: Transactional //getDur().writingInt(_systemFlags) |= flag;
-    }
-
-    void NamespaceDetails::clearSystemFlag( int flag ) {
-        unimplemented("NamespaceDetails durability");
-        _systemFlags &= ~flag; // TODO: Transactional //getDur().writingInt(_systemFlags) &= ~flag;
-    }
-    
-    /**
-     * keeping things in sync this way is a bit of a hack
-     * and the fact that we have to pass in ns again
-     * should be changed, just not sure to what
-     */
-    void NamespaceDetails::syncUserFlags( const string& ns ) {
-        Lock::assertWriteLocked( ns );
-        
-        string system_namespaces = NamespaceString( ns ).db + ".system.namespaces";
-
-        BSONObj oldEntry;
-        // TODO: Do we need to verify this?
-        //verify( Helpers::findOne( system_namespaces , BSON( "name" << ns ) , oldEntry ) );
-        BSONObj newEntry = applyUpdateOperators( oldEntry , BSON( "$set" << BSON( "options.flags" << userFlags() ) ) );
-        
-        verify( 1 == deleteObjects( system_namespaces.c_str() , oldEntry , true , false , true ) );
-        //theDataFileMgr.insert( system_namespaces.c_str() , newEntry.objdata() , newEntry.objsize() , true );
-        ::abort();
-    }
-
-    bool NamespaceDetails::setUserFlag( int flags ) {
-        if ( ( _userFlags & flags ) == flags )
-            return false;
-
-        unimplemented("NamespaceDetails durability");
-        _userFlags |= flags; // TODO: Transactional // getDur().writingInt(_userFlags) |= flags;
-        return true;
-    }
-
-    bool NamespaceDetails::clearUserFlag( int flags ) {
-        if ( ( _userFlags & flags ) == 0 )
-            return false;
-
-        unimplemented("NamespaceDetails durability");
-        _userFlags &= ~flags; // TODO: Transactional //getDur().writingInt(_userFlags) &= ~flags;
-        return true;
-    }
-
-    bool NamespaceDetails::replaceUserFlags( int flags ) {
-        if ( flags == _userFlags )
-            return false;
-
-        unimplemented("NamespaceDetails durability");
-        _userFlags = flags; // TODO: Transactional //getDur().writingInt(_userFlags) = flags;
-        return true;
-    }
-
-    /* ------------------------------------------------------------------------- */
 
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).
        options: { capped : ..., size : ... }

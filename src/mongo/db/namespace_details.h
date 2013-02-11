@@ -82,17 +82,6 @@ namespace mongo {
         */
         int nIndexesBeingBuilt() const { return nIndexes + (indexBuildInProgress ? 1 : 0); }
 
-        /* NOTE: be careful with flags.  are we manipulating them in read locks?  if so,
-                 this isn't thread safe.  TODO TokuDB-implemented namespaces always have an _id index. Remove this!
-        */
-        enum SystemFlags {
-            Flag_HaveIdIndex = 1 << 0 // set when we have _id index (ONLY if ensureIdIndex was called -- 0 if that has never been called)
-        };
-
-        enum UserFlags {
-            Flag_UsePowerOf2Sizes = 1 << 0
-        };
-
         IndexDetails& idx(int idxNo, bool missingExpected = false );
 
         /** get the IndexDetails for the index currently being built in the background. (there is at most one) */
@@ -152,24 +141,6 @@ namespace mongo {
                                                bool requireSingleKey );
 
 
-        const int systemFlags() const { return _systemFlags; }
-        bool isSystemFlagSet( int flag ) const { return _systemFlags & flag; }
-        void setSystemFlag( int flag );
-        void clearSystemFlag( int flag );
-
-        const int userFlags() const { return _userFlags; }
-        bool isUserFlagSet( int flag ) const { return _userFlags & flag; }
-        
-        /*
-         * these methods all return true iff only something was modified
-         */
-        
-        bool setUserFlag( int flag );
-        bool clearUserFlag( int flag );
-        bool replaceUserFlags( int flags );
-
-        void syncUserFlags( const string& ns );
-
         /* @return -1 = not found
            generally id is first index, so not that expensive an operation (assuming present).
         */
@@ -184,7 +155,8 @@ namespace mongo {
 
         // TODO: TokuDB-implemented namespaces always have an _id index. remove this.
         bool haveIdIndex() { 
-            return isSystemFlagSet( NamespaceDetails::Flag_HaveIdIndex ) || findIdIndex() >= 0;
+            return true;
+            //return isSystemFlagSet( NamespaceDetails::Flag_HaveIdIndex ) || findIdIndex() >= 0;
         }
 
         int averageObjectSize() {
@@ -194,9 +166,6 @@ namespace mongo {
     private:
         // Each index (including the _id) index has an IndexDetails that describes it.
         IndexDetails _indexes[NIndexesMax];
-
-        int _systemFlags; // things that the system sets/cares about
-        int _userFlags;
 
         friend class NamespaceIndex;
     }; // NamespaceDetails
