@@ -20,7 +20,6 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/key.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/index.h"
 

@@ -24,7 +24,7 @@
 
 #include "mongo/db/indexkey.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/key.h"
+//#include "mongo/db/key.h"
 #include "mongo/db/namespace.h"
 
 namespace mongo {
