@@ -111,8 +111,8 @@ namespace mongo {
         vector<FieldInterval>::const_iterator i;
         for( i = intervals.begin(); i != intervals.end(); ++i ){
             if ( ! i->equality() ){
-                const shared_ptr< BtreeCursor > exhaustiveCursor(
-                        BtreeCursor::make( nsdetails( _spec->getDetails()->parentNS().c_str()),
+                const shared_ptr< IndexCursor > exhaustiveCursor(
+                        IndexCursor::make( nsdetails( _spec->getDetails()->parentNS().c_str()),
                                            *( _spec->getDetails() ),
                                            BSON( "" << MINKEY ) ,
                                            BSON( "" << MAXKEY ) ,
@@ -132,8 +132,8 @@ namespace mongo {
         shared_ptr<FieldRangeVector> newVector(
                 new FieldRangeVector( newfrs , *_spec , 1 ) );
 
-        const shared_ptr< BtreeCursor > cursor(
-                BtreeCursor::make( nsdetails( _spec->getDetails()->parentNS().c_str()),
+        const shared_ptr< IndexCursor > cursor(
+                IndexCursor::make( nsdetails( _spec->getDetails()->parentNS().c_str()),
                         *( _spec->getDetails() ),  newVector , 1 ) );
         cursor->setMatcher( forceDocMatcher );
         return cursor;

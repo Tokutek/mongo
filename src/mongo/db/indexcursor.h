@@ -1,4 +1,4 @@
-// btree.h
+// indexcursor.h
 
 /**
 *    Copyright (C) 2008 10gen Inc.
@@ -33,9 +33,9 @@ namespace mongo {
      * A Cursor class for Btree iteration.
      * XXX That means "index" iteration.
      *
-     * A BtreeCursor can record its current btree position (noteLoc()) and then relocate this
+     * A IndexCursor can record its current btree position (noteLoc()) and then relocate this
      * position after a write (checkLoc()).  A recorded btree position consists of a btree bucket,
-     * bucket key offset, and unique btree key.  To relocate a unique btree key, a BtreeCursor first
+     * bucket key offset, and unique btree key.  To relocate a unique btree key, a IndexCursor first
      * checks the btree key at its recorded btree bucket and bucket key offset.  If the key at that
      * location does not match the recorded btree key, and an adjacent key also fails to match,
      * the recorded key (or the next existing key following it) is located in the btree using binary
@@ -44,25 +44,25 @@ namespace mongo {
      */
 
     // XXX TokuDB: We're going to want to de-virtualize this and rename it to IndexCursor, or something.
-    class BtreeCursor : public Cursor {
+    class IndexCursor : public Cursor {
         // XXX: TokuDB: A lot of stuff in here has to do with their specific Btree implementation. Clean house.
     protected:
-        BtreeCursor( NamespaceDetails* nsd , int theIndexNo, const IndexDetails& idxDetails );
+        IndexCursor( NamespaceDetails* nsd , int theIndexNo, const IndexDetails& idxDetails );
 
         virtual void init( const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
         virtual void init( const shared_ptr< FieldRangeVector > &_bounds, int singleIntervalLimit, int _direction );
 
     private:
         void _finishConstructorInit();
-        static BtreeCursor* make( NamespaceDetails * nsd , int idxNo , const IndexDetails& indexDetails );
+        static IndexCursor* make( NamespaceDetails * nsd , int idxNo , const IndexDetails& indexDetails );
 
     public:
-        virtual ~BtreeCursor();
+        virtual ~IndexCursor();
         /** makes an appropriate subclass depending on the index version */
-        static BtreeCursor* make( NamespaceDetails *_d, const IndexDetails&, const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
-        static BtreeCursor* make( NamespaceDetails *_d, const IndexDetails& _id, const shared_ptr< FieldRangeVector > &_bounds, int _direction );
-        static BtreeCursor* make( NamespaceDetails *_d, int _idxNo, const IndexDetails&, const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
-        static BtreeCursor* make( NamespaceDetails *_d, int _idxNo, const IndexDetails& _id,
+        static IndexCursor* make( NamespaceDetails *_d, const IndexDetails&, const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
+        static IndexCursor* make( NamespaceDetails *_d, const IndexDetails& _id, const shared_ptr< FieldRangeVector > &_bounds, int _direction );
+        static IndexCursor* make( NamespaceDetails *_d, int _idxNo, const IndexDetails&, const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
+        static IndexCursor* make( NamespaceDetails *_d, int _idxNo, const IndexDetails& _id,
                                  const shared_ptr< FieldRangeVector > &_bounds,
                                  int singleIntervalLimit, int _direction );
 

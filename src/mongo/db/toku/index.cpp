@@ -27,7 +27,7 @@
 #include "db/toku/invariant.h"
 
 #include "db/namespace_details.h"
-#include "db/btree.h"
+#include "db/indexcursor.h"
 
 namespace mongo {
 #if 0

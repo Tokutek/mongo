@@ -21,7 +21,7 @@
 #include "pch.h"
 #include "namespace-inl.h"
 #include "index.h"
-#include "btree.h"
+#include "indexcursor.h"
 #include "background.h"
 #include "repl/rs.h"
 #include "ops/delete.h"

@@ -34,7 +34,7 @@
 #include "../db/jsobj.h"
 #include "../db/cmdline.h"
 #include "../db/queryoptimizer.h"
-#include "../db/btree.h"
+#include "../db/indexcursor.h"
 #include "../db/repl_block.h"
 #include "../db/clientcursor.h"
 #include "../db/repl.h"
@@ -448,7 +448,7 @@ namespace mongo {
             BSONObj min = Helpers::modifiedRangeBound( _min , idx->keyPattern() , -1 );
             BSONObj max = Helpers::modifiedRangeBound( _max , idx->keyPattern() , -1 );
 
-            BtreeCursor* btreeCursor = BtreeCursor::make( d , *idx , min , max , false , 1 );
+            IndexCursor* btreeCursor = IndexCursor::make( d , *idx , min , max , false , 1 );
             auto_ptr<ClientCursor> cc(
                     new ClientCursor( QueryOption_NoCursorTimeout ,
                             shared_ptr<Cursor>( btreeCursor ) ,  _ns ) );

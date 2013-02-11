@@ -967,7 +967,7 @@ namespace QueryOptimizerCursorTests {
                 // Create a btree cursor on an optimal a:1,b:1 plan.
                 Client::ReadContext ctx( ns() );
                 shared_ptr<Cursor> cursor = getCursor();
-                ASSERT_EQUALS( "BtreeCursor a_1_b_1", cursor->toString() );
+                ASSERT_EQUALS( "IndexCursor a_1_b_1", cursor->toString() );
                 
                 // The optimal a:1,b:1 plan is recorded.
                 ASSERT_EQUALS( BSON( "a" << 1 << "b" << 1 ),
@@ -3554,7 +3554,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "_id" << 0 ) );
                 _cli.insert( ns(), BSON( "_id" << 10 ) );
             }
-            string expectedType() const { return "BtreeCursor _id_"; }
+            string expectedType() const { return "IndexCursor _id_"; }
             BSONObj query() const { return BSON( "_id" << 5 ); }
         };
         
@@ -3565,7 +3565,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "a" << 5 ) );
                 _cli.insert( ns(), BSON( "a" << 6 ) );
             }
-            string expectedType() const { return "BtreeCursor a_1"; }
+            string expectedType() const { return "IndexCursor a_1"; }
             BSONObj query() const { return BSON( "a" << GTE << 5 ); }
             void check( const shared_ptr<Cursor> &c ) {
                 ASSERT( c->ok() );
@@ -3585,7 +3585,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
                 _cli.update( ns(), BSONObj(), BSON( "$set" << BSON( "a" << true ) ) );
             }
-            string expectedType() const { return "BtreeCursor a_1"; }
+            string expectedType() const { return "IndexCursor a_1"; }
             bool expectSimpleEquality() const { return true; }
             BSONObj query() const { return BSON( "a" << true ); }
             virtual void check( const shared_ptr<Cursor> &c ) {
@@ -3695,7 +3695,7 @@ namespace QueryOptimizerCursorTests {
                 ASSERT_EQUALS( BSON( "_id" << 1 ), cachedIndexForQuery( BSON( "_id" << GT << 0 ) ) );
                 shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor( ns(), BSON( "_id" << GT << 0 ) );
                 // No need for query optimizer cursor since the plan is optimal.
-                ASSERT_EQUALS( "BtreeCursor _id_", c->toString() );
+                ASSERT_EQUALS( "IndexCursor _id_", c->toString() );
             }
         };
         
@@ -3732,7 +3732,7 @@ namespace QueryOptimizerCursorTests {
             Hint() {
                 _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             }
-            string expectedType() const { return "BtreeCursor a_1"; }
+            string expectedType() const { return "IndexCursor a_1"; }
             BSONObj query() const {
                 return BSON( "$query" << BSON( "_id" << 1 ) << "$hint" << BSON( "a" << 1 ) );
             }
@@ -3744,7 +3744,7 @@ namespace QueryOptimizerCursorTests {
             Snapshot() {
                 _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             }
-            string expectedType() const { return "BtreeCursor _id_"; }
+            string expectedType() const { return "IndexCursor _id_"; }
             BSONObj query() const {
                 return BSON( "$query" << BSON( "a" << 1 ) << "$snapshot" << true );
             }
@@ -3758,7 +3758,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.createCollection( ns(), 1000, true );
                 _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             }
-            string expectedType() const { return "BtreeCursor _id_"; }
+            string expectedType() const { return "IndexCursor _id_"; }
             BSONObj query() const {
                 return BSON( "$query" << BSON( "a" << 1 ) << "$snapshot" << true );
             }
@@ -3770,7 +3770,7 @@ namespace QueryOptimizerCursorTests {
             Min() {
                 _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             }
-            string expectedType() const { return "BtreeCursor a_1"; }
+            string expectedType() const { return "IndexCursor a_1"; }
             BSONObj query() const {
                 return BSON( "$query" << BSONObj() << "$min" << BSON( "a" << 1 ) );
             }
@@ -3782,7 +3782,7 @@ namespace QueryOptimizerCursorTests {
             Max() {
                 _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             }
-            string expectedType() const { return "BtreeCursor a_1"; }
+            string expectedType() const { return "IndexCursor a_1"; }
             BSONObj query() const {
                 return BSON( "$query" << BSONObj() << "$max" << BSON( "a" << 1 ) );
             }
@@ -3802,7 +3802,7 @@ namespace QueryOptimizerCursorTests {
             };
 
             class SimpleId : public Base {
-                string expectedType() const { return "BtreeCursor _id_"; }
+                string expectedType() const { return "IndexCursor _id_"; }
                 BSONObj query() const { return BSON( "_id" << 5 ); }
             };
 
@@ -3915,7 +3915,7 @@ namespace QueryOptimizerCursorTests {
             };
 
             class AllowOptimalIdPlan : public Base {
-                string expectedType() const { return "BtreeCursor _id_"; }
+                string expectedType() const { return "IndexCursor _id_"; }
                 BSONObj query() const { return BSON( "_id" << 5 ); }
             };
 
@@ -3926,7 +3926,7 @@ namespace QueryOptimizerCursorTests {
                     _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
                     _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 ) );
                 }
-                string expectedType() const { return "BtreeCursor _id_"; }
+                string expectedType() const { return "IndexCursor _id_"; }
                 BSONObj query() const { return _query; }
                 void check( const shared_ptr<Cursor> &c ) {
                     ASSERT( c->ok() );
@@ -4091,7 +4091,7 @@ namespace QueryOptimizerCursorTests {
                 ASSERT_EQUALS( 2U, _explain[ "allPlans" ].Array().size() );
 
                 BSONObj plan1 = _explain[ "allPlans" ].Array()[ 0 ].Obj();
-                ASSERT_EQUALS( "BtreeCursor a_1", plan1[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor a_1", plan1[ "cursor" ].String() );
                 ASSERT_EQUALS( 0, plan1[ "n" ].number() );
                 ASSERT_EQUALS( 0, plan1[ "nscannedObjects" ].number() );
                 ASSERT_EQUALS( 1, plan1[ "nscanned" ].number() );
@@ -4128,7 +4128,7 @@ namespace QueryOptimizerCursorTests {
                 ASSERT_EQUALS( 2U, _explain[ "allPlans" ].Array().size() );
                 
                 BSONObj plan1 = _explain[ "allPlans" ].Array()[ 0 ].Obj();
-                ASSERT_EQUALS( "BtreeCursor a_1", plan1[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor a_1", plan1[ "cursor" ].String() );
                 ASSERT_EQUALS( 0, plan1[ "n" ].number() );
                 ASSERT_EQUALS( 0, plan1[ "nscannedObjects" ].number() );
                 ASSERT_EQUALS( 0, plan1[ "nscanned" ].number() );
@@ -4158,7 +4158,7 @@ namespace QueryOptimizerCursorTests {
                 }
             }
             virtual void checkExplain() {
-                ASSERT_EQUALS( "BtreeCursor a_1", _explain[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor a_1", _explain[ "cursor" ].String() );
                 ASSERT_EQUALS( 1, _explain[ "n" ].number() );
                 ASSERT_EQUALS( 2, _explain[ "nscannedObjectsAllPlans" ].number() );
                 ASSERT_EQUALS( 2, _explain[ "nscannedAllPlans" ].number() );
@@ -4183,7 +4183,7 @@ namespace QueryOptimizerCursorTests {
                 }
             }
             virtual void checkExplain() {
-                ASSERT_EQUALS( "BtreeCursor a_1", _explain[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor a_1", _explain[ "cursor" ].String() );
                 ASSERT_EQUALS( 0, _explain[ "n" ].number() ); // needs to be set with noteIterate()
                 ASSERT_EQUALS( 0, _explain[ "nscannedObjectsAllPlans" ].number() );
                 ASSERT_EQUALS( 3, _explain[ "nscannedAllPlans" ].number() );
@@ -4212,7 +4212,7 @@ namespace QueryOptimizerCursorTests {
                 }
             }
             virtual void checkExplain() {
-                ASSERT_EQUALS( "BtreeCursor a_1", _explain[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor a_1", _explain[ "cursor" ].String() );
                 ASSERT_EQUALS( 0, _explain[ "n" ].number() ); // needs to be set with noteIterate()
                 ASSERT_EQUALS( 0, _explain[ "nscannedObjectsAllPlans" ].number() );
                 ASSERT_EQUALS( 4, _explain[ "nscannedAllPlans" ].number() );
@@ -4237,7 +4237,7 @@ namespace QueryOptimizerCursorTests {
                 _cursor->noteIterate( true, true, false );
             }
             virtual void checkExplain() {
-                ASSERT_EQUALS( "BtreeCursor a_1", _explain[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor a_1", _explain[ "cursor" ].String() );
                 ASSERT_EQUALS( 1, _explain[ "n" ].number() );
                 ASSERT_EQUALS( 1, _explain[ "nscannedObjectsAllPlans" ].number() );
                 ASSERT_EQUALS( 2, _explain[ "nscannedAllPlans" ].number() );
@@ -4325,7 +4325,7 @@ namespace QueryOptimizerCursorTests {
                 ASSERT( _nYields > 0 );
                 ASSERT_EQUALS( _nYields, _explain[ "nYields" ].Int() );
                 
-                ASSERT_EQUALS( "BtreeCursor a_1", _explain[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor a_1", _explain[ "cursor" ].String() );
                 ASSERT_EQUALS( 5, _explain[ "n" ].number() );
                 ASSERT_EQUALS( 10, _explain[ "nscannedObjectsAllPlans" ].number() );
                 ASSERT_EQUALS( 10, _explain[ "nscannedAllPlans" ].number() );
@@ -4362,14 +4362,14 @@ namespace QueryOptimizerCursorTests {
                 ASSERT_EQUALS( 18, _explain[ "nscannedAllPlans" ].number() );
 
                 BSONObj clause1 = _explain[ "clauses" ].Array()[ 0 ].Obj();
-                ASSERT_EQUALS( "BtreeCursor a_1", clause1[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor a_1", clause1[ "cursor" ].String() );
                 ASSERT_EQUALS( 4, clause1[ "n" ].number() );
                 ASSERT_EQUALS( 8, clause1[ "nscannedObjectsAllPlans" ].number() );
                 ASSERT_EQUALS( 8, clause1[ "nscannedAllPlans" ].number() );
                 ASSERT_EQUALS( 8, clause1[ "nYields" ].Int() );
                 
                 BSONObj c1plan1 = clause1[ "allPlans" ].Array()[ 0 ].Obj();
-                ASSERT_EQUALS( "BtreeCursor a_1", c1plan1[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor a_1", c1plan1[ "cursor" ].String() );
                 ASSERT_EQUALS( 4, c1plan1[ "n" ].number() );
                 ASSERT_EQUALS( 4, c1plan1[ "nscannedObjects" ].number() );
                 ASSERT_EQUALS( 4, c1plan1[ "nscanned" ].number() );
@@ -4381,14 +4381,14 @@ namespace QueryOptimizerCursorTests {
                 ASSERT_EQUALS( 4, c1plan2[ "nscanned" ].number() );
 
                 BSONObj clause2 = _explain[ "clauses" ].Array()[ 1 ].Obj();
-                ASSERT_EQUALS( "BtreeCursor b_1", clause2[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor b_1", clause2[ "cursor" ].String() );
                 ASSERT_EQUALS( 1, clause2[ "n" ].number() );
                 ASSERT_EQUALS( 10, clause2[ "nscannedObjectsAllPlans" ].number() );
                 ASSERT_EQUALS( 10, clause2[ "nscannedAllPlans" ].number() );
                 ASSERT_EQUALS( 10, clause2[ "nYields" ].Int() );
 
                 BSONObj c2plan1 = clause2[ "allPlans" ].Array()[ 0 ].Obj();
-                ASSERT_EQUALS( "BtreeCursor b_1", c2plan1[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor b_1", c2plan1[ "cursor" ].String() );
                 ASSERT_EQUALS( 5, c2plan1[ "n" ].number() );
                 ASSERT_EQUALS( 5, c2plan1[ "nscannedObjects" ].number() );
                 ASSERT_EQUALS( 5, c2plan1[ "nscanned" ].number() );
@@ -4421,7 +4421,7 @@ namespace QueryOptimizerCursorTests {
                 ASSERT_EQUALS( 20U, _explain[ "clauses" ].Array().size() );
                 for( int i = 20; i >= 1; --i ) {
                     BSONObj clause = _explain[ "clauses" ].Array()[ 20-i ].Obj();
-                    ASSERT_EQUALS( "BtreeCursor a_1", clause[ "cursor" ].String() );
+                    ASSERT_EQUALS( "IndexCursor a_1", clause[ "cursor" ].String() );
                     ASSERT_EQUALS( BSON( "a" << BSON_ARRAY( BSON_ARRAY( i << i ) ) ),
                                   clause[ "indexBounds" ].Obj() );
                     ASSERT_EQUALS( i, clause[ "n" ].number() );
@@ -4555,7 +4555,7 @@ namespace QueryOptimizerCursorTests {
                 clause->addPlanInfo( bPlan );
                 clause->addPlanInfo( cPlan );
                 
-                ASSERT_EQUALS( "BtreeCursor b_1", clause->bson()[ "cursor" ].String() );
+                ASSERT_EQUALS( "IndexCursor b_1", clause->bson()[ "cursor" ].String() );
             }
         };
 

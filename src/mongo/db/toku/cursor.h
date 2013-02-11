@@ -19,16 +19,16 @@
 
 #include <tokudb.h>
 
-#include "db/btree.h"
+#include "db/indexcursor.h"
 #include "db/toku/invariant.h"
 #include "db/toku/row_buffer.h"
 
 namespace mongo {
 
-    // A TokuDB cursor extends a BtreeCursor's public interface.
+    // A TokuDB cursor extends a IndexCursor's public interface.
     // Internally, it uses a real tokudb cursor and it caches the
     // last read row for speed.
-    class TokuDBCursor : public BtreeCursor {
+    class TokuDBCursor : public IndexCursor {
     public:
 
         // must use the above factor for a new tokudb cursor

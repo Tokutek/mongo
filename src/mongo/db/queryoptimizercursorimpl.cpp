@@ -20,7 +20,7 @@
 #include "pch.h"
 #include "queryoptimizercursorimpl.h"
 #include "clientcursor.h"
-#include "btree.h"
+#include "indexcursor.h"
 #include "explain.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/queryoptimizer.h"
@@ -686,7 +686,7 @@ namespace mongo {
                 if ( idxNo >= 0 ) {
                     IndexDetails& i = d->idx( idxNo );
                     BSONObj key = i.getKeyFromQuery( _query );
-                    return shared_ptr<Cursor>( BtreeCursor::make( d, idxNo, i, key, key, true,
+                    return shared_ptr<Cursor>( IndexCursor::make( d, idxNo, i, key, key, true,
                                                                  1 ) );
                 }
             }

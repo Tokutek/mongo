@@ -25,7 +25,7 @@
 namespace mongo {
 
     TokuDBCursor::TokuDBCursor(NamespaceDetails *nsd, int idxNo, const IndexDetails &idx) :
-        BtreeCursor(nsd, idxNo, idx),
+        IndexCursor(nsd, idxNo, idx),
         cursor(NULL),
         txn(NULL),
         row_buffer(),
@@ -177,7 +177,7 @@ namespace mongo {
     // - ignore the others
     void TokuDBCursor::init(const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction) {
         // for some reason we're not allowed to do this in the constructor
-        BtreeCursor::init(startKey, endKey, endKeyInclusive, direction);
+        IndexCursor::init(startKey, endKey, endKeyInclusive, direction);
         init_internal(startKey, endKey);
         invariant(cursor);
     }
@@ -188,7 +188,7 @@ namespace mongo {
     // - direction: do we iterate forward (using next) or backward (using prev)
     void TokuDBCursor::init(const shared_ptr<FieldRangeVector> &bounds, int singleIntervalLimit, int direction) {
         // for some reason we're not allowed to do this in the constructor
-        BtreeCursor::init(bounds,singleIntervalLimit,direction );
+        IndexCursor::init(bounds,singleIntervalLimit,direction );
         init_internal(startKey, endKey);
         invariant(cursor);
     }
@@ -238,7 +238,7 @@ namespace mongo {
     }
 
     //
-    // BtreeCursor specific stuff declared pure virtual
+    // IndexCursor specific stuff declared pure virtual
     //
 
 #if 0

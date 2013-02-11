@@ -76,7 +76,7 @@ namespace mongo {
                 // are enforced by the FieldRangeVectorIterator and only key fields have constraints.  There
                 // is no need to do key deduping because an exact value is specified in the query for all key
                 // fields and duplicate keys are not allowed per document.
-                // NOTE In the distant past we used a min/max bounded BtreeCursor with a shallow
+                // NOTE In the distant past we used a min/max bounded IndexCursor with a shallow
                 // equality comparison to check for matches in the simple match case.  That may be
                 // more performant, but I don't think we've measured the performance.
                 //

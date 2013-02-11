@@ -19,7 +19,7 @@
 
 #include "mongo/pch.h"
 
-#include "mongo/db/btree.h"
+#include "mongo/db/indexcursor.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/json.h"
@@ -28,9 +28,9 @@
 
 namespace CursorTests {
 
-    namespace BtreeCursor {
+    namespace IndexCursor {
 
-        using mongo::BtreeCursor;
+        using mongo::IndexCursor;
 
         // The ranges expressed in these tests are impossible given our query
         // syntax, so going to do them a hacky way.
@@ -62,7 +62,7 @@ namespace CursorTests {
         class MultiRangeForward : public Base {
         public:
             void run() {
-                const char *ns = "unittests.cursortests.BtreeCursorTests.MultiRange";
+                const char *ns = "unittests.cursortests.IndexCursorTests.MultiRange";
                 {
                     DBDirectClient c;
                     for( int i = 0; i < 10; ++i )
@@ -72,9 +72,9 @@ namespace CursorTests {
                 int v[] = { 1, 2, 4, 6 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 4 ) );
                 Client::WriteContext ctx( ns );
-                scoped_ptr<BtreeCursor> _c( BtreeCursor::make( nsdetails( ns ), nsdetails( ns )->idx(1), frv, 1 ) );
-                BtreeCursor &c = *_c.get();
-                ASSERT_EQUALS( "BtreeCursor a_1 multi", c.toString() );
+                scoped_ptr<IndexCursor> _c( IndexCursor::make( nsdetails( ns ), nsdetails( ns )->idx(1), frv, 1 ) );
+                IndexCursor &c = *_c.get();
+                ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
                 double expected[] = { 1, 2, 4, 5, 6 };
                 for( int i = 0; i < 5; ++i ) {
                     ASSERT( c.ok() );
@@ -88,7 +88,7 @@ namespace CursorTests {
         class MultiRangeGap : public Base {
         public:
             void run() {
-                const char *ns = "unittests.cursortests.BtreeCursorTests.MultiRangeGap";
+                const char *ns = "unittests.cursortests.IndexCursorTests.MultiRangeGap";
                 {
                     DBDirectClient c;
                     for( int i = 0; i < 10; ++i )
@@ -100,9 +100,9 @@ namespace CursorTests {
                 int v[] = { -50, 2, 40, 60, 109, 200 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 6 ) );
                 Client::WriteContext ctx( ns );
-                scoped_ptr<BtreeCursor> _c( BtreeCursor::make(nsdetails( ns ), nsdetails( ns )->idx(1), frv, 1 ) );
-                BtreeCursor &c = *_c.get();
-                ASSERT_EQUALS( "BtreeCursor a_1 multi", c.toString() );
+                scoped_ptr<IndexCursor> _c( IndexCursor::make(nsdetails( ns ), nsdetails( ns )->idx(1), frv, 1 ) );
+                IndexCursor &c = *_c.get();
+                ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
                 double expected[] = { 0, 1, 2, 109 };
                 for( int i = 0; i < 4; ++i ) {
                     ASSERT( c.ok() );
@@ -116,7 +116,7 @@ namespace CursorTests {
         class MultiRangeReverse : public Base {
         public:
             void run() {
-                const char *ns = "unittests.cursortests.BtreeCursorTests.MultiRangeReverse";
+                const char *ns = "unittests.cursortests.IndexCursorTests.MultiRangeReverse";
                 {
                     DBDirectClient c;
                     for( int i = 0; i < 10; ++i )
@@ -126,9 +126,9 @@ namespace CursorTests {
                 int v[] = { 1, 2, 4, 6 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 4, -1 ) );
                 Client::WriteContext ctx( ns );
-                scoped_ptr<BtreeCursor> _c( BtreeCursor::make( nsdetails( ns ), nsdetails( ns )->idx(1), frv, -1 ) );
-                BtreeCursor& c = *_c.get();
-                ASSERT_EQUALS( "BtreeCursor a_1 reverse multi", c.toString() );
+                scoped_ptr<IndexCursor> _c( IndexCursor::make( nsdetails( ns ), nsdetails( ns )->idx(1), frv, -1 ) );
+                IndexCursor& c = *_c.get();
+                ASSERT_EQUALS( "IndexCursor a_1 reverse multi", c.toString() );
                 double expected[] = { 6, 5, 4, 2, 1 };
                 for( int i = 0; i < 5; ++i ) {
                     ASSERT( c.ok() );
@@ -163,7 +163,7 @@ namespace CursorTests {
                 // orphan spec for this test.
                 IndexSpec *idxSpec = new IndexSpec( idx() );
                 boost::shared_ptr< FieldRangeVector > frv( new FieldRangeVector( frs, *idxSpec, direction() ) );
-                scoped_ptr<BtreeCursor> c( BtreeCursor::make( nsdetails( ns() ), nsdetails( ns() )->idx( 1 ), frv, direction() ) );
+                scoped_ptr<IndexCursor> c( IndexCursor::make( nsdetails( ns() ), nsdetails( ns() )->idx( 1 ), frv, direction() ) );
                 Matcher m( spec );
                 int count = 0;
                 while( c->ok() ) {
@@ -272,7 +272,7 @@ namespace CursorTests {
                 FieldRangeSet frs( ns(), BSON( "b" << 3 ), true, true );
                 boost::shared_ptr<FieldRangeVector> frv( new FieldRangeVector( frs, idx, 1 ) );
                 Client::WriteContext ctx( ns() );
-                scoped_ptr<BtreeCursor> c( BtreeCursor::make( nsdetails( ns() ), nsdetails( ns() )->idx(1), frv, 1 ) );
+                scoped_ptr<IndexCursor> c( IndexCursor::make( nsdetails( ns() ), nsdetails( ns() )->idx(1), frv, 1 ) );
                 long long initialNscanned = c->nscanned();
                 ASSERT( initialNscanned < 200 );
                 ASSERT( c->ok() );
@@ -283,7 +283,7 @@ namespace CursorTests {
             }
         };
 
-    } // namespace BtreeCursor
+    } // namespace IndexCursor
     
     namespace ClientCursor {
 
@@ -505,15 +505,15 @@ namespace CursorTests {
         All() : Suite( "cursor" ) {}
 
         void setupTests() {
-            add<BtreeCursor::MultiRangeForward>();
-            add<BtreeCursor::MultiRangeGap>();
-            add<BtreeCursor::MultiRangeReverse>();
-            add<BtreeCursor::EqEq>();
-            add<BtreeCursor::EqRange>();
-            add<BtreeCursor::EqIn>();
-            add<BtreeCursor::RangeEq>();
-            add<BtreeCursor::RangeIn>();
-            add<BtreeCursor::AbortImplicitScan>();
+            add<IndexCursor::MultiRangeForward>();
+            add<IndexCursor::MultiRangeGap>();
+            add<IndexCursor::MultiRangeReverse>();
+            add<IndexCursor::EqEq>();
+            add<IndexCursor::EqRange>();
+            add<IndexCursor::EqIn>();
+            add<IndexCursor::RangeEq>();
+            add<IndexCursor::RangeIn>();
+            add<IndexCursor::AbortImplicitScan>();
             add<ClientCursor::HandleDelete>();
             add<ClientCursor::AboutToDelete>();
             add<ClientCursor::AboutToDeleteDuplicate>();

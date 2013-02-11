@@ -27,7 +27,7 @@
 #include "namespace-inl.h"
 #include "commands.h"
 #include "cmdline.h"
-#include "btree.h"
+#include "indexcursor.h"
 #include "curop-inl.h"
 #include "../util/background.h"
 #include "../util/alignedbuilder.h"

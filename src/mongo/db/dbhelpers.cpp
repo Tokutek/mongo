@@ -20,7 +20,7 @@
 #include "db.h"
 #include "dbhelpers.h"
 #include "json.h"
-#include "btree.h"
+#include "indexcursor.h"
 #include "oplog.h"
 #include "ops/update.h"
 #include "ops/delete.h"
@@ -322,7 +322,7 @@ namespace mongo {
                     int minOrMax = maxInclusive ? 1 : -1;
                     BSONObj newMax = Helpers::modifiedRangeBound( max , keyPattern , minOrMax );
                     
-                    c.reset( BtreeCursor::make( nsd , ii , i , newMin , newMax , maxInclusive , 1 ) );
+                    c.reset( IndexCursor::make( nsd , ii , i , newMin , newMax , maxInclusive , 1 ) );
                 }
                 
                 if ( ! c->ok() ) {

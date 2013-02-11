@@ -23,7 +23,7 @@
 
 #include <boost/filesystem/operations.hpp>
 
-#include "mongo/db/btree.h"
+#include "mongo/db/indexcursor.h"
 #include "mongo/db/db.h"
 #include "mongo/db/json.h"
 #include "mongo/db/ops/delete.h"

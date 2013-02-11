@@ -20,7 +20,7 @@
 #include "pch.h"
 
 #include "../db/db.h"
-#include "../db/btree.h"
+#include "../db/indexcursor.h"
 #include "mongo/db/json.h"
 
 #include "dbtests.h"

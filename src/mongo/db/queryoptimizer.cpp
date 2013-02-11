@@ -19,7 +19,7 @@
 #include "pch.h"
 #include "mongo/db/queryoptimizer.h"
 #include "db.h"
-#include "btree.h"
+#include "indexcursor.h"
 #include "cmdline.h"
 #include "../server.h"
 
@@ -297,13 +297,13 @@ doneCheckOrder:
 
         if ( _startOrEndSpec ) {
             // we are sure to spec _endKeyInclusive
-            return shared_ptr<Cursor>( BtreeCursor::make( _d, _idxNo, *_index, _startKey, _endKey, _endKeyInclusive, _direction >= 0 ? 1 : -1 ) );
+            return shared_ptr<Cursor>( IndexCursor::make( _d, _idxNo, *_index, _startKey, _endKey, _endKeyInclusive, _direction >= 0 ? 1 : -1 ) );
         }
         else if ( _index->getSpec().getType() ) {
-            return shared_ptr<Cursor>( BtreeCursor::make( _d, _idxNo, *_index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1 ) );
+            return shared_ptr<Cursor>( IndexCursor::make( _d, _idxNo, *_index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1 ) );
         }
         else {
-            return shared_ptr<Cursor>( BtreeCursor::make( _d, _idxNo, *_index, _frv,
+            return shared_ptr<Cursor>( IndexCursor::make( _d, _idxNo, *_index, _frv,
                                                          independentRangesSingleIntervalLimit(),
                                                          _direction >= 0 ? 1 : -1 ) );
         }

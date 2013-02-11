@@ -16,7 +16,7 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mongo/db/btree.h"
+#include "mongo/db/indexcursor.h"
 #include "mongo/db/hasher.h"
 #include "mongo/db/index.h"
 #include "mongo/db/matcher.h"
@@ -85,7 +85,7 @@ namespace mongo {
          */
         void getKeys( const BSONObj &obj, BSONObjSet &keys ) const;
 
-        /* The newCursor method works for suitable queries by generating a BtreeCursor
+        /* The newCursor method works for suitable queries by generating a IndexCursor
          * using the hash of point-intervals parsed by FieldRangeSet.
          * For unsuitable queries it just instantiates a btree cursor over the whole tree
          */

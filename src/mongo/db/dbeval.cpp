@@ -22,7 +22,7 @@
 #include "../bson/util/builder.h"
 #include <time.h>
 #include "introspect.h"
-#include "btree.h"
+#include "indexcursor.h"
 #include "../util/lruishmap.h"
 #include "json.h"
 #include "repl.h"
