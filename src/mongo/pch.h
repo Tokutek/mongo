@@ -72,7 +72,6 @@ namespace mongo {
 
 }
 
-
 #include "mongo/util/assert_util.h"
 #include "mongo/util/debug_util.h"
 #include "mongo/util/goodies.h"

@@ -15,11 +15,10 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-//#include "pch.h"
-#include "../commands.h"
-#include "../instance.h"
-#include "../clientcursor.h"
-#include "../../util/timer.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/util/timer.h"
 
 namespace mongo {
 
