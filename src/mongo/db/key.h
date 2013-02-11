@@ -24,55 +24,33 @@ namespace mongo {
 
     /** Key class for precomputing a small format index key that is denser than a traditional BSONObj. 
 
-        KeyBson is a legacy wrapper implementation for old BSONObj style keys for v:0 indexes.
-
-        KeyV1 is the new implementation.
+        Key is the new implementation.
     */
-    class KeyBson /* "KeyV0" */ { 
+    class KeyOwned;
+
+    class Key { 
+        void operator=(const Key&); // disallowed just to make people be careful as we don't own the buffer
+        Key(const KeyOwned&);     // disallowed as this is not a great idea as KeyOwned likely will go out of scope
     public:
-        KeyBson() { }
-        explicit KeyBson(const char *keyData) : _o(keyData) { }
-        explicit KeyBson(const BSONObj& obj) : _o(obj) { }
-        int woCompare(const KeyBson& r, const Ordering &o) const;
-        BSONObj toBson() const { return _o; }
-        string toString() const { return _o.toString(); }
-        int dataSize() const { return _o.objsize(); }
-        const char * data() const { return _o.objdata(); }
-        BSONElement _firstElement() const { return _o.firstElement(); }
-        bool isCompactFormat() const { return false; }
-        bool woEqual(const KeyBson& r) const;
-        void assign(const KeyBson& rhs) { *this = rhs; }
-        bool isValid() const { return true; }
-    private:
-        BSONObj _o;
-    };
+        Key() { _keyData = 0; }
+        ~Key() { DEV _keyData = (const unsigned char *) 1; }
 
-    class KeyV1Owned;
-
-    // corresponding to BtreeData_V1
-    class KeyV1 { 
-        void operator=(const KeyV1&); // disallowed just to make people be careful as we don't own the buffer
-        KeyV1(const KeyV1Owned&);     // disallowed as this is not a great idea as KeyV1Owned likely will go out of scope
-    public:
-        KeyV1() { _keyData = 0; }
-        ~KeyV1() { DEV _keyData = (const unsigned char *) 1; }
-
-        KeyV1(const KeyV1& rhs) : _keyData(rhs._keyData) { 
+        Key(const Key& rhs) : _keyData(rhs._keyData) { 
             dassert( _keyData > (const unsigned char *) 1 );
         }
 
         // explicit version of operator= to be safe
-        void assign(const KeyV1& rhs) { 
+        void assign(const Key& rhs) { 
             _keyData = rhs._keyData;
         }
 
-        /** @param keyData can be a buffer containing data in either BSON format, OR in KeyV1 format. 
+        /** @param keyData can be a buffer containing data in either BSON format, OR in Key format. 
                    when BSON, we are just a wrapper
         */
-        explicit KeyV1(const char *keyData) : _keyData((unsigned char *) keyData) { }
+        explicit Key(const char *keyData) : _keyData((unsigned char *) keyData) { }
 
-        int woCompare(const KeyV1& r, const Ordering &o) const;
-        bool woEqual(const KeyV1& r) const;
+        int woCompare(const Key& r, const Ordering &o) const;
+        bool woEqual(const Key& r) const;
         BSONObj toBson() const;
         string toString() const { return toBson().toString(); }
 
@@ -95,20 +73,20 @@ namespace mongo {
             return BSONObj((const char *) _keyData+1);
         }
     private:
-        int compareHybrid(const KeyV1& right, const Ordering& order) const;
+        int compareHybrid(const Key& right, const Ordering& order) const;
     };
 
-    class KeyV1Owned : public KeyV1 { 
-        void operator=(const KeyV1Owned&);
+    class KeyOwned : public Key { 
+        void operator=(const KeyOwned&);
     public:
-        /** @obj a BSON object to be translated to KeyV1 format.  If the object isn't 
-                 representable in KeyV1 format (which happens, intentionally, at times)
+        /** @obj a BSON object to be translated to Key format.  If the object isn't 
+                 representable in Key format (which happens, intentionally, at times)
                  it will stay as bson herein.
         */
-        KeyV1Owned(const BSONObj& obj);
+        KeyOwned(const BSONObj& obj);
 
         /** makes a copy (memcpy's the whole thing) */
-        KeyV1Owned(const KeyV1& rhs);
+        KeyOwned(const Key& rhs);
 
     private:
         StackBufBuilder b;
