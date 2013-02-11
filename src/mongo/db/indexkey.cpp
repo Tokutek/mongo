@@ -27,12 +27,6 @@
 
 namespace mongo {
 
-    /** old (<= v1.8) : 0
-     1 is new version
-     2 is tokudb
-     */
-    //const int DefaultIndexVersionNumber = 2;
-    
     map<string,IndexPlugin*> * IndexPlugin::_plugins;
 
     IndexType::IndexType( const IndexPlugin * plugin , const IndexSpec * spec )
@@ -132,150 +126,9 @@ namespace mongo {
         _finishedInit = true;
     }
 
-    void assertParallelArrays( const char *first, const char *second ) {
-#if 0
-        stringstream ss;
-        ss << "cannot index parallel arrays [" << first << "] [" << second << "]";
-        uasserted( ParallelArraysCode ,  ss.str() );
-#endif
-    }
-    
-    class KeyGeneratorV0 {
+    class KeyGenerator {
     public:
-        KeyGeneratorV0( const IndexSpec &spec ) : _spec( spec ) {}
-        
-        void getKeys( const BSONObj &obj, BSONObjSet &keys ) const {
-            if ( _spec._indexType.get() ) { //plugin (eg geo)
-                _spec._indexType->getKeys( obj , keys );
-                return;
-            }
-            vector<const char*> fieldNames( _spec._fieldNames );
-            vector<BSONElement> fixed( _spec._fixed );
-            _getKeys( fieldNames , fixed , obj, keys );
-            if ( keys.empty() && ! _spec._sparse )
-                keys.insert( _spec._nullKey );
-        }
-        
-    private:
-        void _getKeys( vector<const char*> fieldNames , vector<BSONElement> fixed , const BSONObj &obj, BSONObjSet &keys ) const {
-            BSONElement arrElt;
-            unsigned arrIdx = ~0;
-            int numNotFound = 0;
-            
-            for( unsigned i = 0; i < fieldNames.size(); ++i ) {
-                if ( *fieldNames[ i ] == '\0' )
-                    continue;
-                
-                BSONElement e = obj.getFieldDottedOrArray( fieldNames[ i ] );
-                
-                if ( e.eoo() ) {
-                    e = _spec._nullElt; // no matching field
-                    numNotFound++;
-                }
-                
-                if ( e.type() != Array )
-                    fieldNames[ i ] = ""; // no matching field or non-array match
-                
-                if ( *fieldNames[ i ] == '\0' )
-                    fixed[ i ] = e; // no need for further object expansion (though array expansion still possible)
-                
-                if ( e.type() == Array && arrElt.eoo() ) { // we only expand arrays on a single path -- track the path here
-                    arrIdx = i;
-                    arrElt = e;
-                }
-                
-                // enforce single array path here
-                if ( e.type() == Array && e.rawdata() != arrElt.rawdata() ) {
-                    assertParallelArrays( e.fieldName(), arrElt.fieldName() );
-                }
-            }
-            
-            bool allFound = true; // have we found elements for all field names in the key spec?
-            for( vector<const char*>::const_iterator i = fieldNames.begin(); i != fieldNames.end(); ++i ) {
-                if ( **i != '\0' ) {
-                    allFound = false;
-                    break;
-                }
-            }
-            
-            if ( _spec._sparse && numNotFound == _spec._nFields ) {
-                // we didn't find any fields
-                // so we're not going to index this document
-                return;
-            }
-            
-            bool insertArrayNull = false;
-            
-            if ( allFound ) {
-                if ( arrElt.eoo() ) {
-                    // no terminal array element to expand
-                    BSONObjBuilder b(_spec._sizeTracker);
-                    for( vector< BSONElement >::iterator i = fixed.begin(); i != fixed.end(); ++i )
-                        b.appendAs( *i, "" );
-                    keys.insert( b.obj() );
-                }
-                else {
-                    // terminal array element to expand, so generate all keys
-                    BSONObjIterator i( arrElt.embeddedObject() );
-                    if ( i.more() ) {
-                        while( i.more() ) {
-                            BSONObjBuilder b(_spec._sizeTracker);
-                            for( unsigned j = 0; j < fixed.size(); ++j ) {
-                                if ( j == arrIdx )
-                                    b.appendAs( i.next(), "" );
-                                else
-                                    b.appendAs( fixed[ j ], "" );
-                            }
-                            keys.insert( b.obj() );
-                        }
-                    }
-                    else if ( fixed.size() > 1 ) {
-                        insertArrayNull = true;
-                    }
-                }
-            }
-            else {
-                // nonterminal array element to expand, so recurse
-                verify( !arrElt.eoo() );
-                BSONObjIterator i( arrElt.embeddedObject() );
-                if ( i.more() ) {
-                    while( i.more() ) {
-                        BSONElement e = i.next();
-                        if ( e.type() == Object ) {
-                            _getKeys( fieldNames, fixed, e.embeddedObject(), keys );
-                        }
-                    }
-                }
-                else {
-                    insertArrayNull = true;
-                }
-            }
-            
-            if ( insertArrayNull ) {
-                // x : [] - need to insert undefined
-                BSONObjBuilder b(_spec._sizeTracker);
-                for( unsigned j = 0; j < fixed.size(); ++j ) {
-                    if ( j == arrIdx ) {
-                        b.appendUndefined( "" );
-                    }
-                    else {
-                        BSONElement e = fixed[j];
-                        if ( e.eoo() )
-                            b.appendNull( "" );
-                        else
-                            b.appendAs( e , "" );
-                    }
-                }
-                keys.insert( b.obj() );
-            }
-        }
-        
-        const IndexSpec &_spec;
-    };
-
-    class KeyGeneratorV1 {
-    public:
-        KeyGeneratorV1( const IndexSpec &spec ) : _spec( spec ) {}
+        KeyGenerator( const IndexSpec &spec ) : _spec( spec ) {}
         
         void getKeys( const BSONObj &obj, BSONObjSet &keys ) const {
             if ( _spec._indexType.get() ) { //plugin (eg geo)
@@ -363,7 +216,8 @@ namespace mongo {
                     }
                     else if ( e.rawdata() != arrElt.rawdata() ) {
                         // enforce single array path here
-                        assertParallelArrays( e.fieldName(), arrElt.fieldName() );
+                        // TokuDB: We allow parallel arrays, vanilla Mongo did not.
+                        //assertParallelArrays( e.fieldName(), arrElt.fieldName() );
                     }
                     if ( arrayNestedArray ) {
                         mayExpandArrayUnembedded = false;   
@@ -404,26 +258,9 @@ namespace mongo {
     };
     
     void IndexSpec::getKeys( const BSONObj &obj, BSONObjSet &keys ) const {
-        // TODO: TokuDB: We'll probably steal the v1 key format code (case 1)
-        ::abort();
-#if 0
-        switch( indexVersion() ) {
-            case 0: {
-                KeyGeneratorV0 g( *this );
-                g.getKeys( obj, keys );
-                break;
-            }
-            // tokudb: use btree v1 key format
-            case 2:
-            case 1: {
-                KeyGeneratorV1 g( *this );
-                g.getKeys( obj, keys );
-                break;
-            }
-            default:
-                massert( 15869, "Invalid index version for key generation.", false );
-        }
-#endif
+        // TokuDB: Steal the btree key format
+        KeyGenerator g( *this );
+        g.getKeys( obj, keys );
     }
 
     bool anyElementNamesMatch( const BSONObj& a , const BSONObj& b ) {

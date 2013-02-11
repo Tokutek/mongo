@@ -132,18 +132,7 @@ namespace mongo {
             _init();
         }
 
-        /**
-           this is a DiscLoc of an IndexDetails info
-           should have a key field
-         */
-#if 0
-        explicit IndexSpec( const DiskLoc& loc ) {
-            reset( loc );
-        }
-#endif
-
         void reset( const BSONObj& info );
-        //void reset( const DiskLoc& infoLoc ) { reset(infoLoc.obj()); }
         void reset( const IndexDetails * details );
 
         void getKeys( const BSONObj &obj, BSONObjSet &keys ) const;
@@ -191,8 +180,8 @@ namespace mongo {
         void _init();
 
         friend class IndexType;
-        friend class KeyGeneratorV0;
-        friend class KeyGeneratorV1;
+        friend class KeyGenerator;
+
     public:
         bool _finishedInit;
     };

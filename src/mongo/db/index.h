@@ -32,8 +32,6 @@ namespace mongo {
     /* Details about a particular index. There is one of these effectively for each object in
        system.namespaces (although this also includes the head pointer, which is not in that
        collection).
-
-       ** MemoryMapped Record ** (i.e., this is on disk data)
      */
     class IndexDetails {
     public:
@@ -174,26 +172,6 @@ namespace mongo {
             ::abort();
             return string();
         }
-
-#if 0
-        /** @return true if supported.  supported means we can use the index, including adding new keys.
-                    it may not mean we can build the index version in question: we may not maintain building 
-                    of indexes in old formats in the future.
-        */
-        // tokudb: tokudb indexes are version 2
-        static bool isASupportedIndexVersionNumber(int v) { return v == 2; } // only tokudb indexes are supported
-
-        /** @return the interface for this interface, which varies with the index version.
-            used for backward compatibility of index versions/formats.
-        */
-        IndexInterface& idxInterface() const { 
-            int v = version();
-            dassert( isASupportedIndexVersionNumber(v) );
-            return *iis[v];
-        }
-
-        static IndexInterface *iis[];
-#endif
     };
 
 } // namespace mongo
