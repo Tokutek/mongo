@@ -441,11 +441,19 @@ namespace mongo {
     }
 
     void DatabaseHolder::closeDatabases(const string &path) {
-        DBs &m = _paths[path];
-        for (DBs::iterator i = m.begin(); i != m.end(); i++) {
-            Database *db = i->second;
-            Client::WriteContext ctx(db->name);
-            db->closeDatabase(db->name.c_str(), path);
+        Paths::iterator pi = _paths.find(path);
+        if (pi != _paths.end()) {
+            DBs &dbs = pi->second;
+            while (!dbs.empty()) {
+                DBs::iterator it = dbs.begin();
+                Database *db = it->second;
+                dassert(db->name == it->first);
+                Client::WriteContext ctx(db->name);
+                // This erases dbs[db->name] for us, can't lift it out yet until we understand the callers of closeDatabase().
+                // That's why we have a weird loop here.
+                db->closeDatabase(db->name.c_str(), path);
+            }
+            _paths.erase(pi);
         }
     }
 
