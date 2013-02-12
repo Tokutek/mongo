@@ -417,12 +417,7 @@ namespace mongo {
             mongo::fillQueryResultFromObj( b, 0, keyFieldsOnly->hydrate( c()->currKey() ), details );
         }
         else {
-#if 0
-            DiskLoc loc = minDiskLoc; // TODO: Phase this out once showDiskLoc is always false //c()->currLoc();
-            mongo::fillQueryResultFromObj( b, fields.get(), c()->current(), details,
-                                          ( ( pq && pq->showDiskLoc() ) ? &loc : 0 ) );
-#endif
-            ::abort();
+            mongo::fillQueryResultFromObj( b, fields.get(), c()->current(), details );
         }
     }
 

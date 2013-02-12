@@ -970,8 +970,11 @@ namespace mongo {
         }
 
 
-        // Run a simple id query.
-        if ( ! (explain || pq.showDiskLoc()) && isSimpleIdQuery( query ) && !pq.hasOption( QueryOption_CursorTailable ) ) {
+        // Run a simple id query
+
+        // - Don't do it for explains.
+        // - Don't do it for tailable cursors.
+        if ( !explain && isSimpleIdQuery( query ) && !pq.hasOption( QueryOption_CursorTailable ) ) {
             if ( queryIdHack( ns, query, pq, curop, result ) ) {
                 return "";
             }
@@ -991,17 +994,7 @@ namespace mongo {
         order = order.getOwned();
 
         bool hasRetried = false;
-        //scoped_ptr<PageFaultRetryableSection> pgfs;
-        //scoped_ptr<NoPageFaultsAllowed> npfe;
         while ( 1 ) {
-
-#if 0
-            if ( ! cc().getPageFaultRetryableSection() ) {
-                verify( ! pgfs );
-                pgfs.reset( new PageFaultRetryableSection() );
-            }
-#endif
-                
             try {
                 Client::ReadContext ctx( ns , dbpath ); // read locks
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
@@ -1020,7 +1013,6 @@ namespace mongo {
                     }
                 }
                 
-                
                 // Run a regular query.
                 
                 BSONObj oldPlan;
@@ -1028,21 +1020,14 @@ namespace mongo {
                     scoped_ptr<MultiPlanScanner> mps( MultiPlanScanner::make( ns, query, order ) );
                     oldPlan = mps->cachedPlanExplainSummary();
                 }
-             
    
                 return queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query, order,
-                                                pq_shared, oldPlan, shardingVersionAtStart, 
-                                                /*pgfs, npfe,*/ result );
+                                                pq_shared, oldPlan, shardingVersionAtStart );
             }
             catch ( const QueryRetryException & ) {
                 // In some cases the query may be retried if there is an in memory sort size assertion.
                 verify( ! hasRetried );
                 hasRetried = true;
-            }
-            //catch ( PageFaultException& e )
-            catch ( ... ) {
-                //e.touch();
-                ::abort();
             }
         }
     }

@@ -81,7 +81,6 @@ namespace mongo {
         bool isExplain() const { return _explain; }
         bool isSnapshot() const { return _snapshot; }
         bool returnKey() const { return _returnKey; }
-        bool showDiskLoc() const { return _showDiskLoc; }
         
         const BSONObj& getMin() const { return _min; }
         const BSONObj& getMax() const { return _max; }
@@ -161,7 +160,6 @@ namespace mongo {
             _explain = false;
             _snapshot = false;
             _returnKey = false;
-            _showDiskLoc = false;
             _maxScan = 0;
         }
         
@@ -201,8 +199,6 @@ namespace mongo {
                         _returnKey = e.trueValue();
                     else if ( strcmp( "maxScan" , name ) == 0 )
                         _maxScan = e.numberInt();
-                    else if ( strcmp( "showDiskLoc" , name ) == 0 )
-                        _showDiskLoc = e.trueValue();
                     else if ( strcmp( "comment" , name ) == 0 ) {
                         ; // no-op
                     }
@@ -234,7 +230,6 @@ namespace mongo {
         bool _explain;
         bool _snapshot;
         bool _returnKey;
-        bool _showDiskLoc;
         bool _hasReadPref;
         BSONObj _min;
         BSONObj _max;
