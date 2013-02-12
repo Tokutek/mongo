@@ -111,12 +111,10 @@ namespace mongo {
 
     void IndexSpec::reset( const IndexDetails * details ) {
         _details = details;
-        //reset( details->info );
-        ::abort();
+        reset( details->info() );
     }
 
     void IndexSpec::reset( const BSONObj& _info ) {
-#if 0
         info = _info;
         keyPattern = info["key"].embeddedObjectUserCheck();
         if ( keyPattern.objsize() == 0 ) {
@@ -124,7 +122,5 @@ namespace mongo {
             verify(false);
         }
         _init();
-#endif
-        ::abort();
     }
 }
