@@ -25,7 +25,7 @@ assert(db.getLastError())
 
 // No covering to search over should give an empty result set.
 assert.throws(function() {
-    return t.find({geo: {$within: {$geometry: polygonWithFullHole}}}).count()})
+    return t.find({geo: {$geoWithin: {$geometry: polygonWithFullHole}}}).count()})
 
 // Similar polygon to the one above, but is covered by two holes instead of
 // one.
@@ -42,4 +42,4 @@ assert(db.getLastError());
 
 // No covering to search over should give an empty result set.
 assert.throws(function() {
-    return t.find({geo: {$within: {$geometry: polygonWithTwoHolesCoveringWholeArea}}}).count()})
+    return t.find({geo: {$geoWithin: {$geometry: polygonWithTwoHolesCoveringWholeArea}}}).count()})
