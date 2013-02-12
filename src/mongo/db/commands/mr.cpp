@@ -89,7 +89,7 @@ namespace mongo {
             // is converting many fields to 1
             BSONObjBuilder b;
             b.append( o.firstElement() );
-            s->append( b , "value" , "return" );
+            s->append( b , "value" , "__returnValue" );
             return b.obj();
         }
 
@@ -109,7 +109,7 @@ namespace mongo {
 
             BSONObjBuilder b(endSizeEstimate);
             b.appendAs( key.firstElement() , "0" );
-            _func.scope()->append( b , "1" , "return" );
+            _func.scope()->append( b , "1" , "__returnValue" );
             return b.obj();
         }
 
@@ -137,7 +137,7 @@ namespace mongo {
                 _reduce( tuples , key , endSizeEstimate );
                 BSONObjBuilder b(endSizeEstimate);
                 b.appendAs( key.firstElement() , "_id" );
-                _func.scope()->append( b , "value" , "return" );
+                _func.scope()->append( b , "value" , "__returnValue" );
                 res = b.obj();
             }
 
@@ -193,7 +193,7 @@ namespace mongo {
             s->invokeSafe( _func.func() , &args, 0, 0, false, true, true );
             ++numReduces;
 
-            if ( s->type( "return" ) == Array ) {
+            if ( s->type( "__returnValue" ) == Array ) {
                 uasserted( 10075 , "reduce -> multiple not supported yet");
                 return;
             }
@@ -211,7 +211,7 @@ namespace mongo {
             }
             BSONObjBuilder temp( endSizeEstimate );
             temp.append( key.firstElement() );
-            s->append( temp , "1" , "return" );
+            s->append( temp , "1" , "__returnValue" );
             x.push_back( temp.obj() );
             _reduce( x , key , endSizeEstimate );
         }
@@ -431,7 +431,7 @@ namespace mongo {
             if (_jsMode) {
                 ScriptingFunction getResult = _scope->createFunction("var map = _mrMap; var result = []; for (key in map) { result.push({_id: key, value: map[key]}) } return result;");
                 _scope->invoke(getResult, 0, 0, 0, false);
-                BSONObj obj = _scope->getObject("return");
+                BSONObj obj = _scope->getObject("__returnValue");
                 final.append("results", BSONArray(obj));
                 return;
             }
