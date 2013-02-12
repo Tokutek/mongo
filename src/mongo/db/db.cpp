@@ -575,8 +575,6 @@ namespace mongo {
 
         listen(listenPort);
 
-        storage::shutdown();
-
         // listen() will return when exit code closes its socket.
         exitCleanly(EXIT_NET_ERROR);
     }
