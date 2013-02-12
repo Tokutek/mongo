@@ -78,9 +78,7 @@ namespace mongo {
         Lock::assertWriteLocked(database_);
 
         string nsdbname(database_ + ".ns");
-        const storage::Transaction *txn = cc().transaction();
-        dassert(txn->is_root());
-        nsdb = storage::db_open(txn->txn(), nsdbname.c_str());
+        nsdb = storage::db_open(cc().transaction(), nsdbname.c_str());
 
         const int ns_file_len = 16 * 1024 * 1024;
         void *buf = malloc(ns_file_len);
@@ -89,7 +87,7 @@ namespace mongo {
 
         tokulog() << "loading namespaces..." << endl;
         {
-            storage::Transaction scan_txn;
+            Client::Transaction scan_txn;
             DBC *cursor;
             r = nsdb->cursor(nsdb, scan_txn.txn(), &cursor, 0);
             verify(r == 0);
@@ -164,8 +162,7 @@ namespace mongo {
         ndbt.size = strlen(ns) + 1;
         ddbt.data = const_cast<void *>(static_cast<const void *>(&details));
         ddbt.size = sizeof details;
-        const storage::Transaction *txn = cc().transaction();
-        int r = nsdb->put(nsdb, txn->txn(), &ndbt, &ddbt, 0);
+        int r = nsdb->put(nsdb, cc().transaction().txn(), &ndbt, &ddbt, 0);
         verify(r == 0);
 
         bool ok = ht->put(n, details);

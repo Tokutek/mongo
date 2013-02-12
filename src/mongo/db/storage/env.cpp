@@ -25,6 +25,7 @@
 #endif
 #include <fcntl.h>
 
+#include "mongo/db/client.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
@@ -58,13 +59,14 @@ namespace mongo {
             verify(r == 0);
         }
 
-        DB *db_open(DB_TXN *txn, const char *name) {
+        DB *db_open(const Client::Transaction &txn, const char *name) {
             tokulog() << "opening db " << name << endl;
+            dassert(txn.is_root());
             DB *db;
             int r = db_create(&db, env, 0);
             verify(r == 0);
             const int db_flags = DB_CREATE;
-            r = db->open(db, txn, name, NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+            r = db->open(db, txn.txn(), name, NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
             verify(r == 0);
             return db;
 

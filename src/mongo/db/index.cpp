@@ -32,6 +32,20 @@
 
 namespace mongo {
 
+    IndexDetails::IndexDetails(const BSONObj &info) : _info(info.getOwned()) {
+        const char *name = _info["name"].String().c_str();
+        tokulog() << "opening index " << name << endl;
+
+        // Need a transaction to have already begun. Cannot open/create in a child transaction.
+        // Open the dictionary. Creates it if necessary.
+        _db = storage::db_open(cc().transaction(), name);
+    }
+
+    IndexDetails::~IndexDetails() {
+        tokulog() << "closing index " << _info["name"].String().c_str() << endl;
+        storage::db_close(_db);
+    }
+
     int IndexDetails::keyPatternOffset( const string& key ) const {
         BSONObjIterator i( keyPattern() );
         int n = 0;

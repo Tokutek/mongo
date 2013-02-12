@@ -38,21 +38,9 @@ namespace mongo {
      */
     class IndexDetails {
     public:
-        explicit IndexDetails(const BSONObj &info) : _info(info.getOwned()) {
-            const char *name = _info["name"].String().c_str();
+        explicit IndexDetails(const BSONObj &info);
 
-            // Need a transaction to have already begun. Cannot open/create in a child transaction.
-            storage::Transaction *txn = cc().transaction();
-            dassert(txn != NULL);
-            dassert(txn->is_root());
-
-            // Open the dictionary. Creates it if necessary.
-            _db = storage::db_open(txn->txn(), name);
-        }
-
-        ~IndexDetails() {
-            storage::db_close(_db);
-        }
+        ~IndexDetails();
 
         BSONObj getKeyFromQuery(const BSONObj& query) const {
             BSONObj k = keyPattern();

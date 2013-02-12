@@ -131,15 +131,56 @@ namespace mongo {
 
         LockState& lockState() { return _ls; }
 
-        inline storage::Transaction *transaction() { return _transaction; }
-        inline void set_transaction(storage::Transaction *t) { _transaction = t; }
+        /**
+         * RAII wrapper for a DB_TXN.  Ensures exception safety and that each transaction has at most one child.
+         *
+         * When created, it creates a child of the current client's transaction (cc()._transaction).
+         * When committed or aborted, it resets the current client's transaction to the parent.
+         * When destroyed, it automatically aborts.
+         *
+         * Example:
+         *  {
+         *      Transaction t1; // creates a transaction
+         *      {
+         *          Transaction t2; // creates a child of t1
+         *          t2.commit();
+         *      } // nothing happens
+         *      {
+         *          Transaction t3; // creates a child of t1
+         *          {
+         *              Transaction t4; // creates a child of t4
+         *          } // aborts t4
+         *          t3.abort();
+         *      } // nothing happens
+         *      t1.commit();
+         *  }
+         */
+        class Transaction : boost::noncopyable {
+            DB_TXN *_txn;
+            Transaction *_parent;
+            bool _retired;
+            void retire();
+        public:
+            Transaction();
+            ~Transaction();
+            void commit();
+            void abort();
+
+            inline DB_TXN *txn() const { return _txn; }
+            inline bool is_root() const { return _parent == NULL; }
+        };
+        // Get the current innermost transaction.
+        inline const Transaction &transaction() const {
+            dassert(_transaction != NULL);
+            return *_transaction;
+        }
 
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
         friend class CurOp;
         ConnectionId _connectionId; // > 0 for things "conn", 0 otherwise
         string _threadId; // "" on non support systems
-        storage::Transaction *_transaction;
+        Transaction *_transaction;
         CurOp * _curOp;
         Context * _context;
         bool _shutdown; // to track if Client::shutdown() gets called

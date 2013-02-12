@@ -20,42 +20,28 @@
 
 #include <db.h>
 
-#include "mongo/db/client.h"
 #include "mongo/db/storage/env.h"
 
 namespace mongo {
 
     namespace storage {
 
-        Transaction::Transaction() : _parent(cc().transaction()), _retired(false) {
-            DB_TXN *parent_txn = (_parent == NULL) ? NULL : _parent->txn();
-            int r = env->txn_begin(env, parent_txn, &_txn, 0);
+        DB_TXN *start_txn(DB_TXN *parent) {
+            DB_TXN *txn;
+            int r = env->txn_begin(env, parent, &txn, 0);
             verify(r == 0);
-            cc().set_transaction(this);
+            return txn;
         }
 
-        Transaction::~Transaction() {
-            if (!_retired) {
-                abort();
-            }
-        }
-
-        void Transaction::commit() {
-            verify(cc().transaction() == this);
-            int r = _txn->commit(_txn, 0);
+        void commit_txn(DB_TXN *txn) {
+            int r = txn->commit(txn, 0);
             verify(r == 0);
-            cc().set_transaction(_parent);
-            _retired = true;
         }
 
-        void Transaction::abort() {
-            verify(cc().transaction() == this);
-            int r = _txn->abort(_txn);
+        void abort_txn(DB_TXN *txn) {
+            int r = txn->abort(txn);
             verify(r == 0);
-            cc().set_transaction(_parent);
-            _retired = true;
         }
-
 
     } // namespace storage
 

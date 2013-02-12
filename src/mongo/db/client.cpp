@@ -185,6 +185,35 @@ namespace mongo {
         return false;
     }
 
+    Client::Transaction::Transaction() : _parent(cc()._transaction), _retired(false) {
+        DB_TXN *parent_txn = (_parent != NULL ? _parent->txn() : NULL);
+        _txn = storage::start_txn(parent_txn);
+        cc()._transaction = this;
+    }
+
+    Client::Transaction::~Transaction() {
+        if (!_retired) {
+            abort();
+        }
+    }
+
+    void Client::Transaction::retire() {
+        dassert(!_retired);
+        dassert(cc()._transaction == this);
+        cc()._transaction = _parent;
+        _retired = true;
+    }
+
+    void Client::Transaction::commit() {
+        retire();
+        storage::commit_txn(_txn);
+    }
+
+    void Client::Transaction::abort() {
+        retire();
+        storage::abort_txn(_txn);
+    }
+
     BSONObj CachedBSONObj::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");
     Client::Context::Context( string ns , Database * db, bool doauth ) :
         _client( currentClient.get() ), 

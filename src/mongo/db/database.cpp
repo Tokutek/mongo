@@ -503,8 +503,7 @@ namespace mongo {
         NamespaceIndex *ni = nsindex(ns);
         NamespaceDetails *details = ni->details(ns);
         if (details == NULL) {
-            storage::Transaction txn;
-            verify(txn.is_root());
+            Client::Transaction txn;
 
             Namespace ns_s(ns);
             NamespaceDetails details_s(false);

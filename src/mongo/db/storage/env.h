@@ -19,6 +19,8 @@
 
 #include <db.h>
 
+#include "mongo/db/client.h"
+
 namespace mongo {
 
     namespace storage {
@@ -29,7 +31,7 @@ namespace mongo {
         void shutdown(void);
 
         // Creates the db if it doesn't already exist.
-        DB *db_open(DB_TXN *txn, const char *name);
+        DB *db_open(const Client::Transaction &txn, const char *name);
         void db_close(DB *db);
 
     } // namespace storage
