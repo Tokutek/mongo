@@ -135,6 +135,8 @@ namespace mongo {
         // Open dictionary representing the index on disk.
         DB *_db;
 
+        DB *db() { return _db; };
+
         /* Info about the index. Stored on disk in the .ns file for this database
          * as a NamespaceDetails object.
          */
@@ -144,6 +146,8 @@ namespace mongo {
              }
         */
         BSONObj _info;
+
+        friend class NamespaceDetails;
     };
 
 } // namespace mongo

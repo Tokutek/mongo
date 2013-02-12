@@ -78,26 +78,11 @@ namespace mongo {
     bool Helpers::findById( const char *ns, BSONObj query, BSONObj& result ) {
         Lock::assertAtLeastReadLocked(ns);
         NamespaceDetails *d = nsindex(ns)->details(ns);
-        if ( ! d )
+        if ( ! d ) {
             return false;
-
-        int idxNo = d->findIdIndex();
-        verify(idxNo >= 0);
-        IndexDetails& i = d->idx( idxNo );
-        BSONObj key = i.getKeyFromQuery( query );
-
-        log() << "TODO: Find " << key << " in the _id index for ns " << string(ns) << endl;
-        // eg: add findSingle to indexdetails
-        // return i.findSingle(key, result);
-        return false;
-
-#if 0
-        DiskLoc loc = minDiskLoc; ::abort(); // i.idxInterface().findSingle(i , i.head , key);
-        if ( loc.isNull() )
-            return false;
-        result = loc.obj();
-        return true;
-#endif
+        } else {
+            return d->findById(query, result);
+        }
     }
 
     vector<BSONObj> Helpers::findAll( const string& ns , const BSONObj& query ) {

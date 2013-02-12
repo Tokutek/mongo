@@ -284,6 +284,61 @@ namespace mongo {
         return *id;
     }
 
+    struct findByIdCallbackExtra {
+        const BSONObj &key;
+        BSONObj &obj;
+
+        findByIdCallbackExtra(const BSONObj &k, BSONObj &o) : key(k), obj(o) { }
+    };
+
+    static int findByIdCallback(const DBT *key, const DBT *value, void *extra) {
+        if (key != NULL) {
+            struct findByIdCallbackExtra *info = reinterpret_cast<findByIdCallbackExtra *>(extra);
+            DEV {
+                // We should have been called using an exact getf, so the
+                // key is non-null iff we found an exact match.
+                BSONObj idKey(reinterpret_cast<char *>(key->data));
+                verify(!idKey.isEmpty());
+                verify(idKey.woCompare(idKey, info->key) == 0);
+            }
+            BSONObj obj(reinterpret_cast<char *>(value->data));
+            info->obj = obj.getOwned();
+        }
+        return 0;
+    }
+
+    bool NamespaceDetails::findById(const BSONObj &query, BSONObj &result) {
+        int r;
+
+        // Get the _id index and extract the _id key from the query.
+        IndexDetails &idIndex = idx(0);
+        const BSONObj &key = idIndex.getKeyFromQuery(query);
+
+        DB *db = idIndex.db();
+        DBC *cursor;
+        r = db->cursor(db, NULL, &cursor, 0);
+        verify(r == 0);
+
+        DBT key_dbt;
+        key_dbt.data = const_cast<char *>(key.objdata());
+        key_dbt.size = key.objsize();
+
+        BSONObj obj = BSONObj();
+        struct findByIdCallbackExtra extra(key, obj);
+        r = cursor->c_getf_set(cursor, 0, &key_dbt, findByIdCallback, &extra);
+        verify(r == 0 || r == DB_NOTFOUND);
+        r = cursor->c_close(cursor);
+        verify(r == 0);
+
+        if (!obj.isEmpty()) {
+            result = obj;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+
     /* ------------------------------------------------------------------------- */
 
     SimpleMutex NamespaceDetailsTransient::_qcMutex("qc");

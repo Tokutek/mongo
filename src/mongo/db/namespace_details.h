@@ -173,6 +173,9 @@ namespace mongo {
 
         BSONObj serialize() const;
 
+        // Query the _id index of this collection, get the full object in result
+        bool findById(const BSONObj &key, BSONObj &result);
+
     private:
         // Each index (including the _id) index has an IndexDetails that describes it.
         int _nIndexes;
@@ -437,6 +440,7 @@ namespace mongo {
 
     inline IndexDetails& NamespaceDetails::idx(int idxNo, bool missingExpected ) {
         if ( idxNo < NIndexesMax ) {
+            verify(idxNo < (int) _indexes.size());
             return *_indexes[idxNo];
         }
         unimplemented("more than NIndexesMax indexes"); // TokuDB: Make sure we handle the case where idxNo >= NindexesMax 
