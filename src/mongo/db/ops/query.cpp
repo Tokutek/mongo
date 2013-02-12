@@ -1022,7 +1022,7 @@ namespace mongo {
                 }
    
                 return queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query, order,
-                                                pq_shared, oldPlan, shardingVersionAtStart );
+                                                pq_shared, oldPlan, shardingVersionAtStart, result );
             }
             catch ( const QueryRetryException & ) {
                 // In some cases the query may be retried if there is an in memory sort size assertion.
