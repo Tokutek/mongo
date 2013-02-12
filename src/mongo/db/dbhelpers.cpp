@@ -77,7 +77,7 @@ namespace mongo {
 
     bool Helpers::findById( const char *ns, BSONObj query, BSONObj& result ) {
         Lock::assertAtLeastReadLocked(ns);
-        NamespaceDetails *d = nsindex(ns)->namespaceIndex.details(ns);
+        NamespaceDetails *d = nsindex(ns)->details(ns);
         if ( ! d )
             return false;
 
@@ -86,7 +86,7 @@ namespace mongo {
         IndexDetails& i = d->idx( idxNo );
         BSONObj key = i.getKeyFromQuery( query );
 
-        log() < "TODO: Find " << key.toString() << " in the _id index for ns " << string(ns) << endl;
+        log() << "TODO: Find " << key << " in the _id index for ns " << string(ns) << endl;
         // eg: add findSingle to indexdetails
         // return i.findSingle(key, result);
         return false;
@@ -153,6 +153,10 @@ namespace mongo {
 
         ::abort();
         return true;
+    }
+
+    bool Helpers::getFirst(const char *ns, BSONObj& result) {
+        return getSingleton(ns, result);
     }
 
     bool Helpers::getLast(const char *ns, BSONObj& result) {

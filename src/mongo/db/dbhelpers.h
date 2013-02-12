@@ -86,7 +86,7 @@ namespace mongo {
         bool getSingleton(const char *ns, BSONObj& result);
         void putSingleton(const char *ns, BSONObj obj);
         void putSingletonGod(const char *ns, BSONObj obj, bool logTheOp);
-        bool getFirst(const char *ns, BSONObj& result) { return getSingleton(ns, result); }
+        bool getFirst(const char *ns, BSONObj& result);
         bool getLast(const char *ns, BSONObj& result); // get last object int he collection; e.g. {$natural : -1}
 
         /**

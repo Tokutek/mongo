@@ -87,7 +87,7 @@ namespace mongo {
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
         indexBuildInProgress(false),
         _nIndexes(serialized["indexes"].Array().size()),
-        multiKeyIndexBits(serialized["multiKeyIndexBits"].Number()) {
+        multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())) {
         std::vector<BSONElement> index_array = serialized["indexes"].Array();
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
             shared_ptr<IndexDetails> idx(new IndexDetails(it->Obj()));
@@ -108,7 +108,7 @@ namespace mongo {
             indexes_array.append(index->info());
         }
         BSONObjBuilder s;
-        s.appendIntOrLL("multiKeyIndexBits", multiKeyIndexBits);
+        s.append("multiKeyIndexBits", static_cast<long long>(multiKeyIndexBits));
         s.append("indexes", indexes_array.arr());
         return s.obj();
     }
