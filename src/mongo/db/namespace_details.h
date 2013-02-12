@@ -19,6 +19,7 @@
 #pragma once
 
 #include <limits>
+#include <map>
 
 #include <db.h>
 #include <boost/filesystem.hpp>
@@ -34,8 +35,6 @@
 #include "mongo/db/querypattern.h"
 
 #include "mongo/db/storage/env.h"
-
-#include "mongo/util/hashtab.h"
 
 namespace mongo {
     class Database;
@@ -371,43 +370,41 @@ namespace mongo {
     class NamespaceIndex {
     public:
         NamespaceIndex(const string &dir, const string &database) :
-            ht( 0 ), dir_( dir ), database_( database ) {}
-
-        ~NamespaceIndex() {
+            nsdb(NULL), namespaces(NULL), dir_(dir), database_(database) {
+            tokulog() << "constructing NamespaceIndex for " << database_ << endl;
         }
+
+        ~NamespaceIndex();
 
         /* returns true if new db will be created if we init lazily */
         // why
         bool exists() const;
 
         void init() {
-            if( !ht ) 
+            if (namespaces.get() == NULL) {
                 _init();
+            }
         }
 
-        void add_ns( const char *ns, const NamespaceDetails &details );
+        void add_ns(const char *ns, shared_ptr<NamespaceDetails> details);
 
-        NamespaceDetails* details(const char *ns) {
+        NamespaceDetails *details(const char *ns) {
             tokulog() << "looking for NamespaceDetails for " << ns << endl;
-            if ( !ht )
+            if (namespaces.get() == NULL) {
                 return 0;
+            }
             Namespace n(ns);
-            NamespaceDetails *d = ht->get(n);
-            if ( d && d->isCapped() ) {
+            NamespaceDetailsMap::iterator it = namespaces->find(n);
+            if ( it != namespaces->end() && it->second->isCapped() ) {
                 // What is the right thing to do here? //d->cappedCheckMigrate();
                 unimplemented("capped collections");
             }
-            if (d != NULL) {
-                tokulog() << "found it" << endl;
-            } else {
-                tokulog() << "didn't find it" << endl;
-            }
-            return d;
+            return (it != namespaces->end()) ? it->second.get() : NULL;
         }
 
         void kill_ns(const char *ns);
 
-        bool allocated() const { return ht != 0; }
+        bool allocated() const { return namespaces.get() != NULL; }
 
         void getNamespaces( list<string>& tofill , bool onlyCollections = true ) const;
 
@@ -415,13 +412,12 @@ namespace mongo {
 
         unsigned long long fileLength() const { unimplemented("NamespaceIndex::fileLength"); return 0; }
 
-        void close();
-
+        typedef std::map<Namespace, shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
     private:
         void _init();
 
         DB *nsdb;
-        HashTable<Namespace,NamespaceDetails> *ht;
+        scoped_ptr<NamespaceDetailsMap> namespaces;
         string dir_;
         string database_;
     };

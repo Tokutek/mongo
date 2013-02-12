@@ -20,7 +20,9 @@
 
 #include <algorithm>
 #include <list>
+#include <map>
 #include <vector>
+#include <utility>
 
 #include <boost/filesystem/operations.hpp>
 
@@ -32,7 +34,6 @@
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/txn.h"
 #include "mongo/scripting/engine.h"
-#include "mongo/util/hashtab.h"
 
 namespace mongo {
 
@@ -96,7 +97,7 @@ namespace mongo {
     }
 
     NamespaceDetails::~NamespaceDetails() {
-        tokulog() << "close NamespaceDetails for " << _indexes[0]->toString() << endl;
+        tokulog() << "closing NamespaceDetails for " << _indexes[0]->toString() << endl;
     }
 
     BSONObj NamespaceDetails::serialize() const {
@@ -112,20 +113,21 @@ namespace mongo {
         return s.obj();
     }
 
-    static void close_namespace_details(const Namespace &ns, NamespaceDetails &nsd) {
-        tokulog() << "close_namespace_details " << ns << endl;
-        // This is really really really dumb.
-        delete &nsd;
-    }
-
-    void NamespaceIndex::close() {
-        tokulog() << "close NamespaceIndex" << endl;
-        if (ht) {
-            dassert(nsdb);
+    NamespaceIndex::~NamespaceIndex() {
+        tokulog() << "closing NamespaceIndex (" << this << ") for " << database_ << endl;
+        tokulog() << "nsdb is " << nsdb << endl;
+        if (nsdb != NULL) {
+            dassert(namespaces.get() != NULL);
             storage::db_close(nsdb);
-            ht->iterAll(close_namespace_details);
-            delete ht;
+            tokulog() << "destroying namespace map" << endl;
+            namespaces.reset(NULL);
+            tokulog() << "destroyed namespace map" << endl;
+            // namespaces gets destructed automatically
+        } else {
+            tokulog() << "nsdb was null, nothing to do!" << endl;
+            dassert(namespaces.get() == NULL);
         }
+        tokulog() << "done closing NamespaceIndex" << endl;
     }
 
     bool NamespaceIndex::exists() const {
@@ -138,31 +140,35 @@ namespace mongo {
         return ret;
     }
 
-    static int populate_nsindex_ht(const DBT *key, const DBT *val, void *ht_v) {
-        HashTable<Namespace, NamespaceDetails> *ht = static_cast<HashTable<Namespace, NamespaceDetails> *>(ht_v);
+    static int populate_nsindex_map(const DBT *key, const DBT *val, void *map_v) {
         Namespace n(static_cast<const char *>(key->data));
         BSONObj obj(static_cast<const char *>(val->data));
-        NamespaceDetails d(obj);
-        uassert( 16433 , "too many namespaces/collections during namespace open", ht->put(n, d));
+        shared_ptr<NamespaceDetails> d(new NamespaceDetails(obj));
         tokulog() << "found namespace " << n << endl;
+
+        NamespaceIndex::NamespaceDetailsMap *m = static_cast<NamespaceIndex::NamespaceDetailsMap *>(map_v);
+        std::pair<NamespaceIndex::NamespaceDetailsMap::iterator, bool> ret;
+        ret = m->insert(make_pair(n, d));
+        dassert(ret.second == true);
         return 0;
     }
 
     NOINLINE_DECL void NamespaceIndex::_init() {
         int r;
-        verify( !ht );
 
         Lock::assertWriteLocked(database_);
 
         string nsdbname(database_ + ".ns");
+        dassert(nsdb == NULL);
         nsdb = storage::db_open(cc().transaction(), nsdbname.c_str());
+        dassert(nsdb != NULL);
 
-        const int ns_file_len = 16 * 1024 * 1024;
-        void *buf = calloc(ns_file_len, 1);
-        verify(buf != NULL);
-        ht = new HashTable<Namespace, NamespaceDetails>(buf, ns_file_len, "namespace index");
+        verify(namespaces.get() == NULL);
+        namespaces.reset(new NamespaceDetailsMap());
+        dassert(namespaces.get() != NULL);
 
-        tokulog() << "loading namespaces..." << endl;
+        tokulog() << "initializing NamespaceIndex (" << this << ") for " << database_ << endl;
+        tokulog() << "nsdb is " << nsdb << endl;
         {
             Client::Transaction scan_txn;
             DBC *cursor;
@@ -170,7 +176,7 @@ namespace mongo {
             verify(r == 0);
 
             while (r != DB_NOTFOUND) {
-                r = cursor->c_getf_next(cursor, 0, populate_nsindex_ht, ht);
+                r = cursor->c_getf_next(cursor, 0, populate_nsindex_map, namespaces.get());
                 verify(r == 0 || r == DB_NOTFOUND);
             }
             verify(r == DB_NOTFOUND);
@@ -192,25 +198,27 @@ namespace mongo {
         */
     }
 
-    static void namespaceGetNamespacesCallback( const Namespace& k , NamespaceDetails& v , void * extra ) {
-        list<string> * l = (list<string>*)extra;
-        if ( ! k.hasDollarSign() )
-            l->push_back( (string)k );
-    }
     void NamespaceIndex::getNamespaces( list<string>& tofill , bool onlyCollections ) const {
         verify( onlyCollections ); // TODO: need to implement this
         //                                  need boost::bind or something to make this less ugly
 
-        if ( ht )
-            ht->iterAll( namespaceGetNamespacesCallback , (void*)&tofill );
+        if (namespaces.get() != NULL) {
+            for (NamespaceDetailsMap::const_iterator it = namespaces->begin(); it != namespaces->end(); it++) {
+                const Namespace &n = it->first;
+                tofill.push_back((string) n);
+            }
+        }
     }
 
     void NamespaceIndex::kill_ns(const char *ns) {
         Lock::assertWriteLocked(ns);
-        if ( !ht )
+        if (namespaces.get() == NULL) {
             return;
+        }
         Namespace n(ns);
-        ht->kill(n);
+        NamespaceDetailsMap::iterator it = namespaces->find(n);
+        dassert(it != namespaces->end());
+        namespaces->erase(it);
 
         ::abort(); // TODO: TokuDB: Understand how ht->kill(extra) works
 #if 0
@@ -226,7 +234,7 @@ namespace mongo {
 #endif
     }
 
-    void NamespaceIndex::add_ns( const char *ns, const NamespaceDetails &details ) {
+    void NamespaceIndex::add_ns(const char *ns, shared_ptr<NamespaceDetails> details) {
         Lock::assertWriteLocked(ns);
 
         init();
@@ -235,14 +243,15 @@ namespace mongo {
         DBT ndbt, ddbt;
         ndbt.data = const_cast<void *>(static_cast<const void *>(ns));
         ndbt.size = strlen(ns) + 1;
-        BSONObj serialized = details.serialize();
+        BSONObj serialized = details->serialize();
         ddbt.data = const_cast<void *>(static_cast<const void *>(serialized.objdata()));
         ddbt.size = serialized.objsize();
         int r = nsdb->put(nsdb, cc().transaction().txn(), &ndbt, &ddbt, 0);
         verify(r == 0);
 
-        bool ok = ht->put(n, details);
-        uassert( 10081 , "too many namespaces/collections", ok);
+        std::pair<NamespaceDetailsMap::iterator, bool> ret;
+        ret = namespaces->insert(make_pair(n, details));
+        dassert(ret.second == true);
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {

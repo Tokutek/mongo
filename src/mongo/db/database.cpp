@@ -49,7 +49,6 @@ namespace mongo {
 
     Database::~Database() {
         tokulog() << "closing Database(" << name << ", " << path << ")" << endl;
-        namespaceIndex.close();
         // delegate to NamespaceIndex destructor
 #if 0
         verify( Lock::isW() );
@@ -518,13 +517,11 @@ namespace mongo {
 
             Namespace ns_s(ns);
             // We allocate here in order to call the constructor, and the hashtable takes a literal copy and owns the members.
-            details = new NamespaceDetails(ns, false);
-            ni->add_ns(ns, *details);
-            // Avoid calling the destructor.
-            free(details);
-            details = ni->details(ns);
+            shared_ptr<NamespaceDetails> new_details(new NamespaceDetails(ns, false));
+            ni->add_ns(ns, new_details);
 
             txn.commit();
+            details = ni->details(ns);
         }
         return details;
     }
