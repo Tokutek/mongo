@@ -107,10 +107,12 @@ namespace mongo {
             shared_ptr<IndexDetails> index(*it);
             indexes_array.append(index->info());
         }
-        BSONObjBuilder s;
-        s.append("multiKeyIndexBits", static_cast<long long>(multiKeyIndexBits));
-        s.append("indexes", indexes_array.arr());
-        return s.obj();
+        return BSON("multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
+                    "indexes" << indexes_array.arr());
+        // BSONObjBuilder s;
+        // s.append();
+        // s.append();
+        // return s.obj();
     }
 
     NamespaceIndex::~NamespaceIndex() {
