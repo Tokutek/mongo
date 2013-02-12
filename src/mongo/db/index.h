@@ -80,7 +80,7 @@ namespace mongo {
             s = _info.getStringField("ns");
             verify( !s.empty() );
             s += ".$";
-            s += _info.getStringField("name");
+            s += indexName();
             return s;
         }
 
