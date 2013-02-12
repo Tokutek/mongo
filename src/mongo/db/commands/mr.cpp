@@ -33,6 +33,8 @@
 
 #include "mongo/db/commands/mr.h"
 
+#include "mongo/util/scopeguard.h"
+
 namespace mongo {
 
     namespace mr {
@@ -323,15 +325,24 @@ namespace mongo {
         }
 
         /**
+         * Clean up the temporary and incremental collections
+         */
+        void State::dropTempCollections() {
+            _db.dropCollection(_config.tempLong);
+            if (_useIncremental)
+                _db.dropCollection(_config.incLong);
+        }
+
+        /**
          * Create temporary collection, set up indexes
          */
         void State::prepTempCollection() {
             if ( ! _onDisk )
                 return;
 
-            if (_config.incLong != _config.tempLong) {
+            dropTempCollections();
+            if (_useIncremental) {
                 // create the inc collection and make sure we have index on "0" key
-                _db.dropCollection( _config.incLong );
                 {
                     // Creating a collection must be done in a child transaction,
                     // which aborts if the create fails.
@@ -355,7 +366,6 @@ namespace mongo {
             }
 
             // create temp collection
-            _db.dropCollection( _config.tempLong );
             {
                 // See above for why userCreateNS must be called in its own child transaction.
                 Client::Transaction transaction(0);
@@ -429,7 +439,13 @@ namespace mongo {
             }
 
             if (_jsMode) {
-                ScriptingFunction getResult = _scope->createFunction("var map = _mrMap; var result = []; for (key in map) { result.push({_id: key, value: map[key]}) } return result;");
+                ScriptingFunction getResult = _scope->createFunction(
+                            "var map = _mrMap;"
+                            "var result = [];"
+                            "for (key in map) {"
+                            "  result.push({_id: key, value: map[key]});"
+                            "}"
+                            "return result;");
                 _scope->invoke(getResult, 0, 0, 0, false);
                 BSONObj obj = _scope->getObject("__returnValue");
                 final.append("results", BSONArray(obj));
@@ -568,7 +584,6 @@ namespace mongo {
                         pm.hit();
                     }
                 }
-                _db.dropCollection( _config.tempLong );
                 pm.finished();
             }
 
@@ -593,7 +608,12 @@ namespace mongo {
             insertObject( _config.incLong.c_str() , o , 0 , false );
         }
 
-        State::State( const Config& c ) : _config( c ), _size(0), _dupCount(0), _numEmits(0) {
+        State::State(const Config& c) :
+                _config(c),
+                _useIncremental(true),
+                _size(0),
+                _dupCount(0),
+                _numEmits(0) {
             _temp.reset( new InMemory() );
             _onDisk = _config.outType != Config::INMEMORY;
         }
@@ -609,8 +629,7 @@ namespace mongo {
         State::~State() {
             if ( _onDisk ) {
                 try {
-                    _db.dropCollection( _config.tempLong );
-                    _db.dropCollection( _config.incLong );
+                    dropTempCollections();
                 }
                 catch ( std::exception& e ) {
                     error() << "couldn't cleanup after map reduce: " << e.what() << endl;
@@ -620,7 +639,13 @@ namespace mongo {
             if (_scope && !_scope->isKillPending()) {
                 // cleanup js objects
                 ScriptingFunction cleanup = _scope->createFunction("delete _emitCt; delete _keyCt; delete _mrMap;");
-                _scope->invoke(cleanup, 0, 0, 0, true);
+                try {
+                    _scope->invoke(cleanup, 0, 0, 0, true);
+                }
+                catch (const DBException &dbEx) {
+                    // not important because properties will be reset if scope is reused
+                    LOG(1) << "MapReduce terminated during state destruction" << endl;
+                }
             }
         }
 
@@ -640,32 +665,118 @@ namespace mongo {
                 _config.finalizer->init( this );
             _scope->setBoolean("_doFinal", _config.finalizer.get() != 0);
 
-            // by default start in JS mode, will be faster for small jobs
-            _jsMode = _config.jsMode;
-//            _jsMode = true;
-            switchMode(_jsMode);
+            switchMode(_config.jsMode); // set up js-mode based on Config
 
             // global JS map/reduce hashmap
             // we use a standard JS object which means keys are only simple types
-            // we could also add a real hashmap from a library, still we need to add object comparison methods
-//            _scope->setObject("_mrMap", BSONObj(), false);
-            ScriptingFunction init = _scope->createFunction("_emitCt = 0; _keyCt = 0; _dupCt = 0; _redCt = 0; if (typeof(_mrMap) === 'undefined') { _mrMap = {}; }");
+            // we could also add a real hashmap from a library and object comparison methods
+            // for increased performance, we may want to look at v8 Harmony Map support
+            // _scope->setObject("_mrMap", BSONObj(), false);
+            ScriptingFunction init = _scope->createFunction(
+                        "_emitCt = 0;"
+                        "_keyCt = 0;"
+                        "_dupCt = 0;"
+                        "_redCt = 0;"
+                        "if (typeof(_mrMap) === 'undefined') {"
+                        "  _mrMap = {};"
+                        "}");
             _scope->invoke(init, 0, 0, 0, true);
 
             // js function to run reduce on all keys
-//            redfunc = _scope->createFunction("for (var key in hashmap) {  print('Key is ' + key); list = hashmap[key]; ret = reduce(key, list); print('Value is ' + ret); };");
-            _reduceAll = _scope->createFunction("var map = _mrMap; var list, ret; for (var key in map) { list = map[key]; if (list.length != 1) { ret = _reduce(key, list); map[key] = [ret]; ++_redCt; } } _dupCt = 0;");
-            _reduceAndEmit = _scope->createFunction("var map = _mrMap; var list, ret; for (var key in map) { list = map[key]; if (list.length == 1) { ret = list[0]; } else { ret = _reduce(key, list); ++_redCt; } emit(key, ret); }; delete _mrMap;");
-            _reduceAndFinalize = _scope->createFunction("var map = _mrMap; var list, ret; for (var key in map) { list = map[key]; if (list.length == 1) { if (!_doFinal) {continue;} ret = list[0]; } else { ret = _reduce(key, list); ++_redCt; }; if (_doFinal){ ret = _finalize(key, ret); } map[key] = ret; }");
-            _reduceAndFinalizeAndInsert = _scope->createFunction("var map = _mrMap; var list, ret; for (var key in map) { list = map[key]; if (list.length == 1) { ret = list[0]; } else { ret = _reduce(key, list); ++_redCt; }; if (_doFinal){ ret = _finalize(key, ret); } _nativeToTemp({_id: key, value: ret}); }");
+            // redfunc = _scope->createFunction("for (var key in hashmap) {  print('Key is ' + key); list = hashmap[key]; ret = reduce(key, list); print('Value is ' + ret); };");
+            _reduceAll = _scope->createFunction(
+                        "var map = _mrMap;"
+                        "var list, ret;"
+                        "for (var key in map) {"
+                        "  list = map[key];"
+                        "  if (list.length != 1) {"
+                        "    ret = _reduce(key, list);"
+                        "    map[key] = [ret];"
+                        "    ++_redCt;"
+                        "  }"
+                        "}"
+                        "_dupCt = 0;");
+            massert(16717, "error initializing JavaScript reduceAll function",
+                    _reduceAll != 0);
 
+            _reduceAndEmit = _scope->createFunction(
+                        "var map = _mrMap;"
+                        "var list, ret;"
+                        "for (var key in map) {"
+                        "  list = map[key];"
+                        "  if (list.length == 1)"
+                        "    ret = list[0];"
+                        "  else {"
+                        "    ret = _reduce(key, list);"
+                        "    ++_redCt;"
+                        "  }"
+                        "  emit(key, ret);"
+                        "}"
+                        "delete _mrMap;");
+            massert(16718, "error initializing JavaScript reduce/emit function",
+                    _reduceAndEmit != 0);
+
+            _reduceAndFinalize = _scope->createFunction(
+                        "var map = _mrMap;"
+                        "var list, ret;"
+                        "for (var key in map) {"
+                        "  list = map[key];"
+                        "  if (list.length == 1) {"
+                        "    if (!_doFinal) { continue; }"
+                        "    ret = list[0];"
+                        "  }"
+                        "  else {"
+                        "    ret = _reduce(key, list);"
+                        "    ++_redCt;"
+                        "  }"
+                        "  if (_doFinal)"
+                        "    ret = _finalize(key, ret);"
+                        "  map[key] = ret;"
+                        "}");
+            massert(16719, "error creating JavaScript reduce/finalize function",
+                    _reduceAndFinalize != 0);
+
+            _reduceAndFinalizeAndInsert = _scope->createFunction(
+                        "var map = _mrMap;"
+                        "var list, ret;"
+                        "for (var key in map) {"
+                        "  list = map[key];"
+                        "  if (list.length == 1)"
+                        "    ret = list[0];"
+                        "  else {"
+                        "    ret = _reduce(key, list);"
+                        "    ++_redCt;"
+                        "  }"
+                        "  if (_doFinal)"
+                        "    ret = _finalize(key, ret);"
+                        "  _nativeToTemp({_id: key, value: ret});"
+                        "}");
+            massert(16720, "error initializing JavaScript functions",
+                    _reduceAndFinalizeAndInsert != 0);
         }
 
         void State::switchMode(bool jsMode) {
             _jsMode = jsMode;
             if (jsMode) {
                 // emit function that stays in JS
-                _scope->setFunction("emit", "function(key, value) { if (typeof(key) === 'object') { _bailFromJS(key, value); return; }; ++_emitCt; var map = _mrMap; var list = map[key]; if (!list) { ++_keyCt; list = []; map[key] = list; } else { ++_dupCt; } list.push(value); }");
+                _scope->setFunction("emit",
+                                    "function(key, value) {"
+                                    "  if (typeof(key) === 'object') {"
+                                    "    _bailFromJS(key, value);"
+                                    "    return;"
+                                    "  }"
+                                    "  ++_emitCt;"
+                                    "  var map = _mrMap;"
+                                    "  var list = map[key];"
+                                    "  if (!list) {"
+                                    "    ++_keyCt;"
+                                    "    list = [];"
+                                    "    map[key] = list;"
+                                    "  }"
+                                    "  else"
+                                    "    ++_dupCt;"
+                                    "  list.push(value);"
+                                    "}");
                 _scope->injectNative("_bailFromJS", _bailFromJS, this);
             }
             else {
@@ -1059,6 +1170,7 @@ namespace mongo {
                         }
                         state.init();
                         state.prepTempCollection();
+                        ON_BLOCK_EXIT_OBJ(state, &State::dropTempCollections);
                         ProgressMeterHolder pm( op->setMessage( "m/r: (1/3) emit phase" , state.incomingDocuments() ) );
 
                         wassert( config.limit < 0x4000000 ); // see case on next line to 32 bit unsigned
@@ -1086,7 +1198,7 @@ namespace mongo {
                                 if ( cursor->currentIsDup() ) {
                                     continue;
                                 }
-                                                            
+
                                 BSONObj o = cursor->current();
 
                                 // check to see if this is a new object we don't own yet
@@ -1210,6 +1322,7 @@ namespace mongo {
                 state.init();
 
                 // no need for incremental collection because records are already sorted
+                state._useIncremental = false;
                 config.incLong = config.tempLong;
 
                 BSONObj shardCounts = cmdObj["shardCounts"].embeddedObjectUserCheck();
@@ -1232,6 +1345,7 @@ namespace mongo {
 
                 Client::Transaction transaction(DB_TXN_SNAPSHOT);
                 state.prepTempCollection();
+                ON_BLOCK_EXIT_OBJ(state, &State::dropTempCollections);
 
                 BSONList values;
                 if (!config.outDB.empty()) {
