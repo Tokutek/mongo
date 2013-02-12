@@ -70,78 +70,35 @@ namespace mongo {
     /* fetch a single object from collection ns that matches query
        set your db SavedContext first
     */
-#if 0
     bool Helpers::findOne(const StringData& ns, const BSONObj &query, BSONObj& result, bool requireIndex) {
-        DiskLoc loc = findOne( ns, query, requireIndex );
-        if ( loc.isNull() )
-            return false;
-        result = loc.obj();
-        return true;
+        ::abort();
+        return false;
     }
-#endif
 
-    /* fetch a single object from collection ns that matches query
-       set your db SavedContext first
-    */
-#if 0
-    DiskLoc Helpers::findOne(const StringData& ns, const BSONObj &query, bool requireIndex) {
-        shared_ptr<Cursor> c =
-            NamespaceDetailsTransient::getCursor( ns.data() , query, BSONObj(),
-                                                  requireIndex ?
-                                                  QueryPlanSelectionPolicy::indexOnly() :
-                                                  QueryPlanSelectionPolicy::any() );
-        while( c->ok() ) {
-            if ( c->currentMatches() && !c->getsetdup( c->currLoc() ) ) {
-                return c->currLoc();
-            }
-            ::abort(); // TODO: Wrangle the dup stuff above
-            c->advance();
-        }
-        return DiskLoc();
-    }
-#endif
-
-#if 0
-    bool Helpers::findById(Client& c, const char *ns, BSONObj query, BSONObj& result ,
-                           bool * nsFound , bool * indexFound ) {
+    bool Helpers::findById( const char *ns, BSONObj query, BSONObj& result ) {
         Lock::assertAtLeastReadLocked(ns);
-        Database *database = c.database();
-        verify( database );
-        NamespaceDetails *d = database->namespaceIndex.details(ns);
+        NamespaceDetails *d = nsindex(ns)->namespaceIndex.details(ns);
         if ( ! d )
             return false;
-        if ( nsFound )
-            *nsFound = 1;
 
         int idxNo = d->findIdIndex();
-        if ( idxNo < 0 )
-            return false;
-        if ( indexFound )
-            *indexFound = 1;
-
+        verify(idxNo >= 0);
         IndexDetails& i = d->idx( idxNo );
-
         BSONObj key = i.getKeyFromQuery( query );
 
+        log() < "TODO: Find " << key.toString() << " in the _id index for ns " << string(ns) << endl;
+        // eg: add findSingle to indexdetails
+        // return i.findSingle(key, result);
+        return false;
+
+#if 0
         DiskLoc loc = minDiskLoc; ::abort(); // i.idxInterface().findSingle(i , i.head , key);
         if ( loc.isNull() )
             return false;
         result = loc.obj();
         return true;
-    }
 #endif
-
-#if 0
-    DiskLoc Helpers::findById(NamespaceDetails *d, BSONObj idquery) {
-        verify(d);
-        int idxNo = d->findIdIndex();
-        uassert(13430, "no _id index", idxNo>=0);
-        IndexDetails& i = d->idx( idxNo );
-        BSONObj key = i.getKeyFromQuery( idquery );
-        ::abort();
-        return minDiskLoc; //i.idxInterface().findSingle(i , i.head , key);
     }
-#endif
 
     vector<BSONObj> Helpers::findAll( const string& ns , const BSONObj& query ) {
         Lock::assertAtLeastReadLocked( ns );
@@ -288,23 +245,17 @@ namespace mongo {
                                     const BSONObj& keyPattern ,
                                     bool maxInclusive ,
                                     bool secondaryThrottle ,
-                                    /* RemoveCallback * callback, */
                                     bool fromMigrate ) {
         
         Client& c = cc();
 
         long long numDeleted = 0;
-        //PageFaultRetryableSection pgrs;
-        
         long long millisWaitingForReplication = 0;
 
         while ( 1 ) {
-            try {
-
+            {
                 Client::WriteContext ctx(ns);
-                
                 scoped_ptr<Cursor> c;
-                
                 {
                     NamespaceDetails* nsd = nsdetails( ns.c_str() );
                     if ( ! nsd )
@@ -346,12 +297,6 @@ namespace mongo {
 #endif
                 ::abort();
             }
-            //catch( PageFaultException& e ) {
-            catch( ... ) {
-                ::abort();
-                //e.touch();
-                continue;
-            }
 
             Timer secondaryThrottleTime;
 
@@ -383,49 +328,5 @@ namespace mongo {
         Client::Context context(ns);
         deleteObjects(ns, BSONObj(), false);
     }
-
-#if 0
-    RemoveSaver::RemoveSaver( const string& a , const string& b , const string& why) : _out(0) {
-        static int NUM = 0;
-
-        _root = dbpath;
-        if ( a.size() )
-            _root /= a;
-        if ( b.size() )
-            _root /= b;
-        verify( a.size() || b.size() );
-
-        _file = _root;
-
-        stringstream ss;
-        ss << why << "." << terseCurrentTime(false) << "." << NUM++ << ".bson";
-        _file /= ss.str();
-
-    }
-
-    RemoveSaver::~RemoveSaver() {
-        if ( _out ) {
-            _out->close();
-            delete _out;
-            _out = 0;
-        }
-    }
-
-    void RemoveSaver::goingToDelete( const BSONObj& o ) {
-        if ( ! _out ) {
-            boost::filesystem::create_directories( _root );
-            _out = new ofstream();
-            _out->open( _file.string().c_str() , ios_base::out | ios_base::binary );
-            if ( ! _out->good() ) {
-                log( LL_WARNING ) << "couldn't create file: " << _file.string() << " for remove saving" << endl;
-                delete _out;
-                _out = 0;
-                return;
-            }
-
-        }
-        _out->write( o.objdata() , o.objsize() );
-    }
-#endif
 
 } // namespace mongo

@@ -36,7 +36,7 @@ namespace mongo {
     /**
        all helpers assume locking is handled above them
      */
-    struct Helpers {
+    namespace Helpers {
 
         /* ensure the specified index exists.
 
@@ -49,7 +49,7 @@ namespace mongo {
            Note: use ensureHaveIdIndex() for the _id index: it is faster.
            Note: does nothing if collection does not yet exist.
         */
-        static void ensureIndex(const char *ns, BSONObj keyPattern, bool unique, const char *name);
+        void ensureIndex(const char *ns, BSONObj keyPattern, bool unique, const char *name);
 
         /* fetch a single object from collection ns that matches query.
            set your db SavedContext first.
@@ -62,24 +62,19 @@ namespace mongo {
 
            @return true if object found
         */
-        static bool findOne(const StringData& ns, const BSONObj &query, BSONObj& result, bool requireIndex = false);
-        //static DiskLoc findOne(const StringData& ns, const BSONObj &query, bool requireIndex);
+        bool findOne(const StringData& ns, const BSONObj &query, BSONObj& result, bool requireIndex = false);
+        //DiskLoc findOne(const StringData& ns, const BSONObj &query, bool requireIndex);
 
         /**
          * have to be locked already
          */
-        static vector<BSONObj> findAll( const string& ns , const BSONObj& query );
+        vector<BSONObj> findAll( const string& ns , const BSONObj& query );
 
         /**
          * @param foundIndex if passed in will be set to 1 if ns and index found
          * @return true if object found
          */
-        static bool findById(Client&, const char *ns, BSONObj query, BSONObj& result ,
-                             bool * nsFound = 0 , bool * indexFound = 0 );
-
-        /* uasserts if no _id index.
-           @return null loc if not found */
-        //static DiskLoc findById(NamespaceDetails *d, BSONObj query);
+        bool findById( const char *ns, BSONObj query, BSONObj& result ); 
 
         /** Get/put the first (or last) object from a collection.  Generally only useful if the collection
             only ever has a single object -- which is a "singleton collection".
@@ -88,23 +83,23 @@ namespace mongo {
 
             @return true if object exists.
         */
-        static bool getSingleton(const char *ns, BSONObj& result);
-        static void putSingleton(const char *ns, BSONObj obj);
-        static void putSingletonGod(const char *ns, BSONObj obj, bool logTheOp);
-        static bool getFirst(const char *ns, BSONObj& result) { return getSingleton(ns, result); }
-        static bool getLast(const char *ns, BSONObj& result); // get last object int he collection; e.g. {$natural : -1}
+        bool getSingleton(const char *ns, BSONObj& result);
+        void putSingleton(const char *ns, BSONObj obj);
+        void putSingletonGod(const char *ns, BSONObj obj, bool logTheOp);
+        bool getFirst(const char *ns, BSONObj& result) { return getSingleton(ns, result); }
+        bool getLast(const char *ns, BSONObj& result); // get last object int he collection; e.g. {$natural : -1}
 
         /**
          * you have to lock
          * you do not have to have Context set
          * o has to have an _id field or will assert
          */
-        static void upsert( const string& ns , const BSONObj& o, bool fromMigrate = false );
+        void upsert( const string& ns , const BSONObj& o, bool fromMigrate = false );
 
         /** You do not need to set the database before calling.
             @return true if collection is empty.
         */
-        static bool isEmpty(const char *ns, bool doAuth=true);
+        bool isEmpty(const char *ns, bool doAuth=true);
 
         // TODO: this should be somewhere else probably
         /* Takes object o, and returns a new object with the
@@ -114,7 +109,7 @@ namespace mongo {
          *    o = {a : 5 , b : 6} -->
          *      sets key= {a : 1, b :1}, returns {"" : 5, "" : 6}
          */
-        static BSONObj toKeyFormat( const BSONObj& o , BSONObj& key );
+        BSONObj toKeyFormat( const BSONObj& o , BSONObj& key );
 
         /* Takes a BSONObj indicating the min or max boundary of a range,
          * and a keyPattern corresponding to an index that is useful
@@ -137,17 +132,9 @@ namespace mongo {
          * (also useful when the shard key is equal to the index used,
          * since it strips out the field names).
          */
-        static BSONObj modifiedRangeBound( const BSONObj& bound ,
+        BSONObj modifiedRangeBound( const BSONObj& bound ,
                                            const BSONObj& keyPattern ,
                                            int minOrMax );
-
-#if 0
-        class RemoveCallback {
-        public:
-            virtual ~RemoveCallback() {}
-            virtual void goingToDelete( const BSONObj& o ) = 0;
-        };
-#endif
 
         /**
          * Takes a range, specified by a min and max, and an index, specified by
@@ -161,7 +148,7 @@ namespace mongo {
          *
          * Does oplog the individual document deletions.
          */
-        static long long removeRange( const string& ns , 
+        long long removeRange( const string& ns , 
                                       const BSONObj& min , 
                                       const BSONObj& max , 
                                       const BSONObj& keyPattern ,
@@ -175,28 +162,8 @@ namespace mongo {
          * You do not need to set the database before calling.
          * Does not oplog the operation.
          */
-        static void emptyCollection(const char *ns);
+        void emptyCollection(const char *ns);
 
     };
-
-    /**
-     * user for saving deleted bson objects to a flat file
-     */
-#if 0
-    class RemoveSaver : public Helpers::RemoveCallback , boost::noncopyable {
-    public:
-        RemoveSaver( const string& type , const string& ns , const string& why);
-        ~RemoveSaver();
-
-        void goingToDelete( const BSONObj& o );
-
-    private:
-        boost::filesystem::path _root;
-        boost::filesystem::path _file;
-        ofstream* _out;
-
-    };
-#endif
-
 
 } // namespace mongo

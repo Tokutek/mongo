@@ -841,32 +841,19 @@ namespace mongo {
     }
 
     bool queryIdHack( const char* ns, const BSONObj& query, const ParsedQuery& pq, CurOp& curop, Message& result ) {
-        //Client& currentClient = cc(); // only here since its safe and takes time
-        auto_ptr< QueryResult > qr;
-        
-        // this extra bracing is not strictly needed
-        // but makes it clear what the rules are in different spots
-
         int n = 0;
-        bool nsFound = false;
-        bool indexFound = false;
-        
-        BSONObj resObject; // put inside since we don't own the memory
+        auto_ptr< QueryResult > qr;
+        BSONObj resObject;
         
         Client::ReadContext ctx( ns , dbpath ); // read locks
         replVerifyReadsOk(&pq);
         
-        ::abort();
-        bool found = false; //Helpers::findById( currentClient, ns, query, resObject, &nsFound, &indexFound );
-        if ( nsFound && ! indexFound ) {
-            // we have to resort to a table scan
-            return false;
-        }
+        bool found = Helpers::findById( ns, query, resObject );
         
         if ( shardingState.needShardChunkManager( ns ) ) {
             ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
             if ( m && ! m->belongsToMe( resObject ) ) {
-                // I have something this _id
+                // I have something for this _id
                 // but it doesn't belong to me
                 // so return nothing
                 resObject = BSONObj();
