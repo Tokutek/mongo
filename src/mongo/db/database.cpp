@@ -48,7 +48,9 @@ namespace mongo {
     }
 
     Database::~Database() {
-        ::abort();
+        tokulog() << "closing Database(" << name << ", " << path << ")" << endl;
+        namespaceIndex.close();
+        // delegate to NamespaceIndex destructor
 #if 0
         verify( Lock::isW() );
         magic = 0;
@@ -439,6 +441,15 @@ namespace mongo {
         return size;
     }
 
+    void DatabaseHolder::closeDatabases(const string &path) {
+        DBs &m = _paths[path];
+        for (DBs::iterator i = m.begin(); i != m.end(); i++) {
+            Database *db = i->second;
+            Client::WriteContext ctx(db->name);
+            db->closeDatabase(db->name.c_str(), path);
+        }
+    }
+
     Database* DatabaseHolder::getOrCreate( const string& ns , const string& path , bool& justCreated ) {
         string dbname = _todb( ns );
         {
@@ -506,8 +517,11 @@ namespace mongo {
             Client::Transaction txn;
 
             Namespace ns_s(ns);
-            NamespaceDetails details_s(false);
-            ni->add_ns(ns, details_s);
+            // We allocate here in order to call the constructor, and the hashtable takes a literal copy and owns the members.
+            details = new NamespaceDetails(ns, false);
+            ni->add_ns(ns, *details);
+            // Avoid calling the destructor.
+            free(details);
             details = ni->details(ns);
 
             txn.commit();

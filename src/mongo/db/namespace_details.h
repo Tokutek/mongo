@@ -54,8 +54,8 @@ namespace mongo {
         enum { NIndexesMax = 64 };
 
         //explicit NamespaceDetails( const DiskLoc &loc, bool _capped );
-        explicit NamespaceDetails( bool _capped );
-
+        NamespaceDetails(const string &ns, bool _capped);
+        explicit NamespaceDetails(const BSONObj &serialized);
         ~NamespaceDetails();
 
         /* called when loaded from disk */
@@ -172,10 +172,12 @@ namespace mongo {
         // true if an index is currently being built
         bool indexBuildInProgress;
 
+        BSONObj serialize() const;
+
     private:
         // Each index (including the _id) index has an IndexDetails that describes it.
         int _nIndexes;
-        std::vector<IndexDetails *> _indexes;
+        std::vector<shared_ptr<IndexDetails> > _indexes;
 
         // TODO: TokuDB: Add in memory stats
         unsigned long long multiKeyIndexBits;
@@ -372,7 +374,6 @@ namespace mongo {
             ht( 0 ), dir_( dir ), database_( database ) {}
 
         ~NamespaceIndex() {
-            wunimplemented("NamespaceIndex destructor");
         }
 
         /* returns true if new db will be created if we init lazily */
@@ -414,6 +415,8 @@ namespace mongo {
 
         unsigned long long fileLength() const { unimplemented("NamespaceIndex::fileLength"); return 0; }
 
+        void close();
+
     private:
         void _init();
 
@@ -438,8 +441,7 @@ namespace mongo {
 
     inline IndexDetails& NamespaceDetails::idx(int idxNo, bool missingExpected ) {
         if ( idxNo < NIndexesMax ) {
-            IndexDetails &id = *_indexes[idxNo];
-            return id;
+            return *_indexes[idxNo];
         }
         unimplemented("more than NIndexesMax indexes"); // TokuDB: Make sure we handle the case where idxNo >= NindexesMax 
     }

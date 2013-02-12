@@ -129,6 +129,8 @@ namespace mongo {
             return _info.toString();
         }
 
+        const BSONObj &info() const { return _info; }
+
     private:
         // Open dictionary representing the index on disk.
         DB *_db;

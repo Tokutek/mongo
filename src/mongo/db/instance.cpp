@@ -1020,6 +1020,7 @@ namespace mongo {
         //MemoryMappedFile::closeAllFiles( ss3 );
         log() << ss3.str() << endl;
 
+        dbHolderW().closeDatabases(dbpath);
         storage::shutdown();
 
 #if 0

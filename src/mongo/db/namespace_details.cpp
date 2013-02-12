@@ -38,16 +38,93 @@ namespace mongo {
 
     BSONObj idKeyPattern = fromjson("{\"_id\":1}");
 
-    NamespaceDetails::NamespaceDetails( bool capped ) : indexBuildInProgress(false), _nIndexes(0), multiKeyIndexBits(0) {
+    // Clone of DBClientWithCommands::genIndexName(), should be factored out somewhere.
+    static string genIndexName(const string &ns, const BSONObj &keys) {
+        stringstream ss;
+        ss << ns;
+
+        bool first = 1;
+        for ( BSONObjIterator i(keys); i.more(); ) {
+            BSONElement f = i.next();
+
+            if ( first )
+                first = 0;
+            else
+                ss << "_";
+
+            ss << f.fieldName() << "_";
+            if( f.isNumber() )
+                ss << f.numberInt();
+            else
+                ss << f.str(); //this should match up with shell command
+        }
+        return ss.str();
+    }
+
+    static BSONObj id_index_info(const string &ns) {
+        BSONObjBuilder id_info;
+        id_info.append("ns", ns);
+        id_info.append("key", idKeyPattern);
+        id_info.append("name", genIndexName(ns, idKeyPattern));
+        id_info.appendBool("unique", true);
+        // TODO: Is this right?
+        id_info.appendBool("background", false);
+        return id_info.obj();
+    }
+
+    NamespaceDetails::NamespaceDetails(const string &ns, bool capped) : indexBuildInProgress(false), _nIndexes(0), multiKeyIndexBits(0) {
+        tokulog() << "create NamespaceDetails for " << ns << endl;
         if ( capped ) {
             unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
         }
+
+        shared_ptr<IndexDetails> id_index(new IndexDetails(id_index_info(ns)));
+        _indexes.push_back(id_index);
+        _nIndexes++;
+    }
+
+    NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
+        indexBuildInProgress(false),
+        _nIndexes(serialized["indexes"].Array().size()),
+        multiKeyIndexBits(serialized["multiKeyIndexBits"].Number()) {
+        std::vector<BSONElement> index_array = serialized["indexes"].Array();
+        for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
+            shared_ptr<IndexDetails> idx(new IndexDetails(it->Obj()));
+            _indexes.push_back(idx);
+        }
+        tokulog() << "load NamespaceDetails for " << _indexes[0]->toString() << endl;
     }
 
     NamespaceDetails::~NamespaceDetails() {
-        // Destroy any open indexes.
-        for (std::vector<IndexDetails *>::iterator i = _indexes.begin(); i != _indexes.end(); i++) {
-            delete *i;
+        tokulog() << "close NamespaceDetails for " << _indexes[0]->toString() << endl;
+    }
+
+    BSONObj NamespaceDetails::serialize() const {
+        BSONArrayBuilder indexes_array;
+        typedef std::vector<shared_ptr<IndexDetails> >::const_iterator index_iterator_t;
+        for (index_iterator_t it = _indexes.begin(); it != _indexes.end(); it++) {
+            shared_ptr<IndexDetails> index(*it);
+            indexes_array.append(index->info());
+        }
+        BSONObjBuilder s;
+        s.appendIntOrLL("multiKeyIndexBits", multiKeyIndexBits);
+        s.append("indexes", indexes_array.arr());
+        return s.obj();
+    }
+
+    static void close_namespace_details(const Namespace &ns, NamespaceDetails &nsd) {
+        tokulog() << "close_namespace_details " << ns << endl;
+        // This is really really really dumb.
+        delete &nsd;
+    }
+
+    void NamespaceIndex::close() {
+        tokulog() << "close NamespaceIndex" << endl;
+        if (ht) {
+            dassert(nsdb);
+            storage::db_close(nsdb);
+            ht->iterAll(close_namespace_details);
+            delete ht;
         }
     }
 
@@ -64,9 +141,9 @@ namespace mongo {
     static int populate_nsindex_ht(const DBT *key, const DBT *val, void *ht_v) {
         HashTable<Namespace, NamespaceDetails> *ht = static_cast<HashTable<Namespace, NamespaceDetails> *>(ht_v);
         Namespace n(static_cast<const char *>(key->data));
-        NamespaceDetails *d = static_cast<NamespaceDetails *>(val->data);
-        verify(val->size == (sizeof *d));
-        uassert( 16433 , "too many namespaces/collections during namespace open", ht->put(n, *d));
+        BSONObj obj(static_cast<const char *>(val->data));
+        NamespaceDetails d(obj);
+        uassert( 16433 , "too many namespaces/collections during namespace open", ht->put(n, d));
         tokulog() << "found namespace " << n << endl;
         return 0;
     }
@@ -81,7 +158,7 @@ namespace mongo {
         nsdb = storage::db_open(cc().transaction(), nsdbname.c_str());
 
         const int ns_file_len = 16 * 1024 * 1024;
-        void *buf = malloc(ns_file_len);
+        void *buf = calloc(ns_file_len, 1);
         verify(buf != NULL);
         ht = new HashTable<Namespace, NamespaceDetails>(buf, ns_file_len, "namespace index");
 
@@ -155,13 +232,12 @@ namespace mongo {
         init();
         Namespace n(ns);
 
-        wunimplemented("need to create the new id index and stuff here in the same transaction where we record the new ns to details mapping in nsdb");
-
         DBT ndbt, ddbt;
         ndbt.data = const_cast<void *>(static_cast<const void *>(ns));
         ndbt.size = strlen(ns) + 1;
-        ddbt.data = const_cast<void *>(static_cast<const void *>(&details));
-        ddbt.size = sizeof details;
+        BSONObj serialized = details.serialize();
+        ddbt.data = const_cast<void *>(static_cast<const void *>(serialized.objdata()));
+        ddbt.size = serialized.objsize();
         int r = nsdb->put(nsdb, cc().transaction().txn(), &ndbt, &ddbt, 0);
         verify(r == 0);
 
