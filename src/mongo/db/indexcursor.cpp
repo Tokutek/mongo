@@ -16,13 +16,12 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "jsobj.h"
-#include "curop.h"
-#include "queryutil.h"
-
+#include "mongo/pch.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/queryutil.h"
 #include "mongo/db/namespace_details.h"
-#include "mongo/db/toku/cursor.h"
+#include "mongo/db/indexcursor.h"
 
 namespace mongo {
 
@@ -41,28 +40,11 @@ namespace mongo {
     }
 
 
-    IndexCursor* IndexCursor::make( NamespaceDetails * nsd , int idxNo , const IndexDetails& indexDetails ) {
-        //int v = indexDetails.version();
-        
-        //if( v == 2 ) 
-        //    return new TokuDBCursor( nsd , idxNo , indexDetails );
-
-#if 0
-        if( v == 1 ) 
-            return new IndexCursorImpl<V1>( nsd , idxNo , indexDetails );
-        
-        if( v == 0 ) 
-            return new IndexCursorImpl<V0>( nsd , idxNo , indexDetails );
-
-        dassert( IndexDetails::isASupportedIndexVersionNumber(v) );
-        uasserted(14800, str::stream() << "unsupported index version " << v);
-        return 0; // not reachable
-#endif
-        return NULL;
+    IndexCursor* IndexCursor::make( NamespaceDetails * nsd , int idxNo , const IndexDetails& id ) {
+        // This used to handle index versioning, but since there's only one, it's trivial.
+        return new IndexCursor(nsd, idxNo, id);
     }
 
-    // TODO: Get rid of all but one of these static constructors
-    
     IndexCursor* IndexCursor::make(
         NamespaceDetails *d, int idxNo, const IndexDetails& id, 
         const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction) 
