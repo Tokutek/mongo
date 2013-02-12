@@ -223,6 +223,12 @@ namespace mongo {
             if ( socks[i] > maxfd )
                 maxfd = socks[i];
         }
+
+        if ( maxfd >= FD_SETSIZE ) {
+            error() << "socket " << maxfd << " is higher than " << FD_SETSIZE-1 << 
+                "; not supported" << warnings;
+            return;
+        }
         
 #ifdef MONGO_SSL
         if ( _ssl == 0 ) {
