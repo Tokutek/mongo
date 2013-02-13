@@ -150,7 +150,8 @@ namespace mongo {
         dassert(nsdb == NULL);
 
         string nsdbname(database_ + ".ns");
-        nsdb = storage::db_open(nsdbname, true);
+        const BSONObj &ns_key_pattern = fromjson("{\"ns\":1}");
+        nsdb = storage::db_open(nsdbname, ns_key_pattern, true);
 
         namespaces.reset(new NamespaceDetailsMap());
 
@@ -236,9 +237,13 @@ namespace mongo {
         Lock::assertWriteLocked(ns);
         dassert(namespaces.get() != NULL);
 
+        BSONObjBuilder b;
+        b.append("ns", ns);
+        BSONObj nsobj = b.obj();
+
         DBT ndbt, ddbt;
-        ndbt.data = const_cast<void *>(static_cast<const void *>(ns));
-        ndbt.size = strlen(ns) + 1;
+        ndbt.data = const_cast<void *>(static_cast<const void *>(nsobj.objdata()));
+        ndbt.size = nsobj.objsize();
         BSONObj serialized = details->serialize();
         ddbt.data = const_cast<void *>(static_cast<const void *>(serialized.objdata()));
         ddbt.size = serialized.objsize();

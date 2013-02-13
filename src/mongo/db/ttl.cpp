@@ -39,11 +39,11 @@ namespace mongo {
         
         void doTTLForDB( const string& dbName ) {
             
+#if TOKUDB_FINISHED
             Client::GodScope god;
 
             wunimplemented("doTTLForDB does some point queries");
 
-#if TOKUDB_FINISHED
             vector<BSONObj> indexes;
             {
                 auto_ptr<DBClientCursor> cursor =

@@ -700,28 +700,6 @@ namespace mongo {
         
         for( ; cursor->ok(); cursor->advance() ) {
 
-#if 0
-            bool yielded = false;
-            if ( !ccPointer->yieldSometimes( ClientCursor::MaybeCovered, &yielded ) ||
-                !cursor->ok() ) {
-                cursor.reset();
-                queryResponseBuilder->noteYield();
-                // !!! TODO The queryResponseBuilder still holds cursor.  Currently it will not do
-                // anything unsafe with the cursor in handoff(), but this is very fragile.
-                //
-                // We don't fail the query since we're fine with returning partial data if the
-                // collection was dropped.
-                // NOTE see SERVER-2454.
-                // TODO This is wrong.  The cursor could be gone if the closeAllDatabases command
-                // just ran.
-                break;
-            }
-
-            if ( yielded ) {
-                queryResponseBuilder->noteYield();
-            }
-#endif
-            
             if ( pq.getMaxScan() && cursor->nscanned() > pq.getMaxScan() ) {
                 break;
             }
@@ -775,9 +753,6 @@ namespace mongo {
             throw SendStaleConfigException( ns , "version changed during initial query", shardingVersionAtStart, shardingState.getVersion( ns ) );
         }
         
-        //parentPageFaultSection.reset(0);
-        //noPageFault.reset( new NoPageFaultsAllowed() );
-
         int nReturned = queryResponseBuilder->handoff( result );
 
         ccPointer.reset();
@@ -788,15 +763,6 @@ namespace mongo {
                                               jsobj.getOwned() ) );
             cursorid = ccPointer->cursorid();
             DEV tlog(2) << "query has more, cursorid: " << cursorid << endl;
-#if 0
-            if ( cursor->supportYields() ) {
-                ClientCursor::YieldData data;
-                ccPointer->prepareToYield( data );
-            }
-            else {
-                ccPointer->c()->noteLocation();
-            }
-#endif
             
             // Save slave's position in the oplog.
             if ( pq.hasOption( QueryOption_OplogReplay ) && !slaveReadTill.isNull() ) {
@@ -966,9 +932,6 @@ namespace mongo {
                 return "";
             }
         }
-
-        // TokuDB: Only support _id queries for now.
-        ::abort();
 
         // sanity check the query and projection
         if ( pq.getFields() != NULL )

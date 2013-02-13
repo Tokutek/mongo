@@ -18,6 +18,7 @@
 #define MONGO_DB_STORAGE_ENV_H
 
 #include "mongo/pch.h"
+#include "mongo/bson/bsonobj.h"
 
 #include <db.h>
 
@@ -30,7 +31,7 @@ namespace mongo {
         void startup(void);
         void shutdown(void);
 
-        DB *db_open(const string &name, bool may_create);
+        DB *db_open(const string &name, const BSONObj &key_pattern, bool may_create);
         void db_close(DB *db);
 
     } // namespace storage
