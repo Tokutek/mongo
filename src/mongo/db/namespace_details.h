@@ -487,11 +487,8 @@ namespace mongo {
     inline int NamespaceDetails::findIndexByName(const char *name) {
         IndexIterator i = ii();
         while( i.more() ) {
-#if 0
-            if ( strcmp(i.next().info.obj().getStringField("name"),name) == 0 )
+            if ( strcmp(i.next().info().getStringField("name"), name) == 0 )
                 return i.pos()-1;
-#endif
-            ::abort();
         }
         return -1;
     }
