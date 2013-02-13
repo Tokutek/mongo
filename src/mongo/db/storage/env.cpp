@@ -18,6 +18,8 @@
 
 #include "mongo/pch.h"
 
+#include <string>
+
 #include <db.h>
 #include <boost/filesystem.hpp>
 #ifdef _WIN32
@@ -39,7 +41,6 @@ namespace mongo {
 
         void startup(void) {
             tokulog() << "startup" << endl;
-
             const int env_flags = DB_INIT_LOCK|DB_INIT_MPOOL|DB_INIT_TXN|DB_CREATE|DB_PRIVATE|DB_INIT_LOG|DB_RECOVER;
             const int env_mode = S_IRWXU|S_IRGRP|S_IROTH|S_IXGRP|S_IXOTH;
             boost::filesystem::path envdir(dbpath);
@@ -54,26 +55,24 @@ namespace mongo {
 
         void shutdown(void) {
             tokulog() << "shutdown" << endl;
-
             int r = env->close(env, 0);
             verify(r == 0);
         }
 
-        DB *db_open(const Client::Transaction &txn, const char *name) {
-            tokulog() << "opening db " << name << endl;
+        DB *db_open(const string &name, bool may_create) {
+            const Client::Transaction &txn = cc().transaction();
             dassert(txn.is_root());
             DB *db;
             int r = db_create(&db, env, 0);
             verify(r == 0);
-            const int db_flags = DB_CREATE;
-            r = db->open(db, txn.txn(), name, NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+            const int db_flags = may_create ? DB_CREATE : 0;
+            r = db->open(db, txn.txn(), name.c_str(), NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
             verify(r == 0);
             return db;
 
         }
 
         void db_close(DB *db) {
-            tokulog() << "closing db" << endl;
             int r = db->close(db, 0);
             verify(r == 0);
         }

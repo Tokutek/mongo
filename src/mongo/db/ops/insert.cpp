@@ -26,14 +26,9 @@
 namespace mongo {
 
     void insertObject(const char *ns, const BSONObj &obj) {
-        tokulog() << "TODO: insert into " << ns << " object " << obj.toString() << endl;
-        {
-            Client::WriteContext ctx(ns);
-            Database *db = ctx.ctx().db();
-            tokulog() << "Got database " << db << " named " << db->name << " at path " << db->path << endl;
-            NamespaceDetails *details = nsdetails_maybe_create(ns);
-            tokulog() << "Got the deets " << details << endl;
-        }
+        Client::WriteContext ctx(ns);
+        NamespaceDetails *details = nsdetails_maybe_create(ns);
+        tokulog() << details << "->insert(" << obj << ")" << endl;
     }
     
 } // namespace mongo

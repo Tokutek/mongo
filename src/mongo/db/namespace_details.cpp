@@ -74,7 +74,6 @@ namespace mongo {
     }
 
     NamespaceDetails::NamespaceDetails(const string &ns, bool capped) : indexBuildInProgress(false), _nIndexes(0), multiKeyIndexBits(0) {
-        tokulog() << "create NamespaceDetails for " << ns << endl;
         if ( capped ) {
             unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
         }
@@ -93,11 +92,9 @@ namespace mongo {
             shared_ptr<IndexDetails> idx(new IndexDetails(it->Obj()));
             _indexes.push_back(idx);
         }
-        tokulog() << "load NamespaceDetails for " << _indexes[0]->toString() << endl;
     }
 
     NamespaceDetails::~NamespaceDetails() {
-        tokulog() << "closing NamespaceDetails for " << _indexes[0]->toString() << endl;
     }
 
     BSONObj NamespaceDetails::serialize() const {
@@ -109,27 +106,15 @@ namespace mongo {
         }
         return BSON("multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
                     "indexes" << indexes_array.arr());
-        // BSONObjBuilder s;
-        // s.append();
-        // s.append();
-        // return s.obj();
     }
 
     NamespaceIndex::~NamespaceIndex() {
-        tokulog() << "closing NamespaceIndex (" << this << ") for " << database_ << endl;
-        tokulog() << "nsdb is " << nsdb << endl;
         if (nsdb != NULL) {
-            dassert(namespaces.get() != NULL);
             storage::db_close(nsdb);
-            tokulog() << "destroying namespace map" << endl;
-            namespaces.reset(NULL);
-            tokulog() << "destroyed namespace map" << endl;
-            // namespaces gets destructed automatically
+            dassert(namespaces.get() != NULL);
         } else {
-            tokulog() << "nsdb was null, nothing to do!" << endl;
             dassert(namespaces.get() == NULL);
         }
-        tokulog() << "done closing NamespaceIndex" << endl;
     }
 
     bool NamespaceIndex::exists() const {
@@ -146,7 +131,6 @@ namespace mongo {
         Namespace n(static_cast<const char *>(key->data));
         BSONObj obj(static_cast<const char *>(val->data));
         shared_ptr<NamespaceDetails> d(new NamespaceDetails(obj));
-        tokulog() << "found namespace " << n << endl;
 
         NamespaceIndex::NamespaceDetailsMap *m = static_cast<NamespaceIndex::NamespaceDetailsMap *>(map_v);
         std::pair<NamespaceIndex::NamespaceDetailsMap::iterator, bool> ret;
@@ -159,18 +143,14 @@ namespace mongo {
         int r;
 
         Lock::assertWriteLocked(database_);
+        verify(namespaces.get() == NULL);
+        dassert(nsdb == NULL);
 
         string nsdbname(database_ + ".ns");
-        dassert(nsdb == NULL);
-        nsdb = storage::db_open(cc().transaction(), nsdbname.c_str());
-        dassert(nsdb != NULL);
+        nsdb = storage::db_open(nsdbname, true);
 
-        verify(namespaces.get() == NULL);
         namespaces.reset(new NamespaceDetailsMap());
-        dassert(namespaces.get() != NULL);
 
-        tokulog() << "initializing NamespaceIndex (" << this << ") for " << database_ << endl;
-        tokulog() << "nsdb is " << nsdb << endl;
         {
             Client::Transaction scan_txn;
             DBC *cursor;
@@ -181,7 +161,6 @@ namespace mongo {
                 r = cursor->c_getf_next(cursor, 0, populate_nsindex_map, namespaces.get());
                 verify(r == 0 || r == DB_NOTFOUND);
             }
-            verify(r == DB_NOTFOUND);
 
             r = cursor->c_close(cursor);
             verify(r == 0);
@@ -220,9 +199,9 @@ namespace mongo {
         Namespace n(ns);
         NamespaceDetailsMap::iterator it = namespaces->find(n);
         dassert(it != namespaces->end());
+        unimplemented("need to delete whatever toku stuff is related to this ns");
         namespaces->erase(it);
 
-        ::abort(); // TODO: TokuDB: Understand how ht->kill(extra) works
 #if 0
         for( int i = 0; i<=1; i++ ) {
             try {
@@ -242,26 +221,35 @@ namespace mongo {
         init();
         Namespace n(ns);
 
-        DBT ndbt, ddbt;
-        ndbt.data = const_cast<void *>(static_cast<const void *>(ns));
-        ndbt.size = strlen(ns) + 1;
-        BSONObj serialized = details->serialize();
-        ddbt.data = const_cast<void *>(static_cast<const void *>(serialized.objdata()));
-        ddbt.size = serialized.objsize();
-        int r = nsdb->put(nsdb, cc().transaction().txn(), &ndbt, &ddbt, 0);
-        verify(r == 0);
+        update_ns(ns, details.get(), false);
 
         std::pair<NamespaceDetailsMap::iterator, bool> ret;
         ret = namespaces->insert(make_pair(n, details));
         dassert(ret.second == true);
     }
 
+    void NamespaceIndex::update_ns(const char *ns, NamespaceDetails *details, bool overwrite) {
+        Lock::assertWriteLocked(ns);
+        dassert(namespaces.get() != NULL);
+
+        DBT ndbt, ddbt;
+        ndbt.data = const_cast<void *>(static_cast<const void *>(ns));
+        ndbt.size = strlen(ns) + 1;
+        BSONObj serialized = details->serialize();
+        ddbt.data = const_cast<void *>(static_cast<const void *>(serialized.objdata()));
+        ddbt.size = serialized.objsize();
+        const int flags = overwrite ? 0 : DB_NOOVERWRITE;
+        int r = nsdb->put(nsdb, cc().transaction().txn(), &ndbt, &ddbt, flags);
+        verify(r == 0);
+    }
+
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
         dassert( i < NIndexesMax );
         unsigned long long x = ((unsigned long long) 1) << i;
         if( multiKeyIndexBits & x ) return;
-        unimplemented("NamespaceDetails durability");
-        multiKeyIndexBits |= x; //*getDur().writing(&multiKeyIndexBits) |= x;
+        multiKeyIndexBits |= x;
+        dassert(nsdetails(thisns) == this);
+        nsindex(thisns)->update_ns(thisns, this, true);
         NamespaceDetailsTransient::get(thisns).clearQueryCache();
     }
 
@@ -269,7 +257,7 @@ namespace mongo {
     IndexDetails& NamespaceDetails::addIndex(const char *thisns, bool resetTransient) {
         IndexDetails *id;
         try {
-            id = &idx(nIndexes() ,true);
+            id = &idx(nIndexes(), true);
         }
         catch(DBException&) {
             //allocExtra(thisns, nIndexes);
@@ -277,7 +265,7 @@ namespace mongo {
             ::abort(); // TODO: TokuDB: what to do?
         }
 
-        unimplemented("NamespaceDetails durability");
+        unimplemented("NamespaceDetails durability for nindexes, we currently don't store this because we don't yet have hot indexing, much less resume from shutdown during hot indexing");
         _nIndexes++; //(*getDur().writing(&nIndexes))++;
         if ( resetTransient )
             NamespaceDetailsTransient::get(thisns).addedIndex();

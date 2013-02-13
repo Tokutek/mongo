@@ -48,18 +48,6 @@ namespace mongo {
     }
 
     Database::~Database() {
-        tokulog() << "closing Database(" << name << ", " << path << ")" << endl;
-        // delegate to NamespaceIndex destructor
-#if 0
-        verify( Lock::isW() );
-        magic = 0;
-        size_t n = _files.size();
-        for ( size_t i = 0; i < n; i++ )
-            delete _files[i];
-        if( ccByLoc.size() ) {
-            log() << "\n\n\nWARNING: ccByLoc not empty on database close! " << ccByLoc.size() << ' ' << name << endl;
-        }
-#endif
     }
 
     Database::Database(const char *nm, bool& newDb, const string& _path )

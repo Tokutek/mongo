@@ -17,9 +17,9 @@
 #ifndef MONGO_DB_STORAGE_ENV_H
 #define MONGO_DB_STORAGE_ENV_H
 
-#include <db.h>
+#include "mongo/pch.h"
 
-#include "mongo/db/client.h"
+#include <db.h>
 
 namespace mongo {
 
@@ -30,8 +30,7 @@ namespace mongo {
         void startup(void);
         void shutdown(void);
 
-        // Creates the db if it doesn't already exist.
-        DB *db_open(const Client::Transaction &txn, const char *name);
+        DB *db_open(const string &name, bool may_create);
         void db_close(DB *db);
 
     } // namespace storage

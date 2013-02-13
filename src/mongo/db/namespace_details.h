@@ -374,7 +374,6 @@ namespace mongo {
     public:
         NamespaceIndex(const string &dir, const string &database) :
             nsdb(NULL), namespaces(NULL), dir_(dir), database_(database) {
-            tokulog() << "constructing NamespaceIndex for " << database_ << endl;
         }
 
         ~NamespaceIndex();
@@ -391,8 +390,10 @@ namespace mongo {
 
         void add_ns(const char *ns, shared_ptr<NamespaceDetails> details);
 
+        // If something changes that causes details->serialize() to be different, call this to persist it to the nsdb.
+        void update_ns(const char *ns, NamespaceDetails *details, bool overwrite);
+
         NamespaceDetails *details(const char *ns) {
-            tokulog() << "looking for NamespaceDetails for " << ns << endl;
             if (namespaces.get() == NULL) {
                 return 0;
             }
