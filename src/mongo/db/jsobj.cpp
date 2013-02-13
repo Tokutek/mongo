@@ -204,7 +204,7 @@ namespace mongo {
                     s << '"' << date().toString() << '"';
             }
             else
-                s << date();
+                s << date().asInt64();
             if ( format == Strict )
                 s << " }";
             else
