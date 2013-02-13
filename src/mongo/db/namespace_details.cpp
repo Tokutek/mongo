@@ -302,13 +302,14 @@ namespace mongo {
     bool NamespaceDetails::findById(const BSONObj &query, BSONObj &result) {
         int r;
 
+        Client::Transaction txn;
         // Get the _id index and extract the _id key from the query.
-        IndexDetails &idIndex = idx(0);
+        IndexDetails &idIndex = idx(findIdIndex());
         const BSONObj &key = idIndex.getKeyFromQuery(query);
 
         DB *db = idIndex.db();
         DBC *cursor;
-        r = db->cursor(db, NULL, &cursor, 0);
+        r = db->cursor(db, txn.txn(), &cursor, 0);
         verify(r == 0);
 
         DBT key_dbt;
@@ -321,6 +322,8 @@ namespace mongo {
         verify(r == 0 || r == DB_NOTFOUND);
         r = cursor->c_close(cursor);
         verify(r == 0);
+
+        txn.commit();
 
         if (!obj.isEmpty()) {
             result = obj;
