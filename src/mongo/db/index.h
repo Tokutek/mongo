@@ -131,6 +131,8 @@ namespace mongo {
 
         const BSONObj &info() const { return _info; }
 
+        void insert(const BSONObj &key, const BSONObj &val, bool overwrite);
+
     private:
         // Open dictionary representing the index on disk.
         DB *_db;

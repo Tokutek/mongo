@@ -27,6 +27,8 @@
 #include "ops/delete.h"
 #include "mongo/util/scopeguard.h"
 
+#include <db.h>
+
 #include "db/toku/env.h"
 #include "db/toku/index.h"
 
@@ -103,6 +105,18 @@ namespace mongo {
     const IndexSpec& IndexDetails::getSpec() const {
         SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
         return NamespaceDetailsTransient::get_inlock( info()["ns"].valuestr() ).getIndexSpec( this );
+    }
+
+    void IndexDetails::insert(const BSONObj &key, const BSONObj &val, bool overwrite) {
+        DBT kdbt, vdbt;
+        kdbt.data = const_cast<void *>(static_cast<const void *>(key.objdata()));
+        kdbt.size = key.objsize();
+        vdbt.data = const_cast<void *>(static_cast<const void *>(val.objdata()));
+        vdbt.size = val.objsize();
+        const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
+        int r = _db->put(_db, cc().transaction().txn(), &kdbt, &vdbt, flags);
+        uassert(16433, "key already exists in unique index", r != DB_KEYEXIST);
+        verify(r == 0);
     }
 
     void IndexSpec::reset( const IndexDetails * details ) {

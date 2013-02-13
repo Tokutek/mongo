@@ -101,9 +101,8 @@ namespace mongo {
 
     BSONObj NamespaceDetails::serialize() const {
         BSONArrayBuilder indexes_array;
-        typedef std::vector<shared_ptr<IndexDetails> >::const_iterator index_iterator_t;
-        for (index_iterator_t it = _indexes.begin(); it != _indexes.end(); it++) {
-            shared_ptr<IndexDetails> index(*it);
+        for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); it++) {
+            IndexDetails *index = it->get();
             indexes_array.append(index->info());
         }
         return BSON("multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
@@ -331,6 +330,48 @@ namespace mongo {
         }
     }
 
+    void NamespaceDetails::insert(const char *ns, const BSONObj &obj, bool overwrite) {
+        Lock::assertWriteLocked(ns);
+        Client::Transaction txn;
+
+        uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
+
+        BSONObj primary_key;
+        if (_indexes.size() > 1) {
+            // Have secondary indexes, it's worth it to precompute the key
+            IndexDetails &id_index = idx(findIdIndex());
+            BSONObjSet keys;
+            id_index.getKeysFromObject(obj, keys);
+            dassert(keys.size() == 1);
+            primary_key = *(keys.begin());
+        }
+
+        // TODO: use put_multiple API
+        int idxno;
+        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); it++, idxno++) {
+            IndexDetails *index = it->get();
+            BSONObjSet keys;
+            index->getKeysFromObject(obj, keys);
+            if (keys.size() > 1) {
+                setIndexIsMultikey(ns, idxno);
+            }
+
+            // TODO: handle clustering secondary keys
+            bool clustering = index->isIdIndex();
+            const BSONObj *val;
+            if (clustering) {
+                // TODO: strip key out
+                val = &obj;
+            } else {
+                val = &primary_key;
+            }
+            for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ki++) {
+                index->insert(*ki, *val, overwrite);
+            }
+        }
+
+        txn.commit();
+    }
 
     /* ------------------------------------------------------------------------- */
 

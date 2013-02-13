@@ -176,10 +176,13 @@ namespace mongo {
         // Query the _id index of this collection, get the full object in result
         bool findById(const BSONObj &key, BSONObj &result);
 
+        void insert(const char *ns, const BSONObj &obj, bool overwrite);
+
     private:
         // Each index (including the _id) index has an IndexDetails that describes it.
         int _nIndexes;
-        std::vector<shared_ptr<IndexDetails> > _indexes;
+        typedef std::vector<shared_ptr<IndexDetails> > IndexVector;
+        IndexVector _indexes;
 
         // TODO: TokuDB: Add in memory stats
         unsigned long long multiKeyIndexBits;

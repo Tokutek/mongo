@@ -20,6 +20,7 @@
 
 #include "mongo/db/client.h"
 #include "mongo/db/database.h"
+#include "mongo/db/oplog.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/util/log.h"
 
@@ -28,7 +29,12 @@ namespace mongo {
     void insertObject(const char *ns, const BSONObj &obj) {
         Client::WriteContext ctx(ns);
         NamespaceDetails *details = nsdetails_maybe_create(ns);
-        tokulog() << details << "->insert(" << obj << ")" << endl;
+        {
+            Client::Transaction txn;
+            details->insert(ns, obj, true);
+            logOp("i", ns, obj);
+            txn.commit();
+        }
     }
     
 } // namespace mongo
