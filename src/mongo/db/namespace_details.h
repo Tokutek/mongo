@@ -93,6 +93,7 @@ namespace mongo {
             return idx(_nIndexes);
         }
 
+        // TODO: replace with vector::iterator
         class IndexIterator {
         public:
             int pos() { return i; } // note this is the next one to come
