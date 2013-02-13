@@ -102,8 +102,7 @@ namespace mongo {
 
     const IndexSpec& IndexDetails::getSpec() const {
         SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
-        ::abort();
-        return NamespaceDetailsTransient::get_inlock( /* info.obj() */ BSONObj()["ns"].valuestr() ).getIndexSpec( this );
+        return NamespaceDetailsTransient::get_inlock( info()["ns"].valuestr() ).getIndexSpec( this );
     }
 
     void IndexSpec::reset( const IndexDetails * details ) {
