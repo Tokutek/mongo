@@ -78,6 +78,7 @@ namespace mongo {
             unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
         }
 
+        tokulog() << "Creating NamespaceDetails " << ns << endl;
         shared_ptr<IndexDetails> id_index(new IndexDetails(id_index_info(ns)));
         _indexes.push_back(id_index);
         _nIndexes++;
@@ -95,6 +96,7 @@ namespace mongo {
     }
 
     NamespaceDetails::~NamespaceDetails() {
+        tokulog() << "Closing NamespaceDetails " << idx(findIdIndex()).info()["name"].String() << endl;
     }
 
     BSONObj NamespaceDetails::serialize() const {
@@ -110,6 +112,7 @@ namespace mongo {
 
     NamespaceIndex::~NamespaceIndex() {
         if (nsdb != NULL) {
+            tokulog() << "Closing NamespaceIndex " << database_ << endl;
             storage::db_close(nsdb);
             dassert(namespaces.get() != NULL);
         } else {
@@ -130,6 +133,7 @@ namespace mongo {
     static int populate_nsindex_map(const DBT *key, const DBT *val, void *map_v) {
         Namespace n(static_cast<const char *>(key->data));
         BSONObj obj(static_cast<const char *>(val->data));
+        tokulog() << "Loading NamespaceDetails " << (string) n << endl;
         shared_ptr<NamespaceDetails> d(new NamespaceDetails(obj));
 
         NamespaceIndex::NamespaceDetailsMap *m = static_cast<NamespaceIndex::NamespaceDetailsMap *>(map_v);
@@ -151,6 +155,7 @@ namespace mongo {
 
         namespaces.reset(new NamespaceDetailsMap());
 
+        tokulog() << "Initializing NamespaceIndex " << database_ << endl;
         {
             Client::Transaction scan_txn;
             DBC *cursor;

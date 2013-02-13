@@ -33,11 +33,13 @@
 namespace mongo {
 
     IndexDetails::IndexDetails(const BSONObj &info) : _info(info.getOwned()) {
+        tokulog() << "Opening IndexDetails " << _info["name"].String() << endl;
         // Open the dictionary. Creates it if necessary.
         _db = storage::db_open(_info["name"].String(), true);
     }
 
     IndexDetails::~IndexDetails() {
+        tokulog() << "Closing IndexDetails " << _info["name"].String() << endl;
         storage::db_close(_db);
     }
 
