@@ -8,7 +8,7 @@ namespace mongo {
 
     TEST( ServerParameters, Simple1 ) {
         int f = 5;
-        ExportedServerParameter<int> ff( NULL, "ff", &f );
+        ExportedServerParameter<int> ff( NULL, "ff", &f, true, true );
         ASSERT_EQUALS( "ff" , ff.name() );
         ASSERT_EQUALS( 5, ff.get() );
 
@@ -29,7 +29,7 @@ namespace mongo {
     TEST( ServerParameters, Vector1 ) {
         vector<string> v;
 
-        ExportedServerParameter< vector<string> > vv( NULL, "vv", &v );
+        ExportedServerParameter< vector<string> > vv( NULL, "vv", &v, true, true );
 
         BSONObj x = BSON( "x" << BSON_ARRAY( "a" << "b" << "c" ) );
         vv.set( x.firstElement() );
