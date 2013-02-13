@@ -625,7 +625,7 @@ namespace mongo {
                             _scope->createFunction("delete _emitCt; delete _keyCt; delete _mrMap;");
                     _scope->invoke(cleanup, 0, 0, 0, true);
                 }
-                catch (const DBException &dbEx) {
+                catch (const DBException &) {
                     // not important because properties will be reset if scope is reused
                     LOG(1) << "MapReduce terminated during state destruction" << endl;
                 }
