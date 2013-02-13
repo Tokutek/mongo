@@ -52,7 +52,7 @@ namespace mongo {
         auto_ptr<IndexCursor> c( make( d , idxNo , id ) );
         c->init(startKey,endKey,endKeyInclusive,direction);
         c->initWithoutIndependentFieldRanges();
-        dassert( c->_dups.size() == 0 );
+        //dassert( c->_dups.size() == 0 );
         return c.release();
     }
 

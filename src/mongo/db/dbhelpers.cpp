@@ -70,7 +70,7 @@ namespace mongo {
     /* fetch a single object from collection ns that matches query
        set your db SavedContext first
     */
-    bool Helpers::findOne(const StringData& ns, const BSONObj &query, BSONObj& result, bool requireIndex) {
+    bool Helpers::findOne(const char *ns, const BSONObj &query, BSONObj& result, bool requireIndex) {
         ::abort();
         return false;
     }

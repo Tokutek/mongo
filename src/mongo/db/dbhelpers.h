@@ -62,8 +62,7 @@ namespace mongo {
 
            @return true if object found
         */
-        bool findOne(const StringData& ns, const BSONObj &query, BSONObj& result, bool requireIndex = false);
-        //DiskLoc findOne(const StringData& ns, const BSONObj &query, bool requireIndex);
+        bool findOne(const char *ns, const BSONObj &query, BSONObj& result, bool requireIndex = false);
 
         /**
          * have to be locked already
