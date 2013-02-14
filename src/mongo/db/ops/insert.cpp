@@ -30,10 +30,10 @@ namespace mongo {
         Client::WriteContext ctx(ns);
         NamespaceDetails *details = nsdetails_maybe_create(ns);
         {
-            Client::Transaction txn;
+            //Client::Transaction txn;
             details->insert(ns, obj, true);
             logOp("i", ns, obj);
-            txn.commit();
+            //txn.commit();
         }
     }
     
