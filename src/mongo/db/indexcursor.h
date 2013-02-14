@@ -112,17 +112,6 @@ namespace mongo {
         void skipAndCheck();
         void checkEnd();
 
-        /** selective audits on construction */
-        void audit();
-
-#if 0
-        void _audit() = 0;
-        DiskLoc _locate(const BSONObj& key, const DiskLoc& loc) = 0;
-        DiskLoc _advance(const DiskLoc& thisLoc, int& keyOfs, int direction, const char *caller) = 0;
-        void _advanceTo(DiskLoc &thisLoc, int &keyOfs, const BSONObj &keyBegin, int keyBeginLen, bool afterKey, const vector< const BSONElement * > &keyEnd, const vector< bool > &keyEndInclusive, const Ordering &order, int direction ) = 0;
-
-#endif
-
         /** set initial bucket */
         void initWithoutIndependentFieldRanges();
 
@@ -131,6 +120,10 @@ namespace mongo {
 
         // these are set in the construtor
         NamespaceDetails * const d;
+
+        // TODO: Get rid of idxNo. It only exists because we need to know if the
+        // idxNo'th index is multikey using the NamespaceDetails. We should be
+        // able to figure it out using the indexDetails;
         const int idxNo;
         const IndexDetails& indexDetails;
 
@@ -142,8 +135,7 @@ namespace mongo {
         bool _multikey; // this must be updated every getmore batch in case someone added a multikey
         BSONObj _order; // this is the same as indexDetails.keyPattern()
         Ordering _ordering;
-        //DiskLoc bucket;
-        int _direction; // 1=fwd,-1=reverse
+        int _direction;
         shared_ptr< FieldRangeVector > _bounds;
         auto_ptr< FieldRangeVectorIterator > _boundsIterator;
         shared_ptr< CoveredIndexMatcher > _matcher;

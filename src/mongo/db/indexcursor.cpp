@@ -83,7 +83,7 @@ namespace mongo {
         _endKeyInclusive =  endKeyInclusive;
         _direction = direction;
         _independentFieldRanges = false;
-        audit();
+        dassert( d->idxNo((IndexDetails&) indexDetails) == idxNo );
     }
 
     void IndexCursor::init(  const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction ) {
@@ -94,7 +94,7 @@ namespace mongo {
         _endKeyInclusive = true;
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
         _independentFieldRanges = true;
-        audit();
+        dassert( d->idxNo((IndexDetails&) indexDetails) == idxNo );
         startKey = _bounds->startKey();
         _boundsIterator->advance( startKey ); // handles initialization
         _boundsIterator->prepDive();
@@ -106,10 +106,6 @@ namespace mongo {
     /** Properly destroy forward declared class members. */
     IndexCursor::~IndexCursor() {}
     
-    void IndexCursor::audit() {
-        dassert( d->idxNo((IndexDetails&) indexDetails) == idxNo );
-    }
-
     void IndexCursor::initWithoutIndependentFieldRanges() {
         if ( indexDetails.getSpec().getType() ) {
             startKey = indexDetails.getSpec().getType()->fixKey( startKey );
