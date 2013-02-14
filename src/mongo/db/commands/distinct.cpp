@@ -99,8 +99,7 @@ namespace mongo {
                 nscanned++;
                 bool loadedRecord = false;
 
-                ::abort();
-                if ( cursor->currentMatches( &md ) /* && !cursor->getsetdup( cursor->currLoc() ) */ ) {
+                if ( cursor->currentMatches( &md ) && !cursor->getsetdup( cursor->currPK() ) ) {
                     n++;
 
                     BSONObj holder;
@@ -127,13 +126,6 @@ namespace mongo {
                     nscannedObjects++;
 
                 cursor->advance();
-
-#if 0
-                if (!cc->yieldSometimes( ClientCursor::MaybeCovered )) {
-                    cc.release();
-                    break;
-                }
-#endif
 
                 RARELY killCurrentOp.checkForInterrupt();
             }

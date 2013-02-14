@@ -41,11 +41,9 @@ namespace mongo {
         }
     }
 
-#if 0
     static void checkTooLarge(const BSONObj& newObj) {
         uassert( 12522 , "$ operator made object too large" , newObj.objsize() <= BSONObjMaxUserSize );
     }
-#endif
 
     /* note: this is only (as-is) called for
 
@@ -223,58 +221,27 @@ namespace mongo {
             NamespaceDetailsTransient::getCursor( ns, patternOrig, BSONObj(), planPolicy );
         d = nsdetails(ns);
         nsdt = &NamespaceDetailsTransient::get(ns);
-        //bool autoDedup = c->autoDedup();
 
         if( c->ok() ) {
-            ::abort();
-#if 0
-            set<DiskLoc> seenObjects;
+            set<BSONObj> seenObjects;
             MatchDetails details;
             auto_ptr<ClientCursor> cc;
             do {
 
-                if ( cc.get() == 0 &&
-                     client.allowedToThrowPageFaultException() &&
-                     ! c->currLoc().isNull() &&
-                     ! c->currLoc().rec()->likelyInPhysicalMemory() ) {
-                    throw PageFaultException( c->currLoc().rec() );
-                }
-
                 bool atomic = c->matcher() && c->matcher()->docMatcher().atomic();
 
                 if ( ! atomic && debug.nscanned > 0 ) {
+                    // TODO: Is this still true, since yielding has been removed?
                     // we need to use a ClientCursor to yield
                     if ( cc.get() == 0 ) {
                         shared_ptr< Cursor > cPtr = c;
                         cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , cPtr , ns ) );
                     }
 
-                    bool didYield;
-                    if ( ! cc->yieldSometimes( ClientCursor::WillNeed, &didYield ) ) {
-                        cc.release();
-                        break;
-                    }
                     if ( !c->ok() ) {
                         break;
                     }
-
-                    if ( didYield ) {
-                        d = nsdetails(ns);
-                        if ( ! d )
-                            break;
-                        nsdt = &NamespaceDetailsTransient::get(ns);
-                        if ( mods.get() && ! mods->isIndexed() ) {
-                            // we need to re-check indexes
-                            set<string> bgKeys;
-                            if ( d->indexBuildInProgress )
-                                d->inProgIdx().keyPattern().getFieldNames(bgKeys);
-                            mods->updateIsIndexed( nsdt->indexKeys() , &bgKeys );
-                            modsIsIndexed = mods->isIndexed();
-                        }
-
-                    }
-
-                } // end yielding block
+                }
 
                 debug.nscanned++;
 
@@ -291,17 +258,13 @@ namespace mongo {
                     continue;
                 }
 
-                //Record* r = c->_current();
-                ::abort();
-                DiskLoc loc = minDiskLoc; //c->currLoc();
-
-                if ( c->getsetdup( loc ) && autoDedup ) {
+                BSONObj currPK = c->currPK();
+                if ( c->getsetdup( currPK ) ) {
                     c->advance();
                     continue;
                 }
 
-                //BSONObj js = BSONObj::make(r);
-
+                BSONObj currentObj = c->current();
                 BSONObj pattern = patternOrig;
 
                 if ( logop ) {
@@ -311,16 +274,13 @@ namespace mongo {
                     // with the original pattern.  This isn't replay-safe.
                     // It might make sense to suppress the log instead
                     // if there's no id.
-#if 0
-                    if ( js.getObjectID( id ) ) {
+                    if ( currentObj.getObjectID( id ) ) {
                         idPattern.append( id );
                         pattern = idPattern.obj();
                     }
                     else {
                         uassert( 10157 ,  "multi-update requires all modified objects to have an _id" , ! multi );
                     }
-#endif
-                    ::abort();
                 }
 
                 /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
@@ -331,24 +291,17 @@ namespace mongo {
                         // go to next record in case this one moves
                         c->advance();
 
-                        // Update operations are deduped for cursors that implement their own
-                        // deduplication.  In particular, some geo cursors are excluded.
-                        if ( autoDedup ) {
+                        if ( seenObjects.count( currPK ) ) {
+                            continue;
+                        }
 
-                            if ( seenObjects.count( loc ) ) {
-                                continue;
-                            }
-
-                            // SERVER-5198 Advance past the document to be modified, provided
-                            // deduplication is enabled, but see SERVER-5725.
-                            //while( c->ok() && loc == c->currLoc() ) {
-                            //    c->advance();
-                            //}
-                            // TODO: Look up SERVER-5725 and see if it matters to TokuDB
+                        // SERVER-5198 Advance past the document to be modified, provided
+                        // deduplication is enabled, but see SERVER-5725.
+                        // TODO: Look up SERVER-5725 and see if it matters to TokuDB
+                        while( c->ok() && currPK == c->currPK() ) {
+                            c->advance();
                         }
                     }
-
-                    const BSONObj& onDisk = loc.obj();
 
                     ModSet* useMods = mods.get();
                     bool forceRewrite = false;
@@ -360,65 +313,44 @@ namespace mongo {
                         forceRewrite = true;
                     }
 
-                    auto_ptr<ModSetState> mss = useMods->prepare( onDisk );
+                    auto_ptr<ModSetState> mss = useMods->prepare( currentObj );
                     
+#if 0
                     // tokudb: modsIsIndexed must be true if there exists at least one clustering index
                     for (int idx_i = 0; idx_i < d->nIndexesBeingBuilt(); idx_i++) {
-#if 0
                         IndexDetails &idx = d->idx(idx_i);
                         if (idx.info.obj()["clustering"].trueValue()) {
                             modsIsIndexed = true;
                             break;
                         }
+                    }
 #endif
-                        ::abort(); // TODO: Get clustering value from the index details
-                    }
-
-                    bool willAdvanceCursor = multi && c->ok() && ( modsIsIndexed || ! mss->canApplyInPlace() );
-
-                    if ( willAdvanceCursor ) {
-                        if ( cc.get() ) {
-                            cc->setDoingDeletes( true );
-                        }
-                        //c->prepareToTouchEarlierIterate();
-                    }
 
                     if ( modsIsIndexed <= 0 && mss->canApplyInPlace() ) {
-                        mss->applyModsInPlace( true );// const_cast<BSONObj&>(onDisk) );
+                        mss->applyModsInPlace( true );
 
                         DEBUGUPDATE( "\t\t\t doing in place update" );
                         if ( profile && !multi )
                             debug.fastmod = true;
 
                         if ( modsIsIndexed ) {
-                            seenObjects.insert( loc );
+                            seenObjects.insert( currPK );
                         }
-
-                        //d->paddingFits();
                     }
                     else {
-                        if ( rs )
-                            rs->goingToDelete( onDisk );
-
                         BSONObj newObj = mss->createNewFromMods();
                         checkTooLarge(newObj);
-                        DiskLoc newLoc = minDiskLoc; ::abort();
+                        ::abort();
 #if 0
-                        utheDataFileMgr.updateRecord(ns,
-                                                                     d,
-                                                                     nsdt,
-                                                                     r,
-                                                                     loc,
-                                                                     newObj.objdata(),
-                                                                     newObj.objsize(),
-                                                                     debug);
+                        theDataFileMgr.updateRecord(ns,
+                                                    d,
+                                                    nsdt,
+                                                    r,
+                                                    loc,
+                                                    newObj.objdata(),
+                                                    newObj.objsize(),
+                                                    debug);
 #endif
-
-                        if ( newLoc != loc || modsIsIndexed ){
-                            // log() << "Moved obj " << newLoc.obj()["_id"] << " from " << loc << " to " << newLoc << endl;
-                            // object moved, need to make sure we don' get again
-                            seenObjects.insert( newLoc );
-                        }
 
                     }
 
@@ -444,12 +376,8 @@ namespace mongo {
                     numModded++;
                     if ( ! multi )
                         return UpdateResult( 1 , 1 , numModded , BSONObj() );
-                    if ( willAdvanceCursor )
-                        ; //c->recoverFromTouchingEarlierIterate();
 
-                    // TODO: What do we do here?
-                    ::abort(); //getDur().commitIfNeeded();
-
+                    // TODO: Vanilla mongo did commitIfNeeded her. What do we do?
                     continue;
                 }
 
@@ -457,14 +385,14 @@ namespace mongo {
 
                 BSONElementManipulator::lookForTimestamps( updateobj );
                 checkNoMods( updateobj );
-                ::abort(); //theDataFileMgr.updateRecord(ns, d, nsdt, r, loc , updateobj.objdata(), updateobj.objsize(), debug, su);
+                ::abort();
+                //theDataFileMgr.updateRecord(ns, d, nsdt, r, loc , updateobj.objdata(), updateobj.objsize(), debug, su);
                 if ( logop ) {
                     DEV wassert( !su ); // super used doesn't get logged, this would be bad.
                     logOp("u", ns, updateobj, &pattern, 0, fromMigrate );
                 }
                 return UpdateResult( 1 , 0 , 1 , BSONObj() );
             } while ( c->ok() );
-#endif
         } // endif
 
         if ( numModded )

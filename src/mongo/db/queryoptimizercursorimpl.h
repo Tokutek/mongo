@@ -54,18 +54,16 @@ namespace mongo {
             return _match == True && oldMatch != True;
         }
         bool knowMatch() const { return _match != Unknown; }
-#if 0
-        void countMatch( const DiskLoc &loc ) {
-            if ( !_counted && _match == True && !getsetdup( loc ) ) {
+        void countMatch( const BSONObj &pk ) {
+            if ( !_counted && _match == True && !getsetdup( pk ) ) {
                 ++_cumulativeCount;
                 ++_count;
                 _counted = true;
             }
         }
-        bool wouldCountMatch( const DiskLoc &loc ) const {
-            return !_counted && _match == True && !getdup( loc );
+        bool wouldCountMatch( const BSONObj &pk ) const {
+            return !_counted && _match == True && !getdup( pk );
         }
-#endif
 
         bool enoughCumulativeMatchesToChooseAPlan() const {
             // This is equivalent to the default condition for switching from
@@ -89,21 +87,19 @@ namespace mongo {
         long long nscanned() const { return _nscanned; }
         long long &aggregateNscanned() const { return _aggregateNscanned; }
     private:
-#if 0
-        bool getsetdup( const DiskLoc &loc ) {
+        bool getsetdup( const BSONObj &pk ) {
             if ( !_checkDups ) {
                 return false;
             }
-            pair<set<DiskLoc>::iterator, bool> p = _dups.insert( loc );
+            pair<set<BSONObj>::iterator, bool> p = _dups.insert( pk );
             return !p.second;
         }
-        bool getdup( const DiskLoc &loc ) const {
+        bool getdup( const BSONObj &pk ) const {
             if ( !_checkDups ) {
                 return false;
             }
-            return _dups.find( loc ) != _dups.end();
+            return _dups.find( pk ) != _dups.end();
         }
-#endif
         long long &_aggregateNscanned;
         long long _nscanned;
         int _cumulativeCount;
@@ -112,25 +108,24 @@ namespace mongo {
         enum MatchState { Unknown, False, True };
         MatchState _match;
         bool _counted;
-        //set<DiskLoc> _dups;
+        set<BSONObj> _dups;
     };
     
     /** Dup tracking class, optimizing one common case with small set and few initial reads. */
-#if 0
     class SmallDupSet {
     public:
         SmallDupSet() : _accesses() {
             _vec.reserve( 250 );
         }
-        /** @return true if @param 'loc' already added to the set, false if adding to the set in this call. */
-        bool getsetdup( const DiskLoc &loc ) {
+        /** @return true if @param 'pk' already added to the set, false if adding to the set in this call. */
+        bool getsetdup( const BSONObj &pk ) {
             access();
-            return vec() ? getsetdupVec( loc ) : getsetdupSet( loc );
+            return vec() ? getsetdupVec( pk ) : getsetdupSet( pk );
         }
-        /** @return true when @param loc in the set. */
-        bool getdup( const DiskLoc &loc ) {
+        /** @return true when @param pk in the set. */
+        bool getdup( const BSONObj &pk ) {
             access();
-            return vec() ? getdupVec( loc ) : getdupSet( loc );
+            return vec() ? getdupVec( pk ) : getdupSet( pk );
         }            
     private:
         void access() {
@@ -145,33 +140,32 @@ namespace mongo {
         bool vec() const {
             return _set.size() == 0;
         }
-        bool getsetdupVec( const DiskLoc &loc ) {
-            if ( getdupVec( loc ) ) {
+        bool getsetdupVec( const BSONObj &pk ) {
+            if ( getdupVec( pk ) ) {
                 return true;
             }
-            _vec.push_back( loc );
+            _vec.push_back( pk );
             return false;
         }
-        bool getdupVec( const DiskLoc &loc ) const {
-            for( vector<DiskLoc>::const_iterator i = _vec.begin(); i != _vec.end(); ++i ) {
-                if ( *i == loc ) {
+        bool getdupVec( const BSONObj &pk ) const {
+            for( vector<BSONObj>::const_iterator i = _vec.begin(); i != _vec.end(); ++i ) {
+                if ( *i == pk ) {
                     return true;
                 }
             }
             return false;
         }
-        bool getsetdupSet( const DiskLoc &loc ) {
-            pair<set<DiskLoc>::iterator, bool> p = _set.insert(loc);
+        bool getsetdupSet( const BSONObj &pk ) {
+            pair<set<BSONObj>::iterator, bool> p = _set.insert(pk);
             return !p.second;
         }
-        bool getdupSet( const DiskLoc &loc ) {
-            return _set.count( loc ) > 0;
+        bool getdupSet( const BSONObj &pk ) {
+            return _set.count( pk ) > 0;
         }
-        vector<DiskLoc> _vec;
-        set<DiskLoc> _set;
+        vector<BSONObj> _vec;
+        set<BSONObj> _set;
         long long _accesses;
     };
-#endif
     
     class QueryPlanSummary;
     class MultiPlanScanner;

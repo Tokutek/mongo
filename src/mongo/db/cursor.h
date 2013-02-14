@@ -40,9 +40,15 @@ namespace mongo {
         virtual ~Cursor() {}
         virtual bool ok() = 0;
         bool eof() { return !ok(); }
+        /* current associated document for the cursor.
+         * implementation may or may not perform another query to satisfy this call. */
         virtual BSONObj current() = 0;
-        virtual bool advance() = 0; /*true=ok*/
+        /* returns true if the cursor was able to advance, false otherwise */
+        virtual bool advance() = 0;
+        /* current key in the index. */
         virtual BSONObj currKey() const { return BSONObj(); }
+        /* current associated primary key (_id key) for the document */
+        virtual BSONObj currPK() const { return BSONObj(); }
 
         /* Implement these if you want the cursor to be "tailable" */
 
@@ -69,14 +75,12 @@ namespace mongo {
 
         /* used for multikey index traversal to avoid sending back dups. see Matcher::matches().
            if a multikey index traversal:
-             if loc has already been sent, returns true.
+             if primary key (ie: _id) has already been sent, returns true.
              otherwise, marks loc as sent.
         */
-        //virtual bool getsetdup(DiskLoc loc) = 0;
+        virtual bool getsetdup(const BSONObj &pk) = 0;
 
         virtual bool isMultiKey() const = 0;
-
-        virtual bool autoDedup() const { return true; }
 
         /**
          * return true if the keys in the index have been modified from the main doc
@@ -90,8 +94,7 @@ namespace mongo {
         virtual BSONObj prettyIndexBounds() const { return BSONArray(); }
 
         /**
-         * If true, this is an unindexed cursor over a capped collection.  Currently such cursors must
-         * not own a delegate ClientCursor, due to the implementation of ClientCursor::aboutToDelete(). - SERVER-4563
+         * If true, this is an unindexed cursor over a capped collection.
          */
         virtual bool capped() const { return false; }
 
@@ -164,7 +167,7 @@ namespace mongo {
             ::abort();
         }
         virtual bool tailable() { return _tailable; }
-        //virtual bool getsetdup(DiskLoc loc) { return false; }
+        virtual bool getsetdup(const BSONObj &pk) { return false; }
         virtual bool isMultiKey() const { return false; }
         virtual bool modifiedKeys() const { return false; }
         virtual bool supportGetMore() { return true; }

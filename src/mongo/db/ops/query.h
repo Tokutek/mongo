@@ -201,19 +201,17 @@ namespace mongo {
         int _bufferedMatches;
     };
 
-    /** Helper class for deduping DiskLocs */
-#if 0
-    class DiskLocDupSet {
+    /** Helper class for deduping primary keys (_id keys) */
+    class PKDupSet {
     public:
         /** @return true if dup, otherwise return false and insert. */
-        bool getsetdup( const DiskLoc &loc ) {
-            pair<set<DiskLoc>::iterator, bool> p = _dups.insert(loc);
+        bool getsetdup( const BSONObj &pk ) {
+            pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk);
             return !p.second;
         }
     private:
-        set<DiskLoc> _dups;
+        set<BSONObj> _dups;
     };
-#endif
 
     /**
      * Build strategy for a QueryOptimizerCursor containing some in order and some out of order
@@ -234,7 +232,7 @@ namespace mongo {
         virtual int bufferedMatches() const;
         virtual void finishedFirstBatch();
         bool handleReorderMatch();
-        //DiskLocDupSet _scanAndOrderDups;
+        PKDupSet _scanAndOrderDups;
         OrderedBuildStrategy _orderedBuild;
         scoped_ptr<ReorderBuildStrategy> _reorderBuild;
         bool _reorderedMatches;

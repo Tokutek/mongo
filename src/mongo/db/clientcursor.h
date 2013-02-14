@@ -47,33 +47,10 @@ namespace mongo {
     class ClientCursor;
     class ParsedQuery;
 
-#if 0
-    struct ByLocKey {
-
-        ByLocKey( const DiskLoc & l , const CursorId& i ) : loc(l), id(i) {}
-
-        static ByLocKey min( const DiskLoc& l ) { return ByLocKey( l , numeric_limits<long long>::min() ); }
-        static ByLocKey max( const DiskLoc& l ) { return ByLocKey( l , numeric_limits<long long>::max() ); }
-
-        bool operator<( const ByLocKey &other ) const {
-            int x = loc.compare( other.loc );
-            if ( x )
-                return x < 0;
-            return id < other.id;
-        }
-
-        DiskLoc loc;
-        CursorId id;
-
-    };
-#endif
-
     /* todo: make this map be per connection.  this will prevent cursor hijacking security attacks perhaps.
      *       ERH: 9/2010 this may not work since some drivers send getMore over a different connection
     */
     typedef map<CursorId, ClientCursor*> CCById;
-    // TODO: TokuDB What do we need this for? What features? How do we do it without disklocs?
-    //typedef map<ByLocKey, ClientCursor*> CCByLoc;
 
     extern BSONObj id_obj;
 
@@ -194,61 +171,6 @@ namespace mongo {
         */
         static void invalidate(const char *ns);
 
-        /**
-         * @param microsToSleep -1 : ask client
-         *                     >=0 : sleep for that amount
-         * @param recordToLoad after yielding lock, load this record with only mmutex
-         * do a dbtemprelease
-         * note: caller should check matcher.docMatcher().atomic() first and not yield if atomic -
-         *       we don't do herein as this->matcher (above) is only initialized for true queries/getmore.
-         *       (ie not set for remote/update)
-         * @return if the cursor is still valid.
-         *         if false is returned, then this ClientCursor should be considered deleted -
-         *         in fact, the whole database could be gone.
-         */
-#if 0
-        bool yield( int microsToSleep = -1 , Record * recordToLoad = 0 );
-
-        enum RecordNeeds {
-            DontNeed = -1 , MaybeCovered = 0 , WillNeed = 100
-        };
-            
-        /**
-         * @param needRecord whether or not the next record has to be read from disk for sure
-         *                   if this is true, will yield of next record isn't in memory
-         * @param yielded true if a yield occurred, and potentially if a yield did not occur
-         * @return same as yield()
-         */
-        bool yieldSometimes( RecordNeeds need, bool *yielded = 0 );
-
-        static int suggestYieldMicros();
-        static void staticYield( int micros , const StringData& ns , Record * rec );
-
-        struct YieldData { CursorId _id; bool _doingDeletes; };
-        bool prepareToYield( YieldData &data );
-        static bool recoverFromYield( const YieldData &data );
-        
-        struct YieldLock : boost::noncopyable {
-            
-            explicit YieldLock( ptr<ClientCursor> cc );
-            
-            ~YieldLock();
-            
-            /**
-             * @return if the cursor is still ok
-             *         if it is, we also relock
-             */
-            bool stillOk();
-
-            void relock();
-
-        private:
-            const bool _canYield;
-            YieldData _data;
-            scoped_ptr<dbtempreleasecond> _unlock;
-        };
-#endif
-
         // --- some pass through helpers for Cursor ---
 
         Cursor* c() const { return _c.get(); }
@@ -264,7 +186,7 @@ namespace mongo {
         bool ok() { return _c->ok(); }
         bool advance() { return _c->advance(); }
         BSONObj current() { return _c->current(); }
-        //DiskLoc currLoc() { return _c->currLoc(); }
+        BSONObj currPK() { return _c->currPK(); }
         BSONObj currKey() const { return _c->currKey(); }
 
         /**
@@ -293,7 +215,9 @@ namespace mongo {
 
         void fillQueryResultFromObj( BufBuilder &b, const MatchDetails* details = NULL ) const;
 
-        bool currentIsDup() { /* TODO: Figure out what all this dup stuff is about */ ::abort(); return false; /* _c->getsetdup(  _c->currLoc() minDiskLoc ); */ }
+        bool currentIsDup() {
+            return _c->getsetdup( _c->currPK() );
+        }
 
         bool currentMatches() {
             if ( ! _c->matcher() )
@@ -305,8 +229,6 @@ namespace mongo {
         ShardChunkManagerPtr getChunkManager(){ return _chunkManager; }
 
     private:
-        //void setLastLoc_inlock(DiskLoc);
-
         static ClientCursor* find_inlock(CursorId id, bool warn = true) {
             CCById::iterator it = clientCursorsById.find(id);
             if ( it == clientCursorsById.end() ) {
@@ -317,12 +239,6 @@ namespace mongo {
             return it->second;
         }
         
-        /* call when cursor's location changes so that we can update the
-         cursorsbylocation map.  if you are locked and internally iterating, only
-         need to call when you are ready to "unlock".
-         */
-        void updateLocation();
-
     public:
         static ClientCursor* find(CursorId id, bool warn = true) {
             recursive_scoped_lock lock(ccmutex);
@@ -344,14 +260,6 @@ namespace mongo {
          */
         static int erase( int n , long long * ids );
 
-        void mayUpgradeStorage() {
-            /* if ( !ids_.get() )
-                return;
-            stringstream ss;
-            ss << ns << "." << cursorid;
-            ids_->mayUpgradeStorage( ss.str() );*/
-        }
-
         /**
          * @param millis amount of idle passed time since last call
          */
@@ -361,8 +269,6 @@ namespace mongo {
         void updateSlaveLocation( CurOp& curop );
 
         unsigned idleTime() const { return _idleAgeMillis; }
-
-        void setDoingDeletes( bool doingDeletes ) {_doingDeletes = doingDeletes; }
 
         void slaveReadTill( const OpTime& t ) { _slaveReadTill = t; }
         
@@ -375,7 +281,6 @@ namespace mongo {
 
         static void appendStats( BSONObjBuilder& result );
         static unsigned numCursors() { return clientCursorsById.size(); }
-        //static void aboutToDelete(const DiskLoc& dl);
         static void find( const string& ns , set<CursorId>& all );
 
 
@@ -384,10 +289,6 @@ namespace mongo {
         // cursors normally timeout after an inactivy period to prevent excess memory use
         // setting this prevents timeout of the cursor in question.
         void noTimeout() { _pinValue++; }
-
-        //CCByLoc& byLoc() { return _db->ccByLoc; }
-        
-        //Record* _recordForYield( RecordNeeds need );
 
     private:
 
@@ -413,9 +314,6 @@ namespace mongo {
            100 = in use (pinned) -- see Pointer class
         */
         unsigned _pinValue;
-
-        bool _doingDeletes; // when true we are the delete and aboutToDelete shouldn't manipulate us
-        //ElapsedTracker _yieldSometimesTracker;
 
         ShardChunkManagerPtr _chunkManager;
 

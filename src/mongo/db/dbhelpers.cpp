@@ -115,8 +115,7 @@ namespace mongo {
         shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor( ns.c_str(), query );
 
         while( c->ok() ) {
-            // TODO: Deduplication
-            if ( c->currentMatches() /* && !c->getsetdup( c->currLoc() )*/ ) {
+            if ( c->currentMatches() && !c->getsetdup( c->currPK() ) ) {
                 all.push_back( c->current() );
             }
             c->advance();

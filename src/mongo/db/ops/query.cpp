@@ -109,8 +109,6 @@ namespace mongo {
 
             start = cc->pos();
             Cursor *c = cc->c();
-            //c->recoverFromYield();
-            //DiskLoc last;
 
             // This manager may be stale, but it's the state of chunking when the cursor was created.
             ShardChunkManagerPtr manager = cc->getChunkManager();
@@ -152,12 +150,10 @@ namespace mongo {
                     LOG(2) << "cursor skipping document in un-owned chunk: " << c->current() << endl;
                 }
                 else {
-#if 0
-                    if( c->getsetdup(c->currLoc()) ) {
+                    if( c->getsetdup(c->currPK()) ) {
                         //out() << "  but it's a dup \n";
                     }
                     else {
-                        last = c->currLoc();
                         n++;
 
                         cc->fillQueryResultFromObj( b, &details );
@@ -167,39 +163,14 @@ namespace mongo {
                             cc->incPos( n );
                             break;
                         }
-                        // TODO: Kill the disklocs
                     }
-#endif
-                    ::abort();
                 }
                 c->advance();
-
-#if 0
-                if ( ! cc->yieldSometimes( ( c->ok() && c->keyFieldsOnly() ) ?
-                                          ClientCursor::DontNeed : ClientCursor::WillNeed ) ) {
-                    ClientCursor::erase(cursorid);
-                    cursorid = 0;
-                    cc = 0;
-                    break;
-                }
-#endif
-                ::abort();
             }
             
             if ( cc ) {
-#if 0
-                if ( c->supportYields() ) {
-                    ClientCursor::YieldData data;
-                    verify( cc->prepareToYield( data ) );
-                }
-                else {
-                    cc->c()->noteLocation();
-                }
-                cc->mayUpgradeStorage();
-                cc->storeOpForSlave( last );
+                //cc->storeOpForSlave( last );
                 exhaust = cc->queryOptions() & QueryOption_Exhaust;
-#endif
-                ::abort();
             }
         }
 
@@ -341,12 +312,9 @@ namespace mongo {
     }
     
     bool OrderedBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
-        // TODO: Deduplication
-#if 0
-        if ( _cursor->getsetdup( loc ) ) {
+        if ( _cursor->getsetdup(_cursor->currPK()) ) {
             return orderedMatch = false;
         }
-#endif
         if ( _skip > 0 ) {
             --_skip;
             return orderedMatch = false;
@@ -382,12 +350,9 @@ namespace mongo {
 
     bool ReorderBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
         orderedMatch = false;
-        // TODO: Deduplication
-#if 0
-        if ( _cursor->getsetdup( /* _cursor->currLoc() */ minDiskLoc) ) {
+        if ( _cursor->getsetdup(_cursor->currPK()) ) {
             return false;
         }
-#endif
         _handleMatchNoDedup();
         return true;
     }
@@ -453,14 +418,9 @@ namespace mongo {
     }
     
     bool HybridBuildStrategy::handleReorderMatch() {
-        ::abort();
-#if 0
-        DiskLoc loc = minDiskLoc; //_cursor->currLoc();
-        if ( _scanAndOrderDups.getsetdup( loc ) ) {
+        if ( _scanAndOrderDups.getsetdup(_cursor->currPK()) ) {
             return false;
         }
-#endif
-        ::abort();
         try {
             _reorderBuild->_handleMatchNoDedup();
         } catch ( const UserException &e ) {

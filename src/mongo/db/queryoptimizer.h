@@ -643,17 +643,15 @@ namespace mongo {
                     const QueryOp &op, long long nscanned );
 
         virtual bool ok() { return _c->ok(); }
-        //virtual Record* _current() { return _c->_current(); }
         virtual BSONObj current() { return _c->current(); }
-        //virtual DiskLoc currLoc() { return _c->currLoc(); }
+        virtual BSONObj currPK() const { return _c->currPK(); }
         virtual bool advance();
         virtual BSONObj currKey() const { return _c->currKey(); }
-        //virtual DiskLoc refLoc() { return _c->refLoc(); }
         virtual bool supportGetMore() { return true; }
         virtual BSONObj indexKeyPattern() { return _c->indexKeyPattern(); }
 
         /** Deduping documents from a prior cursor is handled by the matcher. */
-        //virtual bool getsetdup(DiskLoc loc) { return _c->getsetdup( loc ); }
+        virtual bool getsetdup(const BSONObj &pk) { return _c->getsetdup( pk ); }
 
         virtual bool modifiedKeys() const { return true; }
 

@@ -61,7 +61,6 @@ namespace mongo {
 
         shared_ptr< Cursor > cPtr = creal;
         auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout, cPtr, ns) );
-        cc->setDoingDeletes( true );
 
         CursorId id = cc->cursorid();
 

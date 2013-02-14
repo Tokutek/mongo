@@ -42,8 +42,6 @@ namespace mongo {
             //return applySkipLimit( d->stats.nrecords , cmd );
         }
         
-        ::abort();
-#if 0
         long long count = 0;
         long long skip = cmd["skip"].numberLong();
         long long limit = cmd["limit"].numberLong();
@@ -67,10 +65,6 @@ namespace mongo {
                         ccPointer.reset( new ClientCursor( QueryOption_NoCursorTimeout, cursor, ns ) );
                     }
                 }
-                else if ( !ccPointer->yieldSometimes( simpleEqualityMatch ? ClientCursor::DontNeed : ClientCursor::MaybeCovered ) ||
-                         !cursor->ok() ) {
-                    break;
-                }
                 
                 // With simple equality matching there is no need to use the matcher because the bounds
                 // are enforced by the FieldRangeVectorIterator and only key fields have constraints.  There
@@ -79,11 +73,8 @@ namespace mongo {
                 // NOTE In the distant past we used a min/max bounded IndexCursor with a shallow
                 // equality comparison to check for matches in the simple match case.  That may be
                 // more performant, but I don't think we've measured the performance.
-                //
-                // tokudb: simpleEqualityMatch breaks toku indexes but seems to be unnecessary even for
-                // mongo indexes, according to the above comment
-                if ( //simpleEqualityMatch ||
-                    ( cursor->currentMatches() && !cursor->getsetdup( cursor->currLoc() ) ) ) {
+                if ( simpleEqualityMatch ||
+                    ( cursor->currentMatches() && !cursor->getsetdup( cursor->currPK() ) ) ) {
                     
                     if ( skip > 0 ) {
                         --skip;
@@ -114,7 +105,6 @@ namespace mongo {
               << " failed with exception: " << err << " code: " << errCode
               << endl;
         return -2;
-#endif
     }
     
 } // namespace mongo

@@ -60,21 +60,16 @@ namespace mongo {
         bool supportGetMore() { return true; }
 
         /**
-         * used for multikey index traversal to avoid sending back dups. see Matcher::matches().
-         * if a multikey index traversal:
-         *   if loc has already been sent, returns true.
-         *   otherwise, marks loc as sent.
-         * @return false if the loc has not been seen
+         * used for multikey index traversal to avoid sending back dups. see Matcher::matches() and cursor.h
+         * @return false if the pk has not been seen
          */
-#if 0
-        bool getsetdup(DiskLoc loc) {
+        bool getsetdup(const BSONObj &pk) {
             if( _multikey ) {
-                pair<set<DiskLoc>::iterator, bool> p = _dups.insert(loc);
+                pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk);
                 return !p.second;
             }
             return false;
         }
-#endif
 
         bool modifiedKeys() const { return _multikey; }
         bool isMultiKey() const { return _multikey; }
@@ -128,7 +123,7 @@ namespace mongo {
         const IndexDetails& indexDetails;
 
         // these are all set in init()
-        //set<DiskLoc> _dups;
+        set<BSONObj> _dups;
         BSONObj startKey;
         BSONObj endKey;
         bool _endKeyInclusive;

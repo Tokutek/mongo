@@ -89,8 +89,6 @@ namespace mongo {
             // The basic and btree cursors used by this implementation do not supply their own
             // matchers, and a matcher from a query plan will be used instead.
             verify( !_c->matcher() );
-            // Such cursors all support deduplication.
-            verify( _c->autoDedup() );
 
             // The query plan must have a matcher.  The matcher's constructor performs some aspects
             // of query validation that should occur as part of this class's init() if not handled
@@ -133,8 +131,8 @@ namespace mongo {
         virtual QueryOp *createChild() const {
             return new QueryOptimizerCursorOp( _matchCounter.aggregateNscanned(), _selectionPolicy, _requireOrder, _alwaysCountMatches, _matchCounter.cumulativeCount() );
         }
-        //DiskLoc currLoc() const { return _c ? _c->currLoc() : DiskLoc(); }
         BSONObj currKey() const { return _c ? _c->currKey() : BSONObj(); }
+        BSONObj currPK() const { return _c ? _c->currPK() : BSONObj(); }
         bool currentMatches( MatchDetails *details ) {
             if ( !_c || !_c->ok() ) {
                 _matchCounter.setMatch( false );
@@ -148,18 +146,15 @@ namespace mongo {
 
             bool match = queryPlan().matcher()->matchesCurrent( _c.get(), details );
             // Cache the match, so we can count it in mayAdvance().
-            ::abort();
-#if 0
             bool newMatch = _matchCounter.setMatch( match );
 
             if ( _explainPlanInfo ) {
-                bool countableMatch = newMatch && _matchCounter.wouldCountMatch( /* _c->currLoc() */ minDiskLoc);
+                bool countableMatch = newMatch && _matchCounter.wouldCountMatch( _c->currPK() );
                 _explainPlanInfo->noteIterate( countableMatch,
                                               countableMatch || details->hasLoadedRecord(),
                                               *_c );
             }
 
-#endif
             return match;
         }
         virtual bool mayRecordPlan() const {
@@ -191,8 +186,7 @@ namespace mongo {
                 if ( !_matchCounter.knowMatch() ) {
                     currentMatches( 0 );
                 }
-                ::abort();
-                //_matchCounter.countMatch( currLoc() );
+                _matchCounter.countMatch( currPK() );
             }
             if ( _mustAdvance ) {
                 _c->advance();
@@ -215,10 +209,6 @@ namespace mongo {
             return _alwaysCountMatches || !queryPlan().scanAndOrderRequired();
         }
 
-        void recordCursorLocation() {
-        }
-        void checkCursorAdvanced() {
-        }
         void handleCursorAdvanced() {
             _mustAdvance = false;
             _matchCounter.resetMatch();
@@ -246,27 +236,6 @@ namespace mongo {
      * the scanner's cursors as they become available.  Once the scanner chooses
      * a single plan, this cursor becomes a simple wrapper around that single
      * plan's cursor (called the 'takeover' cursor).
-     *
-     * A QueryOptimizerCursor employs a delegation strategy to ensure consistency after writes
-     * during its initial phase when multiple delegate Cursors may be active (before _takeover is
-     * set).
-     *
-     * Before takeover, the return value of refLoc() will be isNull(), causing ClientCursor to
-     * ignore a QueryOptimizerCursor (though not its delegate Cursors) when a delete occurs.
-     * Requests to prepareToYield() or recoverFromYield() will be forwarded to
-     * prepareToYield()/recoverFromYield() on ClientCursors of delegate Cursors.  If a delegate
-     * Cursor becomes eof() or invalid after a yield recovery,
-     * QueryOptimizerCursor::recoverFromYield() may advance _currOp to another delegate Cursor.
-     *
-     * Requests to prepareToTouchEarlierIterate() or recoverFromTouchingEarlierIterate() are
-     * forwarded as prepareToTouchEarlierIterate()/recoverFromTouchingEarlierIterate() to the
-     * delegate Cursor when a single delegate Cursor is active.  If multiple delegate Cursors are
-     * active, the advance() call preceeding prepareToTouchEarlierIterate() may not properly advance
-     * all delegate Cursors, so the calls are forwarded as prepareToYield()/recoverFromYield() to a
-     * ClientCursor for each delegate Cursor.
-     *
-     * After _takeover is set, consistency after writes is ensured by delegation to the _takeover
-     * MultiCursor.
      */
     class QueryOptimizerCursorImpl : public QueryOptimizerCursor {
     public:
@@ -280,38 +249,24 @@ namespace mongo {
             return ret.release();
         }
         
-        virtual bool ok() { /* TODO: This must fundamentally change. */ ::abort(); return _takeover ? _takeover->ok() : /* !currLoc().isNull() */ true; }
-        
-#if 0
-        virtual Record* _current() {
-            if ( _takeover ) {
-                return _takeover->_current();
-            }
-            assertOk();
-            return currLoc().rec();
-        }
-#endif
+        virtual bool ok() { return _takeover ? _takeover->ok() : !_currPK().isEmpty(); }
         
         virtual BSONObj current() {
-#if 0
             if ( _takeover ) {
                 return _takeover->current();
             }
             assertOk();
-            return currLoc().obj();
-#endif
-            // TODO: Here's where we read from dbt->val, or ptquery the main index, or read from the clustering val, etc.
+            // TODO: What do we do here? Do we return findById(currPK())?
+            ::abort();
             return BSONObj();
         }
         
-        //virtual DiskLoc currLoc() { return _takeover ? _takeover->currLoc() : _currLoc(); }
+        virtual BSONObj currPK() const { return _takeover ? _takeover->currPK() : _currPK(); }
         
-#if 0
-        DiskLoc _currLoc() const {
+        BSONObj _currPK() const {
             dassert( !_takeover );
-            return _currOp ? _currOp->currLoc() : DiskLoc();
+            return _currOp ? _currOp->currPK() : BSONObj();
         }
-#endif
         
         virtual bool advance() {
             return _advance( false );
@@ -325,16 +280,6 @@ namespace mongo {
             return _currOp->currKey();
         }
         
-        /**
-         * When return value isNull(), our cursor will be ignored for deletions by the ClientCursor
-         * implementation.  In such cases, internal ClientCursors will update the positions of
-         * component Cursors when necessary.
-         * !!! Use care if changing this behavior, as some ClientCursor functionality may not work
-         * recursively.
-         */
-        // TODO: Again, understand if this is necessary with TokuDB Cursors
-        //virtual DiskLoc refLoc() { return _takeover ? _takeover->refLoc() : DiskLoc(); }
-        
         virtual BSONObj indexKeyPattern() {
             if ( _takeover ) {
                 return _takeover->indexKeyPattern();
@@ -347,18 +292,16 @@ namespace mongo {
 
         virtual string toString() { return "QueryOptimizerCursor"; }
         
-#if 0
-        virtual bool getsetdup(DiskLoc loc) {
+        virtual bool getsetdup(const BSONObj &pk) {
             if ( _takeover ) {
-                if ( getdupInternal( loc ) ) {
+                if ( _dups.getdup( pk ) ) {
                     return true;   
                 }
-             	return _takeover->getsetdup( loc );   
+             	return _takeover->getsetdup( pk );   
             }
             assertOk();
-            return getsetdupInternal( loc );                
+            return _dups.getsetdup( pk );
         }
-#endif
         
         /** Matcher needs to know if the the cursor being forwarded to is multikey. */
         virtual bool isMultiKey() const {
@@ -552,27 +495,11 @@ namespace mongo {
         }
         
         void assertOk() const {
-#if 0
-            massert( 14809, "Invalid access for cursor that is not ok()", !_currLoc().isNull() );
-#endif
-            ::abort();
+            // TODO: We should be calling ok() here, but for some reason that's not const.
+            // So instead we copy the implementation.
+            massert( 14809, "Invalid access for cursor that is not ok()", !currPK().isEmpty() );
         }
 
-        /** Insert and check for dups before takeover occurs */
-#if 0
-        bool getsetdupInternal(const DiskLoc &loc) {
-            //return _dups.getsetdup( loc );
-        }
-#endif
-
-#if 0
-        /** Just check for dups - after takeover occurs */
-        bool getdupInternal(const DiskLoc &loc) {
-            dassert( _takeover );
-            return _dups.getdup( loc );
-        }
-#endif
-        
         bool _requireOrder;
         auto_ptr<MultiPlanScanner> _mps;
         CandidatePlanCharacter _initialCandidatePlans;
@@ -583,7 +510,7 @@ namespace mongo {
         long long _nscanned;
         // Using a SmallDupSet seems a bit hokey, but I've measured a 5% performance improvement
         // with ~100 document non multi key scans.
-        //SmallDupSet _dups;
+        SmallDupSet _dups;
         shared_ptr<ExplainQueryInfo> _explainQueryInfo;
     };
     

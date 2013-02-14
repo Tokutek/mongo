@@ -1373,8 +1373,6 @@ doneCheckOrder:
         if ( _queryPlan ) {
             _matcher.reset( _matcher->nextClauseMatcher( oldClauseFrv, _queryPlan->indexKey() ) );
             _c = _queryPlan->newCursor();
-            // The basic and btree cursors used by this implementation support deduplication.
-            verify( _c->autoDedup() );
             if ( _explainPlanInfo ) {
                 _explainPlanInfo.reset( new ExplainPlanInfo() );
                 _explainPlanInfo->notePlan( *_c, _queryPlan->scanAndOrderRequired(),
