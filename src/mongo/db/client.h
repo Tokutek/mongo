@@ -175,6 +175,18 @@ namespace mongo {
             return *_transaction;
         }
 
+        class RootTransaction : boost::noncopyable {
+            Transaction *_actual;
+            bool _owned;
+        public:
+            explicit RootTransaction(int flags = 0);
+            ~RootTransaction();
+            void commit();
+            void abort();
+            inline DB_TXN *txn() const { return _actual->txn(); }
+            inline bool is_root() const { return true; }
+        };
+
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
         friend class CurOp;

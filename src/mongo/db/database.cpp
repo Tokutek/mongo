@@ -509,14 +509,14 @@ namespace mongo {
         NamespaceIndex *ni = nsindex(ns);
         if (!ni->allocated()) {
             // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
-            Client::Transaction txn;
+            Client::RootTransaction txn;
             ni->init();
             txn.commit();
         }
         NamespaceDetails *details = ni->details(ns);
         if (details == NULL) {
             tokulog() << "Didn't find nsdetails(" << ns << "), creating it." << endl;
-            Client::Transaction txn;
+            Client::RootTransaction txn;
 
             Namespace ns_s(ns);
             shared_ptr<NamespaceDetails> new_details(new NamespaceDetails(ns, false));

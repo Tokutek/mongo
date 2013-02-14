@@ -214,6 +214,32 @@ namespace mongo {
         storage::abort_txn(_txn);
     }
 
+    Client::RootTransaction::RootTransaction(int flags) : _actual(cc()._transaction), _owned(false) {
+        if (_actual == NULL) {
+            _actual = new Transaction(flags);
+            _owned = true;
+        }
+        dassert(_actual->is_root());
+    }
+
+    Client::RootTransaction::~RootTransaction() {
+        if (_owned) {
+            delete _actual;
+        }
+    }
+
+    void Client::RootTransaction::commit() {
+        if (_owned) {
+            _actual->commit();
+        }
+    }
+
+    void Client::RootTransaction::abort() {
+        if (_owned) {
+            _actual->abort();
+        }
+    }
+
     BSONObj CachedBSONObj::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");
     Client::Context::Context( string ns , Database * db, bool doauth ) :
         _client( currentClient.get() ), 

@@ -38,7 +38,7 @@ namespace mongo {
      */
     class IndexDetails {
     public:
-        explicit IndexDetails(const BSONObj &info);
+        explicit IndexDetails(const BSONObj &info, bool may_create=true);
 
         ~IndexDetails();
 
@@ -114,8 +114,11 @@ namespace mongo {
 
         /** @return true if index has unique constraint */
         bool unique() const {
-            // TODO: Make unique a necessary keyword for the _id index
-            return _info["unique"].trueValue() || isIdIndex();
+            bool ret = _info["unique"].trueValue();
+            if (isIdIndex()) {
+                uassert(16434, "_id index must be unique", ret);
+            }
+            return ret;
         }
 
         /** delete this index.  does NOT clean up the system catalog

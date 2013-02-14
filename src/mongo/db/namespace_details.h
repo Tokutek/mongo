@@ -45,6 +45,11 @@ namespace mongo {
     */
     bool legalClientSystemNS( const string& ns , bool write );
 
+    /**
+     * Record that a new namespace exists in <dbname>.system.namespaces.
+     */
+    void addNewNamespaceToCatalog(const string &name, const BSONObj *options = NULL);
+
     /* NamespaceDetails : this is the "header" for a namespace that has all its details.
        It is stored in the NamespaceIndex (a TokuDB dictionary named foo.ns, for Database foo).
     */
@@ -119,10 +124,13 @@ namespace mongo {
         bool isMultikey(int i) const { return (multiKeyIndexBits & (((unsigned long long) 1) << i)) != 0; }
         void setIndexIsMultikey(const char *thisns, int i);
 
+#if 0
         /* add a new index.  does not add to system.indexes etc. - just to NamespaceDetails.
            caller must populate returned object.
          */
         IndexDetails& addIndex(const char *thisns, bool resetTransient=true);
+#endif
+        void createIndex(const BSONObj &idx_info, bool resetTransient=true);
 
         // @return offset in indexes[]
         int findIndexByName(const char *name);

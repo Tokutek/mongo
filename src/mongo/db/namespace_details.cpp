@@ -29,7 +29,9 @@
 #include "mongo/db/indexcursor.h"
 #include "mongo/db/db.h"
 #include "mongo/db/json.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/txn.h"
@@ -40,9 +42,8 @@ namespace mongo {
     BSONObj idKeyPattern = fromjson("{\"_id\":1}");
 
     // Clone of DBClientWithCommands::genIndexName(), should be factored out somewhere.
-    static string genIndexName(const string &ns, const BSONObj &keys) {
+    static string genIndexName(const BSONObj &keys) {
         stringstream ss;
-        ss << ns;
 
         bool first = 1;
         for ( BSONObjIterator i(keys); i.more(); ) {
@@ -66,7 +67,7 @@ namespace mongo {
         BSONObjBuilder id_info;
         id_info.append("ns", ns);
         id_info.append("key", idKeyPattern);
-        id_info.append("name", genIndexName(ns, idKeyPattern));
+        id_info.append("name", genIndexName(idKeyPattern));
         id_info.appendBool("unique", true);
         // TODO: Is this right?
         id_info.appendBool("background", false);
@@ -78,10 +79,10 @@ namespace mongo {
             unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
         }
 
+        addNewNamespaceToCatalog(ns);
+
         tokulog() << "Creating NamespaceDetails " << ns << endl;
-        shared_ptr<IndexDetails> id_index(new IndexDetails(id_index_info(ns)));
-        _indexes.push_back(id_index);
-        _nIndexes++;
+        createIndex(id_index_info(ns), true);
     }
 
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
@@ -90,7 +91,7 @@ namespace mongo {
         multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())) {
         std::vector<BSONElement> index_array = serialized["indexes"].Array();
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
-            shared_ptr<IndexDetails> idx(new IndexDetails(it->Obj()));
+            shared_ptr<IndexDetails> idx(new IndexDetails(it->Obj(), false));
             _indexes.push_back(idx);
         }
     }
@@ -225,8 +226,6 @@ namespace mongo {
         init();
         Namespace n(ns);
 
-        update_ns(ns, details.get(), false);
-
         std::pair<NamespaceDetailsMap::iterator, bool> ret;
         ret = namespaces->insert(make_pair(n, details));
         dassert(ret.second == true);
@@ -252,15 +251,44 @@ namespace mongo {
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
-        dassert( i < NIndexesMax );
+        dassert(i < NIndexesMax);
         unsigned long long x = ((unsigned long long) 1) << i;
-        if( multiKeyIndexBits & x ) return;
+        if (multiKeyIndexBits & x) {
+            return;
+        }
         multiKeyIndexBits |= x;
+
         dassert(nsdetails(thisns) == this);
         nsindex(thisns)->update_ns(thisns, this, true);
+
         NamespaceDetailsTransient::get(thisns).clearQueryCache();
     }
 
+    void NamespaceDetails::createIndex(const BSONObj &idx_info, bool resetTransient) {
+        shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
+        indexBuildInProgress = true;
+        _indexes.push_back(index);
+        wunimplemented("fill index");
+        _nIndexes++;
+        indexBuildInProgress = false;
+
+        const char *ns = idx_info["ns"].String().c_str();
+        dassert(nsdetails(ns) == this);
+
+        // The first index we create should be the _id index, when we first create the collection.
+        // Therefore the collection's NamespaceDetails should not already exist in the NamespaceIndex.
+        const bool may_overwrite = _nIndexes > 1;
+        if (!may_overwrite) {
+            massert(16435, "first index should be _id index", index->isIdIndex());
+        }
+        nsindex(ns)->update_ns(ns, this, may_overwrite);
+
+        if (resetTransient) {
+            NamespaceDetailsTransient::get(ns).addedIndex();
+        }
+    }
+
+#if 0
     /* you MUST call when adding an index.  see pdfile.cpp */
     IndexDetails& NamespaceDetails::addIndex(const char *thisns, bool resetTransient) {
         IndexDetails *id;
@@ -275,10 +303,9 @@ namespace mongo {
 
         unimplemented("NamespaceDetails durability for nindexes, we currently don't store this because we don't yet have hot indexing, much less resume from shutdown during hot indexing");
         _nIndexes++; //(*getDur().writing(&nIndexes))++;
-        if ( resetTransient )
-            NamespaceDetailsTransient::get(thisns).addedIndex();
         return *id;
     }
+#endif
 
     struct findByIdCallbackExtra {
         const BSONObj &key;
@@ -339,7 +366,10 @@ namespace mongo {
         Lock::assertWriteLocked(ns);
         Client::Transaction txn;
 
-        uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
+        if (overwrite && _indexes.size() > 1) {
+            wunimplemented("overwrite inserts on secondary keys right now don't work");
+            //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
+        }
 
         BSONObj primary_key;
         if (_indexes.size() > 1) {
@@ -363,15 +393,25 @@ namespace mongo {
 
             // TODO: handle clustering secondary keys
             bool clustering = index->isIdIndex();
+            const BSONObj null_obj;
             const BSONObj *val;
             if (clustering) {
                 // TODO: strip key out
                 val = &obj;
             } else {
-                val = &primary_key;
+                val = &null_obj;
             }
             for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ki++) {
-                index->insert(*ki, *val, overwrite);
+                if (index->isIdIndex()) {
+                    index->insert(BSON("k" << *ki),
+                                  *val,
+                                  overwrite);
+                } else {
+                    index->insert(BSON("k" << *ki <<
+                                       "i" << primary_key),
+                                  *val,
+                                  overwrite);
+                }
             }
         }
 
@@ -460,11 +500,10 @@ namespace mongo {
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).
        options: { capped : ..., size : ... }
     */
-    void addNewNamespaceToCatalog(const char *ns, const BSONObj *options = 0) {
+    void addNewNamespaceToCatalog(const string &ns, const BSONObj *options) {
         LOG(1) << "New namespace: " << ns << endl;
-        if ( strstr(ns, "system.namespaces") ) {
+        if (mongoutils::str::contains(ns, ".system.namespaces") ) {
             // system.namespaces holds all the others, so it is not explicitly listed in the catalog.
-            // TODO: fix above should not be strstr!
             return;
         }
         
@@ -474,10 +513,9 @@ namespace mongo {
             b.append("options", *options);
         BSONObj j = b.done();
         char database[256];
-        nsToDatabase(ns, database);
+        nsToDatabase(ns.c_str(), database);
         string s = string(database) + ".system.namespaces";
-        //theDataFileMgr.insert(s.c_str(), j.objdata(), j.objsize(), true);
-        ::abort();
+        insertObject(s.c_str(), j);
     }
 
     void renameNamespace( const char *from, const char *to, bool stayTemp) {

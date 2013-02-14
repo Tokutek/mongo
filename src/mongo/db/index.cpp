@@ -16,34 +16,38 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <boost/checked_delete.hpp>
-
 #include "pch.h"
+
+#include <boost/checked_delete.hpp>
+#include <db.h>
+
 #include "namespace.h"
 #include "index.h"
 #include "indexcursor.h"
 #include "background.h"
 #include "repl/rs.h"
 #include "ops/delete.h"
+#include "mongo/util/mongoutils/str.h"
 #include "mongo/util/scopeguard.h"
-
-#include <db.h>
-
-#include "db/toku/env.h"
-#include "db/toku/index.h"
 
 namespace mongo {
 
-    IndexDetails::IndexDetails(const BSONObj &info) : _info(info.getOwned()) {
-        tokulog() << "Opening IndexDetails " << _info["name"].String() << endl;
+    IndexDetails::IndexDetails(const BSONObj &info, bool may_create) : _info(info.getOwned()) {
+        const string &ns = _info["ns"].String();
+        const string &name = _info["name"].String();
+        string dbname = mongoutils::str::stream() << ns << "_" << name;
+        tokulog() << "Opening IndexDetails " << name << " in collection " << ns << endl;
         // Open the dictionary. Creates it if necessary.
-        _db = storage::db_open(_info["name"].String(),
+        _db = storage::db_open(dbname,
                                _info["key"].embeddedObjectUserCheck(),
-                               true);
+                               may_create);
+        if (may_create) {
+            addNewNamespaceToCatalog(dbname);
+        }
     }
 
     IndexDetails::~IndexDetails() {
-        tokulog() << "Closing IndexDetails " << _info["name"].String() << endl;
+        tokulog() << "Closing IndexDetails " << _info["name"].String() << " in collection " << _info["ns"].String() << endl;
         storage::db_close(_db);
     }
 
@@ -118,6 +122,9 @@ namespace mongo {
         const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
         int r = _db->put(_db, cc().transaction().txn(), &kdbt, &vdbt, flags);
         uassert(16433, "key already exists in unique index", r != DB_KEYEXIST);
+        if (r != 0) {
+            tokulog() << "error inserting " << key << ", " << val << endl;
+        }
         verify(r == 0);
     }
 
