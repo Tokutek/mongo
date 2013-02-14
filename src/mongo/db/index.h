@@ -59,7 +59,7 @@ namespace mongo {
            e.g., { lastname:1, firstname:1 }
         */
         BSONObj keyPattern() const {
-            return _info.getObjectField("key");
+            return _info["key"].Obj();
         }
 
         /**
@@ -77,7 +77,7 @@ namespace mongo {
         string indexNamespace() const {
             string s;
             s.reserve(Namespace::MaxNsLen);
-            s = _info.getStringField("ns");
+            s = parentNS();
             verify( !s.empty() );
             s += ".$";
             s += indexName();
@@ -121,6 +121,15 @@ namespace mongo {
             return ret;
         }
 
+        /** @return true if index is clustering */
+        bool clustering() const {
+            bool ret = _info["clustering"].trueValue();
+            if (isIdIndex()) {
+                uassert(16437, "_id index must be clustering", ret);
+            }
+            return ret;
+        }
+
         /** delete this index.  does NOT clean up the system catalog
             (system.indexes or system.namespaces) -- only NamespaceIndex.
         */
@@ -134,7 +143,8 @@ namespace mongo {
 
         const BSONObj &info() const { return _info; }
 
-        void insert(const BSONObj &key, const BSONObj &val, bool overwrite);
+        void insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite);
+        void insertPair(const BSONObj &key, const BSONObj &val, bool overwrite);
 
         DBC *cursor();
 

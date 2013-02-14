@@ -130,6 +130,7 @@ namespace mongo {
          */
         IndexDetails& addIndex(const char *thisns, bool resetTransient=true);
 #endif
+        void fillNewIndex(IndexDetails &newIndex);
         void createIndex(const BSONObj &idx_info, bool resetTransient=true);
 
         // @return offset in indexes[]

@@ -28,6 +28,7 @@
 
 #include "mongo/db/indexcursor.h"
 #include "mongo/db/db.h"
+#include "mongo/db/dbhelpers.h"
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/delete.h"
@@ -262,11 +263,18 @@ namespace mongo {
         NamespaceDetailsTransient::get(thisns).clearQueryCache();
     }
 
+    void NamespaceDetails::fillNewIndex(IndexDetails &newIndex) {
+        const char *thisns = newIndex.parentNS().c_str();
+        for (shared_ptr<Cursor> cursor(Helpers::findTableScan(thisns, BSONObj())); cursor->ok(); cursor->advance()) {
+            newIndex.insert(cursor->current(), cursor->currPK(), false);
+        }
+    }
+
     void NamespaceDetails::createIndex(const BSONObj &idx_info, bool resetTransient) {
         shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
         indexBuildInProgress = true;
         _indexes.push_back(index);
-        wunimplemented("fill index");
+        fillNewIndex(*index);
         _nIndexes++;
         indexBuildInProgress = false;
 
@@ -383,34 +391,7 @@ namespace mongo {
         int idxNo = 0;
         for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); it++, idxNo++) {
             IndexDetails *index = it->get();
-            BSONObjSet keys;
-            index->getKeysFromObject(obj, keys);
-            if (keys.size() > 1) {
-                setIndexIsMultikey(ns, idxNo);
-            }
-
-            // TODO: handle clustering secondary keys
-            bool clustering = index->isIdIndex();
-            const BSONObj null_obj;
-            const BSONObj *val;
-            if (clustering) {
-                // TODO: strip key out
-                val = &obj;
-            } else {
-                val = &null_obj;
-            }
-            for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ki++) {
-                if (index->isIdIndex()) {
-                    index->insert(BSON("k" << *ki),
-                                  *val,
-                                  overwrite);
-                } else {
-                    index->insert(BSON("k" << *ki <<
-                                       "i" << primary_key),
-                                  *val,
-                                  overwrite);
-                }
-            }
+            index->insert(obj, primary_key, overwrite);
         }
 
         txn.commit();

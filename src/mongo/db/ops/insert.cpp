@@ -38,7 +38,7 @@ namespace mongo {
             NamespaceDetails *details = nsdetails_maybe_create(coll.c_str());
             BSONObj key = obj["key"].Obj();
             int i = details->findIndexByKeyPattern(key);
-            uassert(16437, mongoutils::str::stream() << coll << " already has an index on key " << key, i < 0);
+            uassert(16438, mongoutils::str::stream() << coll << " already has an index on key " << key, i < 0);
             details->createIndex(obj);
             txn.commit();
         }

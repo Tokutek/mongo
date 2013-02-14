@@ -33,20 +33,17 @@
 namespace mongo {
 
     IndexDetails::IndexDetails(const BSONObj &info, bool may_create) : _info(info.getOwned()) {
-        const string &ns = _info["ns"].String();
-        string dbname = mongoutils::str::stream() << ns << "_" << indexName();
-        tokulog() << "Opening IndexDetails " << indexName() << " in collection " << ns << endl;
+        string dbname = indexNamespace();
+        tokulog() << "Opening IndexDetails " << dbname << endl;
         // Open the dictionary. Creates it if necessary.
-        _db = storage::db_open(dbname,
-                               _info["key"].embeddedObjectUserCheck(),
-                               may_create);
+        _db = storage::db_open(dbname, keyPattern(), may_create);
         if (may_create) {
             addNewNamespaceToCatalog(dbname);
         }
     }
 
     IndexDetails::~IndexDetails() {
-        tokulog() << "Closing IndexDetails " << indexName() << " in collection " << _info["ns"].String() << endl;
+        tokulog() << "Closing IndexDetails " << indexNamespace() << endl;
         storage::db_close(_db);
     }
 
@@ -112,7 +109,29 @@ namespace mongo {
         return NamespaceDetailsTransient::get_inlock( info()["ns"].valuestr() ).getIndexSpec( this );
     }
 
-    void IndexDetails::insert(const BSONObj &key, const BSONObj &val, bool overwrite) {
+    void IndexDetails::insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite) {
+        BSONObjSet keys;
+        getKeysFromObject(obj, keys);
+        if (keys.size() > 1) {
+            const char *ns = parentNS().c_str();
+            NamespaceDetails *d = nsdetails(ns);
+            const int idxNo = d->idxNo(*this);
+            dassert(idxNo >= 0);
+            d->setIndexIsMultikey(ns, idxNo);
+        }
+
+        for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
+            if (isIdIndex()) {
+                insertPair(BSON("k" << *ki), obj, overwrite);
+            } else if (clustering()) {
+                insertPair(BSON("k" << *ki << "i" << primary_key), obj, overwrite);
+            } else {
+                insertPair(BSON("k" << *ki << "i" << primary_key), BSONObj(), overwrite);
+            }
+        }
+    }
+
+    void IndexDetails::insertPair(const BSONObj &key, const BSONObj &val, bool overwrite) {
         DBT kdbt, vdbt;
         kdbt.data = const_cast<void *>(static_cast<const void *>(key.objdata()));
         kdbt.size = key.objsize();
@@ -142,7 +161,7 @@ namespace mongo {
 
     void IndexSpec::reset( const BSONObj& _info ) {
         info = _info;
-        keyPattern = info["key"].embeddedObjectUserCheck();
+        keyPattern = info["key"].Obj();
         if ( keyPattern.objsize() == 0 ) {
             out() << info.toString() << endl;
             verify(false);
