@@ -79,10 +79,10 @@ namespace mongo {
             unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
         }
 
-        addNewNamespaceToCatalog(ns);
-
         tokulog() << "Creating NamespaceDetails " << ns << endl;
         createIndex(id_index_info(ns), true);
+
+        addNewNamespaceToCatalog(ns);
     }
 
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
@@ -131,10 +131,11 @@ namespace mongo {
     }
 
     static int populate_nsindex_map(const DBT *key, const DBT *val, void *map_v) {
-        Namespace n(static_cast<const char *>(key->data));
-        BSONObj obj(static_cast<const char *>(val->data));
+        BSONObj nobj(static_cast<const char *>(key->data));
+        Namespace n(nobj["ns"].String().c_str());
+        BSONObj dobj(static_cast<const char *>(val->data));
         tokulog() << "Loading NamespaceDetails " << (string) n << endl;
-        shared_ptr<NamespaceDetails> d(new NamespaceDetails(obj));
+        shared_ptr<NamespaceDetails> d(new NamespaceDetails(dobj));
 
         NamespaceIndex::NamespaceDetailsMap *m = static_cast<NamespaceIndex::NamespaceDetailsMap *>(map_v);
         std::pair<NamespaceIndex::NamespaceDetailsMap::iterator, bool> ret;
@@ -235,10 +236,7 @@ namespace mongo {
         Lock::assertWriteLocked(ns);
         dassert(namespaces.get() != NULL);
 
-        BSONObjBuilder b;
-        b.append("ns", ns);
-        BSONObj nsobj = b.obj();
-
+        BSONObj nsobj = BSON("ns" << ns);
         DBT ndbt, ddbt;
         ndbt.data = const_cast<void *>(static_cast<const void *>(nsobj.objdata()));
         ndbt.size = nsobj.objsize();

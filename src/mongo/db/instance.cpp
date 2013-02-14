@@ -815,36 +815,26 @@ namespace mongo {
             multi.push_back( d.nextJsObj() );
         }
 
-        //PageFaultRetryableSection s;
-        while ( true ) {
-            try {
-                Lock::DBWrite lk(ns);
+        Lock::DBWrite lk(ns);
                 
-                // CONCURRENCY TODO: is being read locked in big log sufficient here?
-                // writelock is used to synchronize stepdowns w/ writes
-                uassert( 10058 , "not master", isMasterNs(ns) );
+        // CONCURRENCY TODO: is being read locked in big log sufficient here?
+        // writelock is used to synchronize stepdowns w/ writes
+        uassert( 10058 , "not master", isMasterNs(ns) );
                 
-                if ( handlePossibleShardedMessage( m , 0 ) )
-                    return;
+        if ( handlePossibleShardedMessage( m , 0 ) )
+            return;
                 
-                Client::Context ctx(ns);
+        Client::Context ctx(ns);
                 
-                if( !multi.empty() ) {
-                    const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
-                    insertMulti(keepGoing, ns, multi);
-                    return;
-                }
-                
-                checkAndInsert(ns, first);
-                globalOpCounters.incInsertInWriteLock(1);
-                return;
-            }
-            //catch ( PageFaultException& e ) {
-            catch ( ... ) {
-                //e.touch();
-                ::abort();
-            }
+        if( !multi.empty() ) {
+            const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
+            insertMulti(keepGoing, ns, multi);
+            return;
         }
+                
+        checkAndInsert(ns, first);
+        globalOpCounters.incInsertInWriteLock(1);
+        return;
     }
 
     void getDatabaseNames( vector< string > &names , const string& usePath ) {

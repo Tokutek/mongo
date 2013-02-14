@@ -34,9 +34,8 @@ namespace mongo {
 
     IndexDetails::IndexDetails(const BSONObj &info, bool may_create) : _info(info.getOwned()) {
         const string &ns = _info["ns"].String();
-        const string &name = _info["name"].String();
-        string dbname = mongoutils::str::stream() << ns << "_" << name;
-        tokulog() << "Opening IndexDetails " << name << " in collection " << ns << endl;
+        string dbname = mongoutils::str::stream() << ns << "_" << indexName();
+        tokulog() << "Opening IndexDetails " << indexName() << " in collection " << ns << endl;
         // Open the dictionary. Creates it if necessary.
         _db = storage::db_open(dbname,
                                _info["key"].embeddedObjectUserCheck(),
@@ -47,7 +46,7 @@ namespace mongo {
     }
 
     IndexDetails::~IndexDetails() {
-        tokulog() << "Closing IndexDetails " << _info["name"].String() << " in collection " << _info["ns"].String() << endl;
+        tokulog() << "Closing IndexDetails " << indexName() << " in collection " << _info["ns"].String() << endl;
         storage::db_close(_db);
     }
 

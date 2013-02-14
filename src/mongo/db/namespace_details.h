@@ -139,10 +139,11 @@ namespace mongo {
         int findIndexByKeyPattern(const BSONObj& keyPattern);
 
         void findIndexByType( const string& name , vector<int>& matches ) {
-            IndexIterator i = ii();
-            while ( i.more() ) {
-                if ( i.next().getSpec().getTypeName() == name )
-                    matches.push_back( i.pos() - 1 );
+            for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+                const IndexDetails *index = it->get();
+                if (index->getSpec().getTypeName() == name) {
+                    matches.push_back(it - _indexes.begin());
+                }
             }
         }
 
@@ -158,11 +159,13 @@ namespace mongo {
            generally id is first index, so not that expensive an operation (assuming present).
         */
         int findIdIndex() {
-            IndexIterator i = ii();
-            while( i.more() ) {
-                if( i.next().isIdIndex() )
-                    return i.pos()-1;
+            for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+                const IndexDetails *index = it->get();
+                if (index->isIdIndex()) {
+                    return it - _indexes.begin();
+                }
             }
+            massert(16436, "_id index not found", false);
             return -1;
         }
 
@@ -460,20 +463,22 @@ namespace mongo {
     }
 
     inline int NamespaceDetails::idxNo(const IndexDetails& idx) {
-        IndexIterator i = ii();
-        while( i.more() ) {
-            if( &i.next() == &idx )
-                return i.pos()-1;
+        for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+            const IndexDetails *index = it->get();
+            if (index == &idx) {
+                return it - _indexes.begin();
+            }
         }
         massert( 10349 , "E12000 idxNo fails", false);
         return -1;
     }
 
     inline int NamespaceDetails::findIndexByKeyPattern(const BSONObj& keyPattern) {
-        IndexIterator i = ii();
-        while( i.more() ) {
-            if( i.next().keyPattern() == keyPattern )
-                return i.pos()-1;
+        for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+            const IndexDetails *index = it->get();
+            if (index->keyPattern() == keyPattern) {
+                return it - _indexes.begin();
+            }
         }
         return -1;
     }
@@ -481,14 +486,13 @@ namespace mongo {
     inline const IndexDetails* NamespaceDetails::findIndexByPrefix( const BSONObj &keyPattern ,
                                                                     bool requireSingleKey ) {
         const IndexDetails* bestMultiKeyIndex = NULL;
-        IndexIterator i = ii();
-        while( i.more() ) {
-            const IndexDetails& currentIndex = i.next();
-            if( keyPattern.isPrefixOf( currentIndex.keyPattern() ) ){
-                if( ! isMultikey( i.pos()-1 ) ){
-                    return &currentIndex;
+        for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+            const IndexDetails *index = it->get();
+            if (keyPattern.isPrefixOf(index->keyPattern())) {
+                if (!isMultikey(it - _indexes.begin())) {
+                    return index;
                 } else {
-                    bestMultiKeyIndex = &currentIndex;
+                    bestMultiKeyIndex = index;
                 }
             }
         }
@@ -497,10 +501,11 @@ namespace mongo {
 
     // @return offset in indexes[]
     inline int NamespaceDetails::findIndexByName(const char *name) {
-        IndexIterator i = ii();
-        while( i.more() ) {
-            if ( strcmp(i.next().info().getStringField("name"), name) == 0 )
-                return i.pos()-1;
+        for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+            const IndexDetails *index = it->get();
+            if (mongoutils::str::equals(index->indexName().c_str(), name)) {
+                return it - _indexes.begin();
+            }
         }
         return -1;
     }

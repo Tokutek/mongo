@@ -36,14 +36,15 @@ namespace mongo {
             // { _id: ObjectId('511d34f6d3080c48017a14d0'), ns: "test.leif", key: { a: -1.0 }, name: "a_-1", unique: true }
             const string &coll = obj["ns"].String();
             NamespaceDetails *details = nsdetails_maybe_create(coll.c_str());
-            wunimplemented("make sure we don't try to create the same index twice");
+            BSONObj key = obj["key"].Obj();
+            int i = details->findIndexByKeyPattern(key);
+            uassert(16437, mongoutils::str::stream() << coll << " already has an index on key " << key, i < 0);
             details->createIndex(obj);
             txn.commit();
         }
     }
 
     void insertObject(const char *ns, const BSONObj &obj) {
-        Client::WriteContext ctx(ns);
         if (mongoutils::str::contains(ns, "system.")) {
             uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
             handle_system_collection_insert(ns, obj);
