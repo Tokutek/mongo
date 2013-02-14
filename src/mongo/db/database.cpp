@@ -519,7 +519,6 @@ namespace mongo {
             Client::Transaction txn;
 
             Namespace ns_s(ns);
-            // We allocate here in order to call the constructor, and the hashtable takes a literal copy and owns the members.
             shared_ptr<NamespaceDetails> new_details(new NamespaceDetails(ns, false));
             ni->add_ns(ns, new_details);
 

@@ -161,7 +161,7 @@ namespace mongo {
             bool _retired;
             void retire();
         public:
-            Transaction();
+            explicit Transaction(int flags = 0);
             ~Transaction();
             void commit();
             void abort();

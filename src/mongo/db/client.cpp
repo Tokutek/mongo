@@ -185,9 +185,9 @@ namespace mongo {
         return false;
     }
 
-    Client::Transaction::Transaction() : _parent(cc()._transaction), _retired(false) {
+    Client::Transaction::Transaction(int flags) : _parent(cc()._transaction), _retired(false) {
         DB_TXN *parent_txn = (_parent != NULL ? _parent->txn() : NULL);
-        _txn = storage::start_txn(parent_txn);
+        _txn = storage::start_txn(parent_txn, flags);
         cc()._transaction = this;
     }
 

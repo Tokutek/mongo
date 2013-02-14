@@ -305,7 +305,7 @@ namespace mongo {
 
     bool NamespaceDetails::findById(const BSONObj &query, BSONObj &result) {
         int r;
-        Client::Transaction txn;
+        Client::Transaction txn(DB_TXN_READ_ONLY);
 
         // Get a cursor over the _id index.
         IndexDetails &idIndex = idx(findIdIndex());

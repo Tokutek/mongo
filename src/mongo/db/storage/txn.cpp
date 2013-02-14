@@ -26,9 +26,9 @@ namespace mongo {
 
     namespace storage {
 
-        DB_TXN *start_txn(DB_TXN *parent) {
+        DB_TXN *start_txn(DB_TXN *parent, int flags) {
             DB_TXN *txn;
-            int r = env->txn_begin(env, parent, &txn, 0);
+            int r = env->txn_begin(env, parent, &txn, flags);
             verify(r == 0);
             return txn;
         }
