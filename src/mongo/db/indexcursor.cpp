@@ -214,6 +214,24 @@ namespace mongo {
         return ok();
     }
 
+    BSONObj IndexCursor::currKey() const {
+        // What should the key/val format be?
+        // Ideas:
+        // - key: { k: embeddedKeyObj, id: associated _id key if secondary }}
+        // - val: { o: embeddedValObj if clustering (ie: primary, clustering secondary) }
+        ::abort();
+        return BSONObj();
+    }
+
+    BSONObj IndexCursor::current() {
+        // What should the key/val format be?
+        // Ideas:
+        // - key: { k: embeddedKeyObj, id: associated _id key if secondary }}
+        // - val: { o: embeddedValObj if clustering (ie: primary, clustering secondary) }
+        ::abort();
+        return BSONObj();
+    }
+
     string IndexCursor::toString() {
         string s = string("IndexCursor ") + indexDetails.indexName();
         if ( _direction < 0 ) s += " reverse";

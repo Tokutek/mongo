@@ -18,10 +18,11 @@
 
 #include "pch.h"
 #include "mongo/db/queryoptimizer.h"
-#include "db.h"
-#include "indexcursor.h"
-#include "cmdline.h"
+#include "mongo/db/db.h"
+#include "mongo/db/indexcursor.h"
+#include "mongo/db/cmdline.h"
 #include "../server.h"
+#include "mongo/db/dbhelpers.h"
 
 //#define DEBUGQO(x) cout << x << endl;
 #define DEBUGQO(x)
@@ -283,13 +284,12 @@ doneCheckOrder:
         if ( _utility == Impossible ) {
             // Dummy table scan cursor returning no results.  Allowed in --notablescan mode.
             // TODO: TokuDB: Is this still what needs to happen in this case?
-            return shared_ptr<Cursor>( new BasicCursor( /*DiskLoc()*/ ) );
+            return shared_ptr<Cursor>( new BasicCursor( _d ) );
         }
 
         if ( willScanTable() ) {
             checkTableScanAllowed();
-            ::abort();
-            //return findTableScan( _frs.ns(), _order, startLoc );
+            return Helpers::findTableScan( _frs.ns(), _order);
         }
                 
         // TokuDB: There is no startLoc anymore
@@ -314,8 +314,7 @@ doneCheckOrder:
             int orderSpec = _order.getIntField( "$natural" );
             if ( orderSpec == INT_MIN )
                 orderSpec = 1;
-            ::abort();
-            //return findTableScan( _frs.ns(), BSON( "$natural" << -orderSpec ) );
+            return Helpers::findTableScan( _frs.ns(), BSON( "$natural" << -orderSpec ) );
         }
         massert( 10364 ,  "newReverseCursor() not implemented for indexed plans", false );
         return shared_ptr<Cursor>();

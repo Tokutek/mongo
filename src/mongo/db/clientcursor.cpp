@@ -331,8 +331,10 @@ namespace mongo {
 
         {
             recursive_scoped_lock lock(ccmutex);
-            :: abort(); // TODO: Do we need this?
+
+            // TODO: Update the bylocation multimap, like below.
             //setLastLoc_inlock( DiskLoc() ); // removes us from bylocation multimap
+
             clientCursorsById.erase(_cursorid);
 
             // defensive:

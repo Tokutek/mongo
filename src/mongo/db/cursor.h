@@ -18,14 +18,14 @@
 
 #include "mongo/pch.h"
 
-#include "jsobj.h"
-#include "matcher.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/matcher.h"
 #include "mongo/db/projection.h"
+#include "mongo/db/client.h"
 
 namespace mongo {
 
     class NamespaceDetails;
-    //class Record;
     class CoveredIndexMatcher;
 
     /**
@@ -34,71 +34,15 @@ namespace mongo {
      *
      * WARNING concurrency: the vfunctions below are called back from within a
      * ClientCursor::ccmutex.  Don't cause a deadlock, you've been warned.
-     *
-     * Two general techniques may be used to ensure a Cursor is in a consistent state after a write.
-     *     - The Cursor may be advanced before the document at its current position is deleted.
-     *     - The Cursor may record its position and then relocate this position.
-     * A particular Cursor may potentially utilize only one of the above techniques, but a client
-     * that is Cursor subclass agnostic must implement a pattern handling both techniques.
-     *
-     * When the document at a Cursor's current position is deleted (or moved to a new location) the
-     * following pattern is used:
-     *     DiskLoc toDelete = cursor->currLoc();
-     *     while( cursor->ok() && cursor->currLoc() == toDelete ) {
-     *         cursor->advance();
-     *     }
-     *     cursor->prepareToTouchEarlierIterate();
-     *     delete( toDelete );
-     *     cursor->recoverFromTouchingEarlierIterate();
-     * 
-     * When a cursor yields, the following pattern is used:
-     *     cursor->prepareToYield();
-     *     while( Op theOp = nextOp() ) {
-     *         if ( theOp.type() == INSERT || theOp.type() == UPDATE_IN_PLACE ) {
-     *             theOp.run();
-     *         }
-     *         else if ( theOp.type() == DELETE ) {
-     *             if ( cursor->refLoc() == theOp.toDelete() ) {
-     *                 cursor->recoverFromYield();
-     *                 while ( cursor->ok() && cursor->refLoc() == theOp.toDelete() ) {
-     *                     cursor->advance();
-     *                 }
-     *                 cursor->prepareToYield();
-     *             }
-     *             theOp.run();
-     *         }
-     *     }
-     *     cursor->recoverFromYield();
-     *     
-     * The break before a getMore request is typically treated as a yield, but if a Cursor supports
-     * getMore but not yield the following pattern is currently used:
-     *     cursor->noteLocation();
-     *     runOtherOps();
-     *     cursor->checkLocation();
-     *
-     * But see SERVER-5725.
-     *
-     * A Cursor may rely on additional callbacks not listed above to relocate its position after a
-     * write.
-     *
-     * XXX: TokuDB:
-     * Everything mentioned above is more or less not applicable to our engine. We transactionally
-     * handle * cursor consistency and have fine grained locking, so yielding doesn't do anything.
      */
     class Cursor : boost::noncopyable {
     public:
         virtual ~Cursor() {}
         virtual bool ok() = 0;
         bool eof() { return !ok(); }
-        //virtual Record* _current() = 0;
         virtual BSONObj current() = 0;
-        //virtual DiskLoc currLoc() = 0;
         virtual bool advance() = 0; /*true=ok*/
         virtual BSONObj currKey() const { return BSONObj(); }
-
-        // DiskLoc the cursor requires for continued operation.  Before this
-        // DiskLoc is deleted, the cursor must be incremented or destroyed.
-        //virtual DiskLoc refLoc() = 0;
 
         /* Implement these if you want the cursor to be "tailable" */
 
@@ -190,19 +134,6 @@ namespace mongo {
         virtual void explainDetails( BSONObjBuilder& b ) { return; }
     };
 
-    // Cute, but not necessary
-#if 0
-    // strategy object implementing direction of traversal.
-    class AdvanceStrategy {
-    public:
-        virtual ~AdvanceStrategy() { }
-        //virtual DiskLoc next( const DiskLoc &prev ) const = 0;
-    };
-
-    const AdvanceStrategy *forward();
-    const AdvanceStrategy *reverse();
-#endif
-
     /**
      * table-scan style cursor
      *
@@ -212,41 +143,27 @@ namespace mongo {
      */
     class BasicCursor : public Cursor {
     public:
-        BasicCursor(/* DiskLoc dl , const AdvanceStrategy *_s = forward() */) : /* curr(dl), s( _s ), */ _nscanned() {
-            incNscanned();
-            init();
+        BasicCursor(NamespaceDetails *nsd, int direction = 1);
+        ~BasicCursor();
+        bool ok() {
+            return !currKey().isEmpty();
         }
-#if 0
-        BasicCursor( /*const AdvanceStrategy *_s = forward() */) : /*s( _s ), */ _nscanned() {
-            init();
-        }
-#endif
-        bool ok() { ::abort(); return false; /*return !curr.isNull();*/ }
-#if 0
-        Record* _current() {
-            verify( ok() );
-            return curr.rec();
-        }
-#endif
         BSONObj current() {
-#if 0
-            Record *r = _current();
-            return BSONObj::make(r);
-#endif
-            ::abort(); return BSONObj();
+            return _currObj;
         }
-        //virtual DiskLoc currLoc() { return curr; }
-        //virtual DiskLoc refLoc()  { return curr.isNull() ? last : curr; }
+        BSONObj currKey() const {
+            return _currKey;
+        };
         bool advance();
         virtual string toString() { return "BasicCursor"; }
         virtual void setTailable() {
 #if 0
             if ( !curr.isNull() || !last.isNull() )
-                tailable_ = true;
+                _tailable = true;
 #endif
             ::abort();
         }
-        virtual bool tailable() { return tailable_; }
+        virtual bool tailable() { return _tailable; }
         //virtual bool getsetdup(DiskLoc loc) { return false; }
         virtual bool isMultiKey() const { return false; }
         virtual bool modifiedKeys() const { return false; }
@@ -261,26 +178,34 @@ namespace mongo {
         virtual long long nscanned() { return _nscanned; }
 
     protected:
-        //DiskLoc curr, last;
-        //const AdvanceStrategy *s;
-        void incNscanned() { ::abort(); if ( /*!curr.isNull()*/ false ) { ++_nscanned; } }
+        NamespaceDetails *_nsd;
+
+        // TODO: _direction should be const
+        int _direction;
+        BSONObj _currKey;
+        BSONObj _currObj;
+        DBC *_cursor;
+        Client::Transaction _transaction;
+        void incNscanned() { if ( ok() ) { ++_nscanned; } }
+
     private:
-        bool tailable_;
+        bool _tailable;
         shared_ptr< CoveredIndexMatcher > _matcher;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
         long long _nscanned;
-        void init() { tailable_ = false; }
+        void init() { _tailable = false; }
     };
 
     /* used for order { $natural: -1 } */
     class ReverseCursor : public BasicCursor {
     public:
-        //ReverseCursor(/* DiskLoc dl */) : BasicCursor( /* dl, reverse() */ ) { }
-        //ReverseCursor() : BasicCursor( /* reverse() */ ) { }
+        ReverseCursor(NamespaceDetails *nsd) : BasicCursor(nsd, -1) { }
         virtual string toString() { return "ReverseCursor"; }
     };
 
-    class ForwardCappedCursor : public BasicCursor /*, public AdvanceStrategy */ {
+    // TODO: Capped collections
+#if 0
+    class ForwardCappedCursor : public BasicCursor {
     public:
         static ForwardCappedCursor* make( NamespaceDetails* nsd = 0 /*, const DiskLoc& startLoc = DiskLoc()*/ );
         virtual string toString() {
@@ -291,10 +216,9 @@ namespace mongo {
     private:
         ForwardCappedCursor( NamespaceDetails* nsd );
         //void init( const DiskLoc& startLoc );
-        NamespaceDetails *nsd;
     };
 
-    class ReverseCappedCursor : public BasicCursor /*, public AdvanceStrategy */ {
+    class ReverseCappedCursor : public BasicCursor {
     public:
         ReverseCappedCursor( NamespaceDetails *nsd = 0 /*, const DiskLoc &startLoc = DiskLoc() */ );
         virtual string toString() {
@@ -302,8 +226,7 @@ namespace mongo {
         }
         //virtual DiskLoc next( const DiskLoc &prev ) const;
         virtual bool capped() const { return true; }
-    private:
-        NamespaceDetails *nsd;
     };
+#endif
 
 } // namespace mongo

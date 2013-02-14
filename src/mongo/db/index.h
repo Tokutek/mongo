@@ -133,6 +133,8 @@ namespace mongo {
 
         void insert(const BSONObj &key, const BSONObj &val, bool overwrite);
 
+        DBC *cursor();
+
     private:
         // Open dictionary representing the index on disk.
         DB *_db;

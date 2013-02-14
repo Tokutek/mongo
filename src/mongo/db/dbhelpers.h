@@ -64,6 +64,9 @@ namespace mongo {
         */
         bool findOne(const char *ns, const BSONObj &query, BSONObj& result, bool requireIndex = false);
 
+        // Replacement for DataFileMgr::findTableScan
+        shared_ptr<Cursor> findTableScan(const char *ns, const BSONObj &order);
+
         /**
          * have to be locked already
          */

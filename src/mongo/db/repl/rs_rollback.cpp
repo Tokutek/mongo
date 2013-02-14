@@ -97,6 +97,7 @@ namespace mongo {
         int rbid; // remote server's current rollback sequence #
     };
 
+#if 0
     static void refetch(HowToFixUp& h, const BSONObj& ourObj) {
         const char *op = ourObj.getStringField("op");
         if( *op == 'n' )
@@ -188,10 +189,13 @@ namespace mongo {
 
         h.toRefetch.insert(d);
     }
+#endif
 
     int getRBID(DBClientConnection*);
 
     static void syncRollbackFindCommonPoint(DBClientConnection *them, HowToFixUp& h) {
+        // TODO: Replication
+#if 0
         static time_t last;
         if( time(0)-last < 60 ) {
             throw "findcommonpoint waiting a while before trying again";
@@ -298,6 +302,7 @@ namespace mongo {
                 ourTime = ourObj["ts"]._opTime();
             }
         }
+#endif
     }
 
     struct X {

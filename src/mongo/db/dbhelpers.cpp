@@ -85,6 +85,26 @@ namespace mongo {
         }
     }
 
+    shared_ptr<Cursor> Helpers::findTableScan(const char *ns, const BSONObj &order) {
+        BSONElement el = order.getField("$natural"); // e.g., { $natural : -1 }
+
+        NamespaceDetails *d = nsdetails(ns);
+        if ( el.number() >= 0 ) {
+            return shared_ptr<Cursor>( new BasicCursor(d) );
+        } else {
+            // "reverse natural order"
+            if ( !d->isCapped() ) {
+                return shared_ptr<Cursor>( new ReverseCursor(d) );
+            }
+            else {
+                // TODO: Capped collections
+                //return shared_ptr<Cursor>( new ReverseCappedCursor(d) );
+                ::abort();
+                return shared_ptr<Cursor>( new ReverseCursor(d) );
+            }
+        }
+    }
+
     vector<BSONObj> Helpers::findAll( const string& ns , const BSONObj& query ) {
         Lock::assertAtLeastReadLocked( ns );
 
@@ -95,12 +115,10 @@ namespace mongo {
         shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor( ns.c_str(), query );
 
         while( c->ok() ) {
-#if 0
-            if ( c->currentMatches() && !c->getsetdup( c->currLoc() ) ) {
+            // TODO: Deduplication
+            if ( c->currentMatches() /* && !c->getsetdup( c->currLoc() )*/ ) {
                 all.push_back( c->current() );
             }
-#endif
-            ::abort();
             c->advance();
         }
 
@@ -109,12 +127,8 @@ namespace mongo {
 
     bool Helpers::isEmpty(const char *ns, bool doAuth) {
         Client::Context context(ns, dbpath, doAuth);
-#if 0
-        shared_ptr<Cursor> c = DataFileMgr::findAll(ns);
+        shared_ptr<Cursor> c = findTableScan(ns, BSONObj());
         return !c->ok();
-#endif
-        ::abort();
-        return false;
     }
 
     /* Get the first object from a collection.  Generally only useful if the collection
@@ -125,8 +139,7 @@ namespace mongo {
     bool Helpers::getSingleton(const char *ns, BSONObj& result) {
         Client::Context context(ns);
 
-#if 0
-        shared_ptr<Cursor> c = DataFileMgr::findAll(ns);
+        shared_ptr<Cursor> c = findTableScan(ns, BSONObj());
         if ( !c->ok() ) {
             context.getClient()->curop()->done();
             return false;
@@ -134,9 +147,6 @@ namespace mongo {
 
         result = c->current();
         context.getClient()->curop()->done();
-#endif
-
-        ::abort();
         return true;
     }
 
@@ -145,14 +155,11 @@ namespace mongo {
     }
 
     bool Helpers::getLast(const char *ns, BSONObj& result) {
-#if 0
         Client::Context ctx(ns);
         shared_ptr<Cursor> c = findTableScan(ns, reverseNaturalObj);
         if( !c->ok() )
             return false;
         result = c->current();
-#endif
-        ::abort();
         return true;
     }
 

@@ -27,8 +27,7 @@ namespace mongo {
 
     const unsigned ScanAndOrder::MaxScanAndOrderBytes = 32 * 1024 * 1024;
 
-#if 0
-    void ScanAndOrder::add(const BSONObj& o, const DiskLoc* loc) {
+    void ScanAndOrder::add(const BSONObj& o) {
         verify( o.isValid() );
         BSONObj k;
         try {
@@ -49,16 +48,15 @@ namespace mongo {
             return;   
         }
         if ( (int) _best.size() < _limit ) {
-            _add(k, o, loc);
+            _add(k, o);
             return;
         }
         BestMap::iterator i;
         verify( _best.end() != _best.begin() );
         i = _best.end();
         i--;
-        _addIfBetter(k, o, i, loc);
+        _addIfBetter(k, o, i);
     }
-#endif
 
     void ScanAndOrder::fill( BufBuilder& b, const ParsedQuery *parsedQuery, int& nout ) const {
         int n = 0;
@@ -88,31 +86,22 @@ namespace mongo {
         nout = nFilled;
     }
 
-#if 0
-    void ScanAndOrder::_add(const BSONObj& k, const BSONObj& o, const DiskLoc* loc) {
+    void ScanAndOrder::_add(const BSONObj& k, const BSONObj& o) {
         BSONObj docToReturn = o;
-        if ( loc ) {
-            BSONObjBuilder b;
-            b.appendElements(o);
-            b.append("$diskLoc", loc->toBSONObj());
-            docToReturn = b.obj();
-        }
         _validateAndUpdateApproxSize( k.objsize() + docToReturn.objsize() );
         _best.insert(make_pair(k.getOwned(),docToReturn.getOwned()));
     }
     
-    void ScanAndOrder::_addIfBetter(const BSONObj& k, const BSONObj& o, const BestMap::iterator& i,
-                                    const DiskLoc* loc) {
+    void ScanAndOrder::_addIfBetter(const BSONObj& k, const BSONObj& o, const BestMap::iterator& i) {
         const BSONObj& worstBestKey = i->first;
         int cmp = worstBestKey.woCompare(k, _order._spec.keyPattern);
         if ( cmp > 0 ) {
             // k is better, 'upgrade'
             _validateAndUpdateApproxSize( -i->first.objsize() + -i->second.objsize() );
             _best.erase(i);
-            _add(k, o, loc);
+            _add(k, o);
         }
     }
-#endif
 
     void ScanAndOrder::_validateAndUpdateApproxSize( const int approxSizeDelta ) {
         // note : adjust when bson return limit adjusts. note this limit should be a bit higher.

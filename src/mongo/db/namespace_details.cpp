@@ -157,9 +157,9 @@ namespace mongo {
 
         tokulog() << "Initializing NamespaceIndex " << database_ << endl;
         {
-            Client::Transaction scan_txn;
+            const Client::Transaction &txn = cc().transaction();
             DBC *cursor;
-            r = nsdb->cursor(nsdb, scan_txn.txn(), &cursor, 0);
+            r = nsdb->cursor(nsdb, txn.txn(), &cursor, 0);
             verify(r == 0);
 
             while (r != DB_NOTFOUND) {
@@ -169,7 +169,6 @@ namespace mongo {
 
             r = cursor->c_close(cursor);
             verify(r == 0);
-            scan_txn.commit();
         }
 
         /* if someone manually deleted the datafiles for a database,
@@ -306,21 +305,19 @@ namespace mongo {
 
     bool NamespaceDetails::findById(const BSONObj &query, BSONObj &result) {
         int r;
-
         Client::Transaction txn;
-        // Get the _id index and extract the _id key from the query.
+
+        // Get a cursor over the _id index.
         IndexDetails &idIndex = idx(findIdIndex());
+        DBC *cursor = idIndex.cursor();
+
+        // Extract the _id key from the query object
         const BSONObj &key = idIndex.getKeyFromQuery(query);
-
-        DB *db = idIndex.db();
-        DBC *cursor;
-        r = db->cursor(db, txn.txn(), &cursor, 0);
-        verify(r == 0);
-
         DBT key_dbt;
         key_dbt.data = const_cast<char *>(key.objdata());
         key_dbt.size = key.objsize();
 
+        // Try to find it.
         BSONObj obj = BSONObj();
         struct findByIdCallbackExtra extra(key, obj);
         r = cursor->c_getf_set(cursor, 0, &key_dbt, findByIdCallback, &extra);
@@ -355,13 +352,13 @@ namespace mongo {
         }
 
         // TODO: use put_multiple API
-        int idxno;
-        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); it++, idxno++) {
+        int idxNo = 0;
+        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); it++, idxNo++) {
             IndexDetails *index = it->get();
             BSONObjSet keys;
             index->getKeysFromObject(obj, keys);
             if (keys.size() > 1) {
-                setIndexIsMultikey(ns, idxno);
+                setIndexIsMultikey(ns, idxNo);
             }
 
             // TODO: handle clustering secondary keys

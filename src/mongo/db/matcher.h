@@ -98,7 +98,6 @@ namespace mongo {
     };
 
     class Where; // used for $where javascript eval
-    //class DiskLoc;
 
     /** Reports information about a match request. */
     class MatchDetails {
@@ -280,9 +279,9 @@ namespace mongo {
     class CoveredIndexMatcher : boost::noncopyable {
     public:
         CoveredIndexMatcher(const BSONObj &pattern, const BSONObj &indexKeyPattern);
-        bool matchesWithSingleKeyIndex( const BSONObj& key, /*const DiskLoc& recLoc,*/
+        bool matchesWithSingleKeyIndex( const BSONObj& key, const BSONObj& obj,
                                         MatchDetails* details = 0 ) const {
-            return matches( key, /*recLoc,*/ details, true );   
+            return matches( key, obj, details, true );   
         }
         /**
          * This is the preferred method for matching against a cursor, as it
@@ -306,7 +305,7 @@ namespace mongo {
         string toString() const;
 
     private:
-        bool matches( const BSONObj& key, /*const DiskLoc& recLoc, */MatchDetails* details = 0,
+        bool matches( const BSONObj& key, const BSONObj& obj, MatchDetails* details = 0,
                       bool keyUsable = true ) const;
         bool isOrClauseDup( const BSONObj &obj ) const;
         CoveredIndexMatcher( const CoveredIndexMatcher &prevClauseMatcher,

@@ -1879,6 +1879,9 @@ namespace mongo {
         virtual LockType locktype() const { return WRITE; }
         virtual bool requiresAuth() { return true; }
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
+            // TODO: Capped collections
+            return false;
+#if 0
             string coll = cmdObj[ "captrunc" ].valuestrsafe();
             uassert( 13416, "captrunc must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
@@ -1897,6 +1900,7 @@ namespace mongo {
             //DiskLoc end = c.currLoc();
             //nsd->cappedTruncateAfter( ns.c_str(), end, inc );
             return true;
+#endif
         }
     } capTruncCmd;
 

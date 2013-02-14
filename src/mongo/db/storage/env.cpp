@@ -40,6 +40,9 @@ namespace mongo {
 
         DB_ENV *env;
 
+        // TODO: Make it so that only one bson object lives in the key.
+        // For secondary keys, we will embed the secondary key and then the
+        // primary key into a single bson object.
         static int dbt_bson_compare(DB *db, const DBT *key1, const DBT *key2) {
             // extract bson objects from each dbt and get the ordering
             verify(db->cmp_descriptor);

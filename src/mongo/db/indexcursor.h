@@ -79,10 +79,10 @@ namespace mongo {
         bool modifiedKeys() const { return _multikey; }
         bool isMultiKey() const { return _multikey; }
 
-        BSONObj currKey() const { ::abort(); return BSONObj(); }
+        BSONObj currKey() const;
         BSONObj indexKeyPattern() { return _order; }
 
-        BSONObj current()  { ::abort(); return BSONObj(); } //return BSONObj::make(_current());
+        BSONObj current();
         string toString();
 
         BSONObj prettyKey( const BSONObj &key ) const {

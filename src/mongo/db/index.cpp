@@ -121,6 +121,14 @@ namespace mongo {
         verify(r == 0);
     }
 
+    DBC *IndexDetails::cursor() {
+        DBC *cursor;
+        const Client::Transaction &txn = cc().transaction();
+        int r = _db->cursor(_db, txn.txn(), &cursor, 0);
+        verify(r == 0);
+        return cursor;
+    }
+
     void IndexSpec::reset( const IndexDetails * details ) {
         _details = details;
         reset( details->info() );

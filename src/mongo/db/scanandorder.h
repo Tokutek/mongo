@@ -53,23 +53,10 @@ namespace mongo {
     */
 
     inline void fillQueryResultFromObj(BufBuilder& bb, const Projection *filter, const BSONObj& js,
-                                       const MatchDetails* details = NULL//,
-                                       /*const DiskLoc* loc=NULL*/) {
+                                       const MatchDetails* details = NULL) {
         if ( filter ) {
             BSONObjBuilder b( bb );
             filter->transform( js , b, details );
-#if 0
-            if (loc)
-                b.append("$diskLoc", loc->toBSONObj());
-#endif
-            ::abort();
-            b.done();
-        }
-        else if ( false /* loc */) {
-            BSONObjBuilder b( bb );
-            b.appendElements(js);
-            ::abort();
-            //b.append("$diskLoc", loc->toBSONObj());
             b.done();
         }
         else {
@@ -95,7 +82,7 @@ namespace mongo {
          * @throw ScanAndOrderMemoryLimitExceededAssertionCode if adding would grow memory usage
          * to ScanAndOrder::MaxScanAndOrderBytes.
          */
-        //void add(const BSONObj &o, const DiskLoc* loc);
+        void add(const BSONObj &o);
 
         /* scanning complete. stick the query result in b for n objects. */
         void fill(BufBuilder& b, const ParsedQuery *query, int& nout) const;
@@ -107,12 +94,9 @@ namespace mongo {
 
     private:
 
-#if 0
-        void _add(const BSONObj& k, const BSONObj& o, const DiskLoc* loc);
+        void _add(const BSONObj& k, const BSONObj& o);
 
-        void _addIfBetter(const BSONObj& k, const BSONObj& o, const BestMap::iterator& i,
-                          const DiskLoc* loc);
-#endif
+        void _addIfBetter(const BSONObj& k, const BSONObj& o, const BestMap::iterator& i);
 
         /**
          * @throw ScanAndOrderMemoryLimitExceededAssertionCode if approxSize would grow too high,

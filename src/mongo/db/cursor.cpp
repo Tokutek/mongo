@@ -22,64 +22,118 @@
 
 namespace mongo {
 
+    struct cursor_getf_extra {
+        BSONObj *const key;
+        BSONObj *const val;
+        cursor_getf_extra(BSONObj *const k, BSONObj *const v) : key(k), val(v) { }
+    };
+
+    static int cursor_getf(const DBT *key, const DBT *val, void *extra) {
+        struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
+        dassert(key != NULL);
+        dassert(val != NULL);
+
+        BSONObj keyObj(static_cast<char *>(key->data));
+        BSONObj valObj(static_cast<char *>(val->data));
+        dassert(keyObj.objsize() == (int) key->size);
+        dassert(valObj.objsize() == (int) val->size);
+        *info->key = keyObj.getOwned();
+        *info->val = valObj.getOwned();
+        return 0;
+    }
+
+    BasicCursor::BasicCursor(NamespaceDetails *nsd, int direction)
+        : _nsd(nsd), _direction(direction), _cursor(NULL), _transaction(), _nscanned(0) {
+
+        if (_nsd != NULL) {
+            // Get a cursor over the _id index
+            int idxNo = nsd->findIdIndex();
+            IndexDetails &id = nsd->idx(idxNo);
+            _cursor = id.cursor();
+
+            // Get the first/last element depending on direction
+            struct cursor_getf_extra extra(&_currKey, &_currObj);
+            int r;
+            if (_direction > 0) {
+                r = _cursor->c_getf_first(_cursor, 0, cursor_getf, &extra);
+            } else {
+                r = _cursor->c_getf_last(_cursor, 0, cursor_getf, &extra);
+            }
+            DEV {
+                if (r == 0) {
+                    verify(ok());
+                } else {
+                    verify(!ok());
+                }
+            }
+            incNscanned();
+        }
+        init();
+    }
+
+    BasicCursor::~BasicCursor() {
+        // TODO: Under what circumstances do we abort?
+        // How is the transaction here going to interact with a
+        // transaction that also does updates/deletes?
+        _transaction.commit();
+        if (_cursor != NULL) {
+            int r = _cursor->c_close(_cursor);
+            verify(r == 0);
+        }
+    }
+
     bool BasicCursor::advance() {
-#if 0
         killCurrentOp.checkForInterrupt();
         if ( eof() ) {
-            if ( tailable_ && !last.isNull() ) {
+            // TODO: Tailable cursors
+            if ( _tailable && /* !last.isNull() */ false ) {
+#if 0
                 curr = s->next( last );
+#endif
             }
             else {
                 return false;
             }
+            return false;
         }
         else {
-            last = curr;
-            curr = s->next( curr );
+            // Reset current key/obj to empty.
+            _currKey = BSONObj();
+            _currObj = BSONObj();
+
+            int r;
+            struct cursor_getf_extra extra(&_currKey, &_currObj);
+            if (_direction > 0) {
+                r = _cursor->c_getf_next(_cursor, 0, cursor_getf, &extra);
+            } else {
+                r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
+            }
+
+            DEV {
+                if (r == 0) {
+                    verify(ok());
+                } else {
+                    verify(!ok());
+                }
+            }
         }
-#endif
-        ::abort();
         incNscanned();
         return ok();
     }
 
+    // TODO: Capped collections
 #if 0
-    /* these will be used outside of mutexes - really functors - thus the const */
-    class Forward : public AdvanceStrategy {
-        virtual DiskLoc next( const DiskLoc &prev ) const {
-            ::abort(); return minDiskLoc; //return prev.rec()->getNext( prev );
-        }
-    } _forward;
-
-    class Reverse : public AdvanceStrategy {
-        virtual DiskLoc next( const DiskLoc &prev ) const {
-            ::abort(); return minDiskLoc; //return prev.rec()->getPrev( prev );
-        }
-    } _reverse;
-
-    const AdvanceStrategy *forward() {
-        return &_forward;
-    }
-    const AdvanceStrategy *reverse() {
-        return &_reverse;
-    }
-#endif
-
     ForwardCappedCursor* ForwardCappedCursor::make( NamespaceDetails* nsd /*, const DiskLoc& startLoc */ ) {
-#if 0
         auto_ptr<ForwardCappedCursor> ret( new ForwardCappedCursor( nsd ) );
         ret->init( startLoc );
         return ret.release();
-#endif
         ::abort();
         return NULL;
     }
 
-    ForwardCappedCursor::ForwardCappedCursor( NamespaceDetails* _nsd ) :
-        nsd( _nsd ) {
+    ForwardCappedCursor::ForwardCappedCursor( NamespaceDetails* _nsd ) : BasicCursor( _nsd ) {
     }
 
-#if 0
     void ForwardCappedCursor::init( const DiskLoc& startLoc ) {
         if ( !nsd )
             return;
@@ -100,9 +154,7 @@ namespace mongo {
         s = this;
         incNscanned();
     }
-#endif
 
-#if 0
     DiskLoc ForwardCappedCursor::next( const DiskLoc &prev ) const {
         verify( nsd );
         ::abort();
@@ -124,13 +176,11 @@ namespace mongo {
             i = nsd->capFirstNewRecord;
         return i;
     }
-#endif
 
-    ReverseCappedCursor::ReverseCappedCursor( NamespaceDetails *_nsd /*, const DiskLoc &startLoc*/ ) :
-        nsd( _nsd ) {
-        if ( !nsd )
+    ReverseCappedCursor::ReverseCappedCursor( NamespaceDetails *nsd /*, const DiskLoc &startLoc*/ ) :
+        _nsd( nsd ) {
+        if ( !_nsd )
             return;
-#if 0
         DiskLoc start = startLoc;
         if ( start.isNull() ) {
             ::abort();
@@ -145,11 +195,9 @@ namespace mongo {
         curr = start;
         ::abort();
         s = this;
-#endif
         incNscanned();
     }
 
-#if 0
     DiskLoc ReverseCappedCursor::next( const DiskLoc &prev ) const {
         verify( nsd );
         ::abort();

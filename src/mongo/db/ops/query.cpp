@@ -341,13 +341,12 @@ namespace mongo {
     }
     
     bool OrderedBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
+        // TODO: Deduplication
 #if 0
-        DiskLoc loc = minDiskLoc;//_cursor->currLoc();
         if ( _cursor->getsetdup( loc ) ) {
             return orderedMatch = false;
         }
 #endif
-        ::abort();
         if ( _skip > 0 ) {
             --_skip;
             return orderedMatch = false;
@@ -355,8 +354,7 @@ namespace mongo {
         // Explain does not obey soft limits, so matches should not be buffered.
         if ( !_parsedQuery.isExplain() ) {
             fillQueryResultFromObj( _buf, _parsedQuery.getFields(),
-                                    current( true ), &details//,
-                                   /*( _parsedQuery.showDiskLoc() ? &loc : 0 ) */ );
+                                    current( true ), &details);
             ++_bufferedMatches;
         }
         return orderedMatch = true;
@@ -384,22 +382,18 @@ namespace mongo {
 
     bool ReorderBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
         orderedMatch = false;
+        // TODO: Deduplication
 #if 0
         if ( _cursor->getsetdup( /* _cursor->currLoc() */ minDiskLoc) ) {
             return false;
         }
 #endif
-        ::abort();
         _handleMatchNoDedup();
         return true;
     }
     
     void ReorderBuildStrategy::_handleMatchNoDedup() {
-        ::abort();
-#if 0
-        DiskLoc loc = minDiskLoc; //_cursor->currLoc();
-        _scanAndOrder->add( current( false ), _parsedQuery.showDiskLoc() ? &loc : 0 );
-#endif
+        _scanAndOrder->add( current( false ) );
     }
 
     int ReorderBuildStrategy::rewriteMatches() {

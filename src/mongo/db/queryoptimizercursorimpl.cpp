@@ -675,7 +675,9 @@ namespace mongo {
         }
         
         if ( _planPolicy.permitOptimalNaturalPlan() && _query.isEmpty() && _order.isEmpty() ) {
-            ::abort(); // theDataFileMgr.findAll( _ns );
+            // Table-scan
+            NamespaceDetails *d = nsdetails(_ns);
+            return shared_ptr<Cursor>(new BasicCursor(d));
         }
         if ( _planPolicy.permitOptimalIdPlan() && isSimpleIdQuery( _query ) ) {
             Database *database = cc().database();
