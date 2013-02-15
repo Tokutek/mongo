@@ -34,7 +34,8 @@ namespace mongo {
         }
 
         void commit_txn(DB_TXN *txn) {
-            int r = txn->commit(txn, 0);
+            const int flags = DB_TXN_NOSYNC;
+            int r = txn->commit(txn, flags);
             verify(r == 0);
         }
 

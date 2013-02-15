@@ -20,9 +20,7 @@
 
 #include "pch.h"
 
-#include "mongo/bson/bsonobj.h"
-#include "mongo/bson/bsonobjbuilder.h"
-#include "mongo/bson/oid.h"
+#include "mongo/db/jsobj.h"
 
 namespace mongo {
 
