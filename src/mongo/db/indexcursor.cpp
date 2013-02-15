@@ -125,6 +125,9 @@ namespace mongo {
         if ( _idx.getSpec().getType() ) {
             _startKey = _idx.getSpec().getType()->fixKey( startKey );
             _endKey = _idx.getSpec().getType()->fixKey( endKey );
+        } else {
+            _startKey = startKey;
+            _endKey = endKey;
         }
         initializeDBC();
     }
