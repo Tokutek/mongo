@@ -85,7 +85,7 @@ namespace mongo {
         }
 
         string indexName() const { // e.g. "ts_1"
-            return _info.getStringField("name");
+            return _info["name"].String();
         }
 
         static bool isIdIndexPattern( const BSONObj &pattern ) {
@@ -109,7 +109,7 @@ namespace mongo {
            but the collection we index, its name.
            */
         string parentNS() const {
-            return _info.getStringField("ns");
+            return _info["ns"].String();
         }
 
         /** @return true if index has unique constraint */
