@@ -27,6 +27,7 @@
 // tell windows.h not to include a bunch of headers we don't need:
 # define WIN32_LEAN_AND_MEAN
 # include "mongo/targetver.h"
+
 # include <winsock2.h> //this must be included before the first windows.h include
 # include <ws2tcpip.h>
 # include <wspiapi.h>
