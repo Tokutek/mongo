@@ -1,4 +1,4 @@
-//@file insert.h
+//@file idgen.h
 
 /**
  *    Copyright (C) 2012 Tokutek Inc.
@@ -18,13 +18,10 @@
 
 #pragma once
 
-#include "pch.h"
-
 #include "mongo/bson/bsonobj.h"
 
 namespace mongo {
 
-    // Insert an object into the given namespace.
-    void insertObject(const char *ns, const BSONObj &doc);
-    
-}  // namespace mongo
+    BSONObj addIdField(const BSONObj &orig);
+
+} // namespace mongo

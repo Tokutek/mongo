@@ -29,6 +29,7 @@
 #include "mongo/db/indexcursor.h"
 #include "mongo/db/db.h"
 #include "mongo/db/dbhelpers.h"
+#include "mongo/db/idgen.h"
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/delete.h"
@@ -495,7 +496,7 @@ namespace mongo {
         char database[256];
         nsToDatabase(ns.c_str(), database);
         string s = string(database) + ".system.namespaces";
-        insertObject(s.c_str(), j);
+        insertObject(s.c_str(), addIdField(j));
     }
 
     void renameNamespace( const char *from, const char *to, bool stayTemp) {
