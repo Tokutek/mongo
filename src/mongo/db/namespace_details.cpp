@@ -346,15 +346,14 @@ namespace mongo {
 
         // create an index key
         BSONObj key = getKey ? idIndex.getKeyFromQuery(query) : query;
-        const BSONObj &idxKey = BSON("k" << key);
         DBT key_dbt;
-        key_dbt.data = const_cast<char *>(idxKey.objdata());
-        key_dbt.size = idxKey.objsize();
+        key_dbt.data = const_cast<char *>(key.objdata());
+        key_dbt.size = key.objsize();
 
         // Try to find it.
         BSONObj obj = BSONObj();
-        tokulog() << "NamespaceDetails::findById looking for " << idxKey << endl;
-        struct findByIdCallbackExtra extra(idxKey, obj);
+        tokulog() << "NamespaceDetails::findById looking for " << key << endl;
+        struct findByIdCallbackExtra extra(key, obj);
         r = cursor->c_getf_set(cursor, 0, &key_dbt, findByIdCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND);
         r = cursor->c_close(cursor);

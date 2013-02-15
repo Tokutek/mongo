@@ -122,19 +122,25 @@ namespace mongo {
 
         for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
             if (isIdIndex()) {
-                insertPair(BSON("k" << *ki), obj, overwrite);
+                insertPair(*ki, NULL, obj, overwrite);
             } else if (clustering()) {
-                insertPair(BSON("k" << *ki << "i" << primary_key), obj, overwrite);
+                insertPair(*ki, &primary_key, obj, overwrite);
             } else {
-                insertPair(BSON("k" << *ki << "i" << primary_key), BSONObj(), overwrite);
+                insertPair(*ki, &primary_key, BSONObj(), overwrite);
             }
         }
     }
 
-    void IndexDetails::insertPair(const BSONObj &key, const BSONObj &val, bool overwrite) {
+    void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite) {
+        const int buflen = key.objsize() + (pk != NULL ? pk->objsize() : 0);
+        char buf[buflen];
+        memcpy(buf, key.objdata(), key.objsize());
+        if (pk != NULL) {
+            memcpy(buf + key.objsize(), pk->objdata(), pk->objsize());
+        }
         DBT kdbt, vdbt;
-        kdbt.data = const_cast<void *>(static_cast<const void *>(key.objdata()));
-        kdbt.size = key.objsize();
+        kdbt.data = const_cast<void *>(static_cast<const void *>(buf));
+        kdbt.size = buflen;
         vdbt.data = const_cast<void *>(static_cast<const void *>(val.objdata()));
         vdbt.size = val.objsize();
         const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
@@ -143,7 +149,7 @@ namespace mongo {
         if (r != 0) {
             tokulog() << "error inserting " << key << ", " << val << endl;
         } else {
-            tokulog() << "inserted " << key << ", " << val << endl;
+            tokulog() << "inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
         }
         verify(r == 0);
     }

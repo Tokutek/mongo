@@ -144,7 +144,7 @@ namespace mongo {
         const BSONObj &info() const { return _info; }
 
         void insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite);
-        void insertPair(const BSONObj &key, const BSONObj &val, bool overwrite);
+        void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite);
 
         DBC *cursor() const;
 

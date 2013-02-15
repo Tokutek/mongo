@@ -37,16 +37,6 @@ namespace mongo {
     // TODO: TokuDB: A lot of btree/implementation-specific artifacts from vanilla mongo.
     // TODO: Clean house.
     class IndexCursor : public Cursor {
-    protected:
-        IndexCursor( NamespaceDetails* nsd , int theIndexNo, const IndexDetails& idxDetails );
-
-        void init( const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
-        void init( const shared_ptr< FieldRangeVector > &_bounds, int singleIntervalLimit, int _direction );
-
-    private:
-        void _finishConstructorInit();
-        static IndexCursor* make( NamespaceDetails * nsd , int idxNo , const IndexDetails& _idx );
-
     public:
         ~IndexCursor();
 
@@ -101,6 +91,10 @@ namespace mongo {
         long long nscanned() { return _nscanned; }
 
     protected:
+        IndexCursor( NamespaceDetails* nsd , int theIndexNo, const IndexDetails& idxDetails );
+
+        void init( const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
+        void init( const shared_ptr< FieldRangeVector > &_bounds, int singleIntervalLimit, int _direction );
 
         /** setup the PK and currKey fields based on the stored index key */
         void setKeyAndPK(const BSONObj &idxKey);

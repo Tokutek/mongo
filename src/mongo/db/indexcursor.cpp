@@ -27,8 +27,10 @@ namespace mongo {
 
     struct cursor_getf_extra {
         BSONObj *const key;
+        BSONObj *const pk;
         BSONObj *const val;
-        cursor_getf_extra(BSONObj *const k, BSONObj *const v) : key(k), val(v) { }
+        cursor_getf_extra(BSONObj *const k, BSONObj *const p, BSONObj *const v)
+            : key(k), pk(p), val(v) { }
     };
 
     static int cursor_getf(const DBT *key, const DBT *val, void *extra) {
@@ -36,12 +38,24 @@ namespace mongo {
         dassert(key != NULL);
         dassert(val != NULL);
 
+        // There is always at least one bson object key.
         BSONObj keyObj(static_cast<char *>(key->data));
-        BSONObj valObj(static_cast<char *>(val->data));
-        dassert(keyObj.objsize() == (int) key->size);
-        dassert(valObj.objsize() == (int) val->size);
+        dassert(keyObj.objsize() <= (int) key->size);
         *info->key = keyObj.getOwned();
-        *info->val = valObj.getOwned();
+
+        // Check if there a PK attached to the end of the first key.
+        if (keyObj.objsize() < (int) key->size) {
+            BSONObj pkObj(static_cast<char *>(key->data) + keyObj.objsize());
+            dassert(keyObj.objsize() + pkObj.objsize() == (int) key->size);
+            *info->pk = pkObj.getOwned();
+        }
+
+        // Check if an object lives in the val buffer.
+        if (val->size > 0) {
+            BSONObj valObj(static_cast<char *>(val->data));
+            dassert(valObj.objsize() == (int) val->size);
+            *info->val = valObj.getOwned();
+        }
         return 0;
     }
 
@@ -128,43 +142,22 @@ namespace mongo {
         initializeDBC();
     }
 
-    void IndexCursor::setKeyAndPK(const BSONObj &idxKey) {
-        tokulog() << "setKeyAndPK from idxKey: " << idxKey << endl;
-        if (!idxKey.isEmpty()) {
-            // Must have a key field. May or may not have an associated
-            // primary key field. If it doesn't, then this index
-            // must be the primary key, so set currPk = currKey;
-            _currKey = idxKey["k"].Obj().getOwned();
-            _currPK = idxKey.getObjectField("i").getOwned();
-            if (_currPK.isEmpty()) {
-                _currPK = _currKey;
-            }
-        } else {
-            dassert(_currPK.isEmpty());
-            dassert(_currKey.isEmpty());
-            dassert(_currObj().isEmpty());
-        }
-    }
-
     void IndexCursor::initializeDBC() {
         // Get a cursor over the index
         _cursor = _idx.cursor();
 
         // Get the first/last element depending on direction
         int r;
-        BSONObj idxKey = BSONObj();
-        BSONObj startIdxKey = BSON("k" << _startKey);
-        struct cursor_getf_extra extra(&idxKey, &_currObj);
+        struct cursor_getf_extra extra(&_currKey, &_currPK, &_currObj);
         DBT key_dbt;
-        key_dbt.data = const_cast<char *>(startIdxKey.objdata());
-        key_dbt.size = startIdxKey.objsize();
-        tokulog() << "IndexCursor::initializeDBC getf with key " << startIdxKey << ", direction " << _direction << endl;
+        key_dbt.data = const_cast<char *>(_startKey.objdata());
+        key_dbt.size = _startKey.objsize();
+        tokulog() << "IndexCursor::initializeDBC getf with key " << _startKey << ", direction " << _direction << endl;
         if (_direction > 0) {
             r = _cursor->c_getf_set_range(_cursor, 0, &key_dbt, cursor_getf, &extra);
         } else {
             r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
         }
-        setKeyAndPK(idxKey);
         tokulog() << "IndexCursor::initializeDBC hit K, P, Obj " << _currKey << _currPK << _currObj << endl;
         checkCurrentAgainstBounds();
     }
@@ -245,14 +238,12 @@ namespace mongo {
         _currObj = BSONObj();
 
         int r;
-        BSONObj idxKey = BSONObj();
-        struct cursor_getf_extra extra(&idxKey, &_currObj);
+        struct cursor_getf_extra extra(&_currKey, &_currPK, &_currObj);
         if (_direction > 0) {
             r = _cursor->c_getf_next(_cursor, 0, cursor_getf, &extra);
         } else {
             r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
         }
-        setKeyAndPK(idxKey);
         tokulog() << "IndexCursor::advance moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
         return checkCurrentAgainstBounds();
     }
