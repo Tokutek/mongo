@@ -137,7 +137,7 @@ DB.prototype.__pwHash = function( nonce, username, pass ) {
     return hex_md5( nonce + username + hex_md5( username + ":mongo:" + pass ) );
 }
 
-DB.prototype._defaultAuthenticationMechanism = "MONGO-CR";
+DB.prototype._defaultAuthenticationMechanism = "MONGODB-CR";
 
 DB.prototype._authOrThrow = function () {
     var params;
