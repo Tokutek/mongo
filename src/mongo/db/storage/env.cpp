@@ -40,9 +40,6 @@ namespace mongo {
 
         DB_ENV *env;
 
-        // TODO: Make it so that only one bson object lives in the key.
-        // For secondary keys, we will embed the secondary key and then the
-        // primary key into a single bson object.
         static int dbt_bson_compare(DB *db, const DBT *key1, const DBT *key2) {
             // extract bson objects from each dbt and get the ordering
             verify(db->cmp_descriptor);
@@ -53,7 +50,7 @@ namespace mongo {
             // Primary _id key is represented by one BSON Object.
             // Secondary keys are represented by two, the secondary key plus _id key.
             dassert(key1->size > 0);
-            dassert(key1->size == key2->size);
+            dassert(key2->size > 0);
             const BSONObj obj1(static_cast<char *>(key1->data));
             const BSONObj obj2(static_cast<char *>(key2->data));
             dassert((int) key1->size >= obj1.objsize());
@@ -66,7 +63,12 @@ namespace mongo {
                 return -1;
             } else if (c > 0) {
                 return 1;
-            } else if (obj1.objsize() < (int) key1->size) {
+            }
+
+            int key1_bytes_left = key1->size - obj1.objsize();
+            int key2_bytes_left = key2->size - obj2.objsize();
+            if (key1_bytes_left > 0 && key2_bytes_left > 0) {
+                // Equal first keys, and there is a second key that comes after.
                 const BSONObj other_obj1(static_cast<char *>(key1->data) + obj1.objsize());
                 const BSONObj other_obj2(static_cast<char *>(key2->data) + obj2.objsize());
                 dassert(obj1.objsize() + other_obj1.objsize() == (int) key1->size);
@@ -76,10 +78,15 @@ namespace mongo {
                     return -1;
                 } else if (c > 0) {
                     return 1;
-                } else {
-                    return 0;
                 }
-            } else {
+                return 0;
+            } else if (key1_bytes_left > 0 && key2_bytes_left == 0) {
+                // key 1 has bytes left, but key 2 does not.
+                return 1;
+            } else if (key1_bytes_left == 0 && key2_bytes_left > 0) {
+                // key 1 has no bytes left, but key 2 does.
+                return -1;
+            } else { // no second key after the first object, so key1 == key2
                 return 0;
             }
         }
