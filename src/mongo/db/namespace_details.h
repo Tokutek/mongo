@@ -187,7 +187,9 @@ namespace mongo {
         BSONObj serialize() const;
 
         // Query the _id index of this collection, get the full object in result
-        bool findById(const BSONObj &key, BSONObj &result);
+        // If getKey is true, then the query object must have the _id key extracted.
+        // Otherwise, the query object is just an _id key value with no name.
+        bool findById(const BSONObj &query, BSONObj &result, bool getKey = true);
 
         void insert(const char *ns, const BSONObj &obj, bool overwrite);
 

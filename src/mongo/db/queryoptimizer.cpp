@@ -1115,22 +1115,17 @@ doneCheckOrder:
     catch ( const std::exception &e ) { \
         op.setException( ExceptionInfo( e.what() , 0 ) ); \
     } \
-    catch ( PageFaultException& pfe ) { \
-        throw pfe; \
-    } \
     catch ( ... ) { \
         op.setException( ExceptionInfo( "Caught unknown exception" , 0 ) ); \
     }
 
 
     void QueryPlanSet::Runner::initOp( QueryOp &op ) {
-        ::abort();
-        //GUARD_OP_EXCEPTION( op, op.init() );
+        GUARD_OP_EXCEPTION( op, op.init() );
     }
 
     void QueryPlanSet::Runner::nextOp( QueryOp &op ) {
-        ::abort();
-        //GUARD_OP_EXCEPTION( op, if ( !op.error() ) { op.next(); } );
+        GUARD_OP_EXCEPTION( op, if ( !op.error() ) { op.next(); } );
     }
 
     /**

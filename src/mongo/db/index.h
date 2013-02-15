@@ -146,7 +146,7 @@ namespace mongo {
         void insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite);
         void insertPair(const BSONObj &key, const BSONObj &val, bool overwrite);
 
-        DBC *cursor();
+        DBC *cursor() const;
 
     private:
         // Open dictionary representing the index on disk.

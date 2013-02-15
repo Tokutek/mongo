@@ -142,11 +142,13 @@ namespace mongo {
         uassert(16433, "key already exists in unique index", r != DB_KEYEXIST);
         if (r != 0) {
             tokulog() << "error inserting " << key << ", " << val << endl;
+        } else {
+            tokulog() << "inserted " << key << ", " << val << endl;
         }
         verify(r == 0);
     }
 
-    DBC *IndexDetails::cursor() {
+    DBC *IndexDetails::cursor() const {
         DBC *cursor;
         const Client::Transaction &txn = cc().transaction();
         int r = _db->cursor(_db, txn.txn(), &cursor, 0);

@@ -22,6 +22,8 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/index.h"
+#include "mongo/db/client.h"
+#include "mongo/db/storage/env.h"
 
 namespace mongo {
 
@@ -43,19 +45,17 @@ namespace mongo {
 
     private:
         void _finishConstructorInit();
-        static IndexCursor* make( NamespaceDetails * nsd , int idxNo , const IndexDetails& indexDetails );
+        static IndexCursor* make( NamespaceDetails * nsd , int idxNo , const IndexDetails& _idx );
 
     public:
         ~IndexCursor();
 
-        static IndexCursor* make( NamespaceDetails *_d, const IndexDetails&, const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
-        static IndexCursor* make( NamespaceDetails *_d, const IndexDetails& _id, const shared_ptr< FieldRangeVector > &_bounds, int _direction );
-        static IndexCursor* make( NamespaceDetails *_d, int _idxNo, const IndexDetails&, const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
-        static IndexCursor* make( NamespaceDetails *_d, int _idxNo, const IndexDetails& _id,
-                                 const shared_ptr< FieldRangeVector > &_bounds,
-                                 int singleIntervalLimit, int _direction );
+        static IndexCursor* make( NamespaceDetails *_d, const IndexDetails& idx, const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
+        static IndexCursor* make( NamespaceDetails *_d, const IndexDetails& idx, const shared_ptr< FieldRangeVector > &bounds, int direction );
+        static IndexCursor* make( NamespaceDetails *_d, int idxNo, const IndexDetails& idx, const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
+        static IndexCursor* make( NamespaceDetails *_d, int idxNo, const IndexDetails& idx, const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction );
 
-        bool ok() { ::abort(); return false; /* return !bucket.isNull(); */ }
+        bool ok() { return !_currKey.isEmpty(); }
         bool advance();
         bool supportGetMore() { return true; }
 
@@ -74,14 +74,15 @@ namespace mongo {
         bool modifiedKeys() const { return _multikey; }
         bool isMultiKey() const { return _multikey; }
 
-        BSONObj currKey() const;
-        BSONObj indexKeyPattern() { return _order; }
+        BSONObj currPK() const { return _currPK; }
+        BSONObj currKey() const { return _currKey; }
+        BSONObj indexKeyPattern() { return _idx.keyPattern(); }
 
         BSONObj current();
         string toString();
 
         BSONObj prettyKey( const BSONObj &key ) const {
-            return key.replaceFieldNames( indexDetails.keyPattern() ).clientReadable();
+            return key.replaceFieldNames( _idx.keyPattern() ).clientReadable();
         }
 
         BSONObj prettyIndexBounds() const;
@@ -100,36 +101,31 @@ namespace mongo {
         long long nscanned() { return _nscanned; }
 
     protected:
-        // John thinks this means skip any keys that are not
-        // contained between two adjancet field ranges
-        // in this cursor's field range vector.
+
+        /** setup the PK and currKey fields based on the stored index key */
+        void setKeyAndPK(const BSONObj &idxKey);
+        /** setup DBC cursor and its initial position */
+        void initializeDBC();
+        /** check if the current key is out of bounds, invalidate the current key if so */
+        bool checkCurrentAgainstBounds();
         bool skipOutOfRangeKeysAndCheckEnd();
-        void skipAndCheck();
         void checkEnd();
 
-        /** set initial bucket */
-        void initWithoutIndependentFieldRanges();
-
-        /** if afterKey is true, we want the first key with values of the keyBegin fields greater than keyBegin */
-        void advanceTo( const BSONObj &keyBegin, int keyBeginLen, bool afterKey, const vector< const BSONElement * > &keyEnd, const vector< bool > &keyEndInclusive );
-
         // these are set in the construtor
-        NamespaceDetails * const d;
+        NamespaceDetails * const _d;
 
-        // TODO: Get rid of idxNo. It only exists because we need to know if the
-        // idxNo'th index is multikey using the NamespaceDetails. We should be
-        // able to figure it out using the indexDetails;
-        const int idxNo;
-        const IndexDetails& indexDetails;
+        // TODO: Get rid of _idxNo. It only exists because we need to know if the
+        // _idxNo'th index is multikey using the NamespaceDetails. We should be
+        // able to figure it out using the _idx;
+        const int _idxNo;
+        const IndexDetails& _idx;
 
         // these are all set in init()
         set<BSONObj> _dups;
-        BSONObj startKey;
-        BSONObj endKey;
+        BSONObj _startKey;
+        BSONObj _endKey;
         bool _endKeyInclusive;
         bool _multikey; // this must be updated every getmore batch in case someone added a multikey
-        BSONObj _order; // this is the same as indexDetails.keyPattern()
-        Ordering _ordering;
         int _direction;
         shared_ptr< FieldRangeVector > _bounds;
         auto_ptr< FieldRangeVectorIterator > _boundsIterator;
@@ -137,6 +133,23 @@ namespace mongo {
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
         bool _independentFieldRanges;
         long long _nscanned;
+
+        // For primary _id index:
+        //  _currKey == _currPK == actual dictionary key
+        //  _currObj == full document, actual dictionary val
+        // For secondary indexes:
+        //  _currKey == secondary key data
+        //  _currPK == associated primary key data
+        //  _currKey + _currPK == actual dictionary key
+        //  _currObj == full document
+        //      actual dictionary val if clustering
+        //      empty dictionary val otherwise, full document queried from _id index.
+        BSONObj _currKey;
+        BSONObj _currPK;
+        BSONObj _currObj;
+
+        DBC *_cursor;
+        Client::Transaction _transaction;
     };
 
 } // namespace mongo;

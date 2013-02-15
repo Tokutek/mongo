@@ -17,15 +17,15 @@
 */
 
 #include "pch.h"
-#include "db.h"
-#include "dbhelpers.h"
-#include "json.h"
-#include "indexcursor.h"
-#include "oplog.h"
-#include "ops/update.h"
-#include "ops/delete.h"
-#include "queryoptimizercursor.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/db.h"
+#include "mongo/db/dbhelpers.h"
+#include "mongo/db/json.h"
+#include "mongo/db/indexcursor.h"
+#include "mongo/db/oplog.h"
+#include "mongo/db/ops/update.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/repl_block.h"
 
 #include <fstream>

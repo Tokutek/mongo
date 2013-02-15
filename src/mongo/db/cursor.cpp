@@ -22,6 +22,8 @@
 
 namespace mongo {
 
+    // TODO: Phase this class out in favor of an IndexCursor over the _id index.
+
     struct cursor_getf_extra {
         BSONObj *const key;
         BSONObj *const val;

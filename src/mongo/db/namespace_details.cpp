@@ -336,7 +336,7 @@ namespace mongo {
         return 0;
     }
 
-    bool NamespaceDetails::findById(const BSONObj &query, BSONObj &result) {
+    bool NamespaceDetails::findById(const BSONObj &query, BSONObj &result, bool getKey) {
         int r;
         Client::Transaction txn(DB_TXN_READ_ONLY);
 
@@ -344,15 +344,17 @@ namespace mongo {
         IndexDetails &idIndex = idx(findIdIndex());
         DBC *cursor = idIndex.cursor();
 
-        // Extract the _id key from the query object
-        const BSONObj &key = idIndex.getKeyFromQuery(query);
+        // create an index key
+        BSONObj key = getKey ? idIndex.getKeyFromQuery(query) : query;
+        const BSONObj &idxKey = BSON("k" << key);
         DBT key_dbt;
-        key_dbt.data = const_cast<char *>(key.objdata());
-        key_dbt.size = key.objsize();
+        key_dbt.data = const_cast<char *>(idxKey.objdata());
+        key_dbt.size = idxKey.objsize();
 
         // Try to find it.
         BSONObj obj = BSONObj();
-        struct findByIdCallbackExtra extra(key, obj);
+        tokulog() << "NamespaceDetails::findById looking for " << idxKey << endl;
+        struct findByIdCallbackExtra extra(idxKey, obj);
         r = cursor->c_getf_set(cursor, 0, &key_dbt, findByIdCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND);
         r = cursor->c_close(cursor);
