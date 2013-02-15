@@ -784,9 +784,15 @@ env.Append( CPPPATH=['$EXTRACPPPATH'],
             LIBPATH=['$EXTRALIBPATH'] )
 
 # tokudb
+ltokudb='tokudb_static'
+if 'LIBTOKUDB_NAME' in env['ENV']:
+    ltokudb = env['ENV']['LIBTOKUDB_NAME']
+ltokuportability='tokuportability_static'
+if 'LIBTOKUPORTABILITY_NAME' in env['ENV']:
+    ltokuportability = env['ENV']['LIBTOKUPORTABILITY_NAME']
 env.Append(CPPPATH=['$BUILD_DIR/third_party/tokudb/include'])
 env.Append(LIBPATH=['$BUILD_DIR/third_party/tokudb/lib'])
-env.Append(LIBS=['tokudb_static', 'tokuportability_static', 'dl', 'z'])
+env.Append(LIBS=[ltokudb, ltokuportability, 'dl', 'z'])
 
 # --- check system ---
 
