@@ -353,7 +353,7 @@ namespace mongo {
 
         // Try to find it.
         BSONObj obj = BSONObj();
-        tokulog() << "NamespaceDetails::findById looking for " << key << endl;
+        tokulog(1) << "NamespaceDetails::findById looking for " << key << endl;
         struct findByIdCallbackExtra extra(key, obj);
         r = cursor->c_getf_set(cursor, 0, &key_dbt, findByIdCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND);

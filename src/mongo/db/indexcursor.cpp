@@ -152,13 +152,13 @@ namespace mongo {
         DBT key_dbt;
         key_dbt.data = const_cast<char *>(_startKey.objdata());
         key_dbt.size = _startKey.objsize();
-        tokulog() << "IndexCursor::initializeDBC getf with key " << _startKey << ", direction " << _direction << endl;
+        tokulog(1) << "IndexCursor::initializeDBC getf with key " << _startKey << ", direction " << _direction << endl;
         if (_direction > 0) {
             r = _cursor->c_getf_set_range(_cursor, 0, &key_dbt, cursor_getf, &extra);
         } else {
             r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
         }
-        tokulog() << "IndexCursor::initializeDBC hit K, P, Obj " << _currKey << _currPK << _currObj << endl;
+        tokulog(1) << "IndexCursor::initializeDBC hit K, P, Obj " << _currKey << _currPK << _currObj << endl;
         checkCurrentAgainstBounds();
     }
 
@@ -222,7 +222,7 @@ namespace mongo {
             if ( ( cmp != 0 && cmp != _direction ) ||
                     ( cmp == 0 && !_endKeyInclusive ) ) {
                 _currKey = BSONObj();
-                tokulog() << "IndexCursor::checkEnd stopping with curr, end: " << currKey() << _endKey << endl;
+                tokulog(1) << "IndexCursor::checkEnd stopping with curr, end: " << currKey() << _endKey << endl;
             }
         }
     }
@@ -244,7 +244,7 @@ namespace mongo {
         } else {
             r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
         }
-        tokulog() << "IndexCursor::advance moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
+        tokulog(1) << "IndexCursor::advance moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
         return checkCurrentAgainstBounds();
     }
 
@@ -255,9 +255,9 @@ namespace mongo {
         if (_currObj.isEmpty()) {
             dassert(!_currKey.isEmpty());
             dassert(!_currPK.isEmpty());
-            tokulog() << "IndexCursor::current key: " << _currKey << ", PK " << _currPK << endl;
+            tokulog(1) << "IndexCursor::current key: " << _currKey << ", PK " << _currPK << endl;
             bool found = _d->findById(_currPK, _currObj, false);
-            tokulog() << "IndexCursor::current primary key document lookup: " << _currObj << endl;
+            tokulog(1) << "IndexCursor::current primary key document lookup: " << _currObj << endl;
             verify(found);
             verify(!_currObj.isEmpty());
         }
