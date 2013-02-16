@@ -27,6 +27,8 @@
 namespace mongo {
     
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
+        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
+
         Client::Context cx(ns);
         NamespaceDetails *d = nsdetails( ns );
         if ( !d ) {
@@ -37,8 +39,7 @@ namespace mongo {
         
         // count of all objects
         if ( query.isEmpty() ) {
-            // TODO: TokuDB: Return our version of stats.nrecords
-            ::abort();
+            // TODO: TokuDB: call this with in-memory stats once we maintain them
             //return applySkipLimit( d->stats.nrecords , cmd );
         }
         
@@ -89,6 +90,7 @@ namespace mongo {
                 cursor->advance();
             }
             ccPointer.reset();
+            txn.commit();
             return count;
             
         }
