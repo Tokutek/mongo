@@ -157,6 +157,11 @@ namespace mongo {
         BSONObj currKey() const {
             return _currKey;
         };
+        BSONObj currPK() const {
+            // Basic cursors scan the _id index (the primary key),
+            // so the current PK is just the current key.
+            return currKey;
+        };
         bool advance();
         virtual string toString() { return "BasicCursor"; }
         virtual void setTailable() {
