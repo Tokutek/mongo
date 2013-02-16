@@ -23,8 +23,6 @@
 
 namespace mongo {
     
-    // !!! TODO get rid of const casts
-
     ExplainPlanInfo::ExplainPlanInfo() :
     _isMultiKey(),
     _n(),
@@ -37,7 +35,7 @@ namespace mongo {
     }
 
     void ExplainPlanInfo::notePlan( const Cursor &cursor, bool scanAndOrder, bool indexOnly ) {
-        _cursorName = const_cast<Cursor&>(cursor).toString();
+        _cursorName = cursor.toString();
         _indexBounds = cursor.prettyIndexBounds().getOwned();
         _scanAndOrder = scanAndOrder;
         _indexOnly = indexOnly;
@@ -58,7 +56,7 @@ namespace mongo {
         _done = true;
         noteCursorUpdate( cursor );
         BSONObjBuilder bob;
-        const_cast<Cursor&>(cursor).explainDetails( bob );
+        cursor.explainDetails( bob );
         _details = bob.obj();
     }
     
@@ -97,7 +95,7 @@ namespace mongo {
 
     void ExplainPlanInfo::noteCursorUpdate( const Cursor &cursor ) {
         _isMultiKey = cursor.isMultiKey();
-        _nscanned = const_cast<Cursor&>(cursor).nscanned();
+        _nscanned = cursor.nscanned();
     }
 
     ExplainClauseInfo::ExplainClauseInfo() :

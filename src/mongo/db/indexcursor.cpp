@@ -265,7 +265,7 @@ namespace mongo {
         return _currObj;
     }
 
-    string IndexCursor::toString() {
+    string IndexCursor::toString() const {
         string s = string("IndexCursor ") + _idx.indexName();
         if ( _direction < 0 ) s += " reverse";
         if ( _bounds.get() && _bounds->size() > 1 ) s += " multi";

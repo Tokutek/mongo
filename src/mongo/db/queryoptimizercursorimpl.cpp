@@ -106,7 +106,7 @@ namespace mongo {
             _matchCounter.updateNscanned( _c->nscanned() );
         }
         
-        virtual long long nscanned() {
+        virtual long long nscanned() const {
             return _c ? _c->nscanned() : _matchCounter.nscanned();
         }
         
@@ -291,7 +291,7 @@ namespace mongo {
         
         virtual bool supportGetMore() { return true; }
 
-        virtual string toString() { return "QueryOptimizerCursor"; }
+        virtual string toString() const { return "QueryOptimizerCursor"; }
         
         virtual bool getsetdup(const BSONObj &pk) {
             if ( _takeover ) {
@@ -319,7 +319,7 @@ namespace mongo {
         /** Initial capped wrapping cases (before takeover) are handled internally by a component ClientCursor. */
         virtual bool capped() const { return _takeover ? _takeover->capped() : false; }
 
-        virtual long long nscanned() { return _takeover ? _takeover->nscanned() : _nscanned; }
+        virtual long long nscanned() const { return _takeover ? _takeover->nscanned() : _nscanned; }
 
         virtual shared_ptr<CoveredIndexMatcher> matcherPtr() const {
             if ( _takeover ) {

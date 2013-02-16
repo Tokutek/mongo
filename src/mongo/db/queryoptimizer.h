@@ -210,7 +210,7 @@ namespace mongo {
          * @return current 'nscanned' metric for this QueryOp.  Used to compare
          * cost to other QueryOps.
          */
-        virtual long long nscanned() = 0;
+        virtual long long nscanned() const = 0;
         
         /**
          * @return true iff the QueryPlan for this QueryOp may be registered
@@ -664,7 +664,7 @@ namespace mongo {
 
         virtual bool capped() const { return _c->capped(); }
         
-        virtual long long nscanned() { return _nscanned + _c->nscanned(); }
+        virtual long long nscanned() const { return _nscanned + _c->nscanned(); }
         
         void noteIterate( bool match, bool loadedRecord );
         

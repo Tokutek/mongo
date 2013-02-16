@@ -69,7 +69,7 @@ namespace mongo {
         BSONObj indexKeyPattern() { return _idx.keyPattern(); }
 
         BSONObj current();
-        string toString();
+        string toString() const;
 
         BSONObj prettyKey( const BSONObj &key ) const {
             return key.replaceFieldNames( _idx.keyPattern() ).clientReadable();
@@ -88,7 +88,7 @@ namespace mongo {
             _keyFieldsOnly = keyFieldsOnly;
         }
         
-        long long nscanned() { return _nscanned; }
+        long long nscanned() const { return _nscanned; }
 
     protected:
         IndexCursor( NamespaceDetails* nsd , int theIndexNo, const IndexDetails& idxDetails );

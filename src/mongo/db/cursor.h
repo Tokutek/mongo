@@ -71,7 +71,7 @@ namespace mongo {
 
         virtual bool supportGetMore() = 0;
 
-        virtual string toString() { return "abstract?"; }
+        virtual string toString() const { return "abstract?"; }
 
         /* used for multikey index traversal to avoid sending back dups. see Matcher::matches().
            if a multikey index traversal:
@@ -98,7 +98,7 @@ namespace mongo {
          */
         virtual bool capped() const { return false; }
 
-        virtual long long nscanned() = 0;
+        virtual long long nscanned() const = 0;
 
         // The implementation may return different matchers depending on the
         // position of the cursor.  If matcher() is nonzero at the start,
@@ -134,7 +134,7 @@ namespace mongo {
             massert( 16159, "manual keyFieldsOnly config not allowed", false );
         }
         
-        virtual void explainDetails( BSONObjBuilder& b ) { return; }
+        virtual void explainDetails( BSONObjBuilder& b ) const { return; }
     };
 
     /**
@@ -163,7 +163,7 @@ namespace mongo {
             return currKey();
         };
         bool advance();
-        virtual string toString() { return "BasicCursor"; }
+        virtual string toString() const { return "BasicCursor"; }
         virtual void setTailable() {
 #if 0
             if ( !curr.isNull() || !last.isNull() )
@@ -183,7 +183,7 @@ namespace mongo {
         virtual void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
             _keyFieldsOnly = keyFieldsOnly;
         }
-        virtual long long nscanned() { return _nscanned; }
+        virtual long long nscanned() const { return _nscanned; }
 
     protected:
         NamespaceDetails *_nsd;
@@ -207,7 +207,7 @@ namespace mongo {
     class ReverseCursor : public BasicCursor {
     public:
         ReverseCursor(NamespaceDetails *nsd) : BasicCursor(nsd, -1) { }
-        virtual string toString() { return "ReverseCursor"; }
+        virtual string toString() const { return "ReverseCursor"; }
     };
 
     // TODO: Capped collections
