@@ -38,11 +38,7 @@ namespace mongo {
         static string secondsExpireField;
         
         void doTTLForDB( const string& dbName ) {
-            
-#if TOKUDB_FINISHED
             Client::GodScope god;
-
-            wunimplemented("doTTLForDB does some point queries");
 
             vector<BSONObj> indexes;
             {
@@ -62,8 +58,6 @@ namespace mongo {
             
             for ( unsigned i=0; i<indexes.size(); i++ ) {
                 BSONObj idx = indexes[i];
-                
-
                 BSONObj key = idx["key"].Obj();
                 if ( key.nFields() != 1 ) {
                     error() << "key for ttl index can only have 1 field" << endl;
@@ -88,12 +82,6 @@ namespace mongo {
                         // collection was dropped
                         continue;
                     }
-                    // TODO: TokuDB: Confirm that this doesn't matter.
-#if 0
-                    if ( nsd->setUserFlag( NamespaceDetails::Flag_UsePowerOf2Sizes ) ) {
-                        nsd->syncUserFlags( ns );
-                    }
-#endif
                     // only do deletes if on master
                     if ( ! isMasterNs( dbName.c_str() ) ) {
                         continue;
@@ -104,8 +92,6 @@ namespace mongo {
 
                 LOG(1) << "\tTTL deleted: " << n << endl;
             }
-            
-#endif // TOKUDB_FINISHED
             
         }
 

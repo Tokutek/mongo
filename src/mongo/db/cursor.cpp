@@ -125,7 +125,6 @@ namespace mongo {
         auto_ptr<ForwardCappedCursor> ret( new ForwardCappedCursor( nsd ) );
         ret->init( startLoc );
         return ret.release();
-        ::abort();
         return NULL;
     }
 
@@ -137,7 +136,6 @@ namespace mongo {
             return;
         DiskLoc start = startLoc;
         if ( start.isNull() ) {
-            ::abort();
             if ( !nsd->capLooped() )
                 start = nsd->firstRecord();
             else {
@@ -155,7 +153,6 @@ namespace mongo {
 
     DiskLoc ForwardCappedCursor::next( const DiskLoc &prev ) const {
         verify( nsd );
-        ::abort();
         return minDiskLoc; // TODO: Redo this class
         if ( !nsd->capLooped() )
             return forward()->next( prev );
@@ -181,24 +178,20 @@ namespace mongo {
             return;
         DiskLoc start = startLoc;
         if ( start.isNull() ) {
-            ::abort();
             if ( !nsd->capLooped() ) {
                 start = nsd->lastRecord();
             }
             else {
                 start = nsd->capExtent.ext()->lastRecord;
-                ::abort();
             }
         }
         curr = start;
-        ::abort();
         s = this;
         incNscanned();
     }
 
     DiskLoc ReverseCappedCursor::next( const DiskLoc &prev ) const {
         verify( nsd );
-        ::abort();
         return minDiskLoc;
         if ( !nsd->capLooped() )
             return reverse()->next( prev );
@@ -226,7 +219,6 @@ namespace mongo {
         if ( i == nsd->capExtent.ext()->lastRecord )
             i = reverse()->next( nsd->capFirstNewRecord );
 
-        ::abort();
         return i;
     }
 #endif

@@ -24,13 +24,19 @@
 #include "mongo/util/stacktrace.h"
 
 namespace mongo {
+
+    static void deleteOneObject(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj) {
+        uasserted(16439, "I don't know how to delete objects yet, sorry :(");
+    }
     
     /* ns:      namespace, e.g. <database>.<collection>
        pattern: the "where" clause / criteria
        justOne: stop after 1 match
        god:     allow access to system namespaces, and don't yield
     */
-    long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop, bool god/*, RemoveSaver * rs */) {
+    long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop, bool god) {
+        Client::Transaction txn(DB_TXN_SNAPSHOT);
+
         if( !god ) {
             if ( strstr(ns, ".system.") ) {
                 /* note a delete from system.indexes would corrupt the db
@@ -45,58 +51,20 @@ namespace mongo {
             }
         }
 
-        {
-            NamespaceDetails *d = nsdetails( ns );
-            if ( ! d )
-                return 0;
-            uassert( 10101 ,  "can't remove from a capped collection" , ! d->isCapped() );
-        }
-
-        long long nDeleted = 0;
+        NamespaceDetails *d = nsdetails( ns );
+        if ( ! d )
+            return 0;
+        uassert( 10101 ,  "can't remove from a capped collection" , ! d->isCapped() );
 
         shared_ptr< Cursor > creal = NamespaceDetailsTransient::getCursor( ns, pattern );
-
         if( !creal->ok() )
-            return nDeleted;
+            return 0;
 
         shared_ptr< Cursor > cPtr = creal;
         auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout, cPtr, ns) );
 
-        CursorId id = cc->cursorid();
-
-        //bool canYield = !god && !(creal->matcher() && creal->matcher()->docMatcher().atomic());
-
-        do {
-            // TODO: we can generalize this I believe
-            //       
-            bool willNeedRecord = (creal->matcher() && creal->matcher()->needRecord()) || pattern.isEmpty() || isSimpleIdQuery( pattern );
-            if ( ! willNeedRecord ) {
-                // TODO: this is a total hack right now
-                // check if the index full encompasses query
-                
-                if ( pattern.nFields() == 1 && 
-                     str::equals( pattern.firstElement().fieldName() , creal->indexKeyPattern().firstElement().fieldName() ) )
-                    willNeedRecord = true;
-            }
-            
-#if 0
-            if ( canYield && ! cc->yieldSometimes( willNeedRecord ? ClientCursor::WillNeed : ClientCursor::MaybeCovered ) ) {
-                cc.release(); // has already been deleted elsewhere
-                // TODO should we assert or something?
-                break;
-            }
-            if ( !cc->ok() ) {
-                break; // if we yielded, could have hit the end
-            }
-            ::abort();
-
-            // this way we can avoid calling prepareToYield() every time (expensive)
-            // as well as some other nuances handled
-            cc->setDoingDeletes( true );
-
-            DiskLoc rloc = minDiskLoc; //cc->currLoc();
-            BSONObj key = cc->currKey();
-
+        long long nDeleted = 0;
+        while ( cc->ok() ) {
             bool match = creal->currentMatches();
 
             cc->advance();
@@ -104,23 +72,20 @@ namespace mongo {
             if ( ! match )
                 continue;
 
+            BSONObj pk = cc->currPK();
+            BSONObj key = cc->currKey();
+            BSONObj obj = cc->current();
+
             // SERVER-5198 Advance past the document to be modified, but see SERVER-5725.
-            //while( cc->ok() && rloc == cc->currLoc() ) {
-                //cc->advance();
-            //}
-            // TODO: Does TokuDB Care about SERVER-5198?
+            while( cc->ok() && pk == cc->currPK() ) {
+                cc->advance();
+            }
             
             bool foundAllResults = ( justOne || !cc->ok() );
 
-            if ( !foundAllResults ) {
-                // NOTE: Saving and restoring a btree cursor's position was historically described
-                // as slow here.
-                //cc->c()->prepareToTouchEarlierIterate();
-            }
-
             if ( logop ) {
                 BSONElement e;
-                if( BSONObj::make( rloc.rec() ).getObjectID( e ) ) {
+                if( obj.getObjectID( e ) ) {
                     BSONObjBuilder b;
                     b.append( e );
                     bool replJustOne = true;
@@ -129,38 +94,20 @@ namespace mongo {
                 else {
                     problem() << "deleted object without id, not logging" << endl;
                 }
-                ::abort();
             }
 
-            if ( rs )
-                rs->goingToDelete( rloc.obj() /*cc->c->current()*/ );
-
-            ::abort(); //theDataFileMgr.deleteRecord(ns, rloc.rec(), rloc);
+            deleteOneObject(d, pk, obj);
             nDeleted++;
+
             if ( foundAllResults ) {
                 break;
             }
-            //cc->c()->recoverFromTouchingEarlierIterate();
          
-            if( !god ) 
-                ::abort(); //TODO What do we do here? //getDur().commitIfNeeded();
-
             if( debug && god && nDeleted == 100 ) 
                 log() << "warning high number of deletes with god=true which could use significant memory" << endl;
-#endif
-            ::abort();
-        }
-        while ( cc->ok() );
-
-        if ( cc.get() && ClientCursor::find( id , false ) == 0 ) {
-            // TODO: remove this and the id declaration above if this doesn't trigger
-            //       if it does, then i'm very confused (ERH 06/2011)
-            error() << "this should be impossible" << endl;
-            printStackTrace();
-            cc.release();
         }
 
+        txn.commit();
         return nDeleted;
     }
-
 }
