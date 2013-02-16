@@ -237,12 +237,6 @@ namespace mongo {
         _explainInfo->noteIterate( match, loadedRecord, chunkSkip, *_cursor );
     }
 
-#if 0
-    void SimpleCursorExplainStrategy::noteYield() {
-        _explainInfo->noteYield();
-    }
-#endif
-
     shared_ptr<ExplainQueryInfo> SimpleCursorExplainStrategy::_doneQueryInfo() {
         _explainInfo->noteDone( *_cursor );
         return _explainInfo->queryInfo();
@@ -261,12 +255,6 @@ namespace mongo {
         // be updated with reviseN().
         _cursor->noteIterate( orderedMatch, loadedRecord, chunkSkip );
     }
-
-#if 0
-    void QueryOptimizerCursorExplainStrategy::noteYield() {
-        _cursor->noteYield();
-    }
-#endif
 
     shared_ptr<ExplainQueryInfo> QueryOptimizerCursorExplainStrategy::_doneQueryInfo() {
         return _cursor->explainQueryInfo();
@@ -501,12 +489,6 @@ namespace mongo {
         _explain->noteIterate( match, orderedMatch, true, false );
         return match;
     }
-
-#if 0
-    void QueryResponseBuilder::noteYield() {
-        _explain->noteYield();
-    }
-#endif
 
     bool QueryResponseBuilder::enoughForFirstBatch() const {
         return _parsedQuery.enoughForFirstBatch( _builder->bufferedMatches(), _buf.len() );

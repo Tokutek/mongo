@@ -89,8 +89,6 @@ namespace mongo {
 
         /** Note an iteration of the clause. */
         void noteIterate( bool match, bool loadedRecord, bool chunkSkip );
-        /** Note a yield for the clause. */
-        void noteYield();
         /** Revise the total number of documents returned to match an external count. */
         void reviseN( long long n );
         /** Stop the clauses's timer. */
@@ -129,8 +127,6 @@ namespace mongo {
     public:
         /** Note an iteration of the query's current clause. */
         void noteIterate( bool match, bool loadedRecord, bool chunkSkip );
-        /** Note a yield of the query's current clause. */
-        void noteYield();
         /** Revise the number of documents returned by the current clause. */
         void reviseN( long long n );
 
@@ -165,10 +161,6 @@ namespace mongo {
         void noteIterate( bool match, bool loadedRecord, bool chunkSkip, const Cursor &cursor ) {
             _planInfo->noteIterate( match, loadedRecord, cursor );
             _queryInfo->noteIterate( match, loadedRecord, chunkSkip );
-        }
-        /** Note a yield for the clause. */
-        void noteYield() {
-            _queryInfo->noteYield();
         }
         /** Note that the plan finished execution. */
         void noteDone( const Cursor &cursor ) {

@@ -123,8 +123,6 @@ namespace mongo {
         _plans.push_back( info );
     }
     
-    void ExplainClauseInfo::noteYield() { ++_nYields; }
-    
     void ExplainClauseInfo::noteIterate( bool match, bool loadedRecord, bool chunkSkip ) {
         if ( match ) {
             ++_n;
@@ -203,11 +201,6 @@ namespace mongo {
         _clauses.back()->noteIterate( match, loadedRecord, chunkSkip );
     }
 
-    void ExplainQueryInfo::noteYield() {
-        verify( !_clauses.empty() );
-        _clauses.back()->noteYield();
-    }
-    
     void ExplainQueryInfo::reviseN( long long n ) {
         verify( !_clauses.empty() );
         _clauses.back()->reviseN( n );
