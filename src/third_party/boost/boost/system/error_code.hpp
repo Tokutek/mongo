@@ -211,9 +211,12 @@ namespace boost
     inline const error_category &  get_system_category() { return system_category(); }
     inline const error_category &  get_generic_category() { return generic_category(); }
     inline const error_category &  get_posix_category() { return generic_category(); }
-    static const error_category &  posix_category = generic_category();
-    static const error_category &  errno_ecat     = generic_category();
-    static const error_category &  native_ecat    = system_category();
+    // Whenever a compilation fails for any unit that includes this header,
+    // we get additional "unused" warnings for these variables. Add
+    // the unused attribute to suppress these extraneous warnings.
+    __attribute__((__unused__)) static const error_category &  posix_category = generic_category();
+    __attribute__((__unused__)) static const error_category &  errno_ecat     = generic_category();
+    __attribute__((__unused__)) static const error_category &  native_ecat    = system_category();
 # endif
 
     //  class error_condition  -----------------------------------------------//
