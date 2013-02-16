@@ -864,9 +864,12 @@ namespace mongo {
         // - Don't do it for explains.
         // - Don't do it for tailable cursors.
         if ( !explain && isSimpleIdQuery( query ) && !pq.hasOption( QueryOption_CursorTailable ) ) {
+            // TODO: We should have a better way of passing these flags.
+            Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
             if ( queryIdHack( ns, query, pq, curop, result ) ) {
                 return "";
             }
+            txn.commit();
         }
 
         // sanity check the query and projection
@@ -881,6 +884,7 @@ namespace mongo {
 
         bool hasRetried = false;
         while ( 1 ) {
+            Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
             try {
                 Client::ReadContext ctx( ns , dbpath ); // read locks
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
@@ -907,8 +911,11 @@ namespace mongo {
                     oldPlan = mps->cachedPlanExplainSummary();
                 }
    
-                return queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query, order,
-                                                pq_shared, oldPlan, shardingVersionAtStart, result );
+                string r = queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query, order,
+                                                    pq_shared, oldPlan, shardingVersionAtStart, result );
+                txn.commit();
+                return r;
+                    
             }
             catch ( const QueryRetryException & ) {
                 // In some cases the query may be retried if there is an in memory sort size assertion.

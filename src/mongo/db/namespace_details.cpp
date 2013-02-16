@@ -134,7 +134,8 @@ namespace mongo {
 
     static int populate_nsindex_map(const DBT *key, const DBT *val, void *map_v) {
         BSONObj nobj(static_cast<const char *>(key->data));
-        Namespace n(nobj["ns"].String().c_str());
+        string ns = nobj["ns"].String();
+        Namespace n(ns.c_str());
         BSONObj dobj(static_cast<const char *>(val->data));
         tokulog() << "Loading NamespaceDetails " << (string) n << endl;
         shared_ptr<NamespaceDetails> d(new NamespaceDetails(dobj));
@@ -279,7 +280,8 @@ namespace mongo {
         _nIndexes++;
         indexBuildInProgress = false;
 
-        const char *ns = idx_info["ns"].String().c_str();
+        string idx_ns = idx_info["ns"].String();
+        const char *ns = idx_ns.c_str();
         dassert(nsdetails(ns) == this);
 
         // The first index we create should be the _id index, when we first create the collection.
@@ -339,7 +341,6 @@ namespace mongo {
 
     bool NamespaceDetails::findById(const BSONObj &query, BSONObj &result, bool getKey) {
         int r;
-        Client::Transaction txn(DB_TXN_READ_ONLY);
 
         // Get a cursor over the _id index.
         IndexDetails &idIndex = idx(findIdIndex());
@@ -359,8 +360,6 @@ namespace mongo {
         verify(r == 0 || r == DB_NOTFOUND);
         r = cursor->c_close(cursor);
         verify(r == 0);
-
-        txn.commit();
 
         if (!obj.isEmpty()) {
             result = obj;

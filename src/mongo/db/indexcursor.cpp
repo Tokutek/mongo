@@ -64,14 +64,12 @@ namespace mongo {
         _idxNo( idxNo ),
         _idx( id ),
         _nscanned(0),
-        _cursor(NULL),
-        _transaction(DB_TXN_READ_ONLY) {
+        _cursor(NULL) {
         dassert( d->idxNo((IndexDetails&) idx) == idxNo );
         _multikey = _d->isMultikey( _idxNo );
     }
 
     IndexCursor::~IndexCursor() {
-        _transaction.commit();
         verify(_cursor != NULL);
         int r = _cursor->c_close(_cursor);
         verify(r == 0);

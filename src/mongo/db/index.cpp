@@ -154,6 +154,7 @@ namespace mongo {
         verify(r == 0);
     }
 
+    // Get a DBC over an index. Must already be in the context of a transction.
     DBC *IndexDetails::cursor() const {
         DBC *cursor;
         const Client::Transaction &txn = cc().transaction();

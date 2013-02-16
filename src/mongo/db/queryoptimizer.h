@@ -576,6 +576,8 @@ namespace mongo {
         bool possibleOutOfOrderPlan() const;
         
         int i() const { return _i; }
+
+        const char *ns() { return _ns.c_str(); }
         
         string toString() const;
 

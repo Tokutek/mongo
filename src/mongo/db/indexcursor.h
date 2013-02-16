@@ -143,7 +143,6 @@ namespace mongo {
         BSONObj _currObj;
 
         DBC *_cursor;
-        Client::Transaction _transaction;
     };
 
 } // namespace mongo;
