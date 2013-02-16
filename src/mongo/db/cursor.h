@@ -193,7 +193,6 @@ namespace mongo {
         BSONObj _currKey;
         BSONObj _currObj;
         DBC *_cursor;
-        Client::Transaction _transaction;
         void incNscanned() { if ( ok() ) { ++_nscanned; } }
 
     private:

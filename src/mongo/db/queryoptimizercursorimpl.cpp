@@ -256,9 +256,10 @@ namespace mongo {
                 return _takeover->current();
             }
             assertOk();
-            // TODO: What do we do here? Do we return findById(currPK())?
-            ::abort();
-            return BSONObj();
+            BSONObj currObj;
+            bool found = nsdetails(_mps->ns())->findById(currPK(), currObj, false);
+            verify(found);
+            return currObj;
         }
         
         virtual BSONObj currPK() const { return _takeover ? _takeover->currPK() : _currPK(); }

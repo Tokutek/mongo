@@ -45,7 +45,7 @@ namespace mongo {
     }
 
     BasicCursor::BasicCursor(NamespaceDetails *nsd, int direction)
-        : _nsd(nsd), _direction(direction), _cursor(NULL), _transaction(), _nscanned(0) {
+        : _nsd(nsd), _direction(direction), _cursor(NULL),  _nscanned(0) {
 
         if (_nsd != NULL) {
             // Get a cursor over the _id index
@@ -74,10 +74,6 @@ namespace mongo {
     }
 
     BasicCursor::~BasicCursor() {
-        // TODO: Under what circumstances do we abort?
-        // How is the transaction here going to interact with a
-        // transaction that also does updates/deletes?
-        _transaction.commit();
         if (_cursor != NULL) {
             int r = _cursor->c_close(_cursor);
             verify(r == 0);
