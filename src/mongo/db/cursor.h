@@ -160,7 +160,7 @@ namespace mongo {
         BSONObj currPK() const {
             // Basic cursors scan the _id index (the primary key),
             // so the current PK is just the current key.
-            return currKey;
+            return currKey();
         };
         bool advance();
         virtual string toString() { return "BasicCursor"; }
