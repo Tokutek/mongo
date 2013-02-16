@@ -104,8 +104,8 @@ namespace mongo {
         return c.release();
     }
 
-    // Make an index cursor that has a set of independent field ranges to iterate over.
-    // These might look something like:
+    // Make an index cursor that has a set of one or more independent field ranges to iterate over.
+    // This might look something like:
     //     FieldRangeVector bounds = [0, 5] [10, 100] [1000, 2000]
     IndexCursor* IndexCursor::make(
         NamespaceDetails *d, int idxNo, const IndexDetails& id, 
