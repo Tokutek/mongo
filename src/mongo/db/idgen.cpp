@@ -48,9 +48,10 @@ namespace mongo {
         } else {
             SimpleMutex::scoped_lock lk(mutex);
             BSONObjBuilder b;
-            b.appendElements(orig);
             idToInsert_.oid.init();
+            // _id first, everything else after
             b.append(idToInsert);
+            b.appendElements(orig);
             return b.obj();
         }
     }

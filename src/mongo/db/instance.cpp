@@ -18,40 +18,45 @@
 
 #include "pch.h"
 
-#include <boost/thread/thread.hpp>
-
-#include "../util/time_support.h"
-#include "db.h"
-#include "../bson/util/atomic_int.h"
-#include "introspect.h"
-#include "repl.h"
-#include "dbmessage.h"
-#include "instance.h"
-#include "lasterror.h"
-#include "security.h"
-#include "json.h"
-#include "replutil.h"
-#include "../s/d_logic.h"
-#include "../util/file_allocator.h"
-#include "../util/goodies.h"
-#include "cmdline.h"
+#include <fstream>
 #if !defined(_WIN32)
 #include <sys/file.h>
 #endif
-#include "stats/counters.h"
-#include "background.h"
-#include "d_concurrency.h"
-#include "ops/count.h"
-#include "ops/delete.h"
-#include "ops/query.h"
-#include "ops/update.h"
-#include "ops/insert.h"
-#include <fstream>
+
+#include <boost/thread/thread.hpp>
 #include <boost/filesystem/operations.hpp>
+
+#include "mongo/bson/util/atomic_int.h"
+
+#include "mongo/db/db.h"
+#include "mongo/db/introspect.h"
+#include "mongo/db/repl.h"
+#include "mongo/db/dbmessage.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/lasterror.h"
+#include "mongo/db/security.h"
+#include "mongo/db/json.h"
+#include "mongo/db/replutil.h"
+#include "mongo/db/cmdline.h"
+#include "mongo/db/background.h"
+#include "mongo/db/d_concurrency.h"
 #include "mongo/db/commands/fsync.h"
-#include "index.h"
+#include "mongo/db/index.h"
 #include "mongo/db/jsobjmanipulator.h"
+#include "mongo/db/idgen.h"
+#include "mongo/db/ops/count.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/query.h"
+#include "mongo/db/ops/update.h"
+#include "mongo/db/ops/insert.h"
+#include "mongo/db/stats/counters.h"
 #include "mongo/db/storage/env.h"
+
+#include "mongo/s/d_logic.h"
+
+#include "mongo/util/file_allocator.h"
+#include "mongo/util/goodies.h"
+#include "mongo/util/time_support.h"
 
 namespace mongo {
     
@@ -776,7 +781,9 @@ namespace mongo {
                 uassert( 13511 , "document to insert can't have $ fields" , e.fieldName()[0] != '$' );
             }
         }
-        insertObject(ns, js);
+        BSONElement idField = js.getField( "_id" );
+        uassert( 16440 ,  "_id cannot be an array", idField.type() != Array );
+        insertObject(ns, idField.eoo() ? addIdField(js) : js);
     }
 
     NOINLINE_DECL void insertMulti(bool keepGoing, const char *ns, vector<BSONObj>& objs) {
