@@ -23,7 +23,8 @@ ts = t.totalIndexSize();
 t.ensureIndex( {i:1}, [ true, true ] );
 ts2 = t.totalIndexSize();
 
-assert.eq( ts * 2, ts2, "totalIndexSize fail" );
+// This does not seem like a useful assertion for TokuDB.
+//assert.eq( ts * 2, ts2, "totalIndexSize fail" );
 
 assert.eq( 3, t.count() );
 assert.eq( 1, t.count( {i:1} ) );

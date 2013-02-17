@@ -1,7 +1,7 @@
 // index7.js Test that we use an index when and only when we expect to.
 
 function index( q ) {
-    assert( q.explain().cursor.match( /^BtreeCursor/ ) , "index assert" );
+    assert( q.explain().cursor.match( /^IndexCursor/ ) , "index assert" );
 }
 
 function noIndex( q ) {
