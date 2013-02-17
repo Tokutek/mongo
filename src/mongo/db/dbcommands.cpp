@@ -786,7 +786,7 @@ namespace mongo {
                 return false;
             }
             uassert( 10039 ,  "can't drop collection with reserved $ character in name", strchr(nsToDrop.c_str(), '$') == 0 );
-            ::abort();
+            problem() << "dropping a collection is not implemented, doing nothing!" << endl;
             //dropCollection( nsToDrop, errmsg, result );
             return true;
         }
@@ -876,8 +876,6 @@ namespace mongo {
         }
         CmdDropIndexes() : Command("dropIndexes", false, "deleteIndexes") { }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
-            ::abort();
-#if 0
             BSONElement e = jsobj.firstElement();
             string toDeleteNs = dbname + '.' + e.valuestr();
             NamespaceDetails *d = nsdetails(toDeleteNs.c_str());
@@ -886,7 +884,9 @@ namespace mongo {
             if ( d ) {
                 BSONElement f = jsobj.getField("index");
                 if ( f.type() == String ) {
-                    return dropIndexes( d, toDeleteNs.c_str(), f.valuestr(), errmsg, anObjBuilder, false );
+                    problem() << "dropIndexes not implemented, doing nothing!" << endl;
+                    //return dropIndexes( d, toDeleteNs.c_str(), f.valuestr(), errmsg, anObjBuilder, false );
+                    return true;
                 }
                 else if ( f.type() == Object ) {
                     int idxId = d->findIndexByKeyPattern( f.embeddedObject() );
@@ -898,7 +898,9 @@ namespace mongo {
                     else {
                         IndexDetails& ii = d->idx( idxId );
                         string iName = ii.indexName();
-                        return dropIndexes( d, toDeleteNs.c_str(), iName.c_str() , errmsg, anObjBuilder, false );
+                        problem() << "dropIndexes not implemented, doing nothing!" << endl;
+                        //return dropIndexes( d, toDeleteNs.c_str(), iName.c_str() , errmsg, anObjBuilder, false );
+                        return true;
                     }
                 }
                 else {
@@ -910,7 +912,6 @@ namespace mongo {
                 errmsg = "ns not found";
                 return false;
             }
-#endif
         }
     } cmdDropIndexes;
 
@@ -942,14 +943,15 @@ namespace mongo {
             auto_ptr<DBClientCursor> i = db.query( dbname + ".system.indexes" , BSON( "ns" << toDeleteNs ) , 0 , 0 , 0 , QueryOption_SlaveOk );
             BSONObjBuilder b;
             while ( i->more() ) {
-                BSONObj o = i->next().removeField("v").getOwned();
+                BSONObj o = i->next().getOwned();
                 b.append( BSONObjBuilder::numStr( all.size() ) , o );
                 all.push_back( o );
             }
 
 
-            ::abort();
-            bool ok = false; //dropIndexes( d, toDeleteNs.c_str(), "*" , errmsg, result, true );
+            problem() << "reIndex is not implemented, doing nothing!" << endl;
+#if 0
+            bool ok = dropIndexes( d, toDeleteNs.c_str(), "*" , errmsg, result, true );
             if ( ! ok ) {
                 errmsg = "dropIndexes failed";
                 return false;
@@ -958,8 +960,9 @@ namespace mongo {
             for ( list<BSONObj>::iterator i=all.begin(); i!=all.end(); i++ ) {
                 BSONObj o = *i;
                 log(1) << "reIndex ns: " << toDeleteNs << " index: " << o << endl;
-                ::abort(); //theDataFileMgr.insertWithObjMod( Namespace( toDeleteNs.c_str() ).getSisterNS( "system.indexes" ).c_str() , o , true );
+                theDataFileMgr.insertWithObjMod( Namespace( toDeleteNs.c_str() ).getSisterNS( "system.indexes" ).c_str() , o , true );
             }
+#endif
 
             result.append( "nIndexes" , (int)all.size() );
             result.appendArray( "indexes" , b.obj() );

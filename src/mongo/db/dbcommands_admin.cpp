@@ -169,7 +169,6 @@ namespace mongo {
         //{ validate: "collectionnamewithoutthedbpart" [, scandata: <bool>] [, full: <bool> } */
 
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
-#if 0
             string ns = dbname + "." + cmdObj.firstElement().valuestrsafe();
             NamespaceDetails * d = nsdetails( ns.c_str() );
             if ( !cmdLine.quiet )
@@ -182,19 +181,19 @@ namespace mongo {
 
             result.append( "ns", ns );
             validateNS( ns.c_str() , d, cmdObj, result);
-#endif
-            ::abort();
             return true;
         }
 
     private:
-#if 0
         void validateNS(const char *ns, NamespaceDetails *d, const BSONObj& cmdObj, BSONObjBuilder& result) {
             const bool full = cmdObj["full"].trueValue();
-            const bool scanData = full || cmdObj["scandata"].trueValue();
+            //const bool scanData = full || cmdObj["scandata"].trueValue();
 
             bool valid = true;
+
             BSONArrayBuilder errors; // explanation(s) for why valid = false
+            problem() << "validateNS is not implemented yet, assuming everything is ok." << endl;
+#if 0
             if ( d->isCapped() ){
                 result.append("capped", d->isCapped());
                 result.appendNumber("max", d->maxCappedDocs());
@@ -396,6 +395,7 @@ namespace mongo {
                 errors << "exception during validate";
                 valid = false;
             }
+#endif
 
             result.appendBool("valid", valid);
             result.append("errors", errors.arr());
@@ -408,7 +408,6 @@ namespace mongo {
                 result.append("advice", "ns corrupt, requires repair");
             }
         }
-#endif
     } validateCmd;
 
 }
