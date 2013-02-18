@@ -185,10 +185,22 @@ namespace mongo {
         return false;
     }
 
+    // Start a new transaction with the given flags.
+    // Sets cc()._transaction to this transaction.
     Client::Transaction::Transaction(int flags) : _parent(cc()._transaction), _retired(false) {
         DB_TXN *parent_txn = (_parent != NULL ? _parent->txn() : NULL);
         _txn = storage::start_txn(parent_txn, flags);
         cc()._transaction = this;
+    }
+
+    // Clone an existing transaction, and retire it.
+    // This way, the existing txn's destructor will
+    // not complete the DB_TXN we just assumed.
+    Client::Transaction *Client::Transaction::handoff() {
+        Transaction *transaction = new Transaction(_txn);
+        dassert(is_root());
+        retire();
+        return transaction;
     }
 
     Client::Transaction::~Transaction() {

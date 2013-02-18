@@ -160,11 +160,17 @@ namespace mongo {
             Transaction *_parent;
             bool _retired;
             void retire();
+
+            Transaction(DB_TXN *txn) : _txn(txn), _parent(NULL), _retired(false) { }
         public:
             explicit Transaction(int flags = 0);
             ~Transaction();
             void commit();
             void abort();
+
+            // Make a copy of this transaction and handoff responsiblity
+            // of the underlying DB_TXN to the caller.
+            Transaction *handoff();
 
             inline DB_TXN *txn() const { return _txn; }
             inline bool is_root() const { return _parent == NULL; }
