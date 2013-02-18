@@ -25,287 +25,38 @@
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/index.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/util/concurrency/task.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
 
-#if 0
-    void addRecordToRecListInExtent(Record *r, DiskLoc loc);
-    DiskLoc allocateSpaceForANewRecord(const char *ns, NamespaceDetails *d, int lenWHdr, bool god);
-    void freeExtents(DiskLoc firstExt, DiskLoc lastExt);
+    // run hot optimize on each index
+    bool _compact(const char *ns, NamespaceDetails *d, string& errmsg, BSONObjBuilder& result) { 
+        Client::RootTransaction txn;
 
-    /* this should be done in alloc record not here, but doing here for now. 
-       really dumb; it's a start.
-    */
-    unsigned quantizeMask(unsigned x) { 
-        if( x > 4096 * 20 ) 
-            return ~4095;
-        if( x >= 512 ) 
-            return ~63;
-        return ~0;
-    }
+        // TODO: Track progress with this class
+        //ProgressMeterHolder pm( cc().curop()->setMessage( string("compacting ns ") + string(ns) , nIndexes ) );
 
-    /** @return number of skipped (invalid) documents */
-    unsigned compactExtent(const char *ns, NamespaceDetails *d, const DiskLoc diskloc, int n,
-                const scoped_array<IndexSpec> &indexSpecs,
-                scoped_array<SortPhaseOne>& phase1, int nidx, bool validate, 
-                double pf, int pb)
-    {
-        log() << "compact begin extent #" << n << " for namespace " << ns << endl;
-        unsigned oldObjSize = 0; // we'll report what the old padding was
-        unsigned oldObjSizeWithPadding = 0;
+        const int nIndexes = d->nIndexes();
+        for( int i = 0; i < nIndexes; i++ ) {
+            killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
+            BSONObj info = d->idx(i).info();
+            log() << "compact optimizing index " << info["key"].Obj().toString() << endl;
 
-        Extent *e = diskloc.ext();
-        e->assertOk();
-        verify( e->validates() );
-        unsigned skipped = 0;
+            // TODO: Hot optimize
+            problem() << "compaction is not implemented, doing nothign!" << endl;
 
-        {
-            // the next/prev pointers within the extent might not be in order so we first page the whole thing in 
-            // sequentially
-            log() << "compact paging in len=" << e->length/1000000.0 << "MB" << endl;
-            Timer t;
-            ::abort();
-#if 0
-            MongoDataFile* mdf = cc().database()->getFile( diskloc.a() );
-            HANDLE fd = mdf->getFd();
-            int offset = diskloc.getOfs();
-            Extent* ext = diskloc.ext();
-            size_t length = ext->length;
-                
-            touch_pages(fd, offset, length, ext);
-            int ms = t.millis();
-            if( ms > 1000 ) 
-                log() << "compact end paging in " << ms << "ms " << e->length/1000000.0/ms << "MB/sec" << endl;
-#endif
         }
 
-        {
-            log() << "compact copying records" << endl;
-            long long datasize = 0;
-            long long nrecords = 0;
-            DiskLoc L = e->firstRecord;
-            if( !L.isNull() ) {
-                while( 1 ) {
-                    Record *recOld = L.rec();
-                    L = recOld->nextInExtent(L);
-                    BSONObj objOld = BSONObj::make(recOld);
-
-                    if( !validate || objOld.valid() ) {
-                        nrecords++;
-                        unsigned sz = objOld.objsize();
-
-                        oldObjSize += sz;
-                        oldObjSizeWithPadding += recOld->netLength();
-
-                        unsigned lenWHdr = sz + Record::HeaderSize;
-                        unsigned lenWPadding = lenWHdr;
-                        {
-                            lenWPadding = static_cast<unsigned>(pf*lenWPadding);
-                            lenWPadding += pb;
-                            lenWPadding = lenWPadding & quantizeMask(lenWPadding);
-                            if( lenWPadding < lenWHdr || lenWPadding > BSONObjMaxUserSize / 2 ) { 
-                                lenWPadding = lenWHdr;
-                            }
-                        }
-                        DiskLoc loc = allocateSpaceForANewRecord(ns, d, lenWPadding, false);
-                        uassert(14024, "compact error out of space during compaction", !loc.isNull());
-                        Record *recNew = loc.rec();
-                        datasize += recNew->netLength();
-                        recNew = (Record *) getDur().writingPtr(recNew, lenWHdr);
-                        addRecordToRecListInExtent(recNew, loc);
-                        memcpy(recNew->data(), objOld.objdata(), sz);
-
-                        {
-                            // extract keys for all indexes we will be rebuilding
-                            for( int x = 0; x < nidx; x++ ) { 
-                                phase1[x].addKeys(indexSpecs[x], objOld, loc);
-                            }
-                        }
-                    }
-                    else { 
-                        if( ++skipped <= 10 )
-                            log() << "compact skipping invalid object" << endl;
-                    }
-
-                    if( L.isNull() ) { 
-                        // we just did the very last record from the old extent.  it's still pointed to 
-                        // by the old extent ext, but that will be fixed below after this loop
-                        break;
-                    }
-
-                    // remove the old records (orphan them) periodically so our commit block doesn't get too large
-                    bool stopping = false;
-                    RARELY stopping = *killCurrentOp.checkForInterruptNoAssert() != 0;
-                    if( stopping || getDur().aCommitIsNeeded() ) {
-                        e->firstRecord.writing() = L;
-                        Record *r = L.rec();
-                        getDur().writingInt(r->prevOfs()) = DiskLoc::NullOfs;
-                        getDur().commitIfNeeded();
-                        killCurrentOp.checkForInterrupt(false);
-                    }
-                }
-            } // if !L.isNull()
-
-            verify( d->firstExtent == diskloc );
-            verify( d->lastExtent != diskloc );
-            DiskLoc newFirst = e->xnext;
-            d->firstExtent.writing() = newFirst;
-            newFirst.ext()->xprev.writing().Null();
-            getDur().writing(e)->markEmpty();
-            freeExtents( diskloc, diskloc );
-            // update datasize/record count for this namespace's extent
-            {
-                NamespaceDetails::Stats *s = getDur().writing(&d->stats);
-                s->datasize += datasize;
-                s->nrecords += nrecords;
-            }
-
-            getDur().commitIfNeeded();
-
-            { 
-                double op = 1.0;
-                if( oldObjSize ) 
-                    op = static_cast<double>(oldObjSizeWithPadding)/oldObjSize;
-                log() << "compact finished extent #" << n << " containing " << nrecords << " documents (" << datasize/1000000.0 << "MB)"
-                    << " oldPadding: " << op << ' ' << static_cast<unsigned>(op*100.0)/100
-                    << endl;                    
-            }
-        }
-
-        return skipped;
-    }
-
-    extern SortPhaseOne *precalced;
-
-    bool _compact(const char *ns, NamespaceDetails *d, string& errmsg, bool validate, BSONObjBuilder& result, double pf, int pb) { 
-        // this is a big job, so might as well make things tidy before we start just to be nice.
-        getDur().commitIfNeeded();
-
-        list<DiskLoc> extents;
-        for( DiskLoc L = d->firstExtent; !L.isNull(); L = L.ext()->xnext ) 
-            extents.push_back(L);
-        log() << "compact " << extents.size() << " extents" << endl;
-
-        ProgressMeterHolder pm( cc().curop()->setMessage( "compact extent" , extents.size() ) );
-
-        // same data, but might perform a little different after compact?
-        NamespaceDetailsTransient::get(ns).clearQueryCache();
-
-        int nidx = d->nIndexes;
-        scoped_array<IndexSpec> indexSpecs( new IndexSpec[nidx] );
-        scoped_array<SortPhaseOne> phase1( new SortPhaseOne[nidx] );
-        {
-            NamespaceDetails::IndexIterator ii = d->ii(); 
-            // For each existing index...
-            for( int idxNo = 0; ii.more(); ++idxNo ) {
-                // Build a new index spec based on the old index spec.
-                BSONObjBuilder b;
-                BSONObj::iterator i(ii.next().info.obj());
-                while( i.more() ) { 
-                    BSONElement e = i.next();
-                    if ( str::equals( e.fieldName(), "v" ) ) {
-                        // Drop any preexisting index version spec.  The default index version will
-                        // be used instead for the new index.
-                        continue;
-                    }
-                    if ( str::equals( e.fieldName(), "background" ) ) {
-                        // Create the new index in the foreground.
-                        continue;
-                    }
-                    // Pass the element through to the new index spec.
-                    b.append(e);
-                }
-                // Add the new index spec to 'indexSpecs'.
-                BSONObj o = b.obj().getOwned();
-                indexSpecs[idxNo].reset(o);
-                // Create an external sorter.
-                phase1[idxNo].sorter.reset
-                        ( new BSONObjExternalSorter
-                           // Use the default index interface, since the new index will be created
-                           // with the default index version.
-                         ( IndexInterface::defaultVersion(),
-                           o.getObjectField("key") ) );
-                phase1[idxNo].sorter->hintNumObjects( d->stats.nrecords );
-            }
-        }
-
-        log() << "compact orphan deleted lists" << endl;
-        for( int i = 0; i < Buckets; i++ ) { 
-            d->deletedList[i].writing().Null();
-        }
-
-
-
-        // Start over from scratch with our extent sizing and growth
-        d->lastExtentSize=0;
-
-        // before dropping indexes, at least make sure we can allocate one extent!
-        //uassert(14025, "compact error no space available to allocate", !allocateSpaceForANewRecord(ns, d, Record::HeaderSize+1, false).isNull());
-
-        // note that the drop indexes call also invalidates all clientcursors for the namespace, which is important and wanted here
-        log() << "compact dropping indexes" << endl;
-        BSONObjBuilder b;
-        if( !dropIndexes(d, ns, "*", errmsg, b, true) ) { 
-            errmsg = "compact drop indexes failed";
-            log() << errmsg << endl;
-            return false;
-        }
-
-        getDur().commitIfNeeded();
-
-        long long skipped = 0;
-        int n = 0;
-
-        // reset data size and record counts to 0 for this namespace
-        // as we're about to tally them up again for each new extent
-        {
-            NamespaceDetails::Stats *s = getDur().writing(&d->stats);
-            s->datasize = 0;
-            s->nrecords = 0;
-        }
-
-        for( list<DiskLoc>::iterator i = extents.begin(); i != extents.end(); i++ ) { 
-            skipped += compactExtent(ns, d, *i, n++, indexSpecs, phase1, nidx, validate, pf, pb);
-            pm.hit();
-        }
-
-        if( skipped ) {
-            result.append("invalidObjects", skipped);
-        }
-
-        verify( d->firstExtent.ext()->xprev.isNull() );
-
-        // indexes will do their own progress meter?
-        pm.finished();
-
-        // build indexes
-        NamespaceString s(ns);
-        string si = s.db + ".system.indexes";
-        for( int i = 0; i < nidx; i++ ) {
-            killCurrentOp.checkForInterrupt(false);
-            BSONObj info = indexSpecs[i].info;
-            log() << "compact create index " << info["key"].Obj().toString() << endl;
-            try {
-                precalced = &phase1[i];
-                // TODO Get rid of theDataFileMgr.
-                //theDataFileMgr.insert(si.c_str(), info.objdata(), info.objsize());
-                ::abort();
-            }
-            catch(...) { 
-                precalced = 0;
-                throw;
-            }
-            precalced = 0;
-        }
-
+        txn.commit();
         return true;
     }
 
-    bool compact(const string& ns, string &errmsg, bool validate, BSONObjBuilder& result, double pf, int pb) {
+    bool compact(const string& ns, string &errmsg, BSONObjBuilder& result) {
         massert( 14028, "bad ns", NamespaceString::normal(ns.c_str()) );
-        massert( 14027, "can't compact a system namespace", !str::contains(ns, ".system.") ); // items in system.indexes cannot be moved there are pointers to those disklocs in NamespaceDetails
+        // defensive, there's no need fo optimize a system namespace, probably.
+        massert( 14027, "can't compact a system namespace", !str::contains(ns, ".system.") );
 
         bool ok;
         {
@@ -317,11 +68,8 @@ namespace mongo {
             massert( 13660, str::stream() << "namespace " << ns << " does not exist", d );
             massert( 13661, "cannot compact capped collection", !d->isCapped() );
             log() << "compact " << ns << " begin" << endl;
-            if( pf != 0 || pb != 0 ) { 
-                log() << "paddingFactor:" << pf << " paddingBytes:" << pb << endl;
-            } 
             try { 
-                ok = _compact(ns.c_str(), d, errmsg, validate, result, pf, pb);
+                ok = _compact(ns.c_str(), d, errmsg, result);
             }
             catch(...) { 
                 log() << "compact " << ns << " end (with error)" << endl;
@@ -331,7 +79,6 @@ namespace mongo {
         }
         return ok;
     }
-#endif
 
     bool isCurrentlyAReplSetPrimary();
 
@@ -344,18 +91,17 @@ namespace mongo {
         virtual bool logTheOp() { return false; }
         virtual void help( stringstream& help ) const {
             help << "compact collection\n"
-                "warning: this operation blocks the server and is slow. you can cancel with cancelOp()\n"
+                "note: this operation performs a non-blocking rebuild of all indexes, using moderate CPU and some I/O. you can cancel with cancelOp()\n"
                 "{ compact : <collection_name>, [force:<bool>], [validate:<bool>],\n"
                 "  [paddingFactor:<num>], [paddingBytes:<num>] }\n"
+                "  paddingFactor/paddingBytes - deprecated\n"
                 "  force - allows to run on a replica set primary\n"
-                "  validate - check records are noncorrupt before adding to newly compacting extents. slower but safer (defaults to true in this version)\n";
+                "  validate - deprecated\n";
         }
         virtual bool requiresAuth() { return true; }
         CompactCmd() : Command("compact") { }
 
         virtual bool run(const string& db, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            ::abort();
-#if 0
             string coll = cmdObj.firstElement().valuestr();
             if( coll.empty() || db.empty() ) {
                 errmsg = "no collection name specified";
@@ -394,21 +140,8 @@ namespace mongo {
                 }
             }
 
-            double pf = 1.0;
-            int pb = 0;
-            if( cmdObj.hasElement("paddingFactor") ) {
-                pf = cmdObj["paddingFactor"].Number();
-                verify( pf >= 1.0 && pf <= 4.0 );
-            }
-            if( cmdObj.hasElement("paddingBytes") ) {
-                pb = (int) cmdObj["paddingBytes"].Number();
-                verify( pb >= 0 && pb <= 1024 * 1024 );
-            }
-
-            bool validate = !cmdObj.hasElement("validate") || cmdObj["validate"].trueValue(); // default is true at the moment
-            bool ok = compact(ns, errmsg, validate, result, pf, pb);
+            bool ok = compact(ns, errmsg, result);
             return ok;
-#endif
         }
     };
     static CompactCmd compactCmd;
