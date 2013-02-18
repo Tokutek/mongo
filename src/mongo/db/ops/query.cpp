@@ -612,14 +612,13 @@ namespace mongo {
                                     const shared_ptr<ParsedQuery> &pq_shared,
                                     const BSONObj &oldPlan,
                                     const ConfigVersion &shardingVersionAtStart,
+                                    Client::Transaction *txn,
                                     Message &result ) {
 
         const ParsedQuery &pq( *pq_shared );
         shared_ptr<Cursor> cursor;
         QueryPlanSummary queryPlan;
         
-        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
-
         if ( pq.hasOption( QueryOption_OplogReplay ) ) {
             ::abort();
             //cursor = FindingStartCursor::getCursor( ns.c_str(), query, order );
@@ -723,11 +722,11 @@ namespace mongo {
             ccPointer->fields = pq.getFieldPtr();
             // Clones the transaction and hand's off responsibility
             // of its completion to the client cursor's destructor.
-            ccPointer->transaction = shared_ptr< Client::Transaction >( txn.handoff() );
+            ccPointer->transaction = shared_ptr< Client::Transaction >( txn->handoff() );
             ccPointer.release();
         } else {
             // Not saving the cursor, so we can commit its transaction now.
-            txn.commit();
+            txn->commit();
         }
         
         QueryResult *qr = (QueryResult *) result.header();
@@ -914,6 +913,8 @@ namespace mongo {
                 }
                 
                 // Run a regular query.
+
+                Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
                 
                 BSONObj oldPlan;
                 if ( ! hasRetried && explain && ! pq.hasIndexSpecifier() ) {
@@ -921,8 +922,9 @@ namespace mongo {
                     oldPlan = mps->cachedPlanExplainSummary();
                 }
    
+                // transaction will be committed or handed off in queryWithQueryOptimizer
                 string r = queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query, order,
-                                                    pq_shared, oldPlan, shardingVersionAtStart, result );
+                                                    pq_shared, oldPlan, shardingVersionAtStart, &txn, result );
                 return r;
                     
             }
