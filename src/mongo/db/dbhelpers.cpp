@@ -268,7 +268,7 @@ namespace mongo {
                     int minOrMax = maxInclusive ? 1 : -1;
                     BSONObj newMax = Helpers::modifiedRangeBound( max , keyPattern , minOrMax );
                     
-                    c.reset( IndexCursor::make( nsd , ii , i , newMin , newMax , maxInclusive , 1 ) );
+                    c.reset( new IndexCursor( nsd , &i , newMin , newMax , maxInclusive , 1 ) );
                 }
                 
                 if ( ! c->ok() ) {

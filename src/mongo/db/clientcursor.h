@@ -164,8 +164,6 @@ namespace mongo {
         const BSONObj& query() const { return _query; }
         int queryOptions() const { return _queryOptions; }
 
-        //DiskLoc lastLoc() const { return _lastLoc; }
-
         /* Get rid of cursors for namespaces 'ns'. When dropping a db, ns is "dbname."
            Used by drop, dropIndexes, dropDatabase.
         */
@@ -306,7 +304,6 @@ namespace mongo {
 
         OpTime _slaveReadTill;
 
-        //DiskLoc _lastLoc;                        // use getter and setter not this (important)
         unsigned _idleAgeMillis;                 // how long has the cursor been around, relative to server idle time
 
         /* 0 = normal

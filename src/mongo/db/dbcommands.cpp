@@ -1799,7 +1799,7 @@ namespace mongo {
 
                 int idNum = nsd->findIdIndex();
                 if ( idNum >= 0 ) {
-                    cursor.reset( IndexCursor::make( nsd , idNum , nsd->idx( idNum ) , BSONObj() , BSONObj() , false , 1 ) );
+                    cursor.reset( new IndexCursor( nsd , &nsd->idx( idNum ) , BSONObj() , BSONObj() , false , 1 ) );
                 }
                 else if ( c.find( ".system." ) != string::npos ) {
                     continue;

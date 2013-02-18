@@ -449,10 +449,10 @@ namespace mongo {
             BSONObj min = Helpers::modifiedRangeBound( _min , idx->keyPattern() , -1 );
             BSONObj max = Helpers::modifiedRangeBound( _max , idx->keyPattern() , -1 );
 
-            IndexCursor* btreeCursor = IndexCursor::make( d , *idx , min , max , false , 1 );
+            IndexCursor* idxCursor = new IndexCursor( d , idx , min , max , false , 1 );
             auto_ptr<ClientCursor> cc(
                     new ClientCursor( QueryOption_NoCursorTimeout ,
-                            shared_ptr<Cursor>( btreeCursor ) ,  _ns ) );
+                            shared_ptr<Cursor>( idxCursor ) ,  _ns ) );
 
             // use the average object size to estimate how many objects a full chunk would carry
             // do that while traversing the chunk's range using the sharding index, below

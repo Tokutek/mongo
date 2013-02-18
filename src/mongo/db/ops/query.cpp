@@ -37,6 +37,7 @@ namespace mongo {
     const int MaxBytesToReturnToClientAtOnce = 4 * 1024 * 1024;
 
     bool runCommands(const char *ns, BSONObj& jsobj, CurOp& curop, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions) {
+        // TODO: Create a transaction here fore _runCommands to use internally.
         try {
             return _runCommands(ns, jsobj, b, anObjBuilder, fromRepl, queryOptions);
         }

@@ -281,7 +281,7 @@ namespace mongo {
             return _currOp->currKey();
         }
         
-        virtual BSONObj indexKeyPattern() {
+        virtual BSONObj indexKeyPattern() const {
             if ( _takeover ) {
                 return _takeover->indexKeyPattern();
             }
@@ -616,8 +616,7 @@ namespace mongo {
                 if ( idxNo >= 0 ) {
                     IndexDetails& i = d->idx( idxNo );
                     BSONObj key = i.getKeyFromQuery( _query );
-                    return shared_ptr<Cursor>( IndexCursor::make( d, idxNo, i, key, key, true,
-                                                                 1 ) );
+                    return shared_ptr<Cursor>( new IndexCursor( d, &i, key, key, true, 1 ) );
                 }
             }
         }

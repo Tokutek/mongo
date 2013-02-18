@@ -59,70 +59,20 @@ namespace mongo {
         return 0;
     }
 
-    IndexCursor::IndexCursor( NamespaceDetails *d , int idxNo, const IndexDetails& id ) :
-        _d( d ),
-        _idxNo( idxNo ),
-        _idx( id ),
+    IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
+            const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction ) :
+        _d(d),
+        _idx(idx),
+        _endKeyInclusive(endKeyInclusive),
+        _multiKey(_d != NULL && _idx != NULL ? _d->isMultikey(_d->idxNo(*_idx)) : false),
+        _direction(direction),
+        _independentFieldRanges(false),
         _nscanned(0),
-        _cursor(NULL) {
-        dassert( d->idxNo((IndexDetails&) idx) == idxNo );
-        _multikey = _d->isMultikey( _idxNo );
-    }
-
-    IndexCursor::~IndexCursor() {
-        verify(_cursor != NULL);
-        int r = _cursor->c_close(_cursor);
-        verify(r == 0);
-    }
-
-    IndexCursor* IndexCursor::make(
-        NamespaceDetails *d, const IndexDetails& idx,
-        const shared_ptr< FieldRangeVector > &bounds, int direction )
+        _cursor(NULL)
     {
-        const bool endKeyInclusive = false;
-        return make( d, d->idxNo( (IndexDetails&) idx), idx, bounds,
-                      endKeyInclusive, direction );
-    }
-
-    IndexCursor* IndexCursor::make(
-        NamespaceDetails *d, const IndexDetails& idx,
-        const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction)
-    {
-        return make( d, d->idxNo( (IndexDetails&) idx), idx, startKey, endKey,
-                     endKeyInclusive, direction );
-    }
-
-    // Make an index cursor that has a single range to iterate over.
-    // This might look something like:
-    //     _startKey = 5, _endKey = 100;
-    IndexCursor* IndexCursor::make(
-        NamespaceDetails *d, int idxNo, const IndexDetails& idx, 
-        const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction) 
-    { 
-        auto_ptr<IndexCursor> c( new IndexCursor( d , idxNo , idx ) );
-        c->init(startKey, endKey, endKeyInclusive, direction);
-        return c.release();
-    }
-
-    // Make an index cursor that has a set of one or more independent field ranges to iterate over.
-    // This might look something like:
-    //     FieldRangeVector bounds = [0, 5] [10, 100] [1000, 2000]
-    IndexCursor* IndexCursor::make(
-        NamespaceDetails *d, int idxNo, const IndexDetails& id, 
-        const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction )
-    {
-        auto_ptr<IndexCursor> c( new IndexCursor( d , idxNo , id ) );
-        c->init(bounds,singleIntervalLimit,direction);
-        return c.release();
-    }
-
-    void IndexCursor::init( const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction ) {
-        _endKeyInclusive = endKeyInclusive;
-        _direction = direction;
-        _independentFieldRanges = false;
-        if ( _idx.getSpec().getType() ) {
-            _startKey = _idx.getSpec().getType()->fixKey( startKey );
-            _endKey = _idx.getSpec().getType()->fixKey( endKey );
+        if ( _idx != NULL && _idx->getSpec().getType() ) {
+            _startKey = _idx->getSpec().getType()->fixKey( startKey );
+            _endKey = _idx->getSpec().getType()->fixKey( endKey );
         } else {
             _startKey = startKey;
             _endKey = endKey;
@@ -130,37 +80,56 @@ namespace mongo {
         initializeDBC();
     }
 
-    void IndexCursor::init( const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction ) {
+    IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
+            const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction ) :
+        _d(d),
+        _idx(idx),
+        _endKeyInclusive(true),
+        _multiKey(_d != NULL && _idx != NULL ? _d->isMultikey(_d->idxNo(*_idx)) : false),
+        _direction(direction),
+        _bounds(bounds),
+        _independentFieldRanges(true),
+        _nscanned(0),
+        _cursor(NULL)
+    {
         verify( bounds );
-        _bounds = bounds;
-        _direction = direction;
-        _endKeyInclusive = true;
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
-        _independentFieldRanges = true;
         _startKey = _bounds->startKey();
         _boundsIterator->advance( _startKey ); // handles initialization
         _boundsIterator->prepDive();
         initializeDBC();
     }
 
-    void IndexCursor::initializeDBC() {
-        // Get a cursor over the index
-        _cursor = _idx.cursor();
-
-        // Get the first/last element depending on direction
-        int r;
-        struct cursor_getf_extra extra(&_currKey, &_currPK, &_currObj);
-        DBT key_dbt;
-        key_dbt.data = const_cast<char *>(_startKey.objdata());
-        key_dbt.size = _startKey.objsize();
-        tokulog(1) << "IndexCursor::initializeDBC getf with key " << _startKey << ", direction " << _direction << endl;
-        if (_direction > 0) {
-            r = _cursor->c_getf_set_range(_cursor, 0, &key_dbt, cursor_getf, &extra);
-        } else {
-            r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
+    IndexCursor::~IndexCursor() {
+        if (_cursor != NULL) {
+            int r = _cursor->c_close(_cursor);
+            verify(r == 0);
         }
-        tokulog(1) << "IndexCursor::initializeDBC hit K, P, Obj " << _currKey << _currPK << _currObj << endl;
-        checkCurrentAgainstBounds();
+    }
+
+    void IndexCursor::initializeDBC() {
+        // _d and _idx are mutually null when the collection doesn't
+        // exist and is therefore treated as empty.
+        if (_d != NULL && _idx != NULL) {
+            _cursor = _idx->cursor();
+
+            // Get the first/last element depending on direction
+            int r;
+            struct cursor_getf_extra extra(&_currKey, &_currPK, &_currObj);
+            DBT key_dbt;
+            key_dbt.data = const_cast<char *>(_startKey.objdata());
+            key_dbt.size = _startKey.objsize();
+            tokulog(1) << "IndexCursor::initializeDBC getf with key " << _startKey << ", direction " << _direction << endl;
+            if (_direction > 0) {
+                r = _cursor->c_getf_set_range(_cursor, 0, &key_dbt, cursor_getf, &extra);
+            } else {
+                r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
+            }
+            tokulog(1) << "IndexCursor::initializeDBC hit K, P, Obj " << _currKey << _currPK << _currObj << endl;
+            checkCurrentAgainstBounds();
+        } else {
+            verify( _d == NULL && _idx == NULL );
+        }
     }
 
     // Check the current key with respect to our key bounds, whether
@@ -219,7 +188,8 @@ namespace mongo {
         if ( _currKey.isEmpty() )
             return;
         if ( !_endKey.isEmpty() ) {
-            int cmp = sgn( _endKey.woCompare( currKey(), _idx.keyPattern() ) );
+            verify( _idx != NULL );
+            int cmp = sgn( _endKey.woCompare( currKey(), _idx->keyPattern() ) );
             if ( ( cmp != 0 && cmp != _direction ) ||
                     ( cmp == 0 && !_endKeyInclusive ) ) {
                 _currKey = BSONObj();
@@ -232,6 +202,9 @@ namespace mongo {
         killCurrentOp.checkForInterrupt();
         if ( _currKey.isEmpty() )
             return false;
+
+        // currKey had a value, so the namespace and index must exist
+        dassert( _d != NULL && _idx != NULL );
         
         // Reset current key/pk/obj to empty.
         _currKey = BSONObj();
@@ -253,7 +226,8 @@ namespace mongo {
         // If the index is clustering, the full documenet is always stored in _currObj.
         // If the index is not clustering, _currObj starts as empty and gets filled
         // with the full document on the first call to current().
-        if (_currObj.isEmpty()) {
+        if (_currObj.isEmpty() && _d != NULL) {
+            dassert(_idx != NULL);
             dassert(!_currKey.isEmpty());
             dassert(!_currPK.isEmpty());
             tokulog(1) << "IndexCursor::current key: " << _currKey << ", PK " << _currPK << endl;
@@ -266,7 +240,7 @@ namespace mongo {
     }
 
     string IndexCursor::toString() const {
-        string s = string("IndexCursor ") + _idx.indexName();
+        string s = string("IndexCursor ") + (_idx != NULL ? _idx->indexName() : "(null)");
         if ( _direction < 0 ) s += " reverse";
         if ( _bounds.get() && _bounds->size() > 1 ) s += " multi";
         return s;

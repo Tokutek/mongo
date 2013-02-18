@@ -108,8 +108,8 @@ namespace mongo {
                 max = Helpers::modifiedRangeBound( max , idx->keyPattern() , -1 );
             }
 
-            IndexCursor * bc = IndexCursor::make( d , d->idxNo(*idx) , *idx , min , max , false , 1 );
-            shared_ptr<Cursor> c( bc );
+            IndexCursor * idxCursor = new IndexCursor( d , idx , min , max , false , 1 );
+            shared_ptr<Cursor> c( idxCursor );
             auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
             if ( ! cc->ok() ) {
                 // range is empty
@@ -148,7 +148,7 @@ namespace mongo {
                         continue;
                     
                     ostringstream os;
-                    os << "found null value in key " << bc->prettyKey( currKey ) << " for doc: "
+                    os << "found null value in key " << idxCursor->prettyKey( currKey ) << " for doc: "
                        << ( obj.hasField( "_id" ) ? obj.toString() : obj["_id"].toString() );
                     log() << "checkShardingIndex for '" << ns << "' failed: " << os.str() << endl;
                     
@@ -318,8 +318,8 @@ namespace mongo {
                 long long currCount = 0;
                 long long numChunks = 0;
                 
-                IndexCursor * bc = IndexCursor::make( d , d->idxNo(*idx) , *idx , min , max , false , 1 );
-                shared_ptr<Cursor> c( bc );
+                IndexCursor * idxCursor = new IndexCursor( d , idx , min , max , false , 1 );
+                shared_ptr<Cursor> c( idxCursor );
                 auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
                 if ( ! cc->ok() ) {
                     errmsg = "can't open a cursor for splitting (desired range is possibly empty)";
@@ -330,13 +330,13 @@ namespace mongo {
                 // at the end. If a key appears more times than entries allowed on a chunk, we issue a warning and
                 // split on the following key.
                 set<BSONObj> tooFrequentKeys;
-                splitKeys.push_back( bc->prettyKey( c->currKey().getOwned() ).extractFields( keyPattern ) );
+                splitKeys.push_back( idxCursor->prettyKey( c->currKey().getOwned() ).extractFields( keyPattern ) );
                 while ( 1 ) {
                     while ( cc->ok() ) {
                         currCount++;
                         
                         if ( currCount > keyCount ) {
-                            BSONObj currKey = bc->prettyKey( c->currKey() ).extractFields(keyPattern);
+                            BSONObj currKey = idxCursor->prettyKey( c->currKey() ).extractFields(keyPattern);
                             // Do not use this split key if it is the same used in the previous split point.
                             if ( currKey.woCompare( splitKeys.back() ) == 0 ) {
                                 tooFrequentKeys.insert( currKey.getOwned() );
@@ -383,8 +383,8 @@ namespace mongo {
                     currCount = 0;
                     log() << "splitVector doing another cycle because of force, keyCount now: " << keyCount << endl;
                     
-                    bc = IndexCursor::make( d , d->idxNo(*idx) , *idx , min , max , false , 1 );
-                    c.reset( bc );
+                    idxCursor = new IndexCursor( d , idx , min , max , false , 1 );
+                    c.reset( idxCursor );
                     cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
                 }
                 
@@ -396,7 +396,7 @@ namespace mongo {
                 // Warn for keys that are more numerous than maxChunkSize allows.
                 for ( set<BSONObj>::const_iterator it = tooFrequentKeys.begin(); it != tooFrequentKeys.end(); ++it ) {
                     warning() << "chunk is larger than " << maxChunkSize
-                              << " bytes because of key " << bc->prettyKey( *it ) << endl;
+                              << " bytes because of key " << idxCursor->prettyKey( *it ) << endl;
                 }
                 
                 // Remove the sentinel at the beginning before returning

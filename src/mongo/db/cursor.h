@@ -66,7 +66,7 @@ namespace mongo {
             return 0;
         }
 
-        virtual BSONObj indexKeyPattern() {
+        virtual BSONObj indexKeyPattern() const {
             return BSONObj();
         }
 
@@ -146,12 +146,15 @@ namespace mongo {
      */
     class IndexCursor : public Cursor {
     public:
-        ~IndexCursor();
+        // Create a cursor over a specific start, end key range.
+        IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
+                const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
 
-        static IndexCursor* make( NamespaceDetails *_d, const IndexDetails& idx, const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
-        static IndexCursor* make( NamespaceDetails *_d, const IndexDetails& idx, const shared_ptr< FieldRangeVector > &bounds, int direction );
-        static IndexCursor* make( NamespaceDetails *_d, int idxNo, const IndexDetails& idx, const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
-        static IndexCursor* make( NamespaceDetails *_d, int idxNo, const IndexDetails& idx, const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction );
+        // Create a cursor over a set of one or more field ranges.
+        IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
+                const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction );
+
+        ~IndexCursor();
 
         bool ok() { return !_currKey.isEmpty(); }
         bool advance();
@@ -162,25 +165,25 @@ namespace mongo {
          * @return false if the pk has not been seen
          */
         bool getsetdup(const BSONObj &pk) {
-            if( _multikey ) {
+            if( _multiKey ) {
                 pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk);
                 return !p.second;
             }
             return false;
         }
 
-        bool modifiedKeys() const { return _multikey; }
-        bool isMultiKey() const { return _multikey; }
+        bool modifiedKeys() const { return _multiKey; }
+        bool isMultiKey() const { return _multiKey; }
 
         BSONObj currPK() const { return _currPK; }
         BSONObj currKey() const { return _currKey; }
-        BSONObj indexKeyPattern() { return _idx.keyPattern(); }
+        BSONObj indexKeyPattern() const { return _idx != NULL ? _idx->keyPattern() : BSONObj(); }
 
         BSONObj current();
         string toString() const;
 
         BSONObj prettyKey( const BSONObj &key ) const {
-            return key.replaceFieldNames( _idx.keyPattern() ).clientReadable();
+            return key.replaceFieldNames( indexKeyPattern() ).clientReadable();
         }
 
         BSONObj prettyIndexBounds() const;
@@ -198,14 +201,10 @@ namespace mongo {
         
         long long nscanned() const { return _nscanned; }
 
-    protected:
-        IndexCursor( NamespaceDetails* nsd , int theIndexNo, const IndexDetails& idxDetails );
-
+    private:
         void init( const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
         void init( const shared_ptr< FieldRangeVector > &_bounds, int singleIntervalLimit, int _direction );
 
-        /** setup the PK and currKey fields based on the stored index key */
-        void setKeyAndPK(const BSONObj &idxKey);
         /** setup DBC cursor and its initial position */
         void initializeDBC();
         /** check if the current key is out of bounds, invalidate the current key if so */
@@ -213,21 +212,16 @@ namespace mongo {
         bool skipOutOfRangeKeysAndCheckEnd();
         void checkEnd();
 
-        // these are set in the construtor
+        // If the namespace is does not exist and needs to be treated as empty,
+        // then both _d and _idx will be null.
         NamespaceDetails * const _d;
+        const IndexDetails *_idx;
 
-        // TODO: Get rid of _idxNo. It only exists because we need to know if the
-        // _idxNo'th index is multikey using the NamespaceDetails. We should be
-        // able to figure it out using the _idx;
-        const int _idxNo;
-        const IndexDetails& _idx;
-
-        // these are all set in init()
         set<BSONObj> _dups;
         BSONObj _startKey;
         BSONObj _endKey;
         bool _endKeyInclusive;
-        bool _multikey; // this must be updated every getmore batch in case someone added a multikey
+        bool _multiKey; // this must be updated every getmore batch in case someone added a multikey
         int _direction;
         shared_ptr< FieldRangeVector > _bounds;
         auto_ptr< FieldRangeVectorIterator > _boundsIterator;
@@ -254,69 +248,40 @@ namespace mongo {
     };
 
     /**
-     * table-scan style cursor
+     * Table-scan style cursor.
      *
-     * A BasicCursor relies on advance() to ensure it is in a consistent state after a write.  If
-     * the document at a BasicCursor's current position will be deleted or relocated, the cursor
-     * must first be advanced.  The same is true of BasicCursor subclasses.
+     * Implements the cursor interface by wrapping an IndexCursor
+     * constructed over the primary, clustering _id index.
      */
     class BasicCursor : public Cursor {
     public:
-        BasicCursor(NamespaceDetails *nsd, int direction = 1);
-        ~BasicCursor();
-        bool ok() {
-            return !currKey().isEmpty();
-        }
-        BSONObj current() {
-            return _currObj;
-        }
-        BSONObj currKey() const {
-            return _currKey;
-        };
-        BSONObj currPK() const {
-            // Basic cursors scan the _id index (the primary key),
-            // so the current PK is just the current key.
-            return currKey();
-        };
-        bool advance();
+        BasicCursor(NamespaceDetails *d, int direction = 1);
+        ~BasicCursor() { }
+        bool ok() { return _c.ok(); }
+        BSONObj current() { return _c.current(); }
+        BSONObj currKey() const { return _c.currKey(); }
+        BSONObj currPK() const { return _c.currPK(); }
+        bool advance() { return _c.advance(); }
         virtual string toString() const { return "BasicCursor"; }
-        virtual void setTailable() {
-#if 0
-            if ( !curr.isNull() || !last.isNull() )
-                _tailable = true;
-#endif
-            ::abort();
-        }
-        virtual bool tailable() { return _tailable; }
+        virtual void setTailable() { _c.setTailable(); }
+        virtual bool tailable() { return _c.tailable(); }
         virtual bool getsetdup(const BSONObj &pk) { return false; }
         virtual bool isMultiKey() const { return false; }
         virtual bool modifiedKeys() const { return false; }
         virtual bool supportGetMore() { return true; }
-        virtual CoveredIndexMatcher *matcher() const { return _matcher.get(); }
-        virtual shared_ptr< CoveredIndexMatcher > matcherPtr() const { return _matcher; }
-        virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { _matcher = matcher; }
-        virtual const Projection::KeyOnly *keyFieldsOnly() const { return _keyFieldsOnly.get(); }
-        virtual void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
-            _keyFieldsOnly = keyFieldsOnly;
+        virtual CoveredIndexMatcher *matcher() const { return _c.matcher(); }
+        virtual shared_ptr< CoveredIndexMatcher > matcherPtr() const { return _c.matcherPtr(); }
+        virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) {
+            _c.setMatcher(matcher);
         }
-        virtual long long nscanned() const { return _nscanned; }
-
-    protected:
-        NamespaceDetails *_nsd;
-
-        // TODO: _direction should be const
-        int _direction;
-        BSONObj _currKey;
-        BSONObj _currObj;
-        DBC *_cursor;
-        void incNscanned() { if ( ok() ) { ++_nscanned; } }
+        virtual const Projection::KeyOnly *keyFieldsOnly() const { return _c.keyFieldsOnly(); }
+        virtual void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
+            _c.setKeyFieldsOnly(keyFieldsOnly);
+        }
+        virtual long long nscanned() const { return _c.nscanned(); }
 
     private:
-        bool _tailable;
-        shared_ptr< CoveredIndexMatcher > _matcher;
-        shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
-        long long _nscanned;
-        void init() { _tailable = false; }
+        IndexCursor _c;
     };
 
     /* used for order { $natural: -1 } */

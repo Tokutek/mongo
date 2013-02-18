@@ -103,6 +103,9 @@ namespace mongo {
         const shared_ptr< CoveredIndexMatcher > forceDocMatcher(
                 new CoveredIndexMatcher( query , BSONObj() ) );
 
+        const IndexDetails *idx = _spec->getDetails();
+        NamespaceDetails *d = nsdetails( idx->parentNS().c_str());
+
         //Construct a new query based on the hashes of the previous point-intervals
         //e.g. {a : {$in : [ hash(1) , hash(3) , hash(6) ]}}
         BSONObjBuilder newQueryBuilder;
@@ -112,12 +115,12 @@ namespace mongo {
         for( i = intervals.begin(); i != intervals.end(); ++i ){
             if ( ! i->equality() ){
                 const shared_ptr< IndexCursor > exhaustiveCursor(
-                        IndexCursor::make( nsdetails( _spec->getDetails()->parentNS().c_str()),
-                                           *( _spec->getDetails() ),
-                                           BSON( "" << MINKEY ) ,
-                                           BSON( "" << MAXKEY ) ,
-                                           true ,
-                                           1 ) );
+                        new IndexCursor( d,
+                                         idx,
+                                         BSON( "" << MINKEY ) ,
+                                         BSON( "" << MAXKEY ) ,
+                                         true ,
+                                         1 ) );
                 exhaustiveCursor->setMatcher( forceDocMatcher );
                 return exhaustiveCursor;
             }
@@ -133,8 +136,11 @@ namespace mongo {
                 new FieldRangeVector( newfrs , *_spec , 1 ) );
 
         const shared_ptr< IndexCursor > cursor(
-                IndexCursor::make( nsdetails( _spec->getDetails()->parentNS().c_str()),
-                        *( _spec->getDetails() ),  newVector , 1 ) );
+                new IndexCursor( d,
+                                 idx,
+                                 newVector,
+                                 false,
+                                 1 ) );
         cursor->setMatcher( forceDocMatcher );
         return cursor;
     }

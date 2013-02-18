@@ -459,7 +459,7 @@ namespace mongo {
 
     inline IndexDetails& NamespaceDetails::idx(int idxNo, bool missingExpected ) {
         if ( idxNo < NIndexesMax ) {
-            verify(idxNo < (int) _indexes.size());
+            verify(idxNo >= 0 && idxNo < (int) _indexes.size());
             return *_indexes[idxNo];
         }
         unimplemented("more than NIndexesMax indexes"); // TokuDB: Make sure we handle the case where idxNo >= NindexesMax 

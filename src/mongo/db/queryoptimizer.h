@@ -649,7 +649,7 @@ namespace mongo {
         virtual bool advance();
         virtual BSONObj currKey() const { return _c->currKey(); }
         virtual bool supportGetMore() { return true; }
-        virtual BSONObj indexKeyPattern() { return _c->indexKeyPattern(); }
+        virtual BSONObj indexKeyPattern() const { return _c->indexKeyPattern(); }
 
         /** Deduping documents from a prior cursor is handled by the matcher. */
         virtual bool getsetdup(const BSONObj &pk) { return _c->getsetdup( pk ); }
