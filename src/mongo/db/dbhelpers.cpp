@@ -16,19 +16,19 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
+#include <fstream>
+
+#include "mongo/pch.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/db.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/json.h"
-#include "mongo/db/indexcursor.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/repl_block.h"
-
-#include <fstream>
 
 #include <boost/filesystem/convenience.hpp>
 #include <boost/filesystem/operations.hpp>

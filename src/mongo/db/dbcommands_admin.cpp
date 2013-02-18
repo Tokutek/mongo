@@ -21,21 +21,19 @@
    NOT system stuff
 */
 
-
-#include "pch.h"
-#include "jsobj.h"
-#include "namespace.h"
-#include "commands.h"
-#include "cmdline.h"
-#include "indexcursor.h"
-#include "curop.h"
-#include "../util/background.h"
-#include "../util/alignedbuilder.h"
-#include "../util/paths.h"
-#include "../scripting/engine.h"
-#include "../util/timer.h"
-
+#include "mongo/pch.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/namespace.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/cmdline.h"
+#include "mongo/db/cursor.h"
+#include "mongo/db/curop.h"
+#include "mongo/scripting/engine.h"
+#include "mongo/util/background.h"
+#include "mongo/util/alignedbuilder.h"
+#include "mongo/util/paths.h"
+#include "mongo/util/timer.h"
 
 #include <boost/filesystem/convenience.hpp>
 #include <boost/filesystem/operations.hpp>

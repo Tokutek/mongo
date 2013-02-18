@@ -21,7 +21,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/namespace_details.h"
-#include "mongo/db/indexcursor.h"
+#include "mongo/db/cursor.h"
 
 namespace mongo {
 

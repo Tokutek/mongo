@@ -18,13 +18,12 @@
 
 #pragma once
 
-#include "indexcursor.h"
-#include "cursor.h"
-#include "queryutil.h"
-#include "matcher.h"
-#include "explain.h"
-#include "../util/net/listen.h"
+#include "mongo/db/cursor.h"
+#include "mongo/db/queryutil.h"
+#include "mongo/db/matcher.h"
+#include "mongo/db/explain.h"
 #include "mongo/db/querypattern.h"
+#include "mongo/util/net/listen.h"
 
 namespace mongo {
 

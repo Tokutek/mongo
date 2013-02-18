@@ -19,7 +19,7 @@
 
 #include <tokudb.h>
 
-#include "db/indexcursor.h"
+#include "db/cursor.h"
 #include "db/toku/invariant.h"
 #include "db/toku/row_buffer.h"
 

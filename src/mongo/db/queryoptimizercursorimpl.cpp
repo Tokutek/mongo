@@ -17,12 +17,12 @@
  */
 
 
-#include "pch.h"
-#include "queryoptimizercursorimpl.h"
-#include "clientcursor.h"
-#include "indexcursor.h"
-#include "explain.h"
+#include "mongo/pch.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/queryoptimizercursorimpl.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/cursor.h"
+#include "mongo/db/explain.h"
 #include "mongo/db/queryoptimizer.h"
 
 namespace mongo {

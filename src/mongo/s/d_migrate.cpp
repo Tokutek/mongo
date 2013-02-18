@@ -22,36 +22,37 @@
    mostly around shard management and checking
  */
 
-#include "pch.h"
+
 #include <map>
 #include <string>
 #include <algorithm>
 
 #include <boost/thread/thread.hpp>
 
+#include "mongo/pch.h"
 #include "mongo/db/dbhelpers.h"
-#include "../db/commands.h"
-#include "../db/jsobj.h"
-#include "../db/cmdline.h"
-#include "../db/queryoptimizer.h"
-#include "../db/indexcursor.h"
-#include "../db/repl_block.h"
-#include "../db/clientcursor.h"
-#include "../db/repl.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/cmdline.h"
+#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/cursor.h"
+#include "mongo/db/repl_block.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/repl.h"
 
-#include "../client/connpool.h"
-#include "../client/distlock.h"
+#include "mongo/client/connpool.h"
+#include "mongo/client/distlock.h"
 #include "mongo/client/dbclientcursor.h"
 
-#include "../util/queue.h"
-#include "../util/startup_test.h"
-#include "../util/processinfo.h"
-#include "../util/ramlog.h"
+#include "mongo/util/queue.h"
+#include "mongo/util/startup_test.h"
+#include "mongo/util/processinfo.h"
+#include "mongo/util/ramlog.h"
 
-#include "shard.h"
-#include "d_logic.h"
-#include "config.h"
-#include "chunk.h"
+#include "mongo/s/shard.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/s/config.h"
+#include "mongo/s/chunk.h"
 
 using namespace std;
 

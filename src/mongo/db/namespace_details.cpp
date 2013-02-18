@@ -14,9 +14,7 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-
-#include "mongo/db/namespace_details.h"
+#include "mongo/pch.h"
 
 #include <algorithm>
 #include <list>
@@ -26,12 +24,13 @@
 
 #include <boost/filesystem/operations.hpp>
 
-#include "mongo/db/indexcursor.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/db.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/idgen.h"
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"

@@ -16,12 +16,12 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
+#include "mongo/pch.h"
+#include "mongo/server.h"
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/db.h"
-#include "mongo/db/indexcursor.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/cmdline.h"
-#include "../server.h"
 #include "mongo/db/dbhelpers.h"
 
 //#define DEBUGQO(x) cout << x << endl;

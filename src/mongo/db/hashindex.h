@@ -16,7 +16,7 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mongo/db/indexcursor.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/hasher.h"
 #include "mongo/db/index.h"
 #include "mongo/db/matcher.h"
