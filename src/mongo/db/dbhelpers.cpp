@@ -25,10 +25,12 @@
 #include "mongo/db/json.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/oplog.h"
-#include "mongo/db/ops/update.h"
-#include "mongo/db/ops/delete.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/repl_block.h"
+#include "mongo/db/idgen.h"
+#include "mongo/db/ops/update.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/insert.h"
 
 #include <boost/filesystem/convenience.hpp>
 #include <boost/filesystem/operations.hpp>
@@ -64,16 +66,38 @@ namespace mongo {
         b.appendBool("unique", unique);
         BSONObj o = b.done();
 
-        ::abort(); //theDataFileMgr.insert(system_indexes.c_str(), o.objdata(), o.objsize());
+        insertObject(system_indexes.c_str(), addIdField(o));
     }
 
     /* fetch a single object from collection ns that matches query
        set your db SavedContext first
     */
     bool Helpers::findOne(const char *ns, const BSONObj &query, BSONObj& result, bool requireIndex) {
-        ::abort();
-        return false;
+        BSONObj obj = findOne( ns, query, requireIndex );
+        if ( obj.isEmpty() )
+            return false;
+        result = obj;
+        return true;
     }
+
+    /* fetch a single object from collection ns that matches query
+       set your db SavedContext first
+    */
+    BSONObj Helpers::findOne(const char *ns, const BSONObj &query, bool requireIndex) {
+        shared_ptr<Cursor> c =
+            NamespaceDetailsTransient::getCursor( ns , query, BSONObj(),
+                                                  requireIndex ?
+                                                  QueryPlanSelectionPolicy::indexOnly() :
+                                                  QueryPlanSelectionPolicy::any() );
+        while( c->ok() ) {
+            if ( c->currentMatches() && !c->getsetdup( c->currPK() ) ) {
+                return c->current();
+            }
+            c->advance();
+        }
+        return BSONObj();
+    }
+
 
     bool Helpers::findById( const char *ns, BSONObj query, BSONObj& result ) {
         Lock::assertAtLeastReadLocked(ns);
@@ -251,11 +275,11 @@ namespace mongo {
             {
                 Client::WriteContext ctx(ns);
                 scoped_ptr<Cursor> c;
-                {
-                    NamespaceDetails* nsd = nsdetails( ns.c_str() );
-                    if ( ! nsd )
-                        break;
+                NamespaceDetails* nsd = nsdetails( ns.c_str() );
+                if ( ! nsd )
+                    break;
                     
+                {
                     int ii = nsd->findIndexByKeyPattern( keyPattern );
                     verify( ii >= 0 );
                     
@@ -276,21 +300,15 @@ namespace mongo {
                     break;
                 }
                 
-#if 0
-                DiskLoc rloc = c->currLoc();
+                BSONObj pk = c->currPK();
                 BSONObj obj = c->current();
                 
                 // this is so that we don't have to handle this cursor in the delete code
                 c.reset(0);
                 
-                if ( callback )
-                    callback->goingToDelete( obj );
-                
-                logOp( "d" , ns.c_str() , rloc.obj()["_id"].wrap() , 0 , 0 , fromMigrate );
-                ::abort(); // theDataFileMgr.deleteRecord(ns.c_str() , rloc.rec(), rloc);
+                logOp( "d" , ns.c_str() , obj["_id"].wrap() , 0 , 0 , fromMigrate );
+                deleteOneObject(nsd, pk, obj);
                 numDeleted++;
-#endif
-                ::abort();
             }
 
             Timer secondaryThrottleTime;

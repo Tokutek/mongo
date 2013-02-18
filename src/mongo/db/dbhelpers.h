@@ -63,6 +63,7 @@ namespace mongo {
            @return true if object found
         */
         bool findOne(const char *ns, const BSONObj &query, BSONObj& result, bool requireIndex = false);
+        BSONObj findOne(const char *ns, const BSONObj &query, bool requireIndex);
 
         // Replacement for DataFileMgr::findTableScan
         shared_ptr<Cursor> findTableScan(const char *ns, const BSONObj &order);

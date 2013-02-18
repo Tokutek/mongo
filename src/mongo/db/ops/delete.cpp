@@ -16,16 +16,17 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "delete.h"
-#include "../queryutil.h"
-#include "../oplog.h"
+#include "mongo/pch.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/queryutil.h"
+#include "mongo/db/oplog.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/ops/delete.h"
 #include "mongo/util/stacktrace.h"
 
 namespace mongo {
 
-    static void deleteOneObject(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj) {
+    void deleteOneObject(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj) {
         uasserted(16439, "I don't know how to delete objects yet, sorry :(");
     }
     
