@@ -610,10 +610,16 @@ namespace mongo {
                                     const BSONObj &jsobj, CurOp& curop,
                                     const BSONObj &query, const BSONObj &order,
                                     const shared_ptr<ParsedQuery> &pq_shared,
-                                    const BSONObj &oldPlan,
                                     const ConfigVersion &shardingVersionAtStart,
-                                    Client::Transaction *txn,
+                                    const bool getCachedExplainPlan,
                                     Message &result ) {
+        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
+        
+        BSONObj oldPlan;
+        if (getCachedExplainPlan) {
+            scoped_ptr<MultiPlanScanner> mps( MultiPlanScanner::make( ns.c_str(), query, order ) );
+            oldPlan = mps->cachedPlanExplainSummary();
+        }
 
         const ParsedQuery &pq( *pq_shared );
         shared_ptr<Cursor> cursor;
@@ -722,11 +728,11 @@ namespace mongo {
             ccPointer->fields = pq.getFieldPtr();
             // Clones the transaction and hand's off responsibility
             // of its completion to the client cursor's destructor.
-            ccPointer->transaction = shared_ptr< Client::Transaction >( txn->handoff() );
+            ccPointer->transaction = shared_ptr< Client::Transaction >( txn.handoff() );
             ccPointer.release();
         } else {
             // Not saving the cursor, so we can commit its transaction now.
-            txn->commit();
+            txn.commit();
         }
         
         QueryResult *qr = (QueryResult *) result.header();
@@ -872,7 +878,7 @@ namespace mongo {
         }
 
 
-        // Run a simple id query
+        // Run a simple id query.
 
         // - Don't do it for explains.
         // - Don't do it for tailable cursors.
@@ -914,18 +920,10 @@ namespace mongo {
                 
                 // Run a regular query.
 
-                Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
-                
-                BSONObj oldPlan;
-                if ( ! hasRetried && explain && ! pq.hasIndexSpecifier() ) {
-                    scoped_ptr<MultiPlanScanner> mps( MultiPlanScanner::make( ns, query, order ) );
-                    oldPlan = mps->cachedPlanExplainSummary();
-                }
-   
-                // transaction will be committed or handed off in queryWithQueryOptimizer
-                string r = queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query, order,
-                                                    pq_shared, oldPlan, shardingVersionAtStart, &txn, result );
-                return r;
+                const bool getCachedExplainPlan = ! hasRetried && explain && ! pq.hasIndexSpecifier();
+                return queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query, order,
+                                                pq_shared, shardingVersionAtStart, getCachedExplainPlan,
+                                                result );
                     
             }
             catch ( const QueryRetryException & ) {

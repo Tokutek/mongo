@@ -23,6 +23,9 @@
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/cursor.h"
 
+// TODO: dassert isn't working for some reason, so we call verify instead.
+//       this might be slow.
+
 namespace mongo {
 
     struct cursor_getf_extra {
@@ -35,26 +38,31 @@ namespace mongo {
 
     static int cursor_getf(const DBT *key, const DBT *val, void *extra) {
         struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
-        dassert(key != NULL);
-        dassert(val != NULL);
+        verify(key != NULL);
+        verify(val != NULL);
 
-        // There is always at least one bson object key.
+        // There is always a non-empty bson object key to start.
         BSONObj keyObj(static_cast<char *>(key->data));
-        dassert(keyObj.objsize() <= (int) key->size);
+        verify(keyObj.objsize() <= (int) key->size);
+        verify(!keyObj.isEmpty());
         *info->key = keyObj.getOwned();
 
         // Check if there a PK attached to the end of the first key.
+        // If not, then this is the primary index, so PK == key.
         if (keyObj.objsize() < (int) key->size) {
             BSONObj pkObj(static_cast<char *>(key->data) + keyObj.objsize());
-            dassert(keyObj.objsize() + pkObj.objsize() == (int) key->size);
+            verify(keyObj.objsize() + pkObj.objsize() == (int) key->size);
+            verify(!pkObj.isEmpty());
             *info->pk = pkObj.getOwned();
+        } else {
+            *info->pk = *info->key;
         }
 
         // Check if an object lives in the val buffer.
         if (val->size > 0) {
             BSONObj valObj(static_cast<char *>(val->data));
-            dassert(valObj.objsize() == (int) val->size);
-            *info->val = valObj.getOwned();
+            verify(valObj.objsize() == (int) val->size);
+            *info->val = valObj.isEmpty() ? BSONObj() : valObj.getOwned();
         }
         return 0;
     }
@@ -111,6 +119,7 @@ namespace mongo {
         // _d and _idx are mutually null when the collection doesn't
         // exist and is therefore treated as empty.
         if (_d != NULL && _idx != NULL) {
+            tokulog(1) << "IndexCursor::initializeDBC key pattern " << indexKeyPattern() << endl;
             _cursor = _idx->cursor();
 
             // Get the first/last element depending on direction
@@ -204,7 +213,7 @@ namespace mongo {
             return false;
 
         // currKey had a value, so the namespace and index must exist
-        dassert( _d != NULL && _idx != NULL );
+        verify( _d != NULL && _idx != NULL );
         
         // Reset current key/pk/obj to empty.
         _currKey = BSONObj();
@@ -227,9 +236,9 @@ namespace mongo {
         // If the index is not clustering, _currObj starts as empty and gets filled
         // with the full document on the first call to current().
         if (_currObj.isEmpty() && _d != NULL) {
-            dassert(_idx != NULL);
-            dassert(!_currKey.isEmpty());
-            dassert(!_currPK.isEmpty());
+            verify(_idx != NULL);
+            verify(!_currKey.isEmpty());
+            verify(!_currPK.isEmpty());
             tokulog(1) << "IndexCursor::current key: " << _currKey << ", PK " << _currPK << endl;
             bool found = _d->findById(_currPK, _currObj, false);
             tokulog(1) << "IndexCursor::current primary key document lookup: " << _currObj << endl;

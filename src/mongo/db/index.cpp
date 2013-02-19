@@ -149,7 +149,7 @@ namespace mongo {
         if (r != 0) {
             tokulog() << "error inserting " << key << ", " << val << endl;
         } else {
-            tokulog(1) << "inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
+            tokulog(1) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
         }
         verify(r == 0);
     }
