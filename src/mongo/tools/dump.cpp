@@ -255,6 +255,7 @@ public:
         return _repair( dbname  );
     }
     
+#if 0
     DiskLoc _repairExtent( Database* db , string ns, bool forward , DiskLoc eLoc , Writer& w ){
         LogIndentLevel lil;
         
@@ -324,9 +325,15 @@ public:
         log() << "wrote " << seen.size() << " documents" << endl;
         return forward ? e->xnext : e->xprev;
     }
+#endif
 
     void _repair( Database* db , string ns , boost::filesystem::path outfile ){
         NamespaceDetails * nsd = nsdetails( ns.c_str() );
+        unimplemented("_repair");
+        (void) nsd;
+        (void) db;
+        (void) outfile;
+#if 0
         log() << "nrecords: " << nsd->stats.nrecords 
               << " datasize: " << nsd->stats.datasize 
               << " firstExtent: " << nsd->firstExtent 
@@ -359,7 +366,8 @@ public:
             DiskLoc eLoc = nsd->firstExtent;
             while ( ! eLoc.isNull() ){
                 log() << "extent loc: " << eLoc << endl;
-                eLoc = _repairExtent( db , ns , true , eLoc , w );
+                unimplemented("_repairExtent");
+                //eLoc = _repairExtent( db , ns , true , eLoc , w );
             }
         }
         catch ( DBException& e ){
@@ -372,7 +380,8 @@ public:
             DiskLoc eLoc = nsd->lastExtent;
             while ( ! eLoc.isNull() ){
                 log() << "extent loc: " << eLoc << endl;
-                eLoc = _repairExtent( db , ns , false , eLoc , w );
+                unimplemented("_repairExtent");
+                //eLoc = _repairExtent( db , ns , false , eLoc , w );
             }
         }
         catch ( DBException& e ){
@@ -380,6 +389,7 @@ public:
         }
 
         log() << "\t\t " << m.done() << " objects" << endl;
+#endif
     }
     
     int _repair( string dbname ) {

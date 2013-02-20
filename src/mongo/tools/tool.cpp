@@ -23,6 +23,7 @@
 
 #include "pcrecpp.h"
 
+#include "mongo/db/databaseholder.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/util/file_allocator.h"
 #include "mongo/util/password.h"
@@ -40,6 +41,17 @@ namespace po = boost::program_options;
 namespace mongo {
 
     CmdLine cmdLine;
+
+#ifdef _WIN32
+    string dbpath = "\\data\\db\\";
+#else
+    string dbpath = "/data/db/";
+#endif
+
+    DatabaseHolder _dbHolder;
+    DatabaseHolder& dbHolderUnchecked() {
+        return _dbHolder;
+    }
 
     Tool::Tool( string name , DBAccess access , string defaultDB ,
                 string defaultCollection , bool usesstdout ) :
@@ -221,7 +233,8 @@ namespace mongo {
         }
         else {
             if ( _params.count( "directoryperdb" ) ) {
-                directoryperdb = true;
+                unimplemented("directoryperdb");
+                //directoryperdb = true;
             }
             verify( lastError.get( true ) );
 

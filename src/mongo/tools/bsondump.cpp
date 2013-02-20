@@ -18,7 +18,6 @@
 
 #include "../pch.h"
 #include "mongo/client/dbclientcursor.h"
-#include "../util/mmap.h"
 #include "../util/text.h"
 #include "tool.h"
 

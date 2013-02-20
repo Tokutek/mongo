@@ -20,8 +20,6 @@
 #include "mongo/bson/util/atomic_int.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/json.h"
-#include "mongo/util/logfile.h"
-#include "mongo/util/mmap.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/time_support.h"
 #include "mongo/util/timer.h"
@@ -32,8 +30,8 @@ using namespace mongo;
 using namespace bson;
 
 int dummy;
-LogFile *lf = 0;
-MemoryMappedFile *mmfFile;
+//LogFile *lf = 0;
+//MemoryMappedFile *mmfFile;
 char *mmf = 0;
 bo options;
 unsigned long long len; // file len
@@ -50,7 +48,8 @@ int syncDelaySecs = 0;
 void syncThread() {
     while( 1 ) {
         mongo::Timer t;
-        mmfFile->flush(true);
+        unimplemented("syncThread");
+        //mmfFile->flush(true);
         cout << "                                                     mmf sync took " << t.millis() << "ms" << endl;
         sleepsecs(syncDelaySecs);
     }
@@ -73,6 +72,8 @@ unsigned long long rrand() {
 }
 
 void workerThread() {
+    unimplemented("workerThread");
+#if 0
     bool r = options["r"].trueValue();
     bool w = options["w"].trueValue();
     //cout << "read:" << r << " write:" << w << endl;
@@ -106,9 +107,12 @@ void workerThread() {
             sleepmicros(micros);
         }
     }
+#endif
 }
 
 void go() {
+    unimplemented("go");
+#if 0
     verify( options["r"].trueValue() || options["w"].trueValue() );
     MemoryMappedFile f;
     cout << "creating test file size:";
@@ -186,6 +190,7 @@ void go() {
             cout << (w * PG / 1024 / 1024) << " MB/sec";
         cout << endl;
     }
+#endif
 }
 
 int main(int argc, char *argv[]) {
