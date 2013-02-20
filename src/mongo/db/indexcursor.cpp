@@ -224,7 +224,7 @@ namespace mongo {
             } else {
                 r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
             }
-            tokulog(1) << toString() << ": advance() moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
+            tokulog(2) << toString() << ": advance() moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
         } else {
             // new inserts will not be read by this cursor, because there was no
             // namespace details or index at the time of creation. we can either
