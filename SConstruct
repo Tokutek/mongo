@@ -198,7 +198,7 @@ add_option( "durableDefaultOff" , "have durable default to off" , 0 , True )
 
 add_option( "pch" , "use precompiled headers to speed up the build (experimental)" , 0 , True , "usePCH" )
 add_option( "distcc" , "use distcc for distributing builds" , 0 , False )
-add_option( "ccache" , "use ccache for distributing builds" , 0 , False )
+add_option( "ccache" , "use ccache for caching compilation" , 0 , False )
 add_option( "clang" , "use clang++ rather than g++ (experimental)" , 0 , True )
 
 # debugging/profiling help
