@@ -100,6 +100,7 @@ namespace {
         readRoleActions.addAction(ActionType::dbHash);
         readRoleActions.addAction(ActionType::dbStats);
         readRoleActions.addAction(ActionType::find);
+        readRoleActions.addAction(ActionType::indexRead);
         readRoleActions.addAction(ActionType::killCursors);
         readRoleActions.addAction(ActionType::transactionCommands);
 
@@ -133,6 +134,7 @@ namespace {
         dbAdminRoleActions.addAction(ActionType::dropCollection);
         dbAdminRoleActions.addAction(ActionType::dropIndexes);
         dbAdminRoleActions.addAction(ActionType::ensureIndex);
+        dbAdminRoleActions.addAction(ActionType::indexRead);
         dbAdminRoleActions.addAction(ActionType::indexStats);
         dbAdminRoleActions.addAction(ActionType::profileEnable);
         dbAdminRoleActions.addAction(ActionType::profileRead);
@@ -788,6 +790,9 @@ namespace {
         } else if (collectionName == "system.profle" && newActions.contains(ActionType::find)) {
             newActions.removeAction(ActionType::find);
             newActions.addAction(ActionType::profileRead);
+        } else if (collectionName == "system.indexes" && newActions.contains(ActionType::find)) {
+            newActions.removeAction(ActionType::find);
+            newActions.addAction(ActionType::indexRead);
         }
 
         return Privilege(privilege.getResource(), newActions);

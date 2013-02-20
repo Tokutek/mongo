@@ -46,6 +46,7 @@
 "getShardVersion",
 "handshake",
 "hostInfo",
+"indexRead",
 "indexStats",
 "inprog",
 "insert",
