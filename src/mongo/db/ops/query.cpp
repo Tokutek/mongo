@@ -614,10 +614,11 @@ namespace mongo {
                                     const bool getCachedExplainPlan,
                                     Message &result ) {
 
-        const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
         const ParsedQuery &pq( *pq_shared );
         shared_ptr<Cursor> cursor;
         QueryPlanSummary queryPlan;
+
+        const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
         
         // Tailable cursors need to read newly written entries to the tail
         // of the collection, so we choose read committed isolation.
