@@ -614,19 +614,16 @@ namespace mongo {
                                     const bool getCachedExplainPlan,
                                     Message &result ) {
 
+        const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
         const ParsedQuery &pq( *pq_shared );
         shared_ptr<Cursor> cursor;
         QueryPlanSummary queryPlan;
-
-        if ( pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1 ) {
-            cursor->setTailable();
-        }
         
         // Tailable cursors need to read newly written entries to the tail
         // of the collection, so we choose read committed isolation.
         // Otherwise we default to a snapshot.
         Client::Transaction txn(DB_TXN_READ_ONLY |
-                                (cursor->tailable() ? DB_READ_COMMITTED : DB_TXN_SNAPSHOT));
+                                (tailable ? DB_READ_COMMITTED : DB_TXN_SNAPSHOT));
         
         BSONObj oldPlan;
         if (getCachedExplainPlan) {
@@ -687,6 +684,11 @@ namespace mongo {
             }
         }
 
+        if ( tailable ) {
+            cursor->setTailable();
+        }
+
+        // If the tailing request succeeded
         if ( cursor->tailable() ) {
             saveClientCursor = true;
         }
@@ -909,8 +911,13 @@ namespace mongo {
                 replVerifyReadsOk(&pq);
                 
                 if ( pq.hasOption( QueryOption_CursorTailable ) ) {
+                    // I recall a 10gen engineer saying this is only uasserted
+                    // because tailable cursors on non capped collections were
+                    // historically really slow.
+#if 0
                     NamespaceDetails *d = nsdetails( ns );
                     uassert( 13051, "tailable cursor requested on non capped collection", d && d->isCapped() );
+#endif
                     const BSONObj nat1 = BSON( "$natural" << 1 );
                     if ( order.isEmpty() ) {
                         order = nat1;

@@ -261,8 +261,8 @@ namespace mongo {
         BSONObj currPK() const { return _c.currPK(); }
         bool advance() { return _c.advance(); }
         virtual string toString() const { return "BasicCursor"; }
-        virtual void setTailable() { _c.setTailable(); }
-        virtual bool tailable() { return _c.tailable(); }
+        virtual void setTailable() { _tailable = true; }
+        virtual bool tailable() { return _tailable; }
         virtual bool getsetdup(const BSONObj &pk) { return false; }
         virtual bool isMultiKey() const { return false; }
         virtual bool modifiedKeys() const { return false; }
@@ -279,6 +279,7 @@ namespace mongo {
         virtual long long nscanned() const { return _c.nscanned(); }
 
     private:
+        bool _tailable;
         IndexCursor _c;
     };
 
