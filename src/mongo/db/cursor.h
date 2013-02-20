@@ -223,11 +223,10 @@ namespace mongo {
         bool _endKeyInclusive;
         bool _multiKey; // this must be updated every getmore batch in case someone added a multikey
         int _direction;
-        shared_ptr< FieldRangeVector > _bounds;
+        shared_ptr< FieldRangeVector > _bounds; // field ranges to iterate over, if non-null
         auto_ptr< FieldRangeVectorIterator > _boundsIterator;
         shared_ptr< CoveredIndexMatcher > _matcher;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
-        bool _independentFieldRanges;
         long long _nscanned;
 
         // For primary _id index:
@@ -259,7 +258,6 @@ namespace mongo {
         ~BasicCursor() { }
         bool ok() { return _c.ok(); }
         BSONObj current() { return _c.current(); }
-        BSONObj currKey() const { return _c.currKey(); }
         BSONObj currPK() const { return _c.currPK(); }
         bool advance() { return _c.advance(); }
         virtual string toString() const { return "BasicCursor"; }

@@ -71,20 +71,18 @@ namespace mongo {
             const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction ) :
         _d(d),
         _idx(idx),
+        _startKey(_idx != NULL && _idx->getSpec().getType() ?
+                   _idx->getSpec().getType()->fixKey( startKey ) : startKey),
+        _endKey(_idx != NULL && _idx->getSpec().getType() ?
+                 _idx->getSpec().getType()->fixKey( endKey ) : endKey),
         _endKeyInclusive(endKeyInclusive),
         _multiKey(_d != NULL && _idx != NULL ? _d->isMultikey(_d->idxNo(*_idx)) : false),
         _direction(direction),
-        _independentFieldRanges(false),
+        _bounds(),
         _nscanned(0),
         _cursor(NULL)
     {
-        if ( _idx != NULL && _idx->getSpec().getType() ) {
-            _startKey = _idx->getSpec().getType()->fixKey( startKey );
-            _endKey = _idx->getSpec().getType()->fixKey( endKey );
-        } else {
-            _startKey = startKey;
-            _endKey = endKey;
-        }
+        tokulog(1) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
     }
 
@@ -92,19 +90,20 @@ namespace mongo {
             const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction ) :
         _d(d),
         _idx(idx),
+        _startKey(),
+        _endKey(),
         _endKeyInclusive(true),
         _multiKey(_d != NULL && _idx != NULL ? _d->isMultikey(_d->idxNo(*_idx)) : false),
         _direction(direction),
         _bounds(bounds),
-        _independentFieldRanges(true),
         _nscanned(0),
         _cursor(NULL)
     {
-        verify( bounds );
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
         _startKey = _bounds->startKey();
         _boundsIterator->advance( _startKey ); // handles initialization
         _boundsIterator->prepDive();
+        tokulog(1) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
     }
 
@@ -119,7 +118,6 @@ namespace mongo {
         // _d and _idx are mutually null when the collection doesn't
         // exist and is therefore treated as empty.
         if (_d != NULL && _idx != NULL) {
-            tokulog(1) << "IndexCursor::initializeDBC key pattern " << indexKeyPattern() << endl;
             _cursor = _idx->cursor();
 
             // Get the first/last element depending on direction
@@ -128,13 +126,13 @@ namespace mongo {
             DBT key_dbt;
             key_dbt.data = const_cast<char *>(_startKey.objdata());
             key_dbt.size = _startKey.objsize();
-            tokulog(1) << "IndexCursor::initializeDBC getf with key " << _startKey << ", direction " << _direction << endl;
+            tokulog(1) << toString() << ": initializeDBC(): getf _startKey " << _startKey << ", direction " << _direction << endl;
             if (_direction > 0) {
                 r = _cursor->c_getf_set_range(_cursor, 0, &key_dbt, cursor_getf, &extra);
             } else {
                 r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
             }
-            tokulog(1) << "IndexCursor::initializeDBC hit K, P, Obj " << _currKey << _currPK << _currObj << endl;
+            tokulog(1) << toString() << ": initializeDBC(): hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
             checkCurrentAgainstBounds();
         } else {
             verify( _d == NULL && _idx == NULL );
@@ -144,7 +142,7 @@ namespace mongo {
     // Check the current key with respect to our key bounds, whether
     // it be provided by independent field ranges or by start/end keys.
     bool IndexCursor::checkCurrentAgainstBounds() {
-        if ( !_independentFieldRanges ) {
+        if ( _bounds == NULL ) {
             checkEnd();
             if ( ok() ) {
                 ++_nscanned;
@@ -152,16 +150,12 @@ namespace mongo {
         }
         else {
             long long startNscanned = _nscanned;
-            while( 1 ) {
-                if ( !skipOutOfRangeKeysAndCheckEnd() ) {
-                    break;
-                }
+            if ( skipOutOfRangeKeysAndCheckEnd() ) {
                 do {
                     if ( _nscanned > startNscanned + 20 ) {
                         break;
                     }
                 } while( skipOutOfRangeKeysAndCheckEnd() );
-                break;
             }
         }
         return ok();
@@ -181,6 +175,7 @@ namespace mongo {
             ++_nscanned;
             return false;
         }
+        // TODO: #6041 advance to the key described by _boundsIterator
         ++_nscanned;
         return true;
     }
@@ -202,7 +197,7 @@ namespace mongo {
             if ( ( cmp != 0 && cmp != _direction ) ||
                     ( cmp == 0 && !_endKeyInclusive ) ) {
                 _currKey = BSONObj();
-                tokulog(1) << "IndexCursor::checkEnd stopping with curr, end: " << currKey() << _endKey << endl;
+                tokulog(1) << toString() << ": checkEnd() stopping @ curr, end: " << currKey() << _endKey << endl;
             }
         }
     }
@@ -227,7 +222,7 @@ namespace mongo {
         } else {
             r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
         }
-        tokulog(1) << "IndexCursor::advance moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
+        tokulog(1) << toString() << ": advance() moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
         return checkCurrentAgainstBounds();
     }
 
@@ -239,9 +234,9 @@ namespace mongo {
             verify(_idx != NULL);
             verify(!_currKey.isEmpty());
             verify(!_currPK.isEmpty());
-            tokulog(1) << "IndexCursor::current key: " << _currKey << ", PK " << _currPK << endl;
+            tokulog(1) << toString() << ": current() _currKey: " << _currKey << ", PK " << _currPK << endl;
             bool found = _d->findById(_currPK, _currObj, false);
-            tokulog(1) << "IndexCursor::current primary key document lookup: " << _currObj << endl;
+            tokulog(1) << toString() << ": current() PK lookup res: " << _currObj << endl;
             verify(found);
             verify(!_currObj.isEmpty());
         }
@@ -256,7 +251,7 @@ namespace mongo {
     }
     
     BSONObj IndexCursor::prettyIndexBounds() const {
-        if ( !_independentFieldRanges ) {
+        if ( _bounds == NULL ) {
             return BSON( "start" << prettyKey( _startKey ) << "end" << prettyKey( _endKey ) );
         }
         else {

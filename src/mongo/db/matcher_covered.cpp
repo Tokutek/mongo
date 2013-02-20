@@ -53,17 +53,11 @@ namespace mongo {
     }
 
     bool CoveredIndexMatcher::matchesCurrent( Cursor * cursor , MatchDetails * details ) const {
-        // bool keyUsable = ! cursor->isMultiKey() && check for $orish like conditions in matcher SERVER-1264
-        return matches( cursor->currKey() , cursor->current(), details ,
-                       !cursor->indexKeyPattern().isEmpty() // unindexed cursor
-                       && !cursor->isMultiKey() // multikey cursor
-                       );
-    }
-
-    bool CoveredIndexMatcher::matches( const BSONObj& key, const BSONObj& obj,
-                                       MatchDetails* details, bool keyUsable ) const {
-
+        const bool keyUsable = !cursor->indexKeyPattern().isEmpty() && !cursor->isMultiKey();
+        const BSONObj key = cursor->currKey();
         dassert( key.isValid() );
+
+        LOG(5) << "CoveredIndexMatcher::matches() " << key.toString() << ", keyUsable " << keyUsable << endl;
 
         if ( details )
             details->resetOutput();
@@ -81,11 +75,13 @@ namespace mongo {
         if ( details )
             details->setLoadedRecord( true );
 
+        // Couldn't match off key, need to read full document.
+        const BSONObj obj = cursor->current();
         bool res = _docMatcher->matches( obj, details ) && !isOrClauseDup( obj );
         LOG(5) << "CoveredIndexMatcher _docMatcher->matches() returns " << res << endl;
         return res;
     }
-    
+
     bool CoveredIndexMatcher::isOrClauseDup( const BSONObj &obj ) const {
         for( vector<shared_ptr<FieldRangeVector> >::const_iterator i = _orDedupConstraints.begin();
             i != _orDedupConstraints.end(); ++i ) {

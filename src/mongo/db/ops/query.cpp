@@ -613,17 +613,26 @@ namespace mongo {
                                     const ConfigVersion &shardingVersionAtStart,
                                     const bool getCachedExplainPlan,
                                     Message &result ) {
-        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
+
+        const ParsedQuery &pq( *pq_shared );
+        shared_ptr<Cursor> cursor;
+        QueryPlanSummary queryPlan;
+
+        if ( pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1 ) {
+            cursor->setTailable();
+        }
+        
+        // Tailable cursors need to read newly written entries to the tail
+        // of the collection, so we choose read committed isolation.
+        // Otherwise we default to a snapshot.
+        Client::Transaction txn(DB_TXN_READ_ONLY |
+                                (cursor->tailable() ? DB_READ_COMMITTED : DB_TXN_SNAPSHOT));
         
         BSONObj oldPlan;
         if (getCachedExplainPlan) {
             scoped_ptr<MultiPlanScanner> mps( MultiPlanScanner::make( ns.c_str(), query, order ) );
             oldPlan = mps->cachedPlanExplainSummary();
         }
-
-        const ParsedQuery &pq( *pq_shared );
-        shared_ptr<Cursor> cursor;
-        QueryPlanSummary queryPlan;
         
         if ( pq.hasOption( QueryOption_OplogReplay ) ) {
             ::abort();
@@ -677,16 +686,9 @@ namespace mongo {
                 break;
             }
         }
-        
-        if ( cursor ) {
-            if ( pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1 ) {
-                cursor->setTailable();
-            }
-            
-            // If the tailing request succeeded.
-            if ( cursor->tailable() ) {
-                saveClientCursor = true;
-            }
+
+        if ( cursor->tailable() ) {
+            saveClientCursor = true;
         }
         
         if ( ! shardingState.getVersion( ns ).isWriteCompatibleWith( shardingVersionAtStart ) ) {
@@ -748,7 +750,7 @@ namespace mongo {
         int duration = curop.elapsedMillis();
         bool dbprofile = curop.shouldDBProfile( duration );
         if ( dbprofile || duration >= cmdLine.slowMS ) {
-            curop.debug().nscanned = ( cursor ? cursor->nscanned() : 0LL );
+            curop.debug().nscanned = cursor->nscanned();
             curop.debug().ntoskip = pq.getSkip();
         }
         curop.debug().nreturned = nReturned;
