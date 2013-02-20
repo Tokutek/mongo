@@ -80,7 +80,8 @@ namespace mongo {
         _direction(direction),
         _bounds(),
         _nscanned(0),
-        _cursor(NULL)
+        _cursor(NULL),
+        _tailable(false)
     {
         tokulog(1) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
@@ -97,7 +98,8 @@ namespace mongo {
         _direction(direction),
         _bounds(bounds),
         _nscanned(0),
-        _cursor(NULL)
+        _cursor(NULL),
+        _tailable(false)
     {
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
         _startKey = _bounds->startKey();
@@ -204,25 +206,37 @@ namespace mongo {
 
     bool IndexCursor::advance() {
         killCurrentOp.checkForInterrupt();
-        if ( _currKey.isEmpty() )
+        if ( _currKey.isEmpty() && !tailable() )
             return false;
 
-        // currKey had a value, so the namespace and index must exist
-        verify( _d != NULL && _idx != NULL );
-        
-        // Reset current key/pk/obj to empty.
-        _currKey = BSONObj();
-        _currPK = BSONObj();
-        _currObj = BSONObj();
+        // namespace might be null if we're tailing an empty collection
+        if ( _d != NULL && _idx != NULL ) {
+            
+            // Reset current key/pk/obj to empty.
+            _currKey = BSONObj();
+            _currPK = BSONObj();
+            _currObj = BSONObj();
 
-        int r;
-        struct cursor_getf_extra extra(&_currKey, &_currPK, &_currObj);
-        if (_direction > 0) {
-            r = _cursor->c_getf_next(_cursor, 0, cursor_getf, &extra);
+            int r;
+            struct cursor_getf_extra extra(&_currKey, &_currPK, &_currObj);
+            if (_direction > 0) {
+                r = _cursor->c_getf_next(_cursor, 0, cursor_getf, &extra);
+            } else {
+                r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
+            }
+            tokulog(1) << toString() << ": advance() moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
         } else {
-            r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
+            // new inserts will not be read by this cursor, because there was no
+            // namespace details or index at the time of creation. we can either
+            // accept this caveat or try to fix it. at least emit a warning.
+            if (tailable()) {
+                problem() 
+                    << "Attempted to advance a tailable cursor on an empty collection! " << endl
+                    << "The current implementation cannot read new writes from any cursor " << endl
+                    << "created when the collection was empty. Try again with a new cursor " << endl
+                    << "when the collection is non-empty." << endl;
+            }
         }
-        tokulog(1) << toString() << ": advance() moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
         return checkCurrentAgainstBounds();
     }
 

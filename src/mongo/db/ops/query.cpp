@@ -623,8 +623,12 @@ namespace mongo {
         // Tailable cursors need to read newly written entries to the tail
         // of the collection, so we choose read committed isolation.
         // Otherwise we default to a snapshot.
+        // XXX: TODO Read committed doesn't do what I want it to, so use an
+        // "incorrect" but mostly working UNCOMMITTED isolation.
         Client::Transaction txn(DB_TXN_READ_ONLY |
-                                (tailable ? DB_READ_COMMITTED : DB_TXN_SNAPSHOT));
+                                (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT));
+
+        log(1) << "query beginning read-only transaction. tailable: " << tailable << endl;
         
         BSONObj oldPlan;
         if (getCachedExplainPlan) {
