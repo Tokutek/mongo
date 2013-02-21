@@ -132,6 +132,10 @@ namespace mongo {
         SSLManager* sslServerManager; // currently leaks on close
 #endif
         
+        // TokuDB variables
+        bool directio;
+        uint64_t cachetable_size;
+
         static void launchOk();
 
         static void addGlobalOptions( boost::program_options::options_description& general ,
@@ -162,7 +166,8 @@ namespace mongo {
         configsvr(false), quota(false), quotaFiles(8), cpu(false),
         durOptions(0), objcheck(false), oplogSize(0), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), pretouch(0), moveParanoia( true ),
-        syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp") 
+        syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
+        directio(false), cachetable_size(0)
     {
         started = time(0);
 

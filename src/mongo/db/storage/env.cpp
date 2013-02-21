@@ -29,6 +29,7 @@
 #include <fcntl.h>
 
 #include "mongo/db/client.h"
+#include "mongo/db/cmdline.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
@@ -106,13 +107,18 @@ namespace mongo {
 
         void startup(void) {
             tokulog() << "startup" << endl;
+
+            db_env_set_direct_io(cmdLine.directio);
+
             boost::filesystem::path envdir(dbpath);
             envdir /= "storage";
             boost::filesystem::create_directory(envdir);
             int r = db_env_create(&env, 0);
             verify(r == 0);
 
-            const uint64_t cachesize = calculate_cachesize();
+            const uint64_t cachesize = (cmdLine.cachetable_size > 0
+                                        ? cmdLine.cachetable_size
+                                        : calculate_cachesize());
             const uint32_t bytes = cachesize % (1024L * 1024L * 1024L);
             const uint32_t gigabytes = cachesize >> 30;
             r = env->set_cachesize(env, gigabytes, bytes, 1);

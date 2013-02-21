@@ -737,6 +737,8 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("pairwith", "DEPRECATED")
     ("arbiter", "DEPRECATED")
     ("opIdMem", "DEPRECATED")
+    ("directio", "use direct I/O in tokudb")
+    ("cachetable_size", po::value<uint64_t>(), "tokudb cachetable size")
     ;
 
     positional_options.add("command", 3);
@@ -865,6 +867,12 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
         if (params.count("journalOptions")) {
             cmdLine.durOptions = params["journalOptions"].as<int>();
+        }
+        if (params.count("directio")) {
+            cmdLine.directio = true;
+        }
+        if (params.count("cachetable_size")) {
+            cmdLine.cachetable_size = params["cachetable_size"].as<uint64_t>();
         }
 #if 0
         if (params.count("repairpath")) {
