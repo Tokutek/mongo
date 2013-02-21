@@ -447,9 +447,9 @@ namespace mongo {
                 DBs::iterator it = dbs.begin();
                 Database *db = it->second;
                 dassert(db->name == it->first);
-                Client::WriteContext ctx(db->name);
                 // This erases dbs[db->name] for us, can't lift it out yet until we understand the callers of closeDatabase().
                 // That's why we have a weird loop here.
+                Client::WriteContext ctx(db->name);
                 db->closeDatabase(db->name.c_str(), path);
             }
             _paths.erase(pi);
@@ -510,7 +510,8 @@ namespace mongo {
         return nsindex(ns)->details(ns);
     }
 
-    NamespaceDetails* nsdetails_maybe_create(const char *ns) {
+    NamespaceDetails* nsdetails_maybe_create(const char *ns, BSONObj options) {
+        // TODO: Use options.
         NamespaceIndex *ni = nsindex(ns);
         if (!ni->allocated()) {
             // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.

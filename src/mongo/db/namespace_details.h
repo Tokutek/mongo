@@ -1,4 +1,4 @@
-// namespace_details.h
+//t namespace_details.h
 
 /**
 *    Copyright (C) 2008 10gen Inc.
@@ -42,13 +42,15 @@ namespace mongo {
     // TODO: Put this in the cmdline abstraction, not extern global.
     extern string dbpath; // --dbpath parm
 
-    void userCreateNS( const char *ns );
-
     /** @return true if a client can modify this namespace even though it is under ".system."
         For example <dbname>.system.users is ok for regular clients to update.
         @param write used when .system.js
     */
     bool legalClientSystemNS( const string& ns , bool write );
+
+    bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication);
+
+    void dropCollection( const string &name, string &errmsg, BSONObjBuilder &result );
 
     /**
      * Record that a new namespace exists in <dbname>.system.namespaces.
@@ -450,9 +452,9 @@ namespace mongo {
 
     // Defined in database.cpp
     // Gets the namespace objects for this client threads' current database.
-    NamespaceIndex* nsindex(const char *ns);
-    NamespaceDetails* nsdetails(const char *ns);
-    NamespaceDetails* nsdetails_maybe_create(const char *ns);
+    NamespaceIndex *nsindex(const char *ns);
+    NamespaceDetails *nsdetails(const char *ns);
+    NamespaceDetails *nsdetails_maybe_create(const char *ns, BSONObj options = BSONObj());
 
     inline IndexDetails& NamespaceDetails::idx(int idxNo, bool missingExpected ) {
         if ( idxNo < NIndexesMax ) {

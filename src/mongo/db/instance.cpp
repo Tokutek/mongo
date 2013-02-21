@@ -1014,15 +1014,11 @@ namespace mongo {
         //MemoryMappedFile::closeAllFiles( ss3 );
         log() << ss3.str() << endl;
 
-        dbHolderW().closeDatabases(dbpath);
-        storage::shutdown();
-
-#if 0
-        if( cmdLine.dur ) {
-            // TODO: What should TokuDB do here?
-            //dur::journalCleanup(true);
+        {
+            Lock::GlobalWrite lk;
+            dbHolderW().closeDatabases(dbpath);
+            storage::shutdown();
         }
-#endif
 
 #if !defined(__sunos__)
         if ( lockFile ) {

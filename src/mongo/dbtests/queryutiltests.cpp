@@ -1523,15 +1523,13 @@ namespace QueryUtilTests {
         public:
             IndexBase() : _lk(ns()), _ctx( ns() ) , indexNum_( 0 ) {
                 string err;
-                ::abort();
-                //userCreateNS( ns(), BSONObj(), err, false );
+                // TODO: Create this index
             }
             ~IndexBase() {
                 if ( !nsd() )
                     return;
                 string s( ns() );
-                ::abort();
-                //dropNS( s );
+                // TODO: Drop this index
             }
         protected:
             static const char *ns() { return "unittests.FieldRangeSetPairTests"; }

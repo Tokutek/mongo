@@ -31,6 +31,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/oplog.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
@@ -474,6 +475,37 @@ namespace mongo {
         while( i.more() )
             i.next().keyPattern().getFieldNames(_indexKeys);
         _keysComputed = true;
+    }
+
+    bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication) {
+        const char *coll = strchr( ns, '.' ) + 1;
+        massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns));
+        char cl[ 256 ];
+        nsToDatabase( ns, cl );
+        if (nsdetails(ns) != NULL) {
+            // Namespace already exists
+            return false;
+        } else {
+            // This creates the namespace as well as its _id index
+            nsdetails_maybe_create(ns, options);
+            if ( logForReplication ) {
+                if ( options.getField( "create" ).eoo() ) {
+                    BSONObjBuilder b;
+                    b << "create" << coll;
+                    b.appendElements( options );
+                    options = b.obj();
+                }
+                string logNs = string( cl ) + ".$cmd";
+                logOp("c", logNs.c_str(), options);
+            }
+            // TODO: Identify error paths for this function
+            return true;
+        }
+    }
+
+    void dropCollection( const string &name, string &errmsg, BSONObjBuilder &result ) {
+        // Drop the collection + indexes. The old implementation said something
+        // about cursors. We may need to do something about that.
     }
 
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).

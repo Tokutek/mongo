@@ -73,8 +73,7 @@ namespace QueryOptimizerTests {
         public:
             Base() : _ctx( ns() ) , indexNum_( 0 ) {
                 string err;
-                ::abort();
-                //userCreateNS( ns(), BSONObj(), err, false );
+                userCreateNS( ns(), BSONObj(), err, false );
             }
             ~Base() {
                 if ( !nsd() )
@@ -847,8 +846,7 @@ namespace QueryOptimizerTests {
         public:
             Base() : _context( ns() ) {
                 string err;
-                ::abort();
-                //userCreateNS( ns(), BSONObj(), err, false );
+                userCreateNS( ns(), BSONObj(), err, false );
             }
             virtual ~Base() {
                 if ( !nsd() )
@@ -1406,8 +1404,7 @@ namespace QueryOptimizerTests {
     public:
         Base() : _ctx( ns() ) {
             string err;
-            ::abort();
-            //userCreateNS( ns(), BSONObj(), err, false );
+            userCreateNS( ns(), BSONObj(), err, false );
         }
         ~Base() {
             if ( !nsd() )

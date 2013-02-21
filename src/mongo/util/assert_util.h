@@ -23,6 +23,7 @@
 
 #include "mongo/bson/inline_decls.h"
 #include "mongo/platform/compiler.h"
+#include "mongo/util/debug_util.h"
 
 namespace mongo {
 
@@ -183,7 +184,7 @@ namespace mongo {
 
     /* warning only - keeps going */
 #define MONGO_wassert(_Expression) (void)( MONGO_likely(!!(_Expression)) || (mongo::wasserted(#_Expression, __FILE__, __LINE__), 0) )
-#define MONGO_wunimplemented(msg) (void)(mongo::wasserted("tokudb unimplemented " msg, __FILE__, __LINE__), 0)
+#define MONGO_wunimplemented(msg) MONGO_RARELY { problem() << "tokudb unimplemented " << msg << " " << __FILE__ << ":" << __LINE__ << endl; }
 
     /* display a message, no context, and throw assertionexception
 

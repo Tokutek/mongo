@@ -875,8 +875,7 @@ namespace mongo {
             string ns = dbname + '.' + cmdObj.firstElement().valuestr();
             string err;
             uassert(14832, "specify size:<n> when capped is true", !cmdObj["capped"].trueValue() || cmdObj["size"].isNumber() || cmdObj.hasField("$nExtents"));
-            ::abort();
-            bool ok = false; // userCreateNS(ns.c_str(), cmdObj, err, ! fromRepl );
+            bool ok = userCreateNS(ns.c_str(), cmdObj, err, ! fromRepl );
             if ( !ok && !err.empty() )
                 errmsg = err;
             return ok;
@@ -1648,11 +1647,8 @@ namespace mongo {
             if (jsobj.hasField("temp"))
                 spec.append(jsobj["temp"]);
 
-            ::abort();
-#if 0
             if ( !userCreateNS( toNs.c_str(), spec.done(), errmsg, true ) )
                 return false;
-#endif
 
             auto_ptr< DBClientCursor > c = client.getMore( fromNs, id );
             while( c->more() ) {

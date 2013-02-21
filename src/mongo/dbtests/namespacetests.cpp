@@ -40,7 +40,6 @@ namespace NamespaceTests {
                 if ( id_.info().isEmpty() )
                     return;
                 // TODO: Drop this index
-                ::abort();
                 ASSERT( Helpers::findTableScan( ns(), BSONObj() )->eof() );
             }
         protected:
@@ -968,16 +967,13 @@ namespace NamespaceTests {
                 string s( ns() );
                 string errmsg;
                 BSONObjBuilder result;
-                // TODO: Drop the collection
-                //dropCollection( s, errmsg, result );
-                ::abort();
+                dropCollection( s, errmsg, result );
             }
         protected:
             void create() {
                 Lock::GlobalWrite lk;
                 string err;
-                //ASSERT( userCreateNS( ns(), fromjson( spec() ), err, false ) );
-                ::abort(); // TODO: Implement userCreateNS or something equivalent
+                ASSERT( userCreateNS( ns(), fromjson( spec() ), err, false ) );
             }
             virtual string spec() const {
                 return "{\"capped\":true,\"size\":512,\"$nExtents\":1}";

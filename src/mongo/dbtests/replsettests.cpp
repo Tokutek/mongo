@@ -278,8 +278,7 @@ namespace ReplSetTests {
         void create() {
             Client::Context c(_cappedNs);
             string err;
-            //ASSERT(userCreateNS( _cappedNs.c_str(), fromjson( spec() ), err, false ));
-            ::abort();
+            ASSERT(userCreateNS( _cappedNs.c_str(), fromjson( spec() ), err, false ));
         }
 
         void dropCapped() {
@@ -287,8 +286,7 @@ namespace ReplSetTests {
             if (nsdetails(_cappedNs.c_str()) != NULL) {
                 string errmsg;
                 BSONObjBuilder result;
-                ::abort();
-                //dropCollection( string(_cappedNs), errmsg, result );
+                dropCollection( string(_cappedNs), errmsg, result );
             }
         }
 

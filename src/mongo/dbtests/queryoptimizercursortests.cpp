@@ -43,9 +43,7 @@ namespace QueryOptimizerCursorTests {
     void dropCollection( const char *ns ) {
      	string errmsg;
         BSONObjBuilder result;
-        // TODO: Implement this form of drop collection
-        //dropCollection( ns, errmsg, result );
-        ::abort();
+        dropCollection( ns, errmsg, result );
     }
         
     using boost::shared_ptr;
@@ -207,8 +205,7 @@ namespace QueryOptimizerCursorTests {
             Lock::GlobalWrite lk;
             Client::Context ctx( ns() );
             string err;
-            // TODO: Implement this
-            //userCreateNS( ns(), BSONObj(), err, false );
+            userCreateNS( ns(), BSONObj(), err, false );
             dropCollection( ns() );
         }
         ~Base() {
