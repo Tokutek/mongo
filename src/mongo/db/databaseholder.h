@@ -74,8 +74,17 @@ namespace mongo {
          * gets all unique db names, ignoring paths
          * need some lock
          */
-        void getAllShortNames( set<string>& all ) const {
-            SimpleMutex::scoped_lock lk(_m);
+        void getAllShortNames( set<string>& all, bool inholderlock=false ) const {
+            if (inholderlock) {
+                _getAllShortNames(all);
+            } else {
+                SimpleMutex::scoped_lock lk(_m);
+                _getAllShortNames(all);
+            }
+        }
+
+    private:
+        void _getAllShortNames(set<string> &all) const {
             for ( Paths::const_iterator i=_paths.begin(); i!=_paths.end(); i++ ) {
                 DBs m = i->second;
                 for( DBs::const_iterator j=m.begin(); j!=m.end(); j++ ) {
@@ -83,8 +92,7 @@ namespace mongo {
                 }
             }
         }
-
-    private:
+                
         static string _todb( const string& ns ) {
             string d = __todb( ns );
             uassert( 13280 , (string)"invalid db name: " + ns , NamespaceString::validDBName( d ) );

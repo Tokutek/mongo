@@ -121,16 +121,6 @@ namespace mongo {
         }
     }
 
-    bool NamespaceIndex::exists() const {
-        return !boost::filesystem::exists(path());
-    }
-
-    boost::filesystem::path NamespaceIndex::path() const {
-        boost::filesystem::path ret( dir_ );
-        ret /= ( database_ + ".ns" );
-        return ret;
-    }
-
     static int populate_nsindex_map(const DBT *key, const DBT *val, void *map_v) {
         BSONObj nobj(static_cast<const char *>(key->data));
         string ns = nobj["ns"].String();

@@ -87,15 +87,17 @@ namespace mongo {
                 }
 #endif
             }
-            newDb = namespaceIndex.exists();
             profile = cmdLine.defaultProfile;
             checkDuplicateUncasedNames(true);
             // If already exists, open.  Otherwise behave as if empty until
             // there's a write, then open.
-            if (!newDb) {
-                namespaceIndex.init();
-                //if( _openAllFiles )
-                //    openAllFiles();
+            Client::RootTransaction txn;
+            namespaceIndex.init();
+            txn.commit();
+            if (namespaceIndex.allocated()) {
+                newDb = false;
+            } else {
+                newDb = true;
             }
             magic = 781231;
         } catch(std::exception& e) {
@@ -139,7 +141,7 @@ namespace mongo {
         getDatabaseNames( others , path );
         
         set<string> allShortNames;
-        dbHolder().getAllShortNames( allShortNames );
+        dbHolder().getAllShortNames(allShortNames, inholderlock);
         
         others.insert( others.end(), allShortNames.begin(), allShortNames.end() );
         
@@ -456,6 +458,7 @@ namespace mongo {
 
     Database* DatabaseHolder::getOrCreate( const string& ns , const string& path , bool& justCreated ) {
         string dbname = _todb( ns );
+        Database *db;
         {
             SimpleMutex::scoped_lock lk(_m);
             Lock::assertAtLeastReadLocked(ns);
@@ -476,14 +479,9 @@ namespace mongo {
                 log() << "opening db: " << (path==dbpath?"":path) << ' ' << dbname << endl;
             }
             massert(15927, "can't open database in a read lock. if db was just closed, consider retrying the query. might otherwise indicate an internal error", !cant);
-        }
 
-        // this locks _m for defensive checks, so we don't want to be locked right here : 
-        Database *db = new Database( dbname.c_str() , justCreated , path );
+            db = new Database( dbname.c_str() , justCreated , path );
 
-        {
-            SimpleMutex::scoped_lock lk(_m);
-            DBs& m = _paths[path];
             verify( m[dbname] == 0 );
             m[dbname] = db;
             _size++;
@@ -509,16 +507,7 @@ namespace mongo {
     }
 
     NamespaceDetails* nsdetails(const char *ns) {
-        // if this faults, did you set the current db first?  (Client::Context + dblock)
-        NamespaceIndex *ni = nsindex(ns);
-        if (!ni->allocated()) {
-            // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
-            Client::RootTransaction txn;
-            ni->init();
-            txn.commit();
-        }
-        NamespaceDetails *d = ni->details(ns);
-        return d;
+        return nsindex(ns)->details(ns);
     }
 
     NamespaceDetails* nsdetails_maybe_create(const char *ns) {

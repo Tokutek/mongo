@@ -406,10 +406,6 @@ namespace mongo {
 
         ~NamespaceIndex();
 
-        /* returns true if new db will be created if we init lazily */
-        // why
-        bool exists() const;
-
         void init(bool may_create = false) {
             if (namespaces.get() == NULL) {
                 _init(may_create);
@@ -439,8 +435,6 @@ namespace mongo {
         bool allocated() const { return namespaces.get() != NULL; }
 
         void getNamespaces( list<string>& tofill , bool onlyCollections = true ) const;
-
-        boost::filesystem::path path() const;
 
         unsigned long long fileLength() const { unimplemented("NamespaceIndex::fileLength"); return 0; }
 
