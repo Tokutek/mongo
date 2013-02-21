@@ -503,9 +503,8 @@ namespace mongo {
         }
     }
 
-    void dropDatabase(const string &db) {
+    void dropDatabase(const string &name) {
         tokulog(1) << "dropDatabase(" << name << ")" << endl;
-
     }
 
     void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result) {

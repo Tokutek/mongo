@@ -51,8 +51,7 @@ namespace QueryOptimizerTests {
     void dropCollection( const char *ns ) {
      	string errmsg;
         BSONObjBuilder result;
-        ::abort();
-        //dropCollection( ns, errmsg, result );
+        dropCollection( ns, errmsg, result );
     }
     
     namespace QueryPlanTests {

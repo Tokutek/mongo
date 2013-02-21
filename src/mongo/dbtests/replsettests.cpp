@@ -145,8 +145,7 @@ namespace ReplSetTests {
                 return;
             }
 
-            ::abort();
-            // dropCollection( string(ns()), errmsg, result );
+            dropCollection( string(ns()), errmsg, result );
         }
         void setup() {
             // setup background sync instance

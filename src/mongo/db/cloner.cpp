@@ -16,20 +16,19 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "cloner.h"
-#include "../bson/util/builder.h"
-#include "jsobj.h"
-#include "commands.h"
-#include "db.h"
-#include "instance.h"
-#include "repl.h"
+#include "mongo/pch.h"
+#include "mongo/bson/util/builder.h"
+#include "mongo/db/cloner.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/db.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/repl.h"
+#include "mongo/db/ops/insert.h"
 
 namespace mongo {
 
     BSONElement getErrField(const BSONObj& o);
-
-    void ensureHaveIdIndex(const char *ns);
 
     bool replAuthenticate(DBClientBase *);
 
@@ -160,12 +159,9 @@ namespace mongo {
                 }
 
                 try {
-                    //theDataFileMgr.insertWithObjMod(to_collection, js);
-                    ::abort();
+                    insertObject(to_collection, js);
                     if ( logForRepl )
                         logOp("i", to_collection, js);
-
-                    //getDur().commitIfNeeded();
                 }
                 catch( UserException& e ) {
                     error() << "error: exception cloning object in " << from_collection << ' ' << e.what() << " obj:" << js.toString() << '\n';
@@ -221,8 +217,7 @@ namespace mongo {
             for ( list<BSONObj>::iterator i = storedForLater.begin(); i!=storedForLater.end(); i++ ) {
                 BSONObj js = *i;
                 try {
-                    //theDataFileMgr.insertWithObjMod(to_collection, js);
-                    ::abort();
+                    insertObject(to_collection, js);
                     if ( logForRepl )
                         logOp("i", to_collection, js);
 
@@ -253,15 +248,12 @@ namespace mongo {
         Client::WriteContext ctx(ns);
 
         {
-#if 0
             // config
             string temp = ctx.ctx().db()->name + ".system.namespaces";
             BSONObj config = conn->findOne( temp , BSON( "name" << ns ) );
             if ( config["options"].isABSONObj() )
-                if ( ! userCreateNS( ns.c_str() , config["options"].Obj() , errmsg, logForRepl , 0 ) )
+                if ( ! userCreateNS( ns.c_str() , config["options"].Obj() , errmsg, logForRepl ) )
                     return false;
-#endif
-            ::abort();
         }
 
         {
@@ -301,10 +293,6 @@ namespace mongo {
     }
 
     bool Cloner::go(const char *masterHost, const CloneOptions& opts, set<string>& clonedColls, string& errmsg, int* errCode ){
-        ::abort();
-        return false;
-#if 0
-
         if ( errCode ) {
             *errCode = 0;
         }
@@ -435,40 +423,17 @@ namespace mongo {
             verify(p);
             string to_name = todb + p;
 
-            bool wantIdIndex = false;
             {
-#if 0
                 string err;
                 const char *toname = to_name.c_str();
                 /* we defer building id index for performance - building it in batch is much faster */
-                userCreateNS(toname, options, err, opts.logForRepl, &wantIdIndex);
-#endif
-                ::abort();
+                userCreateNS(toname, options, err, opts.logForRepl);
             }
             log(1) << "\t\t cloning " << from_name << " -> " << to_name << endl;
             Query q;
             if( opts.snapshot )
                 q.snapshot();
             copy(from_name, to_name.c_str(), false, opts.logForRepl, masterSameProcess, opts.slaveOk, opts.mayYield, opts.mayBeInterrupted, q);
-
-            if( wantIdIndex ) {
-                /* we need dropDups to be true as we didn't do a true snapshot and this is before applying oplog operations
-                   that occur during the initial sync.  inDBRepair makes dropDups be true.
-                   */
-                ::abort();
-#if 0
-                bool old = inDBRepair;
-                try {
-                    inDBRepair = true;
-                    ensureIdIndexForNewNs(to_name.c_str());
-                    inDBRepair = old;
-                }
-                catch(...) {
-                    inDBRepair = old;
-                    throw;
-                }
-#endif
-            }
         }
 
         // now build the indexes
@@ -494,7 +459,6 @@ namespace mongo {
             copy(system_indexes_from.c_str(), system_indexes_to.c_str(), true, opts.logForRepl, masterSameProcess, opts.slaveOk, opts.mayYield, opts.mayBeInterrupted, query );
         }
         return true;
-#endif
     }
 
     bool cloneFrom(const char *masterHost, string& errmsg, const string& fromdb, bool logForReplication,
@@ -775,8 +739,7 @@ namespace mongo {
             if ( nsdetails( target.c_str() ) ) {
                 uassert( 10027 ,  "target namespace exists", cmdObj["dropTarget"].trueValue() );
                 BSONObjBuilder bb( result.subobjStart( "dropTarget" ) );
-                ::abort();
-                //dropCollection( target , errmsg , bb );
+                dropCollection( target , errmsg , bb );
                 bb.done();
                 if ( errmsg.size() > 0 )
                     return false;
@@ -805,11 +768,8 @@ namespace mongo {
                 spec.appendBool( "capped", true );
                 spec.append( "size", double( size ) );
             }
-            ::abort();
-#if 0
-            if ( !userCreateNS( target.c_str(), spec.done(), errmsg, false ) )
+            if ( !userCreateNS( target.c_str(), spec.done(), errmsg , false) )
                 return false;
-#endif
 
             auto_ptr< DBClientCursor > c;
             DBDirectClient bridge;
@@ -823,8 +783,7 @@ namespace mongo {
                         break;
                 }
                 BSONObj o = c->next();
-                //theDataFileMgr.insertWithObjMod( target.c_str(), o );
-                ::abort();
+                insertObject( target.c_str(), o );
             }
 
             char cl[256];
@@ -855,14 +814,12 @@ namespace mongo {
                     }
                 }
                 BSONObj n = b.done();
-                //theDataFileMgr.insertWithObjMod( targetIndexes.c_str(), n );
-                ::abort();
+                insertObject( targetIndexes.c_str(), n );
             }
 
             {
                 Client::Context ctx( source );
-                ::abort();
-                //dropCollection( source, errmsg, result );
+                dropCollection( source, errmsg, result );
             }
             return true;
         }
