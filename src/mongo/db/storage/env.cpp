@@ -21,7 +21,10 @@
 #include <string>
 
 #include <db.h>
+#include <toku_time.h>
 #include <toku_os.h>
+#include <partitioned_counter.h>
+
 #include <boost/filesystem.hpp>
 #ifdef _WIN32
 # error "Doesn't support windows."
@@ -151,8 +154,11 @@ namespace mongo {
 
         void shutdown(void) {
             tokulog() << "shutdown" << endl;
-            int r = env->close(env, 0);
-            verify(r == 0);
+            // It's possible for startup to fail before storage::startup() is called
+            if (env != NULL) {
+                int r = env->close(env, 0);
+                verify(r == 0);
+            }
         }
 
         // set a descriptor for the given dictionary. the descriptor is
@@ -186,6 +192,76 @@ namespace mongo {
         void db_close(DB *db) {
             int r = db->close(db, 0);
             verify(r == 0);
+        }
+
+        void get_status(BSONObjBuilder &status) {
+            uint64_t num_rows;
+            uint64_t panic;
+            size_t panic_string_len = 128;
+            char panic_string[panic_string_len];
+            fs_redzone_state redzone_state;
+
+            int r = storage::env->get_engine_status_num_rows(storage::env, &num_rows);
+            verify( r == 0 );
+            TOKU_ENGINE_STATUS_ROW_S mystat[num_rows];
+            r = env->get_engine_status(env, mystat, num_rows, &redzone_state, &panic, panic_string, panic_string_len);
+            verify( r == 0 );
+            status.append( "panic code", (long long) panic );
+            status.append( "panic string", panic_string );
+            switch (redzone_state) {
+                case FS_GREEN:
+                    status.append( "filesystem status", "OK" );
+                    break;
+                case FS_YELLOW:
+                    status.append( "filesystem status", "Getting full..." );
+                    break;
+                case FS_RED:
+                    status.append( "filesystem status", "Critically full. Engine is read-only until space is freed." );
+                    break;
+                case FS_BLOCKED:
+                    status.append( "filesystem status", "Completely full. Free up some space now." );
+                    break;
+                default:
+                    {
+                        StringBuilder s;
+                        s << "Unknown. Code: " << (int) redzone_state;
+                        status.append( "filesystem status", s.str() );
+                    }
+            }
+            for (uint64_t i = 0; i < num_rows; i++) {
+                TOKU_ENGINE_STATUS_ROW row = &mystat[i];
+                switch (row->type) {
+                case UINT64:
+                    status.append( row->keyname, (long long) row->value.num );
+                    break;
+                case CHARSTR:
+                    status.append( row->keyname, row->value.str );
+                    break;
+                case UNIXTIME:
+                    {
+                        time_t t = row->value.num;
+                        char tbuf[26];
+                        status.append( row->keyname, (long long) ctime_r(&t, tbuf) );
+                    }
+                    break;
+                case TOKUTIME:
+                    status.append( row->keyname, (long long) tokutime_to_seconds(row->value.num) );
+                    break;
+                case PARCOUNT:
+                    {
+                        uint64_t v = read_partitioned_counter(row->value.parcount);
+                        status.append( row->keyname, (long long) v );
+                    }
+                    break;
+                default:
+                    {
+                        StringBuilder s;
+                        s << "Unknown type. Code: " << (int) row->type;
+                        status.append( row->keyname, s.str() );
+                    }
+                    break;                
+                }
+            }
         }
 
     } // namespace storage

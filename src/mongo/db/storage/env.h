@@ -34,6 +34,8 @@ namespace mongo {
         DB *db_open(const string &name, const BSONObj &key_pattern, bool may_create);
         void db_close(DB *db);
 
+        void get_status(BSONObjBuilder &status);
+
     } // namespace storage
 
 } // namespace mongo

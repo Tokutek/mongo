@@ -42,6 +42,7 @@
 #include "mongo/db/ops/count.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/stats/counters.h"
+#include "mongo/db/storage/env.h"
 #include "mongo/s/d_writeback.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/version.h"
@@ -711,6 +712,28 @@ namespace mongo {
             return true;
         }
     } cmdServerStatus;
+
+    class CmdEngineStatus : public Command {
+    public:
+        virtual bool slaveOk() const {
+            return true;
+        }
+        CmdEngineStatus() : Command("engineStatus") {
+        }
+
+        virtual LockType locktype() const { return NONE; }
+
+        virtual void help( stringstream& help ) const {
+            help << "returns TokuDB engine statistics";
+        }
+
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            // Get engine status from TokuDB.
+            // Status is system-wide, so we ignore the dbname and fromRepl bit.
+            storage::get_status(result);
+            return true;
+        }
+    } cmdEngineStatus;
 
     class CmdGetOpTime : public Command {
     public:
