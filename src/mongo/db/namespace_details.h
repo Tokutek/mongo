@@ -409,9 +409,9 @@ namespace mongo {
         // why
         bool exists() const;
 
-        void init() {
+        void init(bool may_create = false) {
             if (namespaces.get() == NULL) {
-                _init();
+                _init(may_create);
             }
         }
 
@@ -445,7 +445,7 @@ namespace mongo {
 
         typedef std::map<Namespace, shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
     private:
-        void _init();
+        void _init(bool may_create);
 
         DB *nsdb;
         scoped_ptr<NamespaceDetailsMap> namespaces;

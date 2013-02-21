@@ -31,7 +31,7 @@ namespace mongo {
         void startup(void);
         void shutdown(void);
 
-        DB *db_open(const string &name, const BSONObj &key_pattern, bool may_create);
+        int db_open(DB **dbp, const string &name, const BSONObj &key_pattern, bool may_create);
         void db_close(DB *db);
 
         void get_status(BSONObjBuilder &status);

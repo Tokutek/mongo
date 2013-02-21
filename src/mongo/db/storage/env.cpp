@@ -173,7 +173,7 @@ namespace mongo {
             tokulog() << "set db " << db << " descriptor to key pattern: " << key_pattern << endl;
         }
 
-        DB *db_open(const string &name, const BSONObj &key_pattern, bool may_create) {
+        int db_open(DB **dbp, const string &name, const BSONObj &key_pattern, bool may_create) {
             const Client::Transaction &txn = cc().transaction();
             dassert(txn.is_root());
 
@@ -183,10 +183,16 @@ namespace mongo {
 
             const int db_flags = may_create ? DB_CREATE : 0;
             r = db->open(db, txn.txn(), name.c_str(), NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+            if (r == ENOENT) {
+                verify(!may_create);
+                goto exit;
+            }
             verify(r == 0);
 
             set_db_descriptor(db, txn.txn(), key_pattern);
-            return db;
+            *dbp = db;
+        exit:
+            return r;
         }
 
         void db_close(DB *db) {

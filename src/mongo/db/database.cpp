@@ -510,7 +510,14 @@ namespace mongo {
 
     NamespaceDetails* nsdetails(const char *ns) {
         // if this faults, did you set the current db first?  (Client::Context + dblock)
-        NamespaceDetails *d = nsindex(ns)->details(ns);
+        NamespaceIndex *ni = nsindex(ns);
+        if (!ni->allocated()) {
+            // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
+            Client::RootTransaction txn;
+            ni->init();
+            txn.commit();
+        }
+        NamespaceDetails *d = ni->details(ns);
         return d;
     }
 
@@ -519,7 +526,7 @@ namespace mongo {
         if (!ni->allocated()) {
             // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
             Client::RootTransaction txn;
-            ni->init();
+            ni->init(true);
             txn.commit();
         }
         NamespaceDetails *details = ni->details(ns);

@@ -146,7 +146,7 @@ namespace mongo {
         return 0;
     }
 
-    NOINLINE_DECL void NamespaceIndex::_init() {
+    NOINLINE_DECL void NamespaceIndex::_init(bool may_create) {
         int r;
 
         Lock::assertWriteLocked(database_);
@@ -155,7 +155,13 @@ namespace mongo {
 
         string nsdbname(database_ + ".ns");
         const BSONObj &ns_key_pattern = fromjson("{\"ns\":1}");
-        nsdb = storage::db_open(nsdbname, ns_key_pattern, true);
+        r = storage::db_open(&nsdb, nsdbname, ns_key_pattern, may_create);
+        if (r == ENOENT) {
+            // didn't find on disk
+            dassert(!may_create);
+            return;
+        }
+        verify(r == 0);
 
         namespaces.reset(new NamespaceDetailsMap());
 
