@@ -23,13 +23,14 @@
 
 #include "pcrecpp.h"
 
+#include "mongo/client/dbclient_rs.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/json.h"
+#include "mongo/db/env/storage.h"
 #include "mongo/util/file_allocator.h"
 #include "mongo/util/password.h"
 #include "mongo/util/version.h"
-#include "mongo/client/dbclient_rs.h"
-#include "mongo/db/json.h"
 
 #include <boost/filesystem/operations.hpp>
 
@@ -249,7 +250,7 @@ namespace mongo {
 
             FileAllocator::get()->start();
 
-            //dur::startup();
+            storage::startup();
         }
 
         if ( _params.count( "db" ) )
