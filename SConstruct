@@ -674,6 +674,8 @@ if nix:
 
     if has_option( "ccache" ):
         env["CXX"] = "ccache " + env["CXX"]
+        if has_option("distcc"):
+            env['ENV']['CCACHE_PREFIX'] = 'distcc'
     elif has_option( "distcc" ):
         env["CXX"] = "distcc " + env["CXX"]
 
