@@ -134,6 +134,7 @@ namespace mongo {
             } else {
                 r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
             }
+            verify(r == 0 || r == DB_NOTFOUND);
             tokulog(1) << toString() << ": initializeDBC(): hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
             checkCurrentAgainstBounds();
         } else {
@@ -224,6 +225,7 @@ namespace mongo {
             } else {
                 r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
             }
+            verify(r == 0 || r == DB_NOTFOUND);
             tokulog(2) << toString() << ": advance() moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
         } else {
             // new inserts will not be read by this cursor, because there was no
