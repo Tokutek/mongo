@@ -36,7 +36,6 @@
 
 #include "../bson/util/builder.h"
 #include "../util/net/message.h"
-#include "../util/mmap.h"
 #include "../db/dbmessage.h"
 
 #include <stdio.h>
@@ -65,7 +64,6 @@ using mongo::BSONObj;
 using mongo::BufBuilder;
 using mongo::DBClientConnection;
 using mongo::QueryResult;
-using mongo::MemoryMappedFile;
 
 mongo::CmdLine mongo::cmdLine;
 namespace mongo {
@@ -398,6 +396,8 @@ void processMessage( Connection& c , Message& m ) {
 
 void processDiagLog( const char * file ) {
     Connection c;
+    unimplemented("mmf");
+#if 0
     MemoryMappedFile f;
     long length;
     unsigned long long L = 0;
@@ -423,6 +423,7 @@ void processDiagLog( const char * file ) {
     }
 
     f.close();
+#endif
 }
 
 void usage() {
