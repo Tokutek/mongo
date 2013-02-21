@@ -37,6 +37,8 @@ files.forEach(
 
 	// shellkillop: dunno yet.  SERVER-1445
 
+        // update_setOnInsert: db.setProfilingLevel is not working. SERVER-8653
+
 	// These should simply not be run under sharding:
 	// dbadmin: Uncertain  Cut-n-pasting its contents into mongo worked.
 	// error1: getpreverror not supported under sharding 
@@ -67,7 +69,7 @@ files.forEach(
 	    return;
 	}
 	// These are bugs (some might be fixed now):
-	if (/[\/\\](apply_ops1|count5|cursor8|or4|shellkillop|update4|profile\d*)\.js$/.test(x.name)) {
+	if (/[\/\\](apply_ops1|count5|cursor8|or4|shellkillop|update4|update_setOnInsert|profile\d*)\.js$/.test(x.name)) {
 	    print(" !!!!!!!!!!!!!!! skipping test that has failed under sharding but might not anymore " + x.name)	    
 	    return;
 	}
@@ -83,7 +85,6 @@ files.forEach(
 		  function() {
 		      load(x.name);
 		  }, 1) + "ms");
-        
     }
 );
 
