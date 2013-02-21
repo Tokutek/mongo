@@ -18,14 +18,15 @@
 
 #include <boost/thread/thread.hpp>
 
-#include "../db/ops/count.h"
-
-#include "../db/cursor.h"
-#include "../db/pdfile.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/db.h"
+#include "mongo/db/dbhelpers.h"
 #include "mongo/db/json.h"
+#include "mongo/db/ops/count.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/insert.h"
 
-#include "dbtests.h"
+#include "mongo/dbtests/dbtests.h"
 
 namespace CountTests {
 
@@ -38,12 +39,10 @@ namespace CountTests {
         }
         ~Base() {
             try {
-                boost::shared_ptr<Cursor> c = theDataFileMgr.findAll( ns() );
-                vector<DiskLoc> toDelete;
-                for(; c->ok(); c->advance() )
-                    toDelete.push_back( c->currLoc() );
-                for( vector<DiskLoc>::iterator i = toDelete.begin(); i != toDelete.end(); ++i )
-                    theDataFileMgr.deleteRecord( ns(), i->rec(), *i, false );
+                boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() );
+                for(; c->ok(); c->advance() ) {
+                    deleteOneObject( nsdetails(ns()) , c->currPK(), c->current() );
+                }
                 DBDirectClient cl;
                 cl.dropIndexes( ns() );
             }
@@ -51,7 +50,7 @@ namespace CountTests {
                 FAIL( "Exception while cleaning up collection" );
             }
         }
-    protected:
+    
         static const char *ns() {
             return "unittests.counttests";
         }
@@ -63,13 +62,13 @@ namespace CountTests {
             BSONObj o = b.done();
             stringstream indexNs;
             indexNs << "unittests.system.indexes";
-            theDataFileMgr.insert( indexNs.str().c_str(), o.objdata(), o.objsize() );
+            insertObject( indexNs.str().c_str(), o );
         }
         static void insert( const char *s ) {
             insert( fromjson( s ) );
         }
         static void insert( const BSONObj &o ) {
-            theDataFileMgr.insert( ns(), o.objdata(), o.objsize() );
+            insertObject( ns(), o );
         }
         static BSONObj countCommand( const BSONObj &query ) {
             return BSON( "query" << query );

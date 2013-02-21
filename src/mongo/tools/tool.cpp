@@ -42,17 +42,6 @@ namespace mongo {
 
     CmdLine cmdLine;
 
-#ifdef _WIN32
-    string dbpath = "\\data\\db\\";
-#else
-    string dbpath = "/data/db/";
-#endif
-
-    DatabaseHolder _dbHolder;
-    DatabaseHolder& dbHolderUnchecked() {
-        return _dbHolder;
-    }
-
     Tool::Tool( string name , DBAccess access , string defaultDB ,
                 string defaultCollection , bool usesstdout ) :
         _name( name ) , _db( defaultDB ) , _coll( defaultCollection ) ,

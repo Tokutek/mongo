@@ -39,6 +39,11 @@
 namespace mongo {
     class Database;
 
+    // TODO: Put this in the cmdline abstraction, not extern global.
+    extern string dbpath; // --dbpath parm
+
+    void userCreateNS( const char *ns );
+
     /** @return true if a client can modify this namespace even though it is under ".system."
         For example <dbname>.system.users is ok for regular clients to update.
         @param write used when .system.js
@@ -49,6 +54,10 @@ namespace mongo {
      * Record that a new namespace exists in <dbname>.system.namespaces.
      */
     void addNewNamespaceToCatalog(const string &name, const BSONObj *options = NULL);
+
+    // Rename a namespace within current 'client' db.
+    // (Arguments should include db name)
+    void renameNamespace( const char *from, const char *to, bool stayTemp);
 
     /* NamespaceDetails : this is the "header" for a namespace that has all its details.
        It is stored in the NamespaceIndex (a TokuDB dictionary named foo.ns, for Database foo).
@@ -443,13 +452,6 @@ namespace mongo {
         string dir_;
         string database_;
     };
-
-    // Rename a namespace within current 'client' db.
-    // (Arguments should include db name)
-    void renameNamespace( const char *from, const char *to, bool stayTemp);
-
-    // TODO: Put this in the cmdline abstraction, not extern global.
-    extern string dbpath; // --dbpath parm
 
     // Defined in database.cpp
     // Gets the namespace objects for this client threads' current database.

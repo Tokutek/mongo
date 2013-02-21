@@ -25,6 +25,6 @@
 namespace mongo {
 
     // Insert an object into the given namespace.
-    void insertObject(const char *ns, const BSONObj &doc);
+    void insertObject(const char *ns, const BSONObj &obj);
     
 }  // namespace mongo

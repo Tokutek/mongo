@@ -17,14 +17,17 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-#include "../db/queryoptimizer.h"
-#include "../db/instance.h"
-#include "../db/ops/count.h"
-#include "../db/ops/query.h"
-#include "../db/ops/delete.h"
+#include "mongo/pch.h"
+#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/namespace_details.h"
+#include "mongo/db/dbhelpers.h"
+#include "mongo/db/ops/count.h"
+#include "mongo/db/ops/insert.h"
+#include "mongo/db/ops/query.h"
+#include "mongo/db/ops/delete.h"
 #include "mongo/db/json.h"
-#include "dbtests.h"
+#include "mongo/dbtests/dbtests.h"
 
 
 namespace mongo {
@@ -48,7 +51,8 @@ namespace QueryOptimizerTests {
     void dropCollection( const char *ns ) {
      	string errmsg;
         BSONObjBuilder result;
-        dropCollection( ns, errmsg, result );
+        ::abort();
+        //dropCollection( ns, errmsg, result );
     }
     
     namespace QueryPlanTests {
@@ -69,7 +73,8 @@ namespace QueryOptimizerTests {
         public:
             Base() : _ctx( ns() ) , indexNum_( 0 ) {
                 string err;
-                userCreateNS( ns(), BSONObj(), err, false );
+                ::abort();
+                //userCreateNS( ns(), BSONObj(), err, false );
             }
             ~Base() {
                 if ( !nsd() )
@@ -92,7 +97,7 @@ namespace QueryOptimizerTests {
             }
             int existingIndexNo( const BSONObj &key ) const {
                 NamespaceDetails *d = nsd();
-                for( int i = 0; i < d->nIndexes; ++i ) {
+                for( int i = 0; i < d->nIndexes(); ++i ) {
                     if ( ( d->idx( i ).keyPattern() == key ) ||
                         ( d->idx( i ).isIdIndex() && IndexDetails::isIdIndexPattern( key ) ) ) {
                         return i;
@@ -842,7 +847,8 @@ namespace QueryOptimizerTests {
         public:
             Base() : _context( ns() ) {
                 string err;
-                userCreateNS( ns(), BSONObj(), err, false );
+                ::abort();
+                //userCreateNS( ns(), BSONObj(), err, false );
             }
             virtual ~Base() {
                 if ( !nsd() )
@@ -1003,11 +1009,11 @@ namespace QueryOptimizerTests {
                 BSONObj one = BSON( "a" << 1 );
                 BSONObj fourA = BSON( "a" << 4 );
                 BSONObj fourB = BSON( "a" << 4 );
-                theDataFileMgr.insertWithObjMod( ns(), one );
+                insertObject( ns(), one );
                 ASSERT_EQUALS( 0, runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
-                theDataFileMgr.insertWithObjMod( ns(), fourA );
+                insertObject( ns(), fourA );
                 ASSERT_EQUALS( 1, runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
-                theDataFileMgr.insertWithObjMod( ns(), fourB );
+                insertObject( ns(), fourB );
                 ASSERT_EQUALS( 2, runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
                 ASSERT_EQUALS( 3, runCount( ns(), BSON( "query" << BSONObj() ), err, errCode ) );
                 ASSERT_EQUALS( 3, runCount( ns(), BSON( "query" << BSON( "a" << GT << 0 ) ), err, errCode ) );
@@ -1049,7 +1055,7 @@ namespace QueryOptimizerTests {
         public:
             void run() {
                 BSONObj one = BSON( "a" << 1 );
-                theDataFileMgr.insertWithObjMod( ns(), one );
+                insertObject( ns(), one );
                 BSONObj result;
                 ASSERT( Helpers::findOne( ns(), BSON( "a" << 1 ), result ) );
                 ASSERT_THROWS( Helpers::findOne( ns(), BSON( "a" << 1 ), result, true ), AssertionException );
@@ -1064,10 +1070,10 @@ namespace QueryOptimizerTests {
                 Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
                 for( int i = 0; i < 200; ++i ) {
                     BSONObj two = BSON( "a" << 2 );
-                    theDataFileMgr.insertWithObjMod( ns(), two );
+                    insertObject( ns(), two );
                 }
                 BSONObj one = BSON( "a" << 1 );
-                theDataFileMgr.insertWithObjMod( ns(), one );
+                insertObject( ns(), one );
                 BSONObj delSpec = BSON( "a" << 1 << "_id" << NE << 0 );
                 deleteObjects( ns(), delSpec, false );
                 
@@ -1086,11 +1092,11 @@ namespace QueryOptimizerTests {
                 BSONObj one = BSON( "_id" << 3 << "a" << 1 );
                 BSONObj two = BSON( "_id" << 2 << "a" << 1 );
                 BSONObj three = BSON( "_id" << 1 << "a" << -1 );
-                theDataFileMgr.insertWithObjMod( ns(), one );
-                theDataFileMgr.insertWithObjMod( ns(), two );
-                theDataFileMgr.insertWithObjMod( ns(), three );
+                insertObject( ns(), one );
+                insertObject( ns(), two );
+                insertObject( ns(), three );
                 deleteObjects( ns(), BSON( "_id" << GT << 0 << "a" << GT << 0 ), true );
-                for( boost::shared_ptr<Cursor> c = theDataFileMgr.findAll( ns() ); c->ok(); c->advance() )
+                for( boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() ); c->ok(); c->advance() )
                     ASSERT( 3 != c->current().getIntField( "_id" ) );
             }
         };
@@ -1102,11 +1108,11 @@ namespace QueryOptimizerTests {
                 BSONObj one = BSON( "a" << 2 << "_id" << 0 );
                 BSONObj two = BSON( "a" << 1 << "_id" << 1 );
                 BSONObj three = BSON( "a" << 0 << "_id" << 2 );
-                theDataFileMgr.insertWithObjMod( ns(), one );
-                theDataFileMgr.insertWithObjMod( ns(), two );
-                theDataFileMgr.insertWithObjMod( ns(), three );
+                insertObject( ns(), one );
+                insertObject( ns(), two );
+                insertObject( ns(), three );
                 deleteObjects( ns(), BSON( "a" << GTE << 0 ), true );
-                for( boost::shared_ptr<Cursor> c = theDataFileMgr.findAll( ns() ); c->ok(); c->advance() )
+                for( boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() ); c->ok(); c->advance() )
                     ASSERT( 2 != c->current().getIntField( "_id" ) );
             }
         };
@@ -1117,7 +1123,7 @@ namespace QueryOptimizerTests {
                 Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
                 for( int i = 0; i < 10; ++i ) {
                     BSONObj temp = BSON( "a" << i );
-                    theDataFileMgr.insertWithObjMod( ns(), temp );
+                    insertObject( ns(), temp );
                 }
                 BSONObj query = fromjson( "{a:{$in:[2,3,6,9,11]}}" );
                 BSONObj order;
@@ -1156,7 +1162,7 @@ namespace QueryOptimizerTests {
                 Helpers::ensureIndex( ns(), BSON( "a" << 1 << "b" << 1 ), false, "a_1_b_1" );
                 for( int i = 0; i < 10; ++i ) {
                     BSONObj temp = BSON( "a" << 5 << "b" << i );
-                    theDataFileMgr.insertWithObjMod( ns(), temp );
+                    insertObject( ns(), temp );
                 }
                 auto_ptr< FieldRangeSetPair > frsp( new FieldRangeSetPair( ns(), fromjson( "{a:5,b:{$in:[2,3,6,9,11]}}" ) ) );
                 scoped_ptr<QueryPlan> qp( QueryPlan::make( nsd(), 1, *frsp, frsp.get(),
@@ -1179,7 +1185,7 @@ namespace QueryOptimizerTests {
                 Helpers::ensureIndex( ns(), BSON( "a" << 1 << "b" << 1 ), false, "a_1_b_1" );
                 for( int i = 0; i < 10; ++i ) {
                     BSONObj temp = BSON( "a" << 5 << "b" << i );
-                    theDataFileMgr.insertWithObjMod( ns(), temp );
+                    insertObject(ns(), temp );
                 }
                 auto_ptr< FieldRangeSetPair > frsp( new FieldRangeSetPair( ns(), fromjson( "{a:{$gte:5},b:{$in:[2,3,6,9,11]}}" ) ) );
                 scoped_ptr<QueryPlan> qp
@@ -1400,7 +1406,8 @@ namespace QueryOptimizerTests {
     public:
         Base() : _ctx( ns() ) {
             string err;
-            userCreateNS( ns(), BSONObj(), err, false );
+            ::abort();
+            //userCreateNS( ns(), BSONObj(), err, false );
         }
         ~Base() {
             if ( !nsd() )
@@ -1545,9 +1552,9 @@ namespace QueryOptimizerTests {
             Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
             Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
             BSONObj temp = BSON( "a" << 1 );
-            theDataFileMgr.insertWithObjMod( ns(), temp );
+            insertObject( ns(), temp );
             temp = BSON( "b" << 1 );
-            theDataFileMgr.insertWithObjMod( ns(), temp );
+            insertObject( ns(), temp );
 
             boost::shared_ptr< Cursor > c =
             NamespaceDetailsTransient::bestGuessCursor( ns(), BSON( "b" << 1 ), BSON( "a" << 1 ) );
@@ -1590,7 +1597,6 @@ namespace QueryOptimizerTests {
         All() : Suite( "queryoptimizer" ) {}
 
         void setupTests() {
-            __forceLinkGeoPlugin();
             add<QueryPlanTests::ToString>();
             add<QueryPlanTests::NoIndex>();
             add<QueryPlanTests::SimpleOrder>();

@@ -17,14 +17,14 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-#include "../db/queryutil.h"
+#include "mongo/pch.h"
+#include "mongo/db/namespace_details.h"
+#include "mongo/db/queryutil.h"
 #include "mongo/db/queryoptimizer.h"
-#include "../db/querypattern.h"
-#include "../db/instance.h"
-#include "../db/pdfile.h"
+#include "mongo/db/querypattern.h"
+#include "mongo/db/instance.h"
 #include "mongo/db/json.h"
-#include "dbtests.h"
+#include "mongo/dbtests/dbtests.h"
 
 namespace QueryUtilTests {
 
@@ -1523,13 +1523,15 @@ namespace QueryUtilTests {
         public:
             IndexBase() : _lk(ns()), _ctx( ns() ) , indexNum_( 0 ) {
                 string err;
-                userCreateNS( ns(), BSONObj(), err, false );
+                ::abort();
+                //userCreateNS( ns(), BSONObj(), err, false );
             }
             ~IndexBase() {
                 if ( !nsd() )
                     return;
                 string s( ns() );
-                dropNS( s );
+                ::abort();
+                //dropNS( s );
             }
         protected:
             static const char *ns() { return "unittests.FieldRangeSetPairTests"; }
@@ -1541,7 +1543,7 @@ namespace QueryUtilTests {
                 client_.resetIndexCache();
                 client_.ensureIndex( ns(), key, false, name.c_str() );
                 NamespaceDetails *d = nsd();
-                for( int i = 0; i < d->nIndexes; ++i ) {
+                for( int i = 0; i < d->nIndexes(); ++i ) {
                     if ( d->idx(i).keyPattern() == key /*indexName() == name*/ || ( d->idx(i).isIdIndex() && IndexDetails::isIdIndexPattern( key ) ) )
                         return &d->idx(i);
                 }

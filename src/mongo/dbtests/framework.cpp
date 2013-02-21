@@ -30,7 +30,6 @@
 
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
-#include "mongo/db/dur.h"
 #include "mongo/db/instance.h"
 #include "mongo/unittest/unittest.h"
 #include "mongo/util/background.h"
@@ -240,8 +239,6 @@ namespace mongo {
             if ( params.count( "filter" ) ) {
                 filter = params["filter"].as<string>();
             }
-
-            dur::startup();
 
             if( debug && cmdLine.dur ) {
                 log() << "_DEBUG: automatically enabling cmdLine.durOptions=8 (DurParanoid)" << endl;

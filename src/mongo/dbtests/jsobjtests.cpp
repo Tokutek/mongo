@@ -17,80 +17,19 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-#include "../bson/util/builder.h"
-#include "../db/jsobj.h"
-#include "../db/jsobjmanipulator.h"
-#include "../db/json.h"
-#include "../db/repl.h"
-#include "../db/extsort.h"
-#include "dbtests.h"
-#include "../util/stringutils.h"
-#include "../util/mongoutils/checksum.h"
-#include "../db/key.h"
-#include "../db/indexcursor.h"
+#include "mongo/pch.h"
+#include "mongo/bson/util/builder.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/jsobjmanipulator.h"
+#include "mongo/db/json.h"
+#include "mongo/db/repl.h"
+#include "mongo/db/cursor.h"
+#include "mongo/dbtests/dbtests.h"
 #include "mongo/platform/float_utils.h"
+#include "mongo/util/stringutils.h"
+#include "mongo/util/mongoutils/checksum.h"
 
 namespace JsobjTests {
-
-    IndexInterface& indexInterfaceForTheseTests = (time(0)%2) ? *IndexDetails::iis[0] : *IndexDetails::iis[1];
-
-    void keyTest(const BSONObj& o, bool mustBeCompact = false) {
-        static KeyV1Owned *kLast;
-        static BSONObj last;
-
-        KeyV1Owned *key = new KeyV1Owned(o);
-        KeyV1Owned& k = *key;
-
-        ASSERT( !mustBeCompact || k.isCompactFormat() );
-
-        BSONObj x = k.toBson();
-        int res = o.woCompare(x, BSONObj(), /*considerfieldname*/false);
-        if( res ) {
-            cout << o.toString() << endl;
-            k.toBson();
-            cout << x.toString() << endl;
-            o.woCompare(x, BSONObj(), /*considerfieldname*/false);
-            ASSERT( res == 0 );
-        }
-        ASSERT( k.woEqual(k) );
-        ASSERT( !k.isCompactFormat() || k.dataSize() < o.objsize() );
-
-        {
-            // check BSONObj::equal.  this part not a KeyV1 test.
-            int res = o.woCompare(last);
-            ASSERT( (res==0) == o.equal(last) );
-        }
-
-        if( kLast ) {
-            int r1 = o.woCompare(last, BSONObj(), false);
-            int r2 = k.woCompare(*kLast, Ordering::make(BSONObj()));
-            bool ok = (r1<0 && r2<0) || (r1>0&&r2>0) || r1==r2;
-            if( !ok ) { 
-                cout << "r1r2 " << r1 << ' ' << r2 << endl;
-                cout << "o:" << o.toString() << endl;
-                cout << "last:" << last.toString() << endl;
-                cout << "k:" << k.toString() << endl;
-                cout << "kLast:" << kLast->toString() << endl;
-                int r3 = k.woCompare(*kLast, Ordering::make(BSONObj()));
-                cout << r3 << endl;
-            }
-            ASSERT(ok);
-            if( k.isCompactFormat() && kLast->isCompactFormat() ) { // only check if not bson as bson woEqual is broken! (or was may2011)
-                if( k.woEqual(*kLast) != (r2 == 0) ) { // check woEqual matches
-                    cout << r2 << endl;
-                    cout << k.toString() << endl;
-                    cout << kLast->toString() << endl;
-                    k.woEqual(*kLast);
-                    ASSERT(false);
-                }
-            }
-        }
-
-        delete kLast;
-        kLast = key;
-        last = o.getOwned();
-    }
 
     class BufBuilderBasic {
     public:
@@ -288,31 +227,10 @@ namespace JsobjTests {
                 ASSERT( BSON( "" << "b" << "" << "b" ).woCompare( BSON( "" << "c" ) , key ) < 0 );
 
                 {
-                    // test a big key
-                    string x(2000, 'z');
-                    BSONObj o = BSON( "q" << x );
-                    keyTest(o, false);
-                }
-                {
-                    string y(200, 'w');                 
-                    BSONObjBuilder b;
-                    for( int i = 0; i < 10; i++ ) {
-                        b.append("x", y);
-                    }
-                    keyTest(b.obj(), true);
-                }
-                {
-                    double nan = numeric_limits<double>::quiet_NaN();
-                    BSONObj o = BSON( "y" << nan );
-                    keyTest(o);
-                }
-
-                {
                     BSONObjBuilder b;
                     b.append( "" , "c" );
                     b.appendNull( "" );
                     BSONObj o = b.obj();
-                    keyTest(o);
                     ASSERT( o.woSortOrder( BSON( "" << "b" << "" << "h" ) , key ) > 0 );
                     ASSERT( BSON( "" << "b" << "" << "h" ).woSortOrder( o , key ) < 0 );
 
@@ -391,13 +309,6 @@ namespace JsobjTests {
                 ASSERT( BSON( "a" << nan ).woCompare( BSON( "a" << 1 ) ) < 0 );
 
                 ASSERT( BSON( "a" << nan ).woCompare( BSON( "a" << 5000000000LL ) ) < 0 );
-
-                {
-                    KeyV1Owned a( BSON( "a" << nan ) );
-                    KeyV1Owned b( BSON( "a" << 1 ) );
-                    Ordering o = Ordering::make(BSON("a"<<1));
-                    ASSERT( a.woCompare(b, o) < 0 );
-                }
 
                 ASSERT( BSON( "a" << 1 ).woCompare( BSON( "a" << nan ) ) > 0 );
 
@@ -492,26 +403,7 @@ namespace JsobjTests {
                     ASSERT( n > back );
                     //ASSERT( res > 0 );  // SERVER-3719
 
-                    keyTest(a, false);
-
-                    KeyV1Owned A(a);
-                    KeyV1Owned B(b);
-//3719
-//////                    int res2 =  A.woCompare(B, Ordering::make(BSONObj()));
-                    // ASSERT( res2 > 0 ); // SERVER-3719
-
-                    // fixing requires an index v# change.
-
-                    cout << "todo fix SERVER-3719 and uncomment test in AppendIntOrLL" << endl;
-
                     n++;
-                }
-
-                {
-                    BSONObjBuilder b;
-                    b.appendIntOrLL("L4", -4*billion);
-                    keyTest(b.obj());
-                    keyTest( BSON("" << billion) );
                 }
 
                 BSONObjBuilder b;
@@ -528,7 +420,6 @@ namespace JsobjTests {
                 b.appendIntOrLL("L6", -16*billion);
 
                 BSONObj o = b.obj();
-                keyTest(o);
 
                 ASSERT(o["i1"].type() == NumberInt);
                 ASSERT(o["i1"].number() == 1);
@@ -564,7 +455,6 @@ namespace JsobjTests {
                 b.appendNumber( "e" , 1024LL*1024*1024*1024*1024*1024 );
 
                 BSONObj o = b.obj();
-                keyTest(o);
 
                 ASSERT( o["a"].type() == NumberInt );
                 ASSERT( o["b"].type() == NumberDouble );
@@ -582,53 +472,8 @@ namespace JsobjTests {
                 ASSERT_EQUALS( spec, fromjson( spec ).toString() );
 
                 BSONObj x = BSON( "a" << "astring" << "b" << "str" );
-                keyTest(x);
-                keyTest(x);
                 BSONObj y = BSON( "a" << "astring" << "b" << "stra" );
-                keyTest(y);
                 y = BSON( "a" << "" );
-                keyTest(y);
-
-                keyTest( BSON("abc" << true ) );
-                keyTest( BSON("abc" << false ) );
-                keyTest( BSON("abc" << false << "b" << true ) );
-
-                Date_t now = jsTime();
-                keyTest( BSON("" << now << "" << 3 << "" << jstNULL << "" << true) );
-                keyTest( BSON("" << now << "" << 3 << "" << BSONObj() << "" << true) );
-
-                {
-                    {
-                        // check signed dates with new key format
-                        KeyV1Owned a( BSONObjBuilder().appendDate("", -50).obj() );
-                        KeyV1Owned b( BSONObjBuilder().appendDate("", 50).obj() );
-                        ASSERT( a.woCompare(b, Ordering::make(BSONObj())) < 0 );
-                    }
-                    {
-                        // backward compatibility
-                        KeyBson a( BSONObjBuilder().appendDate("", -50).obj() );
-                        KeyBson b( BSONObjBuilder().appendDate("", 50).obj() );
-                        ASSERT( a.woCompare(b, Ordering::make(BSONObj())) > 0 );
-                    }
-                    {
-                        // this is an uncompactible key:
-                        BSONObj uc1 = BSONObjBuilder().appendDate("", -50).appendCode("", "abc").obj();
-                        BSONObj uc2 = BSONObjBuilder().appendDate("", 55).appendCode("", "abc").obj();
-                        ASSERT( uc1.woCompare(uc2, Ordering::make(BSONObj())) < 0 );
-                        {
-                            KeyV1Owned a(uc1);
-                            KeyV1Owned b(uc2);
-                            ASSERT( !a.isCompactFormat() );
-                            ASSERT( a.woCompare(b, Ordering::make(BSONObj())) < 0 );
-                        }
-                        {
-                            KeyBson a(uc1);
-                            KeyBson b(uc2);
-                            ASSERT( !a.isCompactFormat() );
-                            ASSERT( a.woCompare(b, Ordering::make(BSONObj())) > 0 );
-                        }
-                    }
-                }
 
                 {
                     BSONObjBuilder b;
@@ -636,7 +481,6 @@ namespace JsobjTests {
                     b.appendBinData("e", 3, (BinDataType) 1, "aaa");
                     b.appendBinData("b", 1, (BinDataType) 1, "x");
                     BSONObj o = b.obj();
-                    keyTest( o, true );
                 }
 
                 {
@@ -646,8 +490,6 @@ namespace JsobjTests {
                     ASSERT( !a.equal(b) );
                     int res_ab = a.woCompare(b);
                     ASSERT( res_ab != 0 );
-                    keyTest( a, true );
-                    keyTest( b, true );
 
                     // check subtypes do not equal
                     BSONObj c = BSONObjBuilder().appendBinData("", 8, (BinDataType) 4, "abcdefgh").obj();
@@ -655,69 +497,17 @@ namespace JsobjTests {
                     ASSERT( !a.equal(c) );
                     int res_ac = a.woCompare(c);
                     ASSERT( res_ac != 0 );
-                    keyTest( c, true );
                     ASSERT( !a.equal(d) );
                     int res_ad = a.woCompare(d);
                     ASSERT( res_ad != 0 );
-                    keyTest( d, true );
-
-                    KeyV1Owned A(a);
-                    KeyV1Owned B(b);
-                    KeyV1Owned C(c);
-                    KeyV1Owned D(d);
-                    ASSERT( !A.woEqual(B) );
-                    ASSERT( A.woCompare(B, Ordering::make(BSONObj())) < 0 && res_ab < 0 );
-                    ASSERT( !A.woEqual(C) );
-                    ASSERT( A.woCompare(C, Ordering::make(BSONObj())) < 0 && res_ac < 0 );
-                    ASSERT( !A.woEqual(D) );
-                    ASSERT( A.woCompare(D, Ordering::make(BSONObj())) < 0 && res_ad < 0 );
-                }
 
                 {
                     BSONObjBuilder b;
                     b.appendBinData("f", 33, (BinDataType) 1, "123456789012345678901234567890123");
                     BSONObj o = b.obj();
-                    keyTest( o, false );
                 }
-
-                {
-                    for( int i = 1; i <= 3; i++ ) {
-                        for( int j = 1; j <= 3; j++ ) {
-                            BSONObjBuilder b;
-                            b.appendBinData("f", i, (BinDataType) j, "abc");
-                            BSONObj o = b.obj();
-                            keyTest( o, j != ByteArrayDeprecated );
-                        }
-                    }
                 }
-
-                {
-                    BSONObjBuilder b;
-                    b.appendBinData("f", 1, (BinDataType) 133, "a");
-                    BSONObj o = b.obj();
-                    keyTest( o, true );
-                }
-
-                {
-                    BSONObjBuilder b;
-                    b.append("AA", 3);
-                    b.appendBinData("f", 0, (BinDataType) 0, "");
-                    b.appendBinData("e", 3, (BinDataType) 7, "aaa");
-                    b.appendBinData("b", 1, (BinDataType) 128, "x");
-                    b.append("z", 3);
-                    b.appendBinData("bb", 0, (BinDataType) 129, "x");
-                    BSONObj o = b.obj();
-                    keyTest( o, true );
-                }
-
-                {
-                    // 9 is not supported in compact format. so test a non-compact case here.
-                    BSONObjBuilder b;
-                    b.appendBinData("f", 9, (BinDataType) 0, "aaaabbbbc");
-                    BSONObj o = b.obj();
-                    keyTest( o );
-                }
-          }
+            }
         };
 
         class ToStringNumber {
@@ -736,7 +526,6 @@ namespace JsobjTests {
                 b.append( "g" , -123.456 );
 
                 BSONObj x = b.obj();
-                keyTest(x);
 
                 ASSERT_EQUALS( "4", x["a"].toString( false , true ) );
                 ASSERT_EQUALS( "5.0", x["b"].toString( false , true ) );
@@ -791,7 +580,6 @@ namespace JsobjTests {
                 b.append("b", z);
                 b.appendAs(b.asTempObj()["a"], "c");
                 BSONObj o = b.obj();
-                keyTest(o);
 
                 stringstream ss;
                 ss << 'a' << '\0' << 'b';
@@ -846,7 +634,6 @@ namespace JsobjTests {
                 ASSERT_EQUALS( 2 , o.getFieldDotted( "b.a" ).numberInt() );
                 ASSERT_EQUALS( 3 , o.getFieldDotted( "c.0.a" ).numberInt() );
                 ASSERT_EQUALS( 4 , o.getFieldDotted( "c.1.a" ).numberInt() );
-                keyTest(o);
             }
         };
 
@@ -1216,7 +1003,6 @@ namespace JsobjTests {
                 b.appendOID( "b" , 0 , false );
                 b.appendOID( "c" , 0 , true );
                 BSONObj o = b.obj();
-                keyTest(o);
 
                 ASSERT( o["a"].__oid().str() == "000000000000000000000000" );
                 ASSERT( o["b"].__oid().str() == "000000000000000000000000" );
@@ -1578,226 +1364,6 @@ namespace JsobjTests {
         }
     };
 
-    namespace external_sort {
-        class Basic1 {
-        public:
-            void run() {
-                BSONObjExternalSorter sorter(indexInterfaceForTheseTests);
-
-                sorter.add( BSON( "x" << 10 ) , 5  , 1);
-                sorter.add( BSON( "x" << 2 ) , 3 , 1 );
-                sorter.add( BSON( "x" << 5 ) , 6 , 1 );
-                sorter.add( BSON( "x" << 5 ) , 7 , 1 );
-
-                sorter.sort();
-
-                auto_ptr<BSONObjExternalSorter::Iterator> i = sorter.iterator();
-                int num=0;
-                while ( i->more() ) {
-                    pair<BSONObj,DiskLoc> p = i->next();
-                    if ( num == 0 )
-                        verify( p.first["x"].number() == 2 );
-                    else if ( num <= 2 ) {
-                        verify( p.first["x"].number() == 5 );
-                    }
-                    else if ( num == 3 )
-                        verify( p.first["x"].number() == 10 );
-                    else
-                        ASSERT( 0 );
-                    num++;
-                }
-
-
-                ASSERT_EQUALS( 0 , sorter.numFiles() );
-            }
-        };
-
-        class Basic2 {
-        public:
-            void run() {
-                BSONObjExternalSorter sorter( indexInterfaceForTheseTests, BSONObj() , 10 );
-                sorter.add( BSON( "x" << 10 ) , 5  , 11 );
-                sorter.add( BSON( "x" << 2 ) , 3 , 1 );
-                sorter.add( BSON( "x" << 5 ) , 6 , 1 );
-                sorter.add( BSON( "x" << 5 ) , 7 , 1 );
-
-                sorter.sort();
-
-                auto_ptr<BSONObjExternalSorter::Iterator> i = sorter.iterator();
-                int num=0;
-                while ( i->more() ) {
-                    pair<BSONObj,DiskLoc> p = i->next();
-                    if ( num == 0 ) {
-                        verify( p.first["x"].number() == 2 );
-                        ASSERT_EQUALS( p.second.toString() , "3:1" );
-                    }
-                    else if ( num <= 2 )
-                        verify( p.first["x"].number() == 5 );
-                    else if ( num == 3 ) {
-                        verify( p.first["x"].number() == 10 );
-                        ASSERT_EQUALS( p.second.toString() , "5:b" );
-                    }
-                    else
-                        ASSERT( 0 );
-                    num++;
-                }
-
-            }
-        };
-
-        class Basic3 {
-        public:
-            void run() {
-                BSONObjExternalSorter sorter( indexInterfaceForTheseTests, BSONObj() , 10 );
-                sorter.sort();
-
-                auto_ptr<BSONObjExternalSorter::Iterator> i = sorter.iterator();
-                verify( ! i->more() );
-
-            }
-        };
-
-
-        class ByDiskLock {
-        public:
-            void run() {
-                BSONObjExternalSorter sorter(indexInterfaceForTheseTests);
-                sorter.add( BSON( "x" << 10 ) , 5  , 4);
-                sorter.add( BSON( "x" << 2 ) , 3 , 0 );
-                sorter.add( BSON( "x" << 5 ) , 6 , 2 );
-                sorter.add( BSON( "x" << 5 ) , 7 , 3 );
-                sorter.add( BSON( "x" << 5 ) , 2 , 1 );
-
-                sorter.sort();
-
-                auto_ptr<BSONObjExternalSorter::Iterator> i = sorter.iterator();
-                int num=0;
-                while ( i->more() ) {
-                    pair<BSONObj,DiskLoc> p = i->next();
-                    if ( num == 0 )
-                        verify( p.first["x"].number() == 2 );
-                    else if ( num <= 3 ) {
-                        verify( p.first["x"].number() == 5 );
-                    }
-                    else if ( num == 4 )
-                        verify( p.first["x"].number() == 10 );
-                    else
-                        ASSERT( 0 );
-                    ASSERT_EQUALS( num , p.second.getOfs() );
-                    num++;
-                }
-
-
-            }
-        };
-
-
-        class Big1 {
-        public:
-            void run() {
-                BSONObjExternalSorter sorter( indexInterfaceForTheseTests, BSONObj() , 2000 );
-                for ( int i=0; i<10000; i++ ) {
-                    sorter.add( BSON( "x" << rand() % 10000 ) , 5  , i );
-                }
-
-                sorter.sort();
-
-                auto_ptr<BSONObjExternalSorter::Iterator> i = sorter.iterator();
-                int num=0;
-                double prev = 0;
-                while ( i->more() ) {
-                    pair<BSONObj,DiskLoc> p = i->next();
-                    num++;
-                    double cur = p.first["x"].number();
-                    verify( cur >= prev );
-                    prev = cur;
-                }
-                verify( num == 10000 );
-            }
-        };
-
-        class Big2 {
-        public:
-            void run() {
-                const int total = 100000;
-                BSONObjExternalSorter sorter( indexInterfaceForTheseTests, BSONObj() , total * 2 );
-                for ( int i=0; i<total; i++ ) {
-                    sorter.add( BSON( "a" << "b" ) , 5  , i );
-                }
-
-                sorter.sort();
-
-                auto_ptr<BSONObjExternalSorter::Iterator> i = sorter.iterator();
-                int num=0;
-                double prev = 0;
-                while ( i->more() ) {
-                    pair<BSONObj,DiskLoc> p = i->next();
-                    num++;
-                    double cur = p.first["x"].number();
-                    verify( cur >= prev );
-                    prev = cur;
-                }
-                verify( num == total );
-                ASSERT( sorter.numFiles() > 2 );
-            }
-        };
-
-
-        class Big3 {
-        public:
-            void run() {
-                const int total = 1000 * 1000;
-                BSONObjExternalSorter sorter( indexInterfaceForTheseTests, BSONObj() , total * 2 );
-                for ( int i=0; i<total; i++ ) {
-                    sorter.add( BSON( "abcabcabcabd" << "basdasdasdasdasdasdadasdasd" << "x" << i ) , 5  , i );
-                }
-
-                sorter.sort();
-
-                auto_ptr<BSONObjExternalSorter::Iterator> i = sorter.iterator();
-                int num=0;
-                double prev = 0;
-                while ( i->more() ) {
-                    pair<BSONObj,DiskLoc> p = i->next();
-                    num++;
-                    double cur = p.first["x"].number();
-                    verify( cur >= prev );
-                    prev = cur;
-                }
-                verify( num == total );
-                ASSERT( sorter.numFiles() > 2 );
-            }
-        };
-
-
-        class D1 {
-        public:
-            void run() {
-
-                BSONObjBuilder b;
-                b.appendNull("");
-                BSONObj x = b.obj();
-
-                BSONObjExternalSorter sorter(indexInterfaceForTheseTests);
-                sorter.add(x, DiskLoc(3,7));
-                sorter.add(x, DiskLoc(4,7));
-                sorter.add(x, DiskLoc(2,7));
-                sorter.add(x, DiskLoc(1,7));
-                sorter.add(x, DiskLoc(3,77));
-
-                sorter.sort();
-
-                auto_ptr<BSONObjExternalSorter::Iterator> i = sorter.iterator();
-                while( i->more() ) {
-                    BSONObjExternalSorter::Data d = i->next();
-                    /*cout << d.second.toString() << endl;
-                    cout << d.first.objsize() << endl;
-                    cout<<"SORTER next:" << d.first.toString() << endl;*/
-                }
-            }
-        };
-    }
-
     class CompatBSON {
     public:
 
@@ -1916,7 +1482,6 @@ namespace JsobjTests {
             ASSERT_EQUALS(obj, arr);
 
             BSONObj o = BSON( "obj" << obj << "arr" << arr << "arr2" << BSONArray(obj) );
-            keyTest(o);
 
             ASSERT_EQUALS(o["obj"].type(), Object);
             ASSERT_EQUALS(o["arr"].type(), Array);
@@ -2128,7 +1693,6 @@ namespace JsobjTests {
         void run() {
             BSONObj x = BSON( "a" << BSON( "b" << 1 ) );
             BSONObj y = BSON( "a" << BSON( "b" << 1.0 ) );
-            keyTest(x); keyTest(y);
             ASSERT_EQUALS( x , y );
             ASSERT_EQUALS( 0 , x.woCompare( y ) );
         }
@@ -2377,14 +1941,6 @@ namespace JsobjTests {
             add< MinMaxElementTest >();
             add< ComparatorTest >();
             add< ExtractFieldsTest >();
-            add< external_sort::Basic1 >();
-            add< external_sort::Basic2 >();
-            add< external_sort::Basic3 >();
-            add< external_sort::ByDiskLock >();
-            add< external_sort::Big1 >();
-            add< external_sort::Big2 >();
-            add< external_sort::Big3 >();
-            add< external_sort::D1 >();
             add< CompatBSON >();
             add< CompareDottedFieldNamesTest >();
             add< CompareDottedArrayFieldNamesTest >();

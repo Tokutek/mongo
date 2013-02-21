@@ -20,15 +20,14 @@
 #include "pch.h"
 
 #include "dbtests.h"
-#include "../util/base64.h"
-#include "../util/array.h"
-#include "../util/text.h"
-#include "../util/queue.h"
-#include "../util/paths.h"
-#include "../util/stringutils.h"
-#include "../util/compress.h"
-#include "../util/time_support.h"
-#include "../db/db.h"
+#include "mongo/db/db.h"
+#include "mongo/util/base64.h"
+#include "mongo/util/array.h"
+#include "mongo/util/text.h"
+#include "mongo/util/queue.h"
+#include "mongo/util/paths.h"
+#include "mongo/util/stringutils.h"
+#include "mongo/util/time_support.h"
 
 namespace BasicTests {
 
@@ -716,20 +715,6 @@ namespace BasicTests {
         }
     };
 
-    struct CompressionTest1 { 
-        void run() { 
-            const char * c = "this is a test";
-            std::string s;
-            size_t len = compress(c, strlen(c)+1, &s);
-            verify( len > 0 );
-            
-            std::string out;
-            bool ok = uncompress(s.c_str(), s.size(), &out);
-            verify(ok);
-            verify( strcmp(out.c_str(), c) == 0 );
-        }
-    } ctest1;
-
     /** Simple tests for log tees. */
     class LogTee {
     public:
@@ -813,8 +798,6 @@ namespace BasicTests {
             add< HostAndPortTests >();
             add< RelativePathTest >();
             add< CmdLineParseConfigTest >();
-
-            add< CompressionTest1 >();
 
             add< LogTee >();
         }

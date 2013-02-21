@@ -78,8 +78,22 @@ namespace mongo {
         }
 
         enum MaxNsLenValue { MaxNsLen = 128 };
+
     private:
         char buf[MaxNsLen];
     };
+
+    inline bool isValidNS( const string &ns ) {
+        // TODO: should check for invalid characters
+
+        size_t idx = ns.find( '.' );
+        if ( idx == string::npos )
+            return false;
+
+        if ( idx == ns.size() - 1 )
+            return false;
+
+        return true;
+    }
 
 } // namespace mongo

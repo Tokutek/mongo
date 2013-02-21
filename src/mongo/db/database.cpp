@@ -27,7 +27,16 @@
 
 namespace mongo {
 
-    //bool Database::_openAllFiles = true;
+#ifdef _WIN32
+    string dbpath = "\\data\\db\\";
+#else
+    string dbpath = "/data/db/";
+#endif
+
+    DatabaseHolder _dbHolder;
+    DatabaseHolder& dbHolderUnchecked() {
+        return _dbHolder;
+    }
 
     void assertDbAtLeastReadLocked(const Database *db) { 
         if( db ) { 

@@ -17,18 +17,16 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-#include "../db/repl.h"
-
-#include "../db/db.h"
-#include "../db/instance.h"
-#include "../db/json.h"
-
-#include "dbtests.h"
-#include "../db/oplog.h"
-
+#include "mongo/pch.h"
+#include "mongo/db/repl.h"
+#include "mongo/db/db.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/json.h"
+#include "mongo/db/oplog.h"
+#include "mongo/db/ops/insert.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/bgsync.h"
+#include "mongo/dbtests/dbtests.h"
 
 namespace mongo {
     void createOplog();
@@ -131,7 +129,7 @@ namespace ReplSetTests {
         static void insert( const BSONObj &o, bool god = false ) {
             Lock::DBWrite lk(ns());
             Client::Context ctx( ns() );
-            theDataFileMgr.insert( ns(), o.objdata(), o.objsize(), god );
+            insertObject( ns(), o );
         }
 
         BSONObj findOne( const BSONObj &query = BSONObj() ) const {
@@ -147,7 +145,8 @@ namespace ReplSetTests {
                 return;
             }
 
-            dropCollection( string(ns()), errmsg, result );
+            ::abort();
+            // dropCollection( string(ns()), errmsg, result );
         }
         void setup() {
             // setup background sync instance
@@ -279,7 +278,8 @@ namespace ReplSetTests {
         void create() {
             Client::Context c(_cappedNs);
             string err;
-            ASSERT(userCreateNS( _cappedNs.c_str(), fromjson( spec() ), err, false ));
+            //ASSERT(userCreateNS( _cappedNs.c_str(), fromjson( spec() ), err, false ));
+            ::abort();
         }
 
         void dropCapped() {
@@ -287,7 +287,8 @@ namespace ReplSetTests {
             if (nsdetails(_cappedNs.c_str()) != NULL) {
                 string errmsg;
                 BSONObjBuilder result;
-                dropCollection( string(_cappedNs), errmsg, result );
+                ::abort();
+                //dropCollection( string(_cappedNs), errmsg, result );
             }
         }
 
@@ -354,8 +355,7 @@ namespace ReplSetTests {
         void insert() {
             Client::Context ctx( cappedNs() );
             BSONObj o = BSON(GENOID << "x" << 456);
-            DiskLoc loc = theDataFileMgr.insert( cappedNs().c_str(), o.objdata(), o.objsize(), false );
-            verify(!loc.isNull());
+            insertObject( cappedNs().c_str(), o );
         }
     public:
         virtual ~CappedUpdate() {}

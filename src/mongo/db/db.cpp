@@ -62,17 +62,6 @@
 
 namespace mongo {
 
-#ifdef _WIN32
-    string dbpath = "\\data\\db\\";
-#else
-    string dbpath = "/data/db/";
-#endif
-
-    DatabaseHolder _dbHolder;
-    DatabaseHolder& dbHolderUnchecked() {
-        return _dbHolder;
-    }
-
     /* only off if --nohints */
     extern bool useHints;
 

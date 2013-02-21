@@ -456,8 +456,6 @@ test = testEnv.Install(
 if len(testEnv.subst('$PROGSUFFIX')):
     testEnv.Alias( "test", "#/${PROGPREFIX}test${PROGSUFFIX}" )
 
-env.Install( '#/', testEnv.Program( "perftest", [ "dbtests/perf/perftest.cpp" ], LIBDEPS=["serveronly", "coreserver", "coredb", "testframework", "notmongodormongos" ] ) )
-
 # --- sniffer ---
 mongosniff_built = False
 if darwin or env["_HAVEPCAP"]:
@@ -544,7 +542,6 @@ for t in ["mongo" + x for x in normalTools] + ["mongofiles", "bsondump", "mongop
     installBinary( env, t )
     env.Alias("tools", '#/' + add_exe(t))
 
-env.Alias("tools", "#/" + add_exe("perftest"))
 env.Alias("tools", "#/" + add_exe("mongobridge"))
 
 if mongosniff_built:

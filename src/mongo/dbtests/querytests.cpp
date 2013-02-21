@@ -16,22 +16,20 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
-#include "../db/ops/query.h"
-#include "../db/scanandorder.h"
-
-#include "../db/dbhelpers.h"
-#include "../db/clientcursor.h"
 #include "mongo/client/dbclientcursor.h"
-
-#include "../db/instance.h"
-#include "../db/json.h"
-#include "../db/lasterror.h"
-
-#include "../util/timer.h"
-
-#include "dbtests.h"
+#include "mongo/db/scanandorder.h"
+#include "mongo/db/dbhelpers.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/json.h"
+#include "mongo/db/lasterror.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/insert.h"
+#include "mongo/db/ops/query.h"
+#include "mongo/dbtests/dbtests.h"
+#include "mongo/util/timer.h"
 
 namespace mongo {
     extern int __findingStartInitialTimeout;
@@ -50,12 +48,10 @@ namespace QueryTests {
         }
         ~Base() {
             try {
-                boost::shared_ptr<Cursor> c = theDataFileMgr.findAll( ns() );
-                vector< DiskLoc > toDelete;
-                for(; c->ok(); c->advance() )
-                    toDelete.push_back( c->currLoc() );
-                for( vector< DiskLoc >::iterator i = toDelete.begin(); i != toDelete.end(); ++i )
-                    theDataFileMgr.deleteRecord( ns(), i->rec(), *i, false );
+                boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() );
+                for(; c->ok(); c->advance() ) {
+                    deleteOneObject( nsdetails(ns()), c->currPK(), c->current() );
+                }
                 DBDirectClient cl;
                 cl.dropIndexes( ns() );
             }
@@ -75,13 +71,13 @@ namespace QueryTests {
             BSONObj o = b.done();
             stringstream indexNs;
             indexNs << "unittests.system.indexes";
-            theDataFileMgr.insert( indexNs.str().c_str(), o.objdata(), o.objsize() );
+            insertObject( indexNs.str().c_str(), o );
         }
         static void insert( const char *s ) {
             insert( fromjson( s ) );
         }
         static void insert( const BSONObj &o ) {
-            theDataFileMgr.insert( ns(), o.objdata(), o.objsize() );
+            insertObject( ns(), o );
         }
     };
 
@@ -97,8 +93,8 @@ namespace QueryTests {
             // Check findOne() returning object.
             ASSERT( Helpers::findOne( ns(), query, ret, true ) );
             ASSERT_EQUALS( string( "b" ), ret.firstElement().fieldName() );
-            // Cross check with findOne() returning location.
-            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, true ).obj() );
+            // Cross check with other (redundant) findOne() returning object.
+            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, true ) );
         }
     };
     
@@ -111,19 +107,19 @@ namespace QueryTests {
 
             // Check findOne() returning object, allowing unindexed scan.
             ASSERT( Helpers::findOne( ns(), query, ret, false ) );
-            // Check findOne() returning location, allowing unindexed scan.
-            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, false ).obj() );
+            // Check other findOne() returning object, allowing unindexed scan.
+            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, false ) );
             
             // Check findOne() returning object, requiring indexed scan without index.
             ASSERT_THROWS( Helpers::findOne( ns(), query, ret, true ), MsgAssertionException );
-            // Check findOne() returning location, requiring indexed scan without index.
+            // Check other findOne() returning object, requiring indexed scan without index.
             ASSERT_THROWS( Helpers::findOne( ns(), query, true ), MsgAssertionException );
 
             addIndex( BSON( "b" << 1 ) );
             // Check findOne() returning object, requiring indexed scan with index.
             ASSERT( Helpers::findOne( ns(), query, ret, false ) );
-            // Check findOne() returning location, requiring indexed scan with index.
-            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, false ).obj() );
+            // Check other findOne() returning object, requiring indexed scan with index.
+            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, false ) );
         }
     };
     
@@ -146,7 +142,7 @@ namespace QueryTests {
             BSONObj ret;
             ASSERT( Helpers::findOne( ns(), query, ret, false ) );
             ASSERT( ret.isEmpty() );
-            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, false ).obj() );
+            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, false ) );
         }
     };
     
@@ -996,7 +992,8 @@ namespace QueryTests {
             Client::WriteContext ctx( "unittests" );
 
             // note that extents are always at least 4KB now - so this will get rounded up a bit.
-            ASSERT( userCreateNS( ns() , fromjson( "{ capped : true , size : 2000 }" ) , err , false ) );
+            //ASSERT( userCreateNS( ns() , fromjson( "{ capped : true , size : 2000 }" ) , err , false ) );
+            ::abort();
             for ( int i=0; i<200; i++ ) {
                 insertNext();
 //                cout << count() << endl;
@@ -1054,10 +1051,10 @@ namespace QueryTests {
             ASSERT( Helpers::findOne( ns() , BSON( "_id" << 20 ) , res , true ) );
             ASSERT_EQUALS( 40 , res["x"].numberInt() );
 
-            ASSERT( Helpers::findById( cc(), ns() , BSON( "_id" << 20 ) , res ) );
+            ASSERT( Helpers::findById( ns() , BSON( "_id" << 20 ) , res ) );
             ASSERT_EQUALS( 40 , res["x"].numberInt() );
 
-            ASSERT( ! Helpers::findById( cc(), ns() , BSON( "_id" << 200 ) , res ) );
+            ASSERT( ! Helpers::findById( ns() , BSON( "_id" << 200 ) , res ) );
 
             unsigned long long slow , fast;
 
@@ -1073,7 +1070,7 @@ namespace QueryTests {
             {
                 Timer t;
                 for ( int i=0; i<n; i++ ) {
-                    ASSERT( Helpers::findById( cc(), ns() , BSON( "_id" << 20 ) , res ) );
+                    ASSERT( Helpers::findById( ns() , BSON( "_id" << 20 ) , res ) );
                 }
                 fast = t.micros();
             }
@@ -1101,7 +1098,7 @@ namespace QueryTests {
 
             BSONObj res;
             for ( int i=0; i<1000; i++ ) {
-                bool found = Helpers::findById( cc(), ns() , BSON( "_id" << i ) , res );
+                bool found = Helpers::findById( ns() , BSON( "_id" << i ) , res );
                 ASSERT_EQUALS( i % 2 , int(found) );
             }
 
@@ -1519,10 +1516,10 @@ namespace QueryTests {
                 Testable t( 0, 0, BSON( "a" << 1 ), frs );
                 ASSERT_EQUALS( 0U, t.approxSize() );
                 BSONObj o = BSON( "a" << 1 );
-                t.add( o, 0 );
+                t.add( o );
                 ASSERT( (int)t.approxSize() > o.objsize() );
 
-                t.add( o, 0 );
+                t.add( o );
                 ASSERT( (int)t.approxSize() > 2 * o.objsize() );
 
                 assertNumFilled( 2, t );
@@ -1532,23 +1529,17 @@ namespace QueryTests {
         class LimitOne : public Base {
         public:
             void run() {
-                runWithDiskLoc( 0 );
-                DiskLoc loc;
-                runWithDiskLoc( &loc );
-            }
-        private:
-            void runWithDiskLoc( const DiskLoc *loc ) {
                 FieldRangeSet frs( "n/a", BSONObj(), true, true );
                 Testable t( 0, 1, BSON( "a" << 1 ), frs );
                 ASSERT_EQUALS( 0U, t.approxSize() );
-                t.add( BSON( "a" << 3 ), loc );
+                t.add( BSON( "a" << 3 ) );
                 unsigned smallSize = t.approxSize();
 
-                t.add( BSON( "a" << 2 << "extra" << "read all about it" ), loc );
+                t.add( BSON( "a" << 2 << "extra" << "read all about it" ) );
                 unsigned largeSize = t.approxSize();
                 ASSERT( largeSize > smallSize );
 
-                t.add( BSON( "a" << 1 ), loc );
+                t.add( BSON( "a" << 1 ) );
                 ASSERT_EQUALS( smallSize, t.approxSize() );
 
                 assertNumFilled( 1, t );

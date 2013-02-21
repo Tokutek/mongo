@@ -17,35 +17,35 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Where IndexDetails defined.
-#include "pch.h"
-#include "../db/namespace.h"
-
-#include "../db/db.h"
-#include "../db/json.h"
+#include "mongo/pch.h"
+#include "mongo/db/namespace.h"
+#include "mongo/db/db.h"
+#include "mongo/db/dbhelpers.h"
+#include "mongo/db/json.h"
 #include "mongo/db/queryutil.h"
 
-#include "dbtests.h"
+#include "mongo/dbtests/dbtests.h"
 
 namespace NamespaceTests {
-
-    const int MinExtentSize = 4096;
 
     namespace IndexDetailsTests {
         class Base {
             Lock::GlobalWrite lk;
             Client::Context _context;
         public:
-            Base() : _context(ns()) {
+            // TODO: Give a valid info object to _id constructor
+            Base() : _context(ns()), id_(BSONObj()) {
             }
             virtual ~Base() {
-                if ( id_.info.isNull() )
+                if ( id_.info().isEmpty() )
                     return;
-                theDataFileMgr.deleteRecord( ns(), id_.info.rec(), id_.info );
-                ASSERT( theDataFileMgr.findAll( ns() )->eof() );
+                // TODO: Drop this index
+                ::abort();
+                ASSERT( Helpers::findTableScan( ns(), BSONObj() )->eof() );
             }
         protected:
             void create( bool sparse = false ) {
+#if 0
                 NamespaceDetailsTransient::get( ns() ).deletedIndex();
                 BSONObjBuilder builder;
                 builder.append( "ns", ns() );
@@ -56,6 +56,8 @@ namespace NamespaceTests {
                 id_.info = theDataFileMgr.insert( ns(), bobj.objdata(), bobj.objsize() );
                 // head not needed for current tests
                 // idx_.head = BtreeBucket::addHead( id_ );
+#endif
+                ::abort();
             }
             static const char* ns() {
                 return "unittests.indexdetailstests";
@@ -966,36 +968,19 @@ namespace NamespaceTests {
                 string s( ns() );
                 string errmsg;
                 BSONObjBuilder result;
-                dropCollection( s, errmsg, result );
+                // TODO: Drop the collection
+                //dropCollection( s, errmsg, result );
+                ::abort();
             }
         protected:
             void create() {
                 Lock::GlobalWrite lk;
                 string err;
-                ASSERT( userCreateNS( ns(), fromjson( spec() ), err, false ) );
+                //ASSERT( userCreateNS( ns(), fromjson( spec() ), err, false ) );
+                ::abort(); // TODO: Implement userCreateNS or something equivalent
             }
             virtual string spec() const {
                 return "{\"capped\":true,\"size\":512,\"$nExtents\":1}";
-            }
-            int nRecords() const {
-                int count = 0;
-                for ( DiskLoc i = nsd()->firstExtent; !i.isNull(); i = i.ext()->xnext ) {
-                    int fileNo = i.ext()->firstRecord.a();
-                    if ( fileNo == -1 )
-                        continue;
-                    for ( int j = i.ext()->firstRecord.getOfs(); j != DiskLoc::NullOfs;
-                          j = DiskLoc( fileNo, j ).rec()->nextOfs() ) {
-                        ++count;
-                    }
-                }
-                ASSERT_EQUALS( count, nsd()->stats.nrecords );
-                return count;
-            }
-            int nExtents() const {
-                int count = 0;
-                for ( DiskLoc i = nsd()->firstExtent; !i.isNull(); i = i.ext()->xnext )
-                    ++count;
-                return count;
             }
             static int min( int a, int b ) {
                 return a < b ? a : b;
@@ -1004,7 +989,7 @@ namespace NamespaceTests {
                 return ns_;
             }
             NamespaceDetails *nsd() const {
-                return nsdetails( ns() )->writingWithExtra();
+                return nsdetails( ns() );
             }
             NamespaceDetailsTransient &nsdt() const {
                 return NamespaceDetailsTransient::get( ns() );
@@ -1024,174 +1009,21 @@ namespace NamespaceTests {
             void run() {
                 create();
                 ASSERT( nsd() );
-                ASSERT_EQUALS( 0, nRecords() );
-                ASSERT( nsd()->firstExtent == nsd()->capExtent );
-                DiskLoc initial = DiskLoc();
-                initial.setInvalid();
-                ASSERT( initial == nsd()->capFirstNewRecord );
             }
         };
 
-        class SingleAlloc : public Base {
-        public:
-            void run() {
-                create();
-                BSONObj b = bigObj();
-                ASSERT( !theDataFileMgr.insert( ns(), b.objdata(), b.objsize() ).isNull() );
-                ASSERT_EQUALS( 1, nRecords() );
-            }
-        };
-
-        class Realloc : public Base {
-        public:
-            void run() {
-                create();
-
-                const int N = 20;
-                const int Q = 16; // these constants depend on the size of the bson object, the extent size allocated by the system too
-                DiskLoc l[ N ];
-                for ( int i = 0; i < N; ++i ) {
-					BSONObj b = bigObj(true);
-                    l[ i ] = theDataFileMgr.insert( ns(), b.objdata(), b.objsize() );
-                    ASSERT( !l[ i ].isNull() );
-                    ASSERT( nRecords() <= Q );
-                    //ASSERT_EQUALS( 1 + i % 2, nRecords() );
-                    if ( i >= 16 )
-                        ASSERT( l[ i ] == l[ i - Q] );
-                }
-            }
-        };
-
-        class TwoExtent : public Base {
-        public:
-            void run() {
-                create();
-                ASSERT_EQUALS( 2, nExtents() );
-
-                BSONObj b = bigObj();
-
-                DiskLoc l[ 8 ];
-                for ( int i = 0; i < 8; ++i ) {
-                    l[ i ] = theDataFileMgr.insert( ns(), b.objdata(), b.objsize() );
-                    ASSERT( !l[ i ].isNull() );
-                    //ASSERT_EQUALS( i < 2 ? i + 1 : 3 + i % 2, nRecords() );
-                    //if ( i > 3 )
-                    //    ASSERT( l[ i ] == l[ i - 4 ] );
-                }
-                ASSERT( nRecords() == 8 );
-
-                // Too big
-                BSONObjBuilder bob;
-                bob.append( "a", string( MinExtentSize + 500, 'a' ) ); // min extent size is now 4096
-                BSONObj bigger = bob.done();
-                ASSERT( theDataFileMgr.insert( ns(), bigger.objdata(), bigger.objsize() ).isNull() );
-                ASSERT_EQUALS( 0, nRecords() );
-            }
-        private:
-            virtual string spec() const {
-                return "{\"capped\":true,\"size\":512,\"$nExtents\":2}";
-            }
-        };
-
-        /* test  NamespaceDetails::cappedTruncateAfter(const char *ns, DiskLoc loc)
+        /* test  NamespaceDetails::cappedTruncateAfter
         */
         class TruncateCapped : public Base {
             virtual string spec() const {
                 return "{\"capped\":true,\"size\":512,\"$nExtents\":2}";
             }
             void pass(int p) {
-                create();
-                ASSERT_EQUALS( 2, nExtents() );
-
-                BSONObj b = bigObj(true);
-
-                int N = MinExtentSize / b.objsize() * nExtents() + 5;
-                int T = N - 4;
-
-                DiskLoc truncAt;
-                //DiskLoc l[ 8 ];
-                for ( int i = 0; i < N; ++i ) {
-					BSONObj bb = bigObj(true);
-                    DiskLoc a = theDataFileMgr.insert( ns(), bb.objdata(), bb.objsize() );
-                    if( T == i )
-                        truncAt = a;
-                    ASSERT( !a.isNull() );
-                    /*ASSERT_EQUALS( i < 2 ? i + 1 : 3 + i % 2, nRecords() );
-                    if ( i > 3 )
-                        ASSERT( l[ i ] == l[ i - 4 ] );*/
-                }
-                ASSERT( nRecords() < N );
-
-                NamespaceDetails *nsd = nsdetails(ns());
-
-                DiskLoc last, first;
-                {
-                    ReverseCappedCursor c(nsd);
-                    last = c.currLoc();
-                    ASSERT( !last.isNull() );
-                }
-                {
-                    scoped_ptr<ForwardCappedCursor> c( ForwardCappedCursor::make( nsd ) );
-                    first = c->currLoc();
-                    ASSERT( !first.isNull() );
-                    ASSERT( first != last ) ;
-                }
-
-                nsd->cappedTruncateAfter(ns(), truncAt, false);
-                ASSERT_EQUALS( nsd->stats.nrecords , 28 );
-
-                {
-                    scoped_ptr<ForwardCappedCursor> c( ForwardCappedCursor::make( nsd ) );
-                    ASSERT( first == c->currLoc() );
-                }
-                {
-                    ReverseCappedCursor c(nsd);
-                    ASSERT( last != c.currLoc() ); // old last should be deleted
-                    ASSERT( !last.isNull() );
-                }
-
-                // Too big
-                BSONObjBuilder bob;
-				bob.appendOID("_id", 0, true);
-                bob.append( "a", string( MinExtentSize + 300, 'a' ) );
-                BSONObj bigger = bob.done();
-                ASSERT( theDataFileMgr.insert( ns(), bigger.objdata(), bigger.objsize() ).isNull() );
-                ASSERT_EQUALS( 0, nRecords() );
+                log() << "******** NOT RUNNING TruncateCapped test yet ************" << endl;
             }
         public:
             void run() {
-//                log() << "******** NOT RUNNING TruncateCapped test yet ************" << endl;
                 pass(0);
-            }
-        };
-
-        class Migrate : public Base {
-        public:
-            void run() {
-                create();
-                nsd()->deletedList[ 2 ] = nsd()->cappedListOfAllDeletedRecords().drec()->nextDeleted().drec()->nextDeleted();
-                nsd()->cappedListOfAllDeletedRecords().drec()->nextDeleted().drec()->nextDeleted().writing() = DiskLoc();
-                nsd()->cappedLastDelRecLastExtent().Null();
-                NamespaceDetails *d = nsd();
-                zero( &d->capExtent );
-                zero( &d->capFirstNewRecord );
-
-                nsd();
-
-                ASSERT( nsd()->firstExtent == nsd()->capExtent );
-                ASSERT( nsd()->capExtent.getOfs() != 0 );
-                ASSERT( !nsd()->capFirstNewRecord.isValid() );
-                int nDeleted = 0;
-                for ( DiskLoc i = nsd()->cappedListOfAllDeletedRecords(); !i.isNull(); i = i.drec()->nextDeleted(), ++nDeleted );
-                ASSERT_EQUALS( 10, nDeleted );
-                ASSERT( nsd()->cappedLastDelRecLastExtent().isNull() );
-            }
-        private:
-            static void zero( DiskLoc *d ) {
-                memset( d, 0, sizeof( DiskLoc ) );
-            }
-            virtual string spec() const {
-                return "{\"capped\":true,\"size\":512,\"$nExtents\":10}";
             }
         };
 
@@ -1330,12 +1162,7 @@ namespace NamespaceTests {
             add< IndexSpecTests::Suitability >();
             add< IndexSpecTests::NumericFieldSuitability >();
             add< NamespaceDetailsTests::Create >();
-            add< NamespaceDetailsTests::SingleAlloc >();
-            add< NamespaceDetailsTests::Realloc >();
-            add< NamespaceDetailsTests::TwoExtent >();
             add< NamespaceDetailsTests::TruncateCapped >();
-            add< NamespaceDetailsTests::Migrate >();
-            //            add< NamespaceDetailsTests::BigCollection >();
             add< NamespaceDetailsTests::Size >();
             add< NamespaceDetailsTests::SetIndexIsMultikey >();
             add< NamespaceDetailsTransientTests::ClearQueryCache >();

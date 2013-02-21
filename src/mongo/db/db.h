@@ -17,10 +17,11 @@
 #pragma once
 
 #include "mongo/pch.h"
-#include "../util/net/message.h"
-#include "curop.h"
-#include "client.h"
-#include "databaseholder.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/client.h"
+#include "mongo/db/databaseholder.h"
+#include "mongo/db/namespace.h"
+#include "mongo/util/net/message.h"
 
 namespace mongo {
 

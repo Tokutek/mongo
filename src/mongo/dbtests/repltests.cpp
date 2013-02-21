@@ -17,18 +17,17 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-#include "../db/repl.h"
-
-#include "../db/db.h"
-#include "../db/instance.h"
-#include "../db/json.h"
-
-#include "dbtests.h"
-#include "../db/oplog.h"
-#include "../db/queryoptimizer.h"
-
-#include "../db/repl/rs.h"
+#include "mongo/pch.h"
+#include "mongo/db/repl.h"
+#include "mongo/db/db.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/json.h"
+#include "mongo/db/oplog.h"
+#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/insert.h"
+#include "mongo/db/repl/rs.h"
+#include "mongo/dbtests/dbtests.h"
 
 namespace mongo {
     void createOplog();
@@ -47,7 +46,6 @@ namespace ReplTests {
         Base() : _context( ns() ) {
             replSettings.master = true;
             createOplog();
-            ensureHaveIdIndex( ns() );
         }
         ~Base() {
             try {
@@ -94,7 +92,7 @@ namespace ReplTests {
             int count = 0;
             Lock::GlobalWrite lk;
             Client::Context ctx( ns() );
-            boost::shared_ptr<Cursor> c = theDataFileMgr.findAll( ns() );
+            boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() );
             for(; c->ok(); c->advance(), ++count ) {
 //                cout << "obj: " << c->current().toString() << endl;
             }
@@ -104,7 +102,7 @@ namespace ReplTests {
             Lock::GlobalWrite lk;
             Client::Context ctx( cllNS() );
             int count = 0;
-            for( boost::shared_ptr<Cursor> c = theDataFileMgr.findAll( cllNS() ); c->ok(); c->advance() )
+            for( boost::shared_ptr<Cursor> c = Helpers::findTableScan( cllNS(), BSONObj() ); c->ok(); c->advance() )
                 ++count;
             return count;
         }
@@ -113,7 +111,7 @@ namespace ReplTests {
             vector< BSONObj > ops;
             {
                 Client::Context ctx( cllNS() );
-                for( boost::shared_ptr<Cursor> c = theDataFileMgr.findAll( cllNS() ); c->ok(); c->advance() )
+                for( boost::shared_ptr<Cursor> c = Helpers::findTableScan( cllNS(), BSONObj() ); c->ok(); c->advance() )
                     ops.push_back( c->current() );
             }
             {
@@ -133,8 +131,7 @@ namespace ReplTests {
         static void printAll( const char *ns ) {
             Lock::GlobalWrite lk;
             Client::Context ctx( ns );
-            boost::shared_ptr<Cursor> c = theDataFileMgr.findAll( ns );
-            vector< DiskLoc > toDelete;
+            boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns, BSONObj() );
             out() << "all for " << ns << endl;
             for(; c->ok(); c->advance() ) {
                 out() << c->current().toString() << endl;
@@ -144,19 +141,15 @@ namespace ReplTests {
         static void deleteAll( const char *ns ) {
             Lock::GlobalWrite lk;
             Client::Context ctx( ns );
-            boost::shared_ptr<Cursor> c = theDataFileMgr.findAll( ns );
-            vector< DiskLoc > toDelete;
+            boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns, BSONObj() );
             for(; c->ok(); c->advance() ) {
-                toDelete.push_back( c->currLoc() );
-            }
-            for( vector< DiskLoc >::iterator i = toDelete.begin(); i != toDelete.end(); ++i ) {
-                theDataFileMgr.deleteRecord( ns, i->rec(), *i, true );
+                deleteOneObject( nsdetails(ns), c->currPK(), c->current() );
             }
         }
         static void insert( const BSONObj &o, bool god = false ) {
             Lock::GlobalWrite lk;
             Client::Context ctx( ns() );
-            theDataFileMgr.insert( ns(), o.objdata(), o.objsize(), god );
+            insertObject( ns(), o );
         }
         static BSONObj wid( const char *json ) {
             class BSONObjBuilder b;
@@ -1086,35 +1079,10 @@ namespace ReplTests {
             FieldRangeSetPair frsp( cllNS(), query );
             BSONObj order = BSON( "$natural" << 1 );
             scoped_ptr<QueryPlan> qp( QueryPlan::make( nsd, -1, frsp, &frsp, query, order ) );
-            scoped_ptr<FindingStartCursor> fsc( FindingStartCursor::make( *qp ) );
-            ASSERT( fsc->done() );
-            ASSERT_EQUALS( 0, fsc->cursor()->current()[ "o" ].Obj()[ "_id" ].Int() );
-        }
-    };
-
-    /** Check unsuccessful yield recovery with FindingStartCursor */
-    class FindingStartCursorYield : public Base {
-    public:
-        void run() {
-            for( int i = 0; i < 10; ++i ) {
-                client()->insert( ns(), BSON( "_id" << i ) );
-            }
-            Date_t ts = client()->query( "local.oplog.$main", Query().sort( BSON( "$natural" << 1 ) ), 1, 4 )->next()[ "ts" ].date();
-            Client::Context ctx( cllNS() );
-            NamespaceDetails *nsd = nsdetails( cllNS() );
-            BSONObjBuilder b;
-            b.appendDate( "$gte", ts );
-            BSONObj query = BSON( "ts" << b.obj() );
-            FieldRangeSetPair frsp( cllNS(), query );
-            BSONObj order = BSON( "$natural" << 1 );
-            scoped_ptr<QueryPlan> qp( QueryPlan::make( nsd, -1, frsp, &frsp, query, order ) );
-            scoped_ptr<FindingStartCursor> fsc( FindingStartCursor::make( *qp ) );
-            ASSERT( !fsc->done() );
-            fsc->next();
-            ASSERT( !fsc->done() );
-            ASSERT( fsc->prepareToYield() );
-            ClientCursor::invalidate( "local.oplog.$main" );
-            ASSERT_THROWS( fsc->recoverFromYield(), MsgAssertionException );
+            ::abort();
+            //scoped_ptr<FindingStartCursor> fsc( /* FindingStartCursor::make( *qp ) */ NULL );
+            //ASSERT( fsc->done() );
+            //ASSERT_EQUALS( 0, fsc->cursor()->current()[ "o" ].Obj()[ "_id" ].Int() );
         }
     };
 
@@ -1234,7 +1202,6 @@ namespace ReplTests {
             add< DatabaseIgnorerBasic >();
             add< DatabaseIgnorerUpdate >();
             add< FindingStartCursorStale >();
-            add< FindingStartCursorYield >();
             add< ReplSetMemberCfgEquality >();
             add< ShouldRetry >();
         }
