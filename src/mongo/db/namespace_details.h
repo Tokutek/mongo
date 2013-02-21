@@ -50,7 +50,9 @@ namespace mongo {
 
     bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication);
 
-    void dropCollection( const string &name, string &errmsg, BSONObjBuilder &result );
+    void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result);
+
+    void dropDatabase(const string &db);
 
     /**
      * Record that a new namespace exists in <dbname>.system.namespaces.
@@ -143,6 +145,7 @@ namespace mongo {
 #endif
         void fillNewIndex(IndexDetails &newIndex);
         void createIndex(const BSONObj &idx_info, bool resetTransient=true);
+        void dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex);
 
         // @return offset in indexes[]
         int findIndexByName(const char *name);

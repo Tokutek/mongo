@@ -503,9 +503,27 @@ namespace mongo {
         }
     }
 
-    void dropCollection( const string &name, string &errmsg, BSONObjBuilder &result ) {
-        // Drop the collection + indexes. The old implementation said something
-        // about cursors. We may need to do something about that.
+    void dropDatabase(const string &db) {
+        tokulog(1) << "dropDatabase(" << name << ")" << endl;
+
+    }
+
+    void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result) {
+        tokulog(1) << "dropCollection(" << name << ", " << errmsg << ", " << ")" << endl;
+        NamespaceDetails *d = nsdetails(name.c_str());
+        if (d == NULL) {
+            return;
+        }
+
+        d->dropIndexes(name.c_str(), "*", errmsg, result, true);
+
+        log(1) << "\t dropIndexes done" << endl;
+
+    }
+
+    void NamespaceDetails::dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex) {
+        tokulog(1) << "dropIndexes(" << ns << ", " << name << ", " << errmsg << ", " << mayDeleteIdIndex << ")" << endl;
+        result.obj();
     }
 
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).
