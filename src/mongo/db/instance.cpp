@@ -823,6 +823,8 @@ namespace mongo {
         }
 
         Lock::DBWrite lk(ns);
+
+        Client::Transaction txn;
                 
         // CONCURRENCY TODO: is being read locked in big log sufficient here?
         // writelock is used to synchronize stepdowns w/ writes
@@ -836,11 +838,13 @@ namespace mongo {
         if( !multi.empty() ) {
             const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
             insertMulti(keepGoing, ns, multi);
+            txn.commit();
             return;
         }
                 
         checkAndInsert(ns, first);
         globalOpCounters.incInsertInWriteLock(1);
+        txn.commit();
         return;
     }
 

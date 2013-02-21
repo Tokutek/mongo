@@ -370,7 +370,6 @@ namespace mongo {
 
     void NamespaceDetails::insert(const char *ns, const BSONObj &obj, bool overwrite) {
         Lock::assertWriteLocked(ns);
-        Client::Transaction txn;
 
         if (overwrite && _indexes.size() > 1) {
             wunimplemented("overwrite inserts on secondary keys right now don't work");
@@ -393,8 +392,6 @@ namespace mongo {
             IndexDetails *index = it->get();
             index->insert(obj, primary_key, overwrite);
         }
-
-        txn.commit();
     }
 
     /* ------------------------------------------------------------------------- */
