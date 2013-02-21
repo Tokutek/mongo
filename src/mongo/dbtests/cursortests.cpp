@@ -72,16 +72,20 @@ namespace CursorTests {
                 int v[] = { 1, 2, 4, 6 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 4 ) );
                 Client::WriteContext ctx( ns );
-                scoped_ptr<IndexCursor> _c( new IndexCursor( nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, 1 ) );
-                IndexCursor &c = *_c.get();
-                ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
-                double expected[] = { 1, 2, 4, 5, 6 };
-                for( int i = 0; i < 5; ++i ) {
-                    ASSERT( c.ok() );
-                    ASSERT_EQUALS( expected[ i ], c.currKey().firstElement().number() );
-                    c.advance();
+                Client::Transaction _transaction;
+                {
+                    scoped_ptr<IndexCursor> _c( new IndexCursor( nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, 1 ) );
+                    IndexCursor &c = *_c.get();
+                    ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
+                    double expected[] = { 1, 2, 4, 5, 6 };
+                    for( int i = 0; i < 5; ++i ) {
+                        ASSERT( c.ok() );
+                        ASSERT_EQUALS( expected[ i ], c.currKey().firstElement().number() );
+                        c.advance();
+                    }
+                    ASSERT( !c.ok() );
                 }
-                ASSERT( !c.ok() );
+                _transaction.commit();
             }
         };
 
@@ -100,16 +104,20 @@ namespace CursorTests {
                 int v[] = { -50, 2, 40, 60, 109, 200 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 6 ) );
                 Client::WriteContext ctx( ns );
-                scoped_ptr<IndexCursor> _c( new IndexCursor(nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, 1 ) );
-                IndexCursor &c = *_c.get();
-                ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
-                double expected[] = { 0, 1, 2, 109 };
-                for( int i = 0; i < 4; ++i ) {
-                    ASSERT( c.ok() );
-                    ASSERT_EQUALS( expected[ i ], c.currKey().firstElement().number() );
-                    c.advance();
+                Client::Transaction _transaction;
+                {
+                    scoped_ptr<IndexCursor> _c( new IndexCursor(nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, 1 ) );
+                    IndexCursor &c = *_c.get();
+                    ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
+                    double expected[] = { 0, 1, 2, 109 };
+                    for( int i = 0; i < 4; ++i ) {
+                        ASSERT( c.ok() );
+                        ASSERT_EQUALS( expected[ i ], c.currKey().firstElement().number() );
+                        c.advance();
+                    }
+                    ASSERT( !c.ok() );
                 }
-                ASSERT( !c.ok() );
+                _transaction.commit();
             }
         };
 
@@ -126,16 +134,20 @@ namespace CursorTests {
                 int v[] = { 1, 2, 4, 6 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 4, -1 ) );
                 Client::WriteContext ctx( ns );
-                scoped_ptr<IndexCursor> _c( new IndexCursor( nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, -1 ) );
-                IndexCursor& c = *_c.get();
-                ASSERT_EQUALS( "IndexCursor a_1 reverse multi", c.toString() );
-                double expected[] = { 6, 5, 4, 2, 1 };
-                for( int i = 0; i < 5; ++i ) {
-                    ASSERT( c.ok() );
-                    ASSERT_EQUALS( expected[ i ], c.currKey().firstElement().number() );
-                    c.advance();
+                Client::Transaction _transaction;
+                {
+                    scoped_ptr<IndexCursor> _c( new IndexCursor( nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, -1 ) );
+                    IndexCursor& c = *_c.get();
+                    ASSERT_EQUALS( "IndexCursor a_1 reverse multi", c.toString() );
+                    double expected[] = { 6, 5, 4, 2, 1 };
+                    for( int i = 0; i < 5; ++i ) {
+                        ASSERT( c.ok() );
+                        ASSERT_EQUALS( expected[ i ], c.currKey().firstElement().number() );
+                        c.advance();
+                    }
+                    ASSERT( !c.ok() );
                 }
-                ASSERT( !c.ok() );
+                _transaction.commit();
             }
         };
 
@@ -163,21 +175,25 @@ namespace CursorTests {
                 // orphan spec for this test.
                 IndexSpec *idxSpec = new IndexSpec( idx() );
                 boost::shared_ptr< FieldRangeVector > frv( new FieldRangeVector( frs, *idxSpec, direction() ) );
-                scoped_ptr<IndexCursor> c( new IndexCursor( nsdetails( ns() ), &nsdetails( ns() )->idx( 1 ), frv, 0, direction() ) );
-                Matcher m( spec );
-                int count = 0;
-                while( c->ok() ) {
-                    ASSERT( m.matches( c->current() ) );
-                    c->advance();
-                    ++count;
-                }
-                int expectedCount = 0;
-                for( vector< BSONObj >::const_iterator i = _objs.begin(); i != _objs.end(); ++i ) {
-                    if ( m.matches( *i ) ) {
-                        ++expectedCount;
+                Client::Transaction _transaction;
+                {
+                    scoped_ptr<IndexCursor> c( new IndexCursor( nsdetails( ns() ), &nsdetails( ns() )->idx( 1 ), frv, 0, direction() ) );
+                    Matcher m( spec );
+                    int count = 0;
+                    while( c->ok() ) {
+                        ASSERT( m.matches( c->current() ) );
+                        c->advance();
+                        ++count;
                     }
+                    int expectedCount = 0;
+                    for( vector< BSONObj >::const_iterator i = _objs.begin(); i != _objs.end(); ++i ) {
+                        if ( m.matches( *i ) ) {
+                            ++expectedCount;
+                        }
+                    }
+                    ASSERT_EQUALS( expectedCount, count );
                 }
-                ASSERT_EQUALS( expectedCount, count );
+                _transaction.commit();
             }
         private:
             vector< BSONObj > _objs;
@@ -272,14 +288,18 @@ namespace CursorTests {
                 FieldRangeSet frs( ns(), BSON( "b" << 3 ), true, true );
                 boost::shared_ptr<FieldRangeVector> frv( new FieldRangeVector( frs, idx, 1 ) );
                 Client::WriteContext ctx( ns() );
-                scoped_ptr<IndexCursor> c( new IndexCursor( nsdetails( ns() ), &nsdetails( ns() )->idx(1), frv, 0, 1 ) );
-                long long initialNscanned = c->nscanned();
-                ASSERT( initialNscanned < 200 );
-                ASSERT( c->ok() );
-                c->advance();
-                ASSERT( c->nscanned() > initialNscanned );
-                ASSERT( c->nscanned() < 200 );
-                ASSERT( c->ok() );
+                Client::Transaction _transaction;
+                {
+                    scoped_ptr<IndexCursor> c( new IndexCursor( nsdetails( ns() ), &nsdetails( ns() )->idx(1), frv, 0, 1 ) );
+                    long long initialNscanned = c->nscanned();
+                    ASSERT( initialNscanned < 200 );
+                    ASSERT( c->ok() );
+                    c->advance();
+                    ASSERT( c->nscanned() > initialNscanned );
+                    ASSERT( c->nscanned() < 200 );
+                    ASSERT( c->ok() );
+                }
+                _transaction.commit();
             }
         };
 
@@ -302,10 +322,14 @@ namespace CursorTests {
                         ASSERT( _cursor );
                         _clientCursor.reset( new ClientCursor( 0, _cursor, ns() ) );
                 }
+                ~Base() {
+                    _transaction.commit();
+                }
             protected:
                 CursorId cursorid() const { return _clientCursor->cursorid(); }
             private:
                 Client::WriteContext _ctx;
+                Client::Transaction _transaction;
                 boost::shared_ptr<Cursor> _cursor;
                 ClientCursor::Holder _clientCursor;
             };
