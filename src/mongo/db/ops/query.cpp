@@ -625,8 +625,7 @@ namespace mongo {
         // Otherwise we default to a snapshot.
         // XXX: TODO Read committed doesn't do what I want it to, so use an
         // "incorrect" but mostly working UNCOMMITTED isolation.
-        Client::Transaction txn(DB_TXN_READ_ONLY |
-                                (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT));
+        Client::Transaction txn((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT));
 
         log(1) << "query beginning read-only transaction. tailable: " << tailable << endl;
         
@@ -775,7 +774,7 @@ namespace mongo {
         
         bool found;
         {
-            Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
+            Client::Transaction txn(DB_TXN_SNAPSHOT);
             found = Helpers::findById( ns, query, resObject );
             txn.commit();
         }
