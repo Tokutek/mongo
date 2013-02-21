@@ -394,10 +394,16 @@ namespace mongo {
         }
 
         // TODO: use put_multiple API
-        int idxNo = 0;
-        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); it++, idxNo++) {
+        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             IndexDetails *index = it->get();
             index->insert(obj, primary_key, overwrite);
+        }
+    }
+
+    void NamespaceDetails::deleteObject(const BSONObj &pk, const BSONObj &obj) {
+        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+            IndexDetails *index = it->get();
+            index->deleteObject(pk, obj);
         }
     }
 

@@ -27,31 +27,10 @@
 namespace mongo {
 
     void deleteOneObject(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj) {
-        uasserted(16439, "I don't know how to delete objects yet, sorry :(");
+        d->deleteObject(pk, obj);
     }
     
-    /* ns:      namespace, e.g. <database>.<collection>
-       pattern: the "where" clause / criteria
-       justOne: stop after 1 match
-       god:     allow access to system namespaces, and don't yield
-    */
-    long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop, bool god) {
-        Client::Transaction txn(DB_TXN_SNAPSHOT);
-
-        if( !god ) {
-            if ( strstr(ns, ".system.") ) {
-                /* note a delete from system.indexes would corrupt the db
-                if done here, as there are pointers into those objects in
-                NamespaceDetails.
-                */
-                uassert(12050, "cannot delete from system namespace", legalClientSystemNS( ns , true ) );
-            }
-            if ( strchr( ns , '$' ) ) {
-                log() << "cannot delete from collection with reserved $ in name: " << ns << endl;
-                uassert( 10100 ,  "cannot delete from collection with reserved $ in name", strchr(ns, '$') == 0 );
-            }
-        }
-
+    long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
         NamespaceDetails *d = nsdetails( ns );
         if ( ! d )
             return 0;
@@ -68,10 +47,10 @@ namespace mongo {
         while ( cc->ok() ) {
             bool match = creal->currentMatches();
 
-            cc->advance();
-            
-            if ( ! match )
+            if (!match) {
+                cc->advance();
                 continue;
+            }
 
             BSONObj pk = cc->currPK();
             BSONObj key = cc->currKey();
@@ -103,12 +82,29 @@ namespace mongo {
             if ( foundAllResults ) {
                 break;
             }
-         
-            if( debug && god && nDeleted == 100 ) 
-                log() << "warning high number of deletes with god=true which could use significant memory" << endl;
+        }
+        return nDeleted;
+    }
+
+    /* ns:      namespace, e.g. <database>.<collection>
+       pattern: the "where" clause / criteria
+       justOne: stop after 1 match
+    */
+    long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
+        if ( strstr(ns, ".system.") ) {
+            /* note a delete from system.indexes would corrupt the db
+               if done here, as there are pointers into those objects in
+               NamespaceDetails.
+            */
+            uassert(12050, "cannot delete from system namespace", legalClientSystemNS( ns , true ) );
+        }
+        if ( strchr( ns , '$' ) ) {
+            log() << "cannot delete from collection with reserved $ in name: " << ns << endl;
+            uassert( 10100 ,  "cannot delete from collection with reserved $ in name", strchr(ns, '$') == 0 );
         }
 
-        txn.commit();
+        long long nDeleted = _deleteObjects(ns, pattern, justOne, logop);
+
         return nDeleted;
     }
 }

@@ -144,15 +144,14 @@ namespace mongo {
         const BSONObj &info() const { return _info; }
 
         void insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite);
-        void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite);
-
+        void deleteObject(const BSONObj &pk, const BSONObj &obj);
         DBC *cursor() const;
 
     private:
         // Open dictionary representing the index on disk.
         DB *_db;
 
-        DB *db() { return _db; };
+        void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite);
 
         /* Info about the index. Stored on disk in the .ns file for this database
          * as a NamespaceDetails object.

@@ -622,31 +622,26 @@ namespace mongo {
         op.debug().query = pattern;
         op.setQuery(pattern);
 
-        //PageFaultRetryableSection s;
-        while ( 1 ) {
-            try {
-                Lock::DBWrite lk(ns);
+        Lock::DBWrite lk(ns);
                 
-                // writelock is used to synchronize stepdowns w/ writes
-                uassert( 10056 ,  "not master", isMasterNs( ns ) );
-                
-                // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-                if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
-                    return;
-                
-                Client::Context ctx(ns);
-                
-                long long n = deleteObjects(ns, pattern, justOne, true);
-                lastError.getSafe()->recordDelete( n );
-                break;
-            }
-            //catch ( PageFaultException& e ) {
-            catch ( ... ) {
-                //LOG(2) << "recordDelete got a PageFaultException" << endl;
-                //e.touch();
-                ::abort();
-            }
+        Client::Transaction txn(DB_TXN_SNAPSHOT);
+
+        // writelock is used to synchronize stepdowns w/ writes
+        uassert( 10056 ,  "not master", isMasterNs( ns ) );
+
+        if (broadcast) {
+            unimplemented("what do broadcast deletes do?");
         }
+                
+        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+        if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
+            return;
+                
+        Client::Context ctx(ns);
+
+        long long n = deleteObjects(ns, pattern, justOne, true);
+        lastError.getSafe()->recordDelete( n );
+        txn.commit();
     }
 
     QueryResult* emptyMoreResult(long long);

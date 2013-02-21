@@ -201,6 +201,7 @@ namespace mongo {
         bool findById(const BSONObj &query, BSONObj &result, bool getKey = true);
 
         void insert(const char *ns, const BSONObj &obj, bool overwrite);
+        void deleteObject(const BSONObj &pk, const BSONObj &obj);
 
     private:
         // Each index (including the _id) index has an IndexDetails that describes it.

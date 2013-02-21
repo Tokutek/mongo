@@ -530,7 +530,7 @@ namespace mongo {
                         else {
                             try {
                                 deletes++;
-                                deleteObjects(d.ns, pattern, /*justone*/true, /*logop*/false, /*god*/true/*, rs.get()*/ );
+                                _deleteObjects(d.ns, pattern, /*justone*/true, /*logop*/false);
                             }
                             catch(...) {
                                 log() << "replSet error rollback delete failed ns:" << d.ns << rsLog;

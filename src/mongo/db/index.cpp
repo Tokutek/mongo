@@ -155,6 +155,26 @@ namespace mongo {
         verify(r == 0);
     }
 
+    void IndexDetails::deleteObject(const BSONObj &pk, const BSONObj &obj) {
+        BSONObjSet keys;
+        getKeysFromObject(obj, keys);
+        for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
+            const BSONObj &key = *ki;
+            const int buflen = key.objsize() + (isIdIndex() ? 0 : pk.objsize());
+            char buf[buflen];
+            memcpy(buf, key.objdata(), key.objsize());
+            if (!isIdIndex()) {
+                memcpy(buf + key.objsize(), pk.objdata(), pk.objsize());
+            }
+            DBT kdbt;
+            kdbt.data = const_cast<void *>(static_cast<const void *>(buf));
+            kdbt.size = buflen;
+            const int flags = DB_DELETE_ANY;
+            int r = _db->del(_db, cc().transaction().txn(), &kdbt, flags);
+            verify(r == 0);
+        }
+    }
+
     // Get a DBC over an index. Must already be in the context of a transction.
     DBC *IndexDetails::cursor() const {
         DBC *cursor;
