@@ -36,7 +36,7 @@ namespace mongo {
         string dbname = indexNamespace();
         tokulog() << "Opening IndexDetails " << dbname << endl;
         // Open the dictionary. Creates it if necessary.
-        int r = storage::db_open(&_db, dbname, keyPattern(), may_create);
+        int r = storage::db_open(&_db, dbname, info, may_create);
         verify(r == 0);
         if (may_create) {
             addNewNamespaceToCatalog(dbname);

@@ -173,12 +173,49 @@ namespace mongo {
             tokulog() << "set db " << db << " descriptor to key pattern: " << key_pattern << endl;
         }
 
-        int db_open(DB **dbp, const string &name, const BSONObj &key_pattern, bool may_create) {
+        int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create) {
             const Client::Transaction &txn = cc().transaction();
             dassert(txn.is_root());
 
+            // TODO: Refactor this option setting code to someplace else. It's here because
+            // the YDB api doesn't allow a db->close to be called before db->open, and we
+            // would leak memory if we chose to do nothing. So we validate all the
+            // options here before db_create + db->open.
+            int basementsize = 65536;
+            TOKU_COMPRESSION_METHOD compression = TOKU_QUICKLZ_METHOD;
+            BSONObj key_pattern = info["key"].Obj();
+            
+            BSONElement e;
+            e = info["basementsize"];
+            if (e.ok() && !e.isNull()) {
+                basementsize = e.numberInt();
+                uassert(16441, "basementsize must be a number > 0.", e.isNumber () && basementsize > 0);
+                tokulog(1) << "db " << name << ", using basement node size " << basementsize << endl;
+            }
+            e = info["compression"];
+            if (e.ok() && !e.isNull()) {
+                std::string str = e.String();
+                if (str == "lzma") {
+                    compression = TOKU_LZMA_METHOD;
+                } else if (str == "quicklz") {
+                    compression = TOKU_QUICKLZ_METHOD;
+                } else if (str == "zlib") {
+                    compression = TOKU_ZLIB_METHOD;
+                } else if (str == "none") {
+                    compression = TOKU_NO_COMPRESSION;
+                } else {
+                    uassert(16442, "compression must be one of: lzma, quicklz, zlib, none.", false);
+                }
+                tokulog(1) << "db " << name << ", using compression method \"" << str << "\"" << endl;
+            }
+
             DB *db;
             int r = db_create(&db, env, 0);
+            verify(r == 0);
+
+            r = db->set_readpagesize(db, basementsize);
+            verify(r == 0);
+            r = db->set_compression_method(db, compression);
             verify(r == 0);
 
             const int db_flags = may_create ? DB_CREATE : 0;

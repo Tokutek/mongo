@@ -145,8 +145,7 @@ namespace mongo {
         dassert(nsdb == NULL);
 
         string nsdbname(database_ + ".ns");
-        const BSONObj &ns_key_pattern = fromjson("{\"ns\":1}");
-        r = storage::db_open(&nsdb, nsdbname, ns_key_pattern, may_create);
+        r = storage::db_open(&nsdb, nsdbname, BSON("key" << fromjson("{\"ns\":1}" )), may_create);
         if (r == ENOENT) {
             // didn't find on disk
             dassert(!may_create);
