@@ -121,25 +121,32 @@ namespace mongo {
         // exist and is therefore treated as empty.
         if (_d != NULL && _idx != NULL) {
             _cursor = _idx->cursor();
-
-            // Get the first/last element depending on direction
-            int r;
-            struct cursor_getf_extra extra(&_currKey, &_currPK, &_currObj);
-            DBT key_dbt;
-            key_dbt.data = const_cast<char *>(_startKey.objdata());
-            key_dbt.size = _startKey.objsize();
-            tokulog(1) << toString() << ": initializeDBC(): getf _startKey " << _startKey << ", direction " << _direction << endl;
-            if (_direction > 0) {
-                r = _cursor->c_getf_set_range(_cursor, 0, &key_dbt, cursor_getf, &extra);
-            } else {
-                r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
-            }
-            verify(r == 0 || r == DB_NOTFOUND);
-            tokulog(1) << toString() << ": initializeDBC(): hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
+            setPosition(_startKey);
             checkCurrentAgainstBounds();
         } else {
             verify( _d == NULL && _idx == NULL );
         }
+    }
+
+    void IndexCursor::setPosition(const BSONObj &key) {
+        // Reset keys and objects
+        _currKey = BSONObj();
+        _currPK = BSONObj();
+        _currObj = BSONObj();
+
+        int r;
+        struct cursor_getf_extra extra(&_currKey, &_currPK, &_currObj);
+        DBT key_dbt;
+        key_dbt.data = const_cast<char *>(key.objdata());
+        key_dbt.size = key.objsize();
+        tokulog(1) << toString() << ": setPosition(): getf key " << key << ", direction " << _direction << endl;
+        if (_direction > 0) {
+            r = _cursor->c_getf_set_range(_cursor, 0, &key_dbt, cursor_getf, &extra);
+        } else {
+            r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
+        }
+        verify(r == 0 || r == DB_NOTFOUND);
+        tokulog(1) << toString() << ": setPosition(): hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
     }
 
     // Check the current key with respect to our key bounds, whether
@@ -164,7 +171,6 @@ namespace mongo {
         return ok();
     }
 
-
     bool IndexCursor::skipOutOfRangeKeysAndCheckEnd() {
         if ( !ok() ) {
             return false;
@@ -178,7 +184,9 @@ namespace mongo {
             ++_nscanned;
             return false;
         }
+
         // TODO: #6041 advance to the key described by _boundsIterator
+        _advance();
         ++_nscanned;
         return true;
     }
@@ -205,14 +213,9 @@ namespace mongo {
         }
     }
 
-    bool IndexCursor::advance() {
-        killCurrentOp.checkForInterrupt();
-        if ( _currKey.isEmpty() && !tailable() )
-            return false;
-
+    void IndexCursor::_advance() {
         // namespace might be null if we're tailing an empty collection
         if ( _d != NULL && _idx != NULL ) {
-            
             // Reset current key/pk/obj to empty.
             _currKey = BSONObj();
             _currPK = BSONObj();
@@ -226,7 +229,7 @@ namespace mongo {
                 r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
             }
             verify(r == 0 || r == DB_NOTFOUND);
-            tokulog(2) << toString() << ": advance() moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
+            tokulog(2) << toString() << ": _advance() moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
         } else {
             // new inserts will not be read by this cursor, because there was no
             // namespace details or index at the time of creation. we can either
@@ -239,7 +242,16 @@ namespace mongo {
                     << "when the collection is non-empty." << endl;
             }
         }
-        return checkCurrentAgainstBounds();
+    }
+
+    bool IndexCursor::advance() {
+        killCurrentOp.checkForInterrupt();
+        if ( _currKey.isEmpty() && !tailable() ) {
+            return false;
+        } else {
+            _advance();
+            return checkCurrentAgainstBounds();
+        }
     }
 
     BSONObj IndexCursor::current() {

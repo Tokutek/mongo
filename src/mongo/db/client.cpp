@@ -211,7 +211,9 @@ namespace mongo {
 
     void Client::Transaction::retire() {
         dassert(!_retired);
-        dassert(cc()._transaction == this);
+        if (cc()._transaction) {
+            dassert(cc()._transaction == this);
+        }
         cc()._transaction = _parent;
         _retired = true;
     }

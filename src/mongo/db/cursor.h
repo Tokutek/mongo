@@ -208,8 +208,13 @@ namespace mongo {
         void init( const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
         void init( const shared_ptr< FieldRangeVector > &_bounds, int singleIntervalLimit, int _direction );
 
-        /** setup DBC cursor and its initial position */
+        /** Initialize the internal DBC */
         void initializeDBC();
+        /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */
+        void _advance();
+
+        /** position the cursor over the given key */
+        void setPosition( const BSONObj &key );
         /** check if the current key is out of bounds, invalidate the current key if so */
         bool checkCurrentAgainstBounds();
         bool skipOutOfRangeKeysAndCheckEnd();
