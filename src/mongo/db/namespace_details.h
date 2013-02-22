@@ -71,7 +71,7 @@ namespace mongo {
         enum { NIndexesMax = 64 };
 
         //explicit NamespaceDetails( const DiskLoc &loc, bool _capped );
-        NamespaceDetails(const string &ns, bool _capped);
+        NamespaceDetails(const string &ns, const BSONObj &options, bool _capped);
         explicit NamespaceDetails(const BSONObj &serialized);
         ~NamespaceDetails();
 

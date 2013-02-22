@@ -65,24 +65,33 @@ namespace mongo {
         return ss.str();
     }
 
-    static BSONObj id_index_info(const string &ns) {
+    static BSONObj id_index_info(const string &ns, const BSONObj &options) {
         BSONObjBuilder id_info;
         id_info.append("ns", ns);
         id_info.append("key", idKeyPattern);
         id_info.append("name", genIndexName(idKeyPattern));
         id_info.appendBool("unique", true);
-        // TODO: Is this right?
-        id_info.appendBool("background", false);
+
+        // Choose which options are used for the _id index, manually. 
+        BSONElement e;
+        e = options["basementsize"];
+        if (e.ok() && !e.isNull()) {
+            id_info.append(e);
+        }
+        e = options["compression"];
+        if (e.ok() && !e.isNull()) {
+            id_info.append(e);
+        }
         return id_info.obj();
     }
 
-    NamespaceDetails::NamespaceDetails(const string &ns, bool capped) : indexBuildInProgress(false), _nIndexes(0), multiKeyIndexBits(0) {
+    NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &options, bool capped) : indexBuildInProgress(false), _nIndexes(0), multiKeyIndexBits(0) {
         if ( capped ) {
             unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
         }
 
         tokulog() << "Creating NamespaceDetails " << ns << endl;
-        createIndex(id_index_info(ns), true);
+        createIndex(id_index_info(ns, options), true);
 
         addNewNamespaceToCatalog(ns);
     }

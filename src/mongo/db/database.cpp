@@ -511,7 +511,6 @@ namespace mongo {
     }
 
     NamespaceDetails* nsdetails_maybe_create(const char *ns, BSONObj options) {
-        // TODO: Use options.
         NamespaceIndex *ni = nsindex(ns);
         if (!ni->allocated()) {
             // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
@@ -525,7 +524,7 @@ namespace mongo {
             Client::RootTransaction txn;
 
             Namespace ns_s(ns);
-            shared_ptr<NamespaceDetails> new_details(new NamespaceDetails(ns, false));
+            shared_ptr<NamespaceDetails> new_details(new NamespaceDetails(ns, options, false));
             ni->add_ns(ns, new_details);
 
             txn.commit();
