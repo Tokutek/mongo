@@ -113,9 +113,6 @@ namespace mongo {
 
             db_env_set_direct_io(cmdLine.directio);
 
-            boost::filesystem::path envdir(dbpath);
-            envdir /= "storage";
-            boost::filesystem::create_directory(envdir);
             int r = db_env_create(&env, 0);
             verify(r == 0);
 
@@ -133,7 +130,7 @@ namespace mongo {
 
             const int env_flags = DB_INIT_LOCK|DB_INIT_MPOOL|DB_INIT_TXN|DB_CREATE|DB_PRIVATE|DB_INIT_LOG|DB_RECOVER;
             const int env_mode = S_IRWXU|S_IRGRP|S_IROTH|S_IXGRP|S_IXOTH;
-            r = env->open(env, envdir.string().c_str(), env_flags, env_mode);
+            r = env->open(env, dbpath.c_str(), env_flags, env_mode);
             verify(r == 0);
 
             const int checkpoint_period = 60;
