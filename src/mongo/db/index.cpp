@@ -45,7 +45,9 @@ namespace mongo {
 
     IndexDetails::~IndexDetails() {
         tokulog() << "Closing IndexDetails " << indexNamespace() << endl;
-        storage::db_close(_db);
+        if (_db) {
+            storage::db_close(_db);
+        }
     }
 
     int IndexDetails::keyPatternOffset( const string& key ) const {
@@ -60,10 +62,18 @@ namespace mongo {
         return -1;
     }
 
+    int removeFromSysIndexes(const char *ns, const char *name) {
+        string system_indexes = cc().database()->name + ".system.indexes";
+        return (int) _deleteObjects(system_indexes.c_str(),
+                                    BSON("ns" << ns <<
+                                         "name" << name),
+                                    false, false);
+    }
+
     /* delete this index.  does NOT clean up the system catalog
        (system.indexes or system.namespaces) -- only NamespaceIndex.
     */
-    void IndexDetails::kill_idx() {
+    void IndexDetails::kill_idx(bool can_drop_system) {
         string ns = indexNamespace(); // e.g. foo.coll.$ts_1
         try {
 
@@ -72,29 +82,22 @@ namespace mongo {
             // clean up parent namespace index cache
             NamespaceDetailsTransient::get( pns.c_str() ).deletedIndex();
 
-            string name = indexName();
-            
-            // tokudb: ensure the db is dropped in the environment using dropIndex
-            //idxInterface().dropIndex(*this);
+            storage::db_close(_db);
+            _db = NULL;
+            storage::db_remove(ns);
 
             /* important to catch exception here so we can finish cleanup below. */
             try {
-                ::abort();
-                //dropNS(ns.c_str());
+                dropNS(ns.c_str(), false, can_drop_system);
             }
             catch(DBException& ) {
                 log(2) << "IndexDetails::kill(): couldn't drop ns " << ns << endl;
             }
-            ::abort();
-#if 0
-            head.setInvalid();
-            info.setInvalid();
 
-            // clean up in system.indexes.  we do this last on purpose.
-            int n = removeFromSysIndexes(pns.c_str(), name.c_str());
-            wassert( n == 1 );
-#endif
-
+            if (!mongoutils::str::endsWith(pns.c_str(), ".system.indexes")) {
+                int n = removeFromSysIndexes(pns.c_str(), ns.c_str());
+                wassert( n == 1 );
+            }
         }
         catch ( DBException &e ) {
             log() << "exception in kill_idx: " << e << ", ns: " << ns << endl;

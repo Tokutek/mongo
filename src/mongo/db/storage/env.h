@@ -33,6 +33,7 @@ namespace mongo {
 
         int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create);
         void db_close(DB *db);
+        void db_remove(const string &name);
 
         void get_status(BSONObjBuilder &status);
 

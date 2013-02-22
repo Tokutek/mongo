@@ -237,6 +237,13 @@ namespace mongo {
             verify(r == 0);
         }
 
+        void db_remove(const string &name) {
+            const Client::Transaction &txn = cc().transaction();
+            dassert(txn.is_root());
+            int r = env->dbremove(env, txn.txn(), name.c_str(), NULL, 0);
+            verify(r == 0);
+        }
+
         void get_status(BSONObjBuilder &status) {
             uint64_t num_rows;
             uint64_t panic;

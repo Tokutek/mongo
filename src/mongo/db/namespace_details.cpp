@@ -108,7 +108,6 @@ namespace mongo {
     }
 
     NamespaceDetails::~NamespaceDetails() {
-        tokulog() << "Closing NamespaceDetails " << idx(findIdIndex()).info()["name"].String() << endl;
     }
 
     BSONObj NamespaceDetails::serialize() const {
@@ -211,21 +210,16 @@ namespace mongo {
         }
         Namespace n(ns);
         NamespaceDetailsMap::iterator it = namespaces->find(n);
-        dassert(it != namespaces->end());
-        unimplemented("need to delete whatever toku stuff is related to this ns");
-        namespaces->erase(it);
+        verify(it != namespaces->end());
+        BSONObj nsobj = BSON("ns" << ns);
+        DBT ndbt;
+        ndbt.data = const_cast<void *>(static_cast<const void *>(nsobj.objdata()));
+        ndbt.size = nsobj.objsize();
+        int r = nsdb->del(nsdb, cc().transaction().txn(), &ndbt, DB_DELETE_ANY);
+        verify(r == 0);
 
-#if 0
-        for( int i = 0; i<=1; i++ ) {
-            try {
-                Namespace extra(n.extraName(i).c_str());
-                ht->kill(extra);
-            }
-            catch(DBException&) { 
-                dlog(3) << "caught exception in kill_ns" << endl;
-            }
-        }
-#endif
+        // Should really only do this after the commit of the del.
+        namespaces->erase(it);
     }
 
     void NamespaceIndex::add_ns(const char *ns, shared_ptr<NamespaceDetails> details) {
@@ -253,6 +247,23 @@ namespace mongo {
         const int flags = overwrite ? 0 : DB_NOOVERWRITE;
         int r = nsdb->put(nsdb, cc().transaction().txn(), &ndbt, &ddbt, flags);
         verify(r == 0);
+    }
+
+    void NamespaceIndex::drop() {
+        if (!allocated()) {
+            return;
+        }
+        string errmsg;
+        BSONObjBuilder result;
+        while (!namespaces->empty()) {
+            NamespaceDetailsMap::iterator it = namespaces->begin();
+            const Namespace &ns = it->first;
+            dropCollection((string) ns, errmsg, result, true);
+        }
+        dassert(nsdb != NULL);
+        storage::db_close(nsdb);
+        nsdb = NULL;
+        storage::db_remove(database_ + ".ns");
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
@@ -300,6 +311,60 @@ namespace mongo {
         if (resetTransient) {
             NamespaceDetailsTransient::get(ns).addedIndex();
         }
+    }
+
+    bool NamespaceDetails::dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex, bool can_drop_system) {
+        tokulog(1) << "dropIndexes " << name << endl;
+
+        //BackgroundOperation::assertNoBgOpInProgForNs(ns);
+
+        ClientCursor::invalidate(ns);
+
+        if (mongoutils::str::equals(name, "*")) {
+            result.append("nIndexesWas", (double) _nIndexes);
+            // This is O(n^2), not great, but you can have at most 64 indexes anyway.
+            for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ) {
+                IndexDetails *idx = it->get();
+                if (mayDeleteIdIndex || !idx->isIdIndex()) {
+                    idx->kill_idx(can_drop_system);
+                    it = _indexes.erase(it);
+                    _nIndexes--;
+                } else {
+                    it++;
+                }
+            }
+            // Assuming id index isn't multikey
+            multiKeyIndexBits = 0;
+            result.append("msg", (mayDeleteIdIndex
+                                  ? "indexes dropped for collection"
+                                  : "non-_id indexes dropped for collection"));
+        } else {
+            verify(!can_drop_system);
+            int x = findIndexByName(name);
+            if (x >= 0) {
+                result.append("nIndexesWas", (double) _nIndexes);
+                IndexVector::iterator it = _indexes.begin() + x;
+                IndexDetails *idx = it->get();
+                idx->kill_idx(can_drop_system);
+                _indexes.erase(it);
+                _nIndexes--;
+                // Removes the nth bit, and shifts any bits higher than it down a slot.
+                multiKeyIndexBits = ((multiKeyIndexBits & ((1ULL << x) - 1)) |
+                                     ((multiKeyIndexBits >> (x + 1)) << x));
+            } else {
+                // just in case an orphaned listing there - i.e. should have been repaired but wasn't
+                int n = removeFromSysIndexes(ns, name);
+                if (n) {
+                    log() << "info: removeFromSysIndexes cleaned up " << n << " entries" << endl;
+                }
+                log() << "dropIndexes: " << name << " not found" << endl;
+                errmsg = "index not found";
+                return false;
+            }
+        }
+        // Updated whatever in memory structures are necessary, now update the nsindex.
+        nsindex(ns)->update_ns(ns, this, true);
+        return true;
     }
 
 #if 0
@@ -512,25 +577,43 @@ namespace mongo {
     }
 
     void dropDatabase(const string &name) {
-        tokulog(1) << "dropDatabase(" << name << ")" << endl;
+        tokulog(1) << "dropDatabase " << name << endl;
+        Lock::assertWriteLocked(name);
+        Database *d = cc().database();
+        verify(d != NULL);
+        verify(d->name == name);
+
+        //BackgroundOperation::assertNoBgOpInProgForNs(name.c_str());
+
+        // Not sure we need this here, so removed.  If we do, we need to move it down 
+        // within other calls both (1) as they could be called from elsewhere and 
+        // (2) to keep the lock order right - groupcommitmutex must be locked before 
+        // mmmutex (if both are locked).
+        //
+        //  RWLockRecursive::Exclusive lk(MongoFile::mmmutex);
+
+        d->namespaceIndex.drop();
+        Database::closeDatabase(d->name.c_str(), d->path);
     }
 
-    void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result) {
-        tokulog(1) << "dropCollection(" << name << ", " << errmsg << ", " << ")" << endl;
-        NamespaceDetails *d = nsdetails(name.c_str());
+    void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system) {
+        tokulog(1) << "dropCollection " << name << endl;
+        const char *ns = name.c_str();
+        NamespaceDetails *d = nsdetails(ns);
         if (d == NULL) {
             return;
         }
 
-        d->dropIndexes(name.c_str(), "*", errmsg, result, true);
+        //BackgroundOperation::assertNoBgOpInProgForNs(ns);
 
+        d->dropIndexes(ns, "*", errmsg, result, true, can_drop_system);
+        verify(d->nIndexes() == 0);
         log(1) << "\t dropIndexes done" << endl;
-
-    }
-
-    void NamespaceDetails::dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex) {
-        tokulog(1) << "dropIndexes(" << ns << ", " << name << ", " << errmsg << ", " << mayDeleteIdIndex << ")" << endl;
-        result.obj();
+        result.append("ns", name);
+        ClientCursor::invalidate(ns);
+        Top::global.collectionDropped(name);
+        NamespaceDetailsTransient::eraseForPrefix(ns);
+        dropNS(name, true, can_drop_system);
     }
 
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).
@@ -552,6 +635,37 @@ namespace mongo {
         nsToDatabase(ns.c_str(), database);
         string s = string(database) + ".system.namespaces";
         insertObject(s.c_str(), addIdField(j));
+    }
+
+    void dropNS(const string &nsname, bool is_collection, bool can_drop_system) {
+        const char *ns = nsname.c_str();
+        if (is_collection) {
+            NamespaceDetails *d = nsdetails(ns);
+            uassert(10086, mongoutils::str::stream() << "ns not found: " + nsname, d);
+
+            NamespaceString s(nsname);
+            verify(s.db == cc().database()->name);
+            if (s.isSystem()) {
+                if (s.coll == "system.profile") {
+                    uassert(10087, "turn off profiling before dropping system.profile collection", cc().database()->profile == 0);
+                } else if (!can_drop_system) {
+                    uasserted(12502, "can't drop system ns");
+                }
+            }
+        }
+
+        //BackgroundOperation::assertNoBgOpInProgForNs(ns);
+
+        if (!mongoutils::str::contains(ns, ".system.namespaces")) {
+            string system_namespaces = cc().database()->name + ".system.namespaces";
+            _deleteObjects(system_namespaces.c_str(),
+                           BSON("name" << nsname),
+                           false, false);
+        }
+
+        if (is_collection) {
+            nsindex(ns)->kill_ns(ns);
+        }
     }
 
     void renameNamespace( const char *from, const char *to, bool stayTemp) {

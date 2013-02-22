@@ -26,6 +26,7 @@
 #include "mongo/server.h"
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/background.h"
+#include "mongo/db/client.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/cursor.h"
@@ -389,12 +390,13 @@ namespace mongo {
                 return false;
             }
             BSONElement e = cmdObj.firstElement();
+            Client::RootTransaction txn;
             log() << "dropDatabase " << dbname << endl;
             int p = (int) e.number();
             if ( p != 1 )
                 return false;
-            ::abort();
-            //dropDatabase(dbname);
+            dropDatabase(dbname);
+            txn.commit();
             result.append( "dropped" , dbname );
             return true;
         }
@@ -800,6 +802,7 @@ namespace mongo {
         virtual LockType locktype() const { return WRITE; }
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             string nsToDrop = dbname + '.' + cmdObj.firstElement().valuestr();
+            Client::RootTransaction txn;
             NamespaceDetails *d = nsdetails(nsToDrop.c_str());
             if ( !cmdLine.quiet )
                 tlog() << "CMD: drop " << nsToDrop << endl;
@@ -809,6 +812,7 @@ namespace mongo {
             }
             uassert( 10039 ,  "can't drop collection with reserved $ character in name", strchr(nsToDrop.c_str(), '$') == 0 );
             dropCollection( nsToDrop, errmsg, result );
+            txn.commit();
             return true;
         }
     } cmdDrop;
@@ -898,14 +902,18 @@ namespace mongo {
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
             BSONElement e = jsobj.firstElement();
             string toDeleteNs = dbname + '.' + e.valuestr();
+            Client::RootTransaction txn;
             NamespaceDetails *d = nsdetails(toDeleteNs.c_str());
             if ( !cmdLine.quiet )
                 tlog() << "CMD: dropIndexes " << toDeleteNs << endl;
             if ( d ) {
                 BSONElement f = jsobj.getField("index");
                 if ( f.type() == String ) {
-                    d->dropIndexes( toDeleteNs.c_str(), f.valuestr(), errmsg, anObjBuilder, false );
-                    return true; // TODO: Can dropIndexes() fail?
+                    bool success = d->dropIndexes( toDeleteNs.c_str(), f.valuestr(), errmsg, anObjBuilder, false );
+                    if (success) {
+                        txn.commit();
+                    }
+                    return success;
                 }
                 else if ( f.type() == Object ) {
                     int idxId = d->findIndexByKeyPattern( f.embeddedObject() );
@@ -917,8 +925,11 @@ namespace mongo {
                     else {
                         IndexDetails& ii = d->idx( idxId );
                         string iName = ii.indexName();
-                        d->dropIndexes( toDeleteNs.c_str(), iName.c_str() , errmsg, anObjBuilder, false );
-                        return true; // TODO: Can dropIndexes() fail?
+                        bool success = d->dropIndexes( toDeleteNs.c_str(), iName.c_str() , errmsg, anObjBuilder, false );
+                        if (success) {
+                            txn.commit();
+                        }
+                        return success;
                     }
                 }
                 else {

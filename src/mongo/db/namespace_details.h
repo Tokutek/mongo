@@ -50,9 +50,11 @@ namespace mongo {
 
     bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication);
 
-    void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result);
+    void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system = false);
 
     void dropDatabase(const string &db);
+
+    void dropNS(const string &nsname, bool is_collection = true, bool can_drop_system = false);
 
     /**
      * Record that a new namespace exists in <dbname>.system.namespaces.
@@ -145,7 +147,7 @@ namespace mongo {
 #endif
         void fillNewIndex(IndexDetails &newIndex);
         void createIndex(const BSONObj &idx_info, bool resetTransient=true);
-        void dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex);
+        bool dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex, bool can_drop_system = false);
 
         // @return offset in indexes[]
         int findIndexByName(const char *name);
@@ -422,6 +424,8 @@ namespace mongo {
         // If something changes that causes details->serialize() to be different, call this to persist it to the nsdb.
         void update_ns(const char *ns, NamespaceDetails *details, bool overwrite);
 
+        void kill_ns(const char *ns);
+
         NamespaceDetails *details(const char *ns) {
             if (namespaces.get() == NULL) {
                 return 0;
@@ -435,13 +439,14 @@ namespace mongo {
             return (it != namespaces->end()) ? it->second.get() : NULL;
         }
 
-        void kill_ns(const char *ns);
-
         bool allocated() const { return namespaces.get() != NULL; }
 
         void getNamespaces( list<string>& tofill , bool onlyCollections = true ) const;
 
         unsigned long long fileLength() const { unimplemented("NamespaceIndex::fileLength"); return 0; }
+
+        // drop all collections and the nsindex, we're removing this database
+        void drop();
 
         typedef std::map<Namespace, shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
     private:

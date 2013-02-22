@@ -130,10 +130,8 @@ namespace mongo {
             return ret;
         }
 
-        /** delete this index.  does NOT clean up the system catalog
-            (system.indexes or system.namespaces) -- only NamespaceIndex.
-        */
-        void kill_idx();
+        /** delete this index. */
+        void kill_idx(bool can_drop_system = false);
 
         const IndexSpec& getSpec() const;
 
@@ -165,5 +163,7 @@ namespace mongo {
 
         friend class NamespaceDetails;
     };
+
+    int removeFromSysIndexes(const char *ns, const char *name);
 
 } // namespace mongo
