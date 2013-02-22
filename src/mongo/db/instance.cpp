@@ -833,14 +833,11 @@ namespace mongo {
         if( !multi.empty() ) {
             const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
             insertMulti(keepGoing, ns, multi);
-            txn.commit();
-            return;
+        } else {
+            checkAndInsert(ns, first);
+            globalOpCounters.incInsertInWriteLock(1);
         }
-                
-        checkAndInsert(ns, first);
-        globalOpCounters.incInsertInWriteLock(1);
         txn.commit();
-        return;
     }
 
     void getDatabaseNames( vector< string > &names , const string& usePath ) {
