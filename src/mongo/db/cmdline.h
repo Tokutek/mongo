@@ -135,6 +135,7 @@ namespace mongo {
         // TokuDB variables
         bool directio;
         uint64_t cachetable_size;
+        bool sync_commit;
 
         static void launchOk();
 
@@ -167,7 +168,7 @@ namespace mongo {
         durOptions(0), objcheck(false), oplogSize(0), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), pretouch(0), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
-        directio(false), cachetable_size(0)
+        directio(false), cachetable_size(0), sync_commit(true)
     {
         started = time(0);
 

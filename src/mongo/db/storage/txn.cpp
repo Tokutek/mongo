@@ -20,6 +20,7 @@
 
 #include <db.h>
 
+#include "mongo/db/cmdline.h"
 #include "mongo/db/storage/env.h"
 
 namespace mongo {
@@ -34,7 +35,8 @@ namespace mongo {
         }
 
         void commit_txn(DB_TXN *txn) {
-            int r = txn->commit(txn, 0);
+            const int flags = cmdLine.sync_commit ? 0 : DB_TXN_NOSYNC;
+            int r = txn->commit(txn, flags);
             verify(r == 0);
         }
 

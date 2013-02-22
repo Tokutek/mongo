@@ -727,6 +727,7 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("arbiter", "DEPRECATED")
     ("opIdMem", "DEPRECATED")
     ("directio", "use direct I/O in tokudb")
+    ("nosync_commit", "don't fsync on txn commit")
     ("cachetable_size", po::value<uint64_t>(), "tokudb cachetable size")
     ;
 
@@ -859,6 +860,9 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
         if (params.count("directio")) {
             cmdLine.directio = true;
+        }
+        if (params.count("nosync_commit")) {
+            cmdLine.sync_commit = false;
         }
         if (params.count("cachetable_size")) {
             cmdLine.cachetable_size = params["cachetable_size"].as<uint64_t>();
