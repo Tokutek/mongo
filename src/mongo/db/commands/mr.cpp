@@ -15,21 +15,23 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-#include "../db.h"
-#include "../instance.h"
-#include "../commands.h"
-#include "../../scripting/engine.h"
-#include "../../client/connpool.h"
-#include "../../client/parallel.h"
-#include "../matcher.h"
-#include "../clientcursor.h"
-#include "../replutil.h"
-#include "../../s/d_chunk_manager.h"
-#include "../../s/d_logic.h"
-#include "../../s/grid.h"
+#include "mongo/pch.h"
 
-#include "mr.h"
+#include "mongo/client/connpool.h"
+#include "mongo/client/parallel.h"
+#include "mongo/db/db.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/matcher.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/replutil.h"
+#include "mongo/db/ops/insert.h"
+#include "mongo/s/d_chunk_manager.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/s/grid.h"
+#include "mongo/scripting/engine.h"
+
+#include "mongo/db/commands/mr.h"
 
 namespace mongo {
 
@@ -333,8 +335,6 @@ namespace mongo {
          * Create temporary collection, set up indexes
          */
         void State::prepTempCollection() {
-            ::abort(); // userCreateNS is not implemented
-#if 0
             if ( ! _onDisk )
                 return;
 
@@ -386,8 +386,6 @@ namespace mongo {
                 }
 
             }
-
-#endif
         }
 
         /**
@@ -541,8 +539,7 @@ namespace mongo {
                     bool found;
                     {
                         Client::Context tx( _config.finalLong );
-                        found = false ;//Helpers::findOne( _config.finalLong.c_str() , temp["_id"].wrap() , old , true );
-                        ::abort();
+                        found = Helpers::findOne( _config.finalLong.c_str() , temp["_id"].wrap() , old , true );
                     }
 
                     if ( found ) {
@@ -573,7 +570,7 @@ namespace mongo {
 
             Client::WriteContext ctx( ns );
 
-            ::abort(); //theDataFileMgr.insertAndLog( ns.c_str() , o , false );
+            insertObject( ns.c_str() , o );
         }
 
         /**
@@ -581,8 +578,7 @@ namespace mongo {
          */
         void State::_insertToInc( BSONObj& o ) {
             verify( _onDisk );
-            ::abort(); //theDataFileMgr.insertWithObjMod( _config.incLong.c_str() , o , true );
-            //getDur().commitIfNeeded();
+            insertObject( _config.incLong.c_str() , o );
         }
 
         State::State( const Config& c ) : _config( c ), _size(0), _dupCount(0), _numEmits(0) {

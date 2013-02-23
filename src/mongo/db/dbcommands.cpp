@@ -41,6 +41,7 @@
 #include "mongo/db/security.h"
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/ops/count.h"
+#include "mongo/db/ops/insert.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/storage/env.h"
@@ -58,12 +59,7 @@ namespace mongo {
     bool setParmsMongodSpecific(const string& dbname, BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result, bool fromRepl ) { 
         BSONElement e = cmdObj["ageOutJournalFiles"];
         if( !e.eoo() ) {
-#if 0
-            bool r = e.trueValue();
-            log() << "ageOutJournalFiles " << r << endl;
-            dur::setAgeOutJournalFiles(r);
-#endif
-            ::abort();
+            problem() << "ageOutJournalFiles is a deprecated parameter, ignoring!" << endl;
             return true;
         }
         if( cmdObj.hasElement( "replIndexPrefetch" ) ) {
@@ -186,13 +182,8 @@ namespace mongo {
             }
 
             if ( cmdObj["j"].trueValue() ) { 
-                ::abort();
-#if 0
-                if( !getDur().awaitCommit() ) {
-                    // --journal is off
-                    result.append("jnote", "journaling not enabled on this server");
-                }
-#endif
+                problem() << " getLastError with param \"j\" should be waiting "
+                    "for commit, but it's not implemented!" << endl;
                 if( cmdObj["fsync"].trueValue() ) { 
                     errmsg = "fsync and j options are not used together";
                     return false;
@@ -200,18 +191,10 @@ namespace mongo {
             }
             else if ( cmdObj["fsync"].trueValue() ) {
                 Timer t;
-                ::abort();
-#if 0
-                if( !getDur().awaitCommit() ) {
-                    // if get here, not running with --journal
-                    log() << "fsync from getlasterror" << endl;
-                    result.append( "fsyncFiles" , MemoryMappedFile::flushAll( true ) );
-                }
-                else {
-                    // this perhaps is temp.  how long we wait for the group commit to occur.
-                    result.append( "waited", t.millis() );
-                }
-#endif
+                problem() << " getLastError with param \"fsync\" should be waiting "
+                    "for commit and flushing, but it's not implemented!" << endl;
+                result.append( "fsyncFiles" , 0 );
+                result.append( "waited" , 0 );
             }
 
             if ( err ) {
@@ -417,21 +400,8 @@ namespace mongo {
         virtual bool lockGlobally() const { return true; }
         CmdRepairDatabase() : Command("repairDatabase") {}
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            ::abort(); return false;
-#if 0
-            BSONElement e = cmdObj.firstElement();
-            log() << "repairDatabase " << dbname << endl;
-            int p = (int) e.number();
-            if ( p != 1 ) {
-                errmsg = "bad option";
-                return false;
-            }
-            e = cmdObj.getField( "preserveClonedFilesOnFailure" );
-            bool preserveClonedFilesOnFailure = e.isBoolean() && e.boolean();
-            e = cmdObj.getField( "backupOriginalFiles" );
-            bool backupOriginalFiles = e.isBoolean() && e.boolean();
-            return repairDatabase( dbname, errmsg, preserveClonedFilesOnFailure, backupOriginalFiles );
-#endif
+            problem() << "repairDatabase is a deprecated command, ignoring!" << endl;
+            return false;
         }
     } cmdRepairDatabase;
 
@@ -995,12 +965,11 @@ namespace mongo {
             set<string> seen;
             boost::intmax_t totalSize = 0;
             for ( vector< string >::iterator i = dbNames.begin(); i != dbNames.end(); ++i ) {
-                ::abort();
-#if 0
                 BSONObjBuilder b;
                 b.append( "name", *i );
 
-                boost::intmax_t size = dbSize( i->c_str() );
+                problem() << "don't know how to calculate the sizeOnDisk of a databse yet!" << endl;
+                boost::intmax_t size = 0;
                 b.append( "sizeOnDisk", (double) size );
                 totalSize += size;
                 
@@ -1012,7 +981,6 @@ namespace mongo {
                 dbInfos.push_back( b.obj() );
 
                 seen.insert( i->c_str() );
-#endif
             }
 
             // TODO: erh 1/1/2010 I think this is broken where path != dbpath ??
@@ -1061,9 +1029,7 @@ namespace mongo {
         bool run(const string& dbname , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             bool ok;
             try {
-                ok = false;
-                ::abort();
-                //ok = dbHolderW().closeAll( dbpath , result, false );
+                ok = dbHolderW().closeAll( dbpath , result, false );
             }
             catch(DBException&) { 
                 throw;
@@ -1235,8 +1201,6 @@ namespace mongo {
                  "\nnote: This command may take a while to run";
         }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
-            ::abort(); // TODO: Use keyrange or something for this
-#if 0
             Timer timer;
 
             string ns = jsobj.firstElement().String();
@@ -1248,7 +1212,7 @@ namespace mongo {
             Client::Context ctx( ns );
             NamespaceDetails *d = nsdetails(ns.c_str());
 
-            if ( ! d || d->stats.nrecords == 0 ) {
+            if ( ! d /* || d->stats.nrecords == 0 */) {
                 result.appendNumber( "size" , 0 );
                 result.appendNumber( "numObjects" , 0 );
                 result.append( "millis" , timer.millis() );
@@ -1259,13 +1223,15 @@ namespace mongo {
 
             shared_ptr<Cursor> c;
             if ( min.isEmpty() && max.isEmpty() ) {
+#if 0
                 if ( estimate ) {
                     result.appendNumber( "size" , d->stats.datasize );
                     result.appendNumber( "numObjects" , d->stats.nrecords );
                     result.append( "millis" , timer.millis() );
                     return 1;
                 }
-                ::abort(); //theDataFileMgr.findAll( ns.c_str() );
+#endif
+                Helpers::findTableScan( ns.c_str() , BSONObj() );
             }
             else if ( min.isEmpty() || max.isEmpty() ) {
                 errmsg = "only one of min or max specified";
@@ -1287,10 +1253,10 @@ namespace mongo {
                 min = Helpers::modifiedRangeBound( min , idx->keyPattern() , -1 );
                 max = Helpers::modifiedRangeBound( max , idx->keyPattern() , -1 );
 
-                c.reset( IndexCursor::make( d, d->idxNo(*idx), *idx, min, max, false, 1 ) );
+                c.reset( new IndexCursor( d, idx, min, max, false, 1 ) );
             }
 
-            long long avgObjSize = d->stats.datasize / d->stats.nrecords;
+            //long long avgObjSize = d->stats.datasize / d->stats.nrecords;
 
             long long maxSize = jsobj["maxSize"].numberLong();
             long long maxObjects = jsobj["maxObjects"].numberLong();
@@ -1299,10 +1265,8 @@ namespace mongo {
             long long numObjects = 0;
             while( c->ok() ) {
 
-                if ( estimate )
-                    size += avgObjSize;
-                else
-                    ::abort(); //size += c->currLoc().rec()->netLength();
+                // TODO: If estimate, use avgObjSize
+                size += c->current().objsize();
 
                 numObjects++;
 
@@ -1326,15 +1290,12 @@ namespace mongo {
             result.appendNumber( "numObjects" , numObjects );
             result.append( "millis" , timer.millis() );
             return true;
-#endif
         }
     } cmdDatasize;
 
+#if 0
     namespace {
         long long getIndexSizeForCollection(string db, string ns, BSONObjBuilder* details=NULL, int scale = 1 ) {
-            ::abort();
-            return 0;
-#if 0
             Lock::assertAtLeastReadLocked(ns);
 
             NamespaceDetails * nsd = nsdetails( ns.c_str() );
@@ -1368,9 +1329,9 @@ namespace mongo {
                     details->appendNumber( d.indexName() , datasize / scale );
             }
             return totalSize;
-#endif
         }
     }
+#endif
 
     class CollectionStats : public Command {
     public:
@@ -1406,8 +1367,6 @@ namespace mongo {
                 return false;
             }
 
-            //bool verbose = jsobj["verbose"].trueValue();
-
             //long long size = nsd->stats.datasize / scale;
             //result.appendNumber( "count" , nsd->stats.nrecords );
             //result.appendNumber( "size" , size );
@@ -1415,16 +1374,8 @@ namespace mongo {
             //    result.append      ( "avgObjSize" , double(size) / double(nsd->stats.nrecords) );
             // TODO: TokuDB provide our version of stats
 
-            //int numExtents = 0;
-            //BSONArrayBuilder extents;
-
             //result.appendNumber( "storageSize" , nsd->storageSize( &numExtents , verbose ? &extents : 0  ) / scale );
-            //result.append( "numExtents" , numExtents );
             result.append( "nindexes" , nsd->nIndexes() );
-            //result.append( "lastExtentSize" , nsd->lastExtentSize / scale );
-            //result.append( "paddingFactor" , nsd->paddingFactor() );
-            //result.append( "systemFlags" , nsd->systemFlags() );
-            //result.append( "userFlags" , nsd->userFlags() );
 
             //BSONObjBuilder indexSizes;
             //result.appendNumber( "totalIndexSize" , getIndexSizeForCollection(dbname, ns, &indexSizes, scale) / scale );
@@ -1435,9 +1386,6 @@ namespace mongo {
                 result.append( "capped" , nsd->isCapped() );
                 result.appendNumber( "max" , nsd->maxCappedDocs() );
             }
-
-            //if ( verbose )
-            //    result.appendArray( "extents" , extents.arr() );
 
             return true;
         }
@@ -1558,7 +1506,7 @@ namespace mongo {
                 //numExtents += temp;
 
                 indexes += nsd->nIndexes();
-                indexSize += getIndexSizeForCollection(dbname, ns);
+                //indexSize += getIndexSizeForCollection(dbname, ns);
             }
             
             result.append      ( "db" , dbname );
@@ -1601,24 +1549,12 @@ namespace mongo {
             string toNs = dbname + "." + to;
             NamespaceDetails *nsd = nsdetails( fromNs.c_str() );
             massert( 10301 ,  "source collection " + fromNs + " does not exist", nsd );
-#if 0
-            long long excessSize = nsd->stats.datasize - size * 2; // datasize and extentSize can't be compared exactly, so add some padding to 'size'
-            DiskLoc extent = nsd->firstExtent;
-            for( ; excessSize > extent.ext()->length && extent != nsd->lastExtent; extent = extent.ext()->xnext ) {
-                excessSize -= extent.ext()->length;
-                log( 2 ) << "cloneCollectionAsCapped skipping extent of size " << extent.ext()->length << endl;
-                log( 6 ) << "excessSize: " << excessSize << endl;
-            }
-            DiskLoc startLoc = extent.ext()->firstRecord;
-#endif
-            ::abort();
 
             CursorId id;
             {
-                ::abort();
-                //shared_ptr<Cursor> c = theDataFileMgr.findAll( fromNs.c_str(), startLoc );
-                //ClientCursor *cc = new ClientCursor(0, c, fromNs.c_str());
-                //id = cc->cursorid();
+                shared_ptr<Cursor> c = Helpers::findTableScan( fromNs.c_str(), BSONObj() );
+                ClientCursor *cc = new ClientCursor(0, c, fromNs.c_str());
+                id = cc->cursorid();
             }
 
             DBDirectClient client;
@@ -1635,8 +1571,7 @@ namespace mongo {
             auto_ptr< DBClientCursor > c = client.getMore( fromNs, id );
             while( c->more() ) {
                 BSONObj obj = c->next();
-                ::abort(); //theDataFileMgr.insertAndLog( toNs.c_str(), obj, true );
-                //getDur().commitIfNeeded();
+                insertObject( toNs.c_str(), obj );
             }
 
             return true;
@@ -1749,7 +1684,7 @@ namespace mongo {
             {
                 Lock::DBWrite lk(ns);
                 Client::Context ctx( ns );
-                ::abort(); //theDataFileMgr.insertWithObjMod( ns.c_str(), obj, true );
+                insertObject( ns.c_str(), obj );
             }
             return true;
         }
@@ -1786,16 +1721,13 @@ namespace mongo {
                 // debug SERVER-761
                 NamespaceDetails::IndexIterator ii = nsd->ii();
                 while( ii.more() ) {
-#if 0
                     const IndexDetails &idx = ii.next();
-                    if ( !idx.head.isValid() || !idx.info.isValid() ) {
-                        log() << "invalid index for ns: " << c << " " << idx.head << " " << idx.info;
-                        if ( idx.info.isValid() )
-                            log() << " " << idx.info.obj();
+                    if ( idx.info().isValid() ) {
+                        log() << "invalid index for ns: " << c << " " << idx.info();
+                        if ( idx.info().isValid() )
+                            log() << " " << idx.info();
                         log() << endl;
                     }
-#endif
-                    ::abort(); // TODO: Get idx info properly
                 }
 
                 int idNum = nsd->findIdIndex();
@@ -1806,8 +1738,7 @@ namespace mongo {
                     continue;
                 }
                 else if ( nsd->isCapped() ) {
-                    ::abort();
-                    //cursor = findTableScan( c.c_str() , BSONObj() );
+                    cursor = Helpers::findTableScan( c.c_str() , BSONObj() );
                 }
                 else {
                     log() << "can't find _id index for: " << c << endl;

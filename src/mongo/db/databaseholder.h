@@ -63,7 +63,10 @@ namespace mongo {
         }
 
         /** @param force - force close even if something underway - use at shutdown */
-        bool closeAll( const string& path , BSONObjBuilder& result, bool force );
+        bool closeAll( const string& path , BSONObjBuilder& result, bool force ) {
+            problem() << "don't know how to closeAll databases yet!" << endl;
+            return true;
+        }
 
         void closeDatabases(const string &path);
 

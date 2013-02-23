@@ -375,9 +375,8 @@ namespace mongo {
             id = &idx(nIndexes(), true);
         }
         catch(DBException&) {
-            //allocExtra(thisns, nIndexes);
-            //id = &idx(nIndexes,false);
-            ::abort(); // TODO: TokuDB: what to do?
+            allocExtra(thisns, nIndexes);
+            id = &idx(nIndexes,false);
         }
 
         unimplemented("NamespaceDetails durability for nindexes, we currently don't store this because we don't yet have hot indexing, much less resume from shutdown during hot indexing");
@@ -737,7 +736,7 @@ namespace mongo {
                     newIndexSpecB << "ns" << to;
             }
             BSONObj newIndexSpec = newIndexSpecB.done();
-            DiskLoc newIndexSpecLoc = minDiskLoc; ::abort(); //theDataFileMgr.insert( s.c_str(), newIndexSpec.objdata(), newIndexSpec.objsize(), true, false );
+            DiskLoc newIndexSpecLoc = theDataFileMgr.insert( s.c_str(), newIndexSpec.objdata(), newIndexSpec.objsize(), true, false );
             int indexI = details->findIndexByName( oldIndexSpec.getStringField( "name" ) );
             IndexDetails &indexDetails = details->idx(indexI);
             string oldIndexNs = indexDetails.indexNamespace();
