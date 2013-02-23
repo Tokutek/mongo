@@ -33,8 +33,6 @@ namespace mongo {
 
     // run hot optimize on each index
     bool _compact(const char *ns, NamespaceDetails *d, string& errmsg, BSONObjBuilder& result) { 
-        Client::RootTransaction txn;
-
         // TODO: Track progress with this class
         //ProgressMeterHolder pm( cc().curop()->setMessage( string("compacting ns ") + string(ns) , nIndexes ) );
 
@@ -49,7 +47,6 @@ namespace mongo {
 
         }
 
-        txn.commit();
         return true;
     }
 
@@ -70,6 +67,7 @@ namespace mongo {
             log() << "compact " << ns << " begin" << endl;
             try { 
                 ok = _compact(ns.c_str(), d, errmsg, result);
+                ctx.commit_transaction();
             }
             catch(...) { 
                 log() << "compact " << ns << " end (with error)" << endl;

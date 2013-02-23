@@ -119,7 +119,6 @@ namespace mongo {
     }
 
     Client::Client(const char *desc, AbstractMessagingPort *p) :
-        _transaction(NULL),
         _context(0),
         _shutdown(false),
         _desc(desc),
@@ -185,98 +184,58 @@ namespace mongo {
         return false;
     }
 
-    // Start a new transaction with the given flags.
-    // Sets cc()._transaction to this transaction.
-    Client::Transaction::Transaction(int flags) : _parent(cc()._transaction), _retired(false) {
-        DB_TXN *parent_txn = (_parent != NULL ? _parent->txn() : NULL);
+    Client::Context::Transaction::Transaction(const Client::Context::Transaction::Transaction *parent, int flags) {
+        DB_TXN *parent_txn = (parent != NULL ? parent->_txn : NULL);
         _txn = storage::start_txn(parent_txn, flags);
-        cc()._transaction = this;
     }
 
-    // Clone an existing transaction, and retire it.
-    // This way, the existing txn's destructor will
-    // not complete the DB_TXN we just assumed.
-    Client::Transaction *Client::Transaction::handoff() {
-        Transaction *transaction = new Transaction(_txn);
-        dassert(is_root());
-        retire();
-        return transaction;
-    }
-
-    Client::Transaction::~Transaction() {
-        if (!_retired) {
+    Client::Context::Transaction::~Transaction() {
+        if (_txn) {
             abort();
         }
     }
 
-    void Client::Transaction::retire() {
-        dassert(!_retired);
-        if (cc()._transaction) {
-            dassert(cc()._transaction == this);
-        }
-        cc()._transaction = _parent;
-        _retired = true;
+    void Client::Context::Transaction::commit(int flags) {
+        dassert(_txn);
+        storage::commit_txn(_txn, flags);
+        _txn = NULL;
     }
 
-    void Client::Transaction::commit() {
-        retire();
-        storage::commit_txn(_txn);
-    }
-
-    void Client::Transaction::abort() {
-        retire();
+    void Client::Context::Transaction::abort() {
+        dassert(_txn);
         storage::abort_txn(_txn);
+        _txn = NULL;
     }
 
-    Client::RootTransaction::RootTransaction(int flags) : _actual(cc()._transaction), _owned(false) {
-        if (_actual == NULL) {
-            _actual = new Transaction(flags);
-            _owned = true;
-        }
-        dassert(_actual->is_root());
-    }
-
-    Client::RootTransaction::~RootTransaction() {
-        if (_owned) {
-            delete _actual;
-        }
-    }
-
-    void Client::RootTransaction::commit() {
-        if (_owned) {
-            _actual->commit();
-        }
-    }
-
-    void Client::RootTransaction::abort() {
-        if (_owned) {
-            _actual->abort();
-        }
+    void Client::Context::swap_transactions(shared_ptr<Transaction> &other_transaction) {
+        _transaction.swap(other_transaction);
     }
 
     BSONObj CachedBSONObj::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");
-    Client::Context::Context( string ns , Database * db, bool doauth ) :
+    Client::Context::Context( string ns , Database * db, bool doauth, int txn_flags ) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( mongo::dbpath ), // is this right? could be a different db? may need a dassert for this
         _justCreated(false),
         _doVersion( true ),
         _ns( ns ), 
-        _db(db)
+        _db(db),
+        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), txn_flags))
     {
         verify( db == 0 || db->isOk() );
         _client->_context = this;
         checkNsAccess( doauth );
     }
 
-    Client::Context::Context(const string& ns, string path , bool doauth, bool doVersion ) :
+    Client::Context::Context(const string& ns, string path , bool doauth, bool doVersion, int txn_flags ) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( path ), 
         _justCreated(false), // set for real in finishInit
         _doVersion(doVersion),
         _ns( ns ), 
-        _db(0) 
+        _db(0),
+        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), txn_flags))
     {
         _finishInit( doauth );
     }
@@ -284,12 +243,12 @@ namespace mongo {
     /** "read lock, and set my context, all in one operation" 
      *  This handles (if not recursively locked) opening an unopened database.
      */
-    Client::ReadContext::ReadContext(const string& ns, string path, bool doauth ) {
+    Client::ReadContext::ReadContext(const string& ns, string path, bool doauth, int txn_flags) {
         {
             lk.reset( new Lock::DBRead(ns) );
             Database *db = dbHolder().get(ns, path);
             if( db ) {
-                c.reset( new Context(path, ns, db, doauth) );
+                c.reset( new Context(path, ns, db, doauth, txn_flags) );
                 return;
             }
         }
@@ -300,17 +259,17 @@ namespace mongo {
             if( Lock::isW() ) { 
                 // write locked already
                 DEV RARELY log() << "write locked on ReadContext construction " << ns << endl;
-                c.reset( new Context(ns, path, doauth) );
+                c.reset( new Context(ns, path, doauth, txn_flags) );
             }
             else if( !Lock::nested() ) { 
                 lk.reset(0);
                 {
                     Lock::GlobalWrite w;
-                    Context c(ns, path, doauth);
+                    Context c(ns, path, doauth, txn_flags);
                 }
                 // db could be closed at this interim point -- that is ok, we will throw, and don't mind throwing.
                 lk.reset( new Lock::DBRead(ns) );
-                c.reset( new Context(ns, path, doauth) );
+                c.reset( new Context(ns, path, doauth, txn_flags) );
             }
             else { 
                 uasserted(15928, str::stream() << "can't open a database from a nested read lock " << ns);
@@ -348,14 +307,15 @@ namespace mongo {
     }
 
     // invoked from ReadContext
-    Client::Context::Context(const string& path, const string& ns, Database *db , bool doauth) :
+    Client::Context::Context(const string& path, const string& ns, Database *db , bool doauth, int txn_flags) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( path ), 
         _justCreated(false),
         _doVersion( true ),
         _ns( ns ), 
-        _db(db)
+        _db(db),
+        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), txn_flags))
     {
         verify(_db);
         checkNotStale();
@@ -363,7 +323,7 @@ namespace mongo {
         _client->_curOp->enter( this );
         checkNsAccess( doauth );
     }
-       
+
     void Client::Context::_finishInit( bool doauth ) {
         dassert( Lock::isLocked() );
         int writeLocked = Lock::somethingWriteLocked();
@@ -371,11 +331,13 @@ namespace mongo {
             uassert(14031, "Can't take a write lock while out of disk space", false);
         }
         
+        // getOrCreate will try to open the database, for which we require a transaction.
+        // The storage layer relies on cc().getContext() to find the transaction, so we set the client's context before calling getOrCreate.
+        _client->_context = this;
         _db = dbHolderUnchecked().getOrCreate( _ns , _path , _justCreated );
         verify(_db);
         if( _doVersion ) checkNotStale();
         massert( 16107 , str::stream() << "Don't have a lock on: " << _ns , Lock::atLeastReadLocked( _ns ) );
-        _client->_context = this;
         _client->_curOp->enter( this );
         checkNsAccess( doauth, writeLocked ? 1 : 0 );
     }

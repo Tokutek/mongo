@@ -586,8 +586,6 @@ namespace mongo {
 
         Lock::DBWrite lk(ns);
                 
-        Client::Transaction txn(DB_TXN_SNAPSHOT);
-
         // writelock is used to synchronize stepdowns w/ writes
         uassert( 10056 ,  "not master", isMasterNs( ns ) );
 
@@ -599,11 +597,11 @@ namespace mongo {
         if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
             return;
                 
-        Client::Context ctx(ns);
+        Client::Context ctx(ns, dbpath, true, true, DB_TXN_SNAPSHOT);
 
         long long n = deleteObjects(ns, pattern, justOne, true);
         lastError.getSafe()->recordDelete( n );
-        txn.commit();
+        ctx.commit_transaction();
     }
 
     QueryResult* emptyMoreResult(long long);
@@ -781,8 +779,6 @@ namespace mongo {
 
         Lock::DBWrite lk(ns);
 
-        Client::Transaction txn;
-                
         // CONCURRENCY TODO: is being read locked in big log sufficient here?
         // writelock is used to synchronize stepdowns w/ writes
         uassert( 10058 , "not master", isMasterNs(ns) );
@@ -799,7 +795,7 @@ namespace mongo {
             checkAndInsert(ns, first);
             globalOpCounters.incInsertInWriteLock(1);
         }
-        txn.commit();
+        ctx.commit_transaction();
     }
 
     void getDatabaseNames( vector< string > &names , const string& usePath ) {

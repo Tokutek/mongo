@@ -131,74 +131,11 @@ namespace mongo {
 
         LockState& lockState() { return _ls; }
 
-        /**
-         * RAII wrapper for a DB_TXN.  Ensures exception safety and that each transaction has at most one child.
-         *
-         * When created, it creates a child of the current client's transaction (cc()._transaction).
-         * When committed or aborted, it resets the current client's transaction to the parent.
-         * When destroyed, it automatically aborts.
-         *
-         * Example:
-         *  {
-         *      Transaction t1; // creates a transaction
-         *      {
-         *          Transaction t2; // creates a child of t1
-         *          t2.commit();
-         *      } // nothing happens
-         *      {
-         *          Transaction t3; // creates a child of t1
-         *          {
-         *              Transaction t4; // creates a child of t4
-         *          } // aborts t4
-         *          t3.abort();
-         *      } // nothing happens
-         *      t1.commit();
-         *  }
-         */
-        class Transaction : boost::noncopyable {
-            DB_TXN *_txn;
-            Transaction *_parent;
-            bool _retired;
-            void retire();
-
-            Transaction(DB_TXN *txn) : _txn(txn), _parent(NULL), _retired(false) { }
-        public:
-            explicit Transaction(int flags = 0);
-            ~Transaction();
-            void commit();
-            void abort();
-
-            // Make a copy of this transaction and handoff responsiblity
-            // of the underlying DB_TXN to the caller.
-            Transaction *handoff();
-
-            inline DB_TXN *txn() const { return _txn; }
-            inline bool is_root() const { return _parent == NULL; }
-        };
-        // Get the current innermost transaction.
-        inline const Transaction &transaction() const {
-            dassert(_transaction != NULL);
-            return *_transaction;
-        }
-
-        class RootTransaction : boost::noncopyable {
-            Transaction *_actual;
-            bool _owned;
-        public:
-            explicit RootTransaction(int flags = 0);
-            ~RootTransaction();
-            void commit();
-            void abort();
-            inline DB_TXN *txn() const { return _actual->txn(); }
-            inline bool is_root() const { return true; }
-        };
-
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
         friend class CurOp;
         ConnectionId _connectionId; // > 0 for things "conn", 0 otherwise
         string _threadId; // "" on non support systems
-        Transaction *_transaction;
         CurOp * _curOp;
         Context * _context;
         bool _shutdown; // to track if Client::shutdown() gets called
@@ -234,7 +171,7 @@ namespace mongo {
          */
         class ReadContext : boost::noncopyable { 
         public:
-            ReadContext(const string& ns, string path=dbpath, bool doauth=true );
+            ReadContext(const string &ns, string path=dbpath, bool doauth=true, int txn_flags=0);
             Context& ctx() { return *c.get(); }
         private:
             scoped_ptr<Lock::DBRead> lk;
@@ -247,16 +184,16 @@ namespace mongo {
         class Context : boost::noncopyable {
         public:
             /** this is probably what you want */
-            Context(const string& ns, string path=dbpath, bool doauth=true, bool doVersion=true );
+            Context(const string& ns, string path=dbpath, bool doauth=true, bool doVersion=true, int txn_flags = 0);
 
             /** note: this does not call finishInit -- i.e., does not call 
                       shardVersionOk() for example. 
                 see also: reset().
             */
-            Context( string ns , Database * db, bool doauth=true );
+            Context(string ns, Database * db, bool doauth=true, int txn_flags = 0);
 
             // used by ReadContext
-            Context(const string& path, const string& ns, Database *db, bool doauth);
+            Context(const string& path, const string& ns, Database *db, bool doauth, int txn_flags = 0);
 
             ~Context();
             Client* getClient() const { return _client; }
@@ -283,6 +220,21 @@ namespace mongo {
             /** call after going back into the lock, will re-establish non-thread safe stuff */
             void relocked() { _finishInit(); }
 
+            class Transaction : boost::noncopyable {
+                DB_TXN *_txn;
+            public:
+                explicit Transaction(const Transaction *parent, int flags);
+                ~Transaction();
+                void commit(int flags);
+                void abort();
+                DB_TXN *txn() const { return _txn; }
+            };
+
+            const Transaction &transaction() const { return *_transaction; }
+            bool transaction_is_root() const { return _oldContext == NULL; }
+            void commit_transaction(int flags = 0) { _transaction->commit(flags); }
+            void swap_transactions(shared_ptr<Transaction> &other_transaction);
+
         private:
             friend class CurOp;
             void _finishInit( bool doauth=true);
@@ -297,6 +249,7 @@ namespace mongo {
             bool _doVersion;
             const string _ns;
             Database * _db;
+            shared_ptr<Transaction> _transaction;
             
             Timer _timer;
         }; // class Client::Context

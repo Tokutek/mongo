@@ -27,9 +27,7 @@
 namespace mongo {
     
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
-        Client::Transaction txn(DB_TXN_SNAPSHOT);
-
-        Client::Context cx(ns);
+        Client::Context cx(ns, dbpath, true, true, DB_TXN_SNAPSHOT);
         NamespaceDetails *d = nsdetails( ns );
         if ( !d ) {
             err = "ns missing";
@@ -90,7 +88,7 @@ namespace mongo {
                 cursor->advance();
             }
             ccPointer.reset();
-            txn.commit();
+            cx.commit_transaction();
             return count;
             
         }

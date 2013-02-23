@@ -520,6 +520,7 @@ namespace BasicTests {
             // this leaks as ~Database is private
             // if that changes, should put this on the stack
             {
+                Client::Context ctx("dbtests_basictests_ownsns");
                 Database * db = new Database( "dbtests_basictests_ownsns" , isNew );
                 verify( isNew );
 

@@ -91,9 +91,7 @@ namespace mongo {
             checkDuplicateUncasedNames(true);
             // If already exists, open.  Otherwise behave as if empty until
             // there's a write, then open.
-            Client::RootTransaction txn;
             namespaceIndex.init();
-            txn.commit();
             if (namespaceIndex.allocated()) {
                 newDb = false;
             } else {
@@ -514,20 +512,16 @@ namespace mongo {
         NamespaceIndex *ni = nsindex(ns);
         if (!ni->allocated()) {
             // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
-            Client::RootTransaction txn;
             ni->init(true);
-            txn.commit();
         }
         NamespaceDetails *details = ni->details(ns);
         if (details == NULL) {
             tokulog() << "Didn't find nsdetails(" << ns << "), creating it." << endl;
-            Client::RootTransaction txn;
 
             Namespace ns_s(ns);
             shared_ptr<NamespaceDetails> new_details(new NamespaceDetails(ns, options, false));
             ni->add_ns(ns, new_details);
 
-            txn.commit();
             details = ni->details(ns);
         }
         return details;

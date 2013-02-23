@@ -26,7 +26,7 @@ namespace mongo {
     namespace storage {
 
         DB_TXN *start_txn(DB_TXN *parent, int flags);
-        void commit_txn(DB_TXN *txn);
+        void commit_txn(DB_TXN *txn, int flags);
         void abort_txn(DB_TXN *txn);
 
     } // namespace storage

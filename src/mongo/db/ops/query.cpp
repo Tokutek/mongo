@@ -82,7 +82,7 @@ namespace mongo {
     QueryResult* processGetMore(const char *ns, int ntoreturn, long long cursorid , CurOp& curop, int pass, bool& exhaust ) {
         exhaust = false;
         ClientCursor::Pin p(cursorid);
-        ClientCursor *cc = p.c();
+        ClientCursor *client_cursor = p.c();
 
         int bufSize = 512 + sizeof( QueryResult ) + MaxBytesToReturnToClientAtOnce;
 
@@ -92,30 +92,33 @@ namespace mongo {
         int start = 0;
         int n = 0;
 
-        if ( unlikely(!cc) ) {
+        if ( unlikely(!client_cursor) ) {
             LOGSOME << "getMore: cursorid not found " << ns << " " << cursorid << endl;
             cursorid = 0;
             resultFlags = ResultFlag_CursorNotFound;
         }
         else {
             // check for spoofing of the ns such that it does not match the one originally there for the cursor
-            uassert(14833, "auth error", str::equals(ns, cc->ns().c_str()));
+            uassert(14833, "auth error", str::equals(ns, client_cursor->ns().c_str()));
 
-            // check that we properly set the transaction when the cursor was originally saved.
-            verify( cc->transaction != NULL );
+            // check that we properly set the transaction when the cursor was originally saved, and restore it into the current context
+            Client::Context *ctx = cc().getContext();
+            verify(ctx->transaction_is_root());
+            verify(client_cursor->transaction.get() != NULL);
+            ctx->swap_transactions(client_cursor->transaction);
 
             if ( pass == 0 )
-                cc->updateSlaveLocation( curop );
+                client_cursor->updateSlaveLocation( curop );
 
-            int queryOptions = cc->queryOptions();
+            int queryOptions = client_cursor->queryOptions();
             
-            curop.debug().query = cc->query();
+            curop.debug().query = client_cursor->query();
 
-            start = cc->pos();
-            Cursor *c = cc->c();
+            start = client_cursor->pos();
+            Cursor *c = client_cursor->c();
 
             // This manager may be stale, but it's the state of chunking when the cursor was created.
-            ShardChunkManagerPtr manager = cc->getChunkManager();
+            ShardChunkManagerPtr manager = client_cursor->getChunkManager();
 
             while ( 1 ) {
                 if ( !c->ok() ) {
@@ -137,12 +140,12 @@ namespace mongo {
                     bool ok = ClientCursor::erase(cursorid);
                     verify(ok);
                     cursorid = 0;
-                    cc = 0;
+                    client_cursor = 0;
                     break;
                 }
 
                 MatchDetails details;
-                if ( cc->fields && cc->fields->getArrayOpType() == Projection::ARRAY_OP_POSITIONAL ) {
+                if ( client_cursor->fields && client_cursor->fields->getArrayOpType() == Projection::ARRAY_OP_POSITIONAL ) {
                     // field projection specified, and contains an array operator
                     details.requestElemMatchKey();
                 }
@@ -150,7 +153,7 @@ namespace mongo {
                 // in some cases (clone collection) there won't be a matcher
                 if ( !c->currentMatches( &details ) ) {
                 }
-                else if ( manager && ! manager->belongsToMe( cc ) ){
+                else if ( manager && ! manager->belongsToMe( client_cursor ) ){
                     LOG(2) << "cursor skipping document in un-owned chunk: " << c->current() << endl;
                 }
                 else {
@@ -160,11 +163,11 @@ namespace mongo {
                     else {
                         n++;
 
-                        cc->fillQueryResultFromObj( b, &details );
+                        client_cursor->fillQueryResultFromObj( b, &details );
 
                         if ( ( ntoreturn && n >= ntoreturn ) || b.len() > MaxBytesToReturnToClientAtOnce ) {
                             c->advance();
-                            cc->incPos( n );
+                            client_cursor->incPos( n );
                             break;
                         }
                     }
@@ -172,9 +175,9 @@ namespace mongo {
                 c->advance();
             }
             
-            if ( cc ) {
-                //cc->storeOpForSlave( last );
-                exhaust = cc->queryOptions() & QueryOption_Exhaust;
+            if ( client_cursor ) {
+                //client_cursor->storeOpForSlave( last );
+                exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
             }
         }
 
@@ -620,13 +623,6 @@ namespace mongo {
 
         const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
         
-        // Tailable cursors need to read newly written entries to the tail
-        // of the collection, so we choose read committed isolation.
-        // Otherwise we default to a snapshot.
-        // XXX: TODO Read committed doesn't do what I want it to, so use an
-        // "incorrect" but mostly working UNCOMMITTED isolation.
-        Client::Transaction txn((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT));
-
         log(1) << "query beginning read-only transaction. tailable: " << tailable << endl;
         
         BSONObj oldPlan;
@@ -709,6 +705,7 @@ namespace mongo {
 
         ccPointer.reset();
         long long cursorid = 0;
+        Client::Context *ctx = cc().getContext();
         if ( saveClientCursor ) {
             // Create a new ClientCursor, with a default timeout.
             ccPointer.reset( new ClientCursor( queryOptions, cursor, ns,
@@ -736,11 +733,13 @@ namespace mongo {
             ccPointer->fields = pq.getFieldPtr();
             // Clones the transaction and hand's off responsibility
             // of its completion to the client cursor's destructor.
-            ccPointer->transaction = shared_ptr< Client::Transaction >( txn.handoff() );
+            verify(ctx->transaction_is_root());
+            verify(ccPointer->transaction.get() == NULL);
+            ctx->swap_transactions(ccPointer->transaction);
             ccPointer.release();
         } else {
             // Not saving the cursor, so we can commit its transaction now.
-            txn.commit();
+            ctx->commit_transaction();
         }
         
         QueryResult *qr = (QueryResult *) result.header();
@@ -769,15 +768,11 @@ namespace mongo {
         auto_ptr< QueryResult > qr;
         BSONObj resObject;
         
-        Client::ReadContext ctx( ns , dbpath ); // read locks
+        Client::ReadContext ctx(ns, dbpath, true, (cc().getContext() == 0 ? DB_TXN_SNAPSHOT : DB_INHERIT_ISOLATION)); // read locks
         replVerifyReadsOk(&pq);
         
-        bool found;
-        {
-            Client::Transaction txn(DB_TXN_SNAPSHOT);
-            found = Helpers::findById( ns, query, resObject );
-            txn.commit();
-        }
+        bool found = Helpers::findById( ns, query, resObject );
+        ctx.ctx().commit_transaction();
         
         if ( shardingState.needShardChunkManager( ns ) ) {
             ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
@@ -909,7 +904,17 @@ namespace mongo {
         bool hasRetried = false;
         while ( 1 ) {
             try {
-                Client::ReadContext ctx( ns , dbpath ); // read locks
+                const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
+
+                // Tailable cursors need to read newly written entries to the tail
+                // of the collection, so we choose read committed isolation.
+                // Otherwise we default to a snapshot.
+                // XXX: TODO Read committed doesn't do what I want it to, so use an
+                // "incorrect" but mostly working UNCOMMITTED isolation.
+                Client::ReadContext ctx(ns , dbpath, true,
+                                        (cc().getContext() == 0
+                                         ? (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT)
+                                         : DB_INHERIT_ISOLATION)); // read locks
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
                 
                 replVerifyReadsOk(&pq);

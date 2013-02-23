@@ -31,7 +31,6 @@ namespace mongo {
         // Trying to insert into a system collection.  Fancy side-effects go here:
         // TODO: see insert_checkSys
         if (mongoutils::str::endsWith(ns, ".system.indexes")) {
-            Client::RootTransaction txn;
             // obj is something like this:
             // { _id: ObjectId('511d34f6d3080c48017a14d0'), ns: "test.leif", key: { a: -1.0 }, name: "a_-1", unique: true }
             const string &coll = obj["ns"].String();
@@ -43,7 +42,6 @@ namespace mongo {
                 uasserted(ASSERT_ID_DUPKEY, mongoutils::str::stream() << coll << " already has an index on key " << key);
             }
             details->createIndex(obj);
-            txn.commit();
         }
     }
 

@@ -165,7 +165,7 @@ namespace mongo {
 
         tokulog() << "Initializing NamespaceIndex " << database_ << endl;
         {
-            const Client::Transaction &txn = cc().transaction();
+            const Client::Context::Transaction &txn = cc().getContext()->transaction();
             DBC *cursor;
             r = nsdb->cursor(nsdb, txn.txn(), &cursor, 0);
             verify(r == 0);
@@ -215,7 +215,7 @@ namespace mongo {
         DBT ndbt;
         ndbt.data = const_cast<void *>(static_cast<const void *>(nsobj.objdata()));
         ndbt.size = nsobj.objsize();
-        int r = nsdb->del(nsdb, cc().transaction().txn(), &ndbt, DB_DELETE_ANY);
+        int r = nsdb->del(nsdb, cc().getContext()->transaction().txn(), &ndbt, DB_DELETE_ANY);
         verify(r == 0);
 
         // Should really only do this after the commit of the del.
@@ -245,7 +245,7 @@ namespace mongo {
         ddbt.data = const_cast<void *>(static_cast<const void *>(serialized.objdata()));
         ddbt.size = serialized.objsize();
         const int flags = overwrite ? 0 : DB_NOOVERWRITE;
-        int r = nsdb->put(nsdb, cc().transaction().txn(), &ndbt, &ddbt, flags);
+        int r = nsdb->put(nsdb, cc().getContext()->transaction().txn(), &ndbt, &ddbt, flags);
         verify(r == 0);
     }
 

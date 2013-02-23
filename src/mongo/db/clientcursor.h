@@ -317,8 +317,8 @@ namespace mongo {
     public:
         shared_ptr<ParsedQuery> pq;
         shared_ptr<Projection> fields; // which fields query wants returned
-        shared_ptr<Client::Transaction> transaction; // the transaction this cursor is under,
-                                                     // only set to support getMore() 
+        shared_ptr<Client::Context::Transaction> transaction; // the transaction this cursor is under,
+                                                              // only set to support getMore() 
 
     private: // static members
 

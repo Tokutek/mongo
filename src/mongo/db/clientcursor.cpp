@@ -224,11 +224,6 @@ namespace mongo {
 
             clientCursorsById.erase(_cursorid);
 
-            // Commit a transaction if this cursor is responsible for one.
-            if (transaction) {
-                transaction->commit();
-            }
-
             // defensive:
             _cursorid = INVALID_CURSOR_ID;
             _pos = -2;

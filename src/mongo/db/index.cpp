@@ -148,7 +148,7 @@ namespace mongo {
         vdbt.data = const_cast<void *>(static_cast<const void *>(val.objdata()));
         vdbt.size = val.objsize();
         const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
-        int r = _db->put(_db, cc().transaction().txn(), &kdbt, &vdbt, flags);
+        int r = _db->put(_db, cc().getContext()->transaction().txn(), &kdbt, &vdbt, flags);
         uassert(16433, "key already exists in unique index", r != DB_KEYEXIST);
         if (r != 0) {
             tokulog() << "error inserting " << key << ", " << val << endl;
@@ -173,7 +173,7 @@ namespace mongo {
             kdbt.data = const_cast<void *>(static_cast<const void *>(buf));
             kdbt.size = buflen;
             const int flags = DB_DELETE_ANY;
-            int r = _db->del(_db, cc().transaction().txn(), &kdbt, flags);
+            int r = _db->del(_db, cc().getContext()->transaction().txn(), &kdbt, flags);
             verify(r == 0);
         }
     }
@@ -181,7 +181,7 @@ namespace mongo {
     // Get a DBC over an index. Must already be in the context of a transction.
     DBC *IndexDetails::cursor() const {
         DBC *cursor;
-        const Client::Transaction &txn = cc().transaction();
+        const Client::Context::Transaction &txn = cc().getContext()->transaction();
         int r = _db->cursor(_db, txn.txn(), &cursor, 0);
         verify(r == 0);
         return cursor;
