@@ -45,8 +45,11 @@ namespace mongo {
         }
     }
 
-    void insertOneObject(NamespaceDetails *details, const BSONObj &obj) {
+    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, const BSONObj &obj) {
         details->insertObject(obj, true);
+        if (nsdt != NULL) {
+            nsdt->notifyOfWriteOp();
+        }
     }
 
     void insertObject(const char *ns, const BSONObj &obj) {
@@ -55,7 +58,9 @@ namespace mongo {
             handle_system_collection_insert(ns, obj);
         }
         NamespaceDetails *details = nsdetails_maybe_create(ns);
-        insertOneObject(details, obj);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+
+        insertOneObject(details, nsdt, obj);
         logOp("i", ns, obj);
     }
     

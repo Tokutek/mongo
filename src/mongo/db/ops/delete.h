@@ -23,12 +23,12 @@
 
 namespace mongo {
 
-    void deleteOneObject(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj);
-
-    // If justOne is true, deletedId is set to the id of the deleted object.
-    long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop = false);
+    void deleteOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, const BSONObj &pk, const BSONObj &obj);
 
     // System-y version of deleteObjects that allows you to delete from the system collections, used to be god = true.
     long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop);
+
+    // If justOne is true, deletedId is set to the id of the deleted object.
+    long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop = false);
 
 }

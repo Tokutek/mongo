@@ -275,15 +275,16 @@ namespace mongo {
             {
                 Client::WriteContext ctx(ns);
                 scoped_ptr<Cursor> c;
-                NamespaceDetails* nsd = nsdetails( ns.c_str() );
-                if ( ! nsd )
+                NamespaceDetails *d = nsdetails( ns.c_str() );
+                NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get( ns.c_str() );
+                if ( ! d )
                     break;
                     
                 {
-                    int ii = nsd->findIndexByKeyPattern( keyPattern );
+                    int ii = d->findIndexByKeyPattern( keyPattern );
                     verify( ii >= 0 );
                     
-                    IndexDetails& i = nsd->idx( ii );
+                    IndexDetails& i = d->idx( ii );
 
                     // Extend min to get (min, MinKey, MinKey, ....)
                     BSONObj newMin = Helpers::modifiedRangeBound( min , keyPattern , -1 );
@@ -292,7 +293,7 @@ namespace mongo {
                     int minOrMax = maxInclusive ? 1 : -1;
                     BSONObj newMax = Helpers::modifiedRangeBound( max , keyPattern , minOrMax );
                     
-                    c.reset( new IndexCursor( nsd , &i , newMin , newMax , maxInclusive , 1 ) );
+                    c.reset( new IndexCursor( d , &i , newMin , newMax , maxInclusive , 1 ) );
                 }
                 
                 if ( ! c->ok() ) {
@@ -307,7 +308,7 @@ namespace mongo {
                 c.reset(0);
                 
                 logOp( "d" , ns.c_str() , obj["_id"].wrap() , 0 , 0 , fromMigrate );
-                deleteOneObject(nsd, pk, obj);
+                deleteOneObject( d, nsdt, pk, obj);
                 numDeleted++;
             }
 

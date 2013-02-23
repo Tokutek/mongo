@@ -41,7 +41,7 @@ namespace CountTests {
             try {
                 boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() );
                 for(; c->ok(); c->advance() ) {
-                    deleteOneObject( nsdetails(ns()) , c->currPK(), c->current() );
+                    deleteOneObject( nsdetails(ns()) , &NamespaceDetailsTransient::get(ns()), c->currPK(), c->current() );
                 }
                 DBDirectClient cl;
                 cl.dropIndexes( ns() );
