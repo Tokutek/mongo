@@ -180,8 +180,6 @@ namespace mongo {
             break;
         }
 
-
-
         case PUSH_ALL: {
             uassert( 10132 ,  "$pushAll can only be applied to an array" , in.type() == Array );
             uassert( 10133 ,  "$pushAll has to be passed an array" , elt.type() );
@@ -383,7 +381,6 @@ namespace mongo {
                     int target = validRenamePath( obj, m.fieldName );
                     uassert( 13490, "$rename target field invalid", target != -1 );
                     ms.newVal = obj.getFieldDotted( m.renameFrom() );
-                    mss->amIInPlacePossible( false );
                 }
                 else {
                     ms.dontApply = true;
@@ -392,30 +389,16 @@ namespace mongo {
             }
 
             if ( e.eoo() ) {
-                mss->amIInPlacePossible( m.op == Mod::UNSET );
                 continue;
             }
 
             switch( m.op ) {
             case Mod::INC:
                 uassert( 10140 ,  "Cannot apply $inc modifier to non-number", e.isNumber() || e.eoo() );
-                if ( mss->amIInPlacePossible( e.isNumber() ) ) {
-                    // check more typing info here
-                    if ( m.elt.type() != e.type() ) {
-                        // if i'm incrementing with a double, then the storage has to be a double
-                        mss->amIInPlacePossible( m.elt.type() != NumberDouble );
-                    }
-
-                    // check for overflow
-                    if ( e.type() == NumberInt && e.numberLong() + m.elt.numberLong() > numeric_limits<int>::max() ) {
-                        mss->amIInPlacePossible( false );
-                    }
-                }
                 break;
 
+            default:
             case Mod::SET:
-                mss->amIInPlacePossible( m.elt.type() == e.type() &&
-                                         m.elt.valuesize() == e.valuesize() );
                 break;
 
             case Mod::PUSH:
@@ -423,77 +406,26 @@ namespace mongo {
                 uassert( 10141,
                          "Cannot apply $push/$pushAll modifier to non-array",
                          e.type() == Array || e.eoo() );
-                mss->amIInPlacePossible( false );
                 break;
 
             case Mod::PULL:
-            case Mod::PULL_ALL: {
+            case Mod::PULL_ALL:
                 uassert( 10142,
                          "Cannot apply $pull/$pullAll modifier to non-array",
                          e.type() == Array || e.eoo() );
-
-                //temporarily record the things to pull. only use this set while 'm.elt' in scope.
-                BSONElementSet toPull;
-                if ( m.op == Mod::PULL_ALL ) {
-                    BSONObjIterator j( m.elt.embeddedObject() );
-                    while ( j.more() ) {
-                        toPull.insert( j.next() );
-                    }
-                }
-
-                BSONObjIterator i( e.embeddedObject() );
-                while( mss->_inPlacePossible && i.more() ) {
-                    BSONElement arrI = i.next();
-                    if ( m.op == Mod::PULL ) {
-                        mss->amIInPlacePossible( ! m._pullElementMatch( arrI ) );
-                    }
-                    else if ( m.op == Mod::PULL_ALL ) {
-                        mss->amIInPlacePossible( toPull.find( arrI ) == toPull.end() );
-                    }
-                }
                 break;
-            }
 
-            case Mod::POP: {
+            case Mod::POP:
                 uassert( 10143,
                          "Cannot apply $pop modifier to non-array",
                          e.type() == Array || e.eoo() );
-                mss->amIInPlacePossible( e.embeddedObject().isEmpty() );
                 break;
-            }
 
-            case Mod::ADDTOSET: {
+            case Mod::ADDTOSET:
                 uassert( 12591,
                          "Cannot apply $addToSet modifier to non-array",
                          e.type() == Array || e.eoo() );
-
-                BSONObjIterator i( e.embeddedObject() );
-                if ( m.isEach() ) {
-                    BSONElementSet toadd;
-                    m.parseEach( toadd );
-                    while( i.more() ) {
-                        BSONElement arrI = i.next();
-                        toadd.erase( arrI );
-                    }
-                    mss->amIInPlacePossible( toadd.size() == 0 );
-                }
-                else {
-                    bool found = false;
-                    while( i.more() ) {
-                        BSONElement arrI = i.next();
-                        if ( arrI.woCompare( m.elt , false ) == 0 ) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    mss->amIInPlacePossible( found );
-                }
                 break;
-            }
-
-            default:
-                // mods we don't know about shouldn't be done in place
-                mss->amIInPlacePossible( false );
             }
         }
 
@@ -562,53 +494,6 @@ namespace mongo {
         verify( _objData.isEmpty() );
         _objData = b.obj();
         newVal = _objData.firstElement();
-    }
-
-    void ModSetState::applyModsInPlace( bool isOnDisk ) {
-        // TODO i think this assert means that we can get rid of the isOnDisk param
-        //      and just use isOwned as the determination
-        DEV verify( isOnDisk == ! _obj.isOwned() );
-
-        for ( ModStateHolder::iterator i = _mods.begin(); i != _mods.end(); ++i ) {
-            ModState& m = *i->second;
-
-            if ( m.dontApply ) {
-                continue;
-            }
-
-            switch ( m.m->op ) {
-            case Mod::UNSET:
-            case Mod::ADDTOSET:
-            case Mod::RENAME_FROM:
-            case Mod::RENAME_TO:
-                // this should have been handled by prepare
-                break;
-            case Mod::PULL:
-            case Mod::PULL_ALL:
-                // this should have been handled by prepare
-                break;
-            case Mod::POP:
-                verify( m.old.eoo() || ( m.old.isABSONObj() && m.old.Obj().isEmpty() ) );
-                break;
-                // [dm] the BSONElementManipulator statements below are for replication (correct?)
-            case Mod::INC:
-                if ( isOnDisk )
-                    m.m->IncrementMe( m.old );
-                else
-                    m.m->incrementMe( m.old );
-                m.fixedOpName = "$set";
-                m.fixed = &(m.old);
-                break;
-            case Mod::SET:
-                if ( isOnDisk )
-                    BSONElementManipulator( m.old ).ReplaceTypeAndValue( m.m->elt );
-                else
-                    BSONElementManipulator( m.old ).replaceTypeAndValue( m.m->elt );
-                break;
-            default:
-                uassert( 13478 ,  "can't apply mod in place - shouldn't have gotten here" , 0 );
-            }
-        }
     }
 
     void ModSetState::_appendNewFromMods( const string& root,
@@ -823,11 +708,7 @@ namespace mongo {
         }
 
         auto_ptr<ModSetState> mss = prepare( newObj );
-
-        if ( mss->canApplyInPlace() )
-            mss->applyModsInPlace( false );
-        else
-            newObj = mss->createNewFromMods();
+        newObj = mss->createNewFromMods();
 
         return newObj;
     }

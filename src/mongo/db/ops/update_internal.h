@@ -93,22 +93,6 @@ namespace mongo {
                 verify(0);
             }
         }
-        void IncrementMe( BSONElement& in ) const {
-            BSONElementManipulator manip( in );
-            switch ( in.type() ) {
-            case NumberDouble:
-                manip.SetNumber( elt.numberDouble() + in.numberDouble() );
-                break;
-            case NumberLong:
-                manip.SetLong( elt.numberLong() + in.numberLong() );
-                break;
-            case NumberInt:
-                manip.SetInt( elt.numberInt() + in.numberInt() );
-                break;
-            default:
-                verify(0);
-            }
-        }
 
         void appendIncremented( BSONBuilderBase& bb , const BSONElement& in, ModState& ms ) const;
 
@@ -480,20 +464,10 @@ namespace mongo {
         typedef pair<const ModStateHolder::iterator,const ModStateHolder::iterator> ModStateRange;
         const BSONObj& _obj;
         ModStateHolder _mods;
-        bool _inPlacePossible;
         BSONObj _newFromMods; // keep this data alive, as oplog generation may depend on it
 
         ModSetState( const BSONObj& obj )
-            : _obj( obj ) , _mods( LexNumCmp( true ) ) , _inPlacePossible(true) {
-        }
-
-        /**
-         * @return if in place is still possible
-         */
-        bool amIInPlacePossible( bool inPlacePossible ) {
-            if ( ! inPlacePossible )
-                _inPlacePossible = false;
-            return _inPlacePossible;
+            : _obj( obj ) , _mods( LexNumCmp( true ) ) {
         }
 
         ModStateRange modsForRoot( const string& root );
@@ -586,16 +560,6 @@ namespace mongo {
         static bool duplicateFieldName( const BSONElement& a, const BSONElement& b );
 
     public:
-
-        bool canApplyInPlace() const {
-            return _inPlacePossible;
-        }
-
-        /**
-         * modified underlying _obj
-         * @param isOnDisk - true means this is an on disk object, and this update needs to be made durable
-         */
-        void applyModsInPlace( bool isOnDisk );
 
         BSONObj createNewFromMods();
 

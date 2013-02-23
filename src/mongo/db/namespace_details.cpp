@@ -439,9 +439,7 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::insert(const char *ns, const BSONObj &obj, bool overwrite) {
-        Lock::assertWriteLocked(ns);
-
+    void NamespaceDetails::insertObject(const BSONObj &obj, bool overwrite) {
         if (overwrite && _indexes.size() > 1) {
             wunimplemented("overwrite inserts on secondary keys right now don't work");
             //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);

@@ -120,44 +120,6 @@ namespace mongo {
             timestamp = OpTime::now(lk).asDate();
         }
     }
-    void BSONElementManipulator::SetNumber(double d) {
-        ::abort();
-#if 0
-        if ( _element.type() == NumberDouble )
-            *getDur().writing( reinterpret_cast< double * >( value() )  ) = d;
-        else if ( _element.type() == NumberInt )
-            *getDur().writing( reinterpret_cast< int * >( value() ) ) = (int) d;
-        else verify(0);
-#endif
-    }
-    void BSONElementManipulator::SetLong(long long n) {
-        ::abort();
-#if 0
-        verify( _element.type() == NumberLong );
-        *getDur().writing( reinterpret_cast< long long * >(value()) ) = n;
-#endif
-    }
-    void BSONElementManipulator::SetInt(int n) {
-        ::abort();
-#if 0
-        verify( _element.type() == NumberInt );
-        getDur().writingInt( *reinterpret_cast< int * >( value() ) ) = n;
-#endif
-    }
-    /* dur:: version */
-    void BSONElementManipulator::ReplaceTypeAndValue( const BSONElement &e ) {
-        ::abort();
-#if 0
-        char *d = data();
-        char *v = value();
-        int valsize = e.valuesize();
-        int ofs = (int) (v-d);
-        dassert( ofs > 0 );
-        char *p = (char *) getDur().writingPtr(d, valsize + ofs);
-        *p = e.type();
-        memcpy( p + ofs, e.value(), valsize );
-#endif
-    }
 
     void inProgCmd( Message &m, DbResponse &dbresponse ) {
         BSONObjBuilder b;

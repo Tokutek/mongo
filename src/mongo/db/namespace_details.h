@@ -206,8 +206,7 @@ namespace mongo {
         // If getKey is true, then the query object must have the _id key extracted.
         // Otherwise, the query object is just an _id key value with no name.
         bool findById(const BSONObj &query, BSONObj &result, bool getKey = true);
-
-        void insert(const char *ns, const BSONObj &obj, bool overwrite);
+        void insertObject(const BSONObj &obj, bool overwrite);
         void deleteObject(const BSONObj &pk, const BSONObj &obj);
 
     private:

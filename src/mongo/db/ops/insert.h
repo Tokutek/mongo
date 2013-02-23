@@ -24,7 +24,10 @@
 
 namespace mongo {
 
-    // Insert an object into the given namespace.
+    // Insert an object into the given namespace. Does not log.
+    void insertOneObject(NamespaceDetails *d, const BSONObj &obj);
+
+    // Insert an object into the given namespace. Logs the operation.
     void insertObject(const char *ns, const BSONObj &obj);
     
 }  // namespace mongo

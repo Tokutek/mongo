@@ -36,25 +36,22 @@ namespace mongo {
         */
         void initTimestamp();
 
-        // Note the ones with a capital letter call getDur().writing and journal
-
         /** Change the value, in place, of the number. */
         void setNumber(double d) {
             if ( _element.type() == NumberDouble ) *reinterpret_cast< double * >( value() )  = d;
             else if ( _element.type() == NumberInt ) *reinterpret_cast< int * >( value() ) = (int) d;
             else verify(0);
         }
-        void SetNumber(double d);
+
         void setLong(long long n) {
             verify( _element.type() == NumberLong );
             *reinterpret_cast< long long * >( value() ) = n;
         }
-        void SetLong(long long n);
+
         void setInt(int n) {
             verify( _element.type() == NumberInt );
             *reinterpret_cast< int * >( value() ) = n;
         }
-        void SetInt(int n);
 
         /** Replace the type and value of the element with the type and value of e,
             preserving the original fieldName */
@@ -62,9 +59,6 @@ namespace mongo {
             *data() = e.type();
             memcpy( value(), e.value(), e.valuesize() );
         }
-
-        /* dur:: version */
-        void ReplaceTypeAndValue( const BSONElement &e );
 
         static void lookForTimestamps( const BSONObj& obj ) {
             // If have a Timestamp field as the first or second element,

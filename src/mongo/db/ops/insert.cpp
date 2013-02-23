@@ -47,14 +47,17 @@ namespace mongo {
         }
     }
 
+    void insertOneObject(NamespaceDetails *details, const BSONObj &obj) {
+        details->insertObject(obj, true);
+    }
+
     void insertObject(const char *ns, const BSONObj &obj) {
         if (mongoutils::str::contains(ns, "system.")) {
             uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
             handle_system_collection_insert(ns, obj);
         }
         NamespaceDetails *details = nsdetails_maybe_create(ns);
-        // TODO: need some transactional atomicity around these two?
-        details->insert(ns, obj, true);
+        insertOneObject(details, obj);
         logOp("i", ns, obj);
     }
     
