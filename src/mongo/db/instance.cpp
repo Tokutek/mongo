@@ -544,31 +544,20 @@ namespace mongo {
         op.debug().query = query;
         op.setQuery(query);
 
-        //PageFaultRetryableSection s;
-        while ( 1 ) {
-            try {
-                Lock::DBWrite lk(ns);
-                
-                // void ReplSetImpl::relinquish() uses big write lock so 
-                // this is thus synchronized given our lock above.
-                uassert( 10054 ,  "not master", isMasterNs( ns ) );
-                
-                // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-                if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
-                    return;
-                
-                Client::Context ctx( ns );
-                
-                UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
-                lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
-                break;
-            }
-            //catch ( PageFaultException& e ) {
-            catch ( ... ) {
-                ::abort();
-                //e.touch();
-            }
-        }
+        Lock::DBWrite lk(ns);
+        
+        // void ReplSetImpl::relinquish() uses big write lock so 
+        // this is thus synchronized given our lock above.
+        uassert( 10054 ,  "not master", isMasterNs( ns ) );
+        
+        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+        if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
+            return;
+        
+        Client::Context ctx( ns );
+        
+        UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
+        lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
     }
 
     void receivedDelete(Message& m, CurOp& op) {
