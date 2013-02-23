@@ -216,7 +216,7 @@ namespace mongo {
                     }
                     else if ( e.rawdata() != arrElt.rawdata() ) {
                         // enforce single array path here
-                        // TokuDB: We allow parallel arrays. Do nothing.
+                        uasserted(16443, "_getKeys() does not properly generate parallel array keys, sorry!");
                     }
                     if ( arrayNestedArray ) {
                         mayExpandArrayUnembedded = false;   
