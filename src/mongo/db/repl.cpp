@@ -178,14 +178,11 @@ namespace mongo {
             list<BSONObj> src;
             {
                 Client::ReadContext ctx( "local.sources", dbpath, authed );
-                ::abort();
-#if 0
-                shared_ptr<Cursor> c = findTableScan("local.sources", BSONObj());
+                shared_ptr<Cursor> c = Helpers::findTableScan("local.sources", BSONObj());
                 while ( c->ok() ) {
                     src.push_back(c->current());
                     c->advance();
                 }
-#endif
             }
 
             for( list<BSONObj>::const_iterator i = src.begin(); i != src.end(); i++ ) {
@@ -349,7 +346,6 @@ namespace mongo {
         }
     }
 
-#if 0
     static void addSourceToList(ReplSource::SourceVector &v, ReplSource& s, ReplSource::SourceVector &old) {
         if ( !s.syncedTo.isNull() ) { // Don't reuse old ReplSource if there was a forced resync.
             for ( ReplSource::SourceVector::iterator i = old.begin(); i != old.end();  ) {
@@ -364,7 +360,6 @@ namespace mongo {
 
         v.push_back( shared_ptr< ReplSource >( new ReplSource( s ) ) );
     }
-#endif
 
     /* we reuse our existing objects so that we can keep our existing connection
        and cursor in effect.
@@ -378,9 +373,7 @@ namespace mongo {
             // --source <host> specified.
             // check that no items are in sources other than that
             // add if missing
-            ::abort();
-#if 0
-            shared_ptr<Cursor> c = findTableScan("local.sources", BSONObj());
+            shared_ptr<Cursor> c = Helpers::findTableScan("local.sources", BSONObj());
             int n = 0;
             while ( c->ok() ) {
                 n++;
@@ -409,7 +402,6 @@ namespace mongo {
                 s.only = cmdLine.only;
                 s.save();
             }
-#endif
         }
         else {
             try {
@@ -420,9 +412,7 @@ namespace mongo {
             }
         }
 
-        ::abort();
-#if 0
-        shared_ptr<Cursor> c = findTableScan("local.sources", BSONObj());
+        shared_ptr<Cursor> c = Helpers::findTableScan("local.sources", BSONObj());
         while ( c->ok() ) {
             ReplSource tmp(c->current());
             if ( tmp.syncedTo.isNull() ) {
@@ -437,7 +427,6 @@ namespace mongo {
             addSourceToList(v, tmp, old);
             c->advance();
         }
-#endif
     }
 
     BSONObj opTimeQuery = fromjson("{\"getoptime\":1}");
@@ -496,8 +485,7 @@ namespace mongo {
     string ReplSource::resyncDrop( const char *db, const char *requester ) {
         log() << "resync: dropping database " << db << endl;
         Client::Context ctx(db);
-        ::abort();
-        //dropDatabase(db);
+        dropDatabase(db);
         return db;
     }
 
@@ -623,8 +611,7 @@ namespace mongo {
             incompleteCloneDbs.erase(*i);
             addDbNextPass.erase(*i);
             Client::Context ctx(*i);
-            ::abort();
-            //dropDatabase(*i);
+            dropDatabase(*i);
         }
         
         massert( 14034, "Duplicate database names present after attempting to delete duplicates",
@@ -1080,15 +1067,12 @@ namespace mongo {
             {
                 Lock::GlobalWrite lk;
                 Client::Context ctxt("local.");
-                ::abort();
-#if 0
                 if( !Helpers::findOne("local.system.users", userReplQuery, user) ||
                         // try the first user in local
                         !Helpers::getSingleton("local.system.users", user) ) {
                     log() << "replauthenticate: no user in local.system.users to use for authentication\n";
                     return false;
                 }
-#endif
             }
             u = user.getStringField("user");
             p = user.getStringField("pwd");

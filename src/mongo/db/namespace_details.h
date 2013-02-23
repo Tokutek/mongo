@@ -85,6 +85,7 @@ namespace mongo {
 
         // TODO: Capped collections need are not yet implemented with TokuDB
         bool isCapped() const { return false; }
+        long long cappedSize() const { return 0; }
         long long maxCappedDocs() const { return std::numeric_limits<long long>::max(); }
         void setMaxCappedDocs( long long max ) { unimplemented("capped collections"); }
         void emptyCappedCollection(const char *ns);

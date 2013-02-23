@@ -71,22 +71,10 @@ namespace mongo {
                 return false;
             }
             
-            //PageFaultRetryableSection s;
-            while ( 1 ) {
-                try {
-                    return runNoDirectClient( ns , 
-                                              query , fields , update , 
-                                              upsert , returnNew , remove , 
-                                              result );
-                }
-                //catch ( PageFaultException& e ) {
-                catch ( ... ) {
-                    //e.touch();
-                    ::abort();
-                }
-            }
-
-                    
+            return runNoDirectClient( ns , 
+                                      query , fields , update , 
+                                      upsert , returnNew , remove , 
+                                      result );
         }
 
         void _appendHelper( BSONObjBuilder& result , const BSONObj& doc , bool found , const BSONObj& fields ) {
@@ -116,8 +104,7 @@ namespace mongo {
             Client::Context cx( ns );
 
             BSONObj doc;
-            ::abort(); 
-            bool found = false;// Helpers::findOne( ns.c_str() , queryOriginal , doc );
+            bool found = Helpers::findOne( ns.c_str() , queryOriginal , doc );
 
             BSONObj queryModified = queryOriginal;
             if ( found && doc["_id"].type() && ! isSimpleIdQuery( queryOriginal ) ) {

@@ -24,6 +24,7 @@
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/index.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
@@ -50,9 +51,6 @@ namespace mongo {
                          string& errmsg, 
                          BSONObjBuilder& result, 
                          bool fromRepl) {
-            ::abort();
-            return false;
-#if 0
             string coll = cmdObj.firstElement().valuestr();
             if( coll.empty() || db.empty() ) {
                 errmsg = "no collection name specified";
@@ -74,21 +72,17 @@ namespace mongo {
             }
             bool ok = touch( ns, errmsg, touch_data, touch_indexes, result );
             return ok;
-#endif
         }
 
-#if 0
         bool touch( std::string& ns, 
                     std::string& errmsg, 
                     bool touch_data, 
                     bool touch_indexes, 
                     BSONObjBuilder& result ) {
+            problem() << "touch command unimplemented, doing nothing!" << endl;
 
             if (touch_data) {
-                log() << "touching namespace " << ns << endl;
-                ::abort();
-                touchNs( ns );
-                log() << "touching namespace " << ns << " complete" << endl;
+                log() << " touching namespace " << ns << endl;
             }
 
             if (touch_indexes) {
@@ -108,13 +102,11 @@ namespace mongo {
                 for ( std::vector<std::string>::const_iterator it = indexes.begin(); 
                       it != indexes.end(); 
                       it++ ) {
-                    ::abort();
-                    touchNs( *it );
+                    log() << " touching index " << *it << endl;
                 }
             }
             return true;
         }
-#endif
         
     };
     static TouchCmd touchCmd;

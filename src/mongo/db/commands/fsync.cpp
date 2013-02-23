@@ -87,13 +87,12 @@ namespace mongo {
                 // the simple fsync command case
                 if (sync) {
                     Lock::GlobalWrite w; // can this be GlobalRead? and if it can, it should be nongreedy.
-                    // TODO: What do we do here?
-                    //getDur().commitNow();
+                    problem() << " flushAll/commitNow not implemented, doing nothing!" << endl;
                 }
                 // question : is it ok this is not in the dblock? i think so but this is a change from past behavior, 
                 // please advise.
-                //result.append( "numFiles" , MemoryMappedFile::flushAll( sync ) );
-                ::abort();
+                problem() << " number of files flushed not known, arbitrarily reporting 1!" << endl;
+                result.append( "numFiles" , 1 );
             }
             return 1;
         }
@@ -108,8 +107,7 @@ namespace mongo {
         
         verify( ! fsyncCmd.locked ); // impossible to get here if locked is true
         try { 
-            // TODO: What do we do here?
-            //getDur().syncDataAndTruncateJournal();
+            problem() << " syncDataAndTruncateJournal not implemented, doing nothing!" << endl;
         } 
         catch( std::exception& e ) { 
             error() << "error doing syncDataAndTruncateJournal: " << e.what() << endl;
@@ -122,9 +120,7 @@ namespace mongo {
         global.downgrade();
         
         try {
-            //MemoryMappedFile::flushAll(true);
-            // TODO: Checkpoint TokuDB?
-            ::abort();
+            problem() << " flushAll not implemented, doing nothing!" << endl;
         }
         catch( std::exception& e ) { 
             error() << "error doing flushAll: " << e.what() << endl;
