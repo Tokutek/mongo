@@ -220,6 +220,7 @@ namespace mongo {
         void setPosition( const BSONObj &key );
         /** check if the current key is out of bounds, invalidate the current key if so */
         bool checkCurrentAgainstBounds();
+        void skipPrefix(int k);
         bool skipOutOfRangeKeysAndCheckEnd();
         void checkEnd();
 

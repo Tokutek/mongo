@@ -171,18 +171,34 @@ namespace mongo {
         return ok();
     }
 
+    // Skip the key comprised of the first k fields of currentKey and the
+    // rest set to max/min key for direction > 0 or < 0 respectively.
+    void IndexCursor::skipPrefix(int k) {
+        tokulog(1) << "skipPrefix skipping first " << k << " elements in key " << endl;
+        BSONObjBuilder b;
+        BSONObjIterator it = _currKey.begin();
+        for ( int i = 0; i < _currKey.nFields(); i++ ) {
+            if ( i < k ) {
+                b.append( it.next() );
+            } else {
+                _direction > 0 ? b.appendMaxKey( "" ) : b.appendMinKey( "" );
+            }
+        }
+        setPosition( b.done() );
+    }
+
     bool IndexCursor::skipOutOfRangeKeysAndCheckEnd() {
         BSONObj currentKey = currKey();
         if ( !ok() ) { 
             return false;
         }
-        int skipPrefix = _boundsIterator->advance( currentKey );
-        if ( skipPrefix == -2 ) { 
+        int skipPrefixIndex = _boundsIterator->advance( currentKey );
+        if ( skipPrefixIndex == -2 ) { 
             // We are done iterating completely.
             _currKey = BSONObj();
             return false;
         }
-        else if ( skipPrefix == -1 ) { 
+        else if ( skipPrefixIndex == -1 ) { 
             // We should skip nothing.
             ++_nscanned;
             return false;
@@ -191,49 +207,50 @@ namespace mongo {
         // We should skip to a further key, efficiently.
         //
         // If after(), skip to the first key greater/less than the key comprised
-        // of the first "skipPrefix" elements of currentKey, and the rest
+        // of the first "skipPrefixIndex" elements of currentKey, and the rest
         // set to MaxKey/MinKey for direction > 0 and direction < 0 respectively.
-        // eg: skipPrefix = 1, currKey {a:1, b:2, c:1}, direction > 0,  so we skip
+        // eg: skipPrefixIndex = 1, currKey {a:1, b:2, c:1}, direction > 0,  so we skip
         // to the first key greater than {a:1, b:maxkey, c:maxkey}
         //
         // If after() is false, we use the same key prefix but set the reamining
         // elements to the elements described by cmp(), in order.
-        // eg: skipPrefix = 1, currKey {a:1, b:2, c:1}) and cmp() [b:5, c:11]
+        // eg: skipPrefixIndex = 1, currKey {a:1, b:2, c:1}) and cmp() [b:5, c:11]
         // so we use skip to {a:1, b:5, c:11}, also noting direction.
-        BSONObjBuilder b;
-        BSONObjIterator it = currentKey.begin();
-        for ( int i = 0; i < skipPrefix; i++ ) {
-            verify( it.more() );
-            b.append( it.next() );
-        }
         if ( _boundsIterator->after() ) {
-            // Fill out the rest of the fields with nameless maxKey elements
-            for ( int i = 0; i < currentKey.nFields() - skipPrefix; i++) {
-                _direction > 0 ? b.appendMaxKey( "" ) : b.appendMinKey( "" );
-            }
-            setPosition( b.done() );
+            skipPrefix(skipPrefixIndex);
         } else {
-            // Keep our own copy of endKeys that we can modify.
+            BSONObjBuilder b;
+            BSONObjIterator it = currentKey.begin();
             const vector<const BSONElement *> endKeys = _boundsIterator->cmp();
-            const vector<bool> &inclusive = _boundsIterator->inc();
-            for ( int i = skipPrefix; i < currentKey.nFields(); i++ ) {
-                b.append( *endKeys[i] );
+            for ( int i = 0; i < currentKey.nFields(); i++ ) {
+                if ( i < skipPrefixIndex ) {
+                    verify( it.more() );
+                    b.append( it.next() );
+                } else {
+                    b.appendAs( *endKeys[i] , "" );
+                }
             }
+            tokulog(1) << "skipOutOfRngeKeys used first " << skipPrefixIndex << " elements"
+                " in key and the rest from cmp(), setting position now..." << endl;
             setPosition( b.done() );
 
-            // Skip passed any keys that have elements after the skipPrefix
-            // where the ith element equals the respective endkey, but it
-            // was not supposed to be inclusive.
-            currentKey = currKey();
-            it = currentKey.begin();
-            for ( int i = 0; i < currentKey.nFields(); i++ ) {
-                const BSONElement e = it.next();
-                if ( i > skipPrefix && !inclusive[i] && e == *endKeys[i] ) {
-                    tokulog(1) << "skipOutOfRangeKeys skipping currKey " << currentKey << " because "
-                        " the element at index " << i << " is non-inclusive, " << e << endl;
-                    _advance();
-                    continue;
+            // Skip passed key prefixes that are not supposed to be inclusive
+            // as described by _boundsIterator->inc() and endKeys
+            while ( ok() ) {
+                currentKey = currKey();
+                it = currentKey.begin();
+                const vector<bool> &inclusive = _boundsIterator->inc();
+                for ( int i = 0; i < currentKey.nFields(); i++ ) {
+                    const BSONElement e = it.next();
+                    if ( i > skipPrefixIndex && !inclusive[i] && e == *endKeys[i] ) {
+                        tokulog(1) << "skipOutOfRangeKeys skipping currKey " << currentKey << " because "
+                            " the element at index " << i << " is non-inclusive, " << e << endl;
+                        // The ith element equals the ith endKey but it's not supposed to be inclusive.
+                        skipPrefix( i );
+                        continue;
+                    }
                 }
+                break;
             }
         }
         ++_nscanned;
