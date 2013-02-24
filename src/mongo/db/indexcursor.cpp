@@ -28,6 +28,124 @@
 
 namespace mongo {
 
+    class RowBuffer {
+    public:
+        RowBuffer() :
+            _size(_BUF_SIZE_PREFERRED),
+            _current_offset(0),
+            _end_offset(0),
+            _buf(new char[_size]) {
+        }
+
+        ~RowBuffer() {
+            delete []_buf;
+        }
+
+        // append the given key, pk and obj to the end of the buffer
+        void append(const BSONObj &key, const BSONObj &pk, const BSONObj &obj) {
+            size_t key_size = key.objsize();
+            size_t pk_size = pk.objsize();
+            size_t obj_size = obj.objsize();
+            size_t size_needed = _end_offset + key_size + pk_size + obj_size;
+
+            // if we need more than we have, realloc.
+            if (size_needed > _size) {
+                char *buf = new char[size_needed];
+                memcpy(buf, _buf, _size);
+                delete []_buf;
+                _buf = buf;
+                _size = size_needed;
+            }
+
+            // append the key, update the end offset
+            memcpy(_buf + _end_offset, key.objdata(), key_size);
+            _end_offset += key_size;
+            // append the pk, update the end offset
+            memcpy(_buf + _end_offset, pk.objdata(), pk_size);
+            _end_offset += pk_size;
+            // append the obj, update the end offset
+            memcpy(_buf + _end_offset, obj.objdata(), obj_size);
+            _end_offset += obj_size;
+
+            // postcondition: end offset is correctly bounded
+            verify(_end_offset <= _size);
+        }
+
+        // the row buffer is gorged if its current size is greater
+        // than or equal to the preferred size.
+        // return:
+        //      true, buffer is gorged
+        //      false, buffer could fit more data
+        // rationale:
+        //      - if true, then it makes more sense to empty and refill
+        //      the buffer than trying to stuff more in it.
+        //      - if false, then an append probably won't cause a realloc,
+        //      so go ahead and do it.
+        bool isGorged() const {
+            const int threshold = 100;
+            const bool almost_full = _end_offset + threshold > _size;
+            const bool too_big = _size > _BUF_SIZE_PREFERRED;
+            return almost_full || too_big;
+        }
+
+        // move the internal buffer position to the next key, pk, obj triple
+        // returns:
+        //      true, the buffer is reading to be read via current()
+        //      false, the buffer has no more data. don't call next again without append()'ing.
+        bool next() {
+            verify(_current_offset < _end_offset);
+
+            // seek passed the current key, loc, and obj.
+            size_t key_size = currentKey().objsize();
+            size_t pk_size = currentPK().objsize();
+            size_t obj_size = currentObj().objsize();
+            _current_offset += key_size + pk_size + obj_size;
+
+            // postcondition: we did not seek passed the end of the buffer.
+            verify(_current_offset <= _end_offset);
+
+            return _current_offset < _end_offset ? true : false;
+        }
+
+        // get the current key from the buffer.
+        BSONObj currentKey() const {
+            return BSONObj(_buf + _current_offset);
+        }
+
+        // get the current pk from the buffer, which is just after the key
+        BSONObj currentPK() const {
+            return BSONObj(_buf + _current_offset + currentKey().objsize());
+        }
+
+        // get the current obj from the buffer, which is after the key and the pk
+        BSONObj currentObj() const {
+            return BSONObj(_buf + _current_offset + currentKey().objsize() + currentPK().objsize());
+        }
+
+        // empty the row buffer, resetting all data and internal positions
+        void empty() {
+            delete []_buf;
+            _size = _BUF_SIZE_PREFERRED;
+            _buf = new char[_size];
+            _current_offset = 0;
+            _end_offset = 0;
+        }
+
+    private:
+        // store rows in a buffer that has a "preferred size". if we need to 
+        // fit more in the buf, then it's okay to go over. _size captures the
+        // real size of the buffer.
+        // _end_offset is where we will write new bytes for append(). it is
+        // modified and advanced after the append.
+        // _current_offset is where we will read for current(). it is modified
+        // and advanced after a next()
+        static const size_t _BUF_SIZE_PREFERRED = 128 * 1024;
+        size_t _size;
+        size_t _current_offset;
+        size_t _end_offset;
+        char *_buf;
+    };
+
     struct cursor_getf_extra {
         BSONObj *const key;
         BSONObj *const pk;
