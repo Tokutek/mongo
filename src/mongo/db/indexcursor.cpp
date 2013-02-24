@@ -236,6 +236,15 @@ namespace mongo {
 
             // Skip passed key prefixes that are not supposed to be inclusive
             // as described by _boundsIterator->inc() and endKeys
+            //
+            // We'll spend at worst nFields^2 time ensuring all key elements
+            // are properly set if all the inclusive bits are false and we
+            // keep landing on keys where the ith element of curr == endkeys[i].
+            //
+            // This complexity is usually ok, since this skipping is supposed to
+            // save us from really big linear scans across the key space in
+            // some pathological cases. It's not clear whether or not small
+            // cases are hurt too badly by this algorithm.
             while ( ok() ) {
                 currentKey = currKey();
                 it = currentKey.begin();
@@ -352,13 +361,5 @@ namespace mongo {
             return _bounds->obj();
         }
     }    
-
-    /* ----------------------------------------------------------------------------- */
-
-    struct IndexCursorUnitTest {
-        IndexCursorUnitTest() {
-            //verify( minDiskLoc.compare(maxDiskLoc) < 0 );
-        }
-    } btut;
 
 } // namespace mongo
