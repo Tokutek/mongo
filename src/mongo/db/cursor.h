@@ -144,6 +144,66 @@ namespace mongo {
     class FieldRangeVector;
     class FieldRangeVectorIterator;
     
+    // Class for storing rows bulk fetched from TokuDB
+    class RowBuffer {
+    public:
+        RowBuffer();
+        ~RowBuffer();
+
+        bool ok() {
+            return _current_offset < _end_offset;
+        }
+
+        bool isGorged() const {
+            const int threshold = 100;
+            const bool almost_full = _end_offset + threshold > _size;
+            const bool too_big = _size > _BUF_SIZE_PREFERRED;
+            return almost_full || too_big;
+        }
+
+        // get the current key from the buffer.
+        BSONObj currentKey() const {
+            return BSONObj(_buf + _current_offset);
+        }
+
+        // get the current pk from the buffer, which is just after the key
+        BSONObj currentPK() const {
+            return BSONObj(_buf + _current_offset + currentKey().objsize());
+        }
+
+        // get the current obj from the buffer, which is after the key and the pk
+        BSONObj currentObj() const {
+            return BSONObj(_buf + _current_offset + currentKey().objsize() + currentPK().objsize());
+        }
+
+        // Append a key, pk, and obj in-order into the buffer.
+        void append(const BSONObj &key, const BSONObj &pk, const BSONObj &obj);
+
+        // move the internal buffer position to the next key, pk, obj triple
+        // returns:
+        //      true, the buffer is reading to be read via current()
+        //      false, the buffer has no more data. don't call next again without append()'ing.
+        bool next();
+
+        // empty the row buffer, resetting all data and internal positions
+        // only reset it fields if there is something in the buffer.
+        void empty();
+
+    private:
+        // store rows in a buffer that has a "preferred size". if we need to 
+        // fit more in the buf, then it's okay to go over. _size captures the
+        // real size of the buffer.
+        // _end_offset is where we will write new bytes for append(). it is
+        // modified and advanced after the append.
+        // _current_offset is where we will read for current(). it is modified
+        // and advanced after a next()
+        static const size_t _BUF_SIZE_PREFERRED = 128 * 1024;
+        size_t _size;
+        size_t _current_offset;
+        size_t _end_offset;
+        char *_buf;
+    };
+
     /**
      * A Cursor class for index iteration.
      */
@@ -159,7 +219,7 @@ namespace mongo {
 
         ~IndexCursor();
 
-        bool ok() { return !_currKey.isEmpty(); }
+        bool ok() { return !currKey().isEmpty(); }
         bool advance();
         bool supportGetMore() { return true; }
 
@@ -208,6 +268,7 @@ namespace mongo {
         long long nscanned() const { return _nscanned; }
 
     private:
+
         void init( const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
         void init( const shared_ptr< FieldRangeVector > &_bounds, int singleIntervalLimit, int _direction );
 
@@ -216,6 +277,8 @@ namespace mongo {
         /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */
         void _advance();
 
+        /** pull more rows from the DBC into the RowBuffer */
+        bool fetchMoreRows();
         /** position the cursor over the given key */
         void setPosition( const BSONObj &key );
         /** check if the current key is out of bounds, invalidate the current key if so */
@@ -241,22 +304,18 @@ namespace mongo {
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
         long long _nscanned;
 
-        // For primary _id index:
-        //  _currKey == _currPK == actual dictionary key
-        //  _currObj == full document, actual dictionary val
-        // For secondary indexes:
-        //  _currKey == secondary key data
-        //  _currPK == associated primary key data
-        //  _currKey + _currPK == actual dictionary key
-        //  _currObj == full document
-        //      actual dictionary val if clustering
-        //      empty dictionary val otherwise, full document queried from _id index.
+        DBC *_cursor;
+        bool _tailable;
+        bool _done;
+
+        // The current key, pk, and obj for this cursor.
         BSONObj _currKey;
         BSONObj _currPK;
         BSONObj _currObj;
-
-        DBC *_cursor;
-        bool _tailable;
+        // Row buffer to store rows in using bulk fetch. Also track the iteration
+        // of bulk fetch so we know an appropriate amount of rows to fetch.
+        RowBuffer _buffer;
+        int _getf_iteration;
     };
 
     /**

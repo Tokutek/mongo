@@ -28,161 +28,167 @@
 
 namespace mongo {
 
-    class RowBuffer {
-    public:
-        RowBuffer() :
-            _size(_BUF_SIZE_PREFERRED),
-            _current_offset(0),
-            _end_offset(0),
-            _buf(new char[_size]) {
-        }
+    RowBuffer::RowBuffer() :
+        _size(_BUF_SIZE_PREFERRED),
+        _current_offset(0),
+        _end_offset(0),
+        _buf(new char[_size]) {
+    }
 
-        ~RowBuffer() {
+    RowBuffer::~RowBuffer() {
+        delete []_buf;
+    }
+
+    // append the given key, pk and obj to the end of the buffer
+    void RowBuffer::append(const BSONObj &key, const BSONObj &pk, const BSONObj &obj) {
+        size_t key_size = key.objsize();
+        size_t pk_size = pk.objsize();
+        size_t obj_size = obj.objsize();
+        size_t size_needed = _end_offset + key_size + pk_size + obj_size;
+
+        // if we need more than we have, realloc.
+        if (size_needed > _size) {
+            char *buf = new char[size_needed];
+            memcpy(buf, _buf, _size);
             delete []_buf;
+            _buf = buf;
+            _size = size_needed;
         }
 
-        // append the given key, pk and obj to the end of the buffer
-        void append(const BSONObj &key, const BSONObj &pk, const BSONObj &obj) {
-            size_t key_size = key.objsize();
-            size_t pk_size = pk.objsize();
-            size_t obj_size = obj.objsize();
-            size_t size_needed = _end_offset + key_size + pk_size + obj_size;
+        // append the key, update the end offset
+        memcpy(_buf + _end_offset, key.objdata(), key_size);
+        _end_offset += key_size;
+        // append the pk, update the end offset
+        memcpy(_buf + _end_offset, pk.objdata(), pk_size);
+        _end_offset += pk_size;
+        // append the obj, update the end offset
+        memcpy(_buf + _end_offset, obj.objdata(), obj_size);
+        _end_offset += obj_size;
 
-            // if we need more than we have, realloc.
-            if (size_needed > _size) {
-                char *buf = new char[size_needed];
-                memcpy(buf, _buf, _size);
-                delete []_buf;
-                _buf = buf;
-                _size = size_needed;
-            }
+        // postcondition: end offset is correctly bounded
+        verify(_end_offset <= _size);
+    }
 
-            // append the key, update the end offset
-            memcpy(_buf + _end_offset, key.objdata(), key_size);
-            _end_offset += key_size;
-            // append the pk, update the end offset
-            memcpy(_buf + _end_offset, pk.objdata(), pk_size);
-            _end_offset += pk_size;
-            // append the obj, update the end offset
-            memcpy(_buf + _end_offset, obj.objdata(), obj_size);
-            _end_offset += obj_size;
+    // move the internal buffer position to the next key, pk, obj triple
+    // returns:
+    //      true, the buffer is reading to be read via current()
+    //      false, the buffer has no more data. don't call next again without append()'ing.
+    bool RowBuffer::next() {
+        verify( ok() );
 
-            // postcondition: end offset is correctly bounded
-            verify(_end_offset <= _size);
-        }
+        // seek passed the current key, loc, and obj.
+        size_t key_size = currentKey().objsize();
+        size_t pk_size = currentPK().objsize();
+        size_t obj_size = currentObj().objsize();
+        _current_offset += key_size + pk_size + obj_size;
 
-        // the row buffer is gorged if its current size is greater
-        // than or equal to the preferred size.
-        // return:
-        //      true, buffer is gorged
-        //      false, buffer could fit more data
-        // rationale:
-        //      - if true, then it makes more sense to empty and refill
-        //      the buffer than trying to stuff more in it.
-        //      - if false, then an append probably won't cause a realloc,
-        //      so go ahead and do it.
-        bool isGorged() const {
-            const int threshold = 100;
-            const bool almost_full = _end_offset + threshold > _size;
-            const bool too_big = _size > _BUF_SIZE_PREFERRED;
-            return almost_full || too_big;
-        }
+        // postcondition: we did not seek passed the end of the buffer.
+        verify(_current_offset <= _end_offset);
 
-        // move the internal buffer position to the next key, pk, obj triple
-        // returns:
-        //      true, the buffer is reading to be read via current()
-        //      false, the buffer has no more data. don't call next again without append()'ing.
-        bool next() {
-            verify(_current_offset < _end_offset);
+        return ok();
+    }
 
-            // seek passed the current key, loc, and obj.
-            size_t key_size = currentKey().objsize();
-            size_t pk_size = currentPK().objsize();
-            size_t obj_size = currentObj().objsize();
-            _current_offset += key_size + pk_size + obj_size;
-
-            // postcondition: we did not seek passed the end of the buffer.
-            verify(_current_offset <= _end_offset);
-
-            return _current_offset < _end_offset ? true : false;
-        }
-
-        // get the current key from the buffer.
-        BSONObj currentKey() const {
-            return BSONObj(_buf + _current_offset);
-        }
-
-        // get the current pk from the buffer, which is just after the key
-        BSONObj currentPK() const {
-            return BSONObj(_buf + _current_offset + currentKey().objsize());
-        }
-
-        // get the current obj from the buffer, which is after the key and the pk
-        BSONObj currentObj() const {
-            return BSONObj(_buf + _current_offset + currentKey().objsize() + currentPK().objsize());
-        }
-
-        // empty the row buffer, resetting all data and internal positions
-        void empty() {
+    // empty the row buffer, resetting all data and internal positions
+    // only reset it fields if there is something in the buffer.
+    void RowBuffer::empty() {
+        if ( _end_offset > 0 ) {
             delete []_buf;
             _size = _BUF_SIZE_PREFERRED;
             _buf = new char[_size];
             _current_offset = 0;
             _end_offset = 0;
         }
+    }
 
-    private:
-        // store rows in a buffer that has a "preferred size". if we need to 
-        // fit more in the buf, then it's okay to go over. _size captures the
-        // real size of the buffer.
-        // _end_offset is where we will write new bytes for append(). it is
-        // modified and advanced after the append.
-        // _current_offset is where we will read for current(). it is modified
-        // and advanced after a next()
-        static const size_t _BUF_SIZE_PREFERRED = 128 * 1024;
-        size_t _size;
-        size_t _current_offset;
-        size_t _end_offset;
-        char *_buf;
-    };
+    /* ------------------------------------------------------------------ */
+
+    // how many rows should we fetch for a particular iteration?
+    // crude performance testing shows us that it is quite expensive 
+    // to go into go into ydb layer and start bulk fetching. we should
+    // fetch exponentially more and more rows with each iteration so
+    // that we avoid too much ydb layer overhead without reading it
+    // all at once, which is too aggressive for queries that might
+    // not want all of it.
+    static int max_rows_to_fetch(int iteration) {
+        int rows_to_fetch = 1;
+        switch (iteration) {
+            case 0:
+                rows_to_fetch = 1;
+                break;
+            case 1:
+                rows_to_fetch = 16;
+                break;
+            case 2:
+                rows_to_fetch = 128;
+                break;
+            case 3:
+                rows_to_fetch = 1024;
+                break;
+            case 4:
+                rows_to_fetch = 4096;
+                break;
+            default:
+                rows_to_fetch = 16384;
+                break;
+        }
+        return rows_to_fetch;
+    }
 
     struct cursor_getf_extra {
-        BSONObj *const key;
-        BSONObj *const pk;
-        BSONObj *const val;
-        cursor_getf_extra(BSONObj *const k, BSONObj *const p, BSONObj *const v)
-            : key(k), pk(p), val(v) { }
+        RowBuffer *buffer;
+        int rows_fetched;
+        int rows_to_fetch;
+        cursor_getf_extra(RowBuffer *buf, int n_to_fetch) :
+            buffer(buf), rows_fetched(0), rows_to_fetch(n_to_fetch) {
+        }
     };
 
+    // ydb layer cursor callback
     static int cursor_getf(const DBT *key, const DBT *val, void *extra) {
-        struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
-        verify(key != NULL);
-        verify(val != NULL);
+        int r = 0;
 
-        // There is always a non-empty bson object key to start.
-        BSONObj keyObj(static_cast<char *>(key->data));
-        verify(keyObj.objsize() <= (int) key->size);
-        verify(!keyObj.isEmpty());
-        *info->key = keyObj.getOwned();
+        // the cursor callback is called even if the desired
+        // key is not found. in that case, key == NULL
+        if (key) {
+            struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
+            RowBuffer *buffer = info->buffer;
 
-        // Check if there a PK attached to the end of the first key.
-        // If not, then this is the primary index, so PK == key.
-        if (keyObj.objsize() < (int) key->size) {
-            BSONObj pkObj(static_cast<char *>(key->data) + keyObj.objsize());
-            verify(keyObj.objsize() + pkObj.objsize() == (int) key->size);
-            verify(!pkObj.isEmpty());
-            *info->pk = pkObj.getOwned();
-        } else {
-            *info->pk = *info->key;
+            BSONObj keyObj, pkObj, valObj;
+
+            // There is always a non-empty bson object key to start.
+            keyObj = BSONObj(static_cast<char *>(key->data));
+            verify(keyObj.objsize() <= (int) key->size);
+            verify(!keyObj.isEmpty());
+
+            // Check if there a PK attached to the end of the first key.
+            // If not, then this is the primary index, so PK == key.
+            if (keyObj.objsize() < (int) key->size) {
+                pkObj = BSONObj(static_cast<char *>(key->data) + keyObj.objsize());
+                verify(keyObj.objsize() + pkObj.objsize() == (int) key->size);
+                verify(!pkObj.isEmpty());
+            } else {
+                pkObj = keyObj;
+            }
+
+            // Check if an object lives in the val buffer.
+            if (val->size > 0) {
+                valObj = BSONObj(static_cast<char *>(val->data));
+                verify(valObj.objsize() == (int) val->size);
+            } else {
+                valObj = BSONObj();
+            }
+
+            // Append the new row to the buffer.
+            buffer->append(keyObj, pkObj, valObj);
+            
+            // request more bulk fetching if we are allowed to fetch more rows
+            // and the row buffer is not too full.
+            if (++info->rows_fetched < info->rows_to_fetch && !buffer->isGorged()) {
+                r = TOKUDB_CURSOR_CONTINUE;
+            }
         }
 
-        // Check if an object lives in the val buffer.
-        if (val->size > 0) {
-            BSONObj valObj(static_cast<char *>(val->data));
-            verify(valObj.objsize() == (int) val->size);
-            *info->val = valObj.isEmpty() ? BSONObj() : valObj.getOwned();
-        }
-        return 0;
+        return r;
     }
 
     IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
@@ -199,7 +205,8 @@ namespace mongo {
         _bounds(),
         _nscanned(0),
         _cursor(NULL),
-        _tailable(false)
+        _tailable(false),
+        _getf_iteration(0)
     {
         tokulog(1) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
@@ -217,7 +224,8 @@ namespace mongo {
         _bounds(bounds),
         _nscanned(0),
         _cursor(NULL),
-        _tailable(false)
+        _tailable(false),
+        _getf_iteration(0)
     {
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
         _startKey = _bounds->startKey();
@@ -247,24 +255,27 @@ namespace mongo {
     }
 
     void IndexCursor::setPosition(const BSONObj &key) {
-        // Reset keys and objects
-        _currKey = BSONObj();
-        _currPK = BSONObj();
-        _currObj = BSONObj();
-
-        int r;
-        struct cursor_getf_extra extra(&_currKey, &_currPK, &_currObj);
         DBT key_dbt;
         key_dbt.data = const_cast<char *>(key.objdata());
         key_dbt.size = key.objsize();
         tokulog(1) << toString() << ": setPosition(): getf key " << key << ", direction " << _direction << endl;
+
+        // Empty row buffer, reset fetch iteration, go get more rows.
+        _buffer.empty();
+        _getf_iteration = 0;
+
+        int r;
+        int rows_to_fetch = max_rows_to_fetch(_getf_iteration);
+        struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
         if (_direction > 0) {
             r = _cursor->c_getf_set_range(_cursor, 0, &key_dbt, cursor_getf, &extra);
         } else {
             r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
         }
-        verify(r == 0 || r == DB_NOTFOUND);
-        tokulog(1) << toString() << ": setPosition(): hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
+        _getf_iteration++;
+        _currKey = r == 0 ? _buffer.currentKey() : BSONObj();
+        _currPK = r == 0 ? _buffer.currentPK() : BSONObj();
+        _currObj = r == 0 ? _buffer.currentObj() : BSONObj();
     }
 
     // Check the current key with respect to our key bounds, whether
@@ -406,23 +417,31 @@ namespace mongo {
         }
     }
 
+    bool IndexCursor::fetchMoreRows() {
+        int r;
+        int rows_to_fetch = max_rows_to_fetch(_getf_iteration);
+        struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
+        if (_direction > 0) {
+            r = _cursor->c_getf_next(_cursor, 0, cursor_getf, &extra);
+        } else {
+            r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
+        }
+        _getf_iteration++;
+        verify(r == 0 || r == DB_NOTFOUND);
+        return r == 0 ? true : false;
+    }
+
     void IndexCursor::_advance() {
         // namespace might be null if we're tailing an empty collection
         if ( _d != NULL && _idx != NULL ) {
-            // Reset current key/pk/obj to empty.
-            _currKey = BSONObj();
-            _currPK = BSONObj();
-            _currObj = BSONObj();
-
-            int r;
-            struct cursor_getf_extra extra(&_currKey, &_currPK, &_currObj);
-            if (_direction > 0) {
-                r = _cursor->c_getf_next(_cursor, 0, cursor_getf, &extra);
-            } else {
-                r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
+            bool ok = _buffer.next();
+            if ( !ok ) {
+                _buffer.empty();
+                ok = fetchMoreRows();
             }
-            verify(r == 0 || r == DB_NOTFOUND);
-            tokulog(2) << toString() << ": _advance() moved to K, P, Obj " << _currKey << _currPK << _currObj << endl;
+            _currKey = ok ? _buffer.currentKey() : BSONObj();
+            _currPK = ok ? _buffer.currentPK() : BSONObj();
+            _currObj = ok ? _buffer.currentObj() : BSONObj();
         } else {
             // new inserts will not be read by this cursor, because there was no
             // namespace details or index at the time of creation. we can either
@@ -451,15 +470,12 @@ namespace mongo {
         // If the index is clustering, the full documenet is always stored in _currObj.
         // If the index is not clustering, _currObj starts as empty and gets filled
         // with the full document on the first call to current().
-        if (_currObj.isEmpty() && _d != NULL) {
+        if ( _currObj.isEmpty() && _d != NULL ) {
             verify(_idx != NULL);
-            verify(!_currKey.isEmpty());
-            verify(!_currPK.isEmpty());
             tokulog(1) << toString() << ": current() _currKey: " << _currKey << ", PK " << _currPK << endl;
             bool found = _d->findById(_currPK, _currObj, false);
             tokulog(1) << toString() << ": current() PK lookup res: " << _currObj << endl;
             verify(found);
-            verify(!_currObj.isEmpty());
         }
         return _currObj;
     }
