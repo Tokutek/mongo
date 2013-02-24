@@ -22,9 +22,6 @@
 
 namespace mongo {
 
-    extern BSONObj minKey;
-    extern BSONObj maxKey;
-
     BasicCursor::BasicCursor(NamespaceDetails *d, int direction)
         : _c(d, d != NULL ? &d->idx(d->findIdIndex()) : NULL, // pass null for idx if no ns details
              direction > 0 ? minKey : maxKey, // start at the beginning for forward cursor

@@ -29,6 +29,9 @@ namespace mongo {
     class NamespaceDetails;
     class CoveredIndexMatcher;
 
+    extern BSONObj minKey;
+    extern BSONObj maxKey;
+
     /**
      * Query cursors, base class.  This is for our internal cursors.  "ClientCursor" is a separate
      * concept and is for the user's cursor.
