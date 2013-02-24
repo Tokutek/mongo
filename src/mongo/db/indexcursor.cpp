@@ -273,9 +273,10 @@ namespace mongo {
             r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
         }
         _getf_iteration++;
-        _currKey = r == 0 ? _buffer.currentKey() : BSONObj();
-        _currPK = r == 0 ? _buffer.currentPK() : BSONObj();
-        _currObj = r == 0 ? _buffer.currentObj() : BSONObj();
+        _currKey = extra.rows_fetched > 0 ? _buffer.currentKey() : BSONObj();
+        _currPK = extra.rows_fetched > 0 ? _buffer.currentPK() : BSONObj();
+        _currObj = extra.rows_fetched > 0 ? _buffer.currentObj() : BSONObj();
+        tokulog(1) << "setPosition hit K, P, Obj " << _currKey << _currPK << _currObj << endl;
     }
 
     // Check the current key with respect to our key bounds, whether
@@ -428,7 +429,9 @@ namespace mongo {
         }
         _getf_iteration++;
         verify(r == 0 || r == DB_NOTFOUND);
-        return r == 0 ? true : false;
+        tokulog(1) << "fetchMoreRows reached iteration " << _getf_iteration <<
+            " by fetching " << extra.rows_fetched << " rows" << endl;
+        return extra.rows_fetched > 0 ? true : false;
     }
 
     void IndexCursor::_advance() {
