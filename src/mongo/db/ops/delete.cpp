@@ -41,32 +41,31 @@ namespace mongo {
 
         uassert( 10101 ,  "can't remove from a capped collection" , ! d->isCapped() );
 
-        shared_ptr< Cursor > creal = NamespaceDetailsTransient::getCursor( ns, pattern );
-        if( !creal->ok() )
+        shared_ptr< Cursor > c = NamespaceDetailsTransient::getCursor( ns, pattern );
+        if( !c->ok() )
             return 0;
 
-        shared_ptr< Cursor > cPtr = creal;
+        shared_ptr< Cursor > cPtr = c;
         auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout, cPtr, ns) );
 
         long long nDeleted = 0;
-        while ( cc->ok() ) {
-            bool match = creal->currentMatches();
+        for ( ; cc->ok() ; cc->advance() ) {
 
-            if (!match) {
+            if ( !c->currentMatches() ) {
                 cc->advance();
                 continue;
             }
 
+            // We should never see a duplicate PK. Why?
+            // - If we see a PK once, we delete it completely, removing all secondary index
+            //   keys, including the ones we're scanning over right now.
+            // - If we see a PK twice, then the delete we did the first time must not have
+            //   worked or transactionl isolation is screwed up. Bad!
+            dassert( !c->getsetdup(cc->currPK()) );
+
             BSONObj pk = cc->currPK();
             BSONObj key = cc->currKey();
             BSONObj obj = cc->current();
-
-            // SERVER-5198 Advance past the document to be modified, but see SERVER-5725.
-            while( cc->ok() && pk == cc->currPK() ) {
-                cc->advance();
-            }
-            
-            bool foundAllResults = ( justOne || !cc->ok() );
 
             if ( logop ) {
                 BSONElement e;
@@ -84,7 +83,7 @@ namespace mongo {
             deleteOneObject(d, nsdt, pk, obj);
             nDeleted++;
 
-            if ( foundAllResults ) {
+            if ( justOne ) {
                 break;
             }
         }

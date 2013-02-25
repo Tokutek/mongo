@@ -229,7 +229,10 @@ namespace mongo {
          */
         bool getsetdup(const BSONObj &pk) {
             if( _multiKey ) {
-                pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk);
+                // We need to store a copy of the PK in this data structure, as we
+                // cannot trust that the BSONObj's buffer will uniquely identify
+                // this PK value after this call.
+                pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk.copy());
                 return !p.second;
             }
             return false;

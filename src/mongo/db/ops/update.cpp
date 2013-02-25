@@ -30,7 +30,7 @@
 namespace mongo {
 
     void updateOneObject(NamespaceDetails *d, NamespaceDetailsTransient *nsdt, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
-        dassert( !newObj["_id"].eoo() && newObj["_id"] == oldObj["_id"] );
+        verify( !newObj["_id"].eoo() && newObj["_id"] == oldObj["_id"] );
 
         tokulog(1) << "updateOneObject: del pk " << pk << ", obj " << oldObj << " and inserting " << newObj << endl;
         deleteOneObject( d, nsdt, pk, oldObj );
@@ -91,6 +91,23 @@ namespace mongo {
         if ( logop ) {
             logOp( "i", ns, newObj, 0, 0, fromMigrate );
         }
+    }
+
+    static bool mayUpdateById(NamespaceDetails *d, const BSONObj &patternOrig) {
+        if ( isSimpleIdQuery(patternOrig) ) {
+            for (int i = 0; i < d->nIndexesBeingBuilt(); i++) {
+                IndexDetails &idx = d->idx(i);
+                if (idx.info()["clustering"].trueValue()) {
+                    return false;
+                }
+            }
+            // We may update by _id, since:
+            // - The query is a simple _id query
+            // - The modifications do not affect any indexed fields
+            // - There are no clustering secondary keys.
+            return true;
+        }
+        return false;
     }
 
     /* note: this is only (as-is) called for
@@ -181,15 +198,11 @@ namespace mongo {
 
         debug.updateobj = updateobj;
 
-        // The idea with these here it to make them loop invariant for
-        // multi updates, and thus be a bit faster for that case.  The
-        // pointers may be left invalid on a failed or terminal yield
-        // recovery.
         NamespaceDetails* d = nsdetails_maybe_create(ns);
         NamespaceDetailsTransient* nsdt = &NamespaceDetailsTransient::get(ns);
 
         auto_ptr<ModSet> mods;
-        bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
+        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
         bool modsAreIndexed = false;
 
         if ( isOperatorUpdate ) {
@@ -203,19 +216,8 @@ namespace mongo {
             }
             modsAreIndexed = mods->isIndexed();
         }
-                    
-        if ( !modsAreIndexed ) {
-            // modsAreIndexed must be true if there exists at least one clustering index
-            for (int idx_i = 0; idx_i < d->nIndexesBeingBuilt(); idx_i++) {
-                IndexDetails &idx = d->idx(idx_i);
-                if (idx.info()["clustering"].trueValue()) {
-                    modsAreIndexed = true;
-                    break;
-                }
-            }
-        }
 
-        if( planPolicy.permitOptimalIdPlan() && !multi && isSimpleIdQuery(patternOrig) && !modsAreIndexed ) {
+        if ( planPolicy.permitOptimalIdPlan() && !multi && !modsAreIndexed && mayUpdateById(d, patternOrig) ) {
             int idxNo = d->findIdIndex();
             verify(idxNo >= 0);
             debug.idhack = true;
@@ -249,7 +251,6 @@ namespace mongo {
         debug.nscanned = 0;
         shared_ptr<Cursor> c =
             NamespaceDetailsTransient::getCursor( ns, patternOrig, BSONObj(), planPolicy );
-        nsdt = &NamespaceDetailsTransient::get(ns);
 
         if( c->ok() ) {
             set<BSONObj> seenObjects;
@@ -302,17 +303,25 @@ namespace mongo {
                 if ( isOperatorUpdate ) {
 
                     if ( multi ) {
-                        // go to next record in case this one moves
-                        c->advance();
+                        // Make a copy of the current PK since currPK's bsonobj refers to memory
+                        // only valid as long as the cursor stays in its current position.
+                        currPK = currPK.copy();
 
-                        if ( seenObjects.count( currPK ) ) {
-                            continue;
+                        // Advance past the document to be modified. This used to be because of SERVER-5198,
+                        // but TokuDB does it because we want to avoid needing to do manual deduplication
+                        // of this PK on the next iteration if the current update modifies the next
+                        // entry in the index. For example, an index scan over a:1 with mod {$inc: {a:1}}
+                        // would cause every other key read to be a duplicate if we didn't advance here.
+                        while ( c->ok() && currPK == c->currPK() ) {
+                            c->advance();
                         }
 
-                        // SERVER-5198 Advance past the document to be modified, provided
-                        // deduplication is enabled, but see SERVER-5725.
-                        while( c->ok() && currPK == c->currPK() ) {
-                            c->advance();
+                        // Multi updates need to do their own deduplication because updates may modify the
+                        // keys the cursor is in the process of scanning over.
+                        if ( seenObjects.count( currPK ) ) {
+                            continue;
+                        } else {
+                            seenObjects.insert( currPK );
                         }
                     }
 

@@ -23,9 +23,6 @@
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/cursor.h"
 
-// TODO: dassert isn't working for some reason, so we call verify instead.
-//       this might be slow.
-
 namespace mongo {
 
     RowBuffer::RowBuffer() :
@@ -180,6 +177,7 @@ namespace mongo {
 
             // Append the new row to the buffer.
             buffer->append(keyObj, pkObj, valObj);
+            tokulog(1) << "cursor_getf appended to row buffer " << keyObj << pkObj << valObj << endl;
             
             // request more bulk fetching if we are allowed to fetch more rows
             // and the row buffer is not too full.
@@ -419,6 +417,9 @@ namespace mongo {
     }
 
     bool IndexCursor::fetchMoreRows() {
+        // We're going to get more rows, so get rid of what's there.
+        _buffer.empty();
+
         int r;
         int rows_to_fetch = max_rows_to_fetch(_getf_iteration);
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
@@ -439,12 +440,12 @@ namespace mongo {
         if ( _d != NULL && _idx != NULL ) {
             bool ok = _buffer.next();
             if ( !ok ) {
-                _buffer.empty();
                 ok = fetchMoreRows();
             }
             _currKey = ok ? _buffer.currentKey() : BSONObj();
             _currPK = ok ? _buffer.currentPK() : BSONObj();
             _currObj = ok ? _buffer.currentObj() : BSONObj();
+            tokulog(1) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
         } else {
             // new inserts will not be read by this cursor, because there was no
             // namespace details or index at the time of creation. we can either
