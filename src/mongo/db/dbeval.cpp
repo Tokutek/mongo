@@ -129,7 +129,8 @@ namespace mongo {
             scoped_ptr<Lock::ScopedLock> lk( ai->isAuthorized( dbname.c_str() ) ? 
                                              static_cast<Lock::ScopedLock*>( new Lock::GlobalWrite() ) : 
                                              static_cast<Lock::ScopedLock*>( new Lock::GlobalRead() ) );
-            Client::Context ctx( dbname );
+            // If we create a context here, and the js we're running does fileops, we'll create too many txns.
+            //Client::Context ctx( dbname );
 
             return dbEval(dbname, cmdObj, result, errmsg);
         }

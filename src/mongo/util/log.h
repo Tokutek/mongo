@@ -368,6 +368,12 @@ namespace mongo {
     /** logging which we may not want during unit tests (dbtests) runs.
         set tlogLevel to -1 to suppress tlog() output in a test program. */
     Nullstream& tlog( int level = 0 );
+    inline Nullstream& tlog( const LabeledLevel& ll ) {
+        Nullstream& stream = tlog( ll.getLevel() );
+        if( ll.getLabel() != "" )
+            stream << "[" << ll.getLabel() << "] ";
+        return stream;
+    }
 
     // log if debug build or if at a certain level
     inline Nullstream& dlog( int level ) {
@@ -397,7 +403,7 @@ namespace mongo {
     }
 
     inline Nullstream &tokulog(int level=0) {
-        return log(LabeledLevel("tokudb", level));
+        return tlog(LabeledLevel("tokudb", level));
     }
 
     inline Nullstream& log() {

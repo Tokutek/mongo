@@ -173,7 +173,10 @@ namespace CursorTests {
                 IndexSpec *idxSpec = new IndexSpec( idx() );
                 boost::shared_ptr< FieldRangeVector > frv( new FieldRangeVector( frs, *idxSpec, direction() ) );
                 {
-                    scoped_ptr<IndexCursor> c( new IndexCursor( nsdetails( ns() ), &nsdetails( ns() )->idx( 1 ), frv, 0, direction() ) );
+                    NamespaceDetails *d = nsdetails(ns());
+                    int i = d->findIndexByKeyPattern(idx());
+                    verify(i >= 0);
+                    scoped_ptr<IndexCursor> c( new IndexCursor( d, &d->idx( i ), frv, 0, direction() ) );
                     Matcher m( spec );
                     int count = 0;
                     while( c->ok() ) {
