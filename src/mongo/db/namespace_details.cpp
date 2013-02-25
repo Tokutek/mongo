@@ -91,7 +91,11 @@ namespace mongo {
         }
 
         tokulog() << "Creating NamespaceDetails " << ns << endl;
-        createIndex(id_index_info(ns, options), true);
+        BSONObj id_info = id_index_info(ns, options);
+        createIndex(id_info, true);
+
+        int i = findIdIndex();
+        verify(i == 0);
 
         addNewNamespaceToCatalog(ns);
     }
@@ -613,6 +617,25 @@ namespace mongo {
         dropNS(name, true, can_drop_system);
     }
 
+    void NamespaceDetails::addIdIndexToCatalog() {
+        int i = findIdIndex();
+        verify(i >= 0);
+        const BSONObj &info = idx(i).info();
+        string indexns = info["ns"].String();
+        if (mongoutils::str::contains(indexns, ".system.indexes")) {
+            // system.indexes holds all the others, so it is not explicitly listed in the catalog.
+            return;
+        }
+
+        char database[256];
+        nsToDatabase(indexns.c_str(), database);
+        string s = string(database) + ".system.indexes";
+        const char *ns = s.c_str();
+        NamespaceDetails *d = nsdetails_maybe_create(ns);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+        insertOneObject(d, nsdt, addIdField(info), false);
+    }
+
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).
        options: { capped : ..., size : ... }
     */
@@ -622,7 +645,7 @@ namespace mongo {
             // system.namespaces holds all the others, so it is not explicitly listed in the catalog.
             return;
         }
-        
+
         BSONObjBuilder b;
         b.append("name", ns);
         if ( options )
@@ -631,7 +654,10 @@ namespace mongo {
         char database[256];
         nsToDatabase(ns.c_str(), database);
         string s = string(database) + ".system.namespaces";
-        insertObject(s.c_str(), addIdField(j));
+        const char *system_ns = s.c_str();
+        NamespaceDetails *d = nsdetails_maybe_create(system_ns);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(system_ns);
+        insertOneObject(d, nsdt, addIdField(j), false);
     }
 
     void dropNS(const string &nsname, bool is_collection, bool can_drop_system) {

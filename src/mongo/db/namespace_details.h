@@ -150,6 +150,12 @@ namespace mongo {
         void createIndex(const BSONObj &idx_info, bool resetTransient=true);
         bool dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex, bool can_drop_system = false);
 
+        /**
+         * Record that a new index exists in <dbname>.system.indexes.
+         * Only used for the _id index, the others go through the normal insert path.
+         */
+        void addIdIndexToCatalog();
+
         // @return offset in indexes[]
         int findIndexByName(const char *name);
 

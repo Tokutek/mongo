@@ -179,7 +179,7 @@ namespace mongo {
             // would leak memory if we chose to do nothing. So we validate all the
             // options here before db_create + db->open.
             int basementsize = 65536;
-            TOKU_COMPRESSION_METHOD compression = TOKU_QUICKLZ_METHOD;
+            TOKU_COMPRESSION_METHOD compression = TOKU_DEFAULT_COMPRESSION_METHOD;
             BSONObj key_pattern = info["key"].Obj();
             
             BSONElement e;

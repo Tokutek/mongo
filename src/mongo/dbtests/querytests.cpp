@@ -377,6 +377,8 @@ namespace QueryTests {
 		}
 
         void run() {
+            unimplemented("capped collection");
+            #if 0
             const char *ns = "unittests.querytests.TailableQueryOnId";
             BSONObj info;
             client().runCommand( "unittests", BSON( "create" << "querytests.TailableQueryOnId" << "capped" << true << "size" << 8192 << "autoIndexId" << true ), info );
@@ -400,6 +402,7 @@ namespace QueryTests {
             ASSERT_EQUALS( 2, c2->next().getIntField( "a" ) );  // SERVER-645
             ASSERT( !c2->more() );
             ASSERT( !c2->isDead() );
+            #endif
         }
     };
 
@@ -432,6 +435,8 @@ namespace QueryTests {
             client().dropCollection( "unittests.querytests.OplogReplaySlaveReadTill" );
         }
         void run() {
+            unimplemented("capped collection");
+            #if 0
             const char *ns = "unittests.querytests.OplogReplaySlaveReadTill";
             Lock::DBWrite lk(ns);
             Client::Context ctx( ns );
@@ -456,6 +461,7 @@ namespace QueryTests {
             
             ClientCursor::Pin clientCursor( cursorId );
             ASSERT_EQUALS( three.millis, clientCursor.c()->getSlaveReadTill().asDate() );
+            #endif
         }
     };
 
@@ -987,6 +993,8 @@ namespace QueryTests {
             _n = 0;
         }
         void run() {
+            unimplemented("capped collection");
+            #if 0
             string err;
 
             Client::WriteContext ctx( "unittests" );
@@ -1019,6 +1027,7 @@ namespace QueryTests {
 
             while ( c->more() ) { c->next(); }
             ASSERT( c->isDead() );
+            #endif
         }
 
         void insertNext() {
@@ -1129,6 +1138,8 @@ namespace QueryTests {
         }
 
         void run() {
+            unimplemented("capped collection");
+            #if 0
             BSONObj info;
             ASSERT( client().runCommand( "unittests", BSON( "create" << "querytests.findingstart" << "capped" << true << "$nExtents" << 5 << "autoIndexId" << false ), info ) );
 
@@ -1149,6 +1160,7 @@ namespace QueryTests {
                 }
                 //cout << k << endl;
             }
+            #endif
         }
 
     private:
@@ -1165,6 +1177,8 @@ namespace QueryTests {
         }
 
         void run() {
+            unimplemented("capped collection");
+            #if 0
             unsigned startNumCursors = ClientCursor::numCursors();
 
             BSONObj info;
@@ -1186,6 +1200,7 @@ namespace QueryTests {
             }
 
             ASSERT_EQUALS( startNumCursors, ClientCursor::numCursors() );
+            #endif
         }
 
     private:
@@ -1201,6 +1216,8 @@ namespace QueryTests {
         FindingStartStale() : CollectionBase( "findingstart" ) {}
 
         void run() {
+            unimplemented("capped collection");
+            #if 0
             unsigned startNumCursors = ClientCursor::numCursors();
 
             // Check OplogReplay mode with missing collection.
@@ -1222,6 +1239,7 @@ namespace QueryTests {
 
             // Check that no persistent cursors outlast our queries above.
             ASSERT_EQUALS( startNumCursors, ClientCursor::numCursors() );
+            #endif
         }
     };
 
@@ -1251,6 +1269,8 @@ namespace QueryTests {
     public:
         Exhaust() : CollectionInternalBase( "exhaust" ) {}
         void run() {
+            unimplemented("capped collection");
+            #if 0
             BSONObj info;
             ASSERT( client().runCommand( "unittests",
                                         BSON( "create" << "querytests.exhaust" <<
@@ -1267,6 +1287,7 @@ namespace QueryTests {
             string exhaust = runQuery( message, queryMessage, *cc().curop(), result );
             ASSERT( exhaust.size() );
             ASSERT_EQUALS( string( ns() ), exhaust );
+            #endif
         }
     };
 

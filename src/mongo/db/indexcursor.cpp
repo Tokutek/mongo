@@ -270,6 +270,7 @@ namespace mongo {
         } else {
             r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
         }
+        verify(r == 0 || r == DB_NOTFOUND);
         _getf_iteration++;
         _currKey = extra.rows_fetched > 0 ? _buffer.currentKey() : BSONObj();
         _currPK = extra.rows_fetched > 0 ? _buffer.currentPK() : BSONObj();

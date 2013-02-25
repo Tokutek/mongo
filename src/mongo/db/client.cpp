@@ -184,7 +184,7 @@ namespace mongo {
         return false;
     }
 
-    Client::Context::Transaction::Transaction(const Client::Context::Transaction::Transaction *parent, int flags) {
+    Client::Context::Transaction::Transaction(const Client::Context::Transaction *parent, int flags) {
         DB_TXN *parent_txn = (parent != NULL ? parent->_txn : NULL);
         _txn = storage::start_txn(parent_txn, flags);
     }
