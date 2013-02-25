@@ -904,7 +904,7 @@ namespace mongo {
            @param clustering if true, indicates that data should be clustered with this index
            @param name if not specified, it will be created from the keys automatically (which is recommended)
            @param cache if set to false, the index cache for the connection won't remember this call
-           @param background build index in the background (see mongodb docs/wiki for details)
+           @param background build index in the background (see mongodb docs for details)
            @param v index version. leave at default value. (unit tests set this parameter.)
            @return whether or not sent message to db.
              should be true on first call, false on subsequent unless resetIndexCache was called
