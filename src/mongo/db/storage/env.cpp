@@ -125,6 +125,11 @@ namespace mongo {
             verify(r == 0);
             tokulog() << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
 
+            // Use 10% the size of the cachetable for lock tree memory
+            const int32_t lock_memory = cachesize / 10;
+            r = env->set_lk_max_memory(env, lock_memory);
+            verify(r == 0);
+
             r = env->set_default_bt_compare(env, dbt_bson_compare);
             verify(r == 0);
 
