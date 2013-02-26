@@ -34,7 +34,7 @@ namespace mongo {
 
     IndexDetails::IndexDetails(const BSONObj &info, bool may_create) : _info(info.getOwned()) {
         string dbname = indexNamespace();
-        tokulog() << "Opening IndexDetails " << dbname << endl;
+        tokulog(1) << "Opening IndexDetails " << dbname << endl;
         // Open the dictionary. Creates it if necessary.
         int r = storage::db_open(&_db, dbname, info, may_create);
         verify(r == 0);
@@ -44,7 +44,7 @@ namespace mongo {
     }
 
     IndexDetails::~IndexDetails() {
-        tokulog() << "Closing IndexDetails " << indexNamespace() << endl;
+        tokulog(1) << "Closing IndexDetails " << indexNamespace() << endl;
         if (_db) {
             storage::db_close(_db);
         }
@@ -65,7 +65,7 @@ namespace mongo {
     int removeFromSysIndexes(const char *ns, const char *name) {
         string system_indexes = cc().database()->name + ".system.indexes";
         BSONObj obj = BSON("ns" << ns << "name" << name);
-        tokulog(1) << "removeFromSysIndexes removing " << obj << endl;
+        tokulog(2) << "removeFromSysIndexes removing " << obj << endl;
         return (int) _deleteObjects(system_indexes.c_str(), obj, false, false);
     }
 
@@ -152,7 +152,7 @@ namespace mongo {
         if (r != 0) {
             tokulog() << "error inserting " << key << ", " << val << endl;
         } else {
-            tokulog(1) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
+            tokulog(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
         }
         verify(r == 0);
     }

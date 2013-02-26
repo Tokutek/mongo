@@ -149,7 +149,7 @@ namespace mongo {
 
             // Append the new row to the buffer.
             buffer->append(keyObj, pkObj, valObj);
-            tokulog(1) << "cursor_getf appended to row buffer " << keyObj << pkObj << valObj << endl;
+            tokulog(3) << "cursor_getf appended to row buffer " << keyObj << pkObj << valObj << endl;
             
             // request more bulk fetching if we are allowed to fetch more rows
             // and the row buffer is not too full.
@@ -179,7 +179,7 @@ namespace mongo {
         _readOnly(cc().getContext()->readOnly()),
         _getf_iteration(0)
     {
-        tokulog(1) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        tokulog(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
     }
 
@@ -203,7 +203,7 @@ namespace mongo {
         _startKey = _bounds->startKey();
         _boundsIterator->advance( _startKey ); // handles initialization
         _boundsIterator->prepDive();
-        tokulog(1) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        tokulog(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
     }
 
@@ -275,7 +275,7 @@ namespace mongo {
         }
         key_dbt.data = const_cast<char *>(ikey.objdata());
         key_dbt.size = ikey.objsize();
-        tokulog(1) << toString() << ": setPosition(): getf " << key << ", direction " << _direction << endl;
+        tokulog(3) << toString() << ": setPosition(): getf " << key << ", direction " << _direction << endl;
 
         // Empty row buffer, reset fetch iteration, go get more rows.
         _buffer.empty();
@@ -294,7 +294,7 @@ namespace mongo {
         _currKey = extra.rows_fetched > 0 ? _buffer.currentKey() : BSONObj();
         _currPK = extra.rows_fetched > 0 ? _buffer.currentPK() : BSONObj();
         _currObj = extra.rows_fetched > 0 ? _buffer.currentObj() : BSONObj();
-        tokulog(1) << "setPosition hit K, P, Obj " << _currKey << _currPK << _currObj << endl;
+        tokulog(3) << "setPosition hit K, P, Obj " << _currKey << _currPK << _currObj << endl;
     }
 
     // Check the current key with respect to our key bounds, whether
@@ -322,7 +322,7 @@ namespace mongo {
     // Skip the key comprised of the first k fields of currentKey and the
     // rest set to max/min key for direction > 0 or < 0 respectively.
     void IndexCursor::skipPrefix(int k) {
-        tokulog(1) << "skipPrefix skipping first " << k << " elements in key " << endl;
+        tokulog(3) << "skipPrefix skipping first " << k << " elements in key " << endl;
         BSONObjBuilder b;
         BSONObjIterator it = _currKey.begin();
         for ( int i = 0; i < _currKey.nFields(); i++ ) {
@@ -378,7 +378,7 @@ namespace mongo {
                     b.appendAs( *endKeys[i] , "" );
                 }
             }
-            tokulog(1) << "skipOutOfRngeKeys used first " << skipPrefixIndex << " elements"
+            tokulog(3) << "skipOutOfRngeKeys used first " << skipPrefixIndex << " elements"
                 " in key and the rest from cmp(), setting position now..." << endl;
             setPosition( b.done() );
 
@@ -400,7 +400,7 @@ namespace mongo {
                 for ( int i = 0; i < currentKey.nFields(); i++ ) {
                     const BSONElement e = it.next();
                     if ( i > skipPrefixIndex && !inclusive[i] && e == *endKeys[i] ) {
-                        tokulog(1) << "skipOutOfRangeKeys skipping currKey " << currentKey << " because "
+                        tokulog(3) << "skipOutOfRangeKeys skipping currKey " << currentKey << " because "
                             " the element at index " << i << " is non-inclusive, " << e << endl;
                         // The ith element equals the ith endKey but it's not supposed to be inclusive.
                         skipPrefix( i );
@@ -431,7 +431,7 @@ namespace mongo {
             if ( ( cmp != 0 && cmp != _direction ) ||
                     ( cmp == 0 && !_endKeyInclusive ) ) {
                 _currKey = BSONObj();
-                tokulog(1) << toString() << ": checkEnd() stopping @ curr, end: " << currKey() << _endKey << endl;
+                tokulog(3) << toString() << ": checkEnd() stopping @ curr, end: " << currKey() << _endKey << endl;
             }
         }
     }
@@ -450,7 +450,7 @@ namespace mongo {
         }
         _getf_iteration++;
         verify(r == 0 || r == DB_NOTFOUND);
-        tokulog(1) << "fetchMoreRows reached iteration " << _getf_iteration <<
+        tokulog(3) << "fetchMoreRows reached iteration " << _getf_iteration <<
             " by fetching " << extra.rows_fetched << " rows" << endl;
         return extra.rows_fetched > 0 ? true : false;
     }
@@ -465,7 +465,7 @@ namespace mongo {
             _currKey = ok ? _buffer.currentKey() : BSONObj();
             _currPK = ok ? _buffer.currentPK() : BSONObj();
             _currObj = ok ? _buffer.currentObj() : BSONObj();
-            tokulog(1) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
+            tokulog(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
         } else {
             // new inserts will not be read by this cursor, because there was no
             // namespace details or index at the time of creation. we can either
@@ -496,9 +496,9 @@ namespace mongo {
         // with the full document on the first call to current().
         if ( _currObj.isEmpty() && _d != NULL ) {
             verify(_idx != NULL);
-            tokulog(1) << toString() << ": current() _currKey: " << _currKey << ", PK " << _currPK << endl;
+            tokulog(3) << toString() << ": current() _currKey: " << _currKey << ", PK " << _currPK << endl;
             bool found = _d->findById(_currPK, _currObj, false);
-            tokulog(1) << toString() << ": current() PK lookup res: " << _currObj << endl;
+            tokulog(3) << toString() << ": current() PK lookup res: " << _currObj << endl;
             verify(found);
         }
         return _currObj;

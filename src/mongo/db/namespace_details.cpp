@@ -90,7 +90,7 @@ namespace mongo {
             unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
         }
 
-        tokulog() << "Creating NamespaceDetails " << ns << endl;
+        tokulog(1) << "Creating NamespaceDetails " << ns << endl;
         BSONObj id_info = id_index_info(ns, options);
         createIndex(id_info, true);
 
@@ -126,7 +126,7 @@ namespace mongo {
 
     NamespaceIndex::~NamespaceIndex() {
         if (nsdb != NULL) {
-            tokulog() << "Closing NamespaceIndex " << database_ << endl;
+            tokulog(1) << "Closing NamespaceIndex " << database_ << endl;
             storage::db_close(nsdb);
             dassert(namespaces.get() != NULL);
         } else {
@@ -139,7 +139,7 @@ namespace mongo {
         string ns = nobj["ns"].String();
         Namespace n(ns.c_str());
         BSONObj dobj(static_cast<const char *>(val->data));
-        tokulog() << "Loading NamespaceDetails " << (string) n << endl;
+        tokulog(1) << "Loading NamespaceDetails " << (string) n << endl;
         shared_ptr<NamespaceDetails> d(new NamespaceDetails(dobj));
 
         NamespaceIndex::NamespaceDetailsMap *m = static_cast<NamespaceIndex::NamespaceDetailsMap *>(map_v);
@@ -167,7 +167,7 @@ namespace mongo {
 
         namespaces.reset(new NamespaceDetailsMap());
 
-        tokulog() << "Initializing NamespaceIndex " << database_ << endl;
+        tokulog(1) << "Initializing NamespaceIndex " << database_ << endl;
         {
             const Client::Context::Transaction &txn = cc().getContext()->transaction();
             DBC *cursor;
@@ -427,7 +427,7 @@ namespace mongo {
 
         // Try to find it.
         BSONObj obj = BSONObj();
-        tokulog(1) << "NamespaceDetails::findById looking for " << key << endl;
+        tokulog(3) << "NamespaceDetails::findById looking for " << key << endl;
         struct findByIdCallbackExtra extra(key, obj);
         r = cursor->c_getf_set(cursor, 0, &key_dbt, findByIdCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND);

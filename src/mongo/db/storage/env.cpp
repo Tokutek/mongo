@@ -123,7 +123,7 @@ namespace mongo {
             const uint32_t gigabytes = cachesize >> 30;
             r = env->set_cachesize(env, gigabytes, bytes, 1);
             verify(r == 0);
-            tokulog() << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
+            tokulog(1) << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
 
             // Use 10% the size of the cachetable for lock tree memory
             const int32_t lock_memory = cachesize / 10;
@@ -142,17 +142,17 @@ namespace mongo {
             const int checkpoint_period = 60;
             r = env->checkpointing_set_period(env, checkpoint_period);
             verify(r == 0);
-            tokulog() << "checkpoint period set to " << checkpoint_period << " seconds." << endl;
+            tokulog(1) << "checkpoint period set to " << checkpoint_period << " seconds." << endl;
 
             const int cleaner_period = 2;
             r = env->cleaner_set_period(env, cleaner_period);
             verify(r == 0);
-            tokulog() << "cleaner period set to " << cleaner_period << " seconds." << endl;
+            tokulog(1) << "cleaner period set to " << cleaner_period << " seconds." << endl;
 
             const int cleaner_iterations = 5;
             r = env->cleaner_set_iterations(env, cleaner_iterations);
             verify(r == 0);
-            tokulog() << "cleaner iterations set to " << cleaner_iterations << "." << endl;
+            tokulog(1) << "cleaner iterations set to " << cleaner_iterations << "." << endl;
         }
 
         void shutdown(void) {
@@ -173,7 +173,7 @@ namespace mongo {
             const int flags = DB_UPDATE_CMP_DESCRIPTOR;
             int r = db->change_descriptor(db, txn, &ordering_dbt, flags);
             verify(r == 0);
-            tokulog() << "set db " << db << " descriptor to key pattern: " << key_pattern << endl;
+            tokulog(1) << "set db " << db << " descriptor to key pattern: " << key_pattern << endl;
         }
 
         int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create) {

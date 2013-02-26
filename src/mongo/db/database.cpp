@@ -516,7 +516,7 @@ namespace mongo {
         }
         NamespaceDetails *details = ni->details(ns);
         if (details == NULL) {
-            tokulog() << "Didn't find nsdetails(" << ns << "), creating it." << endl;
+            tokulog(2) << "Didn't find nsdetails(" << ns << "), creating it." << endl;
 
             Namespace ns_s(ns);
             shared_ptr<NamespaceDetails> new_details(new NamespaceDetails(ns, options, false));
