@@ -260,10 +260,22 @@ namespace mongo {
     }
 
     void IndexCursor::setPosition(const BSONObj &key) {
+        BSONObj ikey;
         DBT key_dbt;
-        key_dbt.data = const_cast<char *>(key.objdata());
-        key_dbt.size = key.objsize();
-        tokulog(1) << toString() << ": setPosition(): getf key " << key << ", direction " << _direction << endl;
+
+        // Reverse secondary keys need to set MaxKey to represent the PK.
+        // Forward keys don't need this because "no key" means MinKey.
+        if ( _direction < 0 && !_idx->isIdIndex() ) {
+            BSONObjBuilder b;
+            b.appendElements( key );
+            b.appendMaxKey( "" );
+            ikey = b.done();
+        } else {
+            ikey = key;
+        }
+        key_dbt.data = const_cast<char *>(ikey.objdata());
+        key_dbt.size = ikey.objsize();
+        tokulog(1) << toString() << ": setPosition(): getf " << key << ", direction " << _direction << endl;
 
         // Empty row buffer, reset fetch iteration, go get more rows.
         _buffer.empty();
