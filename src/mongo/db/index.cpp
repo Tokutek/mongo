@@ -64,10 +64,9 @@ namespace mongo {
 
     int removeFromSysIndexes(const char *ns, const char *name) {
         string system_indexes = cc().database()->name + ".system.indexes";
-        return (int) _deleteObjects(system_indexes.c_str(),
-                                    BSON("ns" << ns <<
-                                         "name" << name),
-                                    false, false);
+        BSONObj obj = BSON("ns" << ns << "name" << name);
+        tokulog(1) << "removeFromSysIndexes removing " << obj << endl;
+        return (int) _deleteObjects(system_indexes.c_str(), obj, false, false);
     }
 
     /* delete this index.  does NOT clean up the system catalog
@@ -95,7 +94,7 @@ namespace mongo {
             }
 
             if (!mongoutils::str::endsWith(pns.c_str(), ".system.indexes")) {
-                int n = removeFromSysIndexes(pns.c_str(), ns.c_str());
+                int n = removeFromSysIndexes(pns.c_str(), indexName().c_str());
                 wassert( n == 1 );
             }
         }

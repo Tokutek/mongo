@@ -52,7 +52,6 @@ namespace mongo {
         for ( ; cc->ok() ; cc->advance() ) {
 
             if ( !c->currentMatches() ) {
-                cc->advance();
                 continue;
             }
 
@@ -64,7 +63,6 @@ namespace mongo {
             dassert( !c->getsetdup(cc->currPK()) );
 
             BSONObj pk = cc->currPK();
-            BSONObj key = cc->currKey();
             BSONObj obj = cc->current();
 
             if ( logop ) {

@@ -121,7 +121,7 @@ namespace mongo {
         /** @return true if @param 'pk' already added to the set, false if adding to the set in this call. */
         bool getsetdup( const BSONObj &pk ) {
             access();
-            return vec() ? getsetdupVec( pk ) : getsetdupSet( pk );
+            return vec() ? getsetdupVec( pk.copy() ) : getsetdupSet( pk.copy() );
         }
         /** @return true when @param pk in the set. */
         bool getdup( const BSONObj &pk ) {

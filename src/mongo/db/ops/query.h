@@ -202,7 +202,7 @@ namespace mongo {
     public:
         /** @return true if dup, otherwise return false and insert. */
         bool getsetdup( const BSONObj &pk ) {
-            pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk);
+            pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk.copy());
             return !p.second;
         }
     private:
