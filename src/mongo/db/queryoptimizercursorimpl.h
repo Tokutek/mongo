@@ -91,7 +91,8 @@ namespace mongo {
             if ( !_checkDups ) {
                 return false;
             }
-            pair<set<BSONObj>::iterator, bool> p = _dups.insert( pk );
+            // We need a copy of the PK because we don't own the caller's BSON
+            pair<set<BSONObj>::iterator, bool> p = _dups.insert( pk.copy() );
             return !p.second;
         }
         bool getdup( const BSONObj &pk ) const {
