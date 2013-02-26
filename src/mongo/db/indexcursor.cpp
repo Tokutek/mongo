@@ -261,22 +261,19 @@ namespace mongo {
     }
 
     void IndexCursor::setPosition(const BSONObj &key) {
-        BSONObj ikey;
+        const bool isSecondary = !_idx->isIdIndex();
+        const BSONObj &pk = _direction > 0 ? minKey : maxKey;
+        const size_t buflen = storage::index_key_size(key, isSecondary ? &pk : NULL);
+        char buf[buflen];
 
-        // Reverse secondary keys need to set MaxKey to represent the PK.
-        // Forward keys don't need this because "no key" means MinKey.
-        if ( _direction < 0 && !_idx->isIdIndex() ) {
-            BSONObjBuilder b;
-            b.appendElements( key );
-            b.appendMaxKey( "" );
-            ikey = b.done();
-        } else {
-            ikey = key;
-        }
+        // Secondary keys store an associated Pk next to the stored keys,
+        // so we need to either append Min or Max key to the given key
+        // according to this cursor's direction.
+        storage::index_key_init(buf, buflen, key, isSecondary ? &pk : NULL);
+        tokulog(3) << toString() << ": setPosition(): getf " << key << ", pk " << (isSecondary ? pk : BSONObj()) << ", direction " << _direction << endl;
 
         DBT key_dbt;
-        storage::dbt_init(&key_dbt, ikey.objdata(), ikey.objsize());
-        tokulog(3) << toString() << ": setPosition(): getf " << key << ", direction " << _direction << endl;
+        storage::dbt_init(&key_dbt, buf, buflen);
 
         // Empty row buffer, reset fetch iteration, go get more rows.
         _buffer.empty();
@@ -295,7 +292,7 @@ namespace mongo {
         _currKey = extra.rows_fetched > 0 ? _buffer.currentKey() : BSONObj();
         _currPK = extra.rows_fetched > 0 ? _buffer.currentPK() : BSONObj();
         _currObj = extra.rows_fetched > 0 ? _buffer.currentObj() : BSONObj();
-        tokulog(3) << "setPosition hit K, P, Obj " << _currKey << _currPK << _currObj << endl;
+        tokulog(3) << "setPosition hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
     }
 
     // Check the current key with respect to our key bounds, whether
@@ -451,8 +448,6 @@ namespace mongo {
         }
         _getf_iteration++;
         verify(r == 0 || r == DB_NOTFOUND);
-        tokulog(3) << "fetchMoreRows reached iteration " << _getf_iteration <<
-            " by fetching " << extra.rows_fetched << " rows" << endl;
         return extra.rows_fetched > 0 ? true : false;
     }
 

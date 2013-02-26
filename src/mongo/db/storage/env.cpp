@@ -45,14 +45,11 @@ namespace mongo {
         DB_ENV *env;
 
         static int dbt_bson_compare(DB *db, const DBT *key1, const DBT *key2) {
-            // extract bson objects from each dbt and get the ordering
             verify(db->cmp_descriptor);
-            const DBT *key_pattern_dbt = &db->cmp_descriptor->dbt;
-            const BSONObj key_pattern(static_cast<char *>(key_pattern_dbt->data));
-            const Ordering ordering = Ordering::make(key_pattern);
 
-            // Primary _id key is represented by one BSON Object.
-            // Secondary keys are represented by two, the secondary key plus _id key.
+            // Primary _id keys are represented by exactly one BSON Object.
+            // Secondary keys are represented by exactly two, the secondary
+            // key plus an associated _id key.
             dassert(key1->size > 0);
             dassert(key2->size > 0);
             const BSONObj obj1(static_cast<char *>(key1->data));
@@ -60,8 +57,9 @@ namespace mongo {
             dassert((int) key1->size >= obj1.objsize());
             dassert((int) key2->size >= obj2.objsize());
 
-            // Compare by the first object. If they are equal and there
-            // is another object after the first, compare by the second.
+            // Compare by the first object. The ordering comes from the key pattern.
+            const BSONObj key_pattern(static_cast<char *>(db->cmp_descriptor->dbt.data));
+            const Ordering ordering = Ordering::make(key_pattern);
             int c = obj1.woCompare(obj2, ordering);
             if (c < 0) {
                 return -1;
@@ -69,30 +67,27 @@ namespace mongo {
                 return 1;
             }
 
+            // Compare by the second object, if it exists.
             int key1_bytes_left = key1->size - obj1.objsize();
             int key2_bytes_left = key2->size - obj2.objsize();
             if (key1_bytes_left > 0 && key2_bytes_left > 0) {
-                // Equal first keys, and there is a second key that comes after.
                 const BSONObj other_obj1(static_cast<char *>(key1->data) + obj1.objsize());
                 const BSONObj other_obj2(static_cast<char *>(key2->data) + obj2.objsize());
                 dassert(obj1.objsize() + other_obj1.objsize() == (int) key1->size);
                 dassert(obj2.objsize() + other_obj2.objsize() == (int) key2->size);
+
+                static const Ordering id_ordering = Ordering::make(BSON("_id" << 1));
                 c = other_obj1.woCompare(other_obj2, ordering);
                 if (c < 0) {
                     return -1;
                 } else if (c > 0) {
                     return 1;
                 }
-                return 0;
-            } else if (key1_bytes_left > 0 && key2_bytes_left == 0) {
-                // key 1 has bytes left, but key 2 does not.
-                return 1;
-            } else if (key1_bytes_left == 0 && key2_bytes_left > 0) {
-                // key 1 has no bytes left, but key 2 does.
-                return -1;
-            } else { // no second key after the first object, so key1 == key2
-                return 0;
+            } else {
+                // The associated primary key must exist in both keys, or neither.
+                dassert(key1_bytes_left == 0 && key2_bytes_left == 0);
             }
+            return 0;
         }
 
         static uint64_t calculate_cachesize(void) {
