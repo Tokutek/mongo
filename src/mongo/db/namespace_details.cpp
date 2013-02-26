@@ -37,6 +37,7 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/txn.h"
+#include "mongo/db/storage/key.h"
 #include "mongo/scripting/engine.h"
 
 namespace mongo {
@@ -422,8 +423,7 @@ namespace mongo {
         // create an index key
         BSONObj key = getKey ? idIndex.getKeyFromQuery(query) : query;
         DBT key_dbt;
-        key_dbt.data = const_cast<char *>(key.objdata());
-        key_dbt.size = key.objsize();
+        storage::dbt_init(&key_dbt, key.objdata(), key.objsize());
 
         // Try to find it.
         BSONObj obj = BSONObj();

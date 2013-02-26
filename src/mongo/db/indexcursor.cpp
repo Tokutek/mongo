@@ -22,6 +22,7 @@
 #include "mongo/db/queryutil.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/cursor.h"
+#include "mongo/db/storage/key.h"
 
 namespace mongo {
 
@@ -261,7 +262,6 @@ namespace mongo {
 
     void IndexCursor::setPosition(const BSONObj &key) {
         BSONObj ikey;
-        DBT key_dbt;
 
         // Reverse secondary keys need to set MaxKey to represent the PK.
         // Forward keys don't need this because "no key" means MinKey.
@@ -273,8 +273,9 @@ namespace mongo {
         } else {
             ikey = key;
         }
-        key_dbt.data = const_cast<char *>(ikey.objdata());
-        key_dbt.size = ikey.objsize();
+
+        DBT key_dbt;
+        storage::dbt_init(&key_dbt, ikey.objdata(), ikey.objsize());
         tokulog(3) << toString() << ": setPosition(): getf " << key << ", direction " << _direction << endl;
 
         // Empty row buffer, reset fetch iteration, go get more rows.

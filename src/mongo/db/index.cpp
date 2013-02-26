@@ -27,6 +27,7 @@
 #include "mongo/db/background.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/ops/delete.h"
+#include "mongo/db/storage/key.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/scopeguard.h"
 
@@ -135,17 +136,14 @@ namespace mongo {
     }
 
     void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite) {
-        const int buflen = key.objsize() + (pk != NULL ? pk->objsize() : 0);
+        const size_t buflen = storage::index_key_size(key, pk);
         char buf[buflen];
-        memcpy(buf, key.objdata(), key.objsize());
-        if (pk != NULL) {
-            memcpy(buf + key.objsize(), pk->objdata(), pk->objsize());
-        }
+        storage::index_key_init(buf, buflen, key, pk);
+
         DBT kdbt, vdbt;
-        kdbt.data = const_cast<void *>(static_cast<const void *>(buf));
-        kdbt.size = buflen;
-        vdbt.data = const_cast<void *>(static_cast<const void *>(val.objdata()));
-        vdbt.size = val.objsize();
+        storage::dbt_init(&kdbt, buf, buflen);
+        storage::dbt_init(&vdbt, val.objdata(), val.objsize());
+
         const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
         int r = _db->put(_db, cc().getContext()->transaction().txn(), &kdbt, &vdbt, flags);
         uassert(16433, "key already exists in unique index", r != DB_KEYEXIST);
@@ -162,15 +160,13 @@ namespace mongo {
         getKeysFromObject(obj, keys);
         for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
             const BSONObj &key = *ki;
-            const int buflen = key.objsize() + (isIdIndex() ? 0 : pk.objsize());
+            const size_t buflen = storage::index_key_size(key, !isIdIndex() ? &pk : NULL);
             char buf[buflen];
-            memcpy(buf, key.objdata(), key.objsize());
-            if (!isIdIndex()) {
-                memcpy(buf + key.objsize(), pk.objdata(), pk.objsize());
-            }
+            storage::index_key_init(buf, buflen, key, !isIdIndex() ? &pk : NULL);
+
             DBT kdbt;
-            kdbt.data = const_cast<void *>(static_cast<const void *>(buf));
-            kdbt.size = buflen;
+            storage::dbt_init(&kdbt, buf, buflen);
+
             const int flags = DB_DELETE_ANY;
             int r = _db->del(_db, cc().getContext()->transaction().txn(), &kdbt, flags);
             verify(r == 0);
