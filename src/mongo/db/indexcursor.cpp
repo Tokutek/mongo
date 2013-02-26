@@ -1,4 +1,4 @@
-// btreecursor.cpp
+// indexcursor.cpp
 
 /**
 *    Copyright (C) 2008 10gen Inc.
@@ -89,47 +89,19 @@ namespace mongo {
     // only reset it fields if there is something in the buffer.
     void RowBuffer::empty() {
         if ( _end_offset > 0 ) {
-            delete []_buf;
-            _size = _BUF_SIZE_PREFERRED;
-            _buf = new char[_size];
+            // If the row buffer got really big, bring it back down to size.
+            // Otherwise it's okay if its within 2x preferred size.
+            if ( _size > _BUF_SIZE_PREFERRED * 2 ) {
+                delete []_buf;
+                _size = _BUF_SIZE_PREFERRED;
+                _buf = new char[_size];
+            }
             _current_offset = 0;
             _end_offset = 0;
         }
     }
 
     /* ------------------------------------------------------------------ */
-
-    // how many rows should we fetch for a particular iteration?
-    // crude performance testing shows us that it is quite expensive 
-    // to go into go into ydb layer and start bulk fetching. we should
-    // fetch exponentially more and more rows with each iteration so
-    // that we avoid too much ydb layer overhead without reading it
-    // all at once, which is too aggressive for queries that might
-    // not want all of it.
-    static int max_rows_to_fetch(int iteration) {
-        int rows_to_fetch = 1;
-        switch (iteration) {
-            case 0:
-                rows_to_fetch = 1;
-                break;
-            case 1:
-                rows_to_fetch = 16;
-                break;
-            case 2:
-                rows_to_fetch = 128;
-                break;
-            case 3:
-                rows_to_fetch = 1024;
-                break;
-            case 4:
-                rows_to_fetch = 4096;
-                break;
-            default:
-                rows_to_fetch = 16384;
-                break;
-        }
-        return rows_to_fetch;
-    }
 
     struct cursor_getf_extra {
         RowBuffer *buffer;
@@ -204,6 +176,7 @@ namespace mongo {
         _nscanned(0),
         _cursor(NULL),
         _tailable(false),
+        _readOnly(cc().getContext()->readOnly()),
         _getf_iteration(0)
     {
         tokulog(1) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
@@ -223,6 +196,7 @@ namespace mongo {
         _nscanned(0),
         _cursor(NULL),
         _tailable(false),
+        _readOnly(cc().getContext()->readOnly()),
         _getf_iteration(0)
     {
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
@@ -252,6 +226,39 @@ namespace mongo {
         }
     }
 
+    int IndexCursor::getf_flags() {
+        // Read-only cursors pass no special flags, non read-only cursors pass
+        // DB_RMW in order to obtain write locks in the ydb-layer.
+        return _readOnly ? 0 : DB_RMW;
+    }
+
+    int IndexCursor::getf_fetch_count() {
+        if ( _readOnly ) {
+            // Read-only cursor may bulk fetch rows into a buffer, for speed.
+            // The number of rows fetched is proportional to the number of
+            // times we've called getf.
+            switch ( _getf_iteration ) {
+                case 0:
+                    return 1;
+                case 1:
+                    return 16;
+                case 2:
+                    return 128;
+                case 3:
+                    return 1024;
+                case 4:
+                    return 4096;
+                default:
+                    return 16384;
+            }
+        } else {
+            // Cursors that are not read only may not buffer rows, because they
+            // may perform a write some time in the future and possibly invalidate
+            // buffered data.
+            return 1;
+        }
+    }
+
     void IndexCursor::setPosition(const BSONObj &key) {
         DBT key_dbt;
         key_dbt.data = const_cast<char *>(key.objdata());
@@ -263,12 +270,12 @@ namespace mongo {
         _getf_iteration = 0;
 
         int r;
-        int rows_to_fetch = max_rows_to_fetch(_getf_iteration);
+        const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
         if (_direction > 0) {
-            r = _cursor->c_getf_set_range(_cursor, 0, &key_dbt, cursor_getf, &extra);
+            r = _cursor->c_getf_set_range(_cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         } else {
-            r = _cursor->c_getf_set_range_reverse(_cursor, 0, &key_dbt, cursor_getf, &extra);
+            r = _cursor->c_getf_set_range_reverse(_cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         }
         verify(r == 0 || r == DB_NOTFOUND);
         _getf_iteration++;
@@ -422,12 +429,12 @@ namespace mongo {
         _buffer.empty();
 
         int r;
-        int rows_to_fetch = max_rows_to_fetch(_getf_iteration);
+        const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
         if (_direction > 0) {
-            r = _cursor->c_getf_next(_cursor, 0, cursor_getf, &extra);
+            r = _cursor->c_getf_next(_cursor, getf_flags(), cursor_getf, &extra);
         } else {
-            r = _cursor->c_getf_prev(_cursor, 0, cursor_getf, &extra);
+            r = _cursor->c_getf_prev(_cursor, getf_flags(), cursor_getf, &extra);
         }
         _getf_iteration++;
         verify(r == 0 || r == DB_NOTFOUND);

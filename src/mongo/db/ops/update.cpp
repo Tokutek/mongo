@@ -30,8 +30,6 @@
 namespace mongo {
 
     void updateOneObject(NamespaceDetails *d, NamespaceDetailsTransient *nsdt, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
-        verify( !newObj["_id"].eoo() && newObj["_id"] == oldObj["_id"] );
-
         tokulog(1) << "updateOneObject: del pk " << pk << ", obj " << oldObj << " and inserting " << newObj << endl;
         deleteOneObject( d, nsdt, pk, oldObj );
         insertOneObject( d, nsdt, newObj );

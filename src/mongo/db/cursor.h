@@ -280,6 +280,9 @@ namespace mongo {
         /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */
         void _advance();
 
+        /** determine how many rows the next getf should bulk fetch */
+        int getf_fetch_count();
+        int getf_flags();
         /** pull more rows from the DBC into the RowBuffer */
         bool fetchMoreRows();
         /** position the cursor over the given key */
@@ -309,7 +312,7 @@ namespace mongo {
 
         DBC *_cursor;
         bool _tailable;
-        bool _done;
+        bool _readOnly;
 
         // The current key, pk, and obj for this cursor.
         BSONObj _currKey;
@@ -360,7 +363,9 @@ namespace mongo {
     /* used for order { $natural: -1 } */
     class ReverseCursor : public BasicCursor {
     public:
-        ReverseCursor(NamespaceDetails *nsd) : BasicCursor(nsd, -1) { }
+        ReverseCursor(NamespaceDetails *nsd)
+            : BasicCursor(nsd, -1) {
+        }
         virtual string toString() const { return "ReverseCursor"; }
     };
 

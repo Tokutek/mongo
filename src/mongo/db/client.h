@@ -235,6 +235,13 @@ namespace mongo {
             void commit_transaction(int flags = 0) { _transaction->commit(flags); }
             void swap_transactions(shared_ptr<Transaction> &other_transaction);
 
+            bool readOnly() const {
+                // TODO: Properly identify when a context is read only, so that
+                // cursors can be optimized to use bulk fetch and not take
+                // locks in the locktree!
+                return false;
+            }
+
         private:
             friend class CurOp;
             void _finishInit( bool doauth=true);
