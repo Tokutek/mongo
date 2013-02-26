@@ -58,13 +58,15 @@ namespace mongo {
             dassert((int) key2->size >= obj2.objsize());
 
             // Compare by the first object. The ordering comes from the key pattern.
-            const BSONObj key_pattern(static_cast<char *>(db->cmp_descriptor->dbt.data));
-            const Ordering ordering = Ordering::make(key_pattern);
-            int c = obj1.woCompare(obj2, ordering);
-            if (c < 0) {
-                return -1;
-            } else if (c > 0) {
-                return 1;
+            {
+                const BSONObj key_pattern(static_cast<char *>(db->cmp_descriptor->dbt.data));
+                const Ordering ordering = Ordering::make(key_pattern);
+                const int c = obj1.woCompare(obj2, ordering);
+                if (c < 0) {
+                    return -1;
+                } else if (c > 0) {
+                    return 1;
+                }
             }
 
             // Compare by the second object, if it exists.
@@ -77,7 +79,7 @@ namespace mongo {
                 dassert(obj2.objsize() + other_obj2.objsize() == (int) key2->size);
 
                 static const Ordering id_ordering = Ordering::make(BSON("_id" << 1));
-                c = other_obj1.woCompare(other_obj2, ordering);
+                const int c = other_obj1.woCompare(other_obj2, id_ordering);
                 if (c < 0) {
                     return -1;
                 } else if (c > 0) {

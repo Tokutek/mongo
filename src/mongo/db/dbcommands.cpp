@@ -1519,8 +1519,9 @@ namespace mongo {
             result.appendNumber( "indexes" , indexes );
             result.appendNumber( "indexSize" , indexSize / scale );
             result.appendNumber( "fileSize" , d->fileSize() / scale );
-            if( d )
-                result.appendNumber( "nsSizeMB", (int) d->namespaceIndex.fileLength() / 1024 / 1024 );
+            if ( d ) {
+                //result.appendNumber( "nsSizeMB", (int) d->namespaceIndex.fileLength() / 1024 / 1024 );
+            }
 
             return true;
         }

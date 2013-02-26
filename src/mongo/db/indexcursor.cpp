@@ -166,6 +166,7 @@ namespace mongo {
             const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction ) :
         _d(d),
         _idx(idx),
+        _ordering(Ordering::make(_idx != NULL ? _idx->keyPattern() : BSONObj())),
         _startKey(_idx != NULL && _idx->getSpec().getType() ?
                    _idx->getSpec().getType()->fixKey( startKey ) : startKey),
         _endKey(_idx != NULL && _idx->getSpec().getType() ?
@@ -188,6 +189,7 @@ namespace mongo {
             const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction ) :
         _d(d),
         _idx(idx),
+        _ordering(Ordering::make(_idx != NULL ? _idx->keyPattern() : BSONObj())),
         _startKey(),
         _endKey(),
         _endKeyInclusive(true),
@@ -320,14 +322,20 @@ namespace mongo {
     // Skip the key comprised of the first k fields of currentKey and the
     // rest set to max/min key for direction > 0 or < 0 respectively.
     void IndexCursor::skipPrefix(int k) {
-        tokulog(3) << "skipPrefix skipping first " << k << " elements in key " << endl;
+        tokulog(3) << "skipPrefix skipping first " << k << " elements in key, keyPattern " << indexKeyPattern() << endl;
         BSONObjBuilder b;
         BSONObjIterator it = _currKey.begin();
         for ( int i = 0; i < _currKey.nFields(); i++ ) {
             if ( i < k ) {
                 b.append( it.next() );
             } else {
-                _direction > 0 ? b.appendMaxKey( "" ) : b.appendMinKey( "" );
+                if ( _ordering.descending( 1 << i ) ) {
+                    // Descending sort order, so min key skips forward.
+                    _direction > 0 ? b.appendMinKey( "" ) : b.appendMaxKey( "" );
+                } else {
+                    // Regular ascending order. Max key skips forward.
+                    _direction > 0 ? b.appendMaxKey( "" ) : b.appendMinKey( "" );
+                }
             }
         }
         setPosition( b.done() );

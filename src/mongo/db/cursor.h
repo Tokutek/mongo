@@ -297,6 +297,7 @@ namespace mongo {
         // then both _d and _idx will be null.
         NamespaceDetails * const _d;
         const IndexDetails *_idx;
+        const Ordering _ordering;
 
         set<BSONObj> _dups;
         BSONObj _startKey;
