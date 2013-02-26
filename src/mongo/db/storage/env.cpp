@@ -129,6 +129,7 @@ namespace mongo {
             const int32_t lock_memory = cachesize / 10;
             r = env->set_lk_max_memory(env, lock_memory);
             verify(r == 0);
+            tokulog() << "locktree max memory set to " << lock_memory << " bytes." << endl;
 
             r = env->set_default_bt_compare(env, dbt_bson_compare);
             verify(r == 0);
