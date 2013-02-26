@@ -768,7 +768,7 @@ namespace mongo {
         auto_ptr< QueryResult > qr;
         BSONObj resObject;
         
-        Client::ReadContext ctx(ns, dbpath, true, (cc().getContext() == 0 ? DB_TXN_SNAPSHOT : DB_INHERIT_ISOLATION)); // read locks
+        Client::ReadContext ctx(ns, dbpath, true, DB_TXN_SNAPSHOT); // read locks
         replVerifyReadsOk(&pq);
         
         bool found = Helpers::findById( ns, query, resObject );
@@ -911,10 +911,7 @@ namespace mongo {
                 // Otherwise we default to a snapshot.
                 // XXX: TODO Read committed doesn't do what I want it to, so use an
                 // "incorrect" but mostly working UNCOMMITTED isolation.
-                Client::ReadContext ctx(ns , dbpath, true,
-                                        (cc().getContext() == 0
-                                         ? (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT)
-                                         : DB_INHERIT_ISOLATION)); // read locks
+                Client::ReadContext ctx(ns , dbpath, true, tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT); // read locks
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
                 
                 replVerifyReadsOk(&pq);

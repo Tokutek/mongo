@@ -220,7 +220,8 @@ namespace mongo {
         _doVersion( true ),
         _ns( ns ), 
         _db(db),
-        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), txn_flags))
+        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), 
+                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION))
     {
         verify( db == 0 || db->isOk() );
         _client->_context = this;
@@ -235,7 +236,8 @@ namespace mongo {
         _doVersion(doVersion),
         _ns( ns ), 
         _db(0),
-        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), txn_flags))
+        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL),
+                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION))
     {
         _finishInit( doauth );
     }
@@ -315,7 +317,8 @@ namespace mongo {
         _doVersion( true ),
         _ns( ns ), 
         _db(db),
-        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), txn_flags))
+        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), 
+                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION))
     {
         verify(_db);
         checkNotStale();
