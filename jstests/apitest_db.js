@@ -2,6 +2,7 @@
  *   Tests for the db object enhancement
  */
 
+assert(false, "profiling unimplemented");
 assert( "test" == db, "wrong database currently not test" );
 
 dd = function( x ){
