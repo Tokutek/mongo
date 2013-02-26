@@ -412,6 +412,8 @@ namespace QueryTests {
             client().dropCollection( "unittests.querytests.OplogReplayMode" );
         }
         void run() {
+            unimplemented("QueryOption_OplogReplay");
+            #if 0
             const char *ns = "unittests.querytests.OplogReplayMode";
             insert( ns, BSON( "ts" << 0 ) );
             insert( ns, BSON( "ts" << 1 ) );
@@ -426,6 +428,7 @@ namespace QueryTests {
             ASSERT( c->more() );
             ASSERT_EQUALS( 2, c->next().getIntField( "ts" ) );
             ASSERT( c->more() );
+            #endif
         }
     };
 
@@ -1092,6 +1095,8 @@ namespace QueryTests {
     public:
 
         HelperByIdTest() : CollectionBase( "helpertestbyid" ) {
+            // create collection before instantiating the writecontext
+            nsdetails_maybe_create(ns());
         }
 
         void run() {

@@ -1541,6 +1541,7 @@ namespace QueryUtilTests {
                 client_.resetIndexCache();
                 client_.ensureIndex( ns(), key, false, name.c_str() );
                 NamespaceDetails *d = nsd();
+                verify(d != NULL);
                 for( int i = 0; i < d->nIndexes(); ++i ) {
                     if ( d->idx(i).keyPattern() == key /*indexName() == name*/ || ( d->idx(i).isIdIndex() && IndexDetails::isIdIndexPattern( key ) ) )
                         return &d->idx(i);

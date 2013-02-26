@@ -686,6 +686,8 @@ namespace ShardingTests {
         }
 
         void setupTests() {
+            log(0) << "sharding tests disabled" << endl;
+#if 0
             add< serverandquerytests::test1 >();
             add< ShardVersionParsingTest >();
             add< ChunkManagerCreateBasicTest >();
@@ -693,6 +695,7 @@ namespace ShardingTests {
             add< ChunkManagerLoadBasicTest >();
             add< ChunkDiffUnitTestNormal >();
             add< ChunkDiffUnitTestInverse >();
+#endif
         }
     } myall;
 

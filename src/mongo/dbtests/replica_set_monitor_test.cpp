@@ -1606,6 +1606,8 @@ namespace {
         }
 
         void setupTests(){
+            log(0) << "replication tests disabled" << endl;
+#if 0
             add< SimpleGoodMatchTest >();
             add< SimpleBadMatchTest >();
             add< ExactMatchTest >();
@@ -1630,6 +1632,7 @@ namespace {
             add< SecNodeCompatibleMultiTagTest >();
             add< PriNodeNotCompatibleMultiTagTest >();
             add< SecNodeNotCompatibleMultiTagTest >();
+#endif
         }
     } allNode;
 
@@ -1639,6 +1642,8 @@ namespace {
         }
 
         void setupTests() {
+            log(0) << "replication tests disabled" << endl;
+#if 0
             add< PrimaryOnlyTest >();
             add< PrimaryOnlyPriNotOkTest >();
             add< PriOnlyWithTagsNoMatchTest >();
@@ -1707,6 +1712,7 @@ namespace {
             add< NearestWithMultiTagsMatchesLastTest >();
             add< NearestMultiTagsWithPriMatchTest >();
             add< NearestMultiTagsNoMatchTest >();
+#endif
         }
     } allNodeSelectorSuite;
 

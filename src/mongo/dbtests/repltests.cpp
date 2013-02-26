@@ -1152,6 +1152,8 @@ namespace ReplTests {
         }
 
         void setupTests() {
+            log(0) << "replication tests disabled" << endl;
+#if 0
             add< LogBasic >();
             add< Idempotence::InsertTimestamp >();
             add< Idempotence::InsertAutoId >();
@@ -1204,6 +1206,7 @@ namespace ReplTests {
             add< FindingStartCursorStale >();
             add< ReplSetMemberCfgEquality >();
             add< ShouldRetry >();
+#endif
         }
     } myall;
 

@@ -491,12 +491,15 @@ namespace ReplSetTests {
         }
 
         void setupTests() {
+            log(0) << "replication tests disabled" << endl;
+#if 0
             add< TestInitApplyOp >();
             add< TestInitApplyOp2 >();
             add< CappedInitialSync >();
             add< CappedUpdate >();
             add< CappedInsert >();
             add< TestRSSync >();
+#endif
         }
     } myall;
 }

@@ -797,7 +797,7 @@ if tokupath is None:
     tokupath = '$BUILD_DIR/third_party/tokudb'
 env.Append(CPPPATH=['%s/include' % tokupath])
 env.Append(LIBPATH=['%s/lib' % tokupath])
-env.Append(LIBS=[ltokudb, ltokuportability, 'dl', 'z'])
+env.Append(LIBS=[ltokudb, ltokuportability, 'm', 'dl', 'z'])
 
 # --- check system ---
 
