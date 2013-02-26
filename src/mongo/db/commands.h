@@ -144,11 +144,6 @@ namespace mongo {
 
         virtual void help( stringstream& help ) const;
 
-        /* Return true if authentication and security applies to the commands.  Some commands
-           (e.g., getnonce, authenticate) can be done by anyone even unauthorized.
-        */
-        virtual bool requiresAuth() { return true; }
-
         /**
          * Appends to "*out" the privileges required to run this command on database "dbname" with
          * the invocation described by "cmdObj".
@@ -310,7 +305,6 @@ namespace mongo {
     class NotWithAuthCmd : public InformationCommand {
     public:
         NotWithAuthCmd(const char* cmdName) : InformationCommand(cmdName) { }
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {}
@@ -330,7 +324,6 @@ namespace mongo {
 
     class CmdShutdown : public Command {
     public:
-        virtual bool requiresAuth() { return true; }
         virtual bool adminOnly() const { return true; }
         virtual bool localHostOnlyIfNoAuth(const BSONObj& cmdObj) { return true; }
         virtual bool logTheOp() {

@@ -1335,7 +1335,6 @@ namespace mongo {
 
         class IsDbGridCmd : public InformationCommand {
         public:
-            virtual bool requiresAuth() { return false; }
             IsDbGridCmd() : InformationCommand("isdbgrid") { }
             virtual void addRequiredPrivileges(const std::string& dbname,
                                                const BSONObj& cmdObj,
@@ -1349,7 +1348,6 @@ namespace mongo {
 
         class CmdIsMaster : public InformationCommand {
         public:
-            virtual bool requiresAuth() { return false; }
             virtual void help( stringstream& help ) const {
                 help << "test if this is master half of a replica pair";
             }
@@ -1386,7 +1384,6 @@ namespace mongo {
 
         class CmdShardingGetPrevError : public InformationCommand {
         public:
-            virtual bool requiresAuth() { return false; }
             virtual void help( stringstream& help ) const {
                 help << "get previous error (since last reseterror command)";
             }

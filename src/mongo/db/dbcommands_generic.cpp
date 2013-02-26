@@ -51,7 +51,6 @@ namespace mongo {
     public:
         CmdBuildInfo() : WebInformationCommand("buildInfo", true, "buildinfo") {}
         virtual bool adminOnly() const { return false; }
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {} // No auth required
@@ -76,7 +75,6 @@ namespace mongo {
     public:
         PingCommand() : InformationCommand("ping") {}
         virtual void help( stringstream &help ) const { help << "a way to check that the server is alive. responds immediately even if server is in a db lock."; }
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {} // No auth required

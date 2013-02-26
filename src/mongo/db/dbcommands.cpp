@@ -956,7 +956,6 @@ namespace mongo {
     public:
         CmdRenameCollection() : FileopsCommand( "renameCollection" ) {}
         virtual bool adminOnly() const { return true; }
-        virtual bool requiresAuth() { return true; }
         virtual bool lockGlobally() const { return true; }
         virtual bool logTheOp() {
             return true; // can't log steps when doing fast rename within a db, so always log the op rather than individual steps comprising it.
@@ -1198,7 +1197,6 @@ namespace mongo {
     public:
         CmdCloseAllDatabases() : FileopsCommand( "closeAllDatabases" ) {}
         virtual bool adminOnly() const { return true; }
-        virtual bool requiresAuth() { return true; }
         virtual bool lockGlobally() const { return true; }
         virtual bool logTheOp() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
@@ -1541,7 +1539,6 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << "{whatsmyuri:1}";
         }
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {} // No auth required
@@ -1654,7 +1651,6 @@ namespace mongo {
             help << "w:true write lock. secs:<seconds>";
         }
         // No auth needed because it only works when enabled via command line.
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {}
@@ -1709,7 +1705,6 @@ namespace mongo {
         EmptyCapped() : ModifyCommand( "emptycapped" ) {}
         virtual bool logTheOp() { return true; }
         // No auth needed because it only works when enabled via command line.
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {}

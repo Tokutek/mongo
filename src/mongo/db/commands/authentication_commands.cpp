@@ -59,7 +59,6 @@ namespace mongo {
             _random = SecureRandom::create();
         }
 
-        virtual bool requiresAuth() { return false; }
         void help(stringstream& h) const { h << "internal"; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
