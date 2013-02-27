@@ -235,12 +235,8 @@ namespace mongo {
             void commit_transaction(int flags = 0) { _transaction->commit(flags); }
             void swap_transactions(shared_ptr<Transaction> &other_transaction);
 
-            bool readOnly() const {
-                // TODO: Properly identify when a context is read only, so that
-                // cursors can be optimized to use bulk fetch and not take
-                // locks in the locktree!
-                return false;
-            }
+            bool isReadOnly() const;
+            void setReadOnly();
 
         private:
             friend class CurOp;
@@ -259,6 +255,7 @@ namespace mongo {
             shared_ptr<Transaction> _transaction;
             
             Timer _timer;
+            bool _isReadOnly;
         }; // class Client::Context
 
         class WriteContext : boost::noncopyable {

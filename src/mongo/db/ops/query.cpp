@@ -106,6 +106,7 @@ namespace mongo {
             verify(ctx->transaction_is_root());
             verify(client_cursor->transaction.get() != NULL);
             ctx->swap_transactions(client_cursor->transaction);
+            ctx->setReadOnly();
 
             if ( pass == 0 )
                 client_cursor->updateSlaveLocation( curop );
@@ -915,6 +916,7 @@ namespace mongo {
                 // XXX: TODO Read committed doesn't do what I want it to, so use an
                 // "incorrect" but mostly working UNCOMMITTED isolation.
                 Client::ReadContext ctx(ns , dbpath, true, tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT); // read locks
+                ctx.ctx().setReadOnly();
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
                 
                 replVerifyReadsOk(&pq);

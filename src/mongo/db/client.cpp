@@ -221,11 +221,29 @@ namespace mongo {
         _ns( ns ), 
         _db(db),
         _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), 
-                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION))
+                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION)),
+        _isReadOnly(false)
     {
         verify( db == 0 || db->isOk() );
         _client->_context = this;
         checkNsAccess( doauth );
+    }
+
+    bool Client::Context::isReadOnly() const {
+        // TODO: only trust the parent
+        if (!_isReadOnly && _oldContext) {
+            return _oldContext->isReadOnly();
+        } else {
+            return _isReadOnly;
+        }
+    }
+
+    void Client::Context::setReadOnly() {
+        if (_oldContext) {
+            // TODO: verify(_oldContext->isReadOnly());
+        } else {
+            _isReadOnly = true;
+        }
     }
 
     Client::Context::Context(const string& ns, string path , bool doauth, bool doVersion, int txn_flags ) :
@@ -237,7 +255,8 @@ namespace mongo {
         _ns( ns ), 
         _db(0),
         _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL),
-                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION))
+                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION)),
+        _isReadOnly(false)
     {
         _finishInit( doauth );
     }
@@ -318,7 +337,8 @@ namespace mongo {
         _ns( ns ), 
         _db(db),
         _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), 
-                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION))
+                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION)),
+        _isReadOnly(false)
     {
         verify(_db);
         checkNotStale();

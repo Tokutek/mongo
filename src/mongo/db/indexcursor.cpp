@@ -179,7 +179,7 @@ namespace mongo {
         _nscanned(0),
         _cursor(NULL),
         _tailable(false),
-        _readOnly(cc().getContext()->readOnly()),
+        _readOnly(cc().getContext()->isReadOnly()),
         _getf_iteration(0)
     {
         tokulog(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
@@ -200,7 +200,7 @@ namespace mongo {
         _nscanned(0),
         _cursor(NULL),
         _tailable(false),
-        _readOnly(cc().getContext()->readOnly()),
+        _readOnly(cc().getContext()->isReadOnly()),
         _getf_iteration(0)
     {
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
