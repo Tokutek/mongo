@@ -72,7 +72,7 @@ check();
 t.ensureIndex( {a:1} );
 check();
 var e = t.find( {$and:[{a:1}]} ).explain();
-assert.eq( 'BtreeCursor a_1', e.cursor );
+assert.eq( 'IndexCursor a_1', e.cursor );
 assert.eq( [[1,1]], e.indexBounds.a );
 
 function checkBounds( query ) {

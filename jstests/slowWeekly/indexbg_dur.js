@@ -66,7 +66,7 @@ while( 1 ) {
     
     exp = t.find( {i:20} ).explain();
     assert.eq( 1, exp.n );
-    assert.eq( 'BtreeCursor i_1', exp.cursor );
+    assert.eq( 'IndexCursor i_1', exp.cursor );
     
     break;
 }   

@@ -33,7 +33,7 @@ function nscannedForCursor( explain, cursor ) {
 }
 
 assert.eq( t.find(q).itcount(),
-          nscannedForCursor( t.find(q).explain(true), 'BtreeCursor arr.x_1_a_1' ), "A5" );
+          nscannedForCursor( t.find(q).explain(true), 'IndexCursor arr.x_1_a_1' ), "A5" );
 
 
 

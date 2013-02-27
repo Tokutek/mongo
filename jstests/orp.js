@@ -6,7 +6,7 @@ t.drop();
 
 function verifyExpectedQueryPlan( query ) {
     explain = t.find( query ).explain();
-    assert.eq( 'BtreeCursor a_1', explain.clauses[ 0 ].cursor );
+    assert.eq( 'IndexCursor a_1', explain.clauses[ 0 ].cursor );
     assert.eq( 'BasicCursor', explain.clauses[ 1 ].cursor );
 }
 

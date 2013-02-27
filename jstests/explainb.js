@@ -13,7 +13,7 @@ t.save( { a:1, b:0 } );
 explain = t.find( { a:{ $gte:0 }, b:{ $gte:0 } } ).explain( true );
 
 // The a:1,b:1 plan finishes scanning first.
-assert.eq( 'BtreeCursor a_1_b_1', explain.cursor );
+assert.eq( 'IndexCursor a_1_b_1', explain.cursor );
 assert.eq( 2, explain.n );
 // nscanned and nscannedObjects are reported for the a:1,b:1 plan.
 assert.eq( 2, explain.nscanned );
@@ -25,7 +25,7 @@ assert.eq( 6, explain.nscannedObjectsAllPlans );
 // A limit of 2.
 explain = t.find( { a:{ $gte:0 }, b:{ $gte:0 } } ).limit( -2 ).explain( true );
 
-assert.eq( 'BtreeCursor a_1_b_1', explain.cursor );
+assert.eq( 'IndexCursor a_1_b_1', explain.cursor );
 assert.eq( 2, explain.n );
 assert.eq( 1, explain.nscanned );
 assert.eq( 1, explain.nscannedObjects );
@@ -64,7 +64,7 @@ t.save( { a:'1', b:'0' } );
 
 explain = t.find( { a:/0/, b:/1/ } ).explain( true );
 
-assert.eq( 'BtreeCursor a_1_b_1 multi', explain.cursor );
+assert.eq( 'IndexCursor a_1_b_1 multi', explain.cursor );
 assert.eq( 1, explain.n );
 assert.eq( 2, explain.nscanned );
 assert.eq( 1, explain.nscannedObjects );

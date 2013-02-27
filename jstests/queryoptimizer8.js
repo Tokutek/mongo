@@ -18,7 +18,7 @@ bPreferableQuery = { a:1, b:0 };
 // Run an explain query to record a specified query plan for the query pattern.
 function recordPlan( plan, query, sort, scanAndOrder ) {
     explain = t.find( query ).sort( sort ).explain();
-    assert.eq( 'BtreeCursor ' + plan, explain.cursor );
+    assert.eq( 'IndexCursor ' + plan, explain.cursor );
     assert.eq( scanAndOrder, explain.scanAndOrder );
 }
 
@@ -31,7 +31,7 @@ function checkPlanUsed( plan, query, sort ) {
     assert.eq( query.a, result.a );
     assert.eq( query.b, result.b );
     // Check the plan used for the above query by examining explain's oldPlan field.
-    assert.eq( 'BtreeCursor ' + plan, t.find( query ).sort( sort ).explain( true ).oldPlan.cursor );
+    assert.eq( 'IndexCursor ' + plan, t.find( query ).sort( sort ).explain( true ).oldPlan.cursor );
 }
 
 function checkOrdered( ordered ) {

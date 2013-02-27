@@ -71,9 +71,9 @@ assert.eq( 1, simpleQuery( {}, {} ).limit( -1 ).explain().nscanned );
 // Without a hint, multiple cursors are attempted.
 assert.eq( 0, t.find( { a:{ $in:[ 1, 2 ] } } ).sort( { b:1 } ).limit( -1 )[ 0 ].b );
 explain = t.find( { a:{ $in:[ 1, 2 ] } } ).sort( { b:1 } ).limit( -1 ).explain( true );
-assert.eq( 'BtreeCursor a_1_b_1 multi', explain.cursor );
+assert.eq( 'IndexCursor a_1_b_1 multi', explain.cursor );
 assert.eq( 1, explain.n );
-assert.eq( 'BtreeCursor a_1_b_1 multi', explain.allPlans[ 0 ].cursor );
+assert.eq( 'IndexCursor a_1_b_1 multi', explain.allPlans[ 0 ].cursor );
 assert.eq( 2, explain.allPlans[ 0 ].n );
 assert.eq( 3, explain.allPlans[ 0 ].nscanned );
 

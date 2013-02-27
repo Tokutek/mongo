@@ -49,18 +49,18 @@ for( i = 0; i < 10; ++i ) {
     t.save( { a:0, b:i, c:9-i } );
 }
 
-checkCursorCovered( 'BtreeCursor a_1_b_1', true, 10, { a:0 }, { _id:0, a:1 } );
-checkCursorCovered( 'BtreeCursor a_1_b_1', true, 10, { a:0, d:null }, { _id:0, a:1 } );
-checkCursorCovered( 'BtreeCursor a_1_b_1', true, 10, { a:0, d:null }, { _id:0, a:1, b:1 } );
+checkCursorCovered( 'IndexCursor a_1_b_1', true, 10, { a:0 }, { _id:0, a:1 } );
+checkCursorCovered( 'IndexCursor a_1_b_1', true, 10, { a:0, d:null }, { _id:0, a:1 } );
+checkCursorCovered( 'IndexCursor a_1_b_1', true, 10, { a:0, d:null }, { _id:0, a:1, b:1 } );
 
 // Covered index on a,c not preferentially selected.
-checkCursorCovered( 'BtreeCursor a_1_b_1', false, 10, { a:0, d:null }, { _id:0, a:1, c:1 } );
+checkCursorCovered( 'IndexCursor a_1_b_1', false, 10, { a:0, d:null }, { _id:0, a:1, c:1 } );
 
 t.save( { a:0, c:[ 1, 2 ] } );
 t.save( { a:1 } );
-checkCursorCovered( 'BtreeCursor a_1_b_1', true, 11, { a:0, d:null }, { _id:0, a:1 } );
+checkCursorCovered( 'IndexCursor a_1_b_1', true, 11, { a:0, d:null }, { _id:0, a:1 } );
 
 t.save( { a:0, b:[ 1, 2 ] } );
 t.save( { a:1 } );
-checkCursorCovered( 'BtreeCursor a_1_b_1', false, 12, { a:0, d:null }, { _id:0, a:1 } );
+checkCursorCovered( 'IndexCursor a_1_b_1', false, 12, { a:0, d:null }, { _id:0, a:1 } );
 

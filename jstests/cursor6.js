@@ -8,13 +8,13 @@ function eq( one, two ) {
 function checkExplain( e, idx, reverse, nScanned ) {
     if ( !reverse ) {
 	if ( idx ) {
-	    assert.eq( "BtreeCursor a_1_b_-1", e.cursor );
+	    assert.eq( "IndexCursor a_1_b_-1", e.cursor );
 	} else {
 	    assert.eq( "BasicCursor", e.cursor );
 	}
     } else {
 	if ( idx ) {
-	    assert.eq( "BtreeCursor a_1_b_-1 reverse", e.cursor );
+	    assert.eq( "IndexCursor a_1_b_-1 reverse", e.cursor );
 	} else {
 	    assert( false );
 	}

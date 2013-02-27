@@ -31,12 +31,12 @@ res = t.mapReduce(  m , r , { out : outName } )
     
 assert.eq( "BasicCursor" , ex().cursor , "A1" )
 out.ensureIndex( { value : 1 } )
-assert.eq( "BtreeCursor value_1" , ex().cursor , "A2" )
+assert.eq( "IndexCursor value_1" , ex().cursor , "A2" )
 assert.eq( 3 , ex().n , "A3" )
 
 res = t.mapReduce(  m , r , { out : outName } )
     
-assert.eq( "BtreeCursor value_1" , ex().cursor , "B1" )
+assert.eq( "IndexCursor value_1" , ex().cursor , "B1" )
 assert.eq( 3 , ex().n , "B2" )
 res.drop()
 

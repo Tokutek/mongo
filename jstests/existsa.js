@@ -13,7 +13,7 @@ function setIndex( _indexKeyField ) {
     indexKeySpec = {};
     indexKeySpec[ indexKeyField ] = 1;
     t.ensureIndex( indexKeySpec, { sparse:true } );
-    indexCursorName = 'BtreeCursor ' + indexKeyField + '_1';
+    indexCursorName = 'IndexCursor ' + indexKeyField + '_1';
 }
 setIndex( 'a' );
 
@@ -109,4 +109,4 @@ t.drop();
 t.save( {} );
 t.ensureIndex( { a:1 } );
 assert.eq( 1, t.find( { a:{ $exists:false } } ).itcount() );
-assert.eq( 'BtreeCursor a_1', t.find( { a:{ $exists:false } } ).explain().cursor );
+assert.eq( 'IndexCursor a_1', t.find( { a:{ $exists:false } } ).explain().cursor );

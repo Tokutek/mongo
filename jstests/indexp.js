@@ -6,7 +6,7 @@ t.drop();
 function expectRecordedPlan( query, idx ) {
     explain = t.find( query ).explain( true );
     assert( explain.oldPlan );
- 	assert.eq( "BtreeCursor " + idx, explain.oldPlan.cursor );
+ 	assert.eq( "IndexCursor " + idx, explain.oldPlan.cursor );
 }
 
 function expectNoRecordedPlan( query ) {

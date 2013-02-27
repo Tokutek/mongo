@@ -15,7 +15,7 @@ explain = t.find( { a:{ $gte:0 }, b:0 } ).sort( { a:1 } ).limit( 5 ).explain( tr
 assert.eq( 5, explain.n );
 explain.allPlans.forEach( function( x ) {
                          // Five results are expected for the in order plan.
-                         if ( x.cursor == "BtreeCursor a_1" ) {
+                         if ( x.cursor == "IndexCursor a_1" ) {
                              assert.eq( 5, x.n );
                          }
                          else {

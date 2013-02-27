@@ -15,7 +15,7 @@ assert.eq( 200, explain.n );
 clauses = explain.clauses;
 for( i = 0; i < clauses.length; ++i ) {
     c = clauses[ i ];
-    assert.eq( 'BtreeCursor _id_', c.cursor );
+    assert.eq( 'IndexCursor _id_', c.cursor );
     assert.eq( false, c.isMultiKey );
     assert.eq( 1, c.n, 'n' );
     assert.eq( 1, c.nscannedObjects, 'nscannedObjects' );
@@ -26,7 +26,7 @@ for( i = 0; i < clauses.length; ++i ) {
     allPlans = c.allPlans;
     assert.eq( 1, allPlans.length );
     plan = allPlans[ 0 ];
-    assert.eq( 'BtreeCursor _id_', plan.cursor );
+    assert.eq( 'IndexCursor _id_', plan.cursor );
     assert.eq( 1, plan.n, 'n' );
     assert.eq( 1, plan.nscannedObjects, 'nscannedObjects' );
     assert.eq( 1, plan.nscanned, 'nscanned' );

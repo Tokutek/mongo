@@ -16,6 +16,6 @@ function checkIndex( index, n ) {
     assert.eq( index, explain.cursor );
 }
 
-checkIndex( "BtreeCursor a_1", 100 );
-checkIndex( "BtreeCursor b_1", 500 );
+checkIndex( "IndexCursor a_1", 100 );
+checkIndex( "IndexCursor b_1", 500 );
 t.drop();

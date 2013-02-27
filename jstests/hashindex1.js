@@ -35,7 +35,7 @@ assert.eq( t.find({a : 3}).hint(goodspec).toArray().length , 1);
 assert.eq( t.find({a : 3.1}).hint(goodspec).toArray()[0].a , 3.1);
 
 //test that hashed cursor is used when it should be
-var cursorname = "BtreeCursor a_hashed";
+var cursorname = "IndexCursor a_hashed";
 assert.eq( t.find({a : 1}).explain().cursor ,
 		cursorname ,
 		"not using hashed cursor");

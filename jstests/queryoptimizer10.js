@@ -21,8 +21,8 @@ function assertIndexRecordedForQuery( expectedCursor, query, explainQuery ) {
 }
 
 t.ensureIndex( { a:1 } );
-assertIndexRecordedForQuery( 'BtreeCursor a_1', { $or:[ { a:1 } ] }, { a:1 } );
-assertIndexRecordedForQuery( 'BtreeCursor a_1', { a:1 } );
+assertIndexRecordedForQuery( 'IndexCursor a_1', { $or:[ { a:1 } ] }, { a:1 } );
+assertIndexRecordedForQuery( 'IndexCursor a_1', { a:1 } );
 
 t.drop();
 

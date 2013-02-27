@@ -26,8 +26,8 @@ checkExists( {b:{$exists:true}} );
 checkExists( {b:{$not:{$exists:false}}} );
 
 checkMissing = function( query ) {
-    // Index range constraint on 'b' is not universal, so a BtreeCursor is the default cursor type.
-    assert.eq( 'BtreeCursor b_1', t.find( query ).explain().cursor );
+    // Index range constraint on 'b' is not universal, so a IndexCursor is the default cursor type.
+    assert.eq( 'IndexCursor b_1', t.find( query ).explain().cursor );
     // Scan null index keys.
     assert.eq( [ [ null, null ] ], t.find( query ).explain().indexBounds.b );
     // Two existing null keys will be scanned.

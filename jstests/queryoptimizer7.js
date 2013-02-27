@@ -4,7 +4,7 @@ t = db.jstests_queryoptimizer7;
 
 function assertPlanWasRecorded( query ) {
     var x = t.find( query ).explain( true );
-    assert.eq( 'BtreeCursor a_1', x.oldPlan.cursor , tojson(x) );
+    assert.eq( 'IndexCursor a_1', x.oldPlan.cursor , tojson(x) );
 }
 
 function assertNoPlanWasRecorded( query ) {

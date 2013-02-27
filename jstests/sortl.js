@@ -12,7 +12,7 @@ function recordIndex( index, query, sort ) {
     // Run a query that records the desired index.
     t.find( query ).sort( sort ).explain();
     // Check that the desired index is recorded.
-    assert.eq( 'BtreeCursor ' + index,
+    assert.eq( 'IndexCursor ' + index,
               t.find( query ).sort( sort ).explain( true ).oldPlan.cursor );
 }
 

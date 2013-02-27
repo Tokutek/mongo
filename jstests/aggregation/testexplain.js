@@ -335,7 +335,7 @@ var edi1result = {
                                 }
                         },
                         "cursor" : {
-                                "cursor" : "BtreeCursor d_1",
+                                "cursor" : "IndexCursor d_1",
                                 "isMultiKey" : false,
                                 "n" : 11,
                                 "nscannedObjects" : 11,
@@ -354,7 +354,7 @@ var edi1result = {
                                 },
                                 "allPlans" : [
                                         {
-                                                "cursor" : "BtreeCursor d_1",
+                                                "cursor" : "IndexCursor d_1",
                                                 "n" : 11,
                                                 "nscannedObjects" : 11,
                                                 "nscanned" : 11,
@@ -369,7 +369,7 @@ var edi1result = {
                                         }
                                 ],
                                 "oldPlan" : {
-                                        "cursor" : "BtreeCursor d_1",
+                                        "cursor" : "IndexCursor d_1",
                                         "indexBounds" : {
                                                 "d" : [
                                                         [
@@ -406,7 +406,7 @@ var edi2result = {
                 "d" : 1
             },
             "cursor" : {
-                "cursor" : "BtreeCursor d_1",
+                "cursor" : "IndexCursor d_1",
                 "isMultiKey" : false,
                 "n" : 21,
                 "nscannedObjects" : 21,
@@ -429,7 +429,7 @@ var edi2result = {
                 },
                 "allPlans" : [
                     {
-                        "cursor" : "BtreeCursor d_1",
+                        "cursor" : "IndexCursor d_1",
                         "n" : 21,
                         "nscannedObjects" : 21,
                         "nscanned" : 21,
@@ -448,7 +448,7 @@ var edi2result = {
                     }
                 ],
                 "oldPlan" : {
-                    "cursor" : "BtreeCursor d_1",
+                    "cursor" : "IndexCursor d_1",
                     "indexBounds" : {
                         "d" : [
                             [
@@ -499,7 +499,7 @@ var edi3result = {
                                 "d" : 1
                         },
                         "cursor" : {
-                                "cursor" : "BtreeCursor d_1",
+                                "cursor" : "IndexCursor d_1",
                                 "isMultiKey" : false,
                                 "n" : 11,
                                 "nscannedObjects" : 11,
@@ -518,7 +518,7 @@ var edi3result = {
                                 },
                                 "allPlans" : [
                                         {
-                                                "cursor" : "BtreeCursor d_1",
+                                                "cursor" : "IndexCursor d_1",
                                                 "n" : 11,
                                                 "nscannedObjects" : 11,
                                                 "nscanned" : 11,
@@ -533,7 +533,7 @@ var edi3result = {
                                         }
                                 ],
                                 "oldPlan" : {
-                                        "cursor" : "BtreeCursor d_1",
+                                        "cursor" : "IndexCursor d_1",
                                         "indexBounds" : {
                                                 "d" : [
                                                         [
