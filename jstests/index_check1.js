@@ -1,5 +1,3 @@
-assert(false, "disabled due to server crash");
-
 db.somecollection.drop();
 
 assert(db.system.namespaces.find({name:/somecollection/}).length() == 0, 1);

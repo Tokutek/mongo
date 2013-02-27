@@ -1,4 +1,3 @@
-assert(false, "disabled due to server crash");
 // Test dropping during a $or yield SERVER-3555
 
 t = db.jstests_orm;

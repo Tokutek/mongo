@@ -1,4 +1,3 @@
-assert(false, "disabled due to server crash");
 // SERVER-2845 When skipping objects without loading them, they shouldn't be
 // included in the nscannedObjects count.
 

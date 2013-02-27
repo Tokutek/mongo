@@ -1,4 +1,3 @@
-assert(false, "disabled due to server crash");
 // Some tests for $and SERVER-1089
 
 t = db.jstests_and;

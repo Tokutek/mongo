@@ -1,5 +1,3 @@
-assert(false, "disabled due to server crash");
-
 t = db.index_many2;
 t.drop()
 

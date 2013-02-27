@@ -1,4 +1,3 @@
-assert(false, "disabled due to server crash");
 // Check elimination of proper range type when popping a $or clause SERVER-958.
 
 t = db.jstests_ori;

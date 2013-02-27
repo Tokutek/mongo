@@ -1,5 +1,3 @@
-assert(false, "disabled due to server crash");
-
 t = db.update8;
 t.drop();
 

@@ -1,4 +1,3 @@
-assert(false, "disabled due to server crash");
 t = db.array1
 t.drop()
 

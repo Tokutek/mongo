@@ -1,4 +1,3 @@
-assert(false, "disabled due to server crash");
 
 t = db.update_multi3;
 

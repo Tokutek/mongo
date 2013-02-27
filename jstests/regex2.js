@@ -1,5 +1,3 @@
-assert(false, "disabled due to server crash");
-
 t = db.regex2;
 t.drop();
 
