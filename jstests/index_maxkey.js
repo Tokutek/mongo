@@ -1,4 +1,4 @@
-
+assert(false, "index_maxkey disabled because it relies on some very strange behavior with index versions");
 t = db.index_maxkey;
 
 for ( var indexVersion=0; indexVersion<=1; indexVersion++ ) {

@@ -1,3 +1,4 @@
+assert(false, "mapreduce tests disabled");
 var conn = MongoRunner.runMongod({ noscripting: '' });
 var testDB = conn.getDB( 'foo' );
 var coll = testDB.bar;

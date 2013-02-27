@@ -1,3 +1,4 @@
+assert(false, "mapreduce tests disabled");
 // Test killop applied to m/r operations and child ops of m/r operations.
 
 t = db.jstests_mr_killop;

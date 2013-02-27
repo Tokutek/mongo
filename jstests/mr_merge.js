@@ -1,3 +1,4 @@
+assert(false, "mapreduce tests disabled");
 
 t = db.mr_merge;
 t.drop();

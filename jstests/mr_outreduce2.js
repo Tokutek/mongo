@@ -1,3 +1,4 @@
+assert(false, "mapreduce tests disabled");
 
 normal = "mr_outreduce2"
 out = normal + "_out"
