@@ -204,7 +204,7 @@ namespace mongo {
     {
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
         _startKey = _bounds->startKey();
-        const int skipPrefix = _boundsIterator->advance( _startKey ); // handles initialization
+        _boundsIterator->advance( _startKey ); // handles initialization
         _boundsIterator->prepDive();
         tokulog(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
