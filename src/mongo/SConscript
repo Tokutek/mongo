@@ -404,7 +404,6 @@ env.StaticLibrary("coredb", [
                            ])
 
 coreServerFiles = [ "db/client_basic.cpp",
-                    "db/common.cpp",
                     "util/net/miniwebserver.cpp",
                     "db/stats/counters.cpp",
                     "db/stats/service_stats.cpp",
@@ -478,6 +477,7 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/repl/rs_initialsync.cpp",
                     "db/repl/bgsync.cpp",
                     "db/repl/replication_server_status.cpp",
+                    "db/repl/optime.cpp",
                     "db/oplog.cpp",
                     "db/oplog_helpers.cpp",
                     "db/repl_block.cpp",

@@ -26,7 +26,6 @@
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/startup_test.h"
-#include "optime.h"
 #include "time_support.h"
 #include "mongoutils/str.h"
 #include "timer.h"
@@ -83,8 +82,6 @@ namespace mongo {
 
         }
     } utilTest;
-
-    OpTime OpTime::last(0, 0);
 
     ostream& operator<<( ostream &s, const ThreadSafeString &o ) {
         s << o.toString();

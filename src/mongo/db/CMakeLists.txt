@@ -183,6 +183,7 @@ add_library(serveronly STATIC
   repl/rs_initialsync
   repl/bgsync
   repl/replication_server_status
+  repl/optime
   oplog
   oplog_helpers
   repl_block
@@ -271,7 +272,6 @@ add_dependencies(mongodandmongos generate_error_codes generate_action_types inst
 
 add_library(coreserver STATIC
   client_basic
-  common
   ../util/net/miniwebserver
   stats/counters
   stats/service_stats

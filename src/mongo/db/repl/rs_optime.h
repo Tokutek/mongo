@@ -19,9 +19,7 @@
 
 #pragma once
 
-#include "../../util/optime.h"
-
-// TODO(zardosht): Move these definitions somewhere better and delete this file.
+// TODO(zardosht): Move these definitions somewhere better (oplog.h probably) and delete this file.
 
 namespace mongo {
 

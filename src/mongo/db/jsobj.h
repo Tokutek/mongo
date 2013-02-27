@@ -42,4 +42,4 @@
 #include "mongo/bson/ordering.h"
 #include "mongo/base/string_data.h"
 #include "mongo/bson/bson_db.h"
-#include "mongo/util/optime.h"
+#include "mongo/db/repl/optime.h"
