@@ -498,6 +498,10 @@ namespace {
                 return Status(ErrorCodes::BadValue,
                               "need sslCAFile with sslWeakCertificateValidation");
             }
+            if (!cmdLine.sslCRLFile.empty() &&
+                cmdLine.sslCAFile.empty()) {
+                return Status(ErrorCodes::BadValue, "need sslCAFile with sslCRLFile");
+            }
             if (params.count("ssl.FIPSMode")) {
                 cmdLine.sslFIPSMode = true;
             }
