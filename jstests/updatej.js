@@ -9,4 +9,6 @@ t.save( {a:1} );
 t.save( {a:[]} );
 
 t.update( {}, {$push:{a:2}}, false, true );
-assert.eq( 1, t.count( {a:2} ) );
+//assert.eq( 1, t.count( {a:2} ) );
+// TokuDB aborts the transaction, so assert nothing actually got modified.
+assert.eq( 0, t.count( {a:2} ) );
