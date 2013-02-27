@@ -1,5 +1,5 @@
 // Test yielding group command SERVER-1395
-
+assert(false, "group7 disabled because we don't yield");
 t = db.jstests_group7;
 t.drop();
 
