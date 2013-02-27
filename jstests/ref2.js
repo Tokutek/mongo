@@ -1,3 +1,4 @@
+assert(false, "disabled due to server crash");
 
 t = db.ref2;
 t.drop();

@@ -1,3 +1,4 @@
+assert(false, "disabled due to server crash");
 // Test more than four regex expressions in a query -- SERVER-969
 
 t = db.jstests_regexb;

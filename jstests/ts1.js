@@ -1,3 +1,4 @@
+assert(false, "disabled due to server crash");
 t = db.ts1
 t.drop()
 

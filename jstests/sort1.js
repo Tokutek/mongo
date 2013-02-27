@@ -1,3 +1,4 @@
+assert(false, "disabled due to server crash");
 debug = function( s ){
     //print( s );
 }

@@ -1,3 +1,4 @@
+assert(false, "disabled due to server crash");
 
 t = db.set1;
 t.drop();

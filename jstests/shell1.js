@@ -1,3 +1,4 @@
+assert(false, "disabled due to server crash");
 x = 1;
 
 shellHelper( "show", "tables;" )

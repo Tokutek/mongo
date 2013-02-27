@@ -1,3 +1,4 @@
+assert(false, "disabled due to server crash");
 // Test unique and dropDups index options.
 
 function checkNprev( np ) {

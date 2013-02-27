@@ -1,3 +1,4 @@
+assert(false, "disabled due to server crash");
 // verify that index direction is considered when deduping based on an earlier
 // index
 

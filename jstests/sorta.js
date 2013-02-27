@@ -1,3 +1,4 @@
+assert(false, "disabled due to server crash");
 // SERVER-2905 sorting with missing fields
 
 t = db.jstests_sorta;

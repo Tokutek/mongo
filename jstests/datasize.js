@@ -1,3 +1,4 @@
+assert(false, "datasize test disabled");
 f = db.jstests_datasize;
 f.drop();
 
