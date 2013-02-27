@@ -72,13 +72,14 @@ namespace mongo {
     //      true, the buffer is reading to be read via current()
     //      false, the buffer has no more data. don't call next again without append()'ing.
     bool RowBuffer::next() {
-        verify( ok() );
 
-        // seek passed the current key, loc, and obj.
-        size_t key_size = currentKey().objsize();
-        size_t pk_size = currentPK().objsize();
-        size_t obj_size = currentObj().objsize();
-        _current_offset += key_size + pk_size + obj_size;
+        // if the buffer has more, seek passed the current one
+        if (ok()) {
+            size_t key_size = currentKey().objsize();
+            size_t pk_size = currentPK().objsize();
+            size_t obj_size = currentObj().objsize();
+            _current_offset += key_size + pk_size + obj_size;
+        }
 
         // postcondition: we did not seek passed the end of the buffer.
         verify(_current_offset <= _end_offset);
