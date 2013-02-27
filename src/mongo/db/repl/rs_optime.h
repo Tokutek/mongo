@@ -21,6 +21,8 @@
 
 #include "../../util/optime.h"
 
+// TODO(zardosht): Move these definitions somewhere better and delete this file.
+
 namespace mongo {
 
     const char rsoplog[] = "local.oplog.rs";
