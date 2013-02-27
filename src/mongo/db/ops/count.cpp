@@ -27,7 +27,7 @@
 namespace mongo {
     
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
-        Client::Context cx(ns, dbpath, true, true, DB_TXN_SNAPSHOT);
+        Client::Context ctx(ns, dbpath, true, true, DB_TXN_SNAPSHOT);
         NamespaceDetails *d = nsdetails( ns );
         if ( !d ) {
             err = "ns missing";
@@ -53,17 +53,8 @@ namespace mongo {
         shared_ptr<Cursor> cursor =
         NamespaceDetailsTransient::getCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
                                              &simpleEqualityMatch );
-        ClientCursor::Holder ccPointer;
-        ElapsedTracker timeToStartYielding( 256, 20 );
         try {
             while( cursor->ok() ) {
-                if ( !ccPointer ) {
-                    if ( timeToStartYielding.intervalHasElapsed() ) {
-                        // Lazily construct a ClientCursor, avoiding a performance regression when scanning a very
-                        // small number of documents.
-                        ccPointer.reset( new ClientCursor( QueryOption_NoCursorTimeout, cursor, ns ) );
-                    }
-                }
                 
                 // With simple equality matching there is no need to use the matcher because the bounds
                 // are enforced by the FieldRangeVectorIterator and only key fields have constraints.  There
@@ -87,8 +78,7 @@ namespace mongo {
                 }
                 cursor->advance();
             }
-            ccPointer.reset();
-            cx.commit_transaction();
+            ctx.commit_transaction();
             return count;
             
         }
