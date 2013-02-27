@@ -1,4 +1,4 @@
-
+assert(false, "capped collection tests disabled");
 t = db.capped_empty;
 t.drop();
 

@@ -1,4 +1,4 @@
-
+assert(false, "capped collection tests disabled");
 t = db.scan_capped_id;
 t.drop()
 

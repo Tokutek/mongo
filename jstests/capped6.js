@@ -1,5 +1,5 @@
 // Test NamespaceDetails::cappedTruncateAfter via 'captrunc' command
-
+assert(false, "capped collection tests disabled");
 Random.setRandomSeed();
 
 db.capped6.drop();

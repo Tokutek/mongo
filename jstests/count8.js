@@ -1,4 +1,5 @@
 // Test count yielding, in both fast and normal count modes.
+assert(false, "test disabled because count doesn't yield with snapshot txns");
 
 t = db.jstests_count8;
 t.drop();

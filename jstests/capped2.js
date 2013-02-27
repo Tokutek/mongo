@@ -1,4 +1,4 @@
-db.capped2.drop();
+assert(false, "capped collection tests disabled");db.capped2.drop();
 db._dbCommand( { create: "capped2", capped: true, size: 1000, $nExtents: 11, autoIndexId: false } );
 tzz = db.capped2;
 

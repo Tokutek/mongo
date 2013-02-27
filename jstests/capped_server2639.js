@@ -1,4 +1,4 @@
-
+assert(false, "capped collection tests disabled");
 name = "server2639"
 
 t = db.getCollection( name );
