@@ -1566,7 +1566,7 @@ namespace mongo {
     }
 
     DBClientConnection& DBClientReplicaSet::slaveConn() {
-        BSONArray emptyArray;
+        BSONArray emptyArray(BSON_ARRAY(BSONObj()));
         TagSet tags(emptyArray);
         shared_ptr<ReadPreferenceSetting> readPref(new ReadPreferenceSetting(
                 ReadPreference_SecondaryPreferred, new TagSet(emptyArray)));
