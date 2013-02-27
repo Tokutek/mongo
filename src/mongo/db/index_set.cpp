@@ -1,7 +1,7 @@
-// index_set.h
+// index_set.cpp
 
 /**
-*    Copyright (C) 2008 10gen Inc.
+*    Copyright (C) 2013 10gen Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -24,10 +24,10 @@ namespace mongo {
     void IndexPathSet::addPath( const StringData& path ) {
         string s;
         if ( getCanonicalIndexField( path, &s ) ) {
-            _canonical.push_back( s );
+            _canonical.insert( s );
         }
         else {
-            _canonical.push_back( path.toString() );
+            _canonical.insert( path.toString() );
         }
     }
 
@@ -39,10 +39,13 @@ namespace mongo {
         StringData use = path;
         string x;
         if ( getCanonicalIndexField( path, &x ) )
-            use = StringData(x);
+            use = StringData( x );
 
-        for ( unsigned i = 0; i < _canonical.size(); i++ ) {
-            StringData idx( _canonical[i] );
+        for ( std::set<string>::const_iterator i = _canonical.begin();
+              i != _canonical.end();
+              ++i ) {
+
+            StringData idx( *i );
 
             if ( use.startsWith( idx ) )
                 return true;
@@ -56,6 +59,8 @@ namespace mongo {
 
     bool getCanonicalIndexField( const StringData& fullName, string* out ) {
         // check if fieldName contains ".$" or ".###" substrings (#=digit) and skip them
+        // however do not skip the first field even if it meets these criteria
+
         if ( fullName.find( '.' ) == string::npos )
             return false;
 
