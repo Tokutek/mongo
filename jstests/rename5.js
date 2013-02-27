@@ -1,4 +1,5 @@
 // Check some $rename cases with a missing source.  SERVER-4845
+assert(false, "rename tests disabled");
 
 t = db.jstests_rename5;
 t.drop();

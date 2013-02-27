@@ -1,3 +1,4 @@
+assert(false, "rename tests disabled");
 admin = db.getMongo().getDB( "admin" );
 
 a = db.jstests_rename_a;

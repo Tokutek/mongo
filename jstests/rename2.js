@@ -1,4 +1,4 @@
-
+assert(false, "rename tests disabled");
 
 a = db.rename2a;
 b = db.rename2b;

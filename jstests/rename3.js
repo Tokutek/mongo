@@ -1,3 +1,4 @@
+assert(false, "rename tests disabled");
 
 
 a = db.rename3a

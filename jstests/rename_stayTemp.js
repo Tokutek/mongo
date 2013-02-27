@@ -1,3 +1,4 @@
+assert(false, "rename tests disabled");
 orig = 'rename_stayTemp_orig'
 dest = 'rename_stayTemp_dest'
 

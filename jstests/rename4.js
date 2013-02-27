@@ -1,3 +1,4 @@
+assert(false, "rename tests disabled");
 t = db.jstests_rename4;
 t.drop();
 
