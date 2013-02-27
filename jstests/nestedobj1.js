@@ -1,4 +1,5 @@
 //SERVER-5127, SERVER-5036
+assert(false, "nestedobj1 test disabled, causes weird crash when destroying FieldRangeSet");
 
 if ( typeof _threadInject == "undefined" ) { // SERVER-6448
 
