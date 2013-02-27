@@ -204,7 +204,7 @@ namespace mongo {
     {
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
         _startKey = _bounds->startKey();
-        _boundsIterator->advance( _startKey ); // handles initialization
+        const int skipPrefix = _boundsIterator->advance( _startKey ); // handles initialization
         _boundsIterator->prepDive();
         tokulog(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
@@ -222,7 +222,7 @@ namespace mongo {
         // exist and is therefore treated as empty.
         if (_d != NULL && _idx != NULL) {
             _cursor = _idx->cursor();
-            setPosition(_startKey);
+            findKey(_startKey);
             checkCurrentAgainstBounds();
         } else {
             verify( _d == NULL && _idx == NULL );
@@ -262,17 +262,21 @@ namespace mongo {
         }
     }
 
-    void IndexCursor::setPosition(const BSONObj &key) {
+    void IndexCursor::findKey(const BSONObj &key) {
         const bool isSecondary = !_idx->isIdIndex();
         const BSONObj &pk = _direction > 0 ? minKey : maxKey;
-        const size_t buflen = storage::index_key_size(key, isSecondary ? &pk : NULL);
+        setPosition(key, isSecondary ? pk : BSONObj());
+    };
+
+    void IndexCursor::setPosition(const BSONObj &key, const BSONObj &pk) {
+        const size_t buflen = storage::index_key_size(key, !pk.isEmpty() ? &pk : NULL);
         char buf[buflen];
 
         // Secondary keys store an associated Pk next to the stored keys,
         // so we need to either append Min or Max key to the given key
         // according to this cursor's direction.
-        storage::index_key_init(buf, buflen, key, isSecondary ? &pk : NULL);
-        tokulog(3) << toString() << ": setPosition(): getf " << key << ", pk " << (isSecondary ? pk : BSONObj()) << ", direction " << _direction << endl;
+        storage::index_key_init(buf, buflen, key, !pk.isEmpty() ? &pk : NULL);
+        tokulog(3) << toString() << ": setPosition(): getf " << key << ", pk " << pk << ", direction " << _direction << endl;
 
         DBT key_dbt;
         storage::dbt_init(&key_dbt, buf, buflen);
@@ -338,7 +342,12 @@ namespace mongo {
                 }
             }
         }
-        setPosition( b.done() );
+
+        // This differs from findKey in that we set PK to max to move forward and min
+        // to move backward, resulting in a "skip" of the key prefix, not a "find".
+        const bool isSecondary = !_idx->isIdIndex();
+        const BSONObj &pk = _direction > 0 ? maxKey : minKey;
+        setPosition( b.done(), isSecondary ? pk : BSONObj() );
     }
 
     bool IndexCursor::skipOutOfRangeKeysAndCheckEnd() {
@@ -386,7 +395,7 @@ namespace mongo {
             }
             tokulog(3) << "skipOutOfRngeKeys used first " << skipPrefixIndex << " elements"
                 " in key and the rest from cmp(), setting position now..." << endl;
-            setPosition( b.done() );
+            findKey( b.done() );
 
             // Skip passed key prefixes that are not supposed to be inclusive
             // as described by _boundsIterator->inc() and endKeys

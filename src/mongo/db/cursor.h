@@ -285,8 +285,10 @@ namespace mongo {
         int getf_flags();
         /** pull more rows from the DBC into the RowBuffer */
         bool fetchMoreRows();
-        /** position the cursor over the given key */
-        void setPosition( const BSONObj &key );
+        /** find by key where the PK used for search is determined by _direction */
+        void findKey(const BSONObj &key);
+        /** find by key and a given PK */
+        void setPosition(const BSONObj &key, const BSONObj &pk);
         /** check if the current key is out of bounds, invalidate the current key if so */
         bool checkCurrentAgainstBounds();
         void skipPrefix(int k);

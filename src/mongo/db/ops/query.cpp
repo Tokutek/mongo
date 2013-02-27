@@ -178,6 +178,9 @@ namespace mongo {
             if ( client_cursor ) {
                 //client_cursor->storeOpForSlave( last );
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
+
+                // The cursor is still live. Give back the transaction.
+                ctx->swap_transactions(client_cursor->transaction);
             }
         }
 

@@ -73,7 +73,7 @@ namespace mongo {
         // get or create the profiling collection
         NamespaceDetails *details = getOrCreateProfileCollection(db);
         if (details) {
-            ::abort();
+            // TODO: Figure out what this fast_oplog_insert is all about
 #if 0
             int len = p.objsize();
             Record *r = NULL; //theDataFileMgr.fast_oplog_insert(details, ns, len); TODO: Get rid of theDataFileMgr
@@ -83,9 +83,6 @@ namespace mongo {
     }
 
     NamespaceDetails* getOrCreateProfileCollection(Database *db, bool force) {
-        ::abort();
-        return NULL;
-#if 0
         fassert(16372, db);
         const char* profileName = db->profileName.c_str();
         NamespaceDetails* details = db->namespaceIndex.details(profileName);
@@ -109,7 +106,6 @@ namespace mongo {
             }
         }
         return details;
-#endif
     }
 
 } // namespace mongo
