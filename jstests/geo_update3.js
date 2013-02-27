@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Updates are applied once per location to a document with multiple locations iterated
 // consecutively.  This is a descriptive, not a normative test.  SERVER-5885
 

@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Test that weird polygons work SERVER-3725
 
 t = db.geo_polygon5;

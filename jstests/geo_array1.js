@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Make sure many locations in one doc works, in the form of an array
 
 t = db.geoarray1

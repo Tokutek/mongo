@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 //
 // Tests for N-dimensional polygon querying
 //

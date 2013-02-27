@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 var t = db.geo4;
 t.drop();
 

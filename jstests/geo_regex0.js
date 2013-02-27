@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // From SERVER-2247
 // Tests to make sure regex works with geo indices
 

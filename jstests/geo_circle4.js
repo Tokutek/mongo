@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Reported as server-848.
 db.server848.drop();
 

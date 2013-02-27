@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Reproduces simple test for SERVER-2832
 
 // The setup to reproduce was/is to create a set of points where the 

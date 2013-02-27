@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 var t=db.geod;
 t.drop() 
 t.save( { loc: [0,0] } )

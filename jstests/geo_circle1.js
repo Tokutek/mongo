@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 assert(false, "disabled due to server crash");
 
 t = db.geo_circle1;

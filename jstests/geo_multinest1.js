@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Test distance queries with interleaved distances
 
 t = db.multinest

@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 //
 // Tests the error handling of spherical queries
 // along with multi-location documents.

@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Test where points are on _max (180)
 // Using GeoNearRandom because this test needs a lot of points in the index.
 // If there aren't enough points the test passes even if the code is broken.

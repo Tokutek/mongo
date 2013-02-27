@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Additional checks for geo uniqueDocs and includeLocs SERVER-3139.
 
 collName = 'jstests_geo_uniqueDocs2';

@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Make sure the very basics of geo arrays are sane by creating a few multi location docs
 
 t = db.geoarray

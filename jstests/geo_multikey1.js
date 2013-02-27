@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Multikey geo index tests with parallel arrays.
 
 t = db.jstests_geo_multikey1;

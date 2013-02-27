@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // How to construct a test to stress the flaw in SERVER-994:
 // construct an index, think up a bounding box inside the index that
 // doesn't include the center of the index, and put a point inside the

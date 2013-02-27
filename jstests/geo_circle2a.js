@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // From SERVER-2381 
 // Tests to make sure that nested multi-key indexing works for geo indexes and is not used for direct position
 // lookups

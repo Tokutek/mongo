@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Tests geo queries w/ update & upsert
 // from SERVER-3428
 

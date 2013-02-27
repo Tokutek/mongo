@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Was reported as SERVER-1283.
 // The problem seems to be that sometimes the index btrees are such that
 // the first search for a matching point in the geo code could run to

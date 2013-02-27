@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Tests whether the geospatial search is stable under btree updates
 
 var status = function( msg ){

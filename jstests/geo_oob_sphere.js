@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 //
 // Ensures spherical queries report invalid latitude values in points and center positions
 //

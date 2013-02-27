@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Reproduces simple test for SERVER-2115
 
 // The setup to reproduce is to create a set of points and a really big bounds so that we are required to do 

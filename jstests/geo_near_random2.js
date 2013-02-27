@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // this tests 1% of all points using $near and $nearSphere
 load("jstests/libs/geo_near_random.js");
 

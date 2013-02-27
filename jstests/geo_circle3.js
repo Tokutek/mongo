@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // SERVER-848 and SERVER-1191.
 db.places.drop()
 

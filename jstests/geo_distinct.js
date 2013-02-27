@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Test distinct with geo queries SERVER-2135
 
 t = db.commits

@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Check the semantics of near calls with multiple locations
 
 t = db.geoarray2

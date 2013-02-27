@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Make sure nesting of location arrays also works.
 
 t = db.geonest

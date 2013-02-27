@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 //
 // Tests polygon edge cases
 //

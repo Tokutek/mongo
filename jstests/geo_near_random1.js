@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // this tests all points using $near
 load("jstests/libs/geo_near_random.js");
 

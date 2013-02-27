@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Test uniqueDocs option for $within and geoNear queries SERVER-3139
 
 collName = 'geo_uniqueDocs_test'

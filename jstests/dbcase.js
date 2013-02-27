@@ -1,5 +1,5 @@
 // Check db name duplication constraint SERVER-2111
-
+assert(false, "dbcase test disabled because CmdListDatabases crashes the server");
 a = db.getSisterDB( "dbcasetest_dbnamea" )
 b = db.getSisterDB( "dbcasetest_dbnameA" )
 

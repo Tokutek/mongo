@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Test for SERVER-2746
 
 coll = db.geo10

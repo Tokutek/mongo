@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // SERVER-2386, general geo-indexing using very large and very small bounds
 
 load( "jstests/libs/geo_near_random.js" );

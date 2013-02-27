@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 
 t = db.geo_sort1
 t.drop();

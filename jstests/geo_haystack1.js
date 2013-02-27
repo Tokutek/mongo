@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 
 t = db.geo_haystack1
 t.drop()

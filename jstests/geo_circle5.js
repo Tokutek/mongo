@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 assert(false, "disabled due to server crash");
 // reported as server-1238.
 

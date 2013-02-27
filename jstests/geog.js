@@ -1,3 +1,4 @@
+assert(false, "geo tests disabled");
 // Test geo index selection criterion, with and without explicit hints. SERVER-4531
 
 t = db.jstests_geog;
