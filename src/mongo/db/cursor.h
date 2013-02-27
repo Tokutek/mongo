@@ -293,7 +293,6 @@ namespace mongo {
         bool checkCurrentAgainstBounds();
         void skipPrefix(int k);
         bool skipOutOfRangeKeysAndCheckEnd();
-        void checkEnd();
 
         // If the namespace is does not exist and needs to be treated as empty,
         // then both _d and _idx will be null.

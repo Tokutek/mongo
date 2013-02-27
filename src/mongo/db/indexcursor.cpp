@@ -204,8 +204,7 @@ namespace mongo {
         _getf_iteration(0)
     {
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
-        _startKey = _bounds->startKey();
-        _boundsIterator->advance( _startKey ); // handles initialization
+        _boundsIterator->advance( _bounds->startKey() ); // handles initialization
         _boundsIterator->prepDive();
         tokulog(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
@@ -302,11 +301,28 @@ namespace mongo {
         tokulog(3) << "setPosition hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
     }
 
+    // Return a value in the set {-1, 0, 1} to represent the sign of parameter i.
+    static int sgn( int i ) {
+        if ( i == 0 )
+            return 0;
+        return i > 0 ? 1 : -1;
+    }
+
     // Check the current key with respect to our key bounds, whether
     // it be provided by independent field ranges or by start/end keys.
     bool IndexCursor::checkCurrentAgainstBounds() {
         if ( _bounds == NULL ) {
-            checkEnd();
+            if ( ok() && !_endKey.isEmpty() ) {
+                verify( _idx != NULL );
+                const int cmp = sgn( _endKey.woCompare( currKey(), _idx->keyPattern() ) );
+                if ( ( cmp != 0 && cmp != _direction ) ||
+                        ( cmp == 0 && !_endKeyInclusive ) ) {
+                    _currKey = BSONObj();
+                    tokulog(3) << toString() <<
+                        ": checkCurrentAgainstBounds() stopping @ curr, end: "
+                        << currKey() << _endKey << endl;
+                }
+            }
             if ( ok() ) {
                 ++_nscanned;
             }
@@ -428,28 +444,6 @@ namespace mongo {
         }
         ++_nscanned;
         return true;
-    }
-
-    // Return a value in the set {-1, 0, 1} to represent the sign of parameter i.
-    int sgn( int i ) {
-        if ( i == 0 )
-            return 0;
-        return i > 0 ? 1 : -1;
-    }
-
-    // Check if the current key is beyond endKey.
-    void IndexCursor::checkEnd() {
-        if ( _currKey.isEmpty() )
-            return;
-        if ( !_endKey.isEmpty() ) {
-            verify( _idx != NULL );
-            int cmp = sgn( _endKey.woCompare( currKey(), _idx->keyPattern() ) );
-            if ( ( cmp != 0 && cmp != _direction ) ||
-                    ( cmp == 0 && !_endKeyInclusive ) ) {
-                _currKey = BSONObj();
-                tokulog(3) << toString() << ": checkEnd() stopping @ curr, end: " << currKey() << _endKey << endl;
-            }
-        }
     }
 
     bool IndexCursor::fetchMoreRows() {
