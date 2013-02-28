@@ -16,7 +16,7 @@
 // Clear db
 db.s6121.drop();
 // Populate db
-db.s6121.save({date:new Timestamp(1341337661000, 1)});
+db.s6121.save({date:new Timestamp(1341337661, 1)});
 db.s6121.save({date:new Date(1341337661000)});
 // Aggregate checking various combinations of the constant and the field
 var s6121 = db.runCommand(
@@ -40,7 +40,7 @@ assert.eq(s6121.result[0], s6121.result[1], 's6121 failed');
 
 // Clear db for timestamp to date compare test
 db.s6121.drop();
-db.s6121.save({time:new Timestamp(1341337661000, 1), date:new Date(1341337661000)});
+db.s6121.save({time:new Timestamp(1341337661, 1), date:new Date(1341337661000)});
 var s6121 = db.runCommand(
     {aggregate: "s6121", pipeline: [
         {$project: {
@@ -55,7 +55,7 @@ assert.eq(s6121.code, 16016, 's6121 failed confirming that date and timestamp ca
 
 // Clear db for timestamp comparison tests
 db.s6121.drop();
-db.s6121.save({time:new Timestamp(1341337661000, 1), time2:new Timestamp(1341337661000, 2)});
+db.s6121.save({time:new Timestamp(1341337661, 1), time2:new Timestamp(1341337661, 2)});
 var s6121 = db.runCommand(
     {aggregate: "s6121", pipeline: [
         {$project: {
