@@ -182,6 +182,25 @@ namespace mongo {
         return cursor;
     }
 
+    enum toku_compression_method IndexDetails::get_compression_method() {
+        enum toku_compression_method ret;
+        int r = _db->get_compression_method(_db, &ret);
+        verify(r == 0);
+        return ret;
+    }
+    uint32_t IndexDetails::get_page_size() {
+        uint32_t ret;
+        int r = _db->get_pagesize(_db, &ret);
+        verify(r == 0);
+        return ret;
+    }
+    uint32_t IndexDetails::get_read_page_size() {
+        uint32_t ret;
+        int r = _db->get_readpagesize(_db, &ret);
+        verify(r == 0);
+        return ret;
+    }
+
     void IndexSpec::reset( const IndexDetails * details ) {
         _details = details;
         reset( details->info() );

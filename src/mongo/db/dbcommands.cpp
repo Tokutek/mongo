@@ -1333,6 +1333,7 @@ namespace mongo {
     }
 #endif
 
+
     class CollectionStats : public Command {
     public:
         CollectionStats() : Command( "collStats", false, "collstats" ) {}
@@ -1381,6 +1382,20 @@ namespace mongo {
             //result.appendNumber( "totalIndexSize" , getIndexSizeForCollection(dbname, ns, &indexSizes, scale) / scale );
             //result.append("indexSizes", indexSizes.obj());
             // TODO: Get index sizes for tokudb
+
+            uint32_t nIndexes = nsd->nIndexes();
+            IndexStats indexStats[nIndexes];
+            BSONObjBuilder index_bson_stats[nIndexes];
+            BSONObjBuilder index_info;
+            nsd->fill_index_stats(indexStats);
+            for (uint32_t i = 0; i < nIndexes; i++) {
+                index_bson_stats[i].append("page size", indexStats[i].get_page_size());
+                index_bson_stats[i].append("read page size", indexStats[i].get_read_page_size());
+                index_info.append(nsd->idx(i).indexName(), index_bson_stats[i].obj());
+            }
+            result.append("index details", index_info.obj());
+            
+
 
             if ( nsd->isCapped() ) {
                 result.append( "capped" , nsd->isCapped() );

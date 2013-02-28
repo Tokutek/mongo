@@ -144,6 +144,9 @@ namespace mongo {
         void insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite);
         void deleteObject(const BSONObj &pk, const BSONObj &obj);
         DBC *cursor() const;
+        enum toku_compression_method get_compression_method();
+        uint32_t get_page_size();
+        uint32_t get_read_page_size();
 
     private:
         // Open dictionary representing the index on disk.
@@ -163,6 +166,38 @@ namespace mongo {
 
         friend class NamespaceDetails;
     };
+
+    // class to store statistics about an IndexDetails
+    class IndexStats {
+    public:
+        IndexStats() {
+            _read_page_size = 0;
+            _page_size = 0;
+        }
+
+        void fill_stats(IndexDetails* idx) {
+            name = idx->indexName();
+            _compression_method = idx->get_compression_method();
+            _read_page_size = idx->get_read_page_size();
+            _page_size = idx->get_page_size();
+        }
+
+        uint32_t get_page_size() {
+            return _page_size;
+        }
+
+        uint32_t get_read_page_size() {
+            return _read_page_size;
+        }
+
+    private:
+        string name;
+        DB_BTREE_STAT64 stats;
+        enum toku_compression_method _compression_method;
+        uint32_t _read_page_size;
+        uint32_t _page_size;
+    };
+
 
     int removeFromSysIndexes(const char *ns, const char *name);
 

@@ -472,6 +472,14 @@ namespace mongo {
         }
     }
 
+    void NamespaceDetails::fill_index_stats(IndexStats* indexStats) {
+        uint32_t i = 0;
+        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it, ++i) {
+            IndexDetails *index = it->get();
+            indexStats[i].fill_stats(index);
+        }
+    }
+
     /* ------------------------------------------------------------------------- */
 
     SimpleMutex NamespaceDetailsTransient::_qcMutex("qc");
