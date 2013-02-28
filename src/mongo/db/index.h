@@ -144,10 +144,10 @@ namespace mongo {
         void insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite);
         void deleteObject(const BSONObj &pk, const BSONObj &obj);
         DBC *cursor() const;
-        enum toku_compression_method get_compression_method();
-        uint32_t get_page_size();
-        uint32_t get_read_page_size();
-        void get_stat64(DB_BTREE_STAT64* stats);
+        enum toku_compression_method getCompressionMethod();
+        uint32_t getPageSize();
+        uint32_t getReadPageSize();
+        void getStat64(DB_BTREE_STAT64* stats);
 
     private:
         // Open dictionary representing the index on disk.
@@ -172,32 +172,32 @@ namespace mongo {
     class IndexStats {
     public:
         IndexStats() {
-            _read_page_size = 0;
-            _page_size = 0;
+            _readPageSize = 0;
+            _pageSize = 0;
         }
 
-        void fill_stats(IndexDetails* idx) {
+        void fillStats(IndexDetails* idx) {
             name = idx->indexName();
-            _compression_method = idx->get_compression_method();
-            _read_page_size = idx->get_read_page_size();
-            _page_size = idx->get_page_size();
-            idx->get_stat64(&stats);
+            _compressionMethod = idx->getCompressionMethod();
+            _readPageSize = idx->getReadPageSize();
+            _pageSize = idx->getPageSize();
+            idx->getStat64(&stats);
         }
 
         uint32_t get_page_size() {
-            return _page_size;
+            return _pageSize;
         }
 
         uint32_t get_read_page_size() {
-            return _read_page_size;
+            return _readPageSize;
         }
 
     private:
         string name;
         DB_BTREE_STAT64 stats;
-        enum toku_compression_method _compression_method;
-        uint32_t _read_page_size;
-        uint32_t _page_size;
+        enum toku_compression_method _compressionMethod;
+        uint32_t _readPageSize;
+        uint32_t _pageSize;
     };
 
 

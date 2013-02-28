@@ -476,7 +476,7 @@ namespace mongo {
         uint32_t i = 0;
         for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it, ++i) {
             IndexDetails *index = it->get();
-            indexStats[i].fill_stats(index);
+            indexStats[i].fillStats(index);
         }
     }
 
@@ -616,7 +616,7 @@ namespace mongo {
         //BackgroundOperation::assertNoBgOpInProgForNs(ns);
 
         d->dropIndexes(ns, "*", errmsg, result, true, can_drop_system);
-        uassert(16445, "bug in dropCollection (nIndexes != 0), should crash but won't for now.", d->nIndexes() == 0);
+        verify(d->nIndexes() == 0);
         log(1) << "\t dropIndexes done" << endl;
         result.append("ns", name);
         ClientCursor::invalidate(ns);
