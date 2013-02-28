@@ -26,7 +26,6 @@ jstests/dbcase.js
 jstests/dbhash.js
 jstests/delx.js
 jstests/distinct_index1.js
-jstests/drop.js
 jstests/error4.js
 jstests/eval0.js
 jstests/evalb.js
