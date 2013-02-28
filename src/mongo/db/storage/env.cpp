@@ -241,6 +241,9 @@ namespace mongo {
             Client::Context *ctx = cc().getContext();
             verify(ctx->transaction_is_root());
             int r = env->dbremove(env, ctx->transaction().txn(), name.c_str(), NULL, 0);
+            if (r == ENOENT) {
+                uasserted(16444, "TODO: dbremove bug, should crash but won't right now");
+            }
             verify(r == 0);
         }
 

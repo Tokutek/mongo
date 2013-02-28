@@ -608,7 +608,7 @@ namespace mongo {
         //BackgroundOperation::assertNoBgOpInProgForNs(ns);
 
         d->dropIndexes(ns, "*", errmsg, result, true, can_drop_system);
-        verify(d->nIndexes() == 0);
+        uassert(16445, "bug in dropCollection (nIndexes != 0), should crash but won't for now.", d->nIndexes() == 0);
         log(1) << "\t dropIndexes done" << endl;
         result.append("ns", name);
         ClientCursor::invalidate(ns);

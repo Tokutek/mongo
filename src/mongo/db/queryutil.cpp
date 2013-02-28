@@ -1144,9 +1144,7 @@ namespace mongo {
             BSONArrayBuilder a( b.subarrayStart( k.next().fieldName() ) );
             for( vector<FieldInterval>::const_iterator j = _ranges[ i ].intervals().begin();
                 j != _ranges[ i ].intervals().end(); ++j ) {
-                a << BSONArray(
-                        BSON_ARRAY(j->_lower._bound << j->_lower._inclusive <<
-                                   j->_upper._bound << j->_upper._inclusive).clientReadable());
+                a << BSONArray( BSON_ARRAY(j->_lower._bound << j->_upper._bound).clientReadable() );
             }
             a.done();
         }

@@ -291,7 +291,8 @@ namespace mongo {
         void setPosition(const BSONObj &key, const BSONObj &pk);
         /** check if the current key is out of bounds, invalidate the current key if so */
         bool checkCurrentAgainstBounds();
-        void skipPrefix(int k);
+        void skipPrefix(const BSONObj &key, const int k);
+        int skipToNextKey(const BSONObj &currentKey);
         bool skipOutOfRangeKeysAndCheckEnd();
         void checkEnd();
 
