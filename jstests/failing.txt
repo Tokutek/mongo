@@ -1,6 +1,5 @@
 jstests/and3.js
 jstests/and.js
-jstests/apitest_db.js
 jstests/apply_ops1.js
 jstests/arrayfind1.js
 jstests/arrayfind2.js
