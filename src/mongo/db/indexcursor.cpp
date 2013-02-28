@@ -227,9 +227,11 @@ namespace mongo {
                 // use that start key to set our position.
                 BSONObj nextKey;
                 int r = skipToNextKey( _bounds->startKey() );
-                if ( r == -1 ) {
+                if ( r == 0 ) {
+                    _nscanned = 1;
+                } else if ( r == -1 ) {
                     findKey( _bounds->startKey() );
-                    _nscanned = ok() ? 1 : 0;
+                    checkCurrentAgainstBounds();
                 }
             } else {
                 // Seek to an initial key described by _startKey 
@@ -371,7 +373,6 @@ namespace mongo {
         }
         else if ( skipPrefixIndex == -1 ) { 
             // We should skip nothing.
-            ++_nscanned;
             return -1;
         }
     
@@ -433,13 +434,17 @@ namespace mongo {
                 break;
             }
         }
-        ++_nscanned;
         return 0;
     }
 
     bool IndexCursor::skipOutOfRangeKeysAndCheckEnd() {
         if ( ok() ) { 
-            return skipToNextKey( currKey() ) == 0;
+            // If r is -2, the cursor is exhausted. We're not supposed to count that.
+            int r = skipToNextKey( currKey() );
+            if ( r != -2 ) {
+                _nscanned++;
+            }
+            return r == 0;
         }
         return false;
     }
