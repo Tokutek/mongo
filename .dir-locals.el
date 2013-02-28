@@ -1,8 +1,11 @@
+;; Set some emacs options to follow the mongo style: http://www.mongodb.org/about/contributors/kernel-code-style/
+;; You should also install google-c-style (available in the ELPA or from http://google-styleguide.googlecode.com/svn/trunk/google-c-style.el)
 (
- (c-mode . ((c-basic-offset . 4)
-            (indent-tabs-mode . nil)
-            (fill-column . 100)
-            (eval . (setq ac-clang-flags
+ (nil . ((c-file-style . "Google")
+         (c-basic-offset . 4)
+         (indent-tabs-mode . nil)
+         (fill-column . 100)))
+ (c-mode . ((eval . (setq ac-clang-flags
                           (let* ((cppdefs  '(("_SCONS"                        . "1")
                                              ("MONGO_EXPOSE_MACROS"           . "1")
                                              ("SUPPORT_UTF8"                  . "1")
@@ -39,10 +42,7 @@
                                                              (concat "-I" project-root "src" x))
                                                            includes))))
                             (append cppflags cflags))))))
- (c++-mode . ((c-basic-offset . 4)
-              (indent-tabs-mode . nil)
-              (fill-column . 100)
-              (eval . (setq ac-clang-flags
+ (c++-mode . ((eval . (setq ac-clang-flags
                             (let* ((cppdefs  '(("_SCONS"                        . "1")
                                                ("MONGO_EXPOSE_MACROS"           . "1")
                                                ("SUPPORT_UTF8"                  . "1")
