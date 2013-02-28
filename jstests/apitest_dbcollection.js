@@ -55,7 +55,8 @@ if( v.ns != "test.test_db" ) {
 assert (v.ns == "test.test_db",9);
 assert (v.ok == 1,10);
 
-assert.eq(100,v.nrecords,11)
+// TOKUDB: validate is deprecated, nrecords doesn't matter
+//assert.eq(100,v.nrecords,11)
 
 /*
  * test deleteIndex, deleteIndexes

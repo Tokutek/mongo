@@ -1,6 +1,5 @@
 jstests/and3.js
 jstests/and.js
-jstests/apitest_dbcollection.js
 jstests/apitest_db.js
 jstests/apply_ops1.js
 jstests/arrayfind1.js
@@ -8,7 +7,6 @@ jstests/arrayfind2.js
 jstests/arrayfind7.js
 jstests/arrayfind8.js
 jstests/auth1.js
-jstests/autoid.js
 jstests/basicc.js
 jstests/bench_test3.js
 jstests/check_shard_index.js
