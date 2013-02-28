@@ -200,6 +200,10 @@ namespace mongo {
         verify(r == 0);
         return ret;
     }
+    void IndexDetails::get_stat64(DB_BTREE_STAT64* stats) {
+        int r = _db->stat64(_db, NULL, stats);
+        verify(r == 0);
+    }
 
     void IndexSpec::reset( const IndexDetails * details ) {
         _details = details;

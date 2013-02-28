@@ -147,6 +147,7 @@ namespace mongo {
         enum toku_compression_method get_compression_method();
         uint32_t get_page_size();
         uint32_t get_read_page_size();
+        void get_stat64(DB_BTREE_STAT64* stats);
 
     private:
         // Open dictionary representing the index on disk.
@@ -180,6 +181,7 @@ namespace mongo {
             _compression_method = idx->get_compression_method();
             _read_page_size = idx->get_read_page_size();
             _page_size = idx->get_page_size();
+            idx->get_stat64(&stats);
         }
 
         uint32_t get_page_size() {
