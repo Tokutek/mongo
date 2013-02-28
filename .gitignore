@@ -87,6 +87,8 @@ scratch
 /mongotop
 /mongooplog
 /bsondump
+/loadgen
+/docgen
 
 /docgen
 /loadgen
