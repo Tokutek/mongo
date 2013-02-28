@@ -10,5 +10,6 @@ assert.eq( 1, t.count( {a:[]} ) );
 t.dropIndexes();
 
 // The count result is incorrect - just checking here that v0 key generation is used.
-t.ensureIndex( {a:1}, {v:0} );
-assert.eq( 0, t.count( {a:[]} ) );
+// Index versioning is obsolete in TokuDB
+//t.ensureIndex( {a:1}, {v:0} );
+//assert.eq( 0, t.count( {a:[]} ) );
