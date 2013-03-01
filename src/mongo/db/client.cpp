@@ -394,7 +394,6 @@ namespace mongo {
         
         // getOrCreate will try to open the database, for which we require a transaction.
         // The storage layer relies on cc().getContext() to find the transaction, so we make a transaction and set the client's context before calling getOrCreate.
-        dassert(_oldContext == NULL || !_oldContext->hasTransaction());
         beginTransaction();
         _client->_context = this;
         _db = dbHolderUnchecked().getOrCreate( _ns , _path , _justCreated );
