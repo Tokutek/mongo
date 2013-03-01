@@ -1387,10 +1387,11 @@ namespace mongo {
             IndexStats indexStats[nIndexes];
             BSONObjBuilder index_bson_stats[nIndexes];
             BSONObjBuilder index_info;
-            nsd->fill_index_stats(indexStats);
+            // fill each of the indexStats with statistics
+            nsd->fillIndexStats(indexStats);
             for (uint32_t i = 0; i < nIndexes; i++) {
-                index_bson_stats[i].append("page size", indexStats[i].get_page_size());
-                index_bson_stats[i].append("read page size", indexStats[i].get_read_page_size());
+                // retrieve the statistics into a BSon object
+                indexStats[i].fillBSonWithStats(&index_bson_stats[i], scale);
                 index_info.append(nsd->idx(i).indexName(), index_bson_stats[i].obj());
             }
             result.append("index details", index_info.obj());

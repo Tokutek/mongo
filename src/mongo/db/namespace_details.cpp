@@ -472,7 +472,7 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::fill_index_stats(IndexStats* indexStats) {
+    void NamespaceDetails::fillIndexStats(IndexStats* indexStats) {
         uint32_t i = 0;
         for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it, ++i) {
             IndexDetails *index = it->get();

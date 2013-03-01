@@ -219,4 +219,58 @@ namespace mongo {
         }
         _init();
     }
+
+    void IndexStats::fillStats(IndexDetails* idx) {
+        name = idx->indexName();
+        _compressionMethod = idx->getCompressionMethod();
+        _readPageSize = idx->getReadPageSize();
+        _pageSize = idx->getPageSize();
+        idx->getStat64(&_stats);
+    }
+    
+    void IndexStats::fillBSonWithStats(BSONObjBuilder* bson_stats, int scale) {
+        bson_stats->appendNumber("count", _stats.bt_nkeys);
+        bson_stats->appendNumber("size", _stats.bt_dsize/scale);
+        bson_stats->appendNumber("avgObjSize", (double)(_stats.bt_dsize/(_stats.bt_nkeys*scale)));
+        bson_stats->appendNumber("storageSize", _stats.bt_fsize / scale);
+        bson_stats->append("page size", _pageSize / scale);
+        bson_stats->append("read page size", _readPageSize / scale);
+        // fill compression
+        switch(_compressionMethod) {
+        case TOKU_NO_COMPRESSION:
+            bson_stats->append("compression type", "Uncompressed");
+            break;
+        case TOKU_ZLIB_METHOD:
+            bson_stats->append("compression type", "ZLib ");
+            break;
+        case TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD:
+            bson_stats->append("compression type", "ZLib without checksum");
+            break;
+        case TOKU_QUICKLZ_METHOD:
+            bson_stats->append("compression type", "QuickLZ");
+            break;
+        case TOKU_LZMA_METHOD:
+            bson_stats->append("compression type", "LZMA");
+            break;
+        case TOKU_FAST_COMPRESSION_METHOD:
+            bson_stats->append("compression type", "Fast");
+            break;
+        case TOKU_SMALL_COMPRESSION_METHOD:
+            bson_stats->append("compression type", "Small");
+            break;
+        case TOKU_DEFAULT_COMPRESSION_METHOD:
+            bson_stats->append("compression type", "Default");
+            break;
+        default:
+            bson_stats->append("compression type", "Unknown");
+            break;
+        }
+        // TODO: (Zardosht) Need to figure out how to display these dates
+        /*
+        Date_t create_date(_stats.bt_create_time_sec);
+        Date_t modify_date(_stats.bt_modify_time_sec);
+        bson_stats->append("create time", create_date);
+        bson_stats->append("last modify time", modify_date);
+        */
+    }
 }

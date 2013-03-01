@@ -175,26 +175,11 @@ namespace mongo {
             _readPageSize = 0;
             _pageSize = 0;
         }
-
-        void fillStats(IndexDetails* idx) {
-            name = idx->indexName();
-            _compressionMethod = idx->getCompressionMethod();
-            _readPageSize = idx->getReadPageSize();
-            _pageSize = idx->getPageSize();
-            idx->getStat64(&stats);
-        }
-
-        uint32_t get_page_size() {
-            return _pageSize;
-        }
-
-        uint32_t get_read_page_size() {
-            return _readPageSize;
-        }
-
+        void fillStats(IndexDetails* idx);
+        void fillBSonWithStats(BSONObjBuilder* bson_stats, int scale);
     private:
         string name;
-        DB_BTREE_STAT64 stats;
+        DB_BTREE_STAT64 _stats;
         enum toku_compression_method _compressionMethod;
         uint32_t _readPageSize;
         uint32_t _pageSize;
