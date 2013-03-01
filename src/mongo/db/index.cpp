@@ -243,7 +243,7 @@ namespace mongo {
             bson_stats->append("compressionType", "Uncompressed");
             break;
         case TOKU_ZLIB_METHOD:
-            bson_stats->append("compressionType", "ZLib ");
+            bson_stats->append("compressionType", "ZLib");
             break;
         case TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD:
             bson_stats->append("compressionType", "ZLib without checksum");

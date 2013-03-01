@@ -3,7 +3,6 @@ jstests/and.js
 jstests/apply_ops1.js
 jstests/arrayfind1.js
 jstests/arrayfind2.js
-jstests/arrayfind7.js
 jstests/arrayfind8.js
 jstests/auth1.js
 jstests/basicc.js

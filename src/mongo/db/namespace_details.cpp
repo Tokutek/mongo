@@ -295,9 +295,15 @@ namespace mongo {
     void NamespaceDetails::createIndex(const BSONObj &idx_info, bool resetTransient) {
         shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
         indexBuildInProgress = true;
-        _indexes.push_back(index);
-        fillNewIndex(*index);
-        _nIndexes++;
+        try {
+            _indexes.push_back(index);
+            fillNewIndex(*index);
+            _nIndexes++;
+        } catch (DBException &e) {
+            _indexes.pop_back();
+            indexBuildInProgress = false;
+            throw;
+        }
         indexBuildInProgress = false;
 
         string idx_ns = idx_info["ns"].String();
