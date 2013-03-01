@@ -33,13 +33,13 @@ doTest = function( index ) {
     a1 = t.find( { x:0, $or: [ { a : 1 } ] } ).toArray();
     checkArrs( [ { _id:0, x:0, a:1 } ], a1 );
     if ( index ) {
-        assert( t.find( { x:0,$or: [ { a : 1 } ] } ).explain().cursor.match( /Btree/ ) );
+        assert( t.find( { x:0,$or: [ { a : 1 } ] } ).explain().cursor.match( /Index/ ) );
     }
     
     a1b2 = t.find( { x:1, $or: [ { a : 1 }, { b : 2 } ] } ).toArray();
     checkArrs( [ { _id:4, x:1, a:1, b:1 }, { _id:5, x:1, a:1, b:2 }, { _id:7, x:1, a:2, b:2 } ], a1b2 );
     if ( index ) {
-        assert( t.find( { x:0,$or: [ { a : 1 } ] } ).explain().cursor.match( /Btree/ ) );
+        assert( t.find( { x:0,$or: [ { a : 1 } ] } ).explain().cursor.match( /Index/ ) );
     }
         
     t.drop();

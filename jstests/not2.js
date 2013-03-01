@@ -90,7 +90,7 @@ t.ensureIndex( {i:1} );
 indexed = function( query, min, max ) {
     exp = t.find( query ).explain( true );
 //    printjson( exp );
-    assert( exp.cursor.match( /Btree/ ), tojson( query ) );    
+    assert( exp.cursor.match( /Index/ ), tojson( query ) );    
     assert( exp.allPlans.length == 1, tojson( query ) );    
     // just expecting one element per key
     for( i in exp.indexBounds ) {
@@ -104,7 +104,7 @@ indexed = function( query, min, max ) {
 not = function( query ) {
     exp = t.find( query ).explain( true );
 //    printjson( exp );
-    assert( !exp.cursor.match( /Btree/ ), tojson( query ) );    
+    assert( !exp.cursor.match( /Index/ ), tojson( query ) );    
     assert( exp.allPlans.length == 1, tojson( query ) );    
 }
 
