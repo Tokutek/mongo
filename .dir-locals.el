@@ -54,16 +54,12 @@
                                                "/third_party/pcre-8.30"
                                                "/third_party/boost"
                                                ))
-                                   (cflags   '("-fPIC"
-                                               "-fno-strict-aliasing"
-                                               "-ggdb"
-                                               "-pthread"
+                                   (cflags   '("-pthread"
                                                "-Wall"
                                                "-Wsign-compare"
                                                "-Wno-unknown-pragmas"
                                                "-Winvalid-pch"
                                                "-Werror"
-                                               "-pipe"
                                                ))
                                    (cxxflags '("-Wnon-virtual-dtor"
                                                "-Woverloaded-virtual"
