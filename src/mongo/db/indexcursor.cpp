@@ -216,6 +216,28 @@ namespace mongo {
         }
     }
 
+    void IndexCursor::prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
+        const bool isSecondary = !_idx->isIdIndex();
+        const size_t sbuflen = storage::index_key_size(startKey, isSecondary ? &minKey : NULL);
+        const size_t ebuflen = storage::index_key_size(endKey, isSecondary ? &maxKey : NULL);
+        char sbuf[sbuflen], ebuf[ebuflen];
+
+        DBT start, end;
+        storage::index_key_init(sbuf, sbuflen, startKey, isSecondary ? &minKey : NULL);
+        storage::index_key_init(ebuf, ebuflen, endKey, isSecondary ? &endKey : NULL);
+        storage::dbt_init(&start, sbuf, sbuflen);
+        storage::dbt_init(&end, ebuf, ebuflen);
+
+        int r = _cursor->c_pre_acquire_range_lock( _cursor, &start, &end );
+        if ( r != 0 ) {
+            StringBuilder s;
+            s << toString() << ": failed to acquire prelocked range on " <<
+                prettyIndexBounds() << ", ydb error " << r << ". Try again.";
+            uasserted( 16447, s.str() );
+        }
+                
+    }
+
     void IndexCursor::initializeDBC() {
         // _d and _idx are mutually null when the collection doesn't
         // exist and is therefore treated as empty.
@@ -231,6 +253,7 @@ namespace mongo {
                 }
             } else {
                 // Seek to an initial key described by _startKey 
+                prelockRange( _startKey, _endKey );
                 findKey( _startKey );
             }
             checkCurrentAgainstBounds();

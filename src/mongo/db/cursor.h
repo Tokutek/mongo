@@ -277,6 +277,7 @@ namespace mongo {
 
         /** Initialize the internal DBC */
         void initializeDBC();
+        void prelockRange(const BSONObj &startKey, const BSONObj &endKey);
         /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */
         void _advance();
 
