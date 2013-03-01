@@ -235,36 +235,36 @@ namespace mongo {
                                                 ? 0.0
                                                 : ((double)_stats.bt_dsize/(_stats.bt_nkeys*scale))));
         bson_stats->appendNumber("storageSize", _stats.bt_fsize / scale);
-        bson_stats->append("page size", _pageSize / scale);
-        bson_stats->append("read page size", _readPageSize / scale);
+        bson_stats->append("pageSize", _pageSize / scale);
+        bson_stats->append("readPageSize", _readPageSize / scale);
         // fill compression
         switch(_compressionMethod) {
         case TOKU_NO_COMPRESSION:
-            bson_stats->append("compression type", "Uncompressed");
+            bson_stats->append("compressionType", "Uncompressed");
             break;
         case TOKU_ZLIB_METHOD:
-            bson_stats->append("compression type", "ZLib ");
+            bson_stats->append("compressionType", "ZLib ");
             break;
         case TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD:
-            bson_stats->append("compression type", "ZLib without checksum");
+            bson_stats->append("compressionType", "ZLib without checksum");
             break;
         case TOKU_QUICKLZ_METHOD:
-            bson_stats->append("compression type", "QuickLZ");
+            bson_stats->append("compressionType", "QuickLZ");
             break;
         case TOKU_LZMA_METHOD:
-            bson_stats->append("compression type", "LZMA");
+            bson_stats->append("compressionType", "LZMA");
             break;
         case TOKU_FAST_COMPRESSION_METHOD:
-            bson_stats->append("compression type", "Fast");
+            bson_stats->append("compressionType", "Fast");
             break;
         case TOKU_SMALL_COMPRESSION_METHOD:
-            bson_stats->append("compression type", "Small");
+            bson_stats->append("compressionType", "Small");
             break;
         case TOKU_DEFAULT_COMPRESSION_METHOD:
-            bson_stats->append("compression type", "Default");
+            bson_stats->append("compressionType", "Default");
             break;
         default:
-            bson_stats->append("compression type", "Unknown");
+            bson_stats->append("compressionType", "Unknown");
             break;
         }
         // TODO: (Zardosht) Need to figure out how to display these dates
