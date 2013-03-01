@@ -72,6 +72,7 @@ namespace CursorTests {
                 int v[] = { 1, 2, 4, 6 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 4 ) );
                 Client::WriteContext ctx( ns );
+                ctx.ctx().beginTransaction();
                 {
                     scoped_ptr<IndexCursor> _c( new IndexCursor( nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, 1 ) );
                     IndexCursor &c = *_c.get();
@@ -84,7 +85,7 @@ namespace CursorTests {
                     }
                     ASSERT( !c.ok() );
                 }
-                ctx.ctx().commit_transaction();
+                ctx.ctx().commitTransaction();
             }
         };
 
@@ -103,6 +104,7 @@ namespace CursorTests {
                 int v[] = { -50, 2, 40, 60, 109, 200 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 6 ) );
                 Client::WriteContext ctx( ns );
+                ctx.ctx().beginTransaction();
                 {
                     scoped_ptr<IndexCursor> _c( new IndexCursor(nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, 1 ) );
                     IndexCursor &c = *_c.get();
@@ -115,7 +117,7 @@ namespace CursorTests {
                     }
                     ASSERT( !c.ok() );
                 }
-                ctx.ctx().commit_transaction();
+                ctx.ctx().commitTransaction();
             }
         };
 
@@ -132,6 +134,7 @@ namespace CursorTests {
                 int v[] = { 1, 2, 4, 6 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 4, -1 ) );
                 Client::WriteContext ctx( ns );
+                ctx.ctx().beginTransaction();
                 {
                     scoped_ptr<IndexCursor> _c( new IndexCursor( nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, -1 ) );
                     IndexCursor& c = *_c.get();
@@ -144,7 +147,7 @@ namespace CursorTests {
                     }
                     ASSERT( !c.ok() );
                 }
-                ctx.ctx().commit_transaction();
+                ctx.ctx().commitTransaction();
             }
         };
 
@@ -168,6 +171,7 @@ namespace CursorTests {
                 }
 
                 Client::WriteContext ctx( ns() );
+                ctx.ctx().beginTransaction();
                 FieldRangeSet frs( ns(), spec, true, true );
                 // orphan spec for this test.
                 IndexSpec *idxSpec = new IndexSpec( idx() );
@@ -192,7 +196,7 @@ namespace CursorTests {
                     }
                     ASSERT_EQUALS( expectedCount, count );
                 }
-                ctx.ctx().commit_transaction();
+                ctx.ctx().commitTransaction();
             }
         private:
             vector< BSONObj > _objs;
@@ -287,6 +291,7 @@ namespace CursorTests {
                 FieldRangeSet frs( ns(), BSON( "b" << 3 ), true, true );
                 boost::shared_ptr<FieldRangeVector> frv( new FieldRangeVector( frs, idx, 1 ) );
                 Client::WriteContext ctx( ns() );
+                ctx.ctx().beginTransaction();
                 {
                     scoped_ptr<IndexCursor> c( new IndexCursor( nsdetails( ns() ), &nsdetails( ns() )->idx(1), frv, 0, 1 ) );
                     long long initialNscanned = c->nscanned();
@@ -297,7 +302,7 @@ namespace CursorTests {
                     ASSERT( c->nscanned() < 200 );
                     ASSERT( c->ok() );
                 }
-                ctx.ctx().commit_transaction();
+                ctx.ctx().commitTransaction();
             }
         };
 
@@ -317,11 +322,12 @@ namespace CursorTests {
                 Base() :
                     _ctx( ns() ),
                     _cursor( Helpers::findTableScan( ns(), BSONObj() ) ) {
+                        _ctx.ctx().beginTransaction();
                         ASSERT( _cursor );
                         _clientCursor.reset( new ClientCursor( 0, _cursor, ns() ) );
                 }
                 ~Base() {
-                    _ctx.ctx().commit_transaction();
+                    _ctx.ctx().commitTransaction();
                 }
             protected:
                 CursorId cursorid() const { return _clientCursor->cursorid(); }
