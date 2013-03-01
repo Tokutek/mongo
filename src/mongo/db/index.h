@@ -177,6 +177,15 @@ namespace mongo {
         }
         void fillStats(IndexDetails* idx);
         void fillBSonWithStats(BSONObjBuilder* bson_stats, int scale);
+        uint64_t getCount() {
+            return _stats.bt_nkeys;
+        }
+        uint64_t getDataSize() {
+            return _stats.bt_dsize;
+        }
+        uint64_t getStorageSize() {
+            return _stats.bt_fsize;
+        }
     private:
         string name;
         DB_BTREE_STAT64 _stats;

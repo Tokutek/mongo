@@ -1376,7 +1376,6 @@ namespace mongo {
             // TODO: TokuDB provide our version of stats
 
             //result.appendNumber( "storageSize" , nsd->storageSize( &numExtents , verbose ? &extents : 0  ) / scale );
-            result.append( "nindexes" , nsd->nIndexes() );
 
             //BSONObjBuilder indexSizes;
             //result.appendNumber( "totalIndexSize" , getIndexSizeForCollection(dbname, ns, &indexSizes, scale) / scale );
@@ -1389,14 +1388,28 @@ namespace mongo {
             BSONObjBuilder index_info;
             // fill each of the indexStats with statistics
             nsd->fillIndexStats(indexStats);
+            // also sum up some stats of secondary indexes,
+            // calculate their total data size and storage size
+            uint64_t totalIndexDataSize = 0;
+            uint64_t totalIndexStorageSize = 0;
+            int idIndex = nsd->findIdIndex();
+            verify(idIndex >= 0);
             for (uint32_t i = 0; i < nIndexes; i++) {
                 // retrieve the statistics into a BSon object
                 indexStats[i].fillBSonWithStats(&index_bson_stats[i], scale);
                 index_info.append(nsd->idx(i).indexName(), index_bson_stats[i].obj());
+                if (i != (uint32_t)idIndex) {
+                    totalIndexDataSize += indexStats[i].getDataSize();
+                    totalIndexStorageSize += indexStats[i].getStorageSize();
+                }
             }
+            result.appendNumber("count", indexStats[idIndex].getCount());
+            result.append("nindexes" , nsd->nIndexes() );
+            result.appendNumber("size", indexStats[idIndex].getDataSize()/scale);
+            result.appendNumber("storageSize", indexStats[idIndex].getStorageSize()/scale);
+            result.appendNumber("totalIndexSize", totalIndexDataSize/scale);
+            result.appendNumber("totalIndexStorageSize", totalIndexStorageSize/scale);
             result.append("index details", index_info.obj());
-            
-
 
             if ( nsd->isCapped() ) {
                 result.append( "capped" , nsd->isCapped() );
