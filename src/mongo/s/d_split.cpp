@@ -86,6 +86,7 @@ namespace mongo {
             }
 
             Client::ReadContext ctx( ns );
+            ctx.ctx().beginTransaction();
             NamespaceDetails *d = nsdetails( ns );
             if ( ! d ) {
                 errmsg = "ns not found";
@@ -113,6 +114,7 @@ namespace mongo {
             auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
             if ( ! cc->ok() ) {
                 // range is empty
+                ctx.ctx().commitTransaction();
                 return true;
             }
 
@@ -165,6 +167,7 @@ namespace mongo {
 #endif
             }
 
+            ctx.ctx().commitTransaction();
             return true;
         }
     } cmdCheckShardingIndex;

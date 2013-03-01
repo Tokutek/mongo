@@ -233,7 +233,7 @@ namespace mongo {
     void Client::Context::beginTransaction(int flags) {
         dassert(_transaction.get() == NULL);
         const Transaction *parent = NULL;
-        if (_oldContext) {
+        if (hasTransaction()) {
             parent = &_oldContext->transaction();
         }
         const int safe_flags = ((_oldContext == NULL || !_oldContext->hasTransaction())
@@ -298,7 +298,9 @@ namespace mongo {
         _db(0),
         _isReadOnly(false)
     {
+        beginTransaction();
         _finishInit( doauth );
+        commitTransaction();
     }
        
     /** "read lock, and set my context, all in one operation" 
@@ -394,7 +396,6 @@ namespace mongo {
         
         // getOrCreate will try to open the database, for which we require a transaction.
         // The storage layer relies on cc().getContext() to find the transaction, so we make a transaction and set the client's context before calling getOrCreate.
-        beginTransaction();
         _client->_context = this;
         _db = dbHolderUnchecked().getOrCreate( _ns , _path , _justCreated );
         verify(_db);
@@ -402,7 +403,6 @@ namespace mongo {
         massert( 16107 , str::stream() << "Don't have a lock on: " << _ns , Lock::atLeastReadLocked( _ns ) );
         _client->_curOp->enter( this );
         checkNsAccess( doauth, writeLocked ? 1 : 0 );
-        commitTransaction();
     }
 
     void Client::Context::_auth( int lockState ) {

@@ -35,6 +35,7 @@ namespace CountTests {
         Client::Context _context;
     public:
         Base() : lk(ns()), _context( ns() ) {
+            _context.beginTransaction();
             addIndex( fromjson( "{\"a\":1}" ) );
         }
         ~Base() {
@@ -43,6 +44,7 @@ namespace CountTests {
                 for(; c->ok(); c->advance() ) {
                     deleteOneObject( nsdetails(ns()) , &NamespaceDetailsTransient::get(ns()), c->currPK(), c->current() );
                 }
+                _context.commitTransaction();
                 DBDirectClient cl;
                 cl.dropIndexes( ns() );
             }

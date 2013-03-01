@@ -687,7 +687,11 @@ namespace mongo {
                 c.setConnection( authConn_.release() );
             }
             Client::Context ctx(todb);
+            ctx.beginTransaction();
             bool res = c.go(fromhost.c_str(), errmsg, fromdb, /*logForReplication=*/!fromRepl, slaveOk, /*replauth*/false, /*snapshot*/true, /*mayYield*/true, /*mayBeInterrupted*/ false);
+            if (res) {
+                ctx.commitTransaction();
+            }
             return res;
         }
     } cmdcopydb;

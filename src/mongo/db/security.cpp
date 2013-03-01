@@ -125,6 +125,7 @@ namespace mongo {
             {
                 Client::ReadContext ctx( systemUsers , dbpath, false );
 
+                ctx.ctx().beginTransaction();
                 BSONObjBuilder b;
                 b << "user" << user;
                 BSONObj query = b.done();
@@ -132,6 +133,7 @@ namespace mongo {
                     log() << "auth: couldn't find user " << user << ", " << systemUsers << endl;
                     return false;
                 }
+                ctx.ctx().commitTransaction();
             }
 
             pwd = userObj.getStringField("pwd");
