@@ -1396,7 +1396,7 @@ namespace mongo {
             verify(idIndex >= 0);
             for (uint32_t i = 0; i < nIndexes; i++) {
                 // retrieve the statistics into a BSon object
-                indexStats[i].fillBSonWithStats(&index_bson_stats[i], scale);
+                indexStats[i].fillBSONWithStats(&index_bson_stats[i], scale);
                 index_info.append(nsd->idx(i).indexName(), index_bson_stats[i].obj());
                 if (i != (uint32_t)idIndex) {
                     totalIndexDataSize += indexStats[i].getDataSize();

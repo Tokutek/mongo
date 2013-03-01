@@ -176,7 +176,7 @@ namespace mongo {
             _pageSize = 0;
         }
         void fillStats(IndexDetails* idx);
-        void fillBSonWithStats(BSONObjBuilder* bson_stats, int scale);
+        void fillBSONWithStats(BSONObjBuilder* bson_stats, int scale);
         uint64_t getCount() {
             return _stats.bt_nkeys;
         }

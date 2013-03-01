@@ -200,7 +200,7 @@ namespace mongo {
                 } else if (str == "quicklz") {
                     compression = TOKU_QUICKLZ_METHOD;
                 } else if (str == "zlib") {
-                    compression = TOKU_ZLIB_METHOD;
+                    compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
                 } else if (str == "none") {
                     compression = TOKU_NO_COMPRESSION;
                 } else {
