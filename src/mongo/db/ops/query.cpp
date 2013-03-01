@@ -103,7 +103,6 @@ namespace mongo {
 
             // check that we properly set the transaction when the cursor was originally saved, and restore it into the current context
             Client::Context *ctx = cc().getContext();
-            verify(ctx->transactionIsRoot());
             verify(client_cursor->transaction.get() != NULL);
             ctx->swapTransactions(client_cursor->transaction);
             ctx->setReadOnly();
