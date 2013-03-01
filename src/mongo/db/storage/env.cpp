@@ -181,16 +181,23 @@ namespace mongo {
             // the YDB api doesn't allow a db->close to be called before db->open, and we
             // would leak memory if we chose to do nothing. So we validate all the
             // options here before db_create + db->open.
-            int basementsize = 65536;
+            int readPageSize = 65536;
+            int pageSize = 4*1024*1024;
             TOKU_COMPRESSION_METHOD compression = TOKU_DEFAULT_COMPRESSION_METHOD;
             BSONObj key_pattern = info["key"].Obj();
             
             BSONElement e;
-            e = info["basementsize"];
+            e = info["readPageSize"];
             if (e.ok() && !e.isNull()) {
-                basementsize = e.numberInt();
-                uassert(16441, "basementsize must be a number > 0.", e.isNumber () && basementsize > 0);
-                tokulog(1) << "db " << name << ", using basement node size " << basementsize << endl;
+                readPageSize = e.numberInt();
+                uassert(16441, "readPageSize must be a number > 0.", e.isNumber () && readPageSize > 0);
+                tokulog(1) << "db " << name << ", using read page size " << readPageSize << endl;
+            }
+            e = info["pageSize"];
+            if (e.ok() && !e.isNull()) {
+                pageSize = e.numberInt();
+                uassert(16445, "pageSize must be a number > 0.", e.isNumber () && pageSize > 0);
+                tokulog(1) << "db " << name << ", using page size " << pageSize << endl;
             }
             e = info["compression"];
             if (e.ok() && !e.isNull()) {
@@ -213,7 +220,9 @@ namespace mongo {
             int r = db_create(&db, env, 0);
             verify(r == 0);
 
-            r = db->set_readpagesize(db, basementsize);
+            r = db->set_readpagesize(db, readPageSize);
+            verify(r == 0);
+            r = db->set_pagesize(db, pageSize);
             verify(r == 0);
             r = db->set_compression_method(db, compression);
             verify(r == 0);
