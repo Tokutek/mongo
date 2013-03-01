@@ -27,7 +27,8 @@
 namespace mongo {
     
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
-        Client::Context ctx(ns, dbpath, true, true, DB_TXN_SNAPSHOT);
+        Client::Context ctx(ns, dbpath, true, true);
+        ctx.beginTransaction(DB_TXN_SNAPSHOT);
         ctx.setReadOnly();
         NamespaceDetails *d = nsdetails( ns );
         if ( !d ) {
@@ -79,7 +80,7 @@ namespace mongo {
                 }
                 cursor->advance();
             }
-            ctx.commit_transaction();
+            ctx.commitTransaction();
             return count;
             
         }

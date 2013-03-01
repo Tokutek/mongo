@@ -171,7 +171,7 @@ namespace mongo {
          */
         class ReadContext : boost::noncopyable { 
         public:
-            ReadContext(const string &ns, string path=dbpath, bool doauth=true, int txn_flags=0);
+            ReadContext(const string &ns, string path=dbpath, bool doauth=true);
             Context& ctx() { return *c.get(); }
         private:
             scoped_ptr<Lock::DBRead> lk;
@@ -184,16 +184,16 @@ namespace mongo {
         class Context : boost::noncopyable {
         public:
             /** this is probably what you want */
-            Context(const string& ns, string path=dbpath, bool doauth=true, bool doVersion=true, int txn_flags = 0);
+            Context(const string& ns, string path=dbpath, bool doauth=true, bool doVersion=true);
 
             /** note: this does not call finishInit -- i.e., does not call 
                       shardVersionOk() for example. 
                 see also: reset().
             */
-            Context(string ns, Database * db, bool doauth=true, int txn_flags = 0);
+            Context(string ns, Database * db, bool doauth=true);
 
             // used by ReadContext
-            Context(const string& path, const string& ns, Database *db, bool doauth, int txn_flags = 0);
+            Context(const string& path, const string& ns, Database *db, bool doauth);
 
             ~Context();
             Client* getClient() const { return _client; }
@@ -220,20 +220,48 @@ namespace mongo {
             /** call after going back into the lock, will re-establish non-thread safe stuff */
             void relocked() { _finishInit(); }
 
+            /**
+             * Wraps a DB_TXN in an exception-safe object.
+             * The destructor calls abort() unless it's already committed.
+             * The Context manages these (and parent-child relationships) through beginTransaction and commitTransaction and the stack of contexts.
+             */
             class Transaction : boost::noncopyable {
                 DB_TXN *_txn;
             public:
-                explicit Transaction(const Transaction *parent, int flags);
+                Transaction(const Transaction *parent, int flags);
                 ~Transaction();
                 void commit(int flags);
                 void abort();
                 DB_TXN *txn() const { return _txn; }
             };
 
-            const Transaction &transaction() const { return *_transaction; }
-            bool transaction_is_root() const { return _oldContext == NULL; }
-            void commit_transaction(int flags = 0) { _transaction->commit(flags); }
-            void swap_transactions(shared_ptr<Transaction> &other_transaction);
+            /** @return the current innermost transaction */
+            const Transaction &transaction() const;
+            /**
+             * @return true iff the current innermost transaction is also the outermost transaction
+             * error if there is no current transaction
+             */
+            bool transactionIsRoot() const;
+            /**
+             * Start a new transaction.
+             * If there is a transaction, the new one is a child of that.
+             * Flags are optional, 0 is the default (serializable isolation).
+             */
+            void beginTransaction(int flags = 0);
+            /**
+             * Commit this context's transaction.
+             * May not be used to commit a parent context's transaction.
+             * Flags are optional, 0 is the default (do the fsync).
+             */
+            void commitTransaction(int flags = 0);
+            /**
+             * Swap this context's transaction with another (usually NULL).
+             * Used by cursors to steal the context's transaction and keep it while the context gets destroyed, when waiting for a call to getMore().
+             * Also used by cursors to put back the transaction they stole.
+             * It is an error to swap a child away from its parent.
+             *  (If you did that, the parent would try to retire while the child is alive.)
+             */
+            void swapTransactions(shared_ptr<Transaction> &other);
 
             bool isReadOnly() const;
             void setReadOnly();
@@ -245,6 +273,7 @@ namespace mongo {
             void checkNotStale() const;
             void checkNsAccess( bool doauth );
             void checkNsAccess( bool doauth, int lockState );
+            bool hasTransaction() const;
             Client * const _client;
             Context * const _oldContext;
             const string _path;

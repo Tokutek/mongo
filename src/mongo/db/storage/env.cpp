@@ -175,7 +175,7 @@ namespace mongo {
 
         int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create) {
             Client::Context *ctx = cc().getContext();
-            verify(ctx->transaction_is_root());
+            verify(ctx->transactionIsRoot());
 
             // TODO: Refactor this option setting code to someplace else. It's here because
             // the YDB api doesn't allow a db->close to be called before db->open, and we
@@ -239,7 +239,7 @@ namespace mongo {
 
         void db_remove(const string &name) {
             Client::Context *ctx = cc().getContext();
-            verify(ctx->transaction_is_root());
+            verify(ctx->transactionIsRoot());
             int r = env->dbremove(env, ctx->transaction().txn(), name.c_str(), NULL, 0);
             if (r == ENOENT) {
                 uasserted(16444, "TODO: dbremove bug, should crash but won't right now");

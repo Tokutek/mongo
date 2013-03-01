@@ -103,9 +103,9 @@ namespace mongo {
 
             // check that we properly set the transaction when the cursor was originally saved, and restore it into the current context
             Client::Context *ctx = cc().getContext();
-            verify(ctx->transaction_is_root());
+            verify(ctx->transactionIsRoot());
             verify(client_cursor->transaction.get() != NULL);
-            ctx->swap_transactions(client_cursor->transaction);
+            ctx->swapTransactions(client_cursor->transaction);
             ctx->setReadOnly();
 
             if ( pass == 0 )
@@ -181,7 +181,7 @@ namespace mongo {
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
 
                 // The cursor is still live. Give back the transaction.
-                ctx->swap_transactions(client_cursor->transaction);
+                ctx->swapTransactions(client_cursor->transaction);
             }
         }
 
@@ -737,13 +737,13 @@ namespace mongo {
             ccPointer->fields = pq.getFieldPtr();
             // Clones the transaction and hand's off responsibility
             // of its completion to the client cursor's destructor.
-            verify(ctx->transaction_is_root());
+            verify(ctx->transactionIsRoot());
             verify(ccPointer->transaction.get() == NULL);
-            ctx->swap_transactions(ccPointer->transaction);
+            ctx->swapTransactions(ccPointer->transaction);
             ccPointer.release();
         } else {
             // Not saving the cursor, so we can commit its transaction now.
-            ctx->commit_transaction();
+            ctx->commitTransaction();
         }
         
         QueryResult *qr = (QueryResult *) result.header();
@@ -772,11 +772,12 @@ namespace mongo {
         auto_ptr< QueryResult > qr;
         BSONObj resObject;
         
-        Client::ReadContext ctx(ns, dbpath, true, DB_TXN_SNAPSHOT); // read locks
+        Client::ReadContext ctx(ns, dbpath, true); // read locks
+        ctx.ctx().beginTransaction(DB_TXN_SNAPSHOT);
         replVerifyReadsOk(&pq);
         
         bool found = Helpers::findById( ns, query, resObject );
-        ctx.ctx().commit_transaction();
+        ctx.ctx().commitTransaction();
         
         if ( shardingState.needShardChunkManager( ns ) ) {
             ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
@@ -915,7 +916,8 @@ namespace mongo {
                 // Otherwise we default to a snapshot.
                 // XXX: TODO Read committed doesn't do what I want it to, so use an
                 // "incorrect" but mostly working UNCOMMITTED isolation.
-                Client::ReadContext ctx(ns , dbpath, true, tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT); // read locks
+                Client::ReadContext ctx(ns , dbpath, true); // read locks
+                ctx.ctx().beginTransaction(tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT);
                 ctx.ctx().setReadOnly();
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
                 
@@ -941,6 +943,7 @@ namespace mongo {
                 // Run a regular query.
 
                 const bool getCachedExplainPlan = ! hasRetried && explain && ! pq.hasIndexSpecifier();
+                // This will commit the transaction we created above if necessary.
                 return queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query, order,
                                                 pq_shared, shardingVersionAtStart, getCachedExplainPlan,
                                                 result );

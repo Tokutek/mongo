@@ -555,9 +555,11 @@ namespace mongo {
             return;
         
         Client::Context ctx( ns );
-        
+        ctx.beginTransaction();
+
         UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
         lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
+        ctx.commitTransaction();
     }
 
     void receivedDelete(Message& m, CurOp& op) {
@@ -586,11 +588,13 @@ namespace mongo {
         if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
             return;
                 
-        Client::Context ctx(ns, dbpath, true, true, DB_TXN_SNAPSHOT);
+        Client::Context ctx(ns, dbpath, true, true);
+        ctx.beginTransaction(DB_TXN_SNAPSHOT);
 
         long long n = deleteObjects(ns, pattern, justOne, true);
         lastError.getSafe()->recordDelete( n );
-        ctx.commit_transaction();
+
+        ctx.commitTransaction();
     }
 
     QueryResult* emptyMoreResult(long long);
@@ -776,7 +780,8 @@ namespace mongo {
             return;
                 
         Client::Context ctx(ns);
-                
+        ctx.beginTransaction();
+
         if( !multi.empty() ) {
             const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
             insertMulti(keepGoing, ns, multi);
@@ -784,7 +789,7 @@ namespace mongo {
             checkAndInsert(ns, first);
             globalOpCounters.incInsertInWriteLock(1);
         }
-        ctx.commit_transaction();
+        ctx.commitTransaction();
     }
 
     void getDatabaseNames( vector< string > &names , const string& usePath ) {

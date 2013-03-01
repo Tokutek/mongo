@@ -207,12 +207,56 @@ namespace mongo {
         _txn = NULL;
     }
 
-    void Client::Context::swap_transactions(shared_ptr<Transaction> &other_transaction) {
-        _transaction.swap(other_transaction);
+    const Client::Context::Transaction &Client::Context::transaction() const {
+        if (_transaction.get() != NULL) {
+            return *_transaction;
+        } else {
+            dassert(_oldContext != NULL);
+            return _oldContext->transaction();
+        }
+    }
+
+    bool Client::Context::hasTransaction() const {
+        return ((_transaction.get() != NULL) ||
+                (_oldContext != NULL && _oldContext->hasTransaction()));
+    }
+
+    bool Client::Context::transactionIsRoot() const {
+        if (_transaction.get() != NULL) {
+            return (_oldContext == NULL || !_oldContext->hasTransaction());
+        } else {
+            dassert(_oldContext != NULL);
+            return _oldContext->transactionIsRoot();
+        }
+    }
+
+    void Client::Context::beginTransaction(int flags) {
+        dassert(_transaction.get() == NULL);
+        const Transaction *parent = NULL;
+        if (_oldContext) {
+            parent = &_oldContext->transaction();
+        }
+        const int safe_flags = ((_oldContext == NULL || !_oldContext->hasTransaction())
+                                ? flags
+                                : DB_INHERIT_ISOLATION);
+        _transaction.reset(new Transaction(parent, safe_flags));
+    }
+
+    void Client::Context::commitTransaction(int flags) {
+        dassert(_transaction.get() != NULL);
+        _transaction->commit(flags);
+        _transaction.reset();
+    }
+
+    void Client::Context::swapTransactions(shared_ptr<Transaction> &other) {
+        if (_transaction.get() != NULL) {
+            dassert(transactionIsRoot());
+        }
+        _transaction.swap(other);
     }
 
     BSONObj CachedBSONObj::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");
-    Client::Context::Context( string ns , Database * db, bool doauth, int txn_flags ) :
+    Client::Context::Context( string ns , Database * db, bool doauth ) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( mongo::dbpath ), // is this right? could be a different db? may need a dassert for this
@@ -220,8 +264,6 @@ namespace mongo {
         _doVersion( true ),
         _ns( ns ), 
         _db(db),
-        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), 
-                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION)),
         _isReadOnly(false)
     {
         verify( db == 0 || db->isOk() );
@@ -246,7 +288,7 @@ namespace mongo {
         }
     }
 
-    Client::Context::Context(const string& ns, string path , bool doauth, bool doVersion, int txn_flags ) :
+    Client::Context::Context(const string& ns, string path , bool doauth, bool doVersion) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( path ), 
@@ -254,8 +296,6 @@ namespace mongo {
         _doVersion(doVersion),
         _ns( ns ), 
         _db(0),
-        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL),
-                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION)),
         _isReadOnly(false)
     {
         _finishInit( doauth );
@@ -264,12 +304,12 @@ namespace mongo {
     /** "read lock, and set my context, all in one operation" 
      *  This handles (if not recursively locked) opening an unopened database.
      */
-    Client::ReadContext::ReadContext(const string& ns, string path, bool doauth, int txn_flags) {
+    Client::ReadContext::ReadContext(const string& ns, string path, bool doauth) {
         {
             lk.reset( new Lock::DBRead(ns) );
             Database *db = dbHolder().get(ns, path);
             if( db ) {
-                c.reset( new Context(path, ns, db, doauth, txn_flags) );
+                c.reset( new Context(path, ns, db, doauth) );
                 return;
             }
         }
@@ -280,17 +320,17 @@ namespace mongo {
             if( Lock::isW() ) { 
                 // write locked already
                 DEV RARELY log() << "write locked on ReadContext construction " << ns << endl;
-                c.reset( new Context(ns, path, doauth, txn_flags) );
+                c.reset( new Context(ns, path, doauth) );
             }
             else if( !Lock::nested() ) { 
                 lk.reset(0);
                 {
                     Lock::GlobalWrite w;
-                    Context c(ns, path, doauth, txn_flags);
+                    Context c(ns, path, doauth);
                 }
                 // db could be closed at this interim point -- that is ok, we will throw, and don't mind throwing.
                 lk.reset( new Lock::DBRead(ns) );
-                c.reset( new Context(ns, path, doauth, txn_flags) );
+                c.reset( new Context(ns, path, doauth) );
             }
             else { 
                 uasserted(15928, str::stream() << "can't open a database from a nested read lock " << ns);
@@ -328,7 +368,7 @@ namespace mongo {
     }
 
     // invoked from ReadContext
-    Client::Context::Context(const string& path, const string& ns, Database *db , bool doauth, int txn_flags) :
+    Client::Context::Context(const string& path, const string& ns, Database *db , bool doauth) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( path ), 
@@ -336,8 +376,6 @@ namespace mongo {
         _doVersion( true ),
         _ns( ns ), 
         _db(db),
-        _transaction(new Transaction(((_oldContext != NULL) ? _oldContext->_transaction.get() : NULL), 
-                                     _oldContext == NULL ? txn_flags : DB_INHERIT_ISOLATION)),
         _isReadOnly(false)
     {
         verify(_db);
@@ -355,7 +393,9 @@ namespace mongo {
         }
         
         // getOrCreate will try to open the database, for which we require a transaction.
-        // The storage layer relies on cc().getContext() to find the transaction, so we set the client's context before calling getOrCreate.
+        // The storage layer relies on cc().getContext() to find the transaction, so we make a transaction and set the client's context before calling getOrCreate.
+        dassert(_oldContext == NULL || !_oldContext->hasTransaction());
+        beginTransaction();
         _client->_context = this;
         _db = dbHolderUnchecked().getOrCreate( _ns , _path , _justCreated );
         verify(_db);
@@ -363,6 +403,7 @@ namespace mongo {
         massert( 16107 , str::stream() << "Don't have a lock on: " << _ns , Lock::atLeastReadLocked( _ns ) );
         _client->_curOp->enter( this );
         checkNsAccess( doauth, writeLocked ? 1 : 0 );
+        commitTransaction();
     }
 
     void Client::Context::_auth( int lockState ) {

@@ -61,13 +61,14 @@ namespace mongo {
 
             //BackgroundOperation::assertNoBgOpInProgForNs(ns.c_str());
             Client::Context ctx(ns);
+            ctx.beginTransaction();
             NamespaceDetails *d = nsdetails(ns.c_str());
             massert( 13660, str::stream() << "namespace " << ns << " does not exist", d );
             massert( 13661, "cannot compact capped collection", !d->isCapped() );
             log() << "compact " << ns << " begin" << endl;
             try { 
                 ok = _compact(ns.c_str(), d, errmsg, result);
-                ctx.commit_transaction();
+                ctx.commitTransaction();
             }
             catch(...) { 
                 log() << "compact " << ns << " end (with error)" << endl;

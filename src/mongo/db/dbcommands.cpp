@@ -2017,10 +2017,11 @@ namespace mongo {
             if( c->lockGlobally() )
                 lk.reset( new Lock::GlobalRead() );
             Client::ReadContext ctx( ns , dbpath, c->requiresAuth() ); // read locks
+            ctx.ctx().beginTransaction();
             client.curop()->ensureStarted();
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
             if (retval) {
-                ctx.ctx().commit_transaction();
+                ctx.ctx().commitTransaction();
             }
         }
         else {
@@ -2040,12 +2041,13 @@ namespace mongo {
                                              static_cast<Lock::ScopedLock*>( new Lock::DBWrite( dbname ) ) );
             client.curop()->ensureStarted();
             Client::Context ctx( dbname , dbpath , c->requiresAuth() );
+            ctx.beginTransaction();
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
             if ( retval && c->logTheOp() && ! fromRepl ) {
                 logOp("c", cmdns, cmdObj);
             }
             if (retval) {
-                ctx.commit_transaction();
+                ctx.commitTransaction();
             }
         }
 
