@@ -318,14 +318,6 @@ shellPrint = function( x ){
     }
 }
 
-printjson = function(x){
-    print( tojson( x ) );
-}
-
-printjsononeline = function(x){
-    print( tojsononeline( x ) );
-}
-
 if ( typeof TestData == "undefined" ){
     TestData = undefined
 }
