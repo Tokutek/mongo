@@ -231,7 +231,9 @@ namespace mongo {
     void IndexStats::fillBSonWithStats(BSONObjBuilder* bson_stats, int scale) {
         bson_stats->appendNumber("count", _stats.bt_nkeys);
         bson_stats->appendNumber("size", _stats.bt_dsize/scale);
-        bson_stats->appendNumber("avgObjSize", (double)(_stats.bt_dsize/(_stats.bt_nkeys*scale)));
+        bson_stats->appendNumber("avgObjSize", (_stats.bt_nkeys == 0
+                                                ? 0.0
+                                                : ((double)_stats.bt_dsize/(_stats.bt_nkeys*scale))));
         bson_stats->appendNumber("storageSize", _stats.bt_fsize / scale);
         bson_stats->append("page size", _pageSize / scale);
         bson_stats->append("read page size", _readPageSize / scale);
