@@ -31,8 +31,11 @@ assert.eq(1000, kb_stats.indexDetails[1].pageSize);
 assert.eq(32, kb_stats.indexDetails[1].readPageSize);
 
 // test that count goes up when we insert another element
-f.insert({a:345});
+f.insert({b:345});
 assert.eq(2, f.stats().count);
-
+// this test verifies that even if an insertion
+// does not have any fields that match an index,
+// an insertion happens, and the count increments
+assert.eq(2, f.stats().indexDetails[1].count);
 
 f.drop();
