@@ -225,19 +225,15 @@ namespace mongo {
                 // Try skipping forward in the key space using the bounds iterator
                 // and the proposed startKey. If skipping wasn't necessary, then
                 // use that start key to set our position.
-                BSONObj nextKey;
                 int r = skipToNextKey( _bounds->startKey() );
-                if ( r == 0 ) {
-                    _nscanned = 1;
-                } else if ( r == -1 ) {
+                if ( r == -1 ) {
                     findKey( _bounds->startKey() );
-                    checkCurrentAgainstBounds();
                 }
             } else {
                 // Seek to an initial key described by _startKey 
                 findKey( _startKey );
-                checkCurrentAgainstBounds();
             }
+            checkCurrentAgainstBounds();
         } else {
             verify( _d == NULL && _idx == NULL );
         }
@@ -340,7 +336,7 @@ namespace mongo {
     // Skip the key comprised of the first k fields of currentKey and the
     // rest set to max/min key for direction > 0 or < 0 respectively.
     void IndexCursor::skipPrefix(const BSONObj &key, const int k) {
-        tokulog(3) << "skipPrefix skipping first " << k << " elements in key, keyPattern " << indexKeyPattern() << endl;
+        tokulog(3) << "skipPrefix skipping first " << k << " elements in key " << key << endl;
         BSONObjBuilder b;
         BSONObjIterator it = key.begin();
         for ( int i = 0; i < key.nFields(); i++ ) {
@@ -402,8 +398,6 @@ namespace mongo {
                     b.appendAs( *endKeys[i] , "" );
                 }
             }
-            tokulog(3) << "skipOutOfRngeKeys used first " << skipPrefixIndex << " elements"
-                " in key and the rest from cmp(), setting position now..." << endl;
             findKey( b.done() );
 
             // Skip passed key prefixes that are not supposed to be inclusive
@@ -423,11 +417,11 @@ namespace mongo {
                 const vector<bool> &inclusive = _boundsIterator->inc();
                 for ( int i = 0; i < key.nFields(); i++ ) {
                     const BSONElement e = it.next();
-                    if ( i > skipPrefixIndex && !inclusive[i] && e == *endKeys[i] ) {
-                        tokulog(3) << "skipOutOfRangeKeys skipping key " << key << " because "
-                            " the element at index " << i << " is non-inclusive, " << e << endl;
+                    if ( i >= skipPrefixIndex && !inclusive[i] && e.valuesEqual(*endKeys[i]) ) {
                         // The ith element equals the ith endKey but it's not supposed to be inclusive.
-                        skipPrefix( key, i );
+                        // Skipping to the next value for the ith element involves skipping a prefix 
+                        // with i + 1 elements.
+                        skipPrefix( key, i + 1 );
                         continue;
                     }
                 }
