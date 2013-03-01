@@ -333,6 +333,7 @@ if (BUILD_TESTING)
       owned_pointer_map_test
       parse_number_test
       status_test
+      counter_test
       string_data_test
       units_test
       )
@@ -943,6 +944,7 @@ if (BUILD_TESTING)
       owned_pointer_map_test
       parse_number_test
       status_test
+      counter_test
       string_data_test
       units_test
       )
