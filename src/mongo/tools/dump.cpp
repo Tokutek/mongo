@@ -28,6 +28,7 @@
 
 #include "mongo/base/initializer.h"
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/tools/tool.h"
 
 using namespace mongo;
@@ -219,7 +220,7 @@ public:
             }
             
             // Don't dump indexes
-            if ( endsWith(name.c_str(), ".system.indexes") ) {
+            if (NamespaceString(name).coll == "system.indexes") {
               continue;
             }
             

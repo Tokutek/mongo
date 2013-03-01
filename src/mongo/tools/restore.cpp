@@ -305,7 +305,7 @@ public:
 
     virtual void gotObject( const BSONObj& obj ) {
         massert( 16910, "Shouldn't be inserting into system.indexes directly",
-                        !endsWith( _curns.c_str() , ".system.indexes" ));
+                        NamespaceString(_curns).coll != "system.indexes" );
         if (_drop && endsWith(_curns.c_str(), ".system.users") && _users.count(obj["user"].String())) {
             // Since system collections can't be dropped, we have to manually
             // replace the contents of the system.users collection

@@ -43,7 +43,7 @@ namespace mongo {
     class ShardStrategy : public Strategy {
 
         bool _isSystemIndexes( const char* ns ) {
-            return strstr( ns , ".system.indexes" ) == strchr( ns , '.' ) && strchr( ns , '.' );
+            return NamespaceString(ns).coll == "system.indexes";
         }
 
         virtual void queryOp( Request& r ) {

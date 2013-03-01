@@ -33,6 +33,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/commands/rename_collection.h"
 #include "mongo/db/instance.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/oplog_helpers.h"
@@ -208,7 +209,7 @@ namespace mongo {
                 ++n;
 
                 if (isindex) {
-                    verify(strstr(from_collection, "system.indexes"));
+                    verify(NamespaceString(from_collection).coll == "system.indexes");
                     storedForLater->push_back(fixindex(js, to_dbname).getOwned());
                 }
                 else {
