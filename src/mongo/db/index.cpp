@@ -240,31 +240,31 @@ namespace mongo {
         // fill compression
         switch(_compressionMethod) {
         case TOKU_NO_COMPRESSION:
-            bson_stats->append("compressionType", "uncompressed");
+            bson_stats->append("compression", "uncompressed");
             break;
         case TOKU_ZLIB_METHOD:
-            bson_stats->append("compressionType", "zlib");
+            bson_stats->append("compression", "zlib");
             break;
         case TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD:
-            bson_stats->append("compressionType", "zlib");
+            bson_stats->append("compression", "zlib");
             break;
         case TOKU_QUICKLZ_METHOD:
-            bson_stats->append("compressionType", "quicklz");
+            bson_stats->append("compression", "quicklz");
             break;
         case TOKU_LZMA_METHOD:
-            bson_stats->append("compressionType", "lzma");
+            bson_stats->append("compression", "lzma");
             break;
         case TOKU_FAST_COMPRESSION_METHOD:
-            bson_stats->append("compressionType", "fast");
+            bson_stats->append("compression", "fast");
             break;
         case TOKU_SMALL_COMPRESSION_METHOD:
-            bson_stats->append("compressionType", "small");
+            bson_stats->append("compression", "small");
             break;
         case TOKU_DEFAULT_COMPRESSION_METHOD:
-            bson_stats->append("compressionType", "default");
+            bson_stats->append("compression", "default");
             break;
         default:
-            bson_stats->append("compressionType", "unknown");
+            bson_stats->append("compression", "unknown");
             break;
         }
         // TODO: (Zardosht) Need to figure out how to display these dates
