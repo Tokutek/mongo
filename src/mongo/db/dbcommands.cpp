@@ -1385,7 +1385,6 @@ namespace mongo {
             uint32_t nIndexes = nsd->nIndexes();
             IndexStats indexStats[nIndexes];
             BSONObjBuilder index_bson_stats[nIndexes];
-            BSONObjBuilder index_info;
             // fill each of the indexStats with statistics
             nsd->fillIndexStats(indexStats);
             // also sum up some stats of secondary indexes,
@@ -1394,10 +1393,12 @@ namespace mongo {
             uint64_t totalIndexStorageSize = 0;
             int idIndex = nsd->findIdIndex();
             verify(idIndex >= 0);
+            BSONArrayBuilder index_info;
             for (uint32_t i = 0; i < nIndexes; i++) {
                 // retrieve the statistics into a BSon object
+                index_bson_stats[i].append("name", nsd->idx(i).indexName());
                 indexStats[i].fillBSONWithStats(&index_bson_stats[i], scale);
-                index_info.append(nsd->idx(i).indexName(), index_bson_stats[i].obj());
+                index_info.append(index_bson_stats[i].obj());
                 if (i != (uint32_t)idIndex) {
                     totalIndexDataSize += indexStats[i].getDataSize();
                     totalIndexStorageSize += indexStats[i].getStorageSize();
@@ -1409,7 +1410,7 @@ namespace mongo {
             result.appendNumber("storageSize", indexStats[idIndex].getStorageSize()/scale);
             result.appendNumber("totalIndexSize", totalIndexDataSize/scale);
             result.appendNumber("totalIndexStorageSize", totalIndexStorageSize/scale);
-            result.append("index details", index_info.obj());
+            result.append("indexDetails", index_info.arr());
 
             if ( nsd->isCapped() ) {
                 result.append( "capped" , nsd->isCapped() );
