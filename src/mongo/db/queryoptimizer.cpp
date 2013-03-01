@@ -65,10 +65,6 @@ namespace mongo {
                 IndexDetails& ii = i.next();
                 if ( ii.indexName() == hintstr ) {
                     return &ii;
-                } else if (ii.indexName() == "_id_1" &&
-                           hintstr == "_id_") {
-                    // Mongo special cases the _id index to be named "_id_", but we treat it like others and name it "_id_1".
-                    return &ii;
                 }
             }
         }

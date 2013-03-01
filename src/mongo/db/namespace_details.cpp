@@ -44,33 +44,11 @@ namespace mongo {
 
     BSONObj idKeyPattern = fromjson("{\"_id\":1}");
 
-    // Clone of DBClientWithCommands::genIndexName(), should be factored out somewhere.
-    static string genIndexName(const BSONObj &keys) {
-        stringstream ss;
-
-        bool first = 1;
-        for ( BSONObjIterator i(keys); i.more(); ) {
-            BSONElement f = i.next();
-
-            if ( first )
-                first = 0;
-            else
-                ss << "_";
-
-            ss << f.fieldName() << "_";
-            if( f.isNumber() )
-                ss << f.numberInt();
-            else
-                ss << f.str(); //this should match up with shell command
-        }
-        return ss.str();
-    }
-
     static BSONObj id_index_info(const string &ns, const BSONObj &options) {
         BSONObjBuilder id_info;
         id_info.append("ns", ns);
         id_info.append("key", idKeyPattern);
-        id_info.append("name", genIndexName(idKeyPattern));
+        id_info.append("name", "_id_");
         id_info.appendBool("unique", true);
 
         // Choose which options are used for the _id index, manually. 
