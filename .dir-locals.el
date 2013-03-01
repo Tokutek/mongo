@@ -15,7 +15,7 @@
                                              ("MONGO_HAVE_HEADER_UNISTD_H"    . "1")
                                              ("MONGO_HAVE_EXECINFO_BACKTRACE" . "1")
                                              ))
-                                 (project-root (locate-dominating-file buffer-file-name ".dir-locals.el"))
+                                 (project-root (expand-file-name (locate-dominating-file buffer-file-name ".dir-locals.el")))
                                  (includes '("/"
                                              "/mongo"
                                              "/third_party/pcre-8.30"
@@ -48,7 +48,7 @@
                                                ("MONGO_HAVE_HEADER_UNISTD_H"    . "1")
                                                ("MONGO_HAVE_EXECINFO_BACKTRACE" . "1")
                                                ))
-                                   (project-root (locate-dominating-file buffer-file-name ".dir-locals.el"))
+                                   (project-root (expand-file-name (locate-dominating-file buffer-file-name ".dir-locals.el")))
                                    (includes '("/"
                                                "/mongo"
                                                "/third_party/pcre-8.30"
