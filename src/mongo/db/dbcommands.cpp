@@ -2030,8 +2030,12 @@ namespace mongo {
             scoped_ptr<Lock::GlobalRead> lk;
             if( c->lockGlobally() )
                 lk.reset( new Lock::GlobalRead() );
+
+            // Read contexts use a snapshot transaction and are marked as read only.
             Client::ReadContext ctx( ns , dbpath, c->requiresAuth() ); // read locks
-            ctx.ctx().beginTransaction();
+            ctx.ctx().beginTransaction(DB_TXN_SNAPSHOT);
+            ctx.ctx().setReadOnly();
+
             client.curop()->ensureStarted();
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
             if (retval) {

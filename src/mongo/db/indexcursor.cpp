@@ -247,6 +247,7 @@ namespace mongo {
                 // Try skipping forward in the key space using the bounds iterator
                 // and the proposed startKey. If skipping wasn't necessary, then
                 // use that start key to set our position.
+                prelockRange( _bounds->startKey(), _bounds->endKey() );
                 int r = skipToNextKey( _bounds->startKey() );
                 if ( r == -1 ) {
                     findKey( _bounds->startKey() );
