@@ -715,7 +715,7 @@ namespace mongo {
             help << " example: { renameCollection: foo.a, to: bar.b }";
         }
         virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            uasserted(16445, "rename collection is unimplemented for now");
+            uasserted(16448, "rename collection is unimplemented for now");
             string source = cmdObj.getStringField( name.c_str() );
             string target = cmdObj.getStringField( "to" );
             uassert(15967,"invalid collection name: " + target, NamespaceString::validCollectionName(target.c_str()));
