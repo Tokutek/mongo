@@ -49,21 +49,18 @@ namespace mongo {
         auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout, cPtr, ns) );
 
         long long nDeleted = 0;
-        for ( ; cc->ok() ; cc->advance() ) {
+        while ( cc->ok() ) {
 
-            if ( !c->currentMatches() ) {
+            if ( cc->currentIsDup() || !c->currentMatches() ) {
+                tokulog(4) << "_deleteObjects skipping " << cc->currPK() << ", dup or doesn't match" << endl;
+                cc->advance();
                 continue;
             }
 
-            // We should never see a duplicate PK. Why?
-            // - If we see a PK once, we delete it completely, removing all secondary index
-            //   keys, including the ones we're scanning over right now.
-            // - If we see a PK twice, then the delete we did the first time must not have
-            //   worked or transactionl isolation is screwed up. Bad!
-            dassert( !c->getsetdup(cc->currPK()) );
+            BSONObj pk = cc->currPK().copy();
+            BSONObj obj = cc->current().copy();
 
-            BSONObj pk = cc->currPK();
-            BSONObj obj = cc->current();
+            tokulog(4) << "_deleteObjects iteration: pk " << pk << ", obj " << obj << endl;
 
             if ( logop ) {
                 BSONElement e;
@@ -80,6 +77,13 @@ namespace mongo {
 
             deleteOneObject(d, nsdt, pk, obj);
             nDeleted++;
+
+            // Opportunistically advance the cursor while the current is a
+            // duplicate if what was just deleted. We need to do this at least
+            // once in order to make progress.
+            do {
+                cc->advance();
+            } while ( cc->ok() && cc->currPK() == pk ) ;
 
             if ( justOne ) {
                 break;
