@@ -224,7 +224,7 @@ namespace mongo {
 
         DBT start, end;
         storage::index_key_init(sbuf, sbuflen, startKey, isSecondary ? &minKey : NULL);
-        storage::index_key_init(ebuf, ebuflen, endKey, isSecondary ? &endKey : NULL);
+        storage::index_key_init(ebuf, ebuflen, endKey, isSecondary ? &maxKey : NULL);
         storage::dbt_init(&start, sbuf, sbuflen);
         storage::dbt_init(&end, ebuf, ebuflen);
 
