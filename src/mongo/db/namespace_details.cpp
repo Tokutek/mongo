@@ -271,6 +271,16 @@ namespace mongo {
     }
 
     void NamespaceDetails::createIndex(const BSONObj &idx_info, bool resetTransient) {
+        uassert(12588, "cannot add index with a background operation in progress", !indexBuildInProgress);
+
+        if (nIndexes() >= NIndexesMax ) {
+            string s = (mongoutils::str::stream() <<
+                        "add index fails, too many indexes for " << idx_info["ns"].String() <<
+                        " key:" << idx_info["key"].Obj().toString());
+            log() << s << endl;
+            uasserted(12505,s);
+        }
+
         shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
         indexBuildInProgress = true;
         try {
