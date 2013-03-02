@@ -197,8 +197,11 @@ if ( typeof _threadInject != "undefined" ){
                                    "jstests/bench_test1.js",
                                    "jstests/padding.js",
                                    "jstests/queryoptimizera.js",
-                                   "jstests/loglong.js" // log might overflow before 
-                                                        // this has a chance to see the message
+                                   "jstests/loglong.js", // log might overflow before 
+                                                         // this has a chance to see the message
+                                   "jstests/connections_opened.js", // counts connections, globally
+                                   "jstests/opcounters.js",
+                                   "jstests/currentop.js"// SERVER-8673, plus rwlock yielding issues
                                   ] );
         
         // some tests can't be run in parallel with each other
