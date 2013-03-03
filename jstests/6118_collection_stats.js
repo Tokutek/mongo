@@ -1,3 +1,9 @@
+// test that getting the stats of a collection
+// that does not exist works as expected
+f = db.asdfasdf.stats();
+assert.eq(0, f.ok);
+assert.eq("ns not found", f.errmsg);
+
 f = db.jstests_6118_collection_stats;
 f.drop();
 
