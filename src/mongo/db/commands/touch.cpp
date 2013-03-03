@@ -101,7 +101,10 @@ namespace mongo {
             Client::ReadContext ctx(ns);
             ctx.ctx().beginTransaction(DB_READ_UNCOMMITTED);
             NamespaceDetails *nsd = nsdetails(ns.c_str());
-            massert( 16153, "namespace does not exist", nsd );
+            if (!nsd) {
+                errmsg = "ns not found";
+                return false;
+            }
             int id = nsd->findIdIndex();
 
             if (touch_data) {
