@@ -233,7 +233,7 @@ namespace mongo {
         bson_stats->appendNumber("size", _stats.bt_dsize/scale);
         bson_stats->appendNumber("avgObjSize", (_stats.bt_nkeys == 0
                                                 ? 0.0
-                                                : ((double)_stats.bt_dsize/(_stats.bt_nkeys*scale))));
+                                                : ((double)_stats.bt_dsize/_stats.bt_nkeys)));
         bson_stats->appendNumber("storageSize", _stats.bt_fsize / scale);
         bson_stats->append("pageSize", _pageSize / scale);
         bson_stats->append("readPageSize", _readPageSize / scale);
