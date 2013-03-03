@@ -65,9 +65,22 @@ namespace mongo {
     // (Arguments should include db name)
     void renameNamespace( const char *from, const char *to, bool stayTemp);
 
+    // struct for storing the accumulated states of a NamespaceDetails
+    // all values, except for nIndexes, are estiamtes
+    // note that the id index is used as the main store.
+    struct NamespaceDetailsAccStats {
+        uint64_t count; // number of rows in id index
+        uint64_t size; // size of main store, which is the id index
+        uint64_t storageSize; // size on disk of id index
+        uint64_t nIndexes; // number of indexes, including id index
+        uint64_t indexSize; // size of secondary indexes, NOT including id index
+        uint64_t indexStorageSize; // size on disk for secondary indexes, NOT including id index
+    };
+
     /* NamespaceDetails : this is the "header" for a namespace that has all its details.
        It is stored in the NamespaceIndex (a TokuDB dictionary named foo.ns, for Database foo).
     */
+
     class NamespaceDetails {
     public:
         enum { NIndexesMax = 64 };
@@ -215,12 +228,12 @@ namespace mongo {
         bool findById(const BSONObj &query, BSONObj &result, bool getKey = true);
         void insertObject(const BSONObj &obj, bool overwrite);
         void deleteObject(const BSONObj &pk, const BSONObj &obj);
-
+        void fillCollectionStats(struct NamespaceDetailsAccStats* accStats, BSONObjBuilder* result, int scale);
+    private:
         // fill the statistics for each index in the NamespaceDetails,
         // indexStats is an array of length nIndexes
         void fillIndexStats(IndexStats* indexStats);
 
-    private:
         // Each index (including the _id) index has an IndexDetails that describes it.
         int _nIndexes;
         typedef std::vector<shared_ptr<IndexDetails> > IndexVector;

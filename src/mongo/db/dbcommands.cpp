@@ -1368,35 +1368,8 @@ namespace mongo {
                 return false;
             }
 
-            uint32_t nIndexes = nsd->nIndexes();
-            IndexStats indexStats[nIndexes];
-            BSONObjBuilder index_bson_stats[nIndexes];
-            // fill each of the indexStats with statistics
-            nsd->fillIndexStats(indexStats);
-            // also sum up some stats of secondary indexes,
-            // calculate their total data size and storage size
-            uint64_t totalIndexDataSize = 0;
-            uint64_t totalIndexStorageSize = 0;
-            int idIndex = nsd->findIdIndex();
-            verify(idIndex >= 0);
-            BSONArrayBuilder index_info;
-            for (uint32_t i = 0; i < nIndexes; i++) {
-                // retrieve the statistics into a BSon object
-                index_bson_stats[i].append("name", nsd->idx(i).indexName());
-                indexStats[i].fillBSONWithStats(&index_bson_stats[i], scale);
-                index_info.append(index_bson_stats[i].obj());
-                if (i != (uint32_t)idIndex) {
-                    totalIndexDataSize += indexStats[i].getDataSize();
-                    totalIndexStorageSize += indexStats[i].getStorageSize();
-                }
-            }
-            result.appendNumber("count", indexStats[idIndex].getCount());
-            result.append("nindexes" , nsd->nIndexes() );
-            result.appendNumber("size", indexStats[idIndex].getDataSize()/scale);
-            result.appendNumber("storageSize", indexStats[idIndex].getStorageSize()/scale);
-            result.appendNumber("totalIndexSize", totalIndexDataSize/scale);
-            result.appendNumber("totalIndexStorageSize", totalIndexStorageSize/scale);
-            result.append("indexDetails", index_info.arr());
+            struct NamespaceDetailsAccStats accStats;
+            nsd->fillCollectionStats(&accStats, &result, scale);
 
             if ( nsd->isCapped() ) {
                 result.append( "capped" , nsd->isCapped() );
@@ -1494,13 +1467,13 @@ namespace mongo {
             if ( d )
                 d->namespaceIndex.getNamespaces( collections );
 
-            long long ncollections = 0;
-            long long objects = 0;
-            long long size = 0;
-            //long long storageSize = 0;
-            long long numExtents = 0;
-            long long indexes = 0;
-            long long indexSize = 0;
+            uint64_t ncollections = 0;
+            uint64_t objects = 0;
+            uint64_t size = 0;
+            uint64_t storageSize = 0;
+            uint64_t indexes = 0;
+            uint64_t indexSize = 0;
+            uint64_t indexStorageSize = 0;
 
             for (list<string>::const_iterator it = collections.begin(); it != collections.end(); ++it) {
                 const string ns = *it;
@@ -1513,16 +1486,15 @@ namespace mongo {
                 }
 
                 ncollections += 1;
-                //objects += nsd->stats.nrecords;
-                //size += nsd->stats.datasize;
-                // TODO: Get object count and size from tokudb
-
-                //int temp;
-                //storageSize += nsd->storageSize( &temp );
-                //numExtents += temp;
-
                 indexes += nsd->nIndexes();
-                //indexSize += getIndexSizeForCollection(dbname, ns);
+                BSONObjBuilder dummy;
+                struct NamespaceDetailsAccStats accStats;
+                nsd->fillCollectionStats(&accStats, &dummy, scale);
+                objects += accStats.count;
+                size += accStats.size;
+                storageSize += accStats.storageSize;
+                indexSize += accStats.indexSize;
+                indexStorageSize += accStats.indexStorageSize;
             }
             
             result.append      ( "db" , dbname );
@@ -1530,15 +1502,10 @@ namespace mongo {
             result.appendNumber( "objects" , objects );
             result.append      ( "avgObjSize" , objects == 0 ? 0 : double(size) / double(objects) );
             result.appendNumber( "dataSize" , size / scale );
-            //result.appendNumber( "storageSize" , storageSize / scale);
-            result.appendNumber( "numExtents" , numExtents );
+            result.appendNumber( "storageSize" , storageSize / scale);
             result.appendNumber( "indexes" , indexes );
             result.appendNumber( "indexSize" , indexSize / scale );
-            result.appendNumber( "fileSize" , d->fileSize() / scale );
-            if ( d ) {
-                //result.appendNumber( "nsSizeMB", (int) d->namespaceIndex.fileLength() / 1024 / 1024 );
-            }
-
+            result.appendNumber( "indexStorageSize" , indexStorageSize / scale );
             return true;
         }
     } cmdDBStats;

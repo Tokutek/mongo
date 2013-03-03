@@ -474,6 +474,54 @@ namespace mongo {
         }
     }
 
+    void NamespaceDetails::fillCollectionStats(
+        struct NamespaceDetailsAccStats* accStats, 
+        BSONObjBuilder* result, 
+        int scale) 
+    {
+        uint32_t numIndexes = nIndexes();
+        accStats->nIndexes = numIndexes;
+        IndexStats indexStats[numIndexes];
+        BSONObjBuilder index_bson_stats[numIndexes];
+        // fill each of the indexStats with statistics
+        fillIndexStats(indexStats);
+        // also sum up some stats of secondary indexes,
+        // calculate their total data size and storage size
+        uint64_t totalIndexDataSize = 0;
+        uint64_t totalIndexStorageSize = 0;
+        int idIndex = findIdIndex();
+        verify(idIndex >= 0);
+        BSONArrayBuilder index_info;
+        for (uint32_t i = 0; i < numIndexes; i++) {
+            // retrieve the statistics into a BSon object
+            index_bson_stats[i].append("name", idx(i).indexName());
+            indexStats[i].fillBSONWithStats(&index_bson_stats[i], scale);
+            index_info.append(index_bson_stats[i].obj());
+            if (i != (uint32_t)idIndex) {
+                totalIndexDataSize += indexStats[i].getDataSize();
+                totalIndexStorageSize += indexStats[i].getStorageSize();
+            }
+        }
+        accStats->count = indexStats[idIndex].getCount();
+        result->appendNumber("count", accStats->count);
+
+        result->append("nindexes" , numIndexes );
+
+        accStats->size = indexStats[idIndex].getDataSize();
+        result->appendNumber("size", accStats->size/scale);
+
+        accStats->storageSize = indexStats[idIndex].getStorageSize();
+        result->appendNumber("storageSize", accStats->storageSize/scale);
+
+        accStats->indexSize = totalIndexDataSize;
+        result->appendNumber("totalIndexSize", totalIndexDataSize/scale);
+
+        accStats->indexStorageSize = totalIndexStorageSize;
+        result->appendNumber("totalIndexStorageSize", totalIndexStorageSize/scale);
+
+        result->append("indexDetails", index_info.arr());        
+    }
+
     /* ------------------------------------------------------------------------- */
 
     SimpleMutex NamespaceDetailsTransient::_qcMutex("qc");
