@@ -1368,20 +1368,6 @@ namespace mongo {
                 return false;
             }
 
-            //long long size = nsd->stats.datasize / scale;
-            //result.appendNumber( "count" , nsd->stats.nrecords );
-            //result.appendNumber( "size" , size );
-            //if( nsd->stats.nrecords )
-            //    result.append      ( "avgObjSize" , double(size) / double(nsd->stats.nrecords) );
-            // TODO: TokuDB provide our version of stats
-
-            //result.appendNumber( "storageSize" , nsd->storageSize( &numExtents , verbose ? &extents : 0  ) / scale );
-
-            //BSONObjBuilder indexSizes;
-            //result.appendNumber( "totalIndexSize" , getIndexSizeForCollection(dbname, ns, &indexSizes, scale) / scale );
-            //result.append("indexSizes", indexSizes.obj());
-            // TODO: Get index sizes for tokudb
-
             uint32_t nIndexes = nsd->nIndexes();
             IndexStats indexStats[nIndexes];
             BSONObjBuilder index_bson_stats[nIndexes];
