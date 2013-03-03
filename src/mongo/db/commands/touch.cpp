@@ -29,6 +29,24 @@
 
 namespace mongo {
 
+    static int touchIndexCursorCallback(const DBT *key, const DBT *val, void *extra) {
+        return TOKUDB_CURSOR_CONTINUE;
+    }
+    
+    static void touchIndex(IndexDetails* idx) {
+        DBC* cursor = idx->cursor();
+        DB* db = NULL; // create a dummy db so we get access to negative and positive infinity
+        int r = 0;
+        r = db_create(&db, storage::env, 0);
+        verify(r == 0);
+        // prelock to induce prefetching
+        r = cursor->c_pre_acquire_range_lock(cursor, db->dbt_neg_infty(), db->dbt_pos_infty());
+        while (r != DB_NOTFOUND) {
+            r = cursor->c_getf_next(cursor, 0, touchIndexCursorCallback, NULL);
+        }
+        db->close(db, 0);
+    }
+
     class TouchCmd : public Command {
     public:
         virtual LockType locktype() const { return NONE; }
@@ -38,7 +56,7 @@ namespace mongo {
         virtual bool logTheOp() { return false; }
         virtual void help( stringstream& help ) const {
             help << "touch collection\n"
-                "Page in all pages of memory containing every extent for the given collection\n"
+                "Page in all data for the given collection\n"
                 "{ touch : <collection_name>, [data : true] , [index : true] }\n"
                 " at least one of data or index must be true; default is both are false\n";
         }
@@ -79,32 +97,28 @@ namespace mongo {
                     bool touch_data, 
                     bool touch_indexes, 
                     BSONObjBuilder& result ) {
-            problem() << "touch command unimplemented, doing nothing!" << endl;
+
+            Client::ReadContext ctx(ns);
+            ctx.ctx().beginTransaction(DB_READ_UNCOMMITTED);
+            NamespaceDetails *nsd = nsdetails(ns.c_str());
+            massert( 16153, "namespace does not exist", nsd );
+            int id = nsd->findIdIndex();
 
             if (touch_data) {
                 log() << " touching namespace " << ns << endl;
+                IndexDetails& idx = nsd->idx(id);
+                touchIndex(&idx);                
             }
 
             if (touch_indexes) {
-                // enumerate indexes
-                std::vector< std::string > indexes;
-                {
-                    Client::ReadContext ctx(ns);
-                    NamespaceDetails *nsd = nsdetails(ns.c_str());
-                    massert( 16153, "namespace does not exist", nsd );
-                    
-                    NamespaceDetails::IndexIterator ii = nsd->ii(); 
-                    while ( ii.more() ) {
-                        IndexDetails& idx = ii.next();
-                        indexes.push_back( idx.indexNamespace() );
+                for (int i = 0; i < nsd->nIndexes(); i++) {
+                    if (i != id) {
+                        touchIndex(&nsd->idx(i));
                     }
                 }
-                for ( std::vector<std::string>::const_iterator it = indexes.begin(); 
-                      it != indexes.end(); 
-                      it++ ) {
-                    log() << " touching index " << *it << endl;
-                }
             }
+
+            ctx.ctx().commitTransaction();
             return true;
         }
         
