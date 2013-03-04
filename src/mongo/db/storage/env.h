@@ -36,6 +36,7 @@ namespace mongo {
         void db_remove(const string &name);
 
         void get_status(BSONObjBuilder &status);
+        void log_flush();
 
     } // namespace storage
 

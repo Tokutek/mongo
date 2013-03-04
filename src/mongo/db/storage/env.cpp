@@ -326,6 +326,12 @@ namespace mongo {
             }
         }
 
+        void log_flush() {
+            int r = 0;
+            r = env->log_flush(env, NULL);
+            verify(r == 0);
+        }
+
     } // namespace storage
 
 } // namespace mongo

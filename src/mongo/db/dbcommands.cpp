@@ -146,10 +146,10 @@ namespace mongo {
         virtual void help( stringstream& help ) const {
             help << "return error status of the last operation on this connection\n"
                  << "options:\n"
-                 << "  { fsync:true } - fsync before returning, or wait for journal commit if running with --journal\n"
-                 << "  { j:true } - wait for journal commit if running with --journal\n"
-                 << "  { w:n } - await replication to n servers (including self) before returning\n"
-                 << "  { wtimeout:m} - timeout for w in m milliseconds";
+                 << "  { fsync:true } - fsync the recovery log before returning\n"
+                 << "  { j:true } - fsync the recovery log before returning\n"
+                 << "  { w:n } - replication not supported yet, so does nothing\n"
+                 << "  { wtimeout:m} - replication not supported yet, so does nothing";
         }
         bool run(const string& dbname, BSONObj& _cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             LastError *le = lastError.disableForCommand();
@@ -180,21 +180,15 @@ namespace mongo {
                         cmdObj = *def;
                 }
             }
-
-            if ( cmdObj["j"].trueValue() ) { 
-                problem() << " getLastError with param \"j\" should be waiting "
-                    "for commit, but it's not implemented!" << endl;
-                if( cmdObj["fsync"].trueValue() ) { 
-                    errmsg = "fsync and j options are not used together";
-                    return false;
+            // slight change from MongoDB originally
+            // MongoDB allows only j or fsync to be set, not both
+            // we allow to set both
+            if ( cmdObj["j"].trueValue() || cmdObj["fsync"].trueValue()) {
+                // only bother to flush recovery log 
+                // if we are not already fsyncing on commit
+                if (!cmdLine.sync_commit) {
+                    storage::log_flush();
                 }
-            }
-            else if ( cmdObj["fsync"].trueValue() ) {
-                Timer t;
-                problem() << " getLastError with param \"fsync\" should be waiting "
-                    "for commit and flushing, but it's not implemented!" << endl;
-                result.append( "fsyncFiles" , 0 );
-                result.append( "waited" , 0 );
             }
 
             if ( err ) {
@@ -205,57 +199,7 @@ namespace mongo {
 
             BSONElement e = cmdObj["w"];
             if ( e.ok() ) {
-                int timeout = cmdObj["wtimeout"].numberInt();
-                Timer t;
-
-                long long passes = 0;
-                char buf[32];
-                while ( 1 ) {
-                    OpTime op(c.getLastOp());
-                    
-                    if ( op.isNull() ) {
-                        if ( anyReplEnabled() ) {
-                            result.append( "wnote" , "no write has been done on this connection" );
-                        }
-                        else if ( e.isNumber() && e.numberInt() <= 1 ) {
-                            // don't do anything
-                            // w=1 and no repl, so this is fine
-                        }
-                        else {
-                            // w=2 and no repl
-                            result.append( "wnote" , "no replication has been enabled, so w=2+ won't work" );
-                            result.append( "err", "norepl" );
-                            return true; 
-                        }
-                        break;
-                    }
-
-                    // check this first for w=0 or w=1
-                    if ( opReplicatedEnough( op, e ) ) {
-                        break;
-                    }
-
-                    // if replication isn't enabled (e.g., config servers)
-                    if ( ! anyReplEnabled() ) {
-                        result.append( "err", "norepl" );
-                        return true;
-                    }
-
-
-                    if ( timeout > 0 && t.millis() >= timeout ) {
-                        result.append( "wtimeout" , true );
-                        errmsg = "timed out waiting for slaves";
-                        result.append( "waited" , t.millis() );
-                        result.append( "err" , "timeout" );
-                        return true;
-                    }
-
-                    verify( sprintf( buf , "w block pass: %lld" , ++passes ) < 30 );
-                    c.curop()->setMessage( buf );
-                    sleepmillis(1);
-                    killCurrentOp.checkForInterrupt();
-                }
-                result.appendNumber( "wtime" , t.millis() );
+                problem() << "replication not supported yet, ignoring!" << endl;
             }
 
             result.appendNull( "err" );
