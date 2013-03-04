@@ -502,6 +502,12 @@ if "darwin" == os.sys.platform:
     darwin = True
     platform = "osx" # prettier than darwin
 
+    # Unfortunately, we are too late here to affect the variant dir. We could maybe make this
+    # flag available on all platforms and complain if it is used on non-darwin targets.
+    osx_version_choices = ['10.6', '10.7', '10.8']
+    add_option("osx-version-min", "minimum OS X version to support", 1, False,
+               type = 'choice', default = osx_version_choices[0], choices = osx_version_choices)
+
     if env["CXX"] is None:
         print( "YO" )
         if os.path.exists( "/usr/bin/g++-4.2" ):
@@ -919,6 +925,42 @@ def doConfigure(myenv):
         # http://stackoverflow.com/questions/4866425/mixing-class-and-struct. We disable the
         # warning so it doesn't become an error.
         AddToCCFLAGSIfSupported(myenv, '-Wno-mismatched-tags')
+
+    if has_option('c++11'):
+        # The Microsoft compiler does not need a switch to enable C++11. Again we should be
+        # checking for MSVC, not windows. In theory, we might be using clang or icc on windows.
+        if not windows:
+            # For our other compilers (gcc and clang) we need to pass -std=c++0x or -std=c++11,
+            # but we prefer the latter. Try that first, and fall back to c++0x if we don't
+            # detect that --std=c++11 works.
+            if not AddToCXXFLAGSIfSupported(myenv, '-std=c++11'):
+                if not AddToCXXFLAGSIfSupported(myenv, '-std=c++0x'):
+                    print( 'C++11 mode requested, but cannot find a flag to enable it' )
+                    Exit(1)
+            # Our current builtin tcmalloc is not compilable in C++11 mode. Remove this
+            # check when our builtin release of tcmalloc contains the resolution to
+            # http://code.google.com/p/gperftools/issues/detail?id=477.
+            if get_option('allocator') == 'tcmalloc':
+                if not use_system_version_of_library('tcmalloc'):
+                    print( 'TCMalloc is not currently compatible with C++11' )
+                    Exit(1)
+
+    # This needs to happen before we check for libc++, since it affects whether libc++ is available.
+    if darwin and has_option('osx-version-min'):
+        min_version = get_option('osx-version-min')
+        if not AddToCCFLAGSIfSupported(myenv, '-mmacosx-version-min=%s' % (min_version)):
+            print( "Can't set minimum OS X version with this compiler" )
+            Exit(1)
+
+    if has_option('libc++'):
+        if not using_clang:
+            print( 'libc++ is currently only supported for clang')
+            Exit(1)
+        if AddToCXXFLAGSIfSupported(myenv, '-stdlib=libc++'):
+            myenv.Append(LINKFLAGS=['-stdlib=libc++'])
+        else:
+            print( 'libc++ requested, but compiler does not support -stdlib=libc++' )
+            Exit(1)
 
     # glibc's memcmp is faster than gcc's
     if nix and linux:
