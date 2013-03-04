@@ -80,7 +80,7 @@ namespace mongo {
         /* used for multikey index traversal to avoid sending back dups. see Matcher::matches().
            if a multikey index traversal:
              if primary key (ie: _id) has already been sent, returns true.
-             otherwise, marks loc as sent.
+             otherwise, marks pk as sent.
         */
         virtual bool getsetdup(const BSONObj &pk) = 0;
 
