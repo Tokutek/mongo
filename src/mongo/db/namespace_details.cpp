@@ -312,6 +312,11 @@ namespace mongo {
         }
     }
 
+    // Normally, we cannot drop the _id_ index.
+    // The parameters mayDeleteIdIndex and can_drop_system are here 
+    // for the case where we call dropIndexes through dropCollection, in which
+    // case we are dropping an entire collection, hence the _id_ index will have 
+    // to go
     bool NamespaceDetails::dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex, bool can_drop_system) {
         tokulog(1) << "dropIndexes " << name << endl;
 
