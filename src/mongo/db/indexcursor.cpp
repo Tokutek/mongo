@@ -554,6 +554,7 @@ namespace mongo {
                 // allowed to advance and try again exactly once. If we still can't
                 // find the object, we're in trouble.
                 verify( !_readOnly );
+                tokulog(4) << "current() did not find associated object for pk " << _currPK << endl;
                 advance();
                 if ( ok() ) {
                     found = _d->findById( _currPK, _currObj, false );
