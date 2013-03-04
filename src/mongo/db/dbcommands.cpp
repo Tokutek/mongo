@@ -180,6 +180,12 @@ namespace mongo {
                         cmdObj = *def;
                 }
             }
+            if ( err ) {
+                // doesn't make sense to wait for fsync
+                // if there was an error
+                return true;
+            }
+
             // slight change from MongoDB originally
             // MongoDB allows only j or fsync to be set, not both
             // we allow to set both
@@ -189,12 +195,6 @@ namespace mongo {
                 if (!cmdLine.sync_commit) {
                     storage::log_flush();
                 }
-            }
-
-            if ( err ) {
-                // doesn't make sense to wait for replication
-                // if there was an error
-                return true;
             }
 
             BSONElement e = cmdObj["w"];
