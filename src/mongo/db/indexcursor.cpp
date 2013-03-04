@@ -521,7 +521,7 @@ namespace mongo {
             // new inserts will not be read by this cursor, because there was no
             // namespace details or index at the time of creation. we can either
             // accept this caveat or try to fix it. at least emit a warning.
-            if (tailable()) {
+            if ( tailable() ) {
                 problem() 
                     << "Attempted to advance a tailable cursor on an empty collection! " << endl
                     << "The current implementation cannot read new writes from any cursor " << endl
@@ -546,19 +546,19 @@ namespace mongo {
         // If the index is not clustering, _currObj starts as empty and gets filled
         // with the full document on the first call to current().
         if ( _currObj.isEmpty() && _d != NULL ) {
-            int advanced = 0;
-            while ( ok() ) {
-                verify(_idx != NULL);
-                bool found = _d->findById(_currPK, _currObj, false);
-                if ( !found ) {
-                    // We may not find the associated object, but only once. When the current
-                    // context deletes a document with currPK(), we just need to advance to
-                    // be properly positioned. If we still can't find the associated doc, assert.
-                    verify( ++advanced == 1 );
-                    advance();
-                    continue;
+            verify( _idx != NULL );
+            bool found = _d->findById( _currPK, _currObj, false );
+            if ( !found ) {
+                // If we didn't find the associated object, we must be a non read-only
+                // cursor whose context deleted the current _id. In this case, we are
+                // allowed to advance and try again exactly once. If we still can't
+                // find the object, we're in trouble.
+                verify( !_readOnly );
+                advance();
+                if ( ok() ) {
+                    found = _d->findById( _currPK, _currObj, false );
+                    verify( found );
                 }
-                break;
             }
         }
         return _currObj;
