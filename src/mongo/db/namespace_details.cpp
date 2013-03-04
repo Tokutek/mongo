@@ -344,6 +344,10 @@ namespace mongo {
                 result.append("nIndexesWas", (double) _nIndexes);
                 IndexVector::iterator it = _indexes.begin() + x;
                 IndexDetails *idx = it->get();
+                if ( !mayDeleteIdIndex && idx->isIdIndex() ) {
+                    errmsg = "may not delete _id index";
+                    return false;
+                }
                 idx->kill_idx(can_drop_system);
                 _indexes.erase(it);
                 _nIndexes--;
