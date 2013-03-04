@@ -1,8 +1,18 @@
 // test that getting the stats of a collection
 // that does not exist works as expected
+db.asdfasdf.drop();
 f = db.asdfasdf.stats();
 assert.eq(0, f.ok);
 assert.eq("ns not found", f.errmsg);
+
+f = db.runCommand({create: "asdfasdf", pageSize:1001110, readPageSize:123456, compression:"zlib"});
+assert.eq(1, f.ok);
+stats = db.asdfasdf.stats();
+assert.eq(1, stats.nindexes);
+assert.eq("_id_", stats.indexDetails[0].name);
+assert.eq(1001110, stats.indexDetails[0].pageSize);
+assert.eq(123456, stats.indexDetails[0].readPageSize);
+assert.eq("zlib", stats.indexDetails[0].compression);
 
 f = db.jstests_6118_collection_stats;
 f.drop();

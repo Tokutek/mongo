@@ -53,7 +53,11 @@ namespace mongo {
 
         // Choose which options are used for the _id index, manually. 
         BSONElement e;
-        e = options["basementsize"];
+        e = options["readPageSize"];
+        if (e.ok() && !e.isNull()) {
+            id_info.append(e);
+        }
+        e = options["pageSize"];
         if (e.ok() && !e.isNull()) {
             id_info.append(e);
         }
