@@ -360,6 +360,8 @@ namespace mongo {
                 multiKeyIndexBits = ((multiKeyIndexBits & ((1ULL << x) - 1)) |
                                      ((multiKeyIndexBits >> (x + 1)) << x));
             } else {
+                // theoretically, this should not be needed, as we do all of our fileops
+                // transactionally, but keeping this here just in case at the moment
                 // just in case an orphaned listing there - i.e. should have been repaired but wasn't
                 int n = removeFromSysIndexes(ns, name);
                 if (n) {
