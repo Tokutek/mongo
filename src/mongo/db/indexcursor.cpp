@@ -211,7 +211,7 @@ namespace mongo {
 
     IndexCursor::~IndexCursor() {
         if (_cursor != NULL) {
-            int r = _cursor->c_close(_cursor);
+            const int r = _cursor->c_close(_cursor);
             verify(r == 0);
         }
     }
@@ -228,7 +228,7 @@ namespace mongo {
         storage::dbt_init(&start, sbuf, sbuflen);
         storage::dbt_init(&end, ebuf, ebuflen);
 
-        int r = _cursor->c_pre_acquire_range_lock( _cursor, &start, &end );
+        const int r = _cursor->c_pre_acquire_range_lock( _cursor, &start, &end );
         if ( r != 0 ) {
             StringBuilder s;
             s << toString() << ": failed to acquire prelocked range on " <<
@@ -248,7 +248,7 @@ namespace mongo {
                 // and the proposed startKey. If skipping wasn't necessary, then
                 // use that start key to set our position.
                 prelockRange( _bounds->startKey(), _bounds->endKey() );
-                int r = skipToNextKey( _bounds->startKey() );
+                const int r = skipToNextKey( _bounds->startKey() );
                 if ( r == -1 ) {
                     findKey( _bounds->startKey() );
                 }
@@ -458,7 +458,7 @@ namespace mongo {
     bool IndexCursor::skipOutOfRangeKeysAndCheckEnd() {
         if ( ok() ) { 
             // If r is -2, the cursor is exhausted. We're not supposed to count that.
-            int r = skipToNextKey( currKey() );
+            const int r = skipToNextKey( currKey() );
             if ( r != -2 ) {
                 _nscanned++;
             }
@@ -480,7 +480,7 @@ namespace mongo {
             return;
         if ( !_endKey.isEmpty() ) {
             verify( _idx != NULL );
-            int cmp = sgn( _endKey.woCompare( currKey(), _idx->keyPattern() ) );
+            const int cmp = sgn( _endKey.woCompare( currKey(), _idx->keyPattern() ) );
             if ( ( cmp != 0 && cmp != _direction ) ||
                     ( cmp == 0 && !_endKeyInclusive ) ) {
                 _currKey = BSONObj();
@@ -546,11 +546,20 @@ namespace mongo {
         // If the index is not clustering, _currObj starts as empty and gets filled
         // with the full document on the first call to current().
         if ( _currObj.isEmpty() && _d != NULL ) {
-            verify(_idx != NULL);
-            tokulog(3) << toString() << ": current() _currKey: " << _currKey << ", PK " << _currPK << endl;
-            bool found = _d->findById(_currPK, _currObj, false);
-            tokulog(3) << toString() << ": current() PK lookup res: " << _currObj << endl;
-            verify(found);
+            int advanced = 0;
+            while ( ok() ) {
+                verify(_idx != NULL);
+                bool found = _d->findById(_currPK, _currObj, false);
+                if ( !found ) {
+                    // We may not find the associated object, but only once. When the current
+                    // context deletes a document with currPK(), we just need to advance to
+                    // be properly positioned. If we still can't find the associated doc, assert.
+                    verify( ++advanced == 1 );
+                    advance();
+                    continue;
+                }
+                break;
+            }
         }
         return _currObj;
     }

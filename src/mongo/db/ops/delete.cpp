@@ -60,6 +60,10 @@ namespace mongo {
             BSONObj pk = cc->currPK().copy();
             BSONObj obj = cc->current().copy();
 
+            while ( cc->ok() && cc->currPK() == pk ) {
+                cc->advance();
+            }
+
             tokulog(4) << "_deleteObjects iteration: pk " << pk << ", obj " << obj << endl;
 
             if ( logop ) {
@@ -77,13 +81,6 @@ namespace mongo {
 
             deleteOneObject(d, nsdt, pk, obj);
             nDeleted++;
-
-            // Opportunistically advance the cursor while the current is a
-            // duplicate if what was just deleted. We need to do this at least
-            // once in order to make progress.
-            do {
-                cc->advance();
-            } while ( cc->ok() && cc->currPK() == pk ) ;
 
             if ( justOne ) {
                 break;
