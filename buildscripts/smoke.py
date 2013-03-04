@@ -84,6 +84,9 @@ smoke_server_opts = ''
 small_oplog = False
 small_oplog_rs = False
 
+tests_log = sys.stdout
+server_log_file = ''
+
 # This class just implements the with statement API, for a sneaky
 # purpose below.
 class Nothing(object):
@@ -192,6 +195,8 @@ class mongod(object):
         if self.kwargs.get('auth'):
             argv += ['--auth']
             self.auth = True
+        if len(server_log_file) > 0:
+            argv += ['--logpath', server_log_file]
         argv += [smoke_server_opts]
         print "running " + " ".join(argv)
         self.proc = self._start(buildlogger(argv, is_global=True))
@@ -433,7 +438,7 @@ def runTest(test):
 
     os.environ['MONGO_TEST_FILENAME'] = os.path.basename(path)
     t1 = time.time()
-    r = call(buildlogger(argv), cwd=test_path)
+    r = call(buildlogger(argv), cwd=test_path, stdout=tests_log)
     t2 = time.time()
     del os.environ['MONGO_TEST_FILENAME']
 
@@ -630,7 +635,7 @@ def add_exe(e):
     return e
 
 def set_globals(options, tests):
-    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, small_oplog_rs, no_journal, no_preallocj, auth, keyFile, smoke_db_prefix, smoke_server_opts, test_path
+    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, small_oplog_rs, no_journal, no_preallocj, auth, keyFile, smoke_db_prefix, smoke_server_opts, server_log_file, tests_log, test_path
     global file_of_commands_mode
     #Careful, this can be called multiple times
     test_path = options.test_path
@@ -671,6 +676,10 @@ def set_globals(options, tests):
     # if smoke.py is running a list of commands read from a
     # file (or stdin) rather than running a suite of js tests
     file_of_commands_mode = options.File and options.mode == 'files'
+
+    if options.tests_log_file is not None and len(options.tests_log_file) > 0:
+        tests_log = open(options.tests_log_file, "w")
+    server_log_file = options.server_log_file
 
 def clear_failfile():
     if os.path.exists(failfile):
@@ -794,6 +803,10 @@ def main():
     parser.add_option('--with-cleanbb', dest='with_cleanbb', default=False,
                       action="store_true",
                       help='Clear database files from previous smoke.py runs')
+    parser.add_option('--server-log', dest='server_log_file', default=server_log_file,
+                      help="Log file for the mongod server ('%default')")
+    parser.add_option('--tests-log', dest='tests_log_file', default='',
+                      help="Log file for the tests ('%default')")
 
     # Buildlogger invocation from command line
     parser.add_option('--buildlogger-builder', dest='buildlogger_builder', default=None,
