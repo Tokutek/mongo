@@ -29,8 +29,14 @@ namespace mongo {
         : _readContext( ns ) // Take a read lock.
         , _chunkMgr(shardingState.needShardChunkManager( ns )
                     ? shardingState.getShardChunkManager( ns )
-                    : ShardChunkManagerPtr())
-    {}
+                    : ShardChunkManagerPtr()) {
+        _readContext.ctx().beginTransaction(DB_TXN_SNAPSHOT);
+        _readContext.ctx().setReadOnly();
+    }
+
+    DocumentSourceCursor::CursorWithContext::~CursorWithContext() {
+        _readContext.ctx().commitTransaction();
+    }
 
     DocumentSourceCursor::~DocumentSourceCursor() {
     }

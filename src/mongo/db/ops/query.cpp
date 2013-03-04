@@ -773,6 +773,7 @@ namespace mongo {
         
         Client::ReadContext ctx(ns, dbpath, true); // read locks
         ctx.ctx().beginTransaction(DB_TXN_SNAPSHOT);
+        ctx.ctx().setReadOnly();
         replVerifyReadsOk(&pq);
         
         bool found = Helpers::findById( ns, query, resObject );
