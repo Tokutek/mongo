@@ -80,6 +80,7 @@ lost_in_master = []
 screwy_in_slave = {}
 
 smoke_db_prefix = ''
+smoke_server_opts = ''
 small_oplog = False
 small_oplog_rs = False
 
@@ -191,6 +192,7 @@ class mongod(object):
         if self.kwargs.get('auth'):
             argv += ['--auth']
             self.auth = True
+        argv += [smoke_server_opts]
         print "running " + " ".join(argv)
         self.proc = self._start(buildlogger(argv, is_global=True))
 
@@ -628,7 +630,7 @@ def add_exe(e):
     return e
 
 def set_globals(options, tests):
-    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, small_oplog_rs, no_journal, no_preallocj, auth, keyFile, smoke_db_prefix, test_path
+    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, small_oplog_rs, no_journal, no_preallocj, auth, keyFile, smoke_db_prefix, smoke_server_opts, test_path
     global file_of_commands_mode
     #Careful, this can be called multiple times
     test_path = options.test_path
@@ -645,6 +647,7 @@ def set_globals(options, tests):
 
     continue_on_failure = options.continue_on_failure
     smoke_db_prefix = options.smoke_db_prefix
+    smoke_server_opts = options.smoke_server_opts
     small_oplog = options.small_oplog
     if hasattr(options, "small_oplog_rs"):
         small_oplog_rs = options.small_oplog_rs
@@ -738,7 +741,7 @@ def add_to_failfile(tests, options):
 
 
 def main():
-    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, no_journal, no_preallocj, auth, keyFile, smoke_db_prefix, test_path
+    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, no_journal, no_preallocj, auth, keyFile, smoke_db_prefix, smoke_server_opts, test_path
     parser = OptionParser(usage="usage: smoke.py [OPTIONS] ARGS*")
     parser.add_option('--mode', dest='mode', default='suite',
                       help='If "files", ARGS are filenames; if "suite", ARGS are sets of tests (%default)')
@@ -761,6 +764,8 @@ def main():
                       help="Run tests/suites named in FILE, one test per line, '-' means stdin")
     parser.add_option('--smoke-db-prefix', dest='smoke_db_prefix', default=smoke_db_prefix,
                       help="Prefix to use for the mongods' dbpaths ('%default')")
+    parser.add_option('--smoke-server-opts', dest='smoke_server_opts', default=smoke_server_opts,
+                      help="Additional options for the mongod server ('%default')")
     parser.add_option('--small-oplog', dest='small_oplog', default=False,
                       action="store_true",
                       help='Run tests with master/slave replication & use a small oplog')

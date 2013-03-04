@@ -211,6 +211,7 @@ add_option( "heapcheck", "link to heap-checking malloc-lib and look for memory l
 add_option( "gcov" , "compile with flags for gcov" , 0 , True )
 
 add_option("smokedbprefix", "prefix to dbpath et al. for smoke tests", 1 , False )
+add_option("smoke-server-opts", "additional options for the mongod for smoke tests", 1 , False )
 add_option("smokeauth", "run smoke tests with --auth", 0 , False )
 
 add_option( "use-system-tcmalloc", "use system version of tcmalloc library", 0, True )
