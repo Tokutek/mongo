@@ -120,7 +120,8 @@ namespace mongo {
                                          BSON( "" << MINKEY ) ,
                                          BSON( "" << MAXKEY ) ,
                                          true ,
-                                         1 ) );
+                                         1,
+                                         numWanted) );
                 exhaustiveCursor->setMatcher( forceDocMatcher );
                 return exhaustiveCursor;
             }
@@ -140,7 +141,8 @@ namespace mongo {
                                  idx,
                                  newVector,
                                  false,
-                                 1 ) );
+                                 1,
+                                 numWanted) );
         cursor->setMatcher( forceDocMatcher );
         return cursor;
     }

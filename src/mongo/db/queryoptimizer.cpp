@@ -267,17 +267,19 @@ doneCheckOrder:
         }
     }
 
-    // XXX This is used by the oplog to start a cursor at some known diskloc, I think.
-    // XXX We removed the startLoc parameter
     shared_ptr<Cursor> QueryPlan::newCursor() const {
 
+        // hopefully safe to use original query in these contexts - don't think we can mix type with $or clause separation yet
+        int numWanted = 0;
+        if ( _parsedQuery ) {
+            // SERVER-5390
+            tokulog(2) << "QueryPlan:: newCursor has _parsedQuery skip " <<
+                _parsedQuery->getSkip() << ", limit " << _parsedQuery->getNumToReturn() << endl;
+
+            numWanted = _parsedQuery->getSkip() + _parsedQuery->getNumToReturn();
+        }
+
         if ( _type ) {
-            // hopefully safe to use original query in these contexts - don't think we can mix type with $or clause separation yet
-            int numWanted = 0;
-            if ( _parsedQuery ) {
-                // SERVER-5390
-                numWanted = _parsedQuery->getSkip() + _parsedQuery->getNumToReturn();
-            }
             return _type->newCursor( _originalQuery , _order , numWanted );
         }
 
@@ -291,20 +293,15 @@ doneCheckOrder:
             return Helpers::findTableScan( _frs.ns(), _order);
         }
                 
-        // TokuDB: There is no startLoc anymore
-        //massert( 10363 ,  "newCursor() with start location not implemented for indexed plans", startLoc.isNull() );
-
         if ( _startOrEndSpec ) {
             // we are sure to spec _endKeyInclusive
-            return shared_ptr<Cursor>( new IndexCursor( _d, _index, _startKey, _endKey, _endKeyInclusive, _direction >= 0 ? 1 : -1 ) );
+            return shared_ptr<Cursor>( new IndexCursor( _d, _index, _startKey, _endKey, _endKeyInclusive, _direction >= 0 ? 1 : -1, numWanted ) );
         }
         else if ( _index->getSpec().getType() ) {
-            return shared_ptr<Cursor>( new IndexCursor( _d, _index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1 ) );
+            return shared_ptr<Cursor>( new IndexCursor( _d, _index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1, numWanted ) );
         }
         else {
-            return shared_ptr<Cursor>( new IndexCursor( _d, _index, _frv,
-                                                         independentRangesSingleIntervalLimit(),
-                                                         _direction >= 0 ? 1 : -1 ) );
+            return shared_ptr<Cursor>( new IndexCursor( _d, _index, _frv, independentRangesSingleIntervalLimit(), _direction >= 0 ? 1 : -1, numWanted) );
         }
     }
 

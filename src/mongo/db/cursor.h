@@ -209,13 +209,15 @@ namespace mongo {
      */
     class IndexCursor : public Cursor {
     public:
+        // If numWanted is > 0, there exists a limit clause, so don't prefetch.
+
         // Create a cursor over a specific start, end key range.
         IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
-                const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
+                const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction, int numWanted = 0);
 
         // Create a cursor over a set of one or more field ranges.
         IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
-                const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction );
+                const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction, int numWanted = 0);
 
         ~IndexCursor();
 
@@ -314,6 +316,7 @@ namespace mongo {
         shared_ptr< CoveredIndexMatcher > _matcher;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
         long long _nscanned;
+        int _numWanted;
 
         DBC *_cursor;
         bool _tailable;

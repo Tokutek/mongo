@@ -602,6 +602,7 @@ namespace mongo {
             return shared_ptr<Cursor>();
         }
         
+        const int numWanted = _parsedQuery ? _parsedQuery->getSkip() + _parsedQuery->getNumToReturn() : 0;
         if ( _planPolicy.permitOptimalNaturalPlan() && _query.isEmpty() && _order.isEmpty() ) {
             // Table-scan
             NamespaceDetails *d = nsdetails(_ns);
@@ -616,7 +617,7 @@ namespace mongo {
                 if ( idxNo >= 0 ) {
                     IndexDetails& i = d->idx( idxNo );
                     BSONObj key = i.getKeyFromQuery( _query );
-                    return shared_ptr<Cursor>( new IndexCursor( d, &i, key, key, true, 1 ) );
+                    return shared_ptr<Cursor>( new IndexCursor( d, &i, key, key, true, 1, numWanted ) );
                 }
             }
         }

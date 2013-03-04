@@ -164,7 +164,7 @@ namespace mongo {
     }
 
     IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
-            const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction ) :
+            const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction, int numWanted ) :
         _d(d),
         _idx(idx),
         _ordering(Ordering::make(_idx != NULL ? _idx->keyPattern() : BSONObj())),
@@ -177,6 +177,7 @@ namespace mongo {
         _direction(direction),
         _bounds(),
         _nscanned(0),
+        _numWanted(numWanted),
         _cursor(NULL),
         _tailable(false),
         _readOnly(cc().getContext()->isReadOnly()),
@@ -187,7 +188,7 @@ namespace mongo {
     }
 
     IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
-            const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction ) :
+            const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction, int numWanted ) :
         _d(d),
         _idx(idx),
         _ordering(Ordering::make(_idx != NULL ? _idx->keyPattern() : BSONObj())),
@@ -198,6 +199,7 @@ namespace mongo {
         _direction(direction),
         _bounds(bounds),
         _nscanned(0),
+        _numWanted(numWanted),
         _cursor(NULL),
         _tailable(false),
         _readOnly(cc().getContext()->isReadOnly()),
@@ -266,7 +268,9 @@ namespace mongo {
     int IndexCursor::getf_flags() {
         // Read-only cursors pass no special flags, non read-only cursors pass
         // DB_RMW in order to obtain write locks in the ydb-layer.
-        return _readOnly ? 0 : DB_RMW;
+        const int lockFlags = _readOnly ? 0 : DB_RMW;
+        const int prefetchFlags = _numWanted > 0 ? DBC_DISABLE_PREFETCHING : 0;
+        return lockFlags | prefetchFlags;
     }
 
     int IndexCursor::getf_fetch_count() {
