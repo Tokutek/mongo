@@ -89,19 +89,6 @@ namespace mongo {
         bool dur;                       // --dur durability (now --journal)
         uint32_t logFlushPeriod; // group/batch commit interval ms
 
-        /** --durOptions 7      dump journal and terminate without doing anything further
-            --durOptions 4      recover and terminate without listening
-        */
-        enum { // bits to be ORed
-            DurDumpJournal = 1,   // dump diagnostics on the journal during recovery
-            DurScanOnly = 2,      // don't do any real work, just scan and dump if dump specified
-            DurRecoverOnly = 4,   // terminate after recovery step
-            DurParanoid = 8,      // paranoid mode enables extra checks
-            DurAlwaysCommit = 16, // do a group commit every time the writelock is released
-            DurAlwaysRemap = 32,  // remap the private view after every group commit (may lag to the next write lock acquisition, but will do all files then)
-            DurNoCheckSpace = 64  // don't check that there is enough room for journal files before startup (for diskfull tests)
-        };
-        int durOptions;          // --durOptions <n> for debugging
 
         bool objcheck;         // --objcheck
 
@@ -164,7 +151,7 @@ namespace mongo {
         port(DefaultDBPort), rest(false), jsonp(false), quiet(false),
         noTableScan(false), prealloc(true), preallocj(true), smallfiles(sizeof(int*) == 4),
         configsvr(false), quota(false), quotaFiles(8), cpu(false),
-        durOptions(0), objcheck(false), oplogSize(0), defaultProfile(0),
+        objcheck(false), oplogSize(0), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), pretouch(0), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
         directio(false), cachetable_size(0)

@@ -504,9 +504,6 @@ namespace mongo {
         storage::startup();
         //dur::startup();
 
-        if( cmdLine.durOptions & CmdLine::DurRecoverOnly )
-            return;
-
         // comes after getDur().startup() because this reads from the database
         clearTmpCollections();
 
@@ -656,14 +653,14 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("diaglog", po::value<int>(), "0=off 1=W 2=R 3=both 7=W+some reads")
     //("directoryperdb", "each database will be stored in a separate directory")
     ("ipv6", "enable IPv6 support (disabled by default)")
-    ("journal", "enable journaling")
+    ("journal", "DEPRECATED")
     ("journalCommitInterval", po::value<unsigned>(), "how often to fsync recovery log (same as logFlushPeriod)")
     ("logFlushPeriod", po::value<unsigned>(), "how often to fsync recovery log")
-    ("journalOptions", po::value<int>(), "journal diagnostic options")
+    ("journalOptions", po::value<int>(), "DEPRECATED")
     ("jsonp","allow JSONP access via http (has security implications)")
     ("noauth", "run without security")
     ("nohttpinterface", "disable http interface")
-    ("nojournal", "disable journaling (journaling is on by default for 64 bit)")
+    ("nojournal", "DEPRECATED)")
     ("noprealloc", "disable data file preallocation - will often hurt performance")
     ("noscripting", "disable scripting engine")
     ("notablescan", "do not allow table scans")
@@ -717,12 +714,12 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("pretouch", po::value<int>(), "n pretouch threads for applying replicationed operations") // experimental
     ("command", po::value< vector<string> >(), "command")
     ("cacheSize", po::value<long>(), "cache size (in MB) for rec store")
-    ("nodur", "disable journaling")
+    ("nodur", "DEPRECATED")
     // things we don't want people to use
     ("nohints", "ignore query hints")
-    ("nopreallocj", "don't preallocate journal files")
-    ("dur", "enable journaling") // old name for --journal
-    ("durOptions", po::value<int>(), "durability diagnostic options") // deprecated name
+    ("nopreallocj", "DEPRECATED")
+    ("dur", "DEPRECATED") // old name for --journal
+    ("durOptions", po::value<int>(), "DEPRECATED") // deprecated name
     // deprecated pairing command line options
     ("pairwith", "DEPRECATED")
     ("arbiter", "DEPRECATED")
@@ -844,7 +841,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             cmdLine.dur = true;
         }
         if (params.count("durOptions")) {
-            cmdLine.durOptions = params["durOptions"].as<int>();
+            out() << "durOptions deprecated" <<endl;
         }
         if( params.count("journalCommitInterval") ) {
             // don't check if dur is false here as many will just use the default, and will default to off on win32.
@@ -866,7 +863,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             }
         }
         if (params.count("journalOptions")) {
-            cmdLine.durOptions = params["journalOptions"].as<int>();
+            out() << "journalOptions deprecated" <<endl;
         }
         if (params.count("directio")) {
             cmdLine.directio = true;

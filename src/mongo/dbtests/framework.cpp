@@ -113,7 +113,7 @@ namespace mongo {
             ("list,l", "list available test suites")
             ("bigfiles", "use big datafiles instead of smallfiles which is the default")
             ("filter,f" , po::value<string>() , "string substring filter on test name" )
-            ("verbose,v", "be more verbose (include multiple times for more verbosity e.g. -vvvvv)")
+            ("verbose,v", "verbose")
             ("dur", "enable journaling (currently the default)")
             ("nodur", "disable journaling")
             ("seed", po::value<unsigned long long>(&seed), "random number seed")
@@ -125,11 +125,6 @@ namespace mongo {
             ("suites", po::value< vector<string> >(), "test suites to run")
             ("nopreallocj", "disable journal prealloc")
             ;
-
-            /* support for -vv -vvvv etc. */
-            for (string s = "vv"; s.length() <= 10; s.append("v")) {
-                hidden_options.add_options()(s.c_str(), "verbose");
-            }
 
             positional_options.add("suites", -1);
 
@@ -173,12 +168,6 @@ namespace mongo {
 
             if (params.count("debug") || params.count("verbose") ) {
                 logLevel = 1;
-            }
-
-            for (string s = "vv"; s.length() <= 10; s.append("v")) {
-                if (params.count(s)) {
-                    logLevel = s.length();
-                }
             }
 
             if (params.count("list")) {
@@ -253,12 +242,6 @@ namespace mongo {
             }
 
             storage::startup();
-
-            if( debug && cmdLine.dur ) {
-                log() << "_DEBUG: automatically enabling cmdLine.durOptions=8 (DurParanoid)" << endl;
-                // this was commented out.  why too slow or something? : 
-                cmdLine.durOptions |= 8;
-            }
 
             TestWatchDog twd;
             twd.go();
