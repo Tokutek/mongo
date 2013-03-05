@@ -235,6 +235,8 @@ namespace mongo {
                 DB_TXN *txn() const { return _txn; }
             };
 
+            /** @return true iff there is a live transaction */
+            bool hasTransaction() const;
             /** @return the current innermost transaction */
             const Transaction &transaction() const;
             /**
@@ -273,7 +275,6 @@ namespace mongo {
             void checkNotStale() const;
             void checkNsAccess( bool doauth );
             void checkNsAccess( bool doauth, int lockState );
-            bool hasTransaction() const;
             Client * const _client;
             Context * const _oldContext;
             const string _path;

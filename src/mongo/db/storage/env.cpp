@@ -177,7 +177,6 @@ namespace mongo {
 
         int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create) {
             Client::Context *ctx = cc().getContext();
-            verify(ctx->transactionIsRoot());
 
             // TODO: Refactor this option setting code to someplace else. It's here because
             // the YDB api doesn't allow a db->close to be called before db->open, and we
@@ -230,14 +229,19 @@ namespace mongo {
             verify(r == 0);
 
             const int db_flags = may_create ? DB_CREATE : 0;
-            r = db->open(db, ctx->transaction().txn(), name.c_str(), NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+            if (may_create) {
+                verify(ctx->hasTransaction());
+                verify(ctx->transactionIsRoot());
+            }
+            DB_TXN *txn = ctx->hasTransaction() ? ctx->transaction().txn() : NULL;
+            r = db->open(db, txn, name.c_str(), NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
             if (r == ENOENT) {
                 verify(!may_create);
                 goto exit;
             }
             verify(r == 0);
 
-            set_db_descriptor(db, ctx->transaction().txn(), key_pattern);
+            set_db_descriptor(db, txn, key_pattern);
             *dbp = db;
         exit:
             return r;
