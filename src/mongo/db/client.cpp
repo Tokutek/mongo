@@ -298,9 +298,7 @@ namespace mongo {
         _db(0),
         _isReadOnly(false)
     {
-        beginTransaction();
         _finishInit( doauth );
-        commitTransaction();
     }
        
     /** "read lock, and set my context, all in one operation" 

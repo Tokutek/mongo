@@ -152,9 +152,14 @@ namespace mongo {
 
         tokulog(1) << "Initializing NamespaceIndex " << database_ << endl;
         {
-            const Client::Context::Transaction &txn = cc().getContext()->transaction();
+            Client::Context *ctx = cc().getContext();
+            bool madeTxn = false;
+            if (!ctx->hasTransaction()) {
+                madeTxn = true;
+                ctx->beginTransaction();
+            }
             DBC *cursor;
-            r = nsdb->cursor(nsdb, txn.txn(), &cursor, 0);
+            r = nsdb->cursor(nsdb, ctx->transaction().txn(), &cursor, 0);
             verify(r == 0);
 
             while (r != DB_NOTFOUND) {
@@ -164,6 +169,9 @@ namespace mongo {
 
             r = cursor->c_close(cursor);
             verify(r == 0);
+            if (madeTxn) {
+                ctx->commitTransaction();
+            }
         }
 
         /* if someone manually deleted the datafiles for a database,
