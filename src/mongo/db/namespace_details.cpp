@@ -242,11 +242,23 @@ namespace mongo {
         }
         string errmsg;
         BSONObjBuilder result;
+        // Save .system.indexes collection for last, because dropCollection tries to delete from it.
+        // It has itself and its _id index in the namespaces vector, so it is responsible for two entries.
+        // Leif can't prove that it will always be exactly 2, so we do this in a slightly more careful, but more robust, way.
         while (!namespaces->empty()) {
             NamespaceDetailsMap::iterator it = namespaces->begin();
+            while (it != namespaces->end() && mongoutils::str::contains(it->first, ".system.indexes")) {
+                // Skip anything that contains system.indexes for now.
+                it++;
+            }
+            if (it == namespaces->end()) {
+                // If we hit the end, we can start dropping from the beginning.
+                it = namespaces->begin();
+            }
             const Namespace &ns = it->first;
             dropCollection((string) ns, errmsg, result, true);
         }
+
         dassert(nsdb != NULL);
         storage::db_close(nsdb);
         nsdb = NULL;
