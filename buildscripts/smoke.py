@@ -46,6 +46,7 @@ from subprocess import (Popen,
                         PIPE,
                         call)
 import sys
+from tempfile import SpooledTemporaryFile
 import time
 
 from pymongo import Connection
@@ -458,23 +459,37 @@ def runTest(test):
     vlog.write("         Date : %s\n" % datetime.now().ctime())
     vlog.flush()
 
-    os.environ['MONGO_TEST_FILENAME'] = os.path.basename(path)
-    t1 = time.time()
-    r = call(buildlogger(argv), cwd=test_path, stdout=tests_log)
-    t2 = time.time()
-    del os.environ['MONGO_TEST_FILENAME']
+    tempfile = SpooledTemporaryFile(max_size=16*1024)
 
-    vlog.write("                %fms\n" % ((t2 - t1) * 1000))
-    vlog.flush()
+    try:
+        os.environ['MONGO_TEST_FILENAME'] = os.path.basename(path)
+        t1 = time.time()
+        r = call(buildlogger(argv), cwd=test_path, stdout=tempfile)
+        t2 = time.time()
+        del os.environ['MONGO_TEST_FILENAME']
 
-    if quiet:
-        qlog.write("%s%s : %s\n" % ((" " * max(0, 64 - len(os.path.basename(path)))),
-                                    os.path.basename(path),
-                                    ternary(r == 0, "[ pass ]", "[ fail ]")))
-        qlog.flush()
-    if r != 0:
-        raise TestExitFailure(path, r)
-    
+        vlog.write("                %fms\n" % ((t2 - t1) * 1000))
+        vlog.flush()
+
+        tempfile.seek(0)
+        for line in tempfile:
+            vlog.write(line)
+        vlog.flush()
+
+        if quiet:
+            qlog.write("%s%s : %s\n" % ((" " * max(0, 64 - len(os.path.basename(path)))),
+                                        os.path.basename(path),
+                                        ternary(r == 0, "[ pass ]", "[ fail ]")))
+            if r != 0:
+                tempfile.seek(0)
+                for line in tempfile:
+                    qlog.write(line)
+            qlog.flush()
+        if r != 0:
+            raise TestExitFailure(path, r)
+    finally:
+        tempfile.close()
+
     try:
         c = Connection( "127.0.0.1" , int(mongod_port) )
     except Exception,e:
