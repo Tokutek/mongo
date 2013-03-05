@@ -479,7 +479,7 @@ def runTest(test):
         if quiet:
             qlog.write("%s%s : %s\n" % ((" " * max(0, 64 - len(os.path.basename(path)))),
                                         os.path.basename(path),
-                                        ternary(r == 0, "[ pass ]", "[ fail ]")))
+                                        ternary(r == 0, "ok", "fail")))
             if r != 0:
                 tempfile.seek(0)
                 for line in tempfile:
@@ -718,10 +718,15 @@ def set_globals(options, tests):
     # file (or stdin) rather than running a suite of js tests
     file_of_commands_mode = options.File and options.mode == 'files'
 
+    quiet = options.quiet
     if options.tests_log_file is not None and len(options.tests_log_file) > 0:
         tests_log = open(options.tests_log_file, "w")
-    server_log_file = options.server_log_file
-    quiet = options.quiet
+    elif quiet:
+        tests_log = open(os.path.join(smoke_db_prefix, "tests.log"), "w")
+    if options.server_log_file is not None and len(options.server_log_file) > 0:
+        server_log_file = options.server_log_file
+    elif quiet:
+        server_log_file = os.path.join(smoke_db_prefix, "server.log")
 
 def clear_failfile():
     if os.path.exists(failfile):
