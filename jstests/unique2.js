@@ -36,20 +36,23 @@ assert.throws( function() { t.find( {$where:'aaa'} ).itcount(); } );
 assert( db.getLastError() );
 checkNprev( 1 );
 
-t.ensureIndex({k:1}, {unique:true, dropDups:true});
-// Check error flag was not set SERVER-2054.
-assert( !db.getLastError() );
-// Check that offset of previous error is correct.
-checkNprev( 2 );
+if (false) {
+    // dropDups is unsupported
+    t.ensureIndex({k:1}, {unique:true, dropDups:true});
+    // Check error flag was not set SERVER-2054.
+    assert( !db.getLastError() );
+    // Check that offset of previous error is correct.
+    checkNprev( 2 );
 
-// Check the dups were dropped.
-assert( t.count() == 1 ) ;
-assert( t.find().sort({k:1}).toArray().length == 1 ) ;
-assert( t.find().sort({k:1}).count() == 1 ) ;
+    // Check the dups were dropped.
+    assert( t.count() == 1 ) ;
+    assert( t.find().sort({k:1}).toArray().length == 1 ) ;
+    assert( t.find().sort({k:1}).count() == 1 ) ;
 
-// Check that a new conflicting insert will cause an error.
-t.insert({k:[2,3]});
-assert( db.getLastError() );
+    // Check that a new conflicting insert will cause an error.
+    t.insert({k:[2,3]});
+    assert( db.getLastError() );
+}
 
 t.drop();
 
@@ -66,49 +69,52 @@ assert.throws( function() { t.find( {$where:'aaa'} ).itcount(); } );
 assert( db.getLastError() );
 checkNprev( 1 );
 
-t.ensureIndex({k:1}, {background:true, unique:true, dropDups:true});
-// Check error flag was not set SERVER-2054.
-assert( !db.getLastError() );
-// Check that offset of pervious error is correct.
-checkNprev( 2 );
+if (false) {
+    // dropDups is unsupported
+    t.ensureIndex({k:1}, {background:true, unique:true, dropDups:true});
+    // Check error flag was not set SERVER-2054.
+    assert( !db.getLastError() );
+    // Check that offset of pervious error is correct.
+    checkNprev( 2 );
 
-// Check the dups were dropped.
-assert( t.count() == 1 ) ;
-assert( t.find().sort({k:1}).toArray().length == 1 ) ;
-assert( t.find().sort({k:1}).count() == 1 ) ;
+    // Check the dups were dropped.
+    assert( t.count() == 1 ) ;
+    assert( t.find().sort({k:1}).toArray().length == 1 ) ;
+    assert( t.find().sort({k:1}).count() == 1 ) ;
 
-// Check that a new conflicting insert will cause an error.
-t.insert({k:[2,3]});
-assert( db.getLastError() );
+    // Check that a new conflicting insert will cause an error.
+    t.insert({k:[2,3]});
+    assert( db.getLastError() );
 
-t.drop();
+    t.drop();
 
-/* test for good behavior when indexing multikeys */
+    /* test for good behavior when indexing multikeys */
 
-t.insert({k:3});
-t.insert({k:[2,3]});
-t.insert({k:[4,3]});
-t.insert({k:[4,3]}); // tests SERVER-4770
+    t.insert({k:3});
+    t.insert({k:[2,3]});
+    t.insert({k:[4,3]});
+    t.insert({k:[4,3]}); // tests SERVER-4770
 
-t.ensureIndex({k:1}, {unique:true, dropDups:true});
+    t.ensureIndex({k:1}, {unique:true, dropDups:true});
 
-assert( t.count() == 1 ) ;
-assert( t.find().sort({k:1}).toArray().length == 1 ) ;
-assert( t.find().sort({k:1}).count() == 1 ) ;
+    assert( t.count() == 1 ) ;
+    assert( t.find().sort({k:1}).toArray().length == 1 ) ;
+    assert( t.find().sort({k:1}).count() == 1 ) ;
 
-t.drop();
+    t.drop();
 
-/* same test wtih background:true*/
+    /* same test wtih background:true*/
 
-t.insert({k:3});
-t.insert({k:[2,3]});
-t.insert({k:[4,3]});
-t.insert({k:[4,3]}); 
+    t.insert({k:3});
+    t.insert({k:[2,3]});
+    t.insert({k:[4,3]});
+    t.insert({k:[4,3]}); 
 
-t.ensureIndex({k:1}, {unique:true, dropDups:true, background:true});
+    t.ensureIndex({k:1}, {unique:true, dropDups:true, background:true});
 
-assert( t.count() == 1 ) ;
-assert( t.find().sort({k:1}).toArray().length == 1 ) ;
-assert( t.find().sort({k:1}).count() == 1 ) ;
+    assert( t.count() == 1 ) ;
+    assert( t.find().sort({k:1}).toArray().length == 1 ) ;
+    assert( t.find().sort({k:1}).count() == 1 ) ;
 
-t.drop();
+    t.drop();
+}

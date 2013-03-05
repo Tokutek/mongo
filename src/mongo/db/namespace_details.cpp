@@ -293,6 +293,8 @@ namespace mongo {
     }
 
     void NamespaceDetails::createIndex(const BSONObj &idx_info, bool resetTransient) {
+        uassert(16449, "dropDups is not supported and is likely to remain unsupported for some time because it deletes arbitrary data",
+                !idx_info["dropDups"].trueValue());
         uassert(12588, "cannot add index with a background operation in progress", !indexBuildInProgress);
 
         if (nIndexes() >= NIndexesMax ) {
