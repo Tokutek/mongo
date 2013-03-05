@@ -300,7 +300,7 @@ namespace mongo {
                 TOKU_ENGINE_STATUS_ROW row = &mystat[i];
                 switch (row->type) {
                 case UINT64:
-                    status.append( row->keyname, (long long) row->value.num );
+                    status.appendNumber( row->keyname, (uint64_t)row->value.num );
                     break;
                 case CHARSTR:
                     status.append( row->keyname, row->value.str );
@@ -309,16 +309,16 @@ namespace mongo {
                     {
                         time_t t = row->value.num;
                         char tbuf[26];
-                        status.append( row->keyname, (long long) ctime_r(&t, tbuf) );
+                        status.appendNumber( row->keyname, (uint64_t)ctime_r(&t, tbuf) );
                     }
                     break;
                 case TOKUTIME:
-                    status.append( row->keyname, (long long) tokutime_to_seconds(row->value.num) );
+                    status.appendNumber( row->keyname, tokutime_to_seconds(row->value.num) );
                     break;
                 case PARCOUNT:
                     {
                         uint64_t v = read_partitioned_counter(row->value.parcount);
-                        status.append( row->keyname, (long long) v );
+                        status.appendNumber( row->keyname, v );
                     }
                     break;
                 default:
