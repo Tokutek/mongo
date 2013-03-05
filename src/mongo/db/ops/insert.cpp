@@ -21,6 +21,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/database.h"
 #include "mongo/db/oplog.h"
+#include "mongo/db/idgen.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
@@ -45,8 +46,9 @@ namespace mongo {
         }
     }
 
-    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, const BSONObj &obj) {
-        details->insertObject(obj, true);
+    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, const BSONObj &obj, bool overwrite) {
+        dassert(!obj["_id"].eoo());
+        details->insertObject(obj, overwrite);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }
@@ -60,7 +62,7 @@ namespace mongo {
         NamespaceDetails *details = nsdetails_maybe_create(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
 
-        insertOneObject(details, nsdt, obj);
+        insertOneObject(details, nsdt, addIdField(obj), overwrite);
         logOp("i", ns, obj);
     }
     

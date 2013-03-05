@@ -43,7 +43,6 @@
 #include "mongo/db/commands/fsync.h"
 #include "mongo/db/index.h"
 #include "mongo/db/jsobjmanipulator.h"
-#include "mongo/db/idgen.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/query.h"
@@ -731,7 +730,7 @@ namespace mongo {
         }
         BSONElement idField = js.getField( "_id" );
         uassert( 16440 ,  "_id cannot be an array", idField.type() != Array );
-        insertObject(ns, idField.eoo() ? addIdField(js) : js);
+        insertObject(ns, js);
     }
 
     NOINLINE_DECL void insertMulti(bool keepGoing, const char *ns, vector<BSONObj>& objs) {
