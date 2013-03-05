@@ -43,6 +43,13 @@ namespace mongo {
                 uasserted(ASSERT_ID_DUPKEY, mongoutils::str::stream() << coll << " already has an index on key " << key);
             }
             details->createIndex(obj);
+        } else if (legalClientSystemNS(ns, true)) {
+            if (mongoutils::str::endsWith(ns, ".system.users")) {
+                uassert( 14051 , "system.users entry needs 'user' field to be a string", obj["user"].type() == String );
+                uassert( 14052 , "system.users entry needs 'pwd' field to be a string", obj["pwd"].type() == String );
+                uassert( 14053 , "system.users entry needs 'user' field to be non-empty", obj["user"].String().size() );
+                uassert( 14054 , "system.users entry needs 'pwd' field to be non-empty", obj["pwd"].String().size() );
+            }
         }
     }
 
