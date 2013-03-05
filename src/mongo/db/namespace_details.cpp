@@ -112,8 +112,6 @@ namespace mongo {
             tokulog(1) << "Closing NamespaceIndex " << database_ << endl;
             storage::db_close(nsdb);
             dassert(namespaces.get() != NULL);
-        } else {
-            dassert(namespaces.get() == NULL);
         }
     }
 
