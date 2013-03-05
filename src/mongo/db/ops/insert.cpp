@@ -22,6 +22,8 @@
 #include "mongo/db/database.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/idgen.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
@@ -69,7 +71,9 @@ namespace mongo {
         NamespaceDetails *details = nsdetails_maybe_create(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
 
-        insertOneObject(details, nsdt, addIdField(obj), overwrite);
+        BSONObj objWithId = addIdField(obj);
+        BSONElementManipulator::lookForTimestamps(objWithId);
+        insertOneObject(details, nsdt, objWithId, overwrite);
         logOp("i", ns, obj);
     }
     
