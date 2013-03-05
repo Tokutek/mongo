@@ -1,4 +1,3 @@
-assert(false, "temp_cleanup test disabled because it uses mapreduce");
 
 mydb = db.getSisterDB( "temp_cleanup_test" )
 

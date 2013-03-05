@@ -1,4 +1,3 @@
-assert(false, "or4 test disabled: mapreduce unimplemented");
 t = db.jstests_or4;
 t.drop();
 

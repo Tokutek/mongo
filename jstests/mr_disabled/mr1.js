@@ -1,5 +1,3 @@
-assert(false, "mapreduce tests disabled");
-
 t = db.mr1;
 t.drop();
 

@@ -1,4 +1,3 @@
-assert(false, "mapreduce tests disabled");
 
 t = db.mr_outreduce;
 t.drop();

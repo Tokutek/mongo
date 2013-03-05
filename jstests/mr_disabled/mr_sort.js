@@ -1,5 +1,3 @@
-assert(false, "mapreduce tests disabled");
-assert(false, "disabled due to server crash");
 
 t = db.mr_sort;
 t.drop()
