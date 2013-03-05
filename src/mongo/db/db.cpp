@@ -889,7 +889,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             useHints = false;
         }
         if (params.count("nopreallocj")) {
-            cmdLine.preallocj = false;
+            out() << "nopreallocj deprecated" << endl;
         }
         if (params.count("nohttpinterface")) {
             noHttpInterface = true;

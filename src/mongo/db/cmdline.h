@@ -77,7 +77,6 @@ namespace mongo {
         bool quiet;            // --quiet
         bool noTableScan;      // --notablescan no table scans allowed
         bool prealloc;         // --noprealloc no preallocation of data files
-        bool preallocj;        // --nopreallocj no preallocation of journal files
         bool smallfiles;       // --smallfiles allocate smaller data files
 
         bool configsvr;        // --configsvr
@@ -149,7 +148,7 @@ namespace mongo {
     // todo move to cmdline.cpp?
     inline CmdLine::CmdLine() :
         port(DefaultDBPort), rest(false), jsonp(false), quiet(false),
-        noTableScan(false), prealloc(true), preallocj(true), smallfiles(sizeof(int*) == 4),
+        noTableScan(false), prealloc(true), smallfiles(sizeof(int*) == 4),
         configsvr(false), quota(false), quotaFiles(8), cpu(false),
         objcheck(false), oplogSize(0), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), pretouch(0), moveParanoia( true ),
