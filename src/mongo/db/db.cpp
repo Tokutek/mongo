@@ -653,8 +653,8 @@ static int mongoDbMain(int argc, char* argv[]) {
     //("directoryperdb", "each database will be stored in a separate directory")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
-    ("journalCommitInterval", po::value<unsigned>(), "how often to fsync recovery log (same as logFlushPeriod)")
-    ("logFlushPeriod", po::value<unsigned>(), "how often to fsync recovery log")
+    ("journalCommitInterval", po::value<uint32_t>(), "how often to fsync recovery log (same as logFlushPeriod)")
+    ("logFlushPeriod", po::value<uint32_t>(), "how often to fsync recovery log")
     ("journalOptions", po::value<int>(), "DEPRECATED")
     ("jsonp","allow JSONP access via http (has security implications)")
     ("noauth", "run without security")
@@ -844,7 +844,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             out() << "durOptions deprecated" <<endl;
         }
         if( params.count("journalCommitInterval") ) {
-            cmdLine.logFlushPeriod = params["journalCommitInterval"].as<unsigned>();
+            cmdLine.logFlushPeriod = params["journalCommitInterval"].as<uint32_t>();
             out() << "--journalCommitInterval deprecated, treating as --logFlushPeriod" << endl;
             if( cmdLine.logFlushPeriod < 0 || cmdLine.logFlushPeriod > 300 ) {
                 out() << "--logFlushPeriod out of allowed range (0-300ms)" << endl;
@@ -852,7 +852,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             }
         }
         if( params.count("logFlushPeriod") ) {
-            cmdLine.logFlushPeriod = params["logFlushPeriod"].as<unsigned>();
+            cmdLine.logFlushPeriod = params["logFlushPeriod"].as<uint32_t>();
             if( cmdLine.logFlushPeriod < 0 || cmdLine.logFlushPeriod > 300 ) {
                 out() << "--logFlushPeriod out of allowed range (0-300ms)" << endl;
                 dbexit( EXIT_BADOPTIONS );
