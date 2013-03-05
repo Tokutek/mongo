@@ -30,6 +30,8 @@ if has_option( 'smokedbprefix'):
     smokeFlags += ['--smoke-db-prefix', GetOption( 'smokedbprefix')]
 if has_option( 'smoke-server-opts'):
     smokeFlags += ['--smoke-server-opts', GetOption('smoke-server-opts')]
+if has_option( 'smoke-quiet'):
+    smokeFlags += ['--quiet']
 
 if 'startMongodSmallOplog' in COMMAND_LINE_TARGETS:
     smokeFlags += ["--small-oplog"]
