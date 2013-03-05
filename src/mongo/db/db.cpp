@@ -674,7 +674,7 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("shutdown", "kill a running server (for init scripts)")
 #endif
     ("slowms",po::value<int>(&cmdLine.slowMS)->default_value(100), "value of slow for profile and console log" )
-    ("smallfiles", "use a smaller default file size")
+    ("smallfiles", "DEPRECATED")
     ("syncdelay",po::value<double>(&cmdLine.syncdelay)->default_value(60), "seconds between disk syncs (0=never, but not recommended)")
     ("sysinfo", "print some diagnostic system information")
     ("upgrade", "upgrade db if needed")
@@ -893,8 +893,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             scriptingEnabled = false;
         }
         if (params.count("noprealloc")) {
-            cmdLine.prealloc = false;
-            cout << "note: noprealloc may hurt performance in many applications" << endl;
+            out() << "noprealloc is a deprecated parameter" << endl;
         }
         if (params.count("smallfiles")) {
             out() << " smallfiles is a deprecated parameter." << endl;

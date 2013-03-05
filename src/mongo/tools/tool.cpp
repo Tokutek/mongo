@@ -113,8 +113,6 @@ namespace mongo {
     int Tool::main( int argc , char ** argv ) {
         static StaticObserver staticObserver;
 
-        cmdLine.prealloc = false;
-
 #if( BOOST_VERSION >= 104500 )
     boost::filesystem::path::default_name_check( boost::filesystem2::no_check );
 #else
