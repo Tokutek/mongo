@@ -86,6 +86,7 @@ small_oplog_rs = False
 
 tests_log = sys.stdout
 server_log_file = ''
+quiet = False
 
 # This class just implements the with statement API, for a sneaky
 # purpose below.
@@ -179,7 +180,14 @@ class mongod(object):
                 argv = [utils.find_python(), "buildscripts/cleanbb.py", '--nokill', dir_name]
             else:
                 argv = [utils.find_python(), "buildscripts/cleanbb.py", dir_name]
-            call(argv)
+            if quiet:
+                f = open(server_log_file, "a")
+                try:
+                    call(argv, stdout=f)
+                finally:
+                    f.close()
+            else:
+                call(argv)
         utils.ensureDir(dir_name)
         argv = [mongod_executable, "--port", str(self.port), "--dbpath", dir_name]
         if self.kwargs.get('small_oplog'):
@@ -198,7 +206,8 @@ class mongod(object):
         if len(server_log_file) > 0:
             argv += ['--logpath', server_log_file]
         argv += [smoke_server_opts]
-        print "running " + " ".join(argv)
+        if not quiet:
+            print "running " + " ".join(argv)
         self.proc = self._start(buildlogger(argv, is_global=True))
 
         if not self.did_mongod_start(self.port):
@@ -401,9 +410,16 @@ def runTest(test):
 
     # sys.stdout.write() is more atomic than print, so using it prevents
     # lines being interrupted by, e.g., child processes
-    sys.stdout.write(" *******************************************\n")
-    sys.stdout.write("         Test : %s ...\n" % os.path.basename(path))
-    sys.stdout.flush()
+    if quiet:
+        vlog = tests_log
+        qlog = sys.stdout
+    else:
+        vlog = sys.stdout
+        qlog = None
+
+    vlog.write(" *******************************************\n")
+    vlog.write("         Test : %s ...\n" % os.path.basename(path))
+    vlog.flush()
 
     # FIXME: we don't handle the case where the subprocess
     # hangs... that's bad.
@@ -432,9 +448,9 @@ def runTest(test):
         argv = argv + [ '--nopreallocj' ]
     
     
-    sys.stdout.write("      Command : %s\n" % ' '.join(argv))
-    sys.stdout.write("         Date : %s\n" % datetime.now().ctime())
-    sys.stdout.flush()
+    vlog.write("      Command : %s\n" % ' '.join(argv))
+    vlog.write("         Date : %s\n" % datetime.now().ctime())
+    vlog.flush()
 
     os.environ['MONGO_TEST_FILENAME'] = os.path.basename(path)
     t1 = time.time()
@@ -442,9 +458,14 @@ def runTest(test):
     t2 = time.time()
     del os.environ['MONGO_TEST_FILENAME']
 
-    sys.stdout.write("                %fms\n" % ((t2 - t1) * 1000))
-    sys.stdout.flush()
+    vlog.write("                %fms\n" % ((t2 - t1) * 1000))
+    vlog.flush()
 
+    if quiet:
+        qlog.write("%s%s : %s\n" % ((" " * max(0, 64 - len(os.path.basename(path)))),
+                                    os.path.basename(path),
+                                    ternary(r == 0, "[ pass ]", "[ fail ]")))
+        qlog.flush()
     if r != 0:
         raise TestExitFailure(path, r)
     
@@ -452,8 +473,6 @@ def runTest(test):
         c = Connection( "127.0.0.1" , int(mongod_port) )
     except Exception,e:
         raise TestServerFailure(path)
-
-    print ""
 
 def run_tests(tests):
     # FIXME: some suites of tests start their own mongod, so don't
@@ -506,7 +525,8 @@ def run_tests(tests):
 
                 except TestFailure, f:
                     try:
-                        print f
+                        if not quiet:
+                            print f
                         # Record the failing test and re-raise.
                         losers[f.path] = f.status
                         raise f
@@ -635,7 +655,7 @@ def add_exe(e):
     return e
 
 def set_globals(options, tests):
-    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, small_oplog_rs, no_journal, no_preallocj, auth, keyFile, smoke_db_prefix, smoke_server_opts, server_log_file, tests_log, test_path
+    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, small_oplog_rs, no_journal, no_preallocj, auth, keyFile, smoke_db_prefix, smoke_server_opts, server_log_file, tests_log, quiet, test_path
     global file_of_commands_mode
     #Careful, this can be called multiple times
     test_path = options.test_path
@@ -680,6 +700,7 @@ def set_globals(options, tests):
     if options.tests_log_file is not None and len(options.tests_log_file) > 0:
         tests_log = open(options.tests_log_file, "w")
     server_log_file = options.server_log_file
+    quiet = options.quiet
 
 def clear_failfile():
     if os.path.exists(failfile):
@@ -807,6 +828,9 @@ def main():
                       help="Log file for the mongod server ('%default')")
     parser.add_option('--tests-log', dest='tests_log_file', default='',
                       help="Log file for the tests ('%default')")
+    parser.add_option('--quiet', dest='quiet', default=False,
+                      action="store_true",
+                      help='Generate a quieter report (use with --tests-log)')
 
     # Buildlogger invocation from command line
     parser.add_option('--buildlogger-builder', dest='buildlogger_builder', default=None,
@@ -866,7 +890,14 @@ def main():
 
     if options.with_cleanbb:
         dbroot = os.path.join(options.smoke_db_prefix, 'data', 'db')
-        call([utils.find_python(), "buildscripts/cleanbb.py", "--nokill", dbroot])
+        if options.quiet:
+            f = open(server_log_file, "a")
+            try:
+                call([utils.find_python(), "buildscripts/cleanbb.py", "--nokill", dbroot], stdout=f)
+            finally:
+                f.close()
+        else:
+            call([utils.find_python(), "buildscripts/cleanbb.py", "--nokill", dbroot])
 
     try:
         run_tests(tests)
