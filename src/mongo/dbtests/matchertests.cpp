@@ -158,6 +158,7 @@ namespace MatcherTests {
                 client().insert( ns(), fromjson( "{ a:[ {}, { b:1 } ] }" ) );
                 
                 Client::ReadContext context( ns() );
+                context.ctx().beginTransaction();
 
                 CoveredIndexMatcher matcher( BSON( "a.b" << 1 ), BSON( "$natural" << 1 ) );
                 MatchDetails details;
@@ -169,6 +170,7 @@ namespace MatcherTests {
                 // The '1' entry of the 'a' array is matched.
                 ASSERT( details.hasElemMatchKey() );
                 ASSERT_EQUALS( string( "1" ), details.elemMatchKey() );
+                context.ctx().commitTransaction();
             }
         };
         
@@ -182,6 +184,7 @@ namespace MatcherTests {
                 client().insert( ns(), fromjson( "{ a:[ {}, { b:9 }, { b:1 } ] }" ) );
                 
                 Client::ReadContext context( ns() );
+                context.ctx().beginTransaction();
                 
                 BSONObj query = BSON( "a.b" << 1 );
                 CoveredIndexMatcher matcher( query, BSON( "a.b" << 1 ) );
@@ -194,6 +197,7 @@ namespace MatcherTests {
                 // The '2' entry of the 'a' array is matched.
                 ASSERT( details.hasElemMatchKey() );
                 ASSERT_EQUALS( string( "2" ), details.elemMatchKey() );
+                context.ctx().commitTransaction();
             }
         };
         
@@ -208,6 +212,7 @@ namespace MatcherTests {
                 client().insert( ns(), fromjson( "{ a:[ { b:1 } ] }" ) );
                 
                 Client::ReadContext context( ns() );
+                context.ctx().beginTransaction();
                 
                 BSONObj query = BSON( "a.b" << 1 );
                 CoveredIndexMatcher matcher( query, BSON( "a.b" << 1 ) );
@@ -222,6 +227,7 @@ namespace MatcherTests {
                 // The '0' entry of the 'a' array is matched.
                 ASSERT( details.hasElemMatchKey() );
                 ASSERT_EQUALS( string( "0" ), details.elemMatchKey() );
+                context.ctx().commitTransaction();
             }
         };
         

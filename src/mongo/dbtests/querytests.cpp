@@ -25,6 +25,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/json.h"
 #include "mongo/db/lasterror.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/query.h"
@@ -44,6 +45,7 @@ namespace QueryTests {
         Client::Context _context;
     public:
         Base() : _context( ns() ) {
+            _context.beginTransaction();
             addIndex( fromjson( "{\"a\":1}" ) );
         }
         ~Base() {
@@ -52,6 +54,7 @@ namespace QueryTests {
                 for(; c->ok(); c->advance() ) {
                     deleteOneObject( nsdetails(ns()), &NamespaceDetailsTransient::get(ns()), c->currPK(), c->current() );
                 }
+                _context.commitTransaction();
                 DBDirectClient cl;
                 cl.dropIndexes( ns() );
             }
@@ -377,7 +380,7 @@ namespace QueryTests {
 		}
 
         void run() {
-            unimplemented("capped collection");
+            ASSERT("capped collection" == NULL);
             #if 0
             const char *ns = "unittests.querytests.TailableQueryOnId";
             BSONObj info;
@@ -412,7 +415,7 @@ namespace QueryTests {
             client().dropCollection( "unittests.querytests.OplogReplayMode" );
         }
         void run() {
-            unimplemented("QueryOption_OplogReplay");
+            ASSERT("QueryOption_OplogReplay" == NULL);
             #if 0
             const char *ns = "unittests.querytests.OplogReplayMode";
             insert( ns, BSON( "ts" << 0 ) );
@@ -438,7 +441,7 @@ namespace QueryTests {
             client().dropCollection( "unittests.querytests.OplogReplaySlaveReadTill" );
         }
         void run() {
-            unimplemented("capped collection");
+            ASSERT("capped collection" == NULL);
             #if 0
             const char *ns = "unittests.querytests.OplogReplaySlaveReadTill";
             Lock::DBWrite lk(ns);
@@ -996,7 +999,7 @@ namespace QueryTests {
             _n = 0;
         }
         void run() {
-            unimplemented("capped collection");
+            ASSERT("capped collection" == NULL);
             #if 0
             string err;
 
@@ -1143,7 +1146,7 @@ namespace QueryTests {
         }
 
         void run() {
-            unimplemented("capped collection");
+            ASSERT("capped collections not implemented" == NULL);
             #if 0
             BSONObj info;
             ASSERT( client().runCommand( "unittests", BSON( "create" << "querytests.findingstart" << "capped" << true << "$nExtents" << 5 << "autoIndexId" << false ), info ) );
@@ -1182,7 +1185,7 @@ namespace QueryTests {
         }
 
         void run() {
-            unimplemented("capped collection");
+            ASSERT("capped collection" == NULL);
             #if 0
             unsigned startNumCursors = ClientCursor::numCursors();
 
@@ -1221,7 +1224,7 @@ namespace QueryTests {
         FindingStartStale() : CollectionBase( "findingstart" ) {}
 
         void run() {
-            unimplemented("capped collection");
+            ASSERT("capped collection" == NULL);
             #if 0
             unsigned startNumCursors = ClientCursor::numCursors();
 
@@ -1274,7 +1277,7 @@ namespace QueryTests {
     public:
         Exhaust() : CollectionInternalBase( "exhaust" ) {}
         void run() {
-            unimplemented("capped collection");
+            ASSERT("capped collection" == NULL);
             #if 0
             BSONObj info;
             ASSERT( client().runCommand( "unittests",
