@@ -116,12 +116,18 @@ class mongod(object):
         self.auth = False
 
     def __enter__(self):
+        if quiet:
+            self.outfile = open(os.devnull, "w")
+        else:
+            self.outfile = sys.stdout
         self.start()
         return self
 
     def __exit__(self, type, value, traceback):
         try:
             self.stop()
+            if quiet:
+                self.outfile.close()
         except Exception, e:
             print >> sys.stderr, "error shutting down mongod"
             print >> sys.stderr, e
@@ -230,7 +236,7 @@ class mongod(object):
         child processes of this process can be killed with a single
         call to TerminateJobObject (see self.stop()).
         """
-        proc = Popen(argv)
+        proc = Popen(argv, stdout=self.outfile)
 
         if os.sys.platform == "win32":
             # Create a job object with the "kill on job close"
