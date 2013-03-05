@@ -932,10 +932,12 @@ namespace QueryOptimizerCursorTests {
             _cli.remove( ns(), BSON( "_id" << id ) );
             int count = 1;
             while( c->ok() ) {
-                if ( c->currentMatches() ) {
+                if ( !c->getsetdup( c->currPK() ) &&c->currentMatches() ) {
                     ++count;
                     int id = c->current().getIntField( "_id" );
-                    c->advance();
+                    while ( c->ok() && c->currentMatches() && c->current().getIntField( "_id" ) == id) {
+                        c->advance();
+                    }
                     _cli.remove( ns(), BSON( "_id" << id ) );
                 }
                 else {
@@ -1259,10 +1261,10 @@ namespace QueryOptimizerCursorTests {
             setQueryOptimizerCursor( BSON( "_id" << GT << 0 ), BSON( "$natural" << 1 ) );
             
             ASSERT( ok() );
-            ASSERT_EQUALS( 5, current().getIntField( "_id" ) );
-            ASSERT( advance() );
             ASSERT_EQUALS( 4, current().getIntField( "_id" ) );
             ASSERT( advance() );                
+            ASSERT_EQUALS( 5, current().getIntField( "_id" ) );
+            ASSERT( advance() );
             ASSERT_EQUALS( 6, current().getIntField( "_id" ) );
             ASSERT( !advance() );                
             ctx.commitTransaction();
@@ -1415,7 +1417,7 @@ namespace QueryOptimizerCursorTests {
                       ns() ) );
             
             // Construct component client cursors.
-            ASSERT( nNsCursors() > 1 );
+            ASSERT( nNsCursors() > 0 );
             
                 ClientCursor::invalidate( ns() );
                 ASSERT_EQUALS( 0U, nNsCursors() );
@@ -1442,7 +1444,7 @@ namespace QueryOptimizerCursorTests {
                           ns() ) );
                 
                 // Construct component client cursors.
-                ASSERT( nNsCursors() > 1 );
+                ASSERT( nNsCursors() > 0 );
                 
                 ClientCursor::idleTimeReport( 600001 );
                 ASSERT_EQUALS( 0U, nNsCursors() );
@@ -3136,23 +3138,6 @@ namespace QueryOptimizerCursorTests {
             }
         };
 
-        class BecomesMultikey : public Base {
-            virtual void setupCollection() {
-                _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-                _cli.insert( ns(), BSON( "a" << 1 ) );
-            }
-            virtual void checkExplain() {
-                ASSERT( !_explain[ "isMultiKey" ].Bool() );
-                
-                {
-                    dbtemprelease t;
-                    _cli.insert( ns(), BSON( "a" << BSON_ARRAY( 1 << 2 ) ) );
-                }
-                _cursor->currentMatches();
-                ASSERT( _explainInfo->bson()[ "isMultiKey" ].Bool() );
-            }
-        };
-        
         class Count : public Base {
             virtual void setupCollection() {
                 _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
@@ -3548,7 +3533,8 @@ namespace QueryOptimizerCursorTests {
             add<Explain::PartialIteration>();
             add<Explain::Multikey>();
             add<Explain::MultikeyInitial>();
-            add<Explain::BecomesMultikey>();
+            // Cursors should never "become" multikey, because of transaction isolation.
+            //add<Explain::BecomesMultikey>();
             add<Explain::Count>();
             add<Explain::MultipleClauses>();
             add<Explain::MultiCursorTakeover>();

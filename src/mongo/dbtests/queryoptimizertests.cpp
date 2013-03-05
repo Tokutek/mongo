@@ -1099,7 +1099,7 @@ namespace QueryOptimizerTests {
                 insertObject( ns(), one );
                 insertObject( ns(), two );
                 insertObject( ns(), three );
-                deleteObjects( ns(), BSON( "_id" << GT << 0 << "a" << GT << 0 ), true );
+                deleteObjects( ns(), BSON( "_id" << GTE << 3 << "a" << GTE << 1 ), true );
                 for( boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() ); c->ok(); c->advance() )
                     ASSERT( 3 != c->current().getIntField( "_id" ) );
             }
@@ -1115,9 +1115,9 @@ namespace QueryOptimizerTests {
                 insertObject( ns(), one );
                 insertObject( ns(), two );
                 insertObject( ns(), three );
-                deleteObjects( ns(), BSON( "a" << GTE << 0 ), true );
+                deleteObjects( ns(), BSON( "a" << GTE << 2 ), true );
                 for( boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() ); c->ok(); c->advance() )
-                    ASSERT( 2 != c->current().getIntField( "_id" ) );
+                    ASSERT( 0 != c->current().getIntField( "_id" ) );
             }
         };
 
