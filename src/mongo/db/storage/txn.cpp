@@ -36,7 +36,7 @@ namespace mongo {
 
         void commit_txn(DB_TXN *txn, int flags) {
             // TODO: move to only where we need it
-            const int extra_flags = cmdLine.sync_commit ? 0 : DB_TXN_NOSYNC;
+            const int extra_flags = (cmdLine.logFlushPeriod == 0) ? 0 : DB_TXN_NOSYNC;
             int r = txn->commit(txn, flags | extra_flags);
             verify(r == 0);
         }

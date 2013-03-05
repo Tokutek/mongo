@@ -186,6 +186,7 @@ namespace mongo {
             help << "{ setParameter:1, <param>:<value> }\n";
             help << "supported so far:\n";
             help << "  journalCommitInterval\n";
+            help << "  logFlushPeriod\n";
             help << "  logLevel\n";
             help << "  notablescan\n";
             help << "  quiet\n";
@@ -201,8 +202,15 @@ namespace mongo {
                 }
                 int x = (int) cmdObj["journalCommitInterval"].Number();
                 verify( x > 1 && x < 500 );
-                cmdLine.journalCommitInterval = x;
-                log() << "setParameter journalCommitInterval=" << x << endl;
+                cmdLine.logFlushPeriod = x;
+                log() << "setParameter logFlushPeriod=" << x << endl;
+                s++;
+            }
+            if( cmdObj.hasElement("logFlushPeriod") ) { 
+                int x = (int) cmdObj["logFlushPeriod"].Number();
+                verify( x > 1 && x < 500 );
+                cmdLine.logFlushPeriod = x;
+                log() << "setParameter logFlushPeriod=" << x << endl;
                 s++;
             }
             if( cmdObj.hasElement("notablescan") ) {

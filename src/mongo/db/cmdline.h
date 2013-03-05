@@ -87,7 +87,7 @@ namespace mongo {
         bool cpu;              // --cpu show cpu time periodically
 
         bool dur;                       // --dur durability (now --journal)
-        unsigned journalCommitInterval; // group/batch commit interval ms
+        uint32_t logFlushPeriod; // group/batch commit interval ms
 
         /** --durOptions 7      dump journal and terminate without doing anything further
             --durOptions 4      recover and terminate without listening
@@ -135,7 +135,6 @@ namespace mongo {
         // TokuDB variables
         bool directio;
         uint64_t cachetable_size;
-        bool sync_commit;
 
         static void launchOk();
 
@@ -168,11 +167,11 @@ namespace mongo {
         durOptions(0), objcheck(false), oplogSize(0), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), pretouch(0), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
-        directio(false), cachetable_size(0), sync_commit(true)
+        directio(false), cachetable_size(0)
     {
         started = time(0);
 
-        journalCommitInterval = 0; // 0 means use default
+        logFlushPeriod = 0; // 0 means fsync every transaction TODO, find a better default
         dur = false;
 #if defined(_DURABLEDEFAULTON)
         dur = true;

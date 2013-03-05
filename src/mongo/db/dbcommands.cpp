@@ -192,7 +192,7 @@ namespace mongo {
             if ( cmdObj["j"].trueValue() || cmdObj["fsync"].trueValue()) {
                 // only bother to flush recovery log 
                 // if we are not already fsyncing on commit
-                if (!cmdLine.sync_commit) {
+                if (!cmdLine.logFlushPeriod != 0) {
                     storage::log_flush();
                 }
             }

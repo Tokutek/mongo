@@ -131,6 +131,8 @@ namespace mongo {
             r = env->set_default_bt_compare(env, dbt_bson_compare);
             verify(r == 0);
 
+            env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
+
             const int env_flags = DB_INIT_LOCK|DB_INIT_MPOOL|DB_INIT_TXN|DB_CREATE|DB_PRIVATE|DB_INIT_LOG|DB_RECOVER;
             const int env_mode = S_IRWXU|S_IRGRP|S_IROTH|S_IXGRP|S_IXOTH;
             r = env->open(env, dbpath.c_str(), env_flags, env_mode);

@@ -657,7 +657,8 @@ static int mongoDbMain(int argc, char* argv[]) {
     //("directoryperdb", "each database will be stored in a separate directory")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "enable journaling")
-    ("journalCommitInterval", po::value<unsigned>(), "how often to group/batch commit (ms)")
+    ("journalCommitInterval", po::value<unsigned>(), "how often to fsync recovery log (same as logFlushPeriod)")
+    ("logFlushPeriod", po::value<unsigned>(), "how often to fsync recovery log")
     ("journalOptions", po::value<int>(), "journal diagnostic options")
     ("jsonp","allow JSONP access via http (has security implications)")
     ("noauth", "run without security")
@@ -727,7 +728,6 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("arbiter", "DEPRECATED")
     ("opIdMem", "DEPRECATED")
     ("directio", "use direct I/O in tokudb")
-    ("nosync_commit", "don't fsync on txn commit")
     ("cachetable_size", po::value<uint64_t>(), "tokudb cachetable size")
     ;
 
@@ -849,9 +849,19 @@ static int mongoDbMain(int argc, char* argv[]) {
         if( params.count("journalCommitInterval") ) {
             // don't check if dur is false here as many will just use the default, and will default to off on win32.
             // ie no point making life a little more complex by giving an error on a dev environment.
-            cmdLine.journalCommitInterval = params["journalCommitInterval"].as<unsigned>();
-            if( cmdLine.journalCommitInterval <= 1 || cmdLine.journalCommitInterval > 300 ) {
-                out() << "--journalCommitInterval out of allowed range (0-300ms)" << endl;
+            cmdLine.logFlushPeriod = params["journalCommitInterval"].as<unsigned>();
+            out() << "--journalCommitInterval deprecated, treating as --logFlushPeriod" << endl;
+            if( cmdLine.logFlushPeriod < 0 || cmdLine.logFlushPeriod > 300 ) {
+                out() << "--logFlushPeriod out of allowed range (0-300ms)" << endl;
+                dbexit( EXIT_BADOPTIONS );
+            }
+        }
+        if( params.count("logFlushPeriod") ) {
+            // don't check if dur is false here as many will just use the default, and will default to off on win32.
+            // ie no point making life a little more complex by giving an error on a dev environment.
+            cmdLine.logFlushPeriod = params["logFlushPeriod"].as<unsigned>();
+            if( cmdLine.logFlushPeriod < 0 || cmdLine.logFlushPeriod > 300 ) {
+                out() << "--logFlushPeriod out of allowed range (0-300ms)" << endl;
                 dbexit( EXIT_BADOPTIONS );
             }
         }
@@ -860,9 +870,6 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
         if (params.count("directio")) {
             cmdLine.directio = true;
-        }
-        if (params.count("nosync_commit")) {
-            cmdLine.sync_commit = false;
         }
         if (params.count("cachetable_size")) {
             cmdLine.cachetable_size = params["cachetable_size"].as<uint64_t>();
