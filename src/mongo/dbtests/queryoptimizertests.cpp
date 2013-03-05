@@ -72,12 +72,16 @@ namespace QueryOptimizerTests {
         public:
             Base() : _ctx( ns() ) , indexNum_( 0 ) {
                 string err;
+                _ctx.beginTransaction();
                 userCreateNS( ns(), BSONObj(), err, false );
+                _ctx.commitTransaction();
             }
             ~Base() {
                 if ( !nsd() )
                     return;
+                _ctx.beginTransaction();
                 dropCollection( ns() );
+                _ctx.commitTransaction();
             }
         protected:
             static const char *ns() { return "unittests.QueryPlanTests"; }
@@ -581,10 +585,11 @@ namespace QueryOptimizerTests {
         public:
             void run() {
                 client().insert( "unittests.system.indexes",
-                                BSON( "ns" << ns() <<
-                                     "key" << BSON( "a" << 1 ) <<
-                                     "name" << client().genIndexName( BSON( "a" <<  1 ) ) <<
-                                     "sparse" << true ) );
+                                 BSON( "ns" << ns() <<
+                                       "key" << BSON( "a" << 1 ) <<
+                                       "name" << client().genIndexName( BSON( "a" <<  1 ) ) <<
+                                       "sparse" << true ) );
+                               
 
                 // Non $exists predicates allow the sparse index.
                 assertAllowed( BSON( "a" << 1 ) );
@@ -845,6 +850,7 @@ namespace QueryOptimizerTests {
         public:
             Base() : _context( ns() ) {
                 string err;
+                _context.beginTransaction();
                 userCreateNS( ns(), BSONObj(), err, false );
             }
             virtual ~Base() {
@@ -852,6 +858,7 @@ namespace QueryOptimizerTests {
                     return;
                 NamespaceDetailsTransient::get_inlock( ns() ).clearQueryCache();
                 dropCollection( ns() );
+                _context.commitTransaction();
             }
         protected:
             static void assembleRequest( const string &ns, BSONObj query, int nToReturn, int nToSkip, BSONObj *fieldsToReturn, int queryOptions, Message &toSend ) {
@@ -1230,8 +1237,8 @@ namespace QueryOptimizerTests {
         class PossiblePlans : public Base {
         public:
             void run() {
-                client().ensureIndex( ns(), BSON( "a" << 1 ) );
-                client().ensureIndex( ns(), BSON( "b" << 1 ) );
+                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 
                 {
                     shared_ptr<QueryPlanSet> qps = makeQps( BSON( "a" << 1 ), BSONObj() );
@@ -1314,7 +1321,7 @@ namespace QueryOptimizerTests {
         class AvoidUnhelpfulRecordedPlan : public Base {
         public:
             void run() {
-                client().ensureIndex( ns(), BSON( "a" << 1 ) );
+                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
 
                 // Record the {a:1} index for a {b:1} query.
                 NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get( ns() );
@@ -1335,8 +1342,8 @@ namespace QueryOptimizerTests {
         class AvoidDisallowedRecordedPlan : public Base {
         public:
             void run() {
-                client().insert( "unittests.system.indexes",
-                                BSON( "ns" << ns() <<
+                insertObject( "unittests.system.indexes",
+                               BSON( "ns" << ns() <<
                                      "key" << BSON( "a" << 1 ) <<
                                      "name" << client().genIndexName( BSON( "a" <<  1 ) ) <<
                                      "sparse" << true ) );
@@ -1364,7 +1371,7 @@ namespace QueryOptimizerTests {
                 BSONObj naturalIndex = BSON( "$natural" << 1 );
                 BSONObj specialIndex = BSON( "a" << "2d" );
                 BSONObj query = BSON( "a" << BSON_ARRAY( 0 << 0 ) );
-                client().ensureIndex( ns(), specialIndex );
+                Helpers::ensureIndex( ns(), specialIndex, false, "a_2d" );
 
                 // The special plan is chosen if allowed.
                 assertSingleIndex( specialIndex, makeQps( query ) );
@@ -1403,13 +1410,17 @@ namespace QueryOptimizerTests {
     public:
         Base() : _ctx( ns() ) {
             string err;
+            _ctx.beginTransaction();
             userCreateNS( ns(), BSONObj(), err, false );
+            //_ctx.commitTransaction();
         }
         ~Base() {
             if ( !nsd() )
                 return;
             string s( ns() );
+            //_ctx.beginTransaction();
             dropCollection( ns() );
+            _ctx.commitTransaction();
         }
     protected:
         static const char *ns() { return "unittests.QueryOptimizerTests"; }
@@ -1442,8 +1453,8 @@ namespace QueryOptimizerTests {
         class PossiblePlans : public Base {
         public:
             void run() {
-                client().ensureIndex( ns(), BSON( "a" << 1 ) );
-                client().ensureIndex( ns(), BSON( "b" << 1 ) );
+                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 
                 {
                     shared_ptr<MultiPlanScanner> mps = makeMps( BSON( "a" << 1 ), BSONObj() );

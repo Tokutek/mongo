@@ -39,15 +39,16 @@ namespace RemoveTests {
                 client.insert( ns, BSON( "_id" << i ) );
             }
             
-            log(0) << "removeRange is broken" << endl;
-            if (0) {
+            {
                 // Remove _id range [_min, _max).
                 Lock::DBWrite lk(ns);
                 Client::Context ctx( ns );
+                ctx.beginTransaction();
                 Helpers::removeRange( ns,
                                       BSON( "_id" << _min ),
                                       BSON( "_id" << _max ),
                                       BSON( "_id" << 1 ) );
+                ctx.commitTransaction();
             }
 
             // Check that the expected documents remain.

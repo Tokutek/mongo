@@ -133,6 +133,7 @@ namespace mongo {
         }
         BSONObj currKey() const { return _c ? _c->currKey() : BSONObj(); }
         BSONObj currPK() const { return _c ? _c->currPK() : BSONObj(); }
+        BSONObj current() const { return _c ? _c->current() : BSONObj(); }
         bool currentMatches( MatchDetails *details ) {
             if ( !_c || !_c->ok() ) {
                 _matchCounter.setMatch( false );
@@ -256,10 +257,7 @@ namespace mongo {
                 return _takeover->current();
             }
             assertOk();
-            BSONObj currObj;
-            bool found = nsdetails(_mps->ns())->findById(currPK(), currObj, false);
-            verify(found);
-            return currObj;
+            return _currOp->current();
         }
         
         virtual BSONObj currPK() const { return _takeover ? _takeover->currPK() : _currPK(); }
