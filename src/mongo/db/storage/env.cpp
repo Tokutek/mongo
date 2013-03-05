@@ -113,8 +113,8 @@ namespace mongo {
             int r = db_env_create(&env, 0);
             verify(r == 0);
 
-            const uint64_t cachesize = (cmdLine.cachetable_size > 0
-                                        ? cmdLine.cachetable_size
+            const uint64_t cachesize = (cmdLine.cacheSize > 0
+                                        ? cmdLine.cacheSize
                                         : calculate_cachesize());
             const uint32_t bytes = cachesize % (1024L * 1024L * 1024L);
             const uint32_t gigabytes = cachesize >> 30;
@@ -138,17 +138,17 @@ namespace mongo {
             r = env->open(env, dbpath.c_str(), env_flags, env_mode);
             verify(r == 0);
 
-            const int checkpoint_period = 60;
+            const int checkpoint_period = cmdLine.checkpointPeriod;
             r = env->checkpointing_set_period(env, checkpoint_period);
             verify(r == 0);
             tokulog(1) << "checkpoint period set to " << checkpoint_period << " seconds." << endl;
 
-            const int cleaner_period = 2;
+            const int cleaner_period = cmdLine.cleanerPeriod;
             r = env->cleaner_set_period(env, cleaner_period);
             verify(r == 0);
             tokulog(1) << "cleaner period set to " << cleaner_period << " seconds." << endl;
 
-            const int cleaner_iterations = 5;
+            const int cleaner_iterations = cmdLine.cleanerIterations;
             r = env->cleaner_set_iterations(env, cleaner_iterations);
             verify(r == 0);
             tokulog(1) << "cleaner iterations set to " << cleaner_iterations << "." << endl;

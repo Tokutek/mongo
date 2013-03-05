@@ -712,7 +712,7 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("fastsync", "indicate that this instance is starting from a dbpath snapshot of the repl peer")
     ("pretouch", po::value<int>(), "n pretouch threads for applying replicationed operations") // experimental
     ("command", po::value< vector<string> >(), "command")
-    ("cacheSize", po::value<long>(), "cache size (in MB) for rec store")
+    ("cacheSize", po::value<uint64_t>(), "cache size (in MB) for rec store")
     ("nodur", "DEPRECATED")
     // things we don't want people to use
     ("nohints", "ignore query hints")
@@ -724,7 +724,9 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("arbiter", "DEPRECATED")
     ("opIdMem", "DEPRECATED")
     ("directio", "use direct I/O in tokudb")
-    ("cachetable_size", po::value<uint64_t>(), "tokudb cachetable size")
+    ("checkpointPeriod", po::value<uint32_t>(), "tokudb time between checkpoints, 0 means never checkpoint")
+    ("cleanerPeriod", po::value<uint32_t>(), "tokudb time between cleaner thread operations, 0 means never run")
+    ("cleanerIterations", po::value<uint32_t>(), "tokudb number of iterations per cleaner thread operation, 0 means never run")
     ;
 
     positional_options.add("command", 3);
@@ -862,8 +864,17 @@ static int mongoDbMain(int argc, char* argv[]) {
         if (params.count("directio")) {
             cmdLine.directio = true;
         }
-        if (params.count("cachetable_size")) {
-            cmdLine.cachetable_size = params["cachetable_size"].as<uint64_t>();
+        if (params.count("checkpointPeriod")) {
+            cmdLine.checkpointPeriod = params["checkpointPeriod"].as<uint32_t>();
+        }
+        if (params.count("cleanerPeriod")) {
+            cmdLine.cleanerPeriod = params["cleanerPeriod"].as<uint32_t>();
+        }
+        if (params.count("cleanerIterations")) {
+            cmdLine.cleanerIterations = params["cleanerIterations"].as<uint32_t>();
+        }
+        if (params.count("cacheSize")) {
+            cmdLine.cacheSize = params["cacheSize"].as<uint64_t>();
         }
 #if 0
         if (params.count("repairpath")) {
@@ -982,7 +993,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             verify(cmdLine.oplogSize > 0);
         }
         if (params.count("cacheSize")) {
-            long x = params["cacheSize"].as<long>();
+            long x = params["cacheSize"].as<uint64_t>();
             if (x <= 0) {
                 out() << "bad --cacheSize arg" << endl;
                 dbexit( EXIT_BADOPTIONS );

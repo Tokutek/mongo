@@ -117,7 +117,10 @@ namespace mongo {
         
         // TokuDB variables
         bool directio;
-        uint64_t cachetable_size;
+        uint64_t cacheSize;
+        uint32_t checkpointPeriod;
+        uint32_t cleanerPeriod;
+        uint32_t cleanerIterations;
 
         static void launchOk();
 
@@ -150,11 +153,14 @@ namespace mongo {
         objcheck(false), oplogSize(0), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), pretouch(0), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
-        directio(false), cachetable_size(0)
+        directio(false), cacheSize(0)
     {
         started = time(0);
 
         logFlushPeriod = 0; // 0 means fsync every transaction TODO, find a better default
+        cleanerPeriod = 2;
+        cleanerIterations = 5;
+        checkpointPeriod = 60;
 #ifdef MONGO_SSL
         sslOnNormalPorts = false;
         sslServerManager = 0;
