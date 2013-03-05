@@ -56,7 +56,7 @@ namespace mongo {
         NamespaceDetailsTransient::getCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
                                              &simpleEqualityMatch );
         try {
-            while( cursor->ok() ) {
+            for ( ; cursor->ok() ; cursor->advance() ) {
                 
                 // With simple equality matching there is no need to use the matcher because the bounds
                 // are enforced by the FieldRangeVectorIterator and only key fields have constraints.  There
@@ -78,7 +78,6 @@ namespace mongo {
                         }
                     }
                 }
-                cursor->advance();
             }
             ctx.commitTransaction();
             return count;

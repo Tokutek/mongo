@@ -783,25 +783,16 @@ namespace mongo {
                     // object is same as previous, add to array
                     all.push_back( o );
                     if ( pm->hits() % 100 == 0 ) {
-#if 0
-                        if ( ! cursor->yield() ) {
-                            cursor.release();
-                            break;
-                        }
-#endif
                         killCurrentOp.checkForInterrupt();
                     }
                     continue;
                 }
-
-                //ClientCursor::YieldLock yield (cursor.get());
 
                 try {
                     // reduce a finalize array
                     finalReduce( all );
                 }
                 catch (...) {
-                    //yield.relock();
                     cursor.release();
                     throw;
                 }
@@ -809,13 +800,6 @@ namespace mongo {
                 all.clear();
                 prev = o;
                 all.push_back( o );
-
-#if 0
-                if ( ! yield.stillOk() ) {
-                    cursor.release();
-                    break;
-                }
-#endif
 
                 killCurrentOp.checkForInterrupt();
             }
@@ -1100,21 +1084,18 @@ namespace mongo {
 
                         Timer mt;
                         // go through each doc
-                        while ( cursor->ok() ) {
+                        for ( ; cursor->ok() ; cursor->advance() ) {
                             if ( ! cursor->currentMatches() ) {
-                                cursor->advance();
                                 continue;
                             }
 
                             // make sure we dont process duplicates in case data gets moved around during map
                             // TODO This won't actually help when data gets moved, it's to handle multikeys.
                             if ( cursor->currentIsDup() ) {
-                                cursor->advance();
                                 continue;
                             }
                                                         
                             BSONObj o = cursor->current();
-                            cursor->advance();
 
                             // check to see if this is a new object we don't own yet
                             // because of a chunk migration
@@ -1127,23 +1108,6 @@ namespace mongo {
                             if ( config.verbose ) mapTime += mt.micros();
 
                             num++;
-                            if ( num % 100 == 0 ) {
-#if 0
-                                // try to yield lock regularly
-                                ClientCursor::YieldLock yield (cursor.get());
-                                Timer t;
-                                // check if map needs to be dumped to disk
-                                state.checkSize();
-                                inReduce += t.micros();
-
-                                if ( ! yield.stillOk() ) {
-                                    cursor.release();
-                                    break;
-                                }
-
-                                killCurrentOp.checkForInterrupt();
-#endif
-                            }
                             pm.hit();
 
                             if ( config.limit && num >= config.limit )

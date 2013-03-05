@@ -95,7 +95,7 @@ namespace mongo {
             
             auto_ptr<ClientCursor> cc (new ClientCursor(QueryOption_NoCursorTimeout, cursor, ns));
 
-            while ( cursor->ok() ) {
+            for ( ; cursor->ok(); cursor->advance() ) {
                 nscanned++;
                 bool loadedRecord = false;
 
@@ -124,8 +124,6 @@ namespace mongo {
 
                 if ( loadedRecord || md.hasLoadedRecord() )
                     nscannedObjects++;
-
-                cursor->advance();
 
                 RARELY killCurrentOp.checkForInterrupt();
             }

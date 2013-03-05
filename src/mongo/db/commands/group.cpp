@@ -91,16 +91,13 @@ namespace mongo {
             ClientCursor::Holder ccPointer( new ClientCursor( QueryOption_NoCursorTimeout, cursor,
                                                              ns ) );
 
-            while ( cursor->ok() ) {
+            for ( ; cursor->ok() ; cursor->advance() ) {
                 
                 if ( !cursor->currentMatches() || cursor->getsetdup( cursor->currPK() ) ) {
-                    cursor->advance();
                     continue;
                 }
                 
                 BSONObj obj = cursor->current();
-                cursor->advance();
-
                 BSONObj key = getKey( obj , keyPattern , keyFunction , keysize / keynum , s.get() );
                 keysize += key.objsize();
                 keynum++;

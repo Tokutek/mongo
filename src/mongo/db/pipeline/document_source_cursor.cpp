@@ -85,26 +85,6 @@ namespace mongo {
                 cursor()->ok() && cursor()->c()->keyFieldsOnly());
     }
 
-#if 0
-    void DocumentSourceCursor::yieldSometimes() {
-        try { // SERVER-5752 may make this try unnecessary
-            // if we are index only we don't need the recored
-            bool cursorOk = cursor()->yieldSometimes(canUseCoveredIndex()
-                                                     ? ClientCursor::DontNeed
-                                                     : ClientCursor::WillNeed);
-            uassert( 16028, "collection or database disappeared when cursor yielded", cursorOk );
-        }
-        catch(SendStaleConfigException& e){
-            // We want to ignore this because the migrated documents will be filtered out of the
-            // cursor anyway and, we don't want to restart the aggregation after every migration.
-
-            log() << "Config changed during aggregation - command will resume" << endl;
-            // useful for debugging but off by default to avoid looking like a scary error.
-            LOG(1) << "aggregation stale config exception: " << e.what() << endl;
-        }
-    }
-#endif
-
     void DocumentSourceCursor::findNext() {
 
         if ( !_cursorWithContext ) {
@@ -112,15 +92,7 @@ namespace mongo {
             return;
         }
 
-        for( ; cursor()->ok(); cursor()->advance() ) {
-
-#if 0
-            yieldSometimes();
-            if ( !cursor()->ok() ) {
-                // The cursor was exhausted during the yield.
-                break;
-            }
-#endif
+        for ( ; cursor()->ok(); cursor()->advance() ) {
 
             if ( !cursor()->currentMatches() || cursor()->currentIsDup() )
                 continue;

@@ -1041,17 +1041,14 @@ namespace mongo {
             }
             auto_ptr<ClientCursor> cc (new ClientCursor(QueryOption_NoCursorTimeout, cursor, ns.c_str()));
 
-            while ( cursor->ok() ) {
+            for ( ; cursor->ok() ; cursor->advance() ) {
                 if ( ! cursor->matcher()->matchesCurrent( cursor.get() ) ) {
                     log() << "**** NOT MATCHING ****" << endl;
                     PRINT(cursor->current());
-                    cursor->advance();
                     continue;
                 }
 
                 BSONObj obj = cursor->current();
-                cursor->advance();
-
                 BSONElement ne = obj["n"];
                 verify(ne.isNumber());
                 int myn = ne.numberInt();
@@ -1064,40 +1061,11 @@ namespace mongo {
                     uassert( 10040 ,  "chunks out of order" , n == myn );
                 }
 
-#if 0
-                // make a copy of obj since we access data in it while yielding
-                BSONObj owned = obj.getOwned();
                 int len;
-                const char * data = owned["data"].binDataClean( len );
+                const char * data = obj["data"].binDataClean( len );
 
-                ClientCursor::YieldLock yield (cc.get());
-                try {
-                    md5_append( &st , (const md5_byte_t*)(data) , len );
-                    n++;
-                }
-                catch (...) {
-                    if ( ! yield.stillOk() ) // relocks
-                        cc.release();
-                    throw;
-                }
-
-                try { // SERVER-5752 may make this try unnecessary
-                    if ( ! yield.stillOk() ) { // relocks and checks shard version
-                        cc.release();
-                        if (!partialOk)
-                            uasserted(13281, "File deleted during filemd5 command");
-                    }
-                }
-                catch(SendStaleConfigException& e){
-                    // return partial results.
-                    // Mongos will get the error at the start of the next call if it doesn't update first.
-                    log() << "Config changed during filemd5 - command will resume " << endl;
-
-                    // useful for debugging but off by default to avoid looking like a scary error.
-                    LOG(1) << "filemd5 stale config exception: " << e.what() << endl;
-                    break;
-                }
-#endif
+                md5_append( &st , (const md5_byte_t*)(data) , len );
+                n++;
             }
 
             if (partialOk)
