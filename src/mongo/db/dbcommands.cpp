@@ -481,11 +481,6 @@ namespace mongo {
                 int m = 0; //(int) (MemoryMappedFile::totalMappedLength() / ( 1024 * 1024 ));
                 t.appendNumber( "mapped" , m );
                 
-                if ( cmdLine.dur ) {
-                    m *= 2;
-                    t.appendNumber( "mappedWithJournal" , m );
-                }
-
                 t.done();
 
             }

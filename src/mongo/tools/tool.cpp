@@ -75,7 +75,6 @@ namespace mongo {
              "server - needs to lock the data directory, so cannot be "
              "used if a mongod is currently accessing the same path" )
             ("directoryperdb", "if dbpath specified, each db is in a separate directory" )
-            ("journal", "enable journaling" )
             ;
 
         if ( access & SPECIFY_DBCOL )
@@ -115,10 +114,6 @@ namespace mongo {
         static StaticObserver staticObserver;
 
         cmdLine.prealloc = false;
-
-        // The default value may vary depending on compile options, but for tools
-        // we want durability to be disabled.
-        cmdLine.dur = false;
 
 #if( BOOST_VERSION >= 104500 )
     boost::filesystem::path::default_name_check( boost::filesystem2::no_check );
@@ -227,10 +222,6 @@ namespace mongo {
                 //directoryperdb = true;
             }
             verify( lastError.get( true ) );
-
-            if (_params.count("journal")){
-                cmdLine.dur = true;
-            }
 
             Client::initThread("tools");
             _conn = new DBDirectClient();

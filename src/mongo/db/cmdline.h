@@ -85,7 +85,6 @@ namespace mongo {
         int quotaFiles;        // --quotaFiles
         bool cpu;              // --cpu show cpu time periodically
 
-        bool dur;                       // --dur durability (now --journal)
         uint32_t logFlushPeriod; // group/batch commit interval ms
 
 
@@ -158,16 +157,6 @@ namespace mongo {
         started = time(0);
 
         logFlushPeriod = 0; // 0 means fsync every transaction TODO, find a better default
-        dur = false;
-#if defined(_DURABLEDEFAULTON)
-        dur = true;
-#endif
-        if( sizeof(void*) == 8 )
-            dur = true;
-#if defined(_DURABLEDEFAULTOFF)
-        dur = false;
-#endif
-
 #ifdef MONGO_SSL
         sslOnNormalPorts = false;
         sslServerManager = 0;

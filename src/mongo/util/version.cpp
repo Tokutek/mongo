@@ -208,18 +208,6 @@ namespace mongo {
             }
         }
 
-        if (cmdLine.dur){
-            fstream f ("/proc/sys/vm/overcommit_memory", ios_base::in);
-            unsigned val;
-            f >> val;
-
-            if (val == 2) {
-                log() << startupWarningsLog;
-                log() << "** WARNING: /proc/sys/vm/overcommit_memory is " << val << startupWarningsLog;
-                log() << "**          Journaling works best with it set to 0 or 1" << startupWarningsLog;
-            }
-        }
-
         if (boost::filesystem::exists("/proc/sys/vm/zone_reclaim_mode")){
             fstream f ("/proc/sys/vm/zone_reclaim_mode", ios_base::in);
             unsigned val;

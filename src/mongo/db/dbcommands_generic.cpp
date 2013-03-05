@@ -196,10 +196,6 @@ namespace mongo {
             int s = 0;
             bool found = setParmsMongodSpecific(dbname, cmdObj, errmsg, result, fromRepl);
             if( cmdObj.hasElement("journalCommitInterval") ) { 
-                if( !cmdLine.dur ) { 
-                    errmsg = "journaling is off";
-                    return false;
-                }
                 int x = (int) cmdObj["journalCommitInterval"].Number();
                 verify( x > 1 && x < 500 );
                 cmdLine.logFlushPeriod = x;

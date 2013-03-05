@@ -152,15 +152,6 @@ namespace mongo {
                 return EXIT_CLEAN;
             }
 
-            bool nodur = false;
-            if( params.count("nodur") ) {
-                nodur = true;
-                cmdLine.dur = false;
-            }
-            if( params.count("dur") || cmdLine.dur ) {
-                cmdLine.dur = true;
-            }
-
             if (params.count("debug") || params.count("verbose") ) {
                 logLevel = 1;
             }
@@ -201,9 +192,6 @@ namespace mongo {
 
             // dbtest defaults to smallfiles
             cmdLine.smallfiles = true;
-            if( params.count("bigfiles") ) {
-                cmdLine.dur = true;
-            }
 
             cmdLine.oplogSize = 10 * 1024 * 1024;
             Client::initThread("testsuite");
@@ -216,13 +204,6 @@ namespace mongo {
             if( sizeof(void*)==4 )
                 log() << "32bit" << endl;
             log() << "random seed: " << seed << endl;
-
-            if( time(0) % 3 == 0 && !nodur ) {
-                cmdLine.dur = true;
-                log() << "****************" << endl;
-                log() << "running with journaling enabled to test that. dbtests will do this occasionally even if --dur is not specified." << endl;
-                log() << "****************" << endl;
-            }
 
             FileAllocator::get()->start();
 

@@ -932,7 +932,9 @@ namespace mongo {
         log() << "shutdown: waiting for fs preallocator..." << endl;
         FileAllocator::get()->waitUntilFinished();
 
-        if( cmdLine.dur ) {
+        // TODO: (figure out what this code is doing and what should happen)
+        // originally this was done when journaling was on
+        if( true ) {
             log() << "shutdown: lock for final commit..." << endl;
             {
                 int n = 10;

@@ -502,9 +502,8 @@ namespace mongo {
 
         // TODO: What does TokuDB need to do here?
         storage::startup();
-        //dur::startup();
 
-        // comes after getDur().startup() because this reads from the database
+        // comes after storage::startup() because this reads from the database
         clearTmpCollections();
 
         unsigned long long missingRepl = checkIfReplMissingFromCommandLine();
@@ -827,25 +826,22 @@ static int mongoDbMain(int argc, char* argv[]) {
             cmdLine.quota = true;
             cmdLine.quotaFiles = params["quotaFiles"].as<int>() - 1;
         }
-        bool journalExplicit = false;
-        if( params.count("nodur") || params.count( "nojournal" ) ) {
-            journalExplicit = true;
-            cmdLine.dur = false;
+        if (params.count("nodur")) {
+            out() << "nodur deprecated" <<endl;
         }
-        if( params.count("dur") || params.count( "journal" ) ) {
-            if (journalExplicit) {
-                log() << "Can't specify both --journal and --nojournal options." << endl;
-                return EXIT_BADOPTIONS;
-            }
-            journalExplicit = true;
-            cmdLine.dur = true;
+        if (params.count("nojournal")) {
+            out() << "nojournal deprecated" <<endl;
+        }
+        if (params.count("dur")) {
+            out() << "dur deprecated" <<endl;
+        }
+        if (params.count("journal")) {
+            out() << "journal deprecated" <<endl;
         }
         if (params.count("durOptions")) {
             out() << "durOptions deprecated" <<endl;
         }
         if( params.count("journalCommitInterval") ) {
-            // don't check if dur is false here as many will just use the default, and will default to off on win32.
-            // ie no point making life a little more complex by giving an error on a dev environment.
             cmdLine.logFlushPeriod = params["journalCommitInterval"].as<unsigned>();
             out() << "--journalCommitInterval deprecated, treating as --logFlushPeriod" << endl;
             if( cmdLine.logFlushPeriod < 0 || cmdLine.logFlushPeriod > 300 ) {
@@ -854,8 +850,6 @@ static int mongoDbMain(int argc, char* argv[]) {
             }
         }
         if( params.count("logFlushPeriod") ) {
-            // don't check if dur is false here as many will just use the default, and will default to off on win32.
-            // ie no point making life a little more complex by giving an error on a dev environment.
             cmdLine.logFlushPeriod = params["logFlushPeriod"].as<unsigned>();
             if( cmdLine.logFlushPeriod < 0 || cmdLine.logFlushPeriod > 300 ) {
                 out() << "--logFlushPeriod out of allowed range (0-300ms)" << endl;
@@ -876,11 +870,6 @@ static int mongoDbMain(int argc, char* argv[]) {
             repairpath = params["repairpath"].as<string>();
             if (!repairpath.size()) {
                 out() << "repairpath is empty" << endl;
-                dbexit( EXIT_BADOPTIONS );
-            }
-
-            if (cmdLine.dur && !str::startsWith(repairpath, dbpath)) {
-                out() << "You must use a --repairpath that is a subdirectory of --dbpath when using journaling" << endl;
                 dbexit( EXIT_BADOPTIONS );
             }
         }
@@ -1021,13 +1010,10 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
         if ( params.count("configsvr" ) ) {
             cmdLine.configsvr = true;
-            //dur::DataLimitPerJournalFile = 128 * 1024 * 1024;
             if (cmdLine.usingReplSets() || replSettings.master || replSettings.slave) {
                 log() << "replication should not be enabled on a config server" << endl;
                 ::_exit(-1);
             }
-            if ( params.count( "nodur" ) == 0 && params.count( "nojournal" ) == 0 )
-                cmdLine.dur = true;
             if ( params.count( "dbpath" ) == 0 )
                 dbpath = "/data/configdb";
         }
@@ -1139,13 +1125,6 @@ static int mongoDbMain(int argc, char* argv[]) {
         // if we reach here, then we are not running as a service.  service installation
         // exits directly and so never reaches here either.
 #endif
-
-        if (sizeof(void*) == 4 && !journalExplicit){
-            // trying to make this stand out more like startup warnings
-            log() << endl;
-            warning() << "32-bit servers don't have journaling enabled by default. Please use --journal if you want durability." << endl;
-            log() << endl;
-        }
 
     }
 
