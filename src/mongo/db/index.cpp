@@ -135,7 +135,72 @@ namespace mongo {
         }
     }
 
+    void IndexDetails::uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const {
+        const BSONObj keyPattern(static_cast<char *>(_db->cmp_descriptor->dbt.data));
+        const Ordering ordering = Ordering::make(keyPattern);
+        const int c = newkey.woCompare(oldkey, ordering);
+        if (c == 0) {
+            isUnique = false;
+        }
+    }
+
+    struct UniqueCheckExtra {
+        const IndexDetails &d;
+        const BSONObj &newkey;
+        bool &isUnique;
+        UniqueCheckExtra(const IndexDetails &_d, const BSONObj &_newkey, bool &_isUnique)
+                : d(_d), newkey(_newkey), isUnique(_isUnique) {}
+    };
+
+    int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
+        if (key != NULL) {
+            const BSONObj oldkey(static_cast<char *>(key->data));
+            verify(oldkey.objsize() <= (int) key->size);
+            verify(!oldkey.isEmpty());
+            if (oldkey.objsize() < (int) key->size) {
+                // Sanity check that the pk is what we expect, but we won't use it to check uniqueness.
+                const BSONObj pk(static_cast<char *>(key->data) + oldkey.objsize());
+                verify(!pk.isEmpty());
+                verify(pk.objsize() == ((int) key->size) - oldkey.objsize());
+            }
+            UniqueCheckExtra *e = static_cast<UniqueCheckExtra *>(extra);
+            e->d.uniqueCheckCallback(e->newkey, oldkey, e->isUnique);
+        }
+        return 0;
+    }
+
+    void IndexDetails::uniqueCheck(const BSONObj &key) const {
+        BSONObjIterator it(key);
+        while (it.more()) {
+            BSONElement id = it.next();
+            if (!id.ok()) {
+                // If one of the key fields is null, we just insert it.
+                return;
+            }
+        }
+        const size_t buflen = storage::index_key_size(key, NULL);
+        char buf[buflen];
+        storage::index_key_init(buf, buflen, key, NULL);
+
+        DBT kdbt;
+        storage::dbt_init(&kdbt, buf, buflen);
+        const int c_flags = DB_SERIALIZABLE;
+        DBC *cursor;
+        int r = _db->cursor(_db, cc().getContext()->transaction().txn(), &cursor, c_flags);
+        verify(r == 0);
+        bool isUnique = true;
+        UniqueCheckExtra extra(*this, key, isUnique);
+        r = cursor->c_getf_set_range(cursor, 0, &kdbt, mongo::uniqueCheckCallback, &extra);
+        verify(r == 0 || r == DB_NOTFOUND);
+        r = cursor->c_close(cursor);
+        verify(r == 0);
+
+        uassert(16433, mongoutils::str::stream() << "key " << key << " already exists in unique index", isUnique);
+    }
+
     void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite) {
+        uniqueCheck(key);
+
         const size_t buflen = storage::index_key_size(key, pk);
         char buf[buflen];
         storage::index_key_init(buf, buflen, key, pk);
@@ -146,7 +211,6 @@ namespace mongo {
 
         const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
         int r = _db->put(_db, cc().getContext()->transaction().txn(), &kdbt, &vdbt, flags);
-        uassert(16433, "key already exists in unique index", r != DB_KEYEXIST);
         if (r != 0) {
             tokulog() << "error inserting " << key << ", " << val << endl;
         } else {

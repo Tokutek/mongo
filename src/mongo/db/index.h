@@ -148,6 +148,8 @@ namespace mongo {
         uint32_t getPageSize();
         uint32_t getReadPageSize();
         void getStat64(DB_BTREE_STAT64* stats);
+        void uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const;
+        void uniqueCheck(const BSONObj &key) const;
 
     private:
         // Open dictionary representing the index on disk.
