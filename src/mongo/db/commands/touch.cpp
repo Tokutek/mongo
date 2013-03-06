@@ -42,6 +42,7 @@ namespace mongo {
         // prelock to induce prefetching
         r = cursor->c_pre_acquire_range_lock(cursor, db->dbt_neg_infty(), db->dbt_pos_infty());
         while (r != DB_NOTFOUND) {
+            killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
             r = cursor->c_getf_next(cursor, 0, touchIndexCursorCallback, NULL);
         }
         db->close(db, 0);

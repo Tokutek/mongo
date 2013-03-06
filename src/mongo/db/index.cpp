@@ -272,10 +272,25 @@ namespace mongo {
         verify(r == 0);
     }
 
+    static int hot_opt_callback(void *extra, float progress) {
+        int retval = 0;
+        uint64_t iter = *(uint64_t *)extra;
+        try {
+            if ((iter % 1000) == 0) {                
+                killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
+            }
+        } catch (DBException &e) {
+            retval = 1;
+        }
+        iter++;
+        return retval;
+    }
+
     void IndexDetails::optimize() {        
         int error = _db->optimize(_db);
         verify(error == 0);
-        error = _db->hot_optimize(_db, NULL, NULL);
+        uint64_t iter = 0;
+        error = _db->hot_optimize(_db, hot_opt_callback, &iter);
         if (error) {
             uassert(16450, mongoutils::str::stream() << "reIndex query killed ", false);
         }
