@@ -229,10 +229,12 @@ namespace mongo {
         void insertObject(const BSONObj &obj, bool overwrite);
         void deleteObject(const BSONObj &pk, const BSONObj &obj);
         void fillCollectionStats(struct NamespaceDetailsAccStats* accStats, BSONObjBuilder* result, int scale);
+        void optimize();
     private:
         // fill the statistics for each index in the NamespaceDetails,
         // indexStats is an array of length nIndexes
         void fillIndexStats(IndexStats* indexStats);
+
 
         // Each index (including the _id) index has an IndexDetails that describes it.
         int _nIndexes;

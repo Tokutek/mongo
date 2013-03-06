@@ -150,6 +150,7 @@ namespace mongo {
         void getStat64(DB_BTREE_STAT64* stats);
         void uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const;
         void uniqueCheck(const BSONObj &key) const;
+        void optimize();
 
     private:
         // Open dictionary representing the index on disk.

@@ -876,8 +876,8 @@ namespace mongo {
                 all.push_back( o );
             }
 
-            problem() << "reIndex is not implemented, doing nothing!" << endl;
-            // TODO: Hot optimize.
+            // run optimize
+            d->optimize();
 
             result.append( "nIndexes" , (int)all.size() );
             result.appendArray( "indexes" , b.obj() );

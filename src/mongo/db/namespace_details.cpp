@@ -509,6 +509,14 @@ namespace mongo {
         }
     }
 
+    void NamespaceDetails::optimize() {
+        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+            IndexDetails *index = it->get();
+            index->optimize();
+        }
+    }
+
+
     void NamespaceDetails::fillCollectionStats(
         struct NamespaceDetailsAccStats* accStats, 
         BSONObjBuilder* result, 

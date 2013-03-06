@@ -272,6 +272,15 @@ namespace mongo {
         verify(r == 0);
     }
 
+    void IndexDetails::optimize() {        
+        int error = _db->optimize(_db);
+        verify(error == 0);
+        error = _db->hot_optimize(_db, NULL, NULL);
+        if (error) {
+            uassert(0, mongoutils::str::stream() << "reIndex query killed ", false);
+        }
+    }
+
     void IndexSpec::reset( const IndexDetails * details ) {
         _details = details;
         reset( details->info() );
