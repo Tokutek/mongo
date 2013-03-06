@@ -468,12 +468,15 @@ namespace mongo {
                     t.appendNumber( "resident" , p.getResidentSize() );
                     v = p.getVirtualMemorySize();
                     t.appendNumber( "virtual" , v );
-                    t.appendBool( "supported" , true );
+                    //t.appendBool( "supported" , true );
                 }
                 else {
                     result.append( "note" , "not all mem info support on this platform" );
-                    t.appendBool( "supported" , false );
+                    //t.appendBool( "supported" , false );
                 }
+                // TOKUDB: can't trust the number for mapped because it doesn't mean anything
+                t.appendBool( "supported" , false );
+                tokulog(1) << "TODO: report something about tokudb memory status in serverStatus" << endl;
 
                 timeBuilder.appendNumber( "middle of mem" , Listener::getElapsedTimeMillis() - start );
 
