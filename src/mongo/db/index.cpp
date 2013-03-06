@@ -178,9 +178,10 @@ namespace mongo {
                 return;
             }
         }
-        const size_t buflen = storage::index_key_size(key, NULL);
+        const BSONObj *pk = isIdIndex() ? NULL : &minKey;
+        const size_t buflen = storage::index_key_size(key, pk);
         char buf[buflen];
-        storage::index_key_init(buf, buflen, key, NULL);
+        storage::index_key_init(buf, buflen, key, pk);
 
         DBT kdbt;
         storage::dbt_init(&kdbt, buf, buflen);
@@ -199,7 +200,9 @@ namespace mongo {
     }
 
     void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite) {
-        uniqueCheck(key);
+        if (unique()) {
+            uniqueCheck(key);
+        }
 
         const size_t buflen = storage::index_key_size(key, pk);
         char buf[buflen];
