@@ -33,6 +33,7 @@
 
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/storage/key.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
@@ -166,11 +167,10 @@ namespace mongo {
         // set a descriptor for the given dictionary. the descriptor is
         // a serialization of the index's key pattern.
         static void set_db_descriptor(DB *db, DB_TXN *txn, const BSONObj &key_pattern) {
-            DBT ordering_dbt;
-            ordering_dbt.data = const_cast<char *>(key_pattern.objdata());
-            ordering_dbt.size = key_pattern.objsize();
+            DBT dbt;
+            dbt_init(&dbt, key_pattern.objdata(), key_pattern.objsize());
             const int flags = DB_UPDATE_CMP_DESCRIPTOR;
-            int r = db->change_descriptor(db, txn, &ordering_dbt, flags);
+            int r = db->change_descriptor(db, txn, &dbt, flags);
             verify(r == 0);
             tokulog(1) << "set db " << db << " descriptor to key pattern: " << key_pattern << endl;
         }
