@@ -107,6 +107,7 @@ env.StaticLibrary("coredb", [
         "db/commands/isself.cpp",
         "db/pipeline/pipeline.cpp",
         "db/dbcommands_generic.cpp",
+        "db/dbpath.cpp",
         "db/dbwebserver.cpp",
         "db/matcher.cpp",
         "db/pipeline/accumulator.cpp",
@@ -144,6 +145,8 @@ env.StaticLibrary("coredb", [
         "db/security_commands.cpp",
         "db/security_common.cpp",
         "db/stats/top.cpp",
+        "db/storage/txn.cpp",
+        "db/storage/env.cpp",
         "s/shardconnection.cpp",
         ])
 
@@ -287,10 +290,6 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/ops/insert.cpp",
                     "db/dbcommands.cpp",
                     "db/dbcommands_admin.cpp",
-
-                    # storage
-                    "db/storage/env.cpp",
-                    "db/storage/txn.cpp",
 
                     # most commands are only for mongod
                     "db/commands/fsync.cpp",
