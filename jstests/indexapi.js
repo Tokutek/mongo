@@ -36,5 +36,5 @@ assert.eq( key , idx[1].key , "M2" );
 assert( idx[1].unique , "M3" );
 //printjson( idx );
 
-db.system.indexes.insert( { ns : "test.indexapi" , key : { x : 1 } , name : "x" } );
-assert( db.getLastError().indexOf( "already has an index on" ) >= 0 , "Z1" );
+db.system.indexes.insert( { ns : "test" , key : { x : 1 } , name : "x" } );
+assert( db.getLastError().indexOf( "invalid" ) >= 0 , "Z1" );
