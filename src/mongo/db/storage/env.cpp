@@ -338,6 +338,30 @@ namespace mongo {
             verify(r == 0);
         }
 
+        void set_log_flush_interval(uint32_t period_ms) {
+            cmdLine.logFlushPeriod = period_ms;
+            env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
+            tokulog(1) << "fsync log period set to " << period_ms << " milliseconds." << endl;
+        }
+        void set_checkpoint_period(uint32_t period_seconds) {
+            cmdLine.checkpointPeriod = period_seconds;
+            int r = env->checkpointing_set_period(env, period_seconds);
+            verify(r == 0);
+            tokulog(1) << "checkpoint period set to " << period_seconds << " seconds." << endl;
+        }
+        void set_cleaner_period(uint32_t period_seconds) {
+            cmdLine.cleanerPeriod = period_seconds;
+            int r = env->cleaner_set_period(env, period_seconds);
+            verify(r == 0);
+            tokulog(1) << "cleaner period set to " << period_seconds << " seconds." << endl;
+        }
+        void set_cleaner_iterations(uint32_t num_iterations) {
+            cmdLine.cleanerPeriod = num_iterations;
+            int r = env->cleaner_set_iterations(env, num_iterations);
+            verify(r == 0);
+            tokulog(1) << "cleaner iterations set to " << num_iterations << "." << endl;
+        }
+    
     } // namespace storage
 
 } // namespace mongo

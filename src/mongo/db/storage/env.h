@@ -38,6 +38,11 @@ namespace mongo {
         void get_status(BSONObjBuilder &status);
         void log_flush();
 
+        void set_log_flush_interval(uint32_t period_ms);
+        void set_checkpoint_period(uint32_t period_seconds);
+        void set_cleaner_period(uint32_t period_seconds);
+        void set_cleaner_iterations(uint32_t num_iterations);
+
     } // namespace storage
 
 } // namespace mongo

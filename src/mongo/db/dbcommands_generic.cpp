@@ -198,15 +198,33 @@ namespace mongo {
             if( cmdObj.hasElement("journalCommitInterval") ) { 
                 int x = (int) cmdObj["journalCommitInterval"].Number();
                 verify( x > 1 && x < 500 );
-                cmdLine.logFlushPeriod = x;
+                storage::set_log_flush_interval(x);
                 log() << "setParameter logFlushPeriod=" << x << endl;
                 s++;
             }
             if( cmdObj.hasElement("logFlushPeriod") ) { 
                 int x = (int) cmdObj["logFlushPeriod"].Number();
                 verify( x > 1 && x < 500 );
-                cmdLine.logFlushPeriod = x;
+                storage::set_log_flush_interval(x);
                 log() << "setParameter logFlushPeriod=" << x << endl;
+                s++;
+            }
+            if( cmdObj.hasElement("checkpointPeriod") ) { 
+                int x = (int) cmdObj["checkpointPeriod"].Number();
+                storage::set_checkpoint_period(x);
+                log() << "setParameter checkpointPeriod=" << x << endl;
+                s++;
+            }
+            if( cmdObj.hasElement("cleanerPeriod") ) { 
+                int x = (int) cmdObj["cleanerPeriod"].Number();
+                storage::set_cleaner_period(x);
+                log() << "setParameter cleanerPeriod=" << x << endl;
+                s++;
+            }
+            if( cmdObj.hasElement("cleanerIterations") ) { 
+                int x = (int) cmdObj["cleanerIterations"].Number();
+                storage::set_cleaner_iterations(x);
+                log() << "setParameter cleanerIterations=" << x << endl;
                 s++;
             }
             if( cmdObj.hasElement("notablescan") ) {
