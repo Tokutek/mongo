@@ -277,7 +277,7 @@ namespace mongo {
         verify(error == 0);
         error = _db->hot_optimize(_db, NULL, NULL);
         if (error) {
-            uassert(0, mongoutils::str::stream() << "reIndex query killed ", false);
+            uassert(16450, mongoutils::str::stream() << "reIndex query killed ", false);
         }
     }
 

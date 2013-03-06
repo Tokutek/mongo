@@ -73,6 +73,8 @@ namespace mongo {
             unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
         }
 
+        massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns.c_str()));
+
         tokulog(1) << "Creating NamespaceDetails " << ns << endl;
         BSONObj id_info = id_index_info(ns, options);
         createIndex(id_info, true);
@@ -646,7 +648,7 @@ namespace mongo {
 
     bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication) {
         const char *coll = strchr( ns, '.' ) + 1;
-        massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns));
+        massert( 16451 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns));
         char cl[ 256 ];
         nsToDatabase( ns, cl );
         if (nsdetails(ns) != NULL) {
