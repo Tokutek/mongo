@@ -1616,28 +1616,20 @@ namespace mongo {
                 NamespaceDetails::IndexIterator ii = nsd->ii();
                 while( ii.more() ) {
                     const IndexDetails &idx = ii.next();
-                    if ( idx.info().isValid() ) {
+                    if ( !idx.info().isValid() ) {
                         log() << "invalid index for ns: " << c << " " << idx.info();
-                        if ( idx.info().isValid() )
-                            log() << " " << idx.info();
                         log() << endl;
                     }
                 }
 
                 int idNum = nsd->findIdIndex();
-                if ( idNum >= 0 ) {
+                if ( c.find( ".system." ) != string::npos ) {
+                    continue;
+                }
+		else {
+                    verify(idNum >= 0);
                     cursor.reset( new IndexCursor( nsd , &nsd->idx( idNum ) , BSONObj() , BSONObj() , false , 1 ) );
-                }
-                else if ( c.find( ".system." ) != string::npos ) {
-                    continue;
-                }
-                else if ( nsd->isCapped() ) {
-                    cursor = Helpers::findTableScan( c.c_str() , BSONObj() );
-                }
-                else {
-                    log() << "can't find _id index for: " << c << endl;
-                    continue;
-                }
+		}
 
                 md5_state_t st;
                 md5_init(&st);
