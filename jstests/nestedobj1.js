@@ -1,5 +1,5 @@
 //SERVER-5127, SERVER-5036
-assert(false, "nestedobj1 test disabled, causes weird crash when destroying FieldRangeSet");
+//assert(false, "nestedobj1 test disabled, causes weird crash when destroying FieldRangeSet");
 
 if ( typeof _threadInject == "undefined" ) { // SERVER-6448
 
@@ -26,7 +26,7 @@ t.insert( { tst : "test3", a : nestedObj }, true );
 assert.eq(3, t.count(), "records in collection");
 assert.eq(1, t.find({tst : "test2"}).count(), "find test");
 
-//make sure index insertion failed (nesting must be large enough)
-assert.eq(0, t.find().hint({a:1}).explain().n, "index not empty");
+//make sure index insertion succeeded (these keys are not too big for TokuDB)
+assert.eq(3, t.find().hint({a:1}).explain().n, "index not empty");
 print("Test succeeded!")
 }
