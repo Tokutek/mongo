@@ -191,9 +191,12 @@ namespace mongo {
         bool isUnique = true;
         UniqueCheckExtra extra(*this, key, isUnique);
         int r = cursor->c_getf_set_range(cursor, 0, &kdbt, mongo::uniqueCheckCallback, &extra);
-        verify(r == 0 || r == DB_NOTFOUND); // TODO: DB_LOCK_NOTGRANTED, DB_LOCK_DEADLOCK
+        verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
         r = cursor->c_close(cursor);
         verify(r == 0);
+
+        uassert(16453, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
+        uassert(16454, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
 
         uassert(ASSERT_ID_DUPKEY, mongoutils::str::stream() << "E11000 duplicate key error, " << key << " already exists in unique index", isUnique);
     }
