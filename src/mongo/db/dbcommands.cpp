@@ -345,7 +345,7 @@ namespace mongo {
         CmdRepairDatabase() : Command("repairDatabase") {}
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             problem() << "repairDatabase is a deprecated command, ignoring!" << endl;
-            return false;
+            return true;
         }
     } cmdRepairDatabase;
 
