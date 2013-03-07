@@ -186,13 +186,12 @@ namespace mongo {
         DBT kdbt;
         storage::dbt_init(&kdbt, buf, buflen);
         const int c_flags = DB_SERIALIZABLE;
-        DBC *cursor;
-        int r = _db->cursor(_db, cc().getContext()->transaction().txn(), &cursor, c_flags);
-        verify(r == 0);
+        DBC *cursor = newCursor(c_flags);
+
         bool isUnique = true;
         UniqueCheckExtra extra(*this, key, isUnique);
-        r = cursor->c_getf_set_range(cursor, 0, &kdbt, mongo::uniqueCheckCallback, &extra);
-        verify(r == 0 || r == DB_NOTFOUND);
+        int r = cursor->c_getf_set_range(cursor, 0, &kdbt, mongo::uniqueCheckCallback, &extra);
+        verify(r == 0 || r == DB_NOTFOUND); // TODO: DB_LOCK_NOTGRANTED, DB_LOCK_DEADLOCK
         r = cursor->c_close(cursor);
         verify(r == 0);
 
@@ -240,11 +239,11 @@ namespace mongo {
         }
     }
 
-    // Get a DBC over an index. Must already be in the context of a transction.
-    DBC *IndexDetails::cursor() const {
+    // Get a new DB cursor over an index. Must already be in the context of a transction.
+    DBC *IndexDetails::newCursor(int flags) const {
         DBC *cursor;
         const Client::Context::Transaction &txn = cc().getContext()->transaction();
-        int r = _db->cursor(_db, txn.txn(), &cursor, 0);
+        int r = _db->cursor(_db, txn.txn(), &cursor, flags);
         verify(r == 0);
         return cursor;
     }

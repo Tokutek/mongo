@@ -34,7 +34,7 @@ namespace mongo {
     }
     
     static void touchIndex(IndexDetails* idx) {
-        DBC* cursor = idx->cursor();
+        DBC* cursor = idx->newCursor();
         DB* db = NULL; // create a dummy db so we get access to negative and positive infinity
         int r = 0;
         r = db_create(&db, storage::env, 0);

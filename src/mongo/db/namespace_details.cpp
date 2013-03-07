@@ -453,7 +453,7 @@ namespace mongo {
 
         // Get a cursor over the _id index.
         IndexDetails &idIndex = idx(findIdIndex());
-        DBC *cursor = idIndex.cursor();
+        DBC *cursor = idIndex.newCursor();
 
         // create an index key
         BSONObj key = getKey ? idIndex.getKeyFromQuery(query) : query;

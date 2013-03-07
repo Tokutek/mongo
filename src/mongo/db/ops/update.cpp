@@ -79,15 +79,16 @@ namespace mongo {
     }
 
     static void insertAndLog(const char *ns, NamespaceDetails *d, NamespaceDetailsTransient *nsdt,
-            const BSONObj &newObj, bool logop, bool fromMigrate) {
+            BSONObj &newObj, bool overwrite, bool logop, bool fromMigrate) {
 
         checkNoMods( newObj );
         tokulog(3) << "insertAndLog for upsert: " << newObj << endl;
 
         // Make sure to add an _id field if it doesn't exist.
-        insertOneObject( d, nsdt, newObj["_id"].eoo() ? addIdField(newObj) : newObj );
-        if ( logop ) {
-            logOp( "i", ns, newObj, 0, 0, fromMigrate );
+        newObj = addIdField(newObj);
+        insertOneObject(d, nsdt, newObj, overwrite);
+        if (logop) {
+            logOp("i", ns, newObj, 0, 0, fromMigrate);
         }
     }
 
@@ -377,6 +378,7 @@ namespace mongo {
             return UpdateResult( 1 , 1 , numModded , BSONObj() );
 
         if ( upsert ) {
+            BSONObj newObj = updateobj;
             if ( updateobj.firstElementFieldName()[0] == '$' ) {
                 // upsert of an $operation. build a default object
                 BSONObj newObj = mods->createNewFromQuery( patternOrig );
@@ -386,8 +388,8 @@ namespace mongo {
             }
             uassert( 10159 ,  "multi update only works with $ operators" , ! multi );
             debug.upsert = true;
-            insertAndLog( ns, d, nsdt, updateobj, logop, fromMigrate );
-            return UpdateResult( 0 , 0 , 1 , updateobj );
+            insertAndLog( ns, d, nsdt, newObj, upsert, logop, fromMigrate );
+            return UpdateResult( 0 , 0 , 1 , newObj );
         }
 
         return UpdateResult( 0 , isOperatorUpdate , 0 , BSONObj() );

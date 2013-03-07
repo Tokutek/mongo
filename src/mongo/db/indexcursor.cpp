@@ -244,7 +244,7 @@ namespace mongo {
         // _d and _idx are mutually null when the collection doesn't
         // exist and is therefore treated as empty.
         if (_d != NULL && _idx != NULL) {
-            _cursor = _idx->cursor();
+            _cursor = _idx->newCursor();
             if ( _bounds != NULL) {
                 // Try skipping forward in the key space using the bounds iterator
                 // and the proposed startKey. If skipping wasn't necessary, then
