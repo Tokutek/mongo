@@ -169,8 +169,10 @@ namespace mongo {
                             queryModified = BSON( "_id" << res.upserted );
                         }
                         log() << "queryModified: " << queryModified << endl;
-                        // TODO: Do we need to verify this?
-                        //verify( Helpers::findOne( ns.c_str() , queryModified , doc ) );
+                        // Note, this verify executes a line of code that is
+			// necessary for correctness. It fills doc with the correct value
+			// This line is not simply an assert that can be removed
+                        verify( Helpers::findOne( ns.c_str() , queryModified , doc ) );
                         _appendHelper( result , doc , true , fields );
                     }
                     
