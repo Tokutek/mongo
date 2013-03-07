@@ -27,6 +27,7 @@
 #include "mongo/db/dbwebserver.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/health.h"
+#include "mongo/db/repl/replication_server_status.h"  // replSettings
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/rs_config.h"
 #include "mongo/db/repl_block.h"

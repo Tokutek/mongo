@@ -22,6 +22,7 @@
 #include "mongo/db/repl.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/db/repl/replication_server_status.h"  // replSettings
 
 namespace mongo {
 

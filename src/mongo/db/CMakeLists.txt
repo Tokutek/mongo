@@ -139,6 +139,7 @@ add_library(serveronly STATIC
   repl/rs_sync
   repl/rs_initialsync
   repl/bgsync
+  repl/replication_server_status
   oplog
   oplog_helpers
   repl_block

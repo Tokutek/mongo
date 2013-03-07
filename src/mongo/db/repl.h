@@ -29,44 +29,9 @@
 #pragma once
 
 #include "mongo/base/counter.h"
-#include "mongo/util/optime.h"
-#include "mongo/db/oplog.h"
-#include "mongo/util/concurrency/thread_pool.h"
-#include "mongo/db/oplogreader.h"
-#include "mongo/db/cloner.h"
 #include "mongo/db/stats/timer_stats.h"
 
 namespace mongo {
-
-    class ReplSettings {
-    public:
-        bool fastsync;
-        bool startInRecovery;
-
-        bool autoresync;
-
-        int slavedelay;
-
-        set<string> discoveredSeeds;
-        mutex discoveredSeeds_mx;
-
-        BSONObj reconfig;
-
-        ReplSettings()
-            : fastsync(),
-            startInRecovery(false),
-            autoresync(false),
-            slavedelay(),
-            discoveredSeeds(),
-            discoveredSeeds_mx("ReplSettings::discoveredSeeds") {
-        }
-
-    };
-
-    extern ReplSettings replSettings;
-
-    bool anyReplEnabled();
-    void sethbmsg(const string& s, const int level);
 
     extern TimerStats oplogInsertStats;
     extern Counter64 oplogInsertBytesStats;

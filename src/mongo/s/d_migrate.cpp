@@ -54,6 +54,7 @@
 #include "mongo/db/keypattern.h"
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/ops/query.h"
+#include "mongo/db/repl/replication_server_status.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/collection.h"

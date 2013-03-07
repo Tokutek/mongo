@@ -55,6 +55,7 @@
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/repl.h"
+#include "mongo/db/repl/replication_server_status.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/restapi.h"
 #include "mongo/db/stats/counters.h"

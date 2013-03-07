@@ -41,6 +41,7 @@
 #include "mongo/db/database.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/storage/exception.h"
+#include "mongo/db/repl/rs_sync.h"
 #include "mongo/util/progress_meter.h"
 #include "mongo/util/mongoutils/str.h"
 

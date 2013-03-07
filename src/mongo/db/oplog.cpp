@@ -31,8 +31,6 @@
 #include "mongo/db/repl.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/commands/server_status.h"
-#include "mongo/db/repl/rs.h"
-#include "mongo/db/stats/counters.h"
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/collection.h"
@@ -42,6 +40,9 @@
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/jsobjmanipulator.h"
+#include "mongo/db/repl/replication_server_status.h"
+#include "mongo/db/repl/rs.h"
+#include "mongo/db/stats/counters.h"
 #include "mongo/util/elapsed_tracker.h"
 #include "mongo/db/storage/assert_ids.h"
 
