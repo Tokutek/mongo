@@ -70,7 +70,6 @@ namespace mongo {
     }
 
     void IndexSpec::_init() {
-        tokulog(0) << "IndexSpec::_init key " << keyPattern << ", info " << info << endl;
         verify( keyPattern.objsize() );
 
         // some basics
