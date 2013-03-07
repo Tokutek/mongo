@@ -32,42 +32,37 @@ namespace NamespaceTests {
         class Base {
             Lock::GlobalWrite lk;
             Client::Context _context;
+            shared_ptr<IndexSpec> _spec;
         public:
-            // TODO: Give a valid info object to _id constructor
-            Base() : _context(ns()), id_(BSONObj()) {
+            Base() : _context(ns()), _spec() {
             }
             virtual ~Base() {
-                if ( id_.info().isEmpty() )
-                    return;
-                // TODO: Drop this index
-                ASSERT( Helpers::findTableScan( ns(), BSONObj() )->eof() );
             }
         protected:
-            void create( bool sparse = false ) {
-#if 0
-                NamespaceDetailsTransient::get( ns() ).deletedIndex();
+            void create() {
+                _spec.reset(new IndexSpec(key(), info()));
+            }
+            virtual bool isSparse() const {
+                return false;
+            }
+            BSONObj info() const {
                 BSONObjBuilder builder;
                 builder.append( "ns", ns() );
                 builder.append( "name", "testIndex" );
                 builder.append( "key", key() );
-                builder.append( "sparse", sparse );
-                BSONObj bobj = builder.done();
-                id_.info = theDataFileMgr.insert( ns(), bobj.objdata(), bobj.objsize() );
-                // head not needed for current tests
-                // idx_.head = BtreeBucket::addHead( id_ );
-#endif
-                ::abort();
+                builder.append( "sparse", isSparse() );
+                return builder.obj();
             }
             static const char* ns() {
                 return "unittests.indexdetailstests";
-            }
-            IndexDetails& id() {
-                return id_;
             }
             virtual BSONObj key() const {
                 BSONObjBuilder k;
                 k.append( "a", 1 );
                 return k.obj();
+            }
+            void _getKeysFromObject( const BSONObj &obj, BSONObjSet &keys ) {
+                _spec->getKeys( obj, keys );
             }
             BSONObj aDotB() const {
                 BSONObjBuilder k;
@@ -110,29 +105,18 @@ namespace NamespaceTests {
             }
         private:
             Lock::GlobalWrite lk_;
-            IndexDetails id_;
-        };
-
-        class Create : public Base {
-        public:
-            void run() {
-                create();
-                ASSERT_EQUALS( "testIndex", id().indexName() );
-                ASSERT_EQUALS( ns(), id().parentNS() );
-                assertEquals( key(), id().keyPattern() );
-            }
         };
 
         class GetKeysFromObjectSimple : public Base {
         public:
             void run() {
-                create();
+                create();  
                 BSONObjBuilder b, e;
                 b.append( "b", 4 );
                 b.append( "a", 5 );
                 e.append( "", 5 );
                 BSONObjSet keys;
-                id().getKeysFromObject( b.done(), keys );
+                _getKeysFromObject( b.done(), keys );
                 checkSize( 1, keys );
                 assertEquals( e.obj(), *keys.begin() );
             }
@@ -141,14 +125,14 @@ namespace NamespaceTests {
         class GetKeysFromObjectDotted : public Base {
         public:
             void run() {
-                create();
+                create();  
                 BSONObjBuilder a, e, b;
                 b.append( "b", 4 );
                 a.append( "a", b.done() );
                 a.append( "c", "foo" );
                 e.append( "", 4 );
                 BSONObjSet keys;
-                id().getKeysFromObject( a.done(), keys );
+                _getKeysFromObject( a.done(), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( e.obj(), *keys.begin() );
             }
@@ -161,12 +145,12 @@ namespace NamespaceTests {
         class GetKeysFromArraySimple : public Base {
         public:
             void run() {
-                create();
+                create();  
                 BSONObjBuilder b;
                 b.append( "a", shortArray()) ;
 
                 BSONObjSet keys;
-                id().getKeysFromObject( b.done(), keys );
+                _getKeysFromObject( b.done(), keys );
                 checkSize( 3, keys );
                 int j = 1;
                 for ( BSONObjSet::iterator i = keys.begin(); i != keys.end(); ++i, ++j ) {
@@ -180,13 +164,13 @@ namespace NamespaceTests {
         class GetKeysFromArrayFirstElement : public Base {
         public:
             void run() {
-                create();
+                create();  
                 BSONObjBuilder b;
                 b.append( "a", shortArray() );
                 b.append( "b", 2 );
 
                 BSONObjSet keys;
-                id().getKeysFromObject( b.done(), keys );
+                _getKeysFromObject( b.done(), keys );
                 checkSize( 3, keys );
                 int j = 1;
                 for ( BSONObjSet::iterator i = keys.begin(); i != keys.end(); ++i, ++j ) {
@@ -205,13 +189,13 @@ namespace NamespaceTests {
         class GetKeysFromArraySecondElement : public Base {
         public:
             void run() {
-                create();
+                create();  
                 BSONObjBuilder b;
                 b.append( "first", 5 );
                 b.append( "a", shortArray()) ;
 
                 BSONObjSet keys;
-                id().getKeysFromObject( b.done(), keys );
+                _getKeysFromObject( b.done(), keys );
                 checkSize( 3, keys );
                 int j = 1;
                 for ( BSONObjSet::iterator i = keys.begin(); i != keys.end(); ++i, ++j ) {
@@ -233,14 +217,14 @@ namespace NamespaceTests {
         class GetKeysFromSecondLevelArray : public Base {
         public:
             void run() {
-                create();
+                create();  
                 BSONObjBuilder b;
                 b.append( "b", shortArray() );
                 BSONObjBuilder a;
                 a.append( "a", b.done() );
 
                 BSONObjSet keys;
-                id().getKeysFromObject( a.done(), keys );
+                _getKeysFromObject( a.done(), keys );
                 checkSize( 3, keys );
                 int j = 1;
                 for ( BSONObjSet::iterator i = keys.begin(); i != keys.end(); ++i, ++j ) {
@@ -258,13 +242,13 @@ namespace NamespaceTests {
         class ParallelArraysBasic : public Base {
         public:
             void run() {
-                create();
+                create();  
                 BSONObjBuilder b;
                 b.append( "a", shortArray() );
                 b.append( "b", shortArray() );
 
                 BSONObjSet keys;
-                ASSERT_THROWS( id().getKeysFromObject( b.done(), keys ),
+                ASSERT_THROWS( _getKeysFromObject( b.done(), keys ),
                                   UserException );
             }
         private:
@@ -276,7 +260,7 @@ namespace NamespaceTests {
         class ArraySubobjectBasic : public Base {
         public:
             void run() {
-                create();
+                create(); 
                 vector< BSONObj > elts;
                 for ( int i = 1; i < 4; ++i )
                     elts.push_back( simpleBC( i ) );
@@ -284,7 +268,7 @@ namespace NamespaceTests {
                 b.append( "a", elts );
 
                 BSONObjSet keys;
-                id().getKeysFromObject( b.done(), keys );
+                _getKeysFromObject( b.done(), keys );
                 checkSize( 3, keys );
                 int j = 1;
                 for ( BSONObjSet::iterator i = keys.begin(); i != keys.end(); ++i, ++j ) {
@@ -302,7 +286,7 @@ namespace NamespaceTests {
         class ArraySubobjectMultiFieldIndex : public Base {
         public:
             void run() {
-                create();
+                create();  
                 vector< BSONObj > elts;
                 for ( int i = 1; i < 4; ++i )
                     elts.push_back( simpleBC( i ) );
@@ -311,7 +295,7 @@ namespace NamespaceTests {
                 b.append( "d", 99 );
 
                 BSONObjSet keys;
-                id().getKeysFromObject( b.done(), keys );
+                _getKeysFromObject( b.done(), keys );
                 checkSize( 3, keys );
                 int j = 1;
                 for ( BSONObjSet::iterator i = keys.begin(); i != keys.end(); ++i, ++j ) {
@@ -333,7 +317,7 @@ namespace NamespaceTests {
         class ArraySubobjectSingleMissing : public Base {
         public:
             void run() {
-                create();
+                create(); 
                 vector< BSONObj > elts;
                 BSONObjBuilder s;
                 s.append( "foo", 41 );
@@ -345,7 +329,7 @@ namespace NamespaceTests {
                 BSONObj obj = b.obj();
                 
                 BSONObjSet keys;
-                id().getKeysFromObject( obj, keys );
+                _getKeysFromObject( obj, keys );
                 checkSize( 4, keys );
                 BSONObjSet::iterator i = keys.begin();
                 assertEquals( nullObj(), *i++ ); // see SERVER-3377
@@ -364,7 +348,7 @@ namespace NamespaceTests {
         class ArraySubobjectMissing : public Base {
         public:
             void run() {
-                create();
+                create(); 
                 vector< BSONObj > elts;
                 BSONObjBuilder s;
                 s.append( "foo", 41 );
@@ -374,7 +358,7 @@ namespace NamespaceTests {
                 b.append( "a", elts );
 
                 BSONObjSet keys;
-                id().getKeysFromObject( b.done(), keys );
+                _getKeysFromObject( b.done(), keys );
                 checkSize( 1, keys );
                 assertEquals( nullObj(), *keys.begin() );
             }
@@ -387,9 +371,9 @@ namespace NamespaceTests {
         class MissingField : public Base {
         public:
             void run() {
-                create();
+                create(); 
                 BSONObjSet keys;
-                id().getKeysFromObject( BSON( "b" << 1 ), keys );
+                _getKeysFromObject( BSON( "b" << 1 ), keys );
                 checkSize( 1, keys );
                 assertEquals( nullObj(), *keys.begin() );
             }
@@ -402,9 +386,9 @@ namespace NamespaceTests {
         class SubobjectMissing : public Base {
         public:
             void run() {
-                create();
+                create(); 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[1,2]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[1,2]}" ), keys );
                 checkSize( 1, keys );
                 assertEquals( nullObj(), *keys.begin() );
             }
@@ -417,18 +401,18 @@ namespace NamespaceTests {
         class CompoundMissing : public Base {
         public:
             void run() {
-                create();
+                create(); 
 
                 {
                     BSONObjSet keys;
-                    id().getKeysFromObject( fromjson( "{x:'a',y:'b'}" ) , keys );
+                    _getKeysFromObject( fromjson( "{x:'a',y:'b'}" ) , keys );
                     checkSize( 1 , keys );
                     assertEquals( BSON( "" << "a" << "" << "b" ) , *keys.begin() );
                 }
 
                 {
                     BSONObjSet keys;
-                    id().getKeysFromObject( fromjson( "{x:'a'}" ) , keys );
+                    _getKeysFromObject( fromjson( "{x:'a'}" ) , keys );
                     checkSize( 1 , keys );
                     BSONObjBuilder b;
                     b.append( "" , "a" );
@@ -448,9 +432,9 @@ namespace NamespaceTests {
         class ArraySubelementComplex : public Base {
         public:
             void run() {
-                create();
+                create();  
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[{b:[2]}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[{b:[2]}]}" ), keys );
                 checkSize( 1, keys );
                 assertEquals( BSON( "" << 2 ), *keys.begin() );
             }
@@ -463,9 +447,9 @@ namespace NamespaceTests {
         class ParallelArraysComplex : public Base {
         public:
             void run() {
-                create();
+                create();  
                 BSONObjSet keys;
-                ASSERT_THROWS( id().getKeysFromObject( fromjson( "{a:[{b:[1],c:[2]}]}" ), keys ),
+                ASSERT_THROWS( _getKeysFromObject( fromjson( "{a:[{b:[1],c:[2]}]}" ), keys ),
                                   UserException );
             }
         private:
@@ -477,9 +461,9 @@ namespace NamespaceTests {
         class AlternateMissing : public Base {
         public:
             void run() {
-                create();
+                create();  
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[{b:1},{c:2}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[{b:1},{c:2}]}" ), keys );
                 checkSize( 2, keys );
                 BSONObjSet::iterator i = keys.begin();
                 {
@@ -505,9 +489,9 @@ namespace NamespaceTests {
         class MultiComplex : public Base {
         public:
             void run() {
-                create();
+                create();                
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[{b:1},{b:[1,2,3]}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[{b:1},{b:[1,2,3]}]}" ), keys );
                 checkSize( 3, keys );
             }
         private:
@@ -519,22 +503,22 @@ namespace NamespaceTests {
         class EmptyArray : Base {
         public:
             void run() {
-                create();
+                create();  
 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[1,2]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[1,2]}" ), keys );
                 checkSize(2, keys );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[1]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[1]}" ), keys );
                 checkSize(1, keys );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:null}" ), keys );
+                _getKeysFromObject( fromjson( "{a:null}" ), keys );
                 checkSize(1, keys );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
                 checkSize(1, keys );
                 ASSERT_EQUALS( Undefined, keys.begin()->firstElement().type() );
                 keys.clear();
@@ -544,10 +528,10 @@ namespace NamespaceTests {
         class DoubleArray : Base {
         public:
             void run() {
-             	create();   
+                create();                
                 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[1,2]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[1,2]}" ), keys );
                 checkSize(2, keys );
                 BSONObjSet::const_iterator i = keys.begin();
                 ASSERT_EQUALS( BSON( "" << 1 << "" << 1 ), *i );
@@ -565,10 +549,10 @@ namespace NamespaceTests {
         class DoubleEmptyArray : Base {
         public:
             void run() {
-             	create();   
+                create();
 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
                 checkSize(1, keys );
                 ASSERT_EQUALS( fromjson( "{'':undefined,'':undefined}" ), *keys.begin() );
                 keys.clear();
@@ -583,23 +567,23 @@ namespace NamespaceTests {
         class MultiEmptyArray : Base {
         public:
             void run() {
-                create();
+                create(); 
 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:1,b:[1,2]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:1,b:[1,2]}" ), keys );
                 checkSize(2, keys );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:1,b:[1]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:1,b:[1]}" ), keys );
                 checkSize(1, keys );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:1,b:null}" ), keys );
+                _getKeysFromObject( fromjson( "{a:1,b:null}" ), keys );
                 //cout << "YO : " << *(keys.begin()) << endl;
                 checkSize(1, keys );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:1,b:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:1,b:[]}" ), keys );
                 checkSize(1, keys );
                 //cout << "YO : " << *(keys.begin()) << endl;
                 BSONObjIterator i( *keys.begin() );
@@ -617,10 +601,10 @@ namespace NamespaceTests {
         class NestedEmptyArray : Base {
         public:
             void run() {
-             	create();
+                create();     	
                 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':null}" ), *keys.begin() );
                 keys.clear();
@@ -632,10 +616,10 @@ namespace NamespaceTests {
 		class MultiNestedEmptyArray : Base {
         public:
             void run() {
-             	create();
+                create();	
                 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':null,'':null}" ), *keys.begin() );
                 keys.clear();
@@ -647,20 +631,20 @@ namespace NamespaceTests {
         class UnevenNestedEmptyArray : public Base {
         public:
             void run() {
-             	create();
+                create(); 	
                 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':undefined,'':null}" ), *keys.begin() );
                 keys.clear();
                 
-                id().getKeysFromObject( fromjson( "{a:[{b:1}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[{b:1}]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':{b:1},'':1}" ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[{b:[]}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[{b:[]}]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':{b:[]},'':undefined}" ), *keys.begin() );
                 keys.clear();
@@ -672,10 +656,30 @@ namespace NamespaceTests {
         class ReverseUnevenNestedEmptyArray : public Base {
         public:
             void run() {
-             	create();
+                create();	
                 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                checkSize( 1, keys );
+                ASSERT_EQUALS( fromjson( "{'':null,'':undefined}" ), *keys.begin() );
+                keys.clear();
+            }
+        protected:
+            BSONObj key() const { return BSON( "a.b" << 1 << "a" << 1 ); }            
+        };
+
+        class SparseBase : public Base {
+            virtual bool isSparse() const {
+                return true;
+            }
+        };
+        
+        class SparseReverseUnevenNestedEmptyArray : public SparseBase {
+        public:
+            void run() {
+                create();	
+                BSONObjSet keys;
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':null,'':undefined}" ), *keys.begin() );
                 keys.clear();
@@ -684,36 +688,20 @@ namespace NamespaceTests {
             BSONObj key() const { return BSON( "a.b" << 1 << "a" << 1 ); }            
         };
         
-        class SparseReverseUnevenNestedEmptyArray : public Base {
+        class SparseEmptyArray : public SparseBase {
         public:
             void run() {
-             	create( true );
-                
+                create();	
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
-                checkSize( 1, keys );
-                ASSERT_EQUALS( fromjson( "{'':null,'':undefined}" ), *keys.begin() );
-                keys.clear();
-            }
-        protected:
-            BSONObj key() const { return BSON( "a.b" << 1 << "a" << 1 ); }            
-        };
-        
-        class SparseEmptyArray : public Base {
-        public:
-            void run() {
-             	create( true );
-                
-                BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:1}" ), keys );
+                _getKeysFromObject( fromjson( "{a:1}" ), keys );
                 checkSize( 0, keys );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
                 checkSize( 0, keys );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[{c:1}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[{c:1}]}" ), keys );
                 checkSize( 0, keys );
                 keys.clear();
             }
@@ -721,21 +709,20 @@ namespace NamespaceTests {
             BSONObj key() const { return BSON( "a.b" << 1 ); }            
         };
 
-        class SparseEmptyArraySecond : public Base {
+        class SparseEmptyArraySecond : public SparseBase {
         public:
             void run() {
-             	create( true );
-                
+                create();	
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:1}" ), keys );
+                _getKeysFromObject( fromjson( "{a:1}" ), keys );
                 checkSize( 0, keys );
                 keys.clear();
                 
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
                 checkSize( 0, keys );
                 keys.clear();
                 
-                id().getKeysFromObject( fromjson( "{a:[{c:1}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[{c:1}]}" ), keys );
                 checkSize( 0, keys );
                 keys.clear();
             }
@@ -746,20 +733,20 @@ namespace NamespaceTests {
         class NonObjectMissingNestedField : public Base {
         public:
             void run() {
-             	create();
+                create();	
                 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':null}" ), *keys.begin() );
                 keys.clear();
                 
-                id().getKeysFromObject( fromjson( "{a:[1]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[1]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':null}" ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[1,{b:1}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[1,{b:1}]}" ), keys );
                 checkSize( 2, keys );
                 BSONObjSet::const_iterator c = keys.begin();
                 ASSERT_EQUALS( fromjson( "{'':null}" ), *c );
@@ -773,19 +760,19 @@ namespace NamespaceTests {
 
         class SparseNonObjectMissingNestedField : public Base {
         public:
+            bool isSparse() const { return true; }
             void run() {
-             	create( true );
-                
+                create();	
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
                 checkSize( 0, keys );
                 keys.clear();
                 
-                id().getKeysFromObject( fromjson( "{a:[1]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[1]}" ), keys );
                 checkSize( 0, keys );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[1,{b:1}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[1,{b:1}]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':1}" ), *keys.begin() );
                 keys.clear();
@@ -797,32 +784,32 @@ namespace NamespaceTests {
         class IndexedArrayIndex : public Base {
         public:
             void run() {
-             	create();
+                create();	
                 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[1]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[1]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( BSON( "" << 1 ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[[1]]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[[1]]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':[1]}" ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[[]]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[[]]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':undefined}" ), *keys.begin() );
                 keys.clear();
                 
-                id().getKeysFromObject( fromjson( "{a:{'0':1}}" ), keys );
+                _getKeysFromObject( fromjson( "{a:{'0':1}}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( BSON( "" << 1 ), *keys.begin() );
                 keys.clear();
 
-                ASSERT_THROWS( id().getKeysFromObject( fromjson( "{a:[{'0':1}]}" ), keys ), UserException );
+                ASSERT_THROWS( _getKeysFromObject( fromjson( "{a:[{'0':1}]}" ), keys ), UserException );
 
-                ASSERT_THROWS( id().getKeysFromObject( fromjson( "{a:[1,{'0':2}]}" ), keys ), UserException );
+                ASSERT_THROWS( _getKeysFromObject( fromjson( "{a:[1,{'0':2}]}" ), keys ), UserException );
             }
         protected:
             BSONObj key() const { return BSON( "a.0" << 1 ); }
@@ -831,25 +818,25 @@ namespace NamespaceTests {
         class DoubleIndexedArrayIndex : public Base {
         public:
             void run() {
-             	create();
+                create();	
                 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[[1]]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[[1]]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':1}" ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[[]]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[[]]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':null}" ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':null}" ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[[[]]]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[[[]]]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':undefined}" ), *keys.begin() );
                 keys.clear();
@@ -861,40 +848,40 @@ namespace NamespaceTests {
         class ObjectWithinArray : public Base {
         public:
             void run() {
-             	create();
+                create();	
                 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[{b:1}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[{b:1}]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':1}" ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[{b:[1]}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[{b:[1]}]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':1}" ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[{b:[[1]]}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[{b:[[1]]}]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':[1]}" ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[[{b:1}]]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[[{b:1}]]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':1}" ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[[{b:[1]}]]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[[{b:[1]}]]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':1}" ), *keys.begin() );
                 keys.clear();
 
-                id().getKeysFromObject( fromjson( "{a:[[{b:[[1]]}]]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[[{b:[[1]]}]]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':[1]}" ), *keys.begin() );
                 keys.clear();
                 
-                id().getKeysFromObject( fromjson( "{a:[[{b:[]}]]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[[{b:[]}]]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':undefined}" ), *keys.begin() );
                 keys.clear();
@@ -906,10 +893,10 @@ namespace NamespaceTests {
         class ArrayWithinObjectWithinArray : public Base {
         public:
             void run() {
-             	create();
+                create();	
                 
                 BSONObjSet keys;
-                id().getKeysFromObject( fromjson( "{a:[{b:[1]}]}" ), keys );
+                _getKeysFromObject( fromjson( "{a:[{b:[1]}]}" ), keys );
                 checkSize( 1, keys );
                 ASSERT_EQUALS( fromjson( "{'':1}" ), *keys.begin() );
                 keys.clear();
@@ -967,7 +954,12 @@ namespace NamespaceTests {
                 string s( ns() );
                 string errmsg;
                 BSONObjBuilder result;
+                ctx().beginTransaction();
                 dropCollection( s, errmsg, result );
+                ctx().commitTransaction();
+            }
+            Client::Context &ctx() {
+                return _context;
             }
         protected:
             void create() {
@@ -1000,14 +992,6 @@ namespace NamespaceTests {
             }
         };
 
-        class Create : public Base {
-        public:
-            void run() {
-                create();
-                ASSERT( nsd() );
-            }
-        };
-
         /* test  NamespaceDetails::cappedTruncateAfter
         */
         class TruncateCapped : public Base {
@@ -1029,7 +1013,7 @@ namespace NamespaceTests {
         //        public:
         //            BigCollection() : Base( "NamespaceDetailsTests_BigCollection" ) {}
         //            void run() {
-        //                create();
+        //                
         //                ASSERT_EQUALS( 2, nExtents() );
         //            }
         //        private:
@@ -1042,19 +1026,12 @@ namespace NamespaceTests {
         //            }
         //        };
 
-        class Size {
-        public:
-            void run() {
-                ASSERT_EQUALS( 496U, sizeof( NamespaceDetails ) );
-            }
-        };
-        
         class CachedPlanBase : public Base {
         public:
             CachedPlanBase() :
                 _fieldRangeSet( ns(), BSON( "a" << 1 ), true, true ),
                 _pattern( _fieldRangeSet, BSONObj() ) {
-                create();
+                
             }
         protected:
             void assertCachedIndexKey( const BSONObj &indexKey ) const {
@@ -1083,6 +1060,7 @@ namespace NamespaceTests {
                 
                 ASSERT( !nsd()->isMultikey( 1 ) );
                 
+                ctx().beginTransaction();
                 nsd()->setIndexIsMultikey( ns(), 1 );
                 ASSERT( nsd()->isMultikey( 1 ) );
                 assertCachedIndexKey( BSONObj() );
@@ -1090,6 +1068,7 @@ namespace NamespaceTests {
                 registerIndexKey( BSON( "a" << 1 ) );
                 nsd()->setIndexIsMultikey( ns(), 1 );
                 assertCachedIndexKey( BSON( "a" << 1 ) );
+                ctx().commitTransaction();
             }
         };
         
@@ -1119,7 +1098,6 @@ namespace NamespaceTests {
         }
 
         void setupTests() {
-            add< IndexDetailsTests::Create >();
             add< IndexDetailsTests::GetKeysFromObjectSimple >();
             add< IndexDetailsTests::GetKeysFromObjectDotted >();
             add< IndexDetailsTests::GetKeysFromArraySimple >();
@@ -1157,9 +1135,7 @@ namespace NamespaceTests {
             add< IndexDetailsTests::CompoundMissing >();
             add< IndexSpecTests::Suitability >();
             add< IndexSpecTests::NumericFieldSuitability >();
-            add< NamespaceDetailsTests::Create >();
             add< NamespaceDetailsTests::TruncateCapped >();
-            add< NamespaceDetailsTests::Size >();
             add< NamespaceDetailsTests::SetIndexIsMultikey >();
             add< NamespaceDetailsTransientTests::ClearQueryCache >();
         }

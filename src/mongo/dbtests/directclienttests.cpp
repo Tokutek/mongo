@@ -59,10 +59,10 @@ namespace DirectClientTests {
                     //cout << cmd.toString() << endl;
                     bool ok = client().runCommand("a", cmd, info);
                     //cout << info.toString() << endl;
-                    verify(ok);
+                    ASSERT(ok);
                 }
 
-                verify( client().dropCollection(ns) );
+                ASSERT( client().dropCollection(ns) );
             }
         }
     };
