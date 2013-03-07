@@ -195,7 +195,7 @@ namespace mongo {
         r = cursor->c_close(cursor);
         verify(r == 0);
 
-        uassert(16433, mongoutils::str::stream() << "key " << key << " already exists in unique index", isUnique);
+        uassert(ASSERT_ID_DUPKEY, mongoutils::str::stream() << "E11000 duplicate key error, " << key << " already exists in unique index", isUnique);
     }
 
     void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite) {
