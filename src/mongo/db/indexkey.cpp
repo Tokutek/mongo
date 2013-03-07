@@ -70,6 +70,7 @@ namespace mongo {
     }
 
     void IndexSpec::_init() {
+        tokulog(0) << "IndexSpec::_init key " << keyPattern << ", info " << info << endl;
         verify( keyPattern.objsize() );
 
         // some basics
@@ -124,6 +125,12 @@ namespace mongo {
         }
 
         _finishedInit = true;
+    }
+
+    void assertParallelArrays( const char *first, const char *second ) {
+        stringstream ss;
+        ss << "cannot index parallel arrays [" << first << "] [" << second << "]";
+        uasserted( 16452 ,  ss.str() );
     }
 
     class KeyGenerator {
@@ -216,7 +223,7 @@ namespace mongo {
                     }
                     else if ( e.rawdata() != arrElt.rawdata() ) {
                         // enforce single array path here
-                        uasserted(16443, "_getKeys() does not properly generate parallel array keys, sorry!");
+                        assertParallelArrays( e.fieldName(), arrElt.fieldName() );
                     }
                     if ( arrayNestedArray ) {
                         mayExpandArrayUnembedded = false;   
