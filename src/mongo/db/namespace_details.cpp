@@ -312,16 +312,19 @@ namespace mongo {
         }
 
         shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
+        // Ensure we initialize the spec in case the collection is empty.
+        // This also causes an error to be thrown if we're trying to create an invalid index on an empty collection.
+        index->getSpec();
         indexBuildInProgress = true;
+        _indexes.push_back(index);
         try {
-            _indexes.push_back(index);
             fillNewIndex(*index);
-            _nIndexes++;
         } catch (DBException &e) {
             _indexes.pop_back();
             indexBuildInProgress = false;
             throw;
         }
+        _nIndexes++;
         indexBuildInProgress = false;
 
         string idx_ns = idx_info["ns"].String();

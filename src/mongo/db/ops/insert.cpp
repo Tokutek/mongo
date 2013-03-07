@@ -37,6 +37,7 @@ namespace mongo {
             // obj is something like this:
             // { _id: ObjectId('511d34f6d3080c48017a14d0'), ns: "test.leif", key: { a: -1.0 }, name: "a_-1", unique: true }
             const string &coll = obj["ns"].String();
+            const bool collIsNew = nsdetails(coll.c_str()) == NULL;
             NamespaceDetails *details = nsdetails_maybe_create(coll.c_str());
             BSONObj key = obj["key"].Obj();
             int i = details->findIndexByKeyPattern(key);
@@ -44,7 +45,16 @@ namespace mongo {
                 // uassert with ASSERT_ID_DUPKEY to match vanilla mongodb behavior
                 uasserted(ASSERT_ID_DUPKEY, mongoutils::str::stream() << coll << " already has an index on key " << key);
             }
-            details->createIndex(obj);
+            try {
+                details->createIndex(obj);
+            } catch (DBException &e) {
+                if (collIsNew) {
+                    // We created the collection above just to create this index, but creating the index failed, so we should also roll back the collection creation.
+                    // This has some transaction-ignorant pieces in the NamespaceIndex so we have to manually undo them here.
+                    nsindex(coll.c_str())->kill_ns(coll.c_str());
+                }
+                throw;
+            }
         } else if (legalClientSystemNS(ns, true)) {
             if (mongoutils::str::endsWith(ns, ".system.users")) {
                 uassert( 14051 , "system.users entry needs 'user' field to be a string", obj["user"].type() == String );

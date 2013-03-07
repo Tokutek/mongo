@@ -4,12 +4,12 @@ t.drop()
 //test non-single field hashed indexes don't get created (maybe change later)
 var badspec = {a : "hashed" , b : 1};
 t.ensureIndex( badspec );
-assert.eq( t.getIndexes().length , 1 , "only _id index should be created");
+assert.eq( t.getIndexes().length , 0 , "no index should be created");
 
 //test unique index not created (maybe change later)
 var goodspec = {a : "hashed"};
 t.ensureIndex( goodspec , {"unique" : true});
-assert.eq( t.getIndexes().length , 1 , "unique index got created.");
+assert.eq( t.getIndexes().length , 0 , "no index should be created");
 
 //now test that non-unique index does get created
 t.ensureIndex(goodspec);
