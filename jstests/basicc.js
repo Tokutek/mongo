@@ -1,5 +1,5 @@
 // test writing to two db's at the same time.
-assert(false, "basicc disabled because it doesn't kill its child process properly and that's super annoying");
+
 t1 = db.jstests_basicc;
 var db = db.getSisterDB("test_basicc");
 t2 = db.jstests_basicc;
