@@ -1,4 +1,3 @@
-assert(false, "disabled due to server crash");
 print("BEGIN currentop.js");
 
 // test basic currentop functionality + querying of nested documents
