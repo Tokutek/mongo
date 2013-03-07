@@ -126,29 +126,6 @@ namespace QueryTests {
         }
     };
     
-    class FindOneEmptyObj : public Base {
-    public:
-        void run() {
-            // todo: this is BAD.
-            cc().getAuthenticationInfo()->setIsALocalHostConnectionWithSpecialAuthPowers();
-
-            // We don't normally allow empty objects in the database, but test that we can find
-            // an empty object (one might be allowed inside a reserved namespace at some point).
-            Lock::GlobalWrite lk;
-            Client::Context ctx( "unittests.querytests" );
-            // Set up security so godinsert command can run.
-            DBDirectClient cl;
-            BSONObj info;
-            ASSERT( cl.runCommand( "unittests", BSON( "godinsert" << "querytests" << "obj" << BSONObj() ), info ) );
-            insert( BSONObj() );
-            BSONObj query;
-            BSONObj ret;
-            ASSERT( Helpers::findOne( ns(), query, ret, false ) );
-            ASSERT( ret.isEmpty() );
-            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, false ) );
-        }
-    };
-    
     class ClientBase {
     public:
         ClientBase() {
@@ -492,20 +469,6 @@ namespace QueryTests {
     private:
         void count( unsigned long long c ) const {
             ASSERT_EQUALS( c, client().count( "unittests.querytests.BasicCount", BSON( "a" << 4 ) ) );
-        }
-    };
-
-    class ArrayId : public ClientBase {
-    public:
-        ~ArrayId() {
-            client().dropCollection( "unittests.querytests.ArrayId" );
-        }
-        void run() {
-            const char *ns = "unittests.querytests.ArrayId";
-            client().ensureIndex( ns, BSON( "_id" << 1 ) );
-            ASSERT( !error() );
-            client().insert( ns, fromjson( "{'_id':[1,2]}" ) );
-            ASSERT( error() );
         }
     };
 
@@ -1061,6 +1024,8 @@ namespace QueryTests {
 
             ASSERT_EQUALS( 50 , count() );
 
+            ctx.ctx().beginTransaction();
+
             BSONObj res;
             ASSERT( Helpers::findOne( ns() , BSON( "_id" << 20 ) , res , true ) );
             ASSERT_EQUALS( 40 , res["x"].numberInt() );
@@ -1090,7 +1055,7 @@ namespace QueryTests {
             }
 
             cout << "HelperTest  slow:" << slow << " fast:" << fast << endl;
-
+            ctx.ctx().commitTransaction();
         }
     };
 
@@ -1098,8 +1063,6 @@ namespace QueryTests {
     public:
 
         HelperByIdTest() : CollectionBase( "helpertestbyid" ) {
-            // create collection before instantiating the writecontext
-            nsdetails_maybe_create(ns());
         }
 
         void run() {
@@ -1112,12 +1075,13 @@ namespace QueryTests {
                 client_.remove( ns() , BSON( "_id" << i ) );
             }
 
+            ctx.ctx().beginTransaction();
             BSONObj res;
             for ( int i=0; i<1000; i++ ) {
                 bool found = Helpers::findById( ns() , BSON( "_id" << i ) , res );
                 ASSERT_EQUALS( i % 2 , int(found) );
             }
-
+            ctx.ctx().commitTransaction();
         }
     };
 
@@ -1131,7 +1095,6 @@ namespace QueryTests {
             for ( int i=0; i<1000; i++ ) {
                 insert( ns() , BSON( "_id" << i << "x" << i * 2 ) );
             }
-
 
         }
     };
@@ -1585,7 +1548,6 @@ namespace QueryTests {
             add< FindingStart >();
             add< FindOneOr >();
             add< FindOneRequireIndex >();
-            add< FindOneEmptyObj >();
             add< BoundedKey >();
             add< GetMore >();
             add< PositiveLimit >();
@@ -1598,7 +1560,6 @@ namespace QueryTests {
             add< TailableQueryOnId >();
             add< OplogReplayMode >();
             add< OplogReplaySlaveReadTill >();
-            add< ArrayId >();
             add< UnderscoreNs >();
             add< EmptyFieldSpec >();
             add< MultiNe >();

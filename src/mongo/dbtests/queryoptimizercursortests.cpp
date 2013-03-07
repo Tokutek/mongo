@@ -2795,29 +2795,6 @@ namespace QueryOptimizerCursorTests {
                 BSONObj _query;
             };
 
-            class HintedNaturalForQuery : public Base {
-            public:
-                HintedNaturalForQuery( const BSONObj &query ) : _query( query ) {
-                    _cli.dropCollection( ns() );
-                    _cli.createCollection( ns(), 1024, true );
-                    _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-                    _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 ) );
-                }
-                ~HintedNaturalForQuery() {
-                    _cli.dropCollection( ns() );
-                }
-                string expectedType() const { return "ForwardCappedCursor"; }
-                BSONObj query() const { return _query; }
-                void check( const shared_ptr<Cursor> &c ) {
-                    ASSERT( c->ok() );
-                    ASSERT( c->currentMatches() );
-                    ASSERT_EQUALS( 1, c->current().getIntField( "_id" ) );
-                    ASSERT( !c->advance() );
-                }
-            private:
-                BSONObj _query;
-            };
-
         } // namespace IdElseNatural
         
         /**
@@ -3518,7 +3495,6 @@ namespace QueryOptimizerCursorTests {
             add<GetCursor::IdElseNatural::HintedIdForQuery>( BSON( "_id" << 1 ) );
             add<GetCursor::IdElseNatural::HintedIdForQuery>( BSON( "a" << 1 ) );
             add<GetCursor::IdElseNatural::HintedIdForQuery>( BSON( "_id" << 1 << "a" << 1 ) );
-            add<GetCursor::IdElseNatural::HintedNaturalForQuery>( BSONObj() );
             // now capped collections have _id index by default, so skip these
             //add<GetCursor::IdElseNatural::HintedNaturalForQuery>( BSON( "_id" << 1 ) );
             //add<GetCursor::IdElseNatural::HintedNaturalForQuery>( BSON( "a" << 1 ) );
