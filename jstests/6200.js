@@ -9,5 +9,6 @@ t.ensureIndex({a:1},{unique:1})
 e = db.getLastErrorObj()
 printjson(e)
 assert(e.code == 11000)
+assert(/^E11000 /.test(e.err))
 
 t.drop();
