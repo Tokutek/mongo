@@ -1626,10 +1626,10 @@ namespace mongo {
                 if ( c.find( ".system." ) != string::npos ) {
                     continue;
                 }
-		else {
+                else {
                     verify(idNum >= 0);
                     cursor.reset( new IndexCursor( nsd , &nsd->idx( idNum ) , BSONObj() , BSONObj() , false , 1 ) );
-		}
+                }
 
                 md5_state_t st;
                 md5_init(&st);
