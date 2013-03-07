@@ -209,8 +209,6 @@ namespace mongo {
         CurOp *parent() const { return _wrapped; }
         void kill() { _killed = true; }
         bool killed() const { return _killed; }
-        void yielded() { _numYields++; }
-        int numYields() const { return _numYields; }
         void suppressFromCurop() { _suppressFromCurop = true; }
         
         long long getExpectedLatencyMs() const { return _expectedLatencyMs; }
@@ -242,7 +240,6 @@ namespace mongo {
         ThreadSafeString _message;
         ProgressMeter _progressMeter;
         volatile bool _killed;
-        int _numYields;
         LockStat _lockStat;
         
         // this is how much "extra" time a query might take

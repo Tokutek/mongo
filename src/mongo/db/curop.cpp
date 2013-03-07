@@ -46,7 +46,6 @@ namespace mongo {
         _message = "";
         _progressMeter.finished();
         _killed = false;
-        _numYields = 0;
         _expectedLatencyMs = 0;
         _lockStat.reset();
     }
@@ -175,7 +174,6 @@ namespace mongo {
         if( killed() ) 
             b.append("killed", true);
         
-        b.append( "numYields" , _numYields );
         b.append( "lockStats" , _lockStat.report() );
 
         return b.obj();

@@ -212,27 +212,6 @@ namespace DocumentSourceTests {
             boost::thread _dummyWriter;
         };
 
-        /** DocumentSourceCursor yields deterministically when enough documents are scanned. */
-        class Yield : public Base {
-        public:
-            void run() {
-                // Insert enough documents that counting them will exceed the iteration threshold
-                // to trigger a yield.
-                for( int i = 0; i < 1000; ++i ) {
-                    client.insert( ns, BSON( "a" << 1 ) );
-                }
-                createSource();
-                ASSERT_EQUALS( 0, cc().curop()->numYields() );
-                // Iterate through all results.
-                while( source()->advance() );
-                // The lock was yielded during iteration.
-                ASSERT( 0 < cc().curop()->numYields() );
-            }
-        private:
-            // An active writer is required to trigger yielding.
-            WriterClientScope _writerScope;
-        };
-
     } // namespace DocumentSourceCursor
 
     namespace DocumentSourceLimit {
@@ -1694,7 +1673,6 @@ namespace DocumentSourceTests {
             add<DocumentSourceCursor::Iterate>();
             add<DocumentSourceCursor::Dispose>();
             add<DocumentSourceCursor::IterateDispose>();
-            add<DocumentSourceCursor::Yield>();
 
             add<DocumentSourceLimit::DisposeSource>();
             add<DocumentSourceLimit::DisposeSourceCascade>();

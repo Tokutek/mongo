@@ -601,26 +601,6 @@ namespace mongo {
         return writers + readers;
     }
 
-#if 0
-    bool Client::allowedToThrowPageFaultException() const {
-        if ( _hasWrittenThisPass )
-            return false;
-        
-        if ( ! _pageFaultRetryableSection )
-            return false;
-
-        if ( _pageFaultRetryableSection->laps() >= 100 )
-            return false;
-        
-        // if we've done a normal yield, it means we're in a ClientCursor or something similar
-        // in that case, that code should be handling yielding, not us
-        if ( _curOp && _curOp->numYields() > 0 ) 
-            return false;
-
-        return true;
-    }
-#endif
-
     void OpDebug::reset() {
         extra.reset();
 
@@ -700,9 +680,6 @@ namespace mongo {
                 s << " code:" << exceptionInfo.code;
         }
 
-        if ( curop.numYields() )
-            s << " numYields: " << curop.numYields();
-        
         s << " ";
         curop.lockStat().report( s );
         
@@ -745,7 +722,6 @@ namespace mongo {
         OPDEBUG_APPEND_BOOL( upsert );
         OPDEBUG_APPEND_NUMBER( keyUpdates );
 
-        b.appendNumber( "numYield" , curop.numYields() );
         b.append( "lockStats" , curop.lockStat().report() );
         
         if ( ! exceptionInfo.empty() ) 

@@ -44,7 +44,6 @@ namespace mongo {
             }
             tr.reset(new Lock::TempRelease);
             verify( c.curop() );
-            c.curop()->yielded();
         }
         ~dbtemprelease() {
             tr.reset();
@@ -71,7 +70,6 @@ namespace mongo {
                 _context->unlocked();
             tr.reset(new Lock::TempRelease);
             verify( c.curop() );
-            c.curop()->yielded();            
         }
         ~dbtempreleasewritelock() {
             tr.reset();
