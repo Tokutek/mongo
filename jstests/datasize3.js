@@ -1,4 +1,3 @@
-assert(false, "datasize3 test disabled");
 t = db.datasize3;
 t.drop()
 

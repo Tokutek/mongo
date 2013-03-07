@@ -1141,7 +1141,7 @@ namespace mongo {
                     return 1;
                 }
 #endif
-                Helpers::findTableScan( ns.c_str() , BSONObj() );
+                c = Helpers::findTableScan( ns.c_str() , BSONObj() );
             }
             else if ( min.isEmpty() || max.isEmpty() ) {
                 errmsg = "only one of min or max specified";
