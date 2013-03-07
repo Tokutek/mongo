@@ -1,4 +1,5 @@
-
+print("this test will fail because we reorder the fields in more update cases than vanilla mongo.")
+print("Leif has sent mail asking about this to the mongodb-dev list")
 t = db.inc3;
 
 t.drop();
