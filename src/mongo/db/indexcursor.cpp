@@ -207,7 +207,7 @@ namespace mongo {
     {
         tokulog(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
-        _boundsIterator->prepDive(); // initializes the internal inclusive bits and cmp elements
+        _boundsIterator->prepDive();
         initializeDBC();
     }
 
@@ -244,10 +244,15 @@ namespace mongo {
             if ( _bounds != NULL) {
                 // Try skipping forward in the key space using the bounds iterator
                 // and the proposed startKey. If skipping wasn't necessary, then
-                // use that start key to set our position.
+                // use that start key to set our position and reset the iterator.
                 prelockRange( _bounds->startKey(), _bounds->endKey() );
                 const int r = skipToNextKey( _bounds->startKey() );
                 if ( r == -1 ) {
+                    // The bounds iterator suggests _bounds->startKey() is within
+                    // the current interval, so that's a good place to start. We
+                    // need to prepDive() on the iterator to reset its current
+                    // state so that further calls to skipToNextKey work properly.
+                    _boundsIterator->prepDive();
                     findKey( _bounds->startKey() );
                 }
             } else {
