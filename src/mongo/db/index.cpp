@@ -178,15 +178,12 @@ namespace mongo {
                 return;
             }
         }
-        const BSONObj *pk = isIdIndex() ? NULL : &minKey;
-        const size_t buflen = storage::index_key_size(key, pk);
-        char buf[buflen];
-        storage::index_key_init(buf, buflen, key, pk);
 
-        DBT kdbt;
-        storage::dbt_init(&kdbt, buf, buflen);
         const int c_flags = DB_SERIALIZABLE;
         DBC *cursor = newCursor(c_flags);
+
+        storage::Key skey(key, !isIdIndex() ? &minKey : NULL);
+        DBT kdbt = skey.dbt();
 
         bool isUnique = true;
         UniqueCheckExtra extra(*this, key, isUnique);
@@ -206,13 +203,9 @@ namespace mongo {
             uniqueCheck(key);
         }
 
-        const size_t buflen = storage::index_key_size(key, pk);
-        char buf[buflen];
-        storage::index_key_init(buf, buflen, key, pk);
-
-        DBT kdbt, vdbt;
-        storage::dbt_init(&kdbt, buf, buflen);
-        storage::dbt_init(&vdbt, val.objdata(), val.objsize());
+        storage::Key skey(key, pk);
+        DBT kdbt = skey.dbt();
+        DBT vdbt = storage::make_dbt(val.objdata(), val.objsize());
 
         const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
         int r = _db->put(_db, cc().getContext()->transaction().txn(), &kdbt, &vdbt, flags);
@@ -229,12 +222,8 @@ namespace mongo {
         getKeysFromObject(obj, keys);
         for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
             const BSONObj &key = *ki;
-            const size_t buflen = storage::index_key_size(key, !isIdIndex() ? &pk : NULL);
-            char buf[buflen];
-            storage::index_key_init(buf, buflen, key, !isIdIndex() ? &pk : NULL);
-
-            DBT kdbt;
-            storage::dbt_init(&kdbt, buf, buflen);
+            storage::Key skey(key, !isIdIndex() ? &pk : NULL);
+            DBT kdbt = skey.dbt();
 
             const int flags = DB_DELETE_ANY;
             int r = _db->del(_db, cc().getContext()->transaction().txn(), &kdbt, flags);

@@ -167,8 +167,7 @@ namespace mongo {
         // set a descriptor for the given dictionary. the descriptor is
         // a serialization of the index's key pattern.
         static void set_db_descriptor(DB *db, DB_TXN *txn, const BSONObj &key_pattern) {
-            DBT dbt;
-            dbt_init(&dbt, key_pattern.objdata(), key_pattern.objsize());
+            DBT dbt = make_dbt(key_pattern.objdata(), key_pattern.objsize());
             const int flags = DB_UPDATE_CMP_DESCRIPTOR;
             int r = db->change_descriptor(db, txn, &dbt, flags);
             verify(r == 0);

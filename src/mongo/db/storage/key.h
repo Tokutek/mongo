@@ -38,25 +38,33 @@ namespace mongo {
 
     namespace storage {
 
-        inline void dbt_init(DBT *dbt, const char *buf, size_t size) {
-            dbt->data = const_cast<char *>(buf);
-            dbt->size = size;
-            dbt->ulen = 0;
-            dbt->flags = 0;
+        inline DBT make_dbt(const char *buf, size_t size) {
+            DBT dbt;
+            dbt.data = const_cast<char *>(buf);
+            dbt.size = size;
+            dbt.ulen = 0;
+            dbt.flags = 0;
+            return dbt;
         }
 
-        // How many bytes will an index key take?
-        inline size_t index_key_size(const BSONObj &key, const BSONObj *pk) {
-            return key.objsize() + (pk != NULL ? pk->objsize() : 0);
-        }
-        
-        // Initialize an index key into the given buffer.
-        inline void index_key_init(char *buf, size_t size, const BSONObj &key, const BSONObj *pk) {
-            memcpy(buf, key.objdata(), key.objsize());
-            if (pk != NULL) {
-                memcpy(buf + key.objsize(), pk->objdata(), pk->objsize());
+        class Key {
+        public:
+            Key(const BSONObj &key, const BSONObj *pk) :
+                _size(key.objsize() + (pk != NULL ? pk->objsize() : 0)),
+                _buf(new char[_size])
+            {
+                memcpy(_buf.get(), key.objdata(), key.objsize());
+                if (pk != NULL) {
+                    memcpy(_buf.get() + key.objsize(), pk->objdata(), pk->objsize());
+                }
             }
-        }
+            DBT dbt() const {
+                return make_dbt(_buf.get(), _size);
+            }
+        private:
+            size_t _size;
+            scoped_ptr<char> _buf;
+        };
 
     } // namespace storage
 

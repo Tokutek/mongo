@@ -220,15 +220,11 @@ namespace mongo {
 
     void IndexCursor::prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
         const bool isSecondary = !_idx->isIdIndex();
-        const size_t sbuflen = storage::index_key_size(startKey, isSecondary ? &minKey : NULL);
-        const size_t ebuflen = storage::index_key_size(endKey, isSecondary ? &maxKey : NULL);
-        char sbuf[sbuflen], ebuf[ebuflen];
 
-        DBT start, end;
-        storage::index_key_init(sbuf, sbuflen, startKey, isSecondary ? &minKey : NULL);
-        storage::index_key_init(ebuf, ebuflen, endKey, isSecondary ? &maxKey : NULL);
-        storage::dbt_init(&start, sbuf, sbuflen);
-        storage::dbt_init(&end, ebuf, ebuflen);
+        storage::Key sKey(startKey, isSecondary ? &minKey : NULL);
+        storage::Key eKey(endKey, isSecondary ? &maxKey : NULL);
+        DBT start = sKey.dbt();
+        DBT end = eKey.dbt();
 
         const int r = _cursor->c_pre_acquire_range_lock( _cursor, &start, &end );
         if ( r != 0 ) {
@@ -307,21 +303,14 @@ namespace mongo {
     };
 
     void IndexCursor::setPosition(const BSONObj &key, const BSONObj &pk) {
-        const size_t buflen = storage::index_key_size(key, !pk.isEmpty() ? &pk : NULL);
-        char buf[buflen];
-
-        // Secondary keys store an associated Pk next to the stored keys,
-        // so we need to either append Min or Max key to the given key
-        // according to this cursor's direction.
-        storage::index_key_init(buf, buflen, key, !pk.isEmpty() ? &pk : NULL);
         tokulog(3) << toString() << ": setPosition(): getf " << key << ", pk " << pk << ", direction " << _direction << endl;
-
-        DBT key_dbt;
-        storage::dbt_init(&key_dbt, buf, buflen);
 
         // Empty row buffer, reset fetch iteration, go get more rows.
         _buffer.empty();
         _getf_iteration = 0;
+
+        storage::Key sKey( key, !pk.isEmpty() ? &pk : NULL );
+        DBT key_dbt = sKey.dbt();;
 
         int r;
         const int rows_to_fetch = getf_fetch_count();

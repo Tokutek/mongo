@@ -45,12 +45,14 @@ memoryException( {b:1} );
 noMemoryException( {_id:1} );
 noMemoryException( {$natural:1} );
 
-t.ensureIndex( {a:1} );
+// TokuDB proactively fails to build this index since
+// there are indexes where a.objsize() are very large.
+//t.ensureIndex( {a:1} );
 t.ensureIndex( {b:1} );
 t.ensureIndex( {c:1} );
 
 // These sorts are now indexed.
-noMemoryException( {a:1} );
+//noMemoryException( {a:1} );
 noMemoryException( {b:1} );
 
 // A memory exception is triggered for an unindexed sort involving multiple plans.

@@ -460,8 +460,7 @@ namespace mongo {
 
         // create an index key
         BSONObj key = getKey ? idIndex.getKeyFromQuery(query) : query;
-        DBT key_dbt;
-        storage::dbt_init(&key_dbt, key.objdata(), key.objsize());
+        DBT key_dbt = storage::make_dbt(key.objdata(), key.objsize());
 
         // Try to find it.
         BSONObj obj = BSONObj();
