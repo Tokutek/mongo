@@ -555,21 +555,21 @@ namespace mongo {
             }
         }
         accStats->count = indexStats[idIndex].getCount();
-        result->appendNumber("count", accStats->count);
+        result->appendNumber("count", (long long) accStats->count);
 
         result->append("nindexes" , numIndexes );
 
         accStats->size = indexStats[idIndex].getDataSize();
-        result->appendNumber("size", accStats->size/scale);
+        result->appendNumber("size", (long long) accStats->size/scale);
 
         accStats->storageSize = indexStats[idIndex].getStorageSize();
-        result->appendNumber("storageSize", accStats->storageSize/scale);
+        result->appendNumber("storageSize", (long long) accStats->storageSize/scale);
 
         accStats->indexSize = totalIndexDataSize;
-        result->appendNumber("totalIndexSize", totalIndexDataSize/scale);
+        result->appendNumber("totalIndexSize", (long long) totalIndexDataSize/scale);
 
         accStats->indexStorageSize = totalIndexStorageSize;
-        result->appendNumber("totalIndexStorageSize", totalIndexStorageSize/scale);
+        result->appendNumber("totalIndexStorageSize", (long long) totalIndexStorageSize/scale);
 
         result->append("indexDetails", index_info.arr());        
     }
