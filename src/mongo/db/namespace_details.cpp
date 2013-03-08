@@ -509,11 +509,11 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::fillIndexStats(IndexStats* indexStats) {
-        uint32_t i = 0;
-        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it, ++i) {
+    void NamespaceDetails::fillIndexStats(std::vector<IndexStats> &indexStats) {
+        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             IndexDetails *index = it->get();
-            indexStats[i].fillStats(index);
+            IndexStats stats(*index);
+            indexStats.push_back(stats);
         }
     }
 
@@ -532,27 +532,24 @@ namespace mongo {
     {
         uint32_t numIndexes = nIndexes();
         accStats->nIndexes = numIndexes;
-        IndexStats indexStats[numIndexes];
-        BSONObjBuilder index_bson_stats[numIndexes];
+        std::vector<IndexStats> indexStats;
         // fill each of the indexStats with statistics
         fillIndexStats(indexStats);
         // also sum up some stats of secondary indexes,
         // calculate their total data size and storage size
         uint64_t totalIndexDataSize = 0;
         uint64_t totalIndexStorageSize = 0;
-        int idIndex = findIdIndex();
-        verify(idIndex >= 0);
         BSONArrayBuilder index_info;
-        for (uint32_t i = 0; i < numIndexes; i++) {
-            // retrieve the statistics into a BSon object
-            index_bson_stats[i].append("name", idx(i).indexName());
-            indexStats[i].fillBSONWithStats(&index_bson_stats[i], scale);
-            index_info.append(index_bson_stats[i].obj());
-            if (i != (uint32_t)idIndex) {
-                totalIndexDataSize += indexStats[i].getDataSize();
-                totalIndexStorageSize += indexStats[i].getStorageSize();
+        for (std::vector<IndexStats>::const_iterator it = indexStats.begin(); it != indexStats.end(); ++it) {
+            index_info.append(it->bson(scale));
+            if (!it->isIdIndex()) {
+                totalIndexDataSize += it->getDataSize();
+                totalIndexStorageSize += it->getStorageSize();
             }
         }
+        int idIndex = findIdIndex();
+        verify(idIndex >= 0);
+
         accStats->count = indexStats[idIndex].getCount();
         result->appendNumber("count", (long long) accStats->count);
 

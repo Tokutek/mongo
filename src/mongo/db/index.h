@@ -144,10 +144,10 @@ namespace mongo {
         void insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite);
         void deleteObject(const BSONObj &pk, const BSONObj &obj);
         DBC *newCursor(int flags = 0) const;
-        enum toku_compression_method getCompressionMethod();
-        uint32_t getPageSize();
-        uint32_t getReadPageSize();
-        void getStat64(DB_BTREE_STAT64* stats);
+        enum toku_compression_method getCompressionMethod() const;
+        uint32_t getPageSize() const;
+        uint32_t getReadPageSize() const;
+        void getStat64(DB_BTREE_STAT64* stats) const;
         void uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const;
         void uniqueCheck(const BSONObj &key) const;
         void optimize();
@@ -174,23 +174,23 @@ namespace mongo {
     // class to store statistics about an IndexDetails
     class IndexStats {
     public:
-        IndexStats() {
-            _readPageSize = 0;
-            _pageSize = 0;
-        }
-        void fillStats(IndexDetails* idx);
-        void fillBSONWithStats(BSONObjBuilder* bson_stats, int scale);
-        uint64_t getCount() {
+        explicit IndexStats(const IndexDetails &idx);
+        BSONObj bson(int scale) const;
+        uint64_t getCount() const {
             return _stats.bt_nkeys;
         }
-        uint64_t getDataSize() {
+        uint64_t getDataSize() const {
             return _stats.bt_dsize;
         }
-        uint64_t getStorageSize() {
+        uint64_t getStorageSize() const {
             return _stats.bt_fsize;
         }
+        bool isIdIndex() const {
+            return _isIdIndex;
+        }
     private:
-        string name;
+        bool _isIdIndex;
+        string _name;
         DB_BTREE_STAT64 _stats;
         enum toku_compression_method _compressionMethod;
         uint32_t _readPageSize;
@@ -201,3 +201,12 @@ namespace mongo {
     int removeFromSysIndexes(const char *ns, const char *name);
 
 } // namespace mongo
+
+
+
+
+
+
+
+
+

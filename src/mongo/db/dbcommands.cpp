@@ -1408,14 +1408,14 @@ namespace mongo {
             }
             
             result.append      ( "db" , dbname );
-            result.appendNumber( "collections" , ncollections );
-            result.appendNumber( "objects" , objects );
+            result.appendNumber( "collections" , (long long) ncollections );
+            result.appendNumber( "objects" , (long long) objects );
             result.append      ( "avgObjSize" , objects == 0 ? 0 : double(size) / double(objects) );
-            result.appendNumber( "dataSize" , size / scale );
-            result.appendNumber( "storageSize" , storageSize / scale);
-            result.appendNumber( "indexes" , indexes );
-            result.appendNumber( "indexSize" , indexSize / scale );
-            result.appendNumber( "indexStorageSize" , indexStorageSize / scale );
+            result.appendNumber( "dataSize" , (long long) size / scale );
+            result.appendNumber( "storageSize" , (long long) storageSize / scale);
+            result.appendNumber( "indexes" , (long long) indexes );
+            result.appendNumber( "indexSize" , (long long) indexSize / scale );
+            result.appendNumber( "indexStorageSize" , (long long) indexStorageSize / scale );
             return true;
         }
     } cmdDBStats;

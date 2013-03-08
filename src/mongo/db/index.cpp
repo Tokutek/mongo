@@ -240,25 +240,25 @@ namespace mongo {
         return cursor;
     }
 
-    enum toku_compression_method IndexDetails::getCompressionMethod() {
+    enum toku_compression_method IndexDetails::getCompressionMethod() const {
         enum toku_compression_method ret;
         int r = _db->get_compression_method(_db, &ret);
         verify(r == 0);
         return ret;
     }
-    uint32_t IndexDetails::getPageSize() {
+    uint32_t IndexDetails::getPageSize() const {
         uint32_t ret;
         int r = _db->get_pagesize(_db, &ret);
         verify(r == 0);
         return ret;
     }
-    uint32_t IndexDetails::getReadPageSize() {
+    uint32_t IndexDetails::getReadPageSize() const {
         uint32_t ret;
         int r = _db->get_readpagesize(_db, &ret);
         verify(r == 0);
         return ret;
     }
-    void IndexDetails::getStat64(DB_BTREE_STAT64* stats) {
+    void IndexDetails::getStat64(DB_BTREE_STAT64* stats) const {
         int r = _db->stat64(_db, NULL, stats);
         verify(r == 0);
     }
@@ -302,53 +302,57 @@ namespace mongo {
         _init();
     }
 
-    void IndexStats::fillStats(IndexDetails* idx) {
-        name = idx->indexName();
-        _compressionMethod = idx->getCompressionMethod();
-        _readPageSize = idx->getReadPageSize();
-        _pageSize = idx->getPageSize();
-        idx->getStat64(&_stats);
+    IndexStats::IndexStats(const IndexDetails &idx)
+            : _isIdIndex(idx.isIdIndex()),
+              _name(idx.indexName()),
+              _compressionMethod(idx.getCompressionMethod()),
+              _readPageSize(idx.getReadPageSize()),
+              _pageSize(idx.getPageSize()) {
+        idx.getStat64(&_stats);
     }
     
-    void IndexStats::fillBSONWithStats(BSONObjBuilder* bson_stats, int scale) {
-        bson_stats->appendNumber("count", _stats.bt_nkeys);
-        bson_stats->appendNumber("size", _stats.bt_dsize/scale);
-        bson_stats->appendNumber("avgObjSize", (_stats.bt_nkeys == 0
-                                                ? 0.0
-                                                : ((double)_stats.bt_dsize/_stats.bt_nkeys)));
-        bson_stats->appendNumber("storageSize", _stats.bt_fsize / scale);
-        bson_stats->append("pageSize", _pageSize / scale);
-        bson_stats->append("readPageSize", _readPageSize / scale);
+    BSONObj IndexStats::bson(int scale) const {
+        BSONObjBuilder b;
+        b.append("name", _name);
+        b.appendNumber("count", (long long) _stats.bt_nkeys);
+        b.appendNumber("size", (long long) _stats.bt_dsize/scale);
+        b.appendNumber("avgObjSize", (_stats.bt_nkeys == 0
+                                      ? 0.0
+                                      : ((double)_stats.bt_dsize/_stats.bt_nkeys)));
+        b.appendNumber("storageSize", (long long) _stats.bt_fsize / scale);
+        b.append("pageSize", _pageSize / scale);
+        b.append("readPageSize", _readPageSize / scale);
         // fill compression
         switch(_compressionMethod) {
         case TOKU_NO_COMPRESSION:
-            bson_stats->append("compression", "uncompressed");
+            b.append("compression", "uncompressed");
             break;
         case TOKU_ZLIB_METHOD:
-            bson_stats->append("compression", "zlib");
+            b.append("compression", "zlib");
             break;
         case TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD:
-            bson_stats->append("compression", "zlib");
+            b.append("compression", "zlib");
             break;
         case TOKU_QUICKLZ_METHOD:
-            bson_stats->append("compression", "quicklz");
+            b.append("compression", "quicklz");
             break;
         case TOKU_LZMA_METHOD:
-            bson_stats->append("compression", "lzma");
+            b.append("compression", "lzma");
             break;
         case TOKU_FAST_COMPRESSION_METHOD:
-            bson_stats->append("compression", "fast");
+            b.append("compression", "fast");
             break;
         case TOKU_SMALL_COMPRESSION_METHOD:
-            bson_stats->append("compression", "small");
+            b.append("compression", "small");
             break;
         case TOKU_DEFAULT_COMPRESSION_METHOD:
-            bson_stats->append("compression", "default");
+            b.append("compression", "default");
             break;
         default:
-            bson_stats->append("compression", "unknown");
+            b.append("compression", "unknown");
             break;
         }
+        return b.obj();
         // TODO: (Zardosht) Need to figure out how to display these dates
         /*
         Date_t create_date(_stats.bt_create_time_sec);

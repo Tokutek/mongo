@@ -233,7 +233,7 @@ namespace mongo {
     private:
         // fill the statistics for each index in the NamespaceDetails,
         // indexStats is an array of length nIndexes
-        void fillIndexStats(IndexStats* indexStats);
+        void fillIndexStats(std::vector<IndexStats> &indexStats);
 
 
         // Each index (including the _id) index has an IndexDetails that describes it.
