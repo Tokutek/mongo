@@ -63,7 +63,7 @@ namespace mongo {
             }
         private:
             size_t _size;
-            scoped_ptr<char> _buf;
+            scoped_array<char> _buf;
         };
 
     } // namespace storage
