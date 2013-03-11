@@ -30,7 +30,7 @@
 
 namespace mongo {
 
-    static void handle_system_collection_insert(const char *ns, const BSONObj &obj) {
+    static int handle_system_collection_insert(const char *ns, const BSONObj &obj) {
         // Trying to insert into a system collection.  Fancy side-effects go here:
         // TODO: see insert_checkSys
         if (mongoutils::str::endsWith(ns, ".system.indexes")) {
@@ -42,18 +42,18 @@ namespace mongo {
             BSONObj key = obj["key"].Obj();
             int i = details->findIndexByKeyPattern(key);
             if (i >= 0) {
-                // uassert with ASSERT_ID_DUPKEY to match vanilla mongodb behavior
-                uasserted(ASSERT_ID_DUPKEY, mongoutils::str::stream() << coll << " already has an index on key " << key);
-            }
-            try {
-                details->createIndex(obj);
-            } catch (DBException &e) {
-                if (collIsNew) {
-                    // We created the collection above just to create this index, but creating the index failed, so we should also roll back the collection creation.
-                    // This has some transaction-ignorant pieces in the NamespaceIndex so we have to manually undo them here.
-                    nsindex(coll.c_str())->kill_ns(coll.c_str());
+                return ASSERT_ID_DUPKEY;
+            } else {
+                try {
+                    details->createIndex(obj);
+                } catch (DBException &e) {
+                    if (collIsNew) {
+                        // We created the collection above just to create this index, but creating the index failed, so we should also roll back the collection creation.
+                        // This has some transaction-ignorant pieces in the NamespaceIndex so we have to manually undo them here.
+                        nsindex(coll.c_str())->kill_ns(coll.c_str());
+                    }
+                    throw;
                 }
-                throw;
             }
         } else if (legalClientSystemNS(ns, true)) {
             if (mongoutils::str::endsWith(ns, ".system.users")) {
@@ -63,6 +63,7 @@ namespace mongo {
                 uassert( 14054 , "system.users entry needs 'pwd' field to be non-empty", obj["pwd"].String().size() );
             }
         }
+        return 0;
     }
 
     void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, const BSONObj &obj, bool overwrite) {
@@ -76,7 +77,8 @@ namespace mongo {
     void insertObject(const char *ns, const BSONObj &obj) {
         if (mongoutils::str::contains(ns, "system.")) {
             uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
-            handle_system_collection_insert(ns, obj);
+            if (handle_system_collection_insert(ns, obj))
+                return;
         }
         NamespaceDetails *details = nsdetails_maybe_create(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
