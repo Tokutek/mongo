@@ -227,7 +227,17 @@ namespace mongo {
         _db(0),
         _isReadOnly(false)
     {
-        _finishInit( doauth );
+        try {
+            _finishInit( doauth );
+        } catch (DBException &e) {
+            // We won't call the destructor in this case.
+            // For example, opening the DB might fail, we need to clean up.
+            _transaction.reset();
+            if (_client->_context == this) {
+                _client->_context = _oldContext;
+            }
+            throw;
+        }
     }
        
     /** "read lock, and set my context, all in one operation" 

@@ -288,7 +288,7 @@ namespace mongo {
     }
 
     void NamespaceDetails::fillNewIndex(IndexDetails &newIndex) {
-        string thisns = newIndex.parentNS();
+        string thisns(newIndex.parentNS());
         uint64_t iter = 0;
         for (shared_ptr<Cursor> cursor(Helpers::findTableScan(thisns.c_str(), BSONObj())); cursor->ok(); cursor->advance(), iter++) {
             if (iter % 1000 == 0) {
