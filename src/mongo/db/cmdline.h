@@ -157,7 +157,7 @@ namespace mongo {
     {
         started = time(0);
 
-        logFlushPeriod = 0; // 0 means fsync every transaction TODO, find a better default
+        logFlushPeriod = 100; // 0 means fsync every transaction, 100 means fsync log once every 100 ms
         cleanerPeriod = 2;
         cleanerIterations = 5;
         checkpointPeriod = 60;
