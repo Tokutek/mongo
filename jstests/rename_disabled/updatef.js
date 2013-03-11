@@ -1,4 +1,3 @@
-assert(false, "disabled due to server crash");
 // Test unsafe management of nsdt on update command yield SERVER-3208
 
 prefixNS = db.jstests_updatef;
