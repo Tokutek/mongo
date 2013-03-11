@@ -448,6 +448,58 @@ namespace mongo {
         }
     }
 
+    bool DatabaseHolder::closeAll(const string& path, BSONObjBuilder& result, bool force) {
+        log() << "DatabaseHolder::closeAll path:" << path << endl;
+        verify(Lock::isW());
+
+        Paths::iterator x = _paths.find(path);
+        wassert(x != _paths.end());
+        const DBs &m = x->second;
+
+        set<string> dbs;
+        for (DBs::const_iterator it = m.begin(); it != m.end(); ++it) {
+            wassert(it->second->path == path);
+            dbs.insert(it->first);
+        }
+
+        cc().getContext()->_clear();
+
+        BSONObjBuilder bb(result.subarrayStart("dbs"));
+        int n = 0;
+        int nNotClosed = 0;
+        for (set<string>::const_iterator it = dbs.begin(); it != dbs.end(); ++it) {
+            string name = *it;
+            log(2) << "DatabaseHolder::closeAll path:" << path << " name:" << name << endl;
+            Client::Context ctx(name, path);
+            // Don't know how to implement this check anymore.
+            /*
+            if (!force && BackgroundOperation::inProgForDb(name.c_str())) {
+                log() << "WARNING: can't close database " << name << " because a bg job is in progress - try killOp command" << endl;
+                nNotClosed++;
+            }
+            else {
+            */
+                // This removes the db from m for us
+                Database::closeDatabase(name.c_str(), path);
+                bb.append(bb.numStr(n++), name);
+            /*
+            }
+            */
+        }
+        bb.done();
+        if (nNotClosed) {
+            result.append("nNotClosed", nNotClosed);
+        }
+        else {
+            ClientCursor::assertNoCursors();
+        }
+
+        _size -= m.size();
+        _paths.erase(x);
+
+        return true;
+    }
+
     Database* DatabaseHolder::getOrCreate( const string& ns , const string& path , bool& justCreated ) {
         string dbname = _todb( ns );
         Database *db;
