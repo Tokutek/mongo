@@ -22,6 +22,6 @@ t.save( { tst : "test3", a : nestedArr } );
 assert.eq(3, t.count(), "records in collection");
 assert.eq(1, t.find({tst : "test2"}).count(), "find test");
 
-//make sure index insertion failed (nesting must be large enough)
-assert.eq(0, t.find().hint({a:1}).explain().n, "index not empty");
+//make sure index insertion succeeded because we're tokudb and we're awesome
+assert.eq(3, t.find().hint({a:1}).explain().n, "index empty");
 print("Test succeeded!")
