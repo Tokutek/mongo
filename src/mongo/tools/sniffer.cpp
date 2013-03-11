@@ -395,9 +395,9 @@ void processMessage( Connection& c , Message& m ) {
 }
 
 void processDiagLog( const char * file ) {
-    Connection c;
     unimplemented("mmf");
 #if 0
+    Connection c;
     MemoryMappedFile f;
     long length;
     unsigned long long L = 0;

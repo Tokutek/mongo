@@ -1,4 +1,5 @@
-t = db.jstests_or5;
+// The part of or5.js that ends in doing something with geo indexes
+t = db.jstests_or5geo;
 t.drop();
 
 t.ensureIndex( {a:1} );
@@ -40,65 +41,12 @@ assert.eq.automsg( "6", "t.find( {$or:[{a:2},{b:6},{c:4}]} ).batchSize( i ).toAr
 assert.eq.automsg( "6", "t.find( {$or:[{a:2},{b:3},{c:6}]} ).batchSize( i ).toArray().length" );
 }
 
-function reset() {
-    t.drop();
-    
-    t.ensureIndex( {a:1} );
-    t.ensureIndex( {b:1} );
-    t.ensureIndex( {c:1} );
-    
-    t.save( {a:2} );
-    t.save( {a:2} );
-    t.save( {b:3} );
-    t.save( {b:3} );
-    t.save( {c:4} );
-    t.save( {c:4} );
-}
+t.ensureIndex( {z:"2d"} );
 
-reset();
-
-assert.eq.automsg( "6", "t.find( {$or:[{a:2},{b:3},{c:4}]} ).batchSize( 1 ).itcount()" );
-assert.eq.automsg( "6", "t.find( {$or:[{a:2},{b:3},{c:4}]} ).batchSize( 2 ).itcount()" );
-
-c = t.find( {$or:[{a:2},{b:3},{c:4}]} ).batchSize( 2 );
-c.next(); // Trigger initial query.
-t.remove( {b:3} );
-db.getLastError();
-assert.eq.automsg( "3", c.itcount() ); // The remaining [{a:2},{c:4},{c:4}] comprise 3 results.
-
-reset();
-
-c = t.find( {$or:[{a:2},{b:3},{c:4}]} ).batchSize( 2 );
-c.next();
-c.next();
-t.remove( {b:3} );
-db.getLastError();
-assert.eq.automsg( "2", c.itcount() );
-
-reset();
-
-c = t.find( {$or:[{a:2},{b:3},{c:4}]} ).batchSize( 2 );
-c.next();
-c.next();
-c.next();
-t.remove( {b:3} );
-db.getLastError();
-assert.eq.automsg( "3", c.itcount() );
-
-reset();
-
-c = t.find( {$or:[{a:2},{b:3},{c:4}]} ).batchSize( 2 );
-c.next();
-c.next();
-c.next();
-c.next();
-t.remove( {b:3} );
-db.getLastError();
-assert.eq.automsg( "2", c.itcount() );
+assert.eq.automsg( "'GeoSearchCursor'", "t.find( {z:{$near:[50,50]},a:2} ).explain().cursor" );
+assert.eq.automsg( "'GeoSearchCursor'", "t.find( {z:{$near:[50,50]},$or:[{a:2}]} ).explain().cursor" );
+assert.eq.automsg( "'GeoSearchCursor'", "t.find( {$or:[{a:2}],z:{$near:[50,50]}} ).explain().cursor" );
+assert.eq.automsg( "'GeoSearchCursor'", "t.find( {$or:[{a:2},{b:3}],z:{$near:[50,50]}} ).explain().cursor" );
+assert.throws.automsg( function() { return t.find( {$or:[{z:{$near:[50,50]}},{a:2}]} ).toArray(); } );
 
 t.drop();
-
-t.save( {a:[1,2]} );
-assert.eq.automsg( "1", "t.find( {$or:[{a:[1,2]}]} ).itcount()" );
-assert.eq.automsg( "1", "t.find( {$or:[{a:{$all:[1,2]}}]} ).itcount()" );
-assert.eq.automsg( "0", "t.find( {$or:[{a:{$all:[1,3]}}]} ).itcount()" );

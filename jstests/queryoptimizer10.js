@@ -25,7 +25,3 @@ assertIndexRecordedForQuery( 'IndexCursor a_1', { $or:[ { a:1 } ] }, { a:1 } );
 assertIndexRecordedForQuery( 'IndexCursor a_1', { a:1 } );
 
 t.drop();
-
-//t.ensureIndex( { a:'2d' } );
-assertIndexRecordedForQuery( null, { a:{ $near:[ 50, 50 ] } } );
-assertIndexRecordedForQuery( null, { a:[ 50, 50 ] } );
