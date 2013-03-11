@@ -39,7 +39,6 @@ namespace mongo {
         
         void doTTLForDB( const string& dbName ) {
             problem() << "TTL disabled for debugging convenience. Re-enable for tests at some pointg." << endl;
-#if 0
             Client::GodScope god;
 
             vector<BSONObj> indexes;
@@ -79,6 +78,7 @@ namespace mongo {
                 {
                     string ns = idx["ns"].String();
                     Client::WriteContext ctx( ns );
+                    ctx.ctx().beginTransaction();
                     NamespaceDetails* nsd = nsdetails( ns.c_str() );
                     if ( ! nsd ) {
                         // collection was dropped
@@ -90,12 +90,12 @@ namespace mongo {
                     }
 
                     n = deleteObjects( ns.c_str() , query , false , true );
+                    ctx.ctx().commitTransaction();
                 }
 
                 LOG(1) << "\tTTL deleted: " << n << endl;
             }
             
-#endif
         }
 
         virtual void run() {
