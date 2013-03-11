@@ -1,6 +1,6 @@
 /* test using lots of indexes on one collection */
 
-t = db.jstests_index_many;
+t = db.jstests_index_many_rename;
 
 function f() {
 
@@ -38,6 +38,14 @@ function f() {
 
     assert(t.find({ y: 99 }).length() == 2, "y idx");
     assert(t.find({ y: 99 }).explain().cursor.match(/Index/), "not using y index?");
+
+    /* check that renamecollection remaps all the indexes right */
+    assert(t.renameCollection("many2").ok, "rename failed");
+    assert(t.find({ x: 9 }).length() == 0, "many2a");
+    assert(db.many2.find({ x: 9 }).length() == 1, "many2b");
+    assert(t.find({ y: 99 }).length() == 0, "many2c");
+    assert(db.many2.find({ y: 99 }).length() == 2, "many2d");
+
 }
 
 f();
