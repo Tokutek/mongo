@@ -1,5 +1,4 @@
 // Test dropping during a $or yield SERVER-3555
-assert(false, "orm test disabled: it says it tests a yield but runs for a very long time (15m), not sure if it's valid for toku");
 
 t = db.jstests_orm;
 t.drop();
