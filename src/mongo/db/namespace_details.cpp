@@ -288,9 +288,9 @@ namespace mongo {
     }
 
     void NamespaceDetails::fillNewIndex(IndexDetails &newIndex) {
-        const char *thisns = newIndex.parentNS().c_str();
+        string thisns = newIndex.parentNS();
         uint64_t iter = 0;
-        for (shared_ptr<Cursor> cursor(Helpers::findTableScan(thisns, BSONObj())); cursor->ok(); cursor->advance(), iter++) {
+        for (shared_ptr<Cursor> cursor(Helpers::findTableScan(thisns.c_str(), BSONObj())); cursor->ok(); cursor->advance(), iter++) {
             if (iter % 1000 == 0) {
                 killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
             }
