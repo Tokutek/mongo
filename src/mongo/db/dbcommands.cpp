@@ -880,6 +880,9 @@ namespace mongo {
             d->optimize();
 
             result.append( "nIndexes" , (int)all.size() );
+            // Vanilla mongo does a drop followed by an index build, and the drop populates this field.
+            // It doesn't make much sense for us, but we report it anyway because a python test expected it.
+            result.append( "nIndexesWas" , (int)all.size() );
             result.appendArray( "indexes" , b.obj() );
             return true;
         }
