@@ -73,7 +73,7 @@ namespace mongo {
     //      false, the buffer has no more data. don't call next again without append()'ing.
     bool RowBuffer::next() {
 
-        // if the buffer has more, seek passed the current one
+        // if the buffer has more, seek passed the current one.
         if (ok()) {
             size_t key_size = currentKey().objsize();
             size_t pk_size = currentPK().objsize();
