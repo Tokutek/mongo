@@ -797,7 +797,9 @@ if ltokuportability is None:
 tokupath = os.getenv('TOKUDB_PATH')
 if tokupath is None:
     tokupath = '$BUILD_DIR/third_party/tokudb'
-env.Append(TOKUDB_PATH=tokupath)
+    env.Append(TOKUDB_PATH='src/third_party/tokudb')
+else:
+    env.Append(TOKUDB_PATH=tokupath)
 env.Append(CPPPATH=['%s/include' % tokupath])
 env.Append(LIBPATH=['%s/lib' % tokupath])
 env.Append(LIBS=[ltokudb, ltokuportability, 'm', 'dl', 'z'])
