@@ -47,7 +47,7 @@ namespace mongo {
 
     std::string fullVersionString() {
         stringstream ss;
-        ss << "v" << versionString << "-tokutek-" << mongoTokutekString;
+        ss << versionString << "-tokutek-" << mongoTokutekString;
         return ss.str();
     }
 
