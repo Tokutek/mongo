@@ -73,7 +73,7 @@ namespace mongo {
     //      false, the buffer has no more data. don't call next again without append()'ing.
     bool RowBuffer::next() {
 
-        // if the buffer has more, seek passed the current one
+        // if the buffer has more, seek passed the current one.
         if (ok()) {
             size_t key_size = currentKey().objsize();
             size_t pk_size = currentPK().objsize();
@@ -103,7 +103,7 @@ namespace mongo {
         }
     }
 
-    /* ------------------------------------------------------------------ */
+    /* ---------------------------------------------------------------------- */
 
     struct cursor_getf_extra {
         RowBuffer *buffer;
@@ -505,7 +505,7 @@ namespace mongo {
     }
 
     void IndexCursor::_advance() {
-        // namespace might be null if we're tailing an empty collection
+        // namespace might be null if we're tailing an empty collection.
         if ( _d != NULL && _idx != NULL ) {
             bool ok = _buffer.next();
             if ( !ok ) {
