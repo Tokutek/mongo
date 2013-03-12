@@ -25,9 +25,6 @@
 #pragma once
 
 #include "mongo/pch.h"
-
-#include <db.h>
-
 #include "security.h"
 #include "namespace.h"
 #include "lasterror.h"
@@ -252,7 +249,7 @@ namespace mongo {
              * If there is a transaction, the new one is a child of that.
              * Flags are optional, 0 is the default (serializable isolation).
              */
-            void beginTransaction(int flags = DB_TXN_SNAPSHOT);
+            void beginTransaction(int flags = 0);
             /**
              * Commit this context's transaction.
              * May not be used to commit a parent context's transaction.

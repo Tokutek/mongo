@@ -1891,7 +1891,7 @@ namespace mongo {
 
             // Read contexts use a snapshot transaction and are marked as read only.
             Client::ReadContext ctx( ns , dbpath, c->requiresAuth() ); // read locks
-            ctx.ctx().beginTransaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+            ctx.ctx().beginTransaction(DB_TXN_SNAPSHOT);
             ctx.ctx().setReadOnly();
 
             client.curop()->ensureStarted();

@@ -588,7 +588,7 @@ namespace mongo {
             return;
                 
         Client::Context ctx(ns, dbpath, true, true);
-        ctx.beginTransaction();
+        ctx.beginTransaction(DB_TXN_SNAPSHOT);
 
         long long n = deleteObjects(ns, pattern, justOne, true);
         lastError.getSafe()->recordDelete( n );
