@@ -56,7 +56,9 @@ namespace mongo {
         case Date:
             {
                 long long a = (long long) l.Date().millis;
-                long long b = (long long) r.Date().millis;
+                long long b = (long long) (r.type() == Timestamp // Quick fix for SERVER-3304
+                                           ? r.date().millis
+                                           : r.Date().millis);
                 if( a < b ) 
                     return -1;
                 return a == b ? 0 : 1;
