@@ -121,51 +121,56 @@ function build_mongodb_src() {
     pushd mongodb-$mongodbver-$branch-src
         mongocommit=$(git rev-parse HEAD | cut -c-7)
     popd
+
     mongodbsrc=mongodb-$mongodbver-$mongocommit-src
-    mv mongodb-$mongodbver-$branch-src $mongodbsrc
+    if [ ! -d $mongodbsrc ] ; then
+        mv mongodb-$mongodbver-$branch-src $mongodbsrc
 
-    # install the fractal tree
-    cp -r $tokufractaltreedir $mongodbsrc/src/third_party/tokudb
+        # install the fractal tree
+        cp -r $tokufractaltreedir $mongodbsrc/src/third_party/tokudb
 
-    # make the mongodb src tarball
-    tar --create \
-        --gzip \
-        --file $mongodbsrc.tar.gz \
-        $mongodbsrc
-    md5sum $mongodbsrc.tar.gz >$mongodbsrc.tar.gz.md5
-    md5sum --check $mongodbsrc.tar.gz.md5
+        # make the mongodb src tarball
+        tar --create \
+            --gzip \
+            --file $mongodbsrc.tar.gz \
+            $mongodbsrc
+        md5sum $mongodbsrc.tar.gz >$mongodbsrc.tar.gz.md5
+        md5sum --check $mongodbsrc.tar.gz.md5
 
-    # build mongodb
-    pushd $mongodbsrc
-        local debugoption=""
-        if [[ $debugbuild = 1 ]]; then
-            debugoption="--d"
-        fi
-        systemallocatoroption=""
-        if [ $(uname -s) = Darwin ] ; then
-            systemallocatoroption="--allocator=system"
-        fi
-        scons $debugoption $systemallocatoroption \
-            -j$makejobs --mute \
-            --cc=$cc --cxx=$cxx \
-            dist
-    popd
+        # build mongodb
+        pushd $mongodbsrc
+            local debugoption=""
+            if [[ $debugbuild = 1 ]]; then
+                debugoption="--d"
+            fi
+            systemallocatoroption=""
+            if [ $(uname -s) = Darwin ] ; then
+                systemallocatoroption="--allocator=system"
+            fi
+            scons $debugoption $systemallocatoroption \
+                -j$makejobs --mute \
+                --cc=$cc --cxx=$cxx \
+                dist
+        popd
 
-    mongodbdir=mongodb-$mongodbver-${mongocommit}${suffix}-$system-$arch
+        mongodbdir=mongodb-$mongodbver-${mongocommit}${suffix}-$system-$arch
 
-    # copy the release tarball
-    mkdir $mongodbdir
-    tar --extract \
-        --gzip \
-        --directory $mongodbdir \
-        --strip-components 1 \
-        --file $mongodbsrc/mongodb*.tgz
-    tar --create \
-        --gzip \
-        --file $mongodbdir.tar.gz \
-        $mongodbdir
-    md5sum $mongodbdir.tar.gz >$mongodbdir.tar.gz.md5
-    md5sum --check $mongodbdir.tar.gz.md5
+        # copy the release tarball
+        mkdir $mongodbdir
+        tar --extract \
+            --gzip \
+            --directory $mongodbdir \
+            --strip-components 1 \
+            --file $mongodbsrc/mongodb*.tgz
+        tar --create \
+            --gzip \
+            --file $mongodbdir.tar.gz \
+            $mongodbdir
+        md5sum $mongodbdir.tar.gz >$mongodbdir.tar.gz.md5
+        md5sum --check $mongodbdir.tar.gz.md5
+    else
+        rm -rf mongodb-$mongodbver-$branch-src
+    fi
 }
 
 PATH=$HOME/bin:$PATH
