@@ -114,6 +114,7 @@ files.forEach(function(x) {
 	    'queryoptimizera|' +
 	    'indexStatsCommand|' +
 	    'reversecursor|' +
+	    'stats|' +
 	    'txn_.*|' +
 	    'loader_.*|' +
 	    'query_write_lock|' +
