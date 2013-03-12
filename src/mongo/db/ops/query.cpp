@@ -772,7 +772,7 @@ namespace mongo {
         BSONObj resObject;
         
         Client::ReadContext ctx(ns, dbpath, true); // read locks
-        ctx.ctx().beginTransaction(DB_TXN_SNAPSHOT);
+        ctx.ctx().beginTransaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         ctx.ctx().setReadOnly();
         replVerifyReadsOk(&pq);
         
@@ -917,7 +917,8 @@ namespace mongo {
                 // XXX: TODO Read committed doesn't do what I want it to, so use an
                 // "incorrect" but mostly working UNCOMMITTED isolation.
                 Client::ReadContext ctx(ns , dbpath, true); // read locks
-                ctx.ctx().beginTransaction(tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT);
+                ctx.ctx().beginTransaction((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) |
+                                           DB_TXN_READ_ONLY);
                 ctx.ctx().setReadOnly();
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
                 

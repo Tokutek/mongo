@@ -28,7 +28,7 @@ namespace mongo {
     
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
         Client::Context ctx(ns, dbpath, true, true);
-        ctx.beginTransaction(DB_TXN_SNAPSHOT);
+        ctx.beginTransaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         ctx.setReadOnly();
         NamespaceDetails *d = nsdetails( ns );
         if ( !d ) {
