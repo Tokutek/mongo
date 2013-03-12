@@ -39,8 +39,9 @@ namespace mongo {
     }
 
     static BSONObj native_version( const BSONObj& args, void* data ) {
-        cout << "version: " << versionString << endl;
-        if ( strstr( versionString , "+" ) )
+        std::string version = fullVersionString();
+        cout << "version: " << version << endl;
+        if ( strstr( version.c_str() , "+" ) )
             printGitVersion();
         return BSONObj();
     }

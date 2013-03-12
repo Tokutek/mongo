@@ -113,7 +113,7 @@ function build_fractal_tree() {
 
 # checkout the mongodb source from git, generate a build script, and make the mongodb source tarball
 function build_mongodb_src() {
-    mongodbsrc=mongodb-$mongocommit-$tokudb-$revision-src
+    mongodbsrc=mongodb-$mongodb_version-$mongocommit-$tokudb-$revision-src
     if [ ! -d $mongodbsrc ] ; then
         # check out mongodb
         retry git clone \
@@ -157,7 +157,7 @@ function build_mongodb_src() {
                 dist
         popd
 
-        mongodbdir=mongodb-$mongocommit-$tokudb-${revision}${suffix}-$system-$arch
+        mongodbdir=mongodb-$mongodb_version-$mongocommit-$tokudb-${revision}${suffix}-$system-$arch
 
         # copy the release tarball
         mkdir $mongodbdir
@@ -178,6 +178,7 @@ function build_mongodb_src() {
 PATH=$HOME/bin:$PATH
 
 suffix=''
+mongodb_version=2.2.0
 commit_hash=''
 branch=master
 revision=0
@@ -232,7 +233,7 @@ fi
 
 if [[ $debugbuild != 0 && ( -z $suffix ) ]] ; then suffix=-debug; fi
 
-builddir=build-$tokudb-$revision-mongodb-${mongocommit}${suffix}
+builddir=build-$tokudb-$revision-mongodb-$mongodb_version-${mongocommit}${suffix}
 if [ ! -d $builddir ] ; then mkdir $builddir; fi
 pushd $builddir
 

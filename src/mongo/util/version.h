@@ -11,6 +11,7 @@ namespace mongo {
     // mongo version
     extern const char versionString[];
     extern const BSONArray versionArray;
+    std::string fullVersionString();
     std::string mongodVersion();
     int versionCmp(StringData rhs, StringData lhs); // like strcmp
 
@@ -20,8 +21,14 @@ namespace mongo {
     std::string sysInfo();
     void printSysInfo();
 
+    const char *tokudbVersion();
+    void printTokudbVersion();
+
     void show_warnings();
 
 }  // namespace mongo
 
 #endif  // UTIL_VERSION_HEADER
+
+
+

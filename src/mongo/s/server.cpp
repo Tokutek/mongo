@@ -191,17 +191,18 @@ namespace mongo {
 
     void printShardingVersionInfo( bool out ) {
         if ( out ) {
-            cout << "MongoS version " << versionString << " starting: pid=" << getpid() << " port=" << cmdLine.port <<
+            cout << "MongoS version " << fullVersionString() << " starting: pid=" << getpid() << " port=" << cmdLine.port <<
                     ( sizeof(int*) == 4 ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() << " (--help for usage)" << endl;
             DEV cout << "_DEBUG build" << endl;
             cout << "git version: " << gitVersion() << endl;
             cout <<  "build sys info: " << sysInfo() << endl;
         }
         else {
-            log() << "MongoS version " << versionString << " starting: pid=" << getpid() << " port=" << cmdLine.port <<
+            log() << "MongoS version " << fullVersionString() << " starting: pid=" << getpid() << " port=" << cmdLine.port <<
                     ( sizeof( int* ) == 4 ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() << " (--help for usage)" << endl;
             DEV log() << "_DEBUG build" << endl;
             printGitVersion();
+            printTokudbVersion();
             printSysInfo();
             printCommandLineOpts();
         }

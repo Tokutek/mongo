@@ -123,7 +123,7 @@ namespace mongo {
 
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
                 result.append( "host" , prettyHostName() );
-                result.append("version", versionString);
+                result.append("version", fullVersionString());
                 result.append("process","mongos");
                 result.append("uptime",(double) (time(0)-_started));
                 result.appendDate( "localTime" , jsTime() );

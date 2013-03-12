@@ -415,7 +415,7 @@ namespace mongo {
             bool authed = cc().getAuthenticationInfo()->isAuthorizedReads("admin");
 
             result.append("host", prettyHostName() );
-            result.append("version", versionString);
+            result.append("version", fullVersionString());
             result.append("process","mongod");
             result.append("pid", (int)getpid());
             result.append("uptime",(double) (time(0)-cmdLine.started));
