@@ -505,7 +505,7 @@ namespace mongo {
     }
 
     void IndexCursor::_advance() {
-        // namespace might be null if we're tailing an empty collection
+        // namespace might be null if we're tailing an empty collection.
         if ( _d != NULL && _idx != NULL ) {
             bool ok = _buffer.next();
             if ( !ok ) {
