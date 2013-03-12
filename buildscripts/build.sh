@@ -88,14 +88,15 @@ function build_fractal_tree() {
             sed -ie "s/LIBTOKUDB = tokudb/LIBTOKUDB = $tokufractaltree/" Makefile 
             sed -ie "s/LIBTOKUPORTABILITY = tokuportability/LIBTOKUPORTABILITY = $tokuportability/" Makefile
             if [ x"$(uname)" = x"Darwin" ] ; then
+                set +u
                 DYLD_LIBRARY_PATH=$PWD/../lib:$DYLD_LIBRARY_PATH make check CC=$ftcc
+                set -u
                 exitcode=$?
             else
                 make check CC=$ftcc
                 exitcode=$?
             fi
             echo `date` make check examples $tokufractaltree $exitcode
-            if [ $exitcode != 0 ] ; then exit 1; fi
             make clean
         popd
 
