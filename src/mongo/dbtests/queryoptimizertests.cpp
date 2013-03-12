@@ -21,6 +21,7 @@
 #include "mongo/pch.h"
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/instance.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/ops/count.h"

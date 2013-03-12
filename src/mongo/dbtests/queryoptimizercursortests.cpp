@@ -22,6 +22,7 @@
 
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/queryoptimizercursorimpl.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/clientcursor.h"

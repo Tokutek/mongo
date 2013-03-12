@@ -24,6 +24,7 @@
 #include "mongo/db/matcher.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/replutil.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/s/d_chunk_manager.h"

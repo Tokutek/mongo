@@ -32,6 +32,7 @@
 #include "mongo/db/oplog.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/oplog_helpers.h"
+#include "mongo/db/query_optimizer.h"
 
 using namespace std;
 

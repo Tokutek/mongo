@@ -39,6 +39,7 @@
 #include "mongo/db/lasterror.h"
 #include "mongo/db/security.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/repl/bgsync.h"

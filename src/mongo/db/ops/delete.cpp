@@ -23,6 +23,7 @@
 #include "mongo/db/oplog.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/db/oplog_helpers.h"

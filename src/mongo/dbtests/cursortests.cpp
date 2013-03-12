@@ -25,6 +25,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/json.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/dbtests/dbtests.h"
 
 namespace CursorTests {

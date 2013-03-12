@@ -286,27 +286,6 @@ namespace mongo {
         return shared_ptr<Cursor>();
     }
     
-    shared_ptr<Cursor> getOptimizedCursor( const StringData &ns,
-                                           const BSONObj &query,
-                                           const BSONObj &order,
-                                           const QueryPlanSelectionPolicy &planPolicy,
-                                           bool requestMatcher,
-                                           const shared_ptr<const ParsedQuery> &parsedQuery,
-                                           bool requireOrder,
-                                           QueryPlanSummary *singlePlanSummary ) {
-
-        try {
-            CursorGenerator generator( ns, query, order, planPolicy, requestMatcher, parsedQuery,
-                                       requireOrder, singlePlanSummary );
-            return generator.generate();
-        }
-        catch (storage::RetryableException::MvccDictionaryTooNew &e) {
-            shared_ptr<Cursor> ret;
-            ret.reset(new DummyCursor(1));
-            return ret;
-        }
-    }
-    
     CursorGenerator::CursorGenerator( const StringData &ns,
                                      const BSONObj &query,
                                      const BSONObj &order,

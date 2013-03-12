@@ -25,6 +25,7 @@
 #include "mongo/db/cursor.h"
 #include "mongo/db/json.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/dbtests/dbtests.h"
 #include "mongo/util/timer.h"
 

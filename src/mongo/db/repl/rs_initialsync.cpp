@@ -24,6 +24,7 @@
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/oplogreader.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/bgsync.h"
