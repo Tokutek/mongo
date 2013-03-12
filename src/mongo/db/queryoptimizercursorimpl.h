@@ -28,6 +28,7 @@ namespace mongo {
     class MultiCursor;
     class MultiPlanScanner;
     class QueryPlanRunner;
+    class QueryPlanSelectionPolicy;
     class QueryPlanSummary;
     
     /** Dup tracking class, optimizing one common case with small set and few initial reads. */
@@ -232,9 +233,7 @@ namespace mongo {
         bool mayShortcutQueryOptimizer() const {
             return min().isEmpty() && max().isEmpty() && !hasFields() && _argumentsHint.isEmpty();
         }
-        BSONObj hint() const {
-            return _argumentsHint.isEmpty() ? _planPolicy.planHint( _ns ) : _argumentsHint;
-        }
+        BSONObj hint() const;
         
         void setArgumentsHint();
         shared_ptr<Cursor> shortcutCursor() const;

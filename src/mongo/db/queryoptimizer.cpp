@@ -24,6 +24,7 @@
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/query_plan_selection_policy.h"
 
 //#define DEBUGQO(x) cout << x << endl;
 #define DEBUGQO(x)
