@@ -235,7 +235,7 @@ doneCheckOrder:
 
     shared_ptr<Cursor> QueryPlan::newCursor() const {
 
-        if ( _type ) {
+        if ( _index != NULL && _index->special() ) {
             // hopefully safe to use original query in these contexts - don't think we can mix type
             // with $or clause separation yet
             int numWanted = 0;
@@ -243,7 +243,7 @@ doneCheckOrder:
                 // SERVER-5390
                 numWanted = _parsedQuery->getSkip() + _parsedQuery->getNumToReturn();
             }
-            return _type->newCursor( _originalQuery, _order, numWanted );
+            return _index->newCursor( _originalQuery, _order, numWanted );
         }
 
         if ( _utility == Impossible ) {
@@ -253,9 +253,11 @@ doneCheckOrder:
 
         if ( willScanTable() ) {
             checkTableScanAllowed();
-            return findTableScan( _frs.ns(), _order, startLoc );
+            const int direction = _order.getField("$natural").number() >= 0 ? 1 : -1;
+            NamespaceDetails *d = nsdetails( _frs.ns() );
+            return shared_ptr<Cursor>( BasicCursor::make( d, direction ) );
         }
-                
+
         if ( _startOrEndSpec ) {
             // we are sure to spec _endKeyInclusive
             return shared_ptr<Cursor>( IndexCursor::make( _d,
@@ -266,7 +268,7 @@ doneCheckOrder:
                                                           _direction >= 0 ? 1 : -1 ) );
         }
 
-        if ( _index->getSpec().getType() ) {
+        if ( _index->special() ) {
             return shared_ptr<Cursor>( IndexCursor::make( _d,
                                                           *_index,
                                                           _frv->startKey(),

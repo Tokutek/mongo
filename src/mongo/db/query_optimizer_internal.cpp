@@ -16,12 +16,13 @@
 */
 
 #include "mongo/pch.h"
-#include "mongo/server.h"
+
+#include "mongo/db/query_optimizer_internal.h"
+
 #include "mongo/client/dbclientinterface.h"
-#include "mongo/db/namespace_details.h"
-#include "mongo/db/queryoptimizer.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/query_plan_selection_policy.h"
 
 //#define DEBUGQO(x) cout << x << endl;
@@ -246,7 +247,7 @@ namespace mongo {
         _matchCounter.updateNscanned( _c->nscanned() );
     }
 
-    void QueryPlanRunner::setException( const DBException &e ) {
+    void QueryPlanRunner::setException( const DBException& e ) {
         _error = true;
         _exception = e.getInfo();
     }
@@ -256,7 +257,8 @@ namespace mongo {
             return shared_ptr<ExplainPlanInfo>( new ExplainPlanInfo() );
         }
         _explainPlanInfo.reset( new ExplainPlanInfo() );
-        _explainPlanInfo->notePlan( *_c, queryPlan().scanAndOrderRequired(),
+        _explainPlanInfo->notePlan( *_c,
+                                    queryPlan().scanAndOrderRequired(),
                                     queryPlan().keyFieldsOnly() );
         return _explainPlanInfo;
     }
@@ -323,14 +325,14 @@ namespace mongo {
         }
     }
 
-    QueryPlanGenerator::QueryPlanGenerator( QueryPlanSet &qps,
-                                           auto_ptr<FieldRangeSetPair> originalFrsp,
-                                           const shared_ptr<const ParsedQuery> &parsedQuery,
-                                           const BSONObj &hint,
-                                           RecordedPlanPolicy recordedPlanPolicy,
-                                           const BSONObj &min,
-                                           const BSONObj &max,
-                                           bool allowSpecial ) :
+    QueryPlanGenerator::QueryPlanGenerator( QueryPlanSet& qps,
+                                            auto_ptr<FieldRangeSetPair> originalFrsp,
+                                            const shared_ptr<const ParsedQuery>& parsedQuery,
+                                            const BSONObj& hint,
+                                            RecordedPlanPolicy recordedPlanPolicy,
+                                            const BSONObj& min,
+                                            const BSONObj& max,
+                                            bool allowSpecial ) :
         _qps( qps ),
         _originalFrsp( originalFrsp ),
         _parsedQuery( parsedQuery ),
@@ -342,8 +344,8 @@ namespace mongo {
     }
 
     void QueryPlanGenerator::addInitialPlans() {
-        const char *ns = _qps.frsp().ns();
-        NamespaceDetails *d = nsdetails( ns );
+        const char* ns = _qps.frsp().ns();
+        NamespaceDetails* d = nsdetails( ns );
         
         if ( addShortCircuitPlan( d ) ) {
             return;
@@ -354,8 +356,8 @@ namespace mongo {
     }
     
     void QueryPlanGenerator::addFallbackPlans() {
-        const char *ns = _qps.frsp().ns();
-        NamespaceDetails *d = nsdetails( ns );
+        const char* ns = _qps.frsp().ns();
+        NamespaceDetails* d = nsdetails( ns );
         verify( d );
         
         vector<shared_ptr<QueryPlan> > plans;
@@ -397,7 +399,7 @@ namespace mongo {
             // that will be ignored.
             optimalPlan->registerSelf
                     ( 0, CandidatePlanCharacter( !optimalPlan->scanAndOrderRequired(),
-                                                optimalPlan->scanAndOrderRequired() ) );
+                                                 optimalPlan->scanAndOrderRequired() ) );
             return;
         }
         
@@ -415,7 +417,7 @@ namespace mongo {
         _qps.addCandidatePlan( newPlan( d, -1 ) );
     }
     
-    bool QueryPlanGenerator::addShortCircuitPlan( NamespaceDetails *d ) {
+    bool QueryPlanGenerator::addShortCircuitPlan( NamespaceDetails* d ) {
         return
             // The collection is missing.
             setUnindexedPlanIf( !d, d ) ||
@@ -429,13 +431,14 @@ namespace mongo {
             setUnindexedPlanIf( _qps.frsp().noNonUniversalRanges() && _qps.order().isEmpty(), d ) ||
             // $natural sort is requested.
             setUnindexedPlanIf( !_qps.order().isEmpty() &&
-                               str::equals( _qps.order().firstElementFieldName(), "$natural" ), d );
+                                str::equals( _qps.order().firstElementFieldName(), "$natural" ),
+                                d );
     }
     
-    bool QueryPlanGenerator::addHintPlan( NamespaceDetails *d ) {
+    bool QueryPlanGenerator::addHintPlan( NamespaceDetails* d ) {
         BSONElement hint = _hint.firstElement();
         if ( !hint.eoo() ) {
-            IndexDetails *id = parseHint( hint, d );
+            IndexDetails* id = parseHint( hint, d );
             if ( id ) {
                 setHintedPlanForIndex( *id );
             }
@@ -450,9 +453,12 @@ namespace mongo {
         if ( !_min.isEmpty() || !_max.isEmpty() ) {
             string errmsg;
             BSONObj keyPattern;
-            IndexDetails *idx = indexDetailsForRange( _qps.frsp().ns(), errmsg, _min, _max,
-                                                     keyPattern );
-            uassert( 10367 ,  errmsg, idx );
+            IndexDetails *idx = indexDetailsForRange( _qps.frsp().ns(),
+                                                      errmsg,
+                                                      _min,
+                                                      _max,
+                                                      keyPattern );
+            uassert( 10367, errmsg, idx );
             validateAndSetHintedPlan( newPlan( d, d->idxNo( *idx ), _min, _max ) );
             return true;
         }
@@ -488,13 +494,13 @@ namespace mongo {
         return false;
     }
     
-    void QueryPlanGenerator::addStandardPlans( NamespaceDetails *d ) {
+    void QueryPlanGenerator::addStandardPlans( NamespaceDetails* d ) {
         if ( !addCachedPlan( d ) ) {
             addFallbackPlans();
         }
     }
     
-    bool QueryPlanGenerator::addCachedPlan( NamespaceDetails *d ) {
+    bool QueryPlanGenerator::addCachedPlan( NamespaceDetails* d ) {
         if ( _recordedPlanPolicy == Ignore ) {
             return false;
         }
@@ -519,10 +525,10 @@ namespace mongo {
             }
         }
         
-        massert( 10368 ,  "Unable to locate previously recorded index", p );
+        massert( 10368, "Unable to locate previously recorded index", p );
 
         if ( p->utility() == QueryPlan::Unhelpful ||
-            p->utility() == QueryPlan::Disallowed ) {
+             p->utility() == QueryPlan::Disallowed ) {
             return false;
         }
         
@@ -538,25 +544,32 @@ namespace mongo {
         return true;
     }
 
-    shared_ptr<QueryPlan> QueryPlanGenerator::newPlan( NamespaceDetails *d,
-                                                      int idxNo,
-                                                      const BSONObj &min,
-                                                      const BSONObj &max,
-                                                      const string &special ) const {
-        shared_ptr<QueryPlan> ret( QueryPlan::make( d, idxNo, _qps.frsp(), _originalFrsp.get(),
-                                                   _qps.originalQuery(), _qps.order(), _parsedQuery,
-                                                   min, max, special ) );
+    shared_ptr<QueryPlan> QueryPlanGenerator::newPlan( NamespaceDetails* d,
+                                                       int idxNo,
+                                                       const BSONObj& min,
+                                                       const BSONObj& max,
+                                                       const string& special ) const {
+        shared_ptr<QueryPlan> ret( QueryPlan::make( d,
+                                                    idxNo,
+                                                    _qps.frsp(),
+                                                    _originalFrsp.get(),
+                                                    _qps.originalQuery(),
+                                                    _qps.order(),
+                                                    _parsedQuery,
+                                                    min,
+                                                    max,
+                                                    special ) );
         return ret;
     }
 
-    bool QueryPlanGenerator::setUnindexedPlanIf( bool set, NamespaceDetails *d ) {
+    bool QueryPlanGenerator::setUnindexedPlanIf( bool set, NamespaceDetails* d ) {
         if ( set ) {
             setSingleUnindexedPlan( d );
         }
         return set;
     }
     
-    void QueryPlanGenerator::setSingleUnindexedPlan( NamespaceDetails *d ) {
+    void QueryPlanGenerator::setSingleUnindexedPlan( NamespaceDetails* d ) {
         _qps.setSinglePlan( newPlan( d, -1 ) );
     }
     
@@ -565,10 +578,13 @@ namespace mongo {
             string errmsg;
             BSONObj keyPattern = id.keyPattern();
             // This reformats _min and _max to be used for index lookup.
-            massert( 10365 ,  errmsg, indexDetailsForRange( _qps.frsp().ns(), errmsg, _min, _max,
-                                                           keyPattern ) );
+            massert( 10365 ,  errmsg, indexDetailsForRange( _qps.frsp().ns(),
+                                                            errmsg,
+                                                            _min,
+                                                            _max,
+                                                            keyPattern ) );
         }
-        NamespaceDetails *d = nsdetails( _qps.frsp().ns() );
+        NamespaceDetails* d = nsdetails( _qps.frsp().ns() );
         validateAndSetHintedPlan( newPlan( d, d->idxNo( id ), _min, _max ) );
     }
 
@@ -583,22 +599,17 @@ namespace mongo {
         // and it's a capped collection
         // we warn as it's a common user error
         // .system. and local collections are exempt
-        const char *ns = _qps.frsp().ns();
-        NamespaceDetails *d = nsdetails( ns );
+        const char* ns = _qps.frsp().ns();
+        NamespaceDetails* d = nsdetails( ns );
         if ( d &&
-            d->isCapped() &&
-            _qps.nPlans() == 1 &&
-            ( _qps.firstPlan()->utility() != QueryPlan::Impossible ) &&
-            !_qps.firstPlan()->indexed() &&
-            !_qps.firstPlan()->multikeyFrs().range( "_id" ).universal() ) {
-            if (str::contains( ns , ".system." ) ||
-                str::startsWith( ns , "local." ) ) {
-                // ok
-            }
-            else {
-                warning()
-                << "unindexed _id query on capped collection, "
-                << "performance will be poor collection: " << ns << endl;
+             d->isCapped() &&
+             _qps.nPlans() == 1 &&
+             ( _qps.firstPlan()->utility() != QueryPlan::Impossible ) &&
+             !_qps.firstPlan()->indexed() &&
+             !_qps.firstPlan()->multikeyFrs().range( "_id" ).universal() ) {
+            if ( !str::contains( ns , ".system." ) && !str::startsWith( ns , "local." ) ) {
+                warning() << "unindexed _id query on capped collection, "
+                          << "performance will be poor collection: " << ns << endl;
             }
         }
     }
@@ -614,26 +625,40 @@ namespace mongo {
                                       const BSONObj& min,
                                       const BSONObj& max,
                                       bool allowSpecial ) {
-        auto_ptr<QueryPlanSet> ret( new QueryPlanSet( ns, frsp, originalFrsp, originalQuery, order,
-                                                     parsedQuery, hint, recordedPlanPolicy, min,
-                                                     max, allowSpecial ) );
+        auto_ptr<QueryPlanSet> ret( new QueryPlanSet( ns,
+                                                      frsp,
+                                                      originalFrsp,
+                                                      originalQuery,
+                                                      order,
+                                                      parsedQuery,
+                                                      hint,
+                                                      recordedPlanPolicy,
+                                                      min,
+                                                      max,
+                                                      allowSpecial ) );
         ret->init();
         return ret.release();
     }
 
 
-    QueryPlanSet::QueryPlanSet( const char *ns,
-                               auto_ptr<FieldRangeSetPair> frsp,
-                               auto_ptr<FieldRangeSetPair> originalFrsp,
-                               const BSONObj &originalQuery,
-                               const BSONObj &order,
-                               const shared_ptr<const ParsedQuery> &parsedQuery,
-                               const BSONObj &hint,
-                               QueryPlanGenerator::RecordedPlanPolicy recordedPlanPolicy,
-                               const BSONObj &min,
-                               const BSONObj &max,
-                               bool allowSpecial ) :
-        _generator( *this, originalFrsp, parsedQuery, hint, recordedPlanPolicy, min, max,
+    QueryPlanSet::QueryPlanSet( const char* ns,
+                                auto_ptr<FieldRangeSetPair> frsp,
+                                auto_ptr<FieldRangeSetPair> originalFrsp,
+                                const BSONObj& originalQuery,
+                                const BSONObj& order,
+                                const shared_ptr<const ParsedQuery>& parsedQuery,
+                                const BSONObj& hint,
+                                QueryPlanGenerator::RecordedPlanPolicy recordedPlanPolicy,
+                                const BSONObj& min,
+                                const BSONObj& max,
+                                bool allowSpecial ) :
+        _generator( *this,
+                    originalFrsp,
+                    parsedQuery,
+                    hint,
+                    recordedPlanPolicy,
+                    min,
+                    max,
                     allowSpecial ),
         _originalQuery( originalQuery ),
         _frsp( frsp ),
@@ -659,14 +684,14 @@ namespace mongo {
         _generator.addInitialPlans();
     }
 
-    void QueryPlanSet::setSinglePlan( const QueryPlanPtr &plan ) {
+    void QueryPlanSet::setSinglePlan( const QueryPlanPtr& plan ) {
         if ( nPlans() == 0 ) {
             pushPlan( plan );
         }
     }
     
-    void QueryPlanSet::setCachedPlan( const QueryPlanPtr &plan,
-                                     const CachedQueryPlan &cachedPlan ) {
+    void QueryPlanSet::setCachedPlan( const QueryPlanPtr& plan,
+                                      const CachedQueryPlan& cachedPlan ) {
         verify( nPlans() == 0 );
         _usingCachedPlan = true;
         _oldNScanned = cachedPlan.nScanned();
@@ -674,7 +699,7 @@ namespace mongo {
         pushPlan( plan );
     }
 
-    void QueryPlanSet::addCandidatePlan( const QueryPlanPtr &plan ) {
+    void QueryPlanSet::addCandidatePlan( const QueryPlanPtr& plan ) {
         // If _plans is nonempty, the new plan may be supplementing a recorded plan at the first
         // position of _plans.  It must not duplicate the first plan.
         if ( nPlans() > 0 && plan->indexKey() == firstPlan()->indexKey() ) {
@@ -709,7 +734,8 @@ namespace mongo {
                     return _plans[i];
             }
 
-            warning() << "best guess query plan requested, but scan and order are required for all plans "
+            warning() << "best guess query plan requested, but scan and order are required for all "
+                         "plans "
             		  << " query: " << _originalQuery
             		  << " order: " << _order
             		  << " choices: ";
@@ -773,16 +799,19 @@ namespace mongo {
     }
     
     MultiPlanScanner *MultiPlanScanner::make( const StringData& ns,
-                                             const BSONObj &query,
-                                             const BSONObj &order,
-                                             const shared_ptr<const ParsedQuery> &parsedQuery,
-                                             const BSONObj &hint,
-                                             QueryPlanGenerator::RecordedPlanPolicy
-                                                    recordedPlanPolicy,
-                                             const BSONObj &min,
-                                             const BSONObj &max ) {
-        auto_ptr<MultiPlanScanner> ret( new MultiPlanScanner( ns, query, parsedQuery, hint,
-                                                             recordedPlanPolicy ) );
+                                              const BSONObj& query,
+                                              const BSONObj& order,
+                                              const shared_ptr<const ParsedQuery>& parsedQuery,
+                                              const BSONObj& hint,
+                                              QueryPlanGenerator::RecordedPlanPolicy
+                                                      recordedPlanPolicy,
+                                              const BSONObj& min,
+                                              const BSONObj& max ) {
+        auto_ptr<MultiPlanScanner> ret( new MultiPlanScanner( ns,
+                                                              query,
+                                                              parsedQuery,
+                                                              hint,
+                                                              recordedPlanPolicy ) );
         ret->init( order, min, max );
         return ret.release();
     }
@@ -802,7 +831,7 @@ namespace mongo {
         
         shared_ptr<QueryPlanRunner> runner = _runnerQueue->next();
         if ( runner->error() &&
-            _currentQps->prepareToRetryQuery() ) {
+             _currentQps->prepareToRetryQuery() ) {
 
             // Avoid an infinite loop here - this should never occur.
             verify( !retried );
@@ -816,7 +845,7 @@ namespace mongo {
         return runner;
     }
 
-    void MultiPlanScanner::updateCurrentQps( QueryPlanSet *qps ) {
+    void MultiPlanScanner::updateCurrentQps( QueryPlanSet* qps ) {
         _currentQps.reset( qps );
         _runnerQueue.reset();
     }
@@ -829,7 +858,7 @@ namespace mongo {
     }
 
     shared_ptr<QueryPlanRunner> QueryPlanRunnerQueue::init() {
-        massert( 10369 ,  "no plans", _plans.plans().size() > 0 );
+        massert( 10369, "no plans", _plans.plans().size() > 0 );
         
         if ( _plans.plans().size() > 1 )
             LOG(1) << "  running multiple plans" << endl;
@@ -982,10 +1011,10 @@ namespace mongo {
      */
     
     MultiPlanScanner::MultiPlanScanner( const StringData& ns,
-                                       const BSONObj &query,
-                                       const shared_ptr<const ParsedQuery> &parsedQuery,
-                                       const BSONObj &hint,
-                                       QueryPlanGenerator::RecordedPlanPolicy recordedPlanPolicy ) :
+                                        const BSONObj& query,
+                                        const shared_ptr<const ParsedQuery>& parsedQuery,
+                                        const BSONObj& hint,
+                                        QueryPlanGenerator::RecordedPlanPolicy recordedPlanPolicy ) :
         _ns( ns.toString() ),
         _or( !query.getField( "$or" ).eoo() ),
         _query( query.getOwned() ),
@@ -997,7 +1026,7 @@ namespace mongo {
         _doneRunners() {
     }
     
-    void MultiPlanScanner::init( const BSONObj &order, const BSONObj &min, const BSONObj &max ) {
+    void MultiPlanScanner::init( const BSONObj& order, const BSONObj& min, const BSONObj& max ) {
         if ( !order.isEmpty() || !min.isEmpty() || !max.isEmpty() ) {
             _or = false;
         }
@@ -1016,25 +1045,35 @@ namespace mongo {
         if ( !_or ) {
             ++_i;
             auto_ptr<FieldRangeSetPair> frsp( new FieldRangeSetPair( _ns.c_str(), _query, true ) );
-            updateCurrentQps( QueryPlanSet::make( _ns.c_str(), frsp, auto_ptr<FieldRangeSetPair>(),
-                                                 _query, order, _parsedQuery, _hint,
-                                                 _recordedPlanPolicy,
-                                                 min, max, true ) );
+            updateCurrentQps( QueryPlanSet::make( _ns.c_str(),
+                                                  frsp,
+                                                  auto_ptr<FieldRangeSetPair>(),
+                                                  _query,
+                                                  order,
+                                                  _parsedQuery,
+                                                  _hint,
+                                                  _recordedPlanPolicy,
+                                                  min,
+                                                  max,
+                                                  true ) );
         }
         else {
             BSONElement e = _query.getField( "$or" );
-            massert( 13268, "invalid $or spec",
-                    e.type() == Array && e.embeddedObject().nFields() > 0 );
+            massert( 13268,
+                     "invalid $or spec",
+                     e.type() == Array && e.embeddedObject().nFields() > 0 );
             handleBeginningOfClause();
         }
     }
 
-    void MultiPlanScanner::handleEndOfClause( const QueryPlan &clausePlan ) {
+    void MultiPlanScanner::handleEndOfClause( const QueryPlan& clausePlan ) {
         if ( clausePlan.willScanTable() ) {
             _tableScanned = true;   
-        } else {
-            _org->popOrClause( clausePlan.nsd(), clausePlan.idxNo(),
-                              clausePlan.indexed() ? clausePlan.indexKey() : BSONObj() );
+        }
+        else {
+            _org->popOrClause( clausePlan.nsd(),
+                               clausePlan.idxNo(),
+                               clausePlan.indexed() ? clausePlan.indexKey() : BSONObj() );
         }
     }
     
@@ -1043,11 +1082,18 @@ namespace mongo {
         ++_i;
         auto_ptr<FieldRangeSetPair> frsp( _org->topFrsp() );
         auto_ptr<FieldRangeSetPair> originalFrsp( _org->topFrspOriginal() );
-        updateCurrentQps( QueryPlanSet::make( _ns.c_str(), frsp, originalFrsp, _query,
-                                             BSONObj(), _parsedQuery, _hint, _recordedPlanPolicy,
-                                             BSONObj(), BSONObj(),
-                                             // 'Special' plans are not supported within $or.
-                                             false ) );
+        updateCurrentQps( QueryPlanSet::make( _ns.c_str(),
+                                              frsp,
+                                              originalFrsp,
+                                              _query,
+                                              BSONObj(),
+                                              _parsedQuery,
+                                              _hint,
+                                              _recordedPlanPolicy,
+                                              BSONObj(),
+                                              BSONObj(),
+                                              // 'Special' plans are not supported within $or.
+                                              false ) );
     }
 
     bool MultiPlanScanner::mayHandleBeginningOfClause() {
@@ -1084,7 +1130,7 @@ namespace mongo {
         return runner;
     }
     
-    const QueryPlan *MultiPlanScanner::nextClauseBestGuessPlan( const QueryPlan &currentPlan ) {
+    const QueryPlan *MultiPlanScanner::nextClauseBestGuessPlan( const QueryPlan& currentPlan ) {
         assertHasMoreClauses();
         handleEndOfClause( currentPlan );
         if ( !hasMoreClauses() ) {
@@ -1108,21 +1154,21 @@ namespace mongo {
 
     const QueryPlan *MultiPlanScanner::singlePlan() const {
         if ( _or ||
-            _currentQps->nPlans() != 1 ||
-            _currentQps->hasPossiblyExcludedPlans() ) {
+             _currentQps->nPlans() != 1 ||
+             _currentQps->hasPossiblyExcludedPlans() ) {
             return 0;
         }
         return _currentQps->firstPlan().get();
     }
 
     bool MultiPlanScanner::haveUselessOr() const {
-        NamespaceDetails *nsd = nsdetails( _ns.c_str() );
+        NamespaceDetails* nsd = nsdetails( _ns );
         if ( !nsd ) {
             return true;
         }
         BSONElement hintElt = _hint.firstElement();
         if ( !hintElt.eoo() ) {
-            IndexDetails *id = parseHint( hintElt, nsd );
+            IndexDetails* id = parseHint( hintElt, nsd );
             if ( !id ) {
                 return true;
             }
@@ -1137,8 +1183,8 @@ namespace mongo {
         }
         QueryPlanSet::QueryPlanPtr plan = _currentQps->firstPlan();
         shared_ptr<Cursor> cursor = plan->newCursor();
-        return BSON( "cursor" << cursor->toString()
-                    << "indexBounds" << cursor->prettyIndexBounds() );
+        return BSON( "cursor" << cursor->toString() <<
+                     "indexBounds" << cursor->prettyIndexBounds() );
     }
     
     void MultiPlanScanner::clearIndexesForPatterns() const {
@@ -1164,16 +1210,18 @@ namespace mongo {
                     ).jsonString();
     }
     
-    MultiCursor::MultiCursor( auto_ptr<MultiPlanScanner> mps, const shared_ptr<Cursor> &c,
-                             const shared_ptr<CoveredIndexMatcher> &matcher,
-                             const shared_ptr<ExplainPlanInfo> &explainPlanInfo,
-                             const QueryPlanRunner& runner, long long nscanned ) :
-    _mps( mps ),
-    _c( c ),
-    _matcher( matcher ),
-    _queryPlan( &runner.queryPlan() ),
-    _nscanned( nscanned ),
-    _explainPlanInfo( explainPlanInfo ) {
+    MultiCursor::MultiCursor( auto_ptr<MultiPlanScanner> mps,
+                              const shared_ptr<Cursor>& c,
+                              const shared_ptr<CoveredIndexMatcher>& matcher,
+                              const shared_ptr<ExplainPlanInfo>& explainPlanInfo,
+                              const QueryPlanRunner& runner,
+                              long long nscanned ) :
+        _mps( mps ),
+        _c( c ),
+        _matcher( matcher ),
+        _queryPlan( &runner.queryPlan() ),
+        _nscanned( nscanned ),
+        _explainPlanInfo( explainPlanInfo ) {
         _mps->clearRunnerQueue();
         _mps->setRecordedPlanPolicy( QueryPlanGenerator::UseIfInOrder );
         if ( !ok() ) {
@@ -1198,7 +1246,8 @@ namespace mongo {
             _c = _queryPlan->newCursor();
             if ( _explainPlanInfo ) {
                 _explainPlanInfo.reset( new ExplainPlanInfo() );
-                _explainPlanInfo->notePlan( *_c, _queryPlan->scanAndOrderRequired(),
+                _explainPlanInfo->notePlan( *_c,
+                                            _queryPlan->scanAndOrderRequired(),
                                            _queryPlan->keyFieldsOnly() );
                 shared_ptr<ExplainClauseInfo> clauseInfo( new ExplainClauseInfo() );
                 clauseInfo->addPlanInfo( _explainPlanInfo );
@@ -1217,7 +1266,10 @@ namespace mongo {
         if ( _explainPlanInfo ) _explainPlanInfo->noteIterate( match, loadedRecord, *_c );
     }
     
-    bool indexWorks( const BSONObj &idxPattern, const BSONObj &sampleKey, int direction, int firstSignificantField ) {
+    bool indexWorks( const BSONObj& idxPattern,
+                     const BSONObj& sampleKey,
+                     int direction,
+                     int firstSignificantField ) {
         BSONObjIterator p( idxPattern );
         BSONObjIterator k( sampleKey );
         int i = 0;
@@ -1237,7 +1289,7 @@ namespace mongo {
         return false;
     }
 
-    BSONObj extremeKeyForIndex( const BSONObj &idxPattern, int baseDirection ) {
+    BSONObj extremeKeyForIndex( const BSONObj& idxPattern, int baseDirection ) {
         BSONObjIterator i( idxPattern );
         BSONObjBuilder b;
         while( i.moreWithEOO() ) {
@@ -1260,7 +1312,7 @@ namespace mongo {
         return b.obj();
     }
 
-    pair<int,int> keyAudit( const BSONObj &min, const BSONObj &max ) {
+    pair<int,int> keyAudit( const BSONObj& min, const BSONObj& max ) {
         int direction = 0;
         int firstSignificantField = 0;
         BSONObjIterator i( min );
@@ -1285,7 +1337,7 @@ namespace mongo {
         return make_pair( direction, firstSignificantField );
     }
 
-    pair<int,int> flexibleKeyAudit( const BSONObj &min, const BSONObj &max ) {
+    pair<int,int> flexibleKeyAudit( const BSONObj& min, const BSONObj& max ) {
         if ( min.isEmpty() || max.isEmpty() ) {
             return make_pair( 1, -1 );
         }
@@ -1295,15 +1347,19 @@ namespace mongo {
     }
 
     // NOTE min, max, and keyPattern will be updated to be consistent with the selected index.
-    IndexDetails *indexDetailsForRange( const char *ns, string &errmsg, BSONObj &min, BSONObj &max, BSONObj &keyPattern ) {
+    IndexDetails* indexDetailsForRange( const char* ns,
+                                        string& errmsg,
+                                        BSONObj& min,
+                                        BSONObj& max,
+                                        BSONObj& keyPattern ) {
         if ( min.isEmpty() && max.isEmpty() ) {
             errmsg = "one of min or max must be specified";
             return 0;
         }
 
         Client::Context ctx( ns );
-        IndexDetails *id = 0;
-        NamespaceDetails *d = nsdetails( ns );
+        IndexDetails* id = 0;
+        NamespaceDetails* d = nsdetails( ns );
         if ( !d ) {
             errmsg = "ns not found";
             return 0;
@@ -1358,7 +1414,8 @@ namespace mongo {
         }
 
         if ( !id ) {
-            errmsg = str::stream() << "no index found for specified keyPattern: " << keyPattern.toString() 
+            errmsg = str::stream() << "no index found for specified keyPattern: "
+                                   << keyPattern.toString()
                                    << " min: " << min << " max: " << max;
             return 0;
         }
@@ -1393,7 +1450,10 @@ namespace mongo {
         return ret;
     }
 
-    bool QueryUtilIndexed::indexUseful( const FieldRangeSetPair &frsp, NamespaceDetails *d, int idxNo, const BSONObj &order ) {
+    bool QueryUtilIndexed::indexUseful( const FieldRangeSetPair& frsp,
+                                        NamespaceDetails* d,
+                                        int idxNo,
+                                        const BSONObj& order ) {
         DEV frsp.assertValidIndex( d, idxNo );
         BSONObj keyPattern = d->idx( idxNo ).keyPattern();
         if ( !frsp.matchPossibleForIndex( d, idxNo, keyPattern ) ) {
@@ -1438,8 +1498,12 @@ namespace mongo {
         return CachedQueryPlan();
     }
     
-    bool QueryUtilIndexed::uselessOr( const OrRangeGenerator &org, NamespaceDetails *d, int hintIdx ) {
-        for( list<FieldRangeSetPair>::const_iterator i = org._originalOrSets.begin(); i != org._originalOrSets.end(); ++i ) {
+    bool QueryUtilIndexed::uselessOr( const OrRangeGenerator& org,
+                                      NamespaceDetails* d,
+                                      int hintIdx ) {
+        for( list<FieldRangeSetPair>::const_iterator i = org._originalOrSets.begin();
+             i != org._originalOrSets.end();
+             ++i ) {
             if ( hintIdx != -1 ) {
                 if ( !indexUseful( *i, d, hintIdx, BSONObj() ) ) {
                     return true;   

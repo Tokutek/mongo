@@ -25,7 +25,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/stats/counters.h"
-#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"

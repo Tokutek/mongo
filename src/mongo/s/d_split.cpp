@@ -27,7 +27,7 @@
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/instance.h"
-#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/client/dbclientcursor.h"

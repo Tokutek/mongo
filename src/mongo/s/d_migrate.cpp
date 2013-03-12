@@ -37,7 +37,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/hasher.h"
 #include "mongo/db/cmdline.h"
-#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/clientcursor.h"
