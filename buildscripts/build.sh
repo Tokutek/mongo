@@ -196,6 +196,13 @@ makejobs=$(get_ncpus)
 debugbuild=0
 staticft=1
 
+if [ $(uname -s) = Darwin ] ; then
+    cc=cc
+    cxx=c++
+    ftcc=cc
+    ftcxx=c++
+fi
+
 while [ $# -gt 0 ] ; do
     arg=$1; shift
     if [ $arg = "--gcc44" ] ; then
@@ -216,9 +223,7 @@ if [ $? != 0 ] ; then
 fi
 set -e
 
-
 headcommit=$(git ls-remote git@github.com:Tokutek/mongo.git | grep HEAD | awk '{print $1}' | cut -c-7)
-set +e
 if [ "$commit_hash"x != ""x ] ; then
     mongocommit=$commit_hash
 else
