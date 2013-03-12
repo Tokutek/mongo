@@ -100,7 +100,7 @@ namespace mongo {
                     BSONObjBuilder& result ) {
 
             Client::ReadContext ctx(ns);
-            ctx.ctx().beginTransaction(DB_READ_UNCOMMITTED);
+            ctx.ctx().beginTransaction(DB_READ_UNCOMMITTED | DB_TXN_READ_ONLY);
             NamespaceDetails *nsd = nsdetails(ns.c_str());
             if (!nsd) {
                 errmsg = "ns not found";

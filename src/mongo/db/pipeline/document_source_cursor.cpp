@@ -30,7 +30,7 @@ namespace mongo {
         , _chunkMgr(shardingState.needShardChunkManager( ns )
                     ? shardingState.getShardChunkManager( ns )
                     : ShardChunkManagerPtr()) {
-        _readContext.ctx().beginTransaction(DB_TXN_SNAPSHOT);
+        _readContext.ctx().beginTransaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         _readContext.ctx().setReadOnly();
     }
 
