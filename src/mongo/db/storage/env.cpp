@@ -34,6 +34,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/storage/key.h"
+#include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
@@ -46,51 +47,65 @@ namespace mongo {
         DB_ENV *env;
 
         static int dbt_bson_compare(DB *db, const DBT *key1, const DBT *key2) {
-            verify(db->cmp_descriptor);
+            try {
+                verify(db->cmp_descriptor);
 
-            // Primary _id keys are represented by exactly one BSON Object.
-            // Secondary keys are represented by exactly two, the secondary
-            // key plus an associated _id key.
-            dassert(key1->size > 0);
-            dassert(key2->size > 0);
-            const BSONObj obj1(static_cast<char *>(key1->data));
-            const BSONObj obj2(static_cast<char *>(key2->data));
-            dassert((int) key1->size >= obj1.objsize());
-            dassert((int) key2->size >= obj2.objsize());
+                // Primary _id keys are represented by exactly one BSON Object.
+                // Secondary keys are represented by exactly two, the secondary
+                // key plus an associated _id key.
+                dassert(key1->size > 0);
+                dassert(key2->size > 0);
+                const BSONObj obj1(static_cast<char *>(key1->data));
+                const BSONObj obj2(static_cast<char *>(key2->data));
+                dassert((int) key1->size >= obj1.objsize());
+                dassert((int) key2->size >= obj2.objsize());
 
-            // Compare by the first object. The ordering comes from the key pattern.
-            {
-                const BSONObj key_pattern(static_cast<char *>(db->cmp_descriptor->dbt.data));
-                const Ordering ordering = Ordering::make(key_pattern);
-                const int c = obj1.woCompare(obj2, ordering);
-                if (c < 0) {
-                    return -1;
-                } else if (c > 0) {
-                    return 1;
+                // Compare by the first object. The ordering comes from the key pattern.
+                {
+                    const BSONObj key_pattern(static_cast<char *>(db->cmp_descriptor->dbt.data));
+                    const Ordering ordering = Ordering::make(key_pattern);
+                    const int c = obj1.woCompare(obj2, ordering);
+                    if (c < 0) {
+                        return -1;
+                    } else if (c > 0) {
+                        return 1;
+                    }
                 }
-            }
 
-            // Compare by the second object, if it exists.
-            int key1_bytes_left = key1->size - obj1.objsize();
-            int key2_bytes_left = key2->size - obj2.objsize();
-            if (key1_bytes_left > 0 && key2_bytes_left > 0) {
-                const BSONObj other_obj1(static_cast<char *>(key1->data) + obj1.objsize());
-                const BSONObj other_obj2(static_cast<char *>(key2->data) + obj2.objsize());
-                dassert(obj1.objsize() + other_obj1.objsize() == (int) key1->size);
-                dassert(obj2.objsize() + other_obj2.objsize() == (int) key2->size);
+                // Compare by the second object, if it exists.
+                int key1_bytes_left = key1->size - obj1.objsize();
+                int key2_bytes_left = key2->size - obj2.objsize();
+                if (key1_bytes_left > 0 && key2_bytes_left > 0) {
+                    const BSONObj other_obj1(static_cast<char *>(key1->data) + obj1.objsize());
+                    const BSONObj other_obj2(static_cast<char *>(key2->data) + obj2.objsize());
+                    dassert(obj1.objsize() + other_obj1.objsize() == (int) key1->size);
+                    dassert(obj2.objsize() + other_obj2.objsize() == (int) key2->size);
 
-                static const Ordering id_ordering = Ordering::make(BSON("_id" << 1));
-                const int c = other_obj1.woCompare(other_obj2, id_ordering);
-                if (c < 0) {
-                    return -1;
-                } else if (c > 0) {
-                    return 1;
+                    static const Ordering id_ordering = Ordering::make(BSON("_id" << 1));
+                    const int c = other_obj1.woCompare(other_obj2, id_ordering);
+                    if (c < 0) {
+                        return -1;
+                    } else if (c > 0) {
+                        return 1;
+                    }
+                } else {
+                    // The associated primary key must exist in both keys, or neither.
+                    dassert(key1_bytes_left == 0 && key2_bytes_left == 0);
                 }
-            } else {
-                // The associated primary key must exist in both keys, or neither.
-                dassert(key1_bytes_left == 0 && key2_bytes_left == 0);
+                return 0;
+            } catch (std::exception &e) {
+                // We don't have a way to return an error from a comparison (through the ydb), and the ydb isn't exception-safe.
+                // Of course, if a comparison throws, something is very wrong anyway.
+                // The only safe thing to do here is to crash.
+                log() << "Caught an exception in a comparison function, this is impossible to handle:" << endl;
+                DBException *dbe = dynamic_cast<DBException *>(&e);
+                if (dbe) {
+                    log() << "DBException " << dbe->getCode() << ": " << e.what() << endl;
+                } else {
+                    log() << e.what() << endl;
+                }
+                fassertFailed(16455);
             }
-            return 0;
         }
 
         static uint64_t calculate_cachesize(void) {
