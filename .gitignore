@@ -87,6 +87,9 @@ scratch
 /mongoperf
 /bsondump
 
+/docgen
+/loadgen
+
 *.tgz
 *.zip
 *.tar.gz
