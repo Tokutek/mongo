@@ -96,7 +96,7 @@ namespace mongo {
         /* dump info on this namespace.  for debugging. */
         void dump(const Namespace& k);
 
-        // TODO: Capped collections need are not yet implemented with TokuDB
+        // TODO: Capped collections need are not yet implemented with TokuDB.
         bool isCapped() const { return false; }
         long long cappedSize() const { return 0; }
         long long maxCappedDocs() const { return std::numeric_limits<long long>::max(); }
