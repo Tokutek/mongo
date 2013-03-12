@@ -12,6 +12,7 @@ function usage() {
 }
 
 function retry() {
+    set +e
     local cmd
     local retries
     local exitcode
@@ -19,15 +20,14 @@ function retry() {
     let retries=0
     while [ $retries -le 10 ] ; do
         echo `date` $cmd
-        set +e
         bash -c "$cmd"
         exitcode=$?
-        set -e
         echo `date` $cmd $exitcode $retries
         let retries=retries+1
         if [ $exitcode -eq 0 ] ; then break; fi
         sleep 10
     done
+    set -e
     test $exitcode = 0
 }
 
