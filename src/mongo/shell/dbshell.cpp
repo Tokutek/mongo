@@ -757,7 +757,7 @@ int _main( int argc, char* argv[] ) {
     }
 
     if ( ! mongo::cmdLine.quiet )
-        cout << "MongoDB shell version: " << mongo::ersionString << endl;
+        cout << "MongoDB shell version: " << mongo::fullVersionString() << endl;
 
     mongo::StartupTest::runTests();
 
