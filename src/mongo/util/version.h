@@ -29,6 +29,3 @@ namespace mongo {
 }  // namespace mongo
 
 #endif  // UTIL_VERSION_HEADER
-
-
-
