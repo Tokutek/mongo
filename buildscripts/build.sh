@@ -214,8 +214,6 @@ pushd $builddir
 
 rootdir=$PWD
 
-checkout_mongodb_src
-
 # build the fractal tree tarball
 tokufractaltree=tokufractaltreeindex-${revision}${suffix}
 tokuportability=tokuportability-${revision}${suffix}
