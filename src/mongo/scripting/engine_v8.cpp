@@ -1319,6 +1319,7 @@ namespace mongo {
                     log() << "warning: CodeWScope doesn't transfer to db.eval" << endl;
                 o->ForceSet(name, newFunction(f.codeWScopeCode()));
                 break;
+            case mongo::Symbol:
             case mongo::String:
                 o->ForceSet(name, v8::String::New(f.valuestr()));
                 break;
@@ -1520,6 +1521,7 @@ namespace mongo {
             if (!elem.codeWScopeObject().isEmpty())
                 log() << "warning: CodeWScope doesn't transfer to db.eval" << endl;
             return newFunction(elem.codeWScopeCode());
+        case mongo::Symbol:
         case mongo::String:
             return v8::String::New(elem.valuestr());
         case mongo::jstOID:
