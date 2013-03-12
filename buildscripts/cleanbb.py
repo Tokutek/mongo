@@ -24,7 +24,7 @@ def shouldKill( c ):
     if "java" in c:
         return False
 
-    if "test.tokumon.bash" in c:
+    if "test.sh" in c:
         return False
 
     if c.find( cwd ) >= 0:

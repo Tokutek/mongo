@@ -678,6 +678,8 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("syncdelay",po::value<double>(&cmdLine.syncdelay)->default_value(60), "seconds between disk syncs (0=never, but not recommended)")
     ("sysinfo", "print some diagnostic system information")
     ("upgrade", "upgrade db if needed")
+    ("cacheSize", po::value<uint64_t>(), "cache size (in MB) for rec store")
+    ("directio", "use direct I/O in tokudb")
     ;
 
 #if defined(_WIN32)
@@ -712,7 +714,6 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("fastsync", "indicate that this instance is starting from a dbpath snapshot of the repl peer")
     ("pretouch", po::value<int>(), "n pretouch threads for applying replicationed operations") // experimental
     ("command", po::value< vector<string> >(), "command")
-    ("cacheSize", po::value<uint64_t>(), "cache size (in MB) for rec store")
     ("nodur", "DEPRECATED")
     // things we don't want people to use
     ("nohints", "ignore query hints")
@@ -723,7 +724,6 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("pairwith", "DEPRECATED")
     ("arbiter", "DEPRECATED")
     ("opIdMem", "DEPRECATED")
-    ("directio", "use direct I/O in tokudb")
     ("checkpointPeriod", po::value<uint32_t>(), "tokudb time between checkpoints, 0 means never checkpoint")
     ("cleanerPeriod", po::value<uint32_t>(), "tokudb time between cleaner thread operations, 0 means never run")
     ("cleanerIterations", po::value<uint32_t>(), "tokudb number of iterations per cleaner thread operation, 0 means never run")

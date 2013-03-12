@@ -69,6 +69,21 @@ def getGitVersion():
         return version
     return open( f , 'r' ).read().strip()
 
+def getTokudbVersion(tokudb_path):
+    config_h = os.path.join(tokudb_path, 'include', 'config.h')
+    if not os.path.isdir(tokudb_path) or not os.path.exists(config_h):
+        return "notokudbversion"
+
+    f = open(config_h, 'r')
+    try:
+        pattern = re.compile('#define\s+TOKUDB_REVISION\s+([0-9]+)$')
+        for line in f:
+            m = pattern.match(line.strip())
+            if m is not None:
+                return m.group(1)
+    finally:
+        f.close()
+
 def execsys( args ):
     import subprocess
     if isinstance( args , str ):

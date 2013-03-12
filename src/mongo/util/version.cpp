@@ -43,6 +43,13 @@ namespace mongo {
      * If you really need to do something else you'll need to fix _versionArray()
      */
     const char versionString[] = "2.2.0";
+    const char mongoTokutekString[] = "0.0.1";
+
+    std::string fullVersionString() {
+        stringstream ss;
+        ss << versionString << "-tokutek-" << mongoTokutekString;
+        return ss.str();
+    }
 
     // See unit test for example outputs
     static BSONArray _versionArray(const char* version){
@@ -87,8 +94,7 @@ namespace mongo {
 
     string mongodVersion() {
         stringstream ss;
-        //ss << "db version v" << versionString << ", pdfile version " << PDFILE_VERSION << "." << PDFILE_VERSION_MINOR;
-        ss << "db version v" << versionString; // Got rid of pdfile version for TokuDB
+        ss << "db version v" << fullVersionString() << ", tokudb version r" << tokudbVersion();
         return ss.str();
     }
 
@@ -121,6 +127,13 @@ namespace mongo {
         log() << "build info: " << sysInfo() << endl;
     }
 
+#ifndef _SCONS
+    // only works in scons
+    const char *tokudbVersion() { return "not-scons"; }
+#endif
+
+    void printTokudbVersion() { log() << "tokudb version: " << tokudbVersion() << endl; }
+
 
     Tee * startupWarningsLog = new RamLog("startupWarnings"); //intentionally leaked
 
@@ -132,11 +145,11 @@ namespace mongo {
 
         bool warned = false;
         {
-            const char * foo = strchr( versionString , '.' ) + 1;
+            const char * foo = strchr( fullVersionString().c_str() , '.' ) + 1;
             int bar = atoi( foo );
             if ( ( 2 * ( bar / 2 ) ) != bar ) {
                 log() << startupWarningsLog;
-                log() << "** NOTE: This is a development version (" << versionString << ") of MongoDB." << startupWarningsLog;
+                log() << "** NOTE: This is a development version (" << fullVersionString() << ") of MongoDB." << startupWarningsLog;
                 log() << "**       Not recommended for production." << startupWarningsLog;
                 warned = true;
             }

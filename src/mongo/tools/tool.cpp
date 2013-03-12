@@ -105,8 +105,9 @@ namespace mongo {
     }
 
     void Tool::printVersion(ostream &out) {
-        out << _name << " version " << mongo::versionString;
-        if (mongo::versionString[strlen(mongo::versionString)-1] == '-')
+        std::string version = mongo::fullVersionString();
+        out << _name << " version " << version;
+        if (version[version.size()-1] == '-')
             out << " (commit " << mongo::gitVersion() << ")";
         out << endl;
     }
