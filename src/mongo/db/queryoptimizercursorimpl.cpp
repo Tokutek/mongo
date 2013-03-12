@@ -22,6 +22,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/explain.h"
+#include "mongo/db/query_plan_summary.h"
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/exception.h"

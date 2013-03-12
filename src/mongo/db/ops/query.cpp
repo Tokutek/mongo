@@ -17,18 +17,20 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-#include "query.h"
-#include "../clientcursor.h"
-#include "../oplog.h"
-#include "../../bson/util/builder.h"
-#include "../replutil.h"
-#include "../scanandorder.h"
-#include "../commands.h"
-#include "../queryoptimizer.h"
-#include "../../s/d_logic.h"
-#include "../../server.h"
-#include "../queryoptimizercursor.h"
+#include "mongo/pch.h"
+
+#include "mongo/db/ops/query.h"
+
+#include "mongo/bson/util/builder.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/queryoptimizercursor.h"
+#include "mongo/db/query_plan_summary.h"
+#include "mongo/db/replutil.h"
+#include "mongo/db/scanandorder.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/server.h"
 
 namespace mongo {
 
@@ -414,7 +416,7 @@ namespace mongo {
         verify( _cursor->ok() );
         const FieldRangeSet *fieldRangeSet = 0;
         if ( queryPlan.valid() ) {
-            fieldRangeSet = queryPlan._fieldRangeSetMulti.get();
+            fieldRangeSet = queryPlan.fieldRangeSetMulti.get();
         }
         else {
             verify( _queryOptimizerCursor );
@@ -595,8 +597,8 @@ namespace mongo {
         }
         shared_ptr<ExplainRecordingStrategy> ret
         ( new SimpleCursorExplainStrategy( ancillaryInfo, _cursor ) );
-        ret->notePlan( queryPlan.valid() && queryPlan._scanAndOrderRequired,
-                      queryPlan._keyFieldsOnly );
+        ret->notePlan( queryPlan.valid() && queryPlan.scanAndOrderRequired,
+                       queryPlan.keyFieldsOnly );
         return ret;
     }
 
@@ -606,7 +608,7 @@ namespace mongo {
         bool empty = !_cursor->ok();
         bool singlePlan = !_queryOptimizerCursor;
         bool singleOrderedPlan =
-        singlePlan && ( !queryPlan.valid() || !queryPlan._scanAndOrderRequired );
+                singlePlan && ( !queryPlan.valid() || !queryPlan.scanAndOrderRequired );
         CandidatePlanCharacter queryOptimizerPlans;
         if ( _queryOptimizerCursor ) {
             queryOptimizerPlans = _queryOptimizerCursor->initialCandidatePlans();

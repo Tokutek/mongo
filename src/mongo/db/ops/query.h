@@ -32,7 +32,7 @@ namespace mongo {
 
     class ParsedQuery;
     class QueryOptimizerCursor;
-    class QueryPlanSummary;
+    struct QueryPlanSummary;
     
     QueryResult* processGetMore(const char *ns, int ntoreturn, long long cursorid , CurOp& op, int pass, bool& exhaust);
 

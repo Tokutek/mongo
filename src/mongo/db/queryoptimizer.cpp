@@ -1,5 +1,3 @@
-// @file queryoptimizer.cpp
-
 /**
 *    Copyright (C) 2008 10gen Inc.
 *    Copyright (C) 2013 Tokutek Inc.
@@ -25,13 +23,21 @@
 #include "mongo/db/cursor.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/query_plan_selection_policy.h"
+#include "mongo/db/query_plan_summary.h"
+#include "mongo/server.h"
 
 //#define DEBUGQO(x) cout << x << endl;
 #define DEBUGQO(x)
 
 namespace mongo {
 
-    QueryPlanSummary QueryPlan::summary() const { return QueryPlanSummary( *this ); }
+    QueryPlanSummary QueryPlan::summary() const {
+        QueryPlanSummary summary;
+        summary.fieldRangeSetMulti.reset( new FieldRangeSet( multikeyFrs() ) );
+        summary.keyFieldsOnly = keyFieldsOnly();
+        summary.scanAndOrderRequired = scanAndOrderRequired();
+        return summary;
+    }
 
     double elementDirection( const BSONElement &e ) {
         if ( e.isNumber() )
