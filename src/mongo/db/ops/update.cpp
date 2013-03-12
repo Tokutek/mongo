@@ -241,7 +241,7 @@ namespace mongo {
                 // this handles repl inserts
                 checkNoMods( updateobj );
                 debug.upsert = true;
-                insertOneObject( d, nsdt, updateobj );
+                insertOneObject( d, nsdt, updateobj, upsert );
                 return UpdateResult( 0 , 0 , 1 , updateobj );
             }
         }
@@ -383,7 +383,7 @@ namespace mongo {
                 // upsert of an $operation. build a default object
                 BSONObj newObj = mods->createNewFromQuery( patternOrig );
                 debug.fastmodinsert = true;
-                insertAndLog( ns, d, nsdt, newObj, logop, fromMigrate );
+                insertAndLog( ns, d, nsdt, newObj, upsert, logop, fromMigrate );
                 return UpdateResult( 0 , 1 , 1 , newObj );
             }
             uassert( 10159 ,  "multi update only works with $ operators" , ! multi );
@@ -413,12 +413,10 @@ namespace mongo {
                      legalClientSystemNS( ns , true ) );
         }
 
-        Client::Transaction transaction;
         UpdateResult ur = _updateObjects(false, ns, updateobj, patternOrig,
                                          upsert, multi, logop,
                                          debug, fromMigrate, planPolicy );
         debug.nupdated = ur.num;
-        transaction.commit();
         return ur;
     }
 

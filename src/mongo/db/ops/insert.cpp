@@ -74,7 +74,7 @@ namespace mongo {
         }
     }
 
-    void insertObject(const char *ns, const BSONObj &obj) {
+    void insertObject(const char *ns, const BSONObj &obj, bool overwrite) {
         if (mongoutils::str::contains(ns, "system.")) {
             uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
             if (handle_system_collection_insert(ns, obj))
