@@ -226,6 +226,10 @@ tokuportability=tokuportability-${revision}${suffix}
 tokufractaltreedir=$tokufractaltree-$system-$arch
 build_fractal_tree
 
+LIBTOKUDB_NAME=${tokufractaltree}_static
+LIBTOKUPORTABILITY_NAME=${tokuportability}_static
+export LIBTOKUDB_NAME LIBTOKUPORTABILITY_NAME
+
 # build the mongodb source tarball
 build_mongodb_src
 
