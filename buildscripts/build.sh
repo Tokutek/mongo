@@ -5,7 +5,8 @@ set -u
 
 function usage() {
     echo 1>&2 "build.bash"
-    echo 1>&2 "[--branch=$branch] [--tokudb=$tokudb] [--revision=$revision]"
+    echo 1>&2 "[--branch=$branch] [--commit_hash=$commit_hash]"
+    echo 1>&2 "[--tokudb=$tokudb] [--revision=$revision]"
     echo 1>&2 "[--cc=$cc --cxx=$cxx] [--ftcc=$ftcc --ftcxx=$ftcxx]"
     echo 1>&2 "[--debugbuild=$debugbuild]"
     return 1
@@ -112,22 +113,25 @@ function build_fractal_tree() {
 
 # checkout the mongodb source from git, generate a build script, and make the mongodb source tarball
 function build_mongodb_src() {
-    # check out mongodb
-    retry git clone \
-        --depth 1 \
-        --single-branch \
-        --branch $branch \
-        $gitserver mongodb-$mongodbver-$branch-src
-    pushd mongodb-$mongodbver-$branch-src
-        mongocommit=$(git rev-parse HEAD | cut -c-7)
-    popd
-
-    mongodbsrc=mongodb-$mongodbver-$mongocommit-src
+    mongodbsrc=mongodb-$mongocommit-src
     if [ ! -d $mongodbsrc ] ; then
-        mv mongodb-$mongodbver-$branch-src $mongodbsrc
+        # check out mongodb
+        retry git clone \
+            --depth 1 \
+            --single-branch \
+            --branch $branch \
+            $gitserver $mongodbsrc
+        pushd $mongodbsrc
+            git checkout $mongocommit
+        popd
 
         # install the fractal tree
-        cp -r $tokufractaltreedir $mongodbsrc/src/third_party/tokudb
+        mkdir $mongodbsrc/src/third_party/tokudb
+        tar --extract \
+            --gzip \
+            --directory $mongodbsrc/src/third_party/tokudb \
+            --strip-components 1 \
+            --file $tokufractaltreedir.tar.gz
 
         # make the mongodb src tarball
         tar --create \
@@ -153,7 +157,7 @@ function build_mongodb_src() {
                 dist
         popd
 
-        mongodbdir=mongodb-$mongodbver-${mongocommit}${suffix}-$system-$arch
+        mongodbdir=mongodb-$mongocommit-$tokudb-${revision}${suffix}-$system-$arch
 
         # copy the release tarball
         mkdir $mongodbdir
@@ -168,15 +172,13 @@ function build_mongodb_src() {
             $mongodbdir
         md5sum $mongodbdir.tar.gz >$mongodbdir.tar.gz.md5
         md5sum --check $mongodbdir.tar.gz.md5
-    else
-        rm -rf mongodb-$mongodbver-$branch-src
     fi
 }
 
 PATH=$HOME/bin:$PATH
 
 suffix=''
-mongodbver=2.2-tokutek
+commit_hash=''
 branch=master
 revision=0
 tokudb=tokudb
@@ -206,15 +208,26 @@ while [ $# -gt 0 ] ; do
 done
 
 # Check for scons, the interpreter mongo uses for builds
+set +e
 command -v scons &>/dev/null
 if [ $? != 0 ] ; then
     echo "Need scons to build MongoDB!"
     exit 1;
 fi
+set -e
+
+
+headcommit=$(git ls-remote git@github.com:Tokutek/mongo.git | grep HEAD | awk '{print $1}' | cut -c-7)
+set +e
+if [ "$commit_hash"x != ""x ] ; then
+    mongocommit=$commit_hash
+else
+    mongocommit=$headcommit
+fi
 
 if [[ $debugbuild != 0 && ( -z $suffix ) ]] ; then suffix=-debug; fi
 
-builddir=build-mongodb-$branch-$tokudb-${revision}${suffix}
+builddir=build-$tokudb-$revision-mongodb-${mongocommit}${suffix}
 if [ ! -d $builddir ] ; then mkdir $builddir; fi
 pushd $builddir
 
