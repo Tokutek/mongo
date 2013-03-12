@@ -113,7 +113,7 @@ function build_fractal_tree() {
 
 # checkout the mongodb source from git, generate a build script, and make the mongodb source tarball
 function build_mongodb_src() {
-    mongodbsrc=mongodb-$mongocommit-src
+    mongodbsrc=mongodb-$mongocommit-$tokudb-$revision-src
     if [ ! -d $mongodbsrc ] ; then
         # check out mongodb
         retry git clone \
