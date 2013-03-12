@@ -60,17 +60,17 @@ namespace mongo {
             _positonalOptions.add( name , pos );
         }
 
-        string getParam( string name , string def="" ) {
+        string getParam( string name , string def="" ) const {
             if ( _params.count( name ) )
                 return _params[name.c_str()].as<string>();
             return def;
         }
-        int getParam( string name , int def ) {
+        int getParam( string name , int def ) const {
             if ( _params.count( name ) )
                 return _params[name.c_str()].as<int>();
             return def;
         }
-        bool hasParam( string name ) {
+        bool hasParam( string name ) const {
             return _params.count( name );
         }
 

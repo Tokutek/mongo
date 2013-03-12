@@ -45,11 +45,6 @@ add_library(client_parallel STATIC
   )
 add_dependencies(client_parallel generate_error_codes generate_action_types install_tdb_h)
 
-add_library(notmongodormongos STATIC
-  connection_factory
-  )
-add_dependencies(notmongodormongos generate_error_codes generate_action_types)
-
 add_library(gridfs STATIC
   gridfs
   )
@@ -63,7 +58,6 @@ target_link_libraries(clientandshell LINK_PUBLIC
   mongocommon
   defaultversion
   gridfs
-  notmongodormongos
   )
 
 add_library(allclient STATIC

@@ -118,7 +118,6 @@ set(client_sources
   bson/util/bson_extract.cpp
   client/clientAndShell.cpp
   client/clientOnly.cpp
-  client/connection_factory.cpp
   client/connpool.cpp
   client/dbclient.cpp
   client/dbclient_rs.cpp
@@ -554,7 +553,6 @@ if (BUILD_TESTING)
   link_recursive_deps(sock_test
     unittest_main
     mongocommon
-    notmongodormongos
     ${TOKUMX_SSL_LIBRARIES}
     )
 
@@ -701,7 +699,6 @@ if (APPLE OR PCAP_FOUND)
     serveronly
     coreserver
     coredb
-    notmongodormongos
     ${PCAP_LIBRARIES}
     ${TOKUMX_SSL_LIBRARIES}
     )

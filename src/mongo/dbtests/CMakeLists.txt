@@ -39,7 +39,6 @@ link_recursive_deps(smokeTest
   coredb
   testframework
   gridfs
-  notmongodormongos
   s_upgrade
   mocklib
   ${TokuKV_LIBRARIES}

@@ -279,8 +279,8 @@ class VanillaOplogPlayer : boost::noncopyable {
 class OplogTool : public Tool {
     static const char *_tsFilename;
     bool _logAtExit;
+    string _from;
     scoped_ptr<VanillaOplogPlayer> _player;
-    scoped_ptr<ScopedDbConnection> _rconn;
     string _oplogns;
     string _rpass;
     string _rauthenticationDatabase;
@@ -349,14 +349,17 @@ public:
     void report() const {
         const OpTime &maxOpTimeSynced = _player->maxOpTimeSynced();
         LOG(0) << "synced up to " << fmtOpTime(maxOpTimeSynced);
-        if (!_rconn) {
-            LOG(0) << endl;
-            return;
-        }
         Query lastQuery;
         lastQuery.sort("$natural", -1);
         BSONObj lastFields = BSON("ts" << 1);
-        BSONObj lastObj = _rconn->conn().findOne(_oplogns, lastQuery, &lastFields);
+        ScopedDbConnection conn(_from);
+        if (!doAuth(conn)) {
+            LOG(0) << endl;
+            conn.done();
+            return;
+        }
+        BSONObj lastObj = conn->findOne(_oplogns, lastQuery, &lastFields);
+        conn.done();
         BSONElement tsElt = lastObj["ts"];
         if (!tsElt.ok()) {
             warning() << "couldn't find last oplog entry on remote host" << endl;
@@ -381,6 +384,29 @@ public:
         _reportingTimer.reset();
     }
 
+    bool doAuth(ScopedDbConnection &conn) const {
+        if (hasParam("ruser")) {
+            if (!hasParam("rpass")) {
+                log() << "if using auth on source, must specify both --ruser and --rpass" << endl;
+                return false;
+            }
+            try {
+                conn->auth(BSON("user" << getParam("ruser") <<
+                                "userSource" << _rauthenticationDatabase <<
+                                "pwd" << _rpass <<
+                                "mechanism" << _authenticationMechanism));
+            } catch (DBException &e) {
+                if (e.getCode() == ErrorCodes::AuthenticationFailed) {
+                    error() << "error authenticating to " << _rauthenticationDatabase << " on source: "
+                            << e.what() << endl;
+                    return false;
+                }
+                throw;
+            }
+        }
+        return true;
+    }
+
     int run() {
         if (!hasParam("from")) {
             log() << "need to specify --from" << endl;
@@ -394,27 +420,13 @@ public:
         }
 
         LOG(1) << "going to connect" << endl;
-        
-        _rconn.reset(ScopedDbConnection::getScopedDbConnection(getParam("from")));
 
-        if (hasParam("ruser")) {
-            if (!hasParam("rpass")) {
-                log() << "if using auth on source, must specify both --ruser and --rpass" << endl;
-                return -1;
-            }
-            try {
-                _rconn->conn().auth(BSON("user" << getParam("ruser") <<
-                                         "userSource" << _rauthenticationDatabase <<
-                                         "pwd" << _rpass <<
-                                         "mechanism" << _authenticationMechanism));
-            } catch (DBException &e) {
-                if (e.getCode() == ErrorCodes::AuthenticationFailed) {
-                    error() << "error authenticating to " << _rauthenticationDatabase << " on source: "
-                            << e.what() << endl;
-                    return -1;
-                }
-                throw;
-            }
+        _from = getParam("from");
+        ScopedDbConnection conn(_from);
+
+        if (!doAuth(conn)) {
+            conn.done();
+            return -1;
         }
 
         LOG(1) << "connected" << endl;
@@ -449,7 +461,7 @@ public:
             }
             maxOpTimeSynced = OpTime(secs, i);
 
-            _player.reset(new VanillaOplogPlayer(conn(), _host, maxOpTimeSynced, running, _logAtExit));
+            _player.reset(new VanillaOplogPlayer(conn.conn(), _host, maxOpTimeSynced, running, _logAtExit));
         }
 
         try {
@@ -459,12 +471,12 @@ public:
                 bool shouldContinue = false;
                 try {
                     try {
-                        shouldContinue = attemptQuery(tailingQueryOptions | QueryOption_SlaveOk);
+                        shouldContinue = attemptQuery(conn, tailingQueryOptions | QueryOption_SlaveOk);
                     } catch (CantFindTimestamp &e) {
                         log() << "Couldn't find OpTime " << _player->maxOpTimeSyncedStr()
                               << " with slaveOk = true (couldn't find anything before " << fmtOpTime(e.firstTime())
                               << "), retrying with slaveOk = false..." << endl;
-                        shouldContinue = attemptQuery(tailingQueryOptions);
+                        shouldContinue = attemptQuery(conn, tailingQueryOptions);
                     }
                 } catch (CantFindTimestamp &e) {
                     warning() << "Tried to start at OpTime " << _player->maxOpTimeSyncedStr()
@@ -475,8 +487,7 @@ public:
                 }
 
                 if (!shouldContinue) {
-                    _rconn->done();
-                    _rconn.reset();
+                    conn.done();
                     return -1;
                 }
             }
@@ -484,35 +495,31 @@ public:
         catch (DBException &e) {
             warning() << "Caught exception " << e.what() << " while processing.  Exiting..." << endl;
             logPosition();
-            _rconn->done();
-            _rconn.reset();
+            conn.done();
             return -1;
         }
         catch (...) {
             warning() << "Caught unknown exception while processing.  Exiting..." << endl;
             logPosition();
-            _rconn->done();
-            _rconn.reset();
+            conn.done();
             return -1;
         }
 
         if (_logAtExit) {
             logPosition();
 
-            _rconn->done();
-            _rconn.reset();
+            conn.done();
             return 0;
         }
         else {
-            _rconn->done();
-            _rconn.reset();
+            conn.done();
             return -1;
         }
     }
 
-    bool attemptQuery(int queryOptions) {
+    bool attemptQuery(ScopedDbConnection &conn, int queryOptions) {
         BSONObj res;
-        auto_ptr<DBClientCursor> cursor(_rconn->conn().query(
+        auto_ptr<DBClientCursor> cursor(conn->query(
             _oplogns, QUERY("ts" << GTE << _player->maxOpTimeSynced()),
             0, 0, &res, queryOptions));
 

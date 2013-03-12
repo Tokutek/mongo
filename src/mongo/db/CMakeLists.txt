@@ -213,7 +213,6 @@ target_link_libraries(serveronly LINK_PUBLIC
   )
 
 add_library(mongodandmongos STATIC
-  connection_factory
   initialize_server_global_state
   server_extra_log_context
   ../util/net/message_server_port

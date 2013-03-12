@@ -7,7 +7,6 @@ target_link_libraries(alltools LINK_PUBLIC
   serveronly
   coreserver
   coredb
-  notmongodormongos
   )
 
 add_library(docgenerator STATIC
