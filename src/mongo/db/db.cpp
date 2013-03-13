@@ -680,6 +680,7 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("upgrade", "upgrade db if needed")
     ("cacheSize", po::value<uint64_t>(), "cache size (in MB) for rec store")
     ("directio", "use direct I/O in tokudb")
+    ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers")
     ;
 
 #if defined(_WIN32)
@@ -742,10 +743,6 @@ static int mongoDbMain(int argc, char* argv[]) {
     visible_options.add(ssl_options);
 #endif
     Module::addOptions( visible_options );
-
-
-    setupCoreSignals();
-    setupSignals( false );
 
     dbExecCommand = argv[0];
 
@@ -863,6 +860,9 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
         if (params.count("directio")) {
             cmdLine.directio = true;
+        }
+        if (params.count("gdb")) {
+            cmdLine.gdb = true;
         }
         if (params.count("checkpointPeriod")) {
             cmdLine.checkpointPeriod = params["checkpointPeriod"].as<uint32_t>();
@@ -1137,6 +1137,9 @@ static int mongoDbMain(int argc, char* argv[]) {
 
     }
 
+    setupCoreSignals();
+    setupSignals( false );
+
     StartupTest::runTests();
     initAndListen(cmdLine.port);
     dbexit(EXIT_CLEAN);
@@ -1247,9 +1250,11 @@ namespace mongo {
         else
             sigaddset( &asyncSignals, SIGHUP );
 
-        sigaddset( &asyncSignals, SIGINT );
-        sigaddset( &asyncSignals, SIGTERM );
-        verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
+        if ( !cmdLine.gdb ) {
+            sigaddset( &asyncSignals, SIGINT );
+            sigaddset( &asyncSignals, SIGTERM );
+            verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
+        }
         boost::thread it( interruptThread );
 
         set_terminate( myterminate );

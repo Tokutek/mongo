@@ -117,6 +117,7 @@ namespace mongo {
         
         // TokuDB variables
         bool directio;
+        bool gdb;
         uint64_t cacheSize;
         uint32_t checkpointPeriod;
         uint32_t cleanerPeriod;
