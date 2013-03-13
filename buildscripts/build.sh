@@ -123,15 +123,15 @@ function build_mongodb_src() {
         else
             retry git clone \
                 --depth 1 \
-                $gitserver mongo
+                $gitserver mongo-git
         fi
 
         # export the right branch or tag
-        pushd mongo
+        pushd mongo-git
             git archive \
                 --format=tar \
                 --prefix=$mongodbsrc/ \
-                --output=$mongodbsrc.tar
+                --output=$mongodbsrc.tar \
                 $treeish
             force_git_version=$(git get-tar-commit-id < $mongodbsrc.tar)
             tar --extract \
