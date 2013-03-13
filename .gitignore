@@ -125,6 +125,9 @@ debian/mongodb
 # This was inserted 2009-08-16, nobody knows why.
 #debian/mongodb.*
 
+#generated script
+/buildscripts/build.tokudb.sh
+
 #osx
 .DS_Store
 ._.DS_Store

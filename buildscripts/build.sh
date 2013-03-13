@@ -113,7 +113,7 @@ function build_fractal_tree() {
 
 # checkout the mongodb source from git, generate a build script, and make the mongodb source tarball
 function build_mongodb_src() {
-    mongodbsrc=mongodb-$mongodb_version-tokutek-$git_commit-$tokudb-${svn_revision}${suffix}-src
+    mongodbsrc=mongodb-$mongodb_version-tokutek-$git_commit-src
     if [ ! -d $mongodbsrc ] ; then
         # clone mongo
         if [ -d mongo-git ] ; then
@@ -140,13 +140,19 @@ function build_mongodb_src() {
             rm $mongodbsrc.tar
         popd
 
-        # install the fractal tree
-        mkdir $mongodbsrc/src/third_party/tokudb
-        tar --extract \
-            --gzip \
-            --directory $mongodbsrc/src/third_party/tokudb \
-            --strip-components 1 \
-            --file $tokufractaltreedir.tar.gz
+        # set defaults for build script
+        sed <$mongodbsrc/buildscripts/build.tokudb.sh.in \
+            -e "s+@makejobs@+$makejobs+" \
+            -e "s+@cc@+$cc+" \
+            -e "s+@cxx@+$cxx+" \
+            -e "s+@debugbuild@+$debugbuild+" \
+            -e "s+@force_git_version@+$force_git_version+" \
+            -e "s+@mongodbsrc@+$mongodbsrc+" \
+            -e "s+@tokufractaltreesrc@+$tokufractaltreedir+" \
+            -e "s+@LIBTOKUDB_NAME@+${tokufractaltree}_static+" \
+            -e "s+@LIBTOKUPORTABILITY_NAME@+${tokuportability}_static+" \
+            >$mongodbsrc/buildscripts/build.tokudb.sh
+        chmod +x $mongodbsrc/buildscripts/build.tokudb.sh
 
         # make the mongodb src tarball
         tar --create \
@@ -156,28 +162,12 @@ function build_mongodb_src() {
         md5sum $mongodbsrc.tar.gz >$mongodbsrc.tar.gz.md5
         md5sum --check $mongodbsrc.tar.gz.md5
 
-        # build mongodb
-        pushd $mongodbsrc
-            local buildtypeoption=""
-            if [[ $debugbuild = 1 ]]; then
-                buildtypeoption="--dd"
-            else
-                buildtypeoption="--release"
-            fi
-            systemallocatoroption=""
-            if [ $(uname -s) = Darwin ] ; then
-                systemallocatoroption="--allocator=system"
-            fi
-            scons $buildtypeoption $systemallocatoroption \
-                --force-git-version=$force_git_version \
-                -j$makejobs --mute \
-                --cc=$cc --cxx=$cxx \
-                dist
-        popd
+        # run the build script
+        $mongodbsrc/buildscripts/build.tokudb.sh
 
         mongodbdir=mongodb-$mongodb_version-tokutek-$git_commit-$tokudb-${svn_revision}${suffix}-$system-$arch
 
-        # copy the release tarball
+        # copy the release tarball to a name of our choosing
         mkdir $mongodbdir
         tar --extract \
             --gzip \
@@ -273,10 +263,6 @@ tokufractaltree=tokufractaltreeindex-${svn_revision}${suffix}
 tokuportability=tokuportability-${svn_revision}${suffix}
 tokufractaltreedir=$tokufractaltree-$system-$arch
 build_fractal_tree
-
-LIBTOKUDB_NAME=${tokufractaltree}_static
-LIBTOKUPORTABILITY_NAME=${tokuportability}_static
-export LIBTOKUDB_NAME LIBTOKUPORTABILITY_NAME
 
 # build the mongodb source tarball
 build_mongodb_src

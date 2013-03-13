@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+
+makejobs=@makejobs@
+cc=@cc@
+cxx=@cxx@
+debugbuild=@debugbuild@
+force_git_version=@force_git_version@
+
+mongodbsrc=@mongodbsrc@
+tokufractaltreesrc=@tokufractaltreesrc@
+LIBTOKUDB_NAME=@LIBTOKUDB_NAME@
+LIBTOKUPORTABILITY_NAME=@LIBTOKUPORTABILITY_NAME@
+
+while [ $@ -gt 0 ] ; do
+    arg=$1; shift
+    if [[ $arg =~ --(.*)=(.*) ]] ; then
+        eval ${BASH_REMATCH[1]}=${BASH_REMATCH[2]}
+    else
+        break
+    fi
+done
+
+set -e
+
+md5sum --check $mongodbsrc.tar.gz.md5
+md5sum --check $tokufractaltreesrc.tar.gz.md5
+
+if [ ! -d $mongodbsrc ] ; then
+    tar --extract \
+        --gzip \
+        --file $mongodbsrc.tar.gz
+fi
+tokufractaltreetarball=$PWD/$tokufractaltreesrc.tar.gz
+pushd $mongodbsrc
+    if [ ! -d src/third_party/tokudb ] ; then
+        tar --extract \
+            --gzip \
+            --strip-components 1 \
+            --directory src/third_party/tokudb/ \
+            --file $tokufractaltreetarball
+    fi
+popd
+
+pushd $mongodbsrc
+    build_type_option=""
+    if [ $debugbuild = 1 ] ; then
+        build_type_options="--d --nostrip"
+    else
+        build_type_options="--release"
+    fi
+
+    allocator_option=""
+    if [ $(uname -s) = Darwin ] ; then
+        allocator_option="--allocator=system"
+    fi
+
+    scons \
+        $build_type_option \
+        $allocator_option \
+        --force_git_version=$force_git_version \
+        -j$makejobs --mute \
+        --cc=$cc --cxx=$cxx \
+        dist
+popd
