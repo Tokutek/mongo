@@ -1226,7 +1226,7 @@ namespace mongo {
     };
 
     MONGO_INITIALIZER(RegisterNotWithAuthCommands)(InitializerContext* context) {
-        if (noauth) {
+        if (!AuthorizationManager::isAuthEnabled()) {
             // Leaked intentionally: a Command registers itself when constructed.
             new CmdCloneCollection();
             new CmdCopyDb();

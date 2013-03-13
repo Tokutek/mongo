@@ -529,7 +529,7 @@ namespace mongo {
             }
         };
         MONGO_INITIALIZER(RegisterCopyDBCommand)(InitializerContext* context) {
-            if (noauth) {
+            if (!AuthorizationManager::isAuthEnabled()) {
                 // Leaked intentionally: a Command registers itself when constructed.
                 new CopyDBCmd();
             } else {

@@ -2229,7 +2229,7 @@ namespace mongo {
 
     void migrateThread() {
         Client::initThread( "migrateThread" );
-        if (!noauth) {
+        if (AuthorizationManager::isAuthEnabled()) {
             ShardedConnectionInfo::addHook();
             cc().getAuthorizationManager()->grantInternalAuthorization("_migrateThread");
         }
