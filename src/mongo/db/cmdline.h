@@ -150,17 +150,15 @@ namespace mongo {
         port(DefaultDBPort), rest(false), jsonp(false), quiet(false),
         noTableScan(false),
         configsvr(false), quota(false), quotaFiles(8), cpu(false),
+        logFlushPeriod(100), // 0 means fsync every transaction, 100 means fsync log once every 100 ms
         objcheck(false), oplogSize(0), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), pretouch(0), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
-        directio(false), cacheSize(0)
+        directio(false), cacheSize(0), checkpointPeriod(60), cleanerPeriod(2),
+        cleanerIterations(5)
     {
         started = time(0);
 
-        logFlushPeriod = 100; // 0 means fsync every transaction, 100 means fsync log once every 100 ms
-        cleanerPeriod = 2;
-        cleanerIterations = 5;
-        checkpointPeriod = 60;
 #ifdef MONGO_SSL
         sslOnNormalPorts = false;
         sslServerManager = 0;
