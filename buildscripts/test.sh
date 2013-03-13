@@ -2,7 +2,6 @@
 
 set -e
 set -u
-shopt -s compat31 2> /dev/null
 
 function usage() {
     echo 1>&2 "test.sh"
