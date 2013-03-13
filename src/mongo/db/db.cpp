@@ -998,7 +998,6 @@ static int mongoDbMain(int argc, char* argv[]) {
                 out() << "bad --cacheSize arg" << endl;
                 dbexit( EXIT_BADOPTIONS );
             }
-            log() << "--cacheSize option not currently supported" << endl;
         }
         if (params.count("port") == 0 ) {
             if( params.count("configsvr") ) {
