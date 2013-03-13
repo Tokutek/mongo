@@ -132,7 +132,7 @@ function build_mongodb_src() {
                 --format=tar \
                 --prefix=$mongodbsrc/ \
                 --output=$mongodbsrc.tar \
-                $treeish
+                $git_commit
             force_git_version=$(git get-tar-commit-id < $mongodbsrc.tar)
             tar --extract \
                 --directory .. \
@@ -243,11 +243,9 @@ set -e
 
 if [ "$git_tag"x = ""x ] ; then
     git_commit=$(git ls-remote $gitserver $git_branch | cut -c-7)
-    treeish=$git_branch
 else
     test $git_branch = master
     git_commit=$git_tag
-    treeish=$git_tag
 fi
 
 if [[ $debugbuild != 0 && ( -z $suffix ) ]] ; then suffix=-debug; fi
