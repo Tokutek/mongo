@@ -58,7 +58,7 @@ pushd $mongodbsrc
     scons \
         $build_type_option \
         $allocator_option \
-        --force_git_version=$force_git_version \
+        --force-git-version=$force_git_version \
         -j$makejobs --mute \
         --cc=$cc --cxx=$cxx \
         dist
