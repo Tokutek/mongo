@@ -212,7 +212,8 @@ class mongod(object):
             self.auth = True
         if len(server_log_file) > 0:
             argv += ['--logpath', server_log_file]
-        argv += [smoke_server_opts]
+        if len(smoke_server_opts) > 0:
+            argv += [smoke_server_opts]
         if not quiet:
             print "running " + " ".join(argv)
         self.proc = self._start(buildlogger(argv, is_global=True))
