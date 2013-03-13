@@ -186,9 +186,11 @@ namespace mongo {
                 return true;
             }
 
+            //
             // slight change from MongoDB originally
             // MongoDB allows only j or fsync to be set, not both
             // we allow to set both
+            //
             if ( cmdObj["j"].trueValue() || cmdObj["fsync"].trueValue()) {
                 // only bother to flush recovery log 
                 // if we are not already fsyncing on commit
