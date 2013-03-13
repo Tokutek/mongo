@@ -131,8 +131,13 @@ function build_mongodb_src() {
             git archive \
                 --format=tar \
                 --prefix=$mongodbsrc/ \
-                $treeish \
-                | tar x -C ../
+                --output=$mongodbsrc.tar
+                $treeish
+            force_git_version=$(git get-tar-commit-id < $mongodbsrc.tar)
+            tar --extract \
+                --directory .. \
+                --file $mongodbsrc.tar
+            rm $mongodbsrc.tar
         popd
 
         # install the fractal tree
@@ -164,6 +169,7 @@ function build_mongodb_src() {
                 systemallocatoroption="--allocator=system"
             fi
             scons $buildtypeoption $systemallocatoroption \
+                --force-git-version=$force_git_version \
                 -j$makejobs --mute \
                 --cc=$cc --cxx=$cxx \
                 dist
