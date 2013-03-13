@@ -13,6 +13,8 @@
 # This file, SConstruct, configures the build environment, and then delegates to
 # several, subordinate SConscript files, which describe specific build rules.
 
+# adding a comment for zardosht
+
 import buildscripts
 import buildscripts.bb
 import datetime
