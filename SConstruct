@@ -148,6 +148,7 @@ add_option( "mute" , "do not display commandlines for compiling and linking, to 
 add_option( "prefix" , "installation prefix" , 1 , False, default=DEFAULT_INSTALL_DIR )
 add_option( "distname" , "dist name (0.8.0)" , 1 , False )
 add_option( "distmod", "additional piece for full dist name" , 1 , False )
+add_option( "force-git-version", "force the git version if building from a tarball" , 1, False )
 add_option( "nostrip", "do not strip installed binaries" , 0 , False )
 
 add_option( "sharedclient", "build a libmongoclient.so/.dll" , 0 , False )
@@ -803,6 +804,8 @@ else:
 env.Append(CPPPATH=['%s/include' % tokupath])
 env.Append(LIBPATH=['%s/lib' % tokupath])
 env.Append(LIBS=[ltokudb, ltokuportability, 'm', 'dl', 'z'])
+if has_option( 'force-git-version' ):
+    env.Append(FORCEGITVERSION=get_option( 'force-git-version' ))
 
 # --- check system ---
 

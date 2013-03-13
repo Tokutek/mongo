@@ -32,7 +32,10 @@ namespace mongo {
 '''
 
 def generate_buildinfo(env, target, source, **kw):
-    git_version = buildscripts.utils.getGitVersion()
+    if 'FORCEGITVERSION' in env:
+        git_version = env['FORCEGITVERSION']
+    else:
+        git_version = buildscripts.utils.getGitVersion()
     if env["MONGO_MODULES"]:
         git_version += " modules: %s" % (", ".join(env["MONGO_MODULES"].keys()))
     tokudb_version = buildscripts.utils.getTokudbVersion(env['TOKUDB_PATH'])
