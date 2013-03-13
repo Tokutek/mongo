@@ -993,11 +993,7 @@ def getCodeVersion():
         print( "can't find version # in code" )
         return None
     tokupatchver = allMatches[0]
-    allMatches = utils.getTokudbVersion(env['TOKUDB_PATH'])
-    if len(allMatches) != 1:
-        print( "can't find tokudb version #" )
-        return None
-    ftver = allMatches[0]
+    ftver = utils.getTokudbVersion(env['TOKUDB_PATH'])
     return mongodbver + "-tokutek-" + tokupatchver + "-tokudb-" + ftver
 
 mongoCodeVersion = getCodeVersion()
