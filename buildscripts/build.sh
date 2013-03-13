@@ -153,15 +153,17 @@ function build_mongodb_src() {
 
         # build mongodb
         pushd $mongodbsrc
-            local debugoption=""
+            local buildtypeoption=""
             if [[ $debugbuild = 1 ]]; then
-                debugoption="--d"
+                buildtypeoption="--dd"
+            else
+                buildtypeoption="--release"
             fi
             systemallocatoroption=""
             if [ $(uname -s) = Darwin ] ; then
                 systemallocatoroption="--allocator=system"
             fi
-            scons $debugoption $systemallocatoroption \
+            scons $buildtypeoption $systemallocatoroption \
                 -j$makejobs --mute \
                 --cc=$cc --cxx=$cxx \
                 dist
