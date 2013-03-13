@@ -55,6 +55,7 @@ pushd $mongodbsrc
         allocator_option="--allocator=system"
     fi
 
+    export LIBTOKUDB_NAME LIBTOKUPORTABILITY_NAME
     scons \
         $build_type_option \
         $allocator_option \
