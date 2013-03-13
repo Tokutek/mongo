@@ -116,19 +116,18 @@ function build_mongodb_src() {
     mongodbsrc=mongodb-$mongodb_version-tokutek-$git_commit-src
     if [ ! -d $mongodbsrc ] ; then
         # clone mongo
-        if [ -d mongo.git ] ; then
-            pushd mongo.git
+        if [ -d mongo-git ] ; then
+            pushd mongo-git
                 retry git pull
             popd
         else
             retry git clone \
-                --bare \
                 --depth 1 \
-                $gitserver mongo.git
+                $gitserver mongo-git
         fi
 
         # export the right branch or tag
-        pushd mongo.git
+        pushd mongo-git
             git archive \
                 --format=tar \
                 --prefix=$mongodbsrc/ \
