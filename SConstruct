@@ -990,7 +990,7 @@ def getCodeVersion():
         print( "can't find version # in code" )
         return None
     mongodbver = allMatches[0]
-    allMatches = re.findall( r"mongoTokutekString.. = \"(.*?)\"" , fullSource );
+    allMatches = re.findall( r"tokutekPatchVersionString.. = \"(.*?)\"" , fullSource );
     if len(allMatches) != 1:
         print( "can't find version # in code" )
         return None

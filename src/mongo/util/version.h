@@ -10,6 +10,7 @@ namespace mongo {
 
     // mongo version
     extern const char versionString[];
+    extern const char tokutekPatchVersionString[];
     extern const BSONArray versionArray;
     std::string fullVersionString();
     std::string mongodVersion();
