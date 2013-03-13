@@ -40,9 +40,7 @@ pushd $mongodbsrc
             --directory src/third_party/tokudb/ \
             --file $tokufractaltreetarball
     fi
-popd
 
-pushd $mongodbsrc
     build_type_option=""
     if [ $debugbuild = 1 ] ; then
         build_type_options="--d --nostrip"
