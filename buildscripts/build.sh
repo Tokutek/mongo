@@ -118,6 +118,7 @@ function build_mongodb_src() {
         # clone mongo
         if [ -d mongo-git ] ; then
             pushd mongo-git
+                retry git remote prune origin
                 retry git pull
             popd
         else
