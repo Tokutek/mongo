@@ -32,7 +32,8 @@ if [ ! -d $mongodbsrc ] ; then
 fi
 tokufractaltreetarball=$PWD/$tokufractaltreesrc.tar.gz
 pushd $mongodbsrc
-    if [ ! -d src/third_party/tokudb ] ; then
+    if [ ! -d src/third_party/tokudb/lib ] ; then
+        mkdir -p src/third_party/tokudb
         tar --extract \
             --gzip \
             --strip-components 1 \
