@@ -992,7 +992,7 @@ def getCodeVersion():
     if len(allMatches) != 1:
         print( "can't find version # in code" )
         return None
-    return mongodbver + "-tokutek-" + mongoTokutekString
+    return mongodbver + "-tokutek-" + allMatches[0]
 
 mongoCodeVersion = getCodeVersion()
 if mongoCodeVersion == None:
