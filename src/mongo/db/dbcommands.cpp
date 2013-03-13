@@ -712,14 +712,14 @@ namespace mongo {
         virtual LockType locktype() const { return WRITE; }
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             string nsToDrop = dbname + '.' + cmdObj.firstElement().valuestr();
-            NamespaceDetails *d = nsdetails(nsToDrop.c_str());
             if ( !cmdLine.quiet )
                 tlog() << "CMD: drop " << nsToDrop << endl;
+            uassert( 10039 ,  "can't drop collection with reserved $ character in name", strchr(nsToDrop.c_str(), '$') == 0 );
+            NamespaceDetails *d = nsdetails(nsToDrop.c_str());
             if ( d == 0 ) {
                 errmsg = "ns not found";
                 return false;
             }
-            uassert( 10039 ,  "can't drop collection with reserved $ character in name", strchr(nsToDrop.c_str(), '$') == 0 );
             dropCollection( nsToDrop, errmsg, result );
             return true;
         }
