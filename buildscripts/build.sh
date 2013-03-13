@@ -4,9 +4,9 @@ set -e
 set -u
 
 function usage() {
-    echo 1>&2 "build.bash"
-    echo 1>&2 "[--branch=$branch] [--commit_hash=$commit_hash]"
-    echo 1>&2 "[--tokudb=$tokudb] [--revision=$revision]"
+    echo 1>&2 "build.sh"
+    echo 1>&2 "[--git_branch=$git_branch] [--git_tag=$git_tag]"
+    echo 1>&2 "[--tokudb=$tokudb] [--svn_revision=$svn_revision]"
     echo 1>&2 "[--cc=$cc --cxx=$cxx] [--ftcc=$ftcc --ftcxx=$ftcxx]"
     echo 1>&2 "[--debugbuild=$debugbuild]"
     return 1
@@ -45,9 +45,9 @@ function build_fractal_tree() {
     if [ ! -d $tokufractaltreedir ] ; then
         mkdir $tokufractaltreedir
 
-        retry svn export -q -r $revision $svnserver/toku/$tokudb
-        retry svn export -q -r $revision $svnserver/$jemalloc
-        retry svn export -q -r $revision $svnserver/$xz
+        retry svn export -q -r $svn_revision $svnserver/toku/$tokudb
+        retry svn export -q -r $svn_revision $svnserver/$jemalloc
+        retry svn export -q -r $svn_revision $svnserver/$xz
 
         pushd $tokudb
             echo `date` make $tokudb $ftcc $($ftcc --version)
@@ -69,7 +69,7 @@ function build_fractal_tree() {
             eval $cmake_env cmake \
                 -D LIBTOKUDB=$tokufractaltree \
                 -D LIBTOKUPORTABILITY=$tokuportability \
-                -D CMAKE_TOKUDB_REVISION=$revision \
+                -D CMAKE_TOKUDB_REVISION=$svn_revision \
                 -D CMAKE_BUILD_TYPE=$build_type \
                 -D TOKU_SVNROOT=$rootdir \
                 -D CMAKE_INSTALL_PREFIX=$rootdir/$tokufractaltreedir \
@@ -113,16 +113,26 @@ function build_fractal_tree() {
 
 # checkout the mongodb source from git, generate a build script, and make the mongodb source tarball
 function build_mongodb_src() {
-    mongodbsrc=mongodb-$mongodb_version-$mongocommit-$tokudb-$revision-src
+    mongodbsrc=mongodb-$mongodb_version-tokutek-$git_commit-$tokudb-$svn_revision-src
     if [ ! -d $mongodbsrc ] ; then
-        # check out mongodb
-        retry git clone \
-            --depth 1 \
-            --single-branch \
-            --branch $branch \
-            $gitserver $mongodbsrc
-        pushd $mongodbsrc
-            git checkout $mongocommit
+        # clone mongo
+        if [ -d mongo-git ] ; then
+            pushd mongo-git
+                retry git pull
+            popd
+        else
+            retry git clone \
+                --depth 1 \
+                $gitserver mongo
+        fi
+
+        # export the right branch or tag
+        pushd mongo
+            git archive \
+                --format=tar \
+                --prefix=$mongodbsrc/ \
+                $treeish \
+                | tar x -C ../
         popd
 
         # install the fractal tree
@@ -157,7 +167,7 @@ function build_mongodb_src() {
                 dist
         popd
 
-        mongodbdir=mongodb-$mongodb_version-$mongocommit-$tokudb-${revision}${suffix}-$system-$arch
+        mongodbdir=mongodb-$mongodb_version-tokutek-$git_commit-$tokudb-${svn_revision}${suffix}-$system-$arch
 
         # copy the release tarball
         mkdir $mongodbdir
@@ -179,9 +189,9 @@ PATH=$HOME/bin:$PATH
 
 suffix=''
 mongodb_version=2.2.0
-commit_hash=''
-branch=master
-revision=0
+git_branch=master
+git_tag=''
+svn_revision=0
 tokudb=tokudb
 cc=gcc44
 cxx=g++44
@@ -200,6 +210,15 @@ staticft=1
 if [ $(uname -s) = Darwin ] ; then
     cc=cc
     cxx=c++
+    ftcc=cc
+    ftcxx=c++
+fi
+
+if ! command -v $cc &>/dev/null ; then
+    cc=cc
+    cxx=c++
+fi
+if ! command -v $ftcc &>/dev/null ; then
     ftcc=cc
     ftcxx=c++
 fi
@@ -224,24 +243,26 @@ if [ $? != 0 ] ; then
 fi
 set -e
 
-headcommit=$(git ls-remote git@github.com:Tokutek/mongo.git | grep HEAD | awk '{print $1}' | cut -c-7)
-if [ "$commit_hash"x != ""x ] ; then
-    mongocommit=$commit_hash
+if [ "$git_tag"x = ""x ] ; then
+    git_commit=$(git ls-remote $gitserver $git_branch | cut -c-7)
+    treeish=$git_branch
 else
-    mongocommit=$headcommit
+    test $git_branch = master
+    git_commit=$git_tag
+    treeish=$git_tag
 fi
 
 if [[ $debugbuild != 0 && ( -z $suffix ) ]] ; then suffix=-debug; fi
 
-builddir=build-$tokudb-$revision-mongodb-$mongodb_version-${mongocommit}${suffix}
+builddir=build-$tokudb-${svn_revision}${suffix}
 if [ ! -d $builddir ] ; then mkdir $builddir; fi
 pushd $builddir
 
 rootdir=$PWD
 
 # build the fractal tree tarball
-tokufractaltree=tokufractaltreeindex-${revision}${suffix}
-tokuportability=tokuportability-${revision}${suffix}
+tokufractaltree=tokufractaltreeindex-${svn_revision}${suffix}
+tokuportability=tokuportability-${svn_revision}${suffix}
 tokufractaltreedir=$tokufractaltree-$system-$arch
 build_fractal_tree
 
