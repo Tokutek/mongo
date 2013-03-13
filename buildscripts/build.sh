@@ -142,15 +142,15 @@ function build_mongodb_src() {
 
         # set defaults for build script
         sed <$mongodbsrc/buildscripts/build.tokudb.sh.in \
-            -e "s+@makejobs@+$makejobs+" \
-            -e "s+@cc@+$cc+" \
-            -e "s+@cxx@+$cxx+" \
-            -e "s+@debugbuild@+$debugbuild+" \
-            -e "s+@force_git_version@+$force_git_version+" \
-            -e "s+@mongodbsrc@+$mongodbsrc+" \
-            -e "s+@tokufractaltreesrc@+$tokufractaltreedir+" \
-            -e "s+@LIBTOKUDB_NAME@+${tokufractaltree}_static+" \
-            -e "s+@LIBTOKUPORTABILITY_NAME@+${tokuportability}_static+" \
+            -e "s^@makejobs@^$makejobs^" \
+            -e "s^@cc@^$cc^" \
+            -e "s^@cxx@^$cxx^" \
+            -e "s^@debugbuild@^$debugbuild^" \
+            -e "s^@force_git_version@^$force_git_version^" \
+            -e "s^@mongodbsrc@^$mongodbsrc^" \
+            -e "s^@tokufractaltreesrc@^$tokufractaltreedir^" \
+            -e "s^@LIBTOKUDB_NAME@^${tokufractaltree}_static^" \
+            -e "s^@LIBTOKUPORTABILITY_NAME@^${tokuportability}_static^" \
             >$mongodbsrc/buildscripts/build.tokudb.sh
         chmod +x $mongodbsrc/buildscripts/build.tokudb.sh
 
