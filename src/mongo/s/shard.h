@@ -291,14 +291,10 @@ namespace mongo {
          */
         bool runCommand( const string& db , const BSONObj& cmd , BSONObj& res );
 
+        static bool releaseConnectionsAfterResponse;
+
         /** checks all of my thread local connections for the version of this ns */
         static void checkMyConnectionVersions( const string & ns );
-
-        /**
-         * Whether or not we should release all connections after an operation with
-         * a response.
-         */
-        static bool releaseConnectionsAfterResponse;
 
         /**
          * Returns all the current sharded connections to the pool.

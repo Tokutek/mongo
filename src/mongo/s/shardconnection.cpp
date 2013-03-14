@@ -23,6 +23,7 @@
 
 #include "mongo/db/client.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/s/config.h"
 #include "mongo/s/request.h"
 #include "mongo/s/shard.h"
@@ -426,12 +427,6 @@ namespace mongo {
         ClientConnections::threadInstance()->checkVersions( ns );
     }
 
-    bool ShardConnection::releaseConnectionsAfterResponse( false );
-
-    void ShardConnection::releaseMyConnections() {
-        ClientConnections::threadInstance()->releaseAll();
-    }
-
     ShardConnection::~ShardConnection() {
         if ( _conn ) {
             if (_conn->isFailed()) {
@@ -453,6 +448,20 @@ namespace mongo {
                 kill();
             }
         }
+    }
+
+    bool ShardConnection::releaseConnectionsAfterResponse( false );
+
+    ExportedServerParameter<bool> ReleaseConnectionsAfterResponse(
+        ServerParameterSet::getGlobal(),
+        "releaseConnectionsAfterResponse",
+         &ShardConnection::releaseConnectionsAfterResponse,
+        true,
+        true
+    );
+
+    void ShardConnection::releaseMyConnections() {
+        ClientConnections::threadInstance()->releaseAll();
     }
 
     void ShardConnection::clearPool() {
