@@ -82,7 +82,7 @@ namespace mongo {
         int i = findIdIndex();
         verify(i == 0);
 
-        addNewNamespaceToCatalog(ns);
+        addNewNamespaceToCatalog(ns, &options);
     }
 
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
