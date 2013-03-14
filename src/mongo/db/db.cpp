@@ -678,7 +678,7 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("syncdelay",po::value<double>(&cmdLine.syncdelay)->default_value(60), "seconds between disk syncs (0=never, but not recommended)")
     ("sysinfo", "print some diagnostic system information")
     ("upgrade", "upgrade db if needed")
-    ("cacheSize", po::value<uint64_t>(), "cache size (in MB) for rec store")
+    ("cacheSize", po::value<uint64_t>(), "cache size (in bytes) for rec store")
     ("directio", "use direct I/O in tokudb")
     ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers")
     ;
