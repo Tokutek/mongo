@@ -15,6 +15,7 @@
  *    limitations under the License.
  */
 
+#include <boost/scoped_ptr.hpp>
 #include <iostream>
 #include <cstdlib>
 #include <string>
@@ -39,9 +40,15 @@ int main( int argc, const char **argv ) {
         return EXIT_FAILURE;
     }
 
-    DBClientConnection conn;
     std::string errmsg;
-    if ( ! conn.connect( string( "127.0.0.1:" ) + port , errmsg ) ) {
+    ConnectionString cs = ConnectionString::parse(string("127.0.0.1:") + port, errmsg);
+    if (!cs.isValid()) {
+        cout << "error parsing url: " << errmsg << endl;
+        return EXIT_FAILURE;
+    }
+
+    boost::scoped_ptr<DBClientBase> conn(cs.connect(errmsg));
+    if (!conn) {
         cout << "couldn't connect: " << errmsg << endl;
         return EXIT_FAILURE;
     }
@@ -57,11 +64,11 @@ int main( int argc, const char **argv ) {
                       ret);
 
     errmsg.clear();
-    bool ok = conn.auth( "test" , "eliot" , "bar" , errmsg );
+    bool ok = conn->auth( "test" , "eliot" , "bar" , errmsg );
     if ( ! ok )
         cout << errmsg << endl;
     MONGO_verify( ok );
 
-    MONGO_verify( ! conn.auth( "test" , "eliot" , "bars" , errmsg ) );
+    MONGO_verify( ! conn->auth( "test" , "eliot" , "bars" , errmsg ) );
     return EXIT_SUCCESS;
 }
