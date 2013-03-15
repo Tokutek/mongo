@@ -439,17 +439,11 @@ namespace mongo {
     */
     class NamespaceIndex {
     public:
-        NamespaceIndex(const string &dir, const string &database) :
-            nsdb(NULL), namespaces(NULL), dir_(dir), database_(database) {
-        }
+        NamespaceIndex(const string &dir, const string &database);
 
         ~NamespaceIndex();
 
-        void init(bool may_create = false) {
-            if (namespaces.get() == NULL) {
-                _init(may_create);
-            }
-        }
+        void init(bool may_create = false);
 
         void add_ns(const char *ns, shared_ptr<NamespaceDetails> details);
 
