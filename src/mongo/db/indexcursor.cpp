@@ -545,17 +545,17 @@ namespace mongo {
         // with the full document on the first call to current().
         if ( _currObj.isEmpty() && _d != NULL ) {
             verify( _idx != NULL );
-            bool found = _d->findById( _currPK, _currObj, false );
+            bool found = _d->findByPK( _currPK, _currObj );
             if ( !found ) {
                 // If we didn't find the associated object, we must be a non read-only
-                // cursor whose context deleted the current _id. In this case, we are
+                // cursor whose context deleted the current pk. In this case, we are
                 // allowed to advance and try again exactly once. If we still can't
                 // find the object, we're in trouble.
                 verify( !_readOnly );
                 tokulog(4) << "current() did not find associated object for pk " << _currPK << endl;
                 advance();
                 if ( ok() ) {
-                    found = _d->findById( _currPK, _currObj, false );
+                    found = _d->findByPK( _currPK, _currObj );
                     verify( found );
                 }
             }

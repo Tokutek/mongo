@@ -567,7 +567,9 @@ namespace mongo {
             Namespace ns_s(ns);
             shared_ptr<NamespaceDetails> new_details( NamespaceDetails::make(ns, options) );
             ni->add_ns(ns, new_details);
+            dassert(nsdetails(ns) != NULL);
 
+            new_details->addPKIndexToCatalog();
             details = ni->details(ns);
         }
         return details;
