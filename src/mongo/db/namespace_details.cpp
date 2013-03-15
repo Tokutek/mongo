@@ -186,7 +186,6 @@ namespace mongo {
         BSONObj id_info = id_index_info(ns, options);
         createIndex(id_info, true);
 
-        // Add the new ns to system.namespaces, and add the _id index to system.indexes
         addNewNamespaceToCatalog(ns, &options);
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
