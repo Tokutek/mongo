@@ -107,7 +107,7 @@ namespace mongo {
             return _indexes.size();
         }
 
-        IndexDetails& idx(int idxNo, bool missingExpected = false );
+        IndexDetails& idx(int idxNo);
 
         /** get the IndexDetails for the index currently being built in the background. (there is at most one) */
         IndexDetails& inProgIdx() {
@@ -137,7 +137,7 @@ namespace mongo {
              for a single document. see multikey in wiki.
            for these, we have to do some dedup work on queries.
         */
-        // TODO: Be sure to setIndexIsMultiKey on the insert path when we detect it.
+        // TODO: Change the bit smashing to something simpler, eventually.
         bool isMultikey(int i) const { return (multiKeyIndexBits & (((unsigned long long) 1) << i)) != 0; }
         void setIndexIsMultikey(const char *thisns, int i);
 
@@ -496,7 +496,7 @@ namespace mongo {
     NamespaceDetails *nsdetails(const char *ns);
     NamespaceDetails *nsdetails_maybe_create(const char *ns, BSONObj options = BSONObj());
 
-    inline IndexDetails& NamespaceDetails::idx(int idxNo, bool missingExpected ) {
+    inline IndexDetails& NamespaceDetails::idx(int idxNo) {
         if ( idxNo < NIndexesMax ) {
             verify(idxNo >= 0 && idxNo < (int) _indexes.size());
             return *_indexes[idxNo];
