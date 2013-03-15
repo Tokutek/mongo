@@ -68,10 +68,14 @@ namespace mongo {
         return id_info.obj();
     }
 
-    NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &options, bool capped) : indexBuildInProgress(false), _nIndexes(0), multiKeyIndexBits(0) {
-        if ( capped ) {
-            unimplemented("capped collections"); //cappedLastDelRecLastExtent().setInvalid(); TODO: Capped collections will need to be re-done in TokuDB
-        }
+    shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
+        // TODO: Pass sensible index key pattern
+        return shared_ptr<NamespaceDetails>( new NamespaceDetails(ns, BSONObj(), options) );
+    }
+    NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
+        indexBuildInProgress(false),
+        _nIndexes(0),
+        multiKeyIndexBits(0) {
 
         massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns.c_str()));
 
@@ -82,13 +86,19 @@ namespace mongo {
         int i = findIdIndex();
         verify(i == 0);
 
-        addNewNamespaceToCatalog(ns, &options);
+        // Add the new ns to system.namespaces, and add the _id index to system.indexes
+        addNewNamespaceToCatalog(ns);
+        addIdIndexToCatalog();
     }
 
+    shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
+        return shared_ptr<NamespaceDetails>( new NamespaceDetails(serialized) );
+    }
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
         indexBuildInProgress(false),
         _nIndexes(serialized["indexes"].Array().size()),
         multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())) {
+
         std::vector<BSONElement> index_array = serialized["indexes"].Array();
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
             shared_ptr<IndexDetails> idx(new IndexDetails(it->Obj(), false));
@@ -123,7 +133,7 @@ namespace mongo {
         Namespace n(ns.c_str());
         BSONObj dobj(static_cast<const char *>(val->data));
         tokulog(1) << "Loading NamespaceDetails " << (string) n << endl;
-        shared_ptr<NamespaceDetails> d(new NamespaceDetails(dobj));
+        shared_ptr<NamespaceDetails> d( NamespaceDetails::make(dobj) );
 
         NamespaceIndex::NamespaceDetailsMap *m = static_cast<NamespaceIndex::NamespaceDetailsMap *>(map_v);
         std::pair<NamespaceIndex::NamespaceDetailsMap::iterator, bool> ret;
@@ -287,17 +297,6 @@ namespace mongo {
         NamespaceDetailsTransient::get(thisns).clearQueryCache();
     }
 
-    void NamespaceDetails::fillNewIndex(IndexDetails &newIndex) {
-        string thisns(newIndex.parentNS());
-        uint64_t iter = 0;
-        for (shared_ptr<Cursor> cursor(Helpers::findTableScan(thisns.c_str(), BSONObj())); cursor->ok(); cursor->advance(), iter++) {
-            if (iter % 1000 == 0) {
-                killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
-            }
-            newIndex.insert(cursor->current(), cursor->currPK(), false);
-        }
-    }
-
     void NamespaceDetails::createIndex(const BSONObj &idx_info, bool resetTransient) {
         uassert(16449, "dropDups is not supported and is likely to remain unsupported for some time because it deletes arbitrary data",
                 !idx_info["dropDups"].trueValue());
@@ -318,7 +317,14 @@ namespace mongo {
         indexBuildInProgress = true;
         _indexes.push_back(index);
         try {
-            fillNewIndex(*index);
+            string thisns(index->parentNS());
+            uint64_t iter = 0;
+            for (shared_ptr<Cursor> cursor(Helpers::findTableScan(thisns.c_str(), BSONObj())); cursor->ok(); cursor->advance(), iter++) {
+                if (iter % 1000 == 0) {
+                    killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
+                }
+                index->insert(cursor->current(), cursor->currPK(), false);
+            }
         } catch (DBException &e) {
             _indexes.pop_back();
             indexBuildInProgress = false;
