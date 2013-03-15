@@ -43,7 +43,7 @@
 namespace mongo {
 
     static const BSONObj idKeyPattern = fromjson("{\"_id\":1}");
-    static const BSONObj hiddenKeyPattern = fromjson("{\"$_\":1}");
+    static const BSONObj implicitPKPattern = fromjson("{\"$_\":1}");
 
     struct findByIdCallbackExtra {
         const BSONObj &key;
@@ -67,7 +67,6 @@ namespace mongo {
         }
         return 0;
     }
-
 
     class UserNamespace : public NamespaceDetails {
     public:
