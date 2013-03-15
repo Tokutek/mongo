@@ -74,8 +74,7 @@ namespace mongo {
     }
 
     void insertObject(const char *ns, const BSONObj &obj, bool overwrite) {
-        bool systemInsert = mongoutils::str::contains(ns, "system.");
-        if (systemInsert) {
+        if (mongoutils::str::contains(ns, "system.")) {
             uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
             if (handle_system_collection_insert(ns, obj))
                 return;
@@ -84,10 +83,10 @@ namespace mongo {
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
 
         // objects in system namespaces do not have _id fields, all others do.
-        BSONObj objMod = !systemInsert? addIdField(obj) : obj;
-        BSONElementManipulator::lookForTimestamps(objMod);
-        insertOneObject(details, nsdt, objMod, overwrite);
-        logOp("i", ns, obj);
+        BSONObj objWithId = addIdField(obj);
+        BSONElementManipulator::lookForTimestamps(objWithId);
+        insertOneObject(details, nsdt, objWithId, overwrite);
+        logOp("i", ns, objWithId);
     }
     
 } // namespace mongo

@@ -187,7 +187,7 @@ namespace mongo {
         createIndex(id_info, true);
 
         // Add the new ns to system.namespaces, and add the _id index to system.indexes
-        addNewNamespaceToCatalog(ns);
+        addNewNamespaceToCatalog(ns, &options);
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
         return shared_ptr<NamespaceDetails>(new UserNamespace(ns, options));
