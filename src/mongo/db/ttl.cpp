@@ -38,7 +38,6 @@ namespace mongo {
         static string secondsExpireField;
         
         void doTTLForDB( const string& dbName ) {
-            problem() << "TTL disabled for debugging convenience. Re-enable for tests at some pointg." << endl;
             Client::GodScope god;
 
             vector<BSONObj> indexes;
