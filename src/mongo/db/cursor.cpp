@@ -14,9 +14,9 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-#include "curop.h"
+#include "mongo/pch.h"
 
+#include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/namespace_details.h"
 
