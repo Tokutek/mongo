@@ -130,7 +130,7 @@ namespace mongo {
         BSONObj obj;
         {
             tokulog(3) << "_updateById looking for pk " << pk << endl;
-            bool found = d->findById( pk, obj );
+            bool found = d->findById( pk, obj, false );
             tokulog(3) << "_updateById findById() got " << obj << endl;
             if ( !found ) {
                 // no upsert support in _updateById yet, so we are done.
