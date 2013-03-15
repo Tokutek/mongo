@@ -186,18 +186,10 @@ namespace mongo {
         BSONObj id_info = id_index_info(ns, options);
         createIndex(id_info, true);
 
-<<<<<<< HEAD
-        // Add the new ns to system.namespaces, and add the _id index to system.indexes
         addNewNamespaceToCatalog(ns, &options);
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
         return shared_ptr<NamespaceDetails>(new UserNamespace(ns, options));
-=======
-        int i = findIdIndex();
-        verify(i == 0);
-
-        addNewNamespaceToCatalog(ns, &options);
->>>>>>> f44e4b73ff9756e41316e7f53a144727a547d394
     }
 
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
