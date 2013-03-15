@@ -88,7 +88,8 @@ namespace mongo {
         static shared_ptr<NamespaceDetails> make(const string &ns, const BSONObj &options);
         static shared_ptr<NamespaceDetails> make(const BSONObj &serialized);
 
-        virtual ~NamespaceDetails();
+        virtual ~NamespaceDetails() {
+        }
 
         int nIndexes() const {
             return _nIndexes;
@@ -144,9 +145,9 @@ namespace mongo {
 
         /**
          * Record that a new index exists in <dbname>.system.indexes.
-         * Only used for the _id index, the others go through the normal insert path.
+         * Only used for the primary key index, the others go through the normal insert path.
          */
-        void addIdIndexToCatalog();
+        void addPKIndexToCatalog();
 
         // @return offset in indexes[]
         int findIndexByName(const char *name);
@@ -177,6 +178,7 @@ namespace mongo {
         int findIdIndex() {
             for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
                 const IndexDetails *index = it->get();
+                // TODO: Ask nsd->isIdIndex(idx);
                 if (index->isIdIndex()) {
                     return it - _indexes.begin();
                 }
@@ -230,7 +232,7 @@ namespace mongo {
         // namespace. should not insert into system.namespaces or system.indexes.
         virtual void createIndex(const BSONObj &info, bool resetTransient = true);
 
-    private:
+    protected:
         NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit NamespaceDetails(const BSONObj &serialized);
 
@@ -240,7 +242,7 @@ namespace mongo {
 
         // The options used to create this namespace details. We serialize
         // this (among other things) to disk on close (see serialize())
-        BSONObj options;
+        BSONObj _options;
 
         // Each index (including the _id) index has an IndexDetails that describes it.
         int _nIndexes;

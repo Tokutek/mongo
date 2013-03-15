@@ -776,7 +776,13 @@ namespace mongo {
         ctx.ctx().setReadOnly();
         replVerifyReadsOk(&pq);
         
-        bool found = Helpers::findById( ns, query, resObject );
+        NamespaceDetails *d = nsdetails(ns);
+        if (d != NULL && !d->hasIdIndex()) {
+            // we have to resort to a table-scan
+            return false;
+        }
+
+        bool found = d->findById( query, resObject );
         ctx.ctx().commitTransaction();
         
         if ( shardingState.needShardChunkManager( ns ) ) {
@@ -924,13 +930,8 @@ namespace mongo {
                 replVerifyReadsOk(&pq);
                 
                 if ( pq.hasOption( QueryOption_CursorTailable ) ) {
-                    // I recall a 10gen engineer saying this is only uasserted
-                    // because tailable cursors on non capped collections were
-                    // historically really slow.
-#if 0
                     NamespaceDetails *d = nsdetails( ns );
                     uassert( 13051, "tailable cursor requested on non capped collection", d && d->isCapped() );
-#endif
                     const BSONObj nat1 = BSON( "$natural" << 1 );
                     if ( order.isEmpty() ) {
                         order = nat1;

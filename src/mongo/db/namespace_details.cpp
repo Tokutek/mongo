@@ -42,7 +42,113 @@
 
 namespace mongo {
 
-    BSONObj idKeyPattern = fromjson("{\"_id\":1}");
+    static const BSONObj idKeyPattern = fromjson("{\"_id\":1}");
+    static const BSONObj hiddenKeyPattern = fromjson("{\"$_\":1}");
+
+    struct findByIdCallbackExtra {
+        const BSONObj &key;
+        BSONObj &obj;
+
+        findByIdCallbackExtra(const BSONObj &k, BSONObj &o) : key(k), obj(o) { }
+    };
+
+    static int findByIdCallback(const DBT *key, const DBT *value, void *extra) {
+        if (key != NULL) {
+            struct findByIdCallbackExtra *info = reinterpret_cast<findByIdCallbackExtra *>(extra);
+            DEV {
+                // We should have been called using an exact getf, so the
+                // key is non-null iff we found an exact match.
+                BSONObj idKey(reinterpret_cast<char *>(key->data));
+                verify(!idKey.isEmpty());
+                verify(idKey.woCompare(idKey, info->key) == 0);
+            }
+            BSONObj obj(reinterpret_cast<char *>(value->data));
+            info->obj = obj.getOwned();
+        }
+        return 0;
+    }
+
+
+    class UserNamespace : public NamespaceDetails {
+    public:
+        UserNamespace(const string &ns, const BSONObj &options) :
+            NamespaceDetails(ns, idKeyPattern, options) {
+        }
+        UserNamespace(const BSONObj &serialized) :
+            NamespaceDetails(serialized) {
+        }
+
+        // all user namespaces have an _id index
+        bool hasIdIndex() {
+            return true;
+        }
+
+        // finds an objectl by _id field
+        bool findById(const BSONObj &query, BSONObj &result, bool getKey = true) {
+            int r;
+
+            // Get a cursor over the _id index.
+            IndexDetails &idIndex = idx(findIdIndex());
+            DBC *cursor = idIndex.newCursor();
+
+            // create an index key
+            BSONObj key = getKey ? idIndex.getKeyFromQuery(query) : query;
+            DBT key_dbt = storage::make_dbt(key.objdata(), key.objsize());
+
+            // Try to find it.
+            BSONObj obj = BSONObj();
+            tokulog(3) << "NamespaceDetails::findById looking for " << key << endl;
+            struct findByIdCallbackExtra extra(key, obj);
+            r = cursor->c_getf_set(cursor, 0, &key_dbt, findByIdCallback, &extra);
+            verify(r == 0 || r == DB_NOTFOUND);
+            r = cursor->c_close(cursor);
+            verify(r == 0);
+
+            if (!obj.isEmpty()) {
+                result = obj;
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        // finds a document by primary key
+        bool findByPK(const BSONObj &pk, BSONObj &result) {
+            return findById(pk, result, false);
+        }
+
+        // inserts an object into this namespace, taking care of secondary indexes if they exist
+        void insertObject(const BSONObj &obj, bool overwrite) {
+            if (overwrite && _indexes.size() > 1) {
+                wunimplemented("overwrite inserts on secondary keys right now don't work");
+                //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
+            }
+
+            BSONObj primary_key;
+            if (_indexes.size() > 1) {
+                // Have secondary indexes, it's worth it to precompute the key
+                IndexDetails &id_index = idx(findIdIndex());
+                BSONObjSet keys;
+                id_index.getKeysFromObject(obj, keys);
+                dassert(keys.size() == 1);
+                primary_key = *(keys.begin());
+            }
+
+            // TODO: use put_multiple API
+            for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+                IndexDetails *index = it->get();
+                index->insert(obj, primary_key, overwrite);
+            }
+        }
+
+        // deletes an object from this namespace, taking care of secondary indexes if they exist
+        void deleteObject(const BSONObj &pk, const BSONObj &obj) {
+            for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+                IndexDetails *index = it->get();
+                index->deleteObject(pk, obj);
+            }
+        }
+    };
 
     static BSONObj id_index_info(const string &ns, const BSONObj &options) {
         BSONObjBuilder id_info;
@@ -68,12 +174,9 @@ namespace mongo {
         return id_info.obj();
     }
 
-    shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
-        // TODO: Pass sensible index key pattern
-        return shared_ptr<NamespaceDetails>( new NamespaceDetails(ns, BSONObj(), options) );
-    }
     NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
         indexBuildInProgress(false),
+        _options(options.copy()),
         _nIndexes(0),
         multiKeyIndexBits(0) {
 
@@ -83,19 +186,16 @@ namespace mongo {
         BSONObj id_info = id_index_info(ns, options);
         createIndex(id_info, true);
 
-        int i = findIdIndex();
-        verify(i == 0);
-
         // Add the new ns to system.namespaces, and add the _id index to system.indexes
         addNewNamespaceToCatalog(ns);
-        addIdIndexToCatalog();
+    }
+    shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
+        return shared_ptr<NamespaceDetails>(new UserNamespace(ns, options));
     }
 
-    shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
-        return shared_ptr<NamespaceDetails>( new NamespaceDetails(serialized) );
-    }
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
         indexBuildInProgress(false),
+        _options(serialized["options"].embeddedObject()),
         _nIndexes(serialized["indexes"].Array().size()),
         multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())) {
 
@@ -105,8 +205,8 @@ namespace mongo {
             _indexes.push_back(idx);
         }
     }
-
-    NamespaceDetails::~NamespaceDetails() {
+    shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
+        return shared_ptr<NamespaceDetails>(new UserNamespace(serialized));
     }
 
     BSONObj NamespaceDetails::serialize() const {
@@ -115,7 +215,8 @@ namespace mongo {
             IndexDetails *index = it->get();
             indexes_array.append(index->info());
         }
-        return BSON("multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
+        return BSON("options" << _options <<
+                    "multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
                     "indexes" << indexes_array.arr());
     }
 
@@ -416,105 +517,6 @@ namespace mongo {
         return true;
     }
 
-#if 0
-    /* you MUST call when adding an index.  see pdfile.cpp */
-    IndexDetails& NamespaceDetails::addIndex(const char *thisns, bool resetTransient) {
-        IndexDetails *id;
-        try {
-            id = &idx(nIndexes(), true);
-        }
-        catch(DBException&) {
-            allocExtra(thisns, nIndexes);
-            id = &idx(nIndexes,false);
-        }
-
-        unimplemented("NamespaceDetails durability for nindexes, we currently don't store this because we don't yet have hot indexing, much less resume from shutdown during hot indexing");
-        _nIndexes++; //(*getDur().writing(&nIndexes))++;
-        return *id;
-    }
-#endif
-
-    struct findByIdCallbackExtra {
-        const BSONObj &key;
-        BSONObj &obj;
-
-        findByIdCallbackExtra(const BSONObj &k, BSONObj &o) : key(k), obj(o) { }
-    };
-
-    static int findByIdCallback(const DBT *key, const DBT *value, void *extra) {
-        if (key != NULL) {
-            struct findByIdCallbackExtra *info = reinterpret_cast<findByIdCallbackExtra *>(extra);
-            DEV {
-                // We should have been called using an exact getf, so the
-                // key is non-null iff we found an exact match.
-                BSONObj idKey(reinterpret_cast<char *>(key->data));
-                verify(!idKey.isEmpty());
-                verify(idKey.woCompare(idKey, info->key) == 0);
-            }
-            BSONObj obj(reinterpret_cast<char *>(value->data));
-            info->obj = obj.getOwned();
-        }
-        return 0;
-    }
-
-    bool NamespaceDetails::findById(const BSONObj &query, BSONObj &result, bool getKey) {
-        int r;
-
-        // Get a cursor over the _id index.
-        IndexDetails &idIndex = idx(findIdIndex());
-        DBC *cursor = idIndex.newCursor();
-
-        // create an index key
-        BSONObj key = getKey ? idIndex.getKeyFromQuery(query) : query;
-        DBT key_dbt = storage::make_dbt(key.objdata(), key.objsize());
-
-        // Try to find it.
-        BSONObj obj = BSONObj();
-        tokulog(3) << "NamespaceDetails::findById looking for " << key << endl;
-        struct findByIdCallbackExtra extra(key, obj);
-        r = cursor->c_getf_set(cursor, 0, &key_dbt, findByIdCallback, &extra);
-        verify(r == 0 || r == DB_NOTFOUND);
-        r = cursor->c_close(cursor);
-        verify(r == 0);
-
-        if (!obj.isEmpty()) {
-            result = obj;
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    void NamespaceDetails::insertObject(const BSONObj &obj, bool overwrite) {
-        if (overwrite && _indexes.size() > 1) {
-            wunimplemented("overwrite inserts on secondary keys right now don't work");
-            //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
-        }
-
-        BSONObj primary_key;
-        if (_indexes.size() > 1) {
-            // Have secondary indexes, it's worth it to precompute the key
-            IndexDetails &id_index = idx(findIdIndex());
-            BSONObjSet keys;
-            id_index.getKeysFromObject(obj, keys);
-            dassert(keys.size() == 1);
-            primary_key = *(keys.begin());
-        }
-
-        // TODO: use put_multiple API
-        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-            IndexDetails *index = it->get();
-            index->insert(obj, primary_key, overwrite);
-        }
-    }
-
-    void NamespaceDetails::deleteObject(const BSONObj &pk, const BSONObj &obj) {
-        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-            IndexDetails *index = it->get();
-            index->deleteObject(pk, obj);
-        }
-    }
-
     void NamespaceDetails::fillIndexStats(std::vector<IndexStats> &indexStats) {
         for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             IndexDetails *index = it->get();
@@ -721,7 +723,7 @@ namespace mongo {
         dropNS(name, true, can_drop_system);
     }
 
-    void NamespaceDetails::addIdIndexToCatalog() {
+    void NamespaceDetails::addPKIndexToCatalog() {
         int i = findIdIndex();
         verify(i >= 0);
         const BSONObj &info = idx(i).info();
@@ -754,14 +756,15 @@ namespace mongo {
         b.append("name", ns);
         if ( options )
             b.append("options", *options);
-        BSONObj j = b.done();
+        BSONObj info = b.done();
+
         char database[256];
         nsToDatabase(ns.c_str(), database);
         string s = string(database) + ".system.namespaces";
         const char *system_ns = s.c_str();
         NamespaceDetails *d = nsdetails_maybe_create(system_ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(system_ns);
-        insertOneObject(d, nsdt, addIdField(j), false);
+        insertOneObject(d, nsdt, addIdField(info), false);
     }
 
     void dropNS(const string &nsname, bool is_collection, bool can_drop_system) {
