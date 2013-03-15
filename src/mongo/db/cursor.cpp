@@ -28,6 +28,6 @@ namespace mongo {
         direction > 0 ? maxKey : minKey, // finish at the end for forward cursor
         true, // end key is inclusive, because we want to scan everything.
         direction) {
-  }
+    }
 
 } // namespace mongo
