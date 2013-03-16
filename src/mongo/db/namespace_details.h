@@ -434,9 +434,8 @@ namespace mongo {
         return make_inlock(ns);
     }
 
-    /* NamespaceIndex is the ".ns" file you see in the data directory.  It is the "system catalog"
-       if you will: at least the core parts.  (Additional info in system.* collections.)
-    */
+    /* NamespaceIndex is the the "system catalog" if you will: at least the core parts.
+     * (Additional info in system.* collections.) */
     class NamespaceIndex {
     public:
         NamespaceIndex(const string &dir, const string &database);
@@ -458,10 +457,6 @@ namespace mongo {
             }
             Namespace n(ns);
             NamespaceDetailsMap::iterator it = namespaces->find(n);
-            if ( it != namespaces->end() && it->second->isCapped() ) {
-                // What is the right thing to do here? //d->cappedCheckMigrate();
-                unimplemented("capped collections");
-            }
             return (it != namespaces->end()) ? it->second.get() : NULL;
         }
 
