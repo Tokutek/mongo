@@ -104,7 +104,7 @@ namespace mongo {
         }
     }
 
-    void IndexDetails::getKeysFromObject( const BSONObj& obj, BSONObjSet& keys) const {
+    void IndexDetails::getKeysFromObject(const BSONObj& obj, BSONObjSet& keys) const {
         getSpec().getKeys( obj, keys );
     }
 
@@ -126,10 +126,13 @@ namespace mongo {
 
         for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
             if (isIdIndex()) {
+                verify(!primary_key.isEmpty() == (*ki == primary_key));
                 insertPair(*ki, NULL, obj, overwrite);
             } else if (clustering()) {
+                verify(!primary_key.isEmpty());
                 insertPair(*ki, &primary_key, obj, overwrite);
             } else {
+                verify(!primary_key.isEmpty());
                 insertPair(*ki, &primary_key, BSONObj(), overwrite);
             }
         }
@@ -222,6 +225,10 @@ namespace mongo {
         getKeysFromObject(obj, keys);
         for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
             const BSONObj &key = *ki;
+            if (isIdIndex()) {
+                verify(key == pk);
+            }
+            verify(!pk.isEmpty());
             storage::Key skey(key, !isIdIndex() ? &pk : NULL);
             DBT kdbt = skey.dbt();
 
