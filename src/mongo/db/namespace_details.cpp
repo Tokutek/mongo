@@ -131,6 +131,7 @@ namespace mongo {
                 id_index.getKeysFromObject(obj, keys);
                 dassert(keys.size() == 1);
                 primary_key = *(keys.begin());
+                dassert(primary_key == obj["_id"].wrap(""));
             }
 
             // TODO: use put_multiple API
