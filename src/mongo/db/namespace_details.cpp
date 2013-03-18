@@ -45,16 +45,16 @@ namespace mongo {
     static const BSONObj idKeyPattern = fromjson("{\"_id\":1}");
     static const BSONObj implicitPKPattern = fromjson("{\"$_\":1}");
 
-    struct findByIdCallbackExtra {
+    struct findByPKCallbackExtra {
         const BSONObj &key;
         BSONObj &obj;
 
-        findByIdCallbackExtra(const BSONObj &k, BSONObj &o) : key(k), obj(o) { }
+        findByPKCallbackExtra(const BSONObj &k, BSONObj &o) : key(k), obj(o) { }
     };
 
-    static int findByIdCallback(const DBT *key, const DBT *value, void *extra) {
+    static int findByPKCallback(const DBT *key, const DBT *value, void *extra) {
         if (key != NULL) {
-            struct findByIdCallbackExtra *info = reinterpret_cast<findByIdCallbackExtra *>(extra);
+            struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
             DEV {
                 // We should have been called using an exact getf, so the
                 // key is non-null iff we found an exact match.
@@ -216,9 +216,9 @@ namespace mongo {
 
         // Try to find it.
         BSONObj obj = BSONObj();
-        tokulog(3) << "NamespaceDetails::findById looking for " << key << endl;
-        struct findByIdCallbackExtra extra(key, obj);
-        r = cursor->c_getf_set(cursor, 0, &key_dbt, findByIdCallback, &extra);
+        tokulog(3) << "NamespaceDetails::findByPK looking for " << key << endl;
+        struct findByPKCallbackExtra extra(key, obj);
+        r = cursor->c_getf_set(cursor, 0, &key_dbt, findByPKCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND);
         r = cursor->c_close(cursor);
         verify(r == 0);
