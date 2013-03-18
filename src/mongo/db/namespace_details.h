@@ -187,6 +187,11 @@ namespace mongo {
             return -1;
         }
 
+        IndexDetails &getPKIndex() const {
+            dassert(_indexes[0]->keyPattern() == _pk);
+            return *_indexes[0];
+        }
+
         int averageObjectSize() {
             return 10; // TODO: Return something meaningful based on in-memory stats
         }
@@ -214,11 +219,14 @@ namespace mongo {
             return false;
         }
 
-        // finds an objectl by _id field
-        virtual bool findById(const BSONObj &query, BSONObj &result, bool getKey = true) = 0;
-
+        // TODO: Does this actually need to be virtual? Maybe not...
         // finds a document by primary key
-        virtual bool findByPK(const BSONObj &pk, BSONObj &result) = 0;
+        virtual bool findByPK(const BSONObj &pk, BSONObj &result);
+
+        // finds an objectl by _id field
+        virtual bool findById(const BSONObj &query, BSONObj &result) {
+            massert(16456, "findById shouldn't be called unless it's implemented.", false);
+        }
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
         virtual void insertObject(const BSONObj &obj, bool overwrite) = 0;

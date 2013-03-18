@@ -68,52 +68,28 @@ namespace mongo {
         return 0;
     }
 
-    class UserNamespace : public NamespaceDetails {
+    class IndexedCollection : public NamespaceDetails {
     public:
-        UserNamespace(const string &ns, const BSONObj &options) :
+        IndexedCollection(const string &ns, const BSONObj &options) :
             NamespaceDetails(ns, idKeyPattern, options) {
         }
-        UserNamespace(const BSONObj &serialized) :
+        IndexedCollection(const BSONObj &serialized) :
             NamespaceDetails(serialized) {
         }
 
-        // all user namespaces have an _id index
+        // all indexed collections have an _id index
         bool hasIdIndex() {
+            dassert(findIdIndex() >= 0);
             return true;
         }
 
-        // finds an objectl by _id field
-        bool findById(const BSONObj &query, BSONObj &result, bool getKey = true) {
-            int r;
-
-            // Get a cursor over the _id index.
-            IndexDetails &idIndex = idx(findIdIndex());
-            DBC *cursor = idIndex.newCursor();
-
-            // create an index key
-            BSONObj key = getKey ? idIndex.getKeyFromQuery(query) : query;
-            DBT key_dbt = storage::make_dbt(key.objdata(), key.objsize());
-
-            // Try to find it.
-            BSONObj obj = BSONObj();
-            tokulog(3) << "NamespaceDetails::findById looking for " << key << endl;
-            struct findByIdCallbackExtra extra(key, obj);
-            r = cursor->c_getf_set(cursor, 0, &key_dbt, findByIdCallback, &extra);
-            verify(r == 0 || r == DB_NOTFOUND);
-            r = cursor->c_close(cursor);
-            verify(r == 0);
-
-            if (!obj.isEmpty()) {
-                result = obj;
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        // finds a document by primary key
-        bool findByPK(const BSONObj &pk, BSONObj &result) {
-            return findById(pk, result, false);
+        // finds an objectl by _id field, which in the case of indexed collections
+        // is the primary key.
+        bool findById(const BSONObj &query, BSONObj &result) {
+            dassert(hasIdIndex());
+            dassert(query["_id"].ok());
+            // TODO: It is inefficient to do this _id extraction/wrap
+            return findByPK(query["_id"].wrap(""), result);
         }
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
@@ -196,7 +172,7 @@ namespace mongo {
         addNewNamespaceToCatalog(ns, &options);
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
-        return shared_ptr<NamespaceDetails>(new UserNamespace(ns, options));
+        return shared_ptr<NamespaceDetails>(new IndexedCollection(ns, options));
     }
 
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
@@ -213,7 +189,7 @@ namespace mongo {
         }
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
-        return shared_ptr<NamespaceDetails>(new UserNamespace(serialized));
+        return shared_ptr<NamespaceDetails>(new IndexedCollection(serialized));
     }
 
     BSONObj NamespaceDetails::serialize() const {
@@ -226,6 +202,33 @@ namespace mongo {
                     "pk" << _pk <<
                     "_multiKeyIndexBits" << static_cast<long long>(_multiKeyIndexBits) <<
                     "indexes" << indexes_array.arr());
+    }
+
+    bool NamespaceDetails::findByPK(const BSONObj &key, BSONObj &result) {
+        int r;
+
+        // get a cursor over the primary key index
+        IndexDetails &pkIdx = getPKIndex();
+        DBC *cursor = pkIdx.newCursor();
+
+        // create an index key
+        DBT key_dbt = storage::make_dbt(key.objdata(), key.objsize());
+
+        // Try to find it.
+        BSONObj obj = BSONObj();
+        tokulog(3) << "NamespaceDetails::findById looking for " << key << endl;
+        struct findByIdCallbackExtra extra(key, obj);
+        r = cursor->c_getf_set(cursor, 0, &key_dbt, findByIdCallback, &extra);
+        verify(r == 0 || r == DB_NOTFOUND);
+        r = cursor->c_close(cursor);
+        verify(r == 0);
+
+        if (!obj.isEmpty()) {
+            result = obj;
+            return true;
+        } else {
+            return false;
+        }
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
