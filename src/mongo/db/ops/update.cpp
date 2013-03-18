@@ -205,7 +205,7 @@ namespace mongo {
         bool modsAreIndexed = false;
 
         if ( isOperatorUpdate ) {
-            if( d->indexBuildInProgress ) {
+            if ( d->indexBuildInProgress() ) {
                 set<string> bgKeys;
                 d->inProgIdx().keyPattern().getFieldNames(bgKeys);
                 mods.reset( new ModSet(updateobj, nsdt->indexKeys(), &bgKeys) );

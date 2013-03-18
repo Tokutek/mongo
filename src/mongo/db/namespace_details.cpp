@@ -179,9 +179,9 @@ namespace mongo {
     }
 
     NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
-        indexBuildInProgress(false),
         _options(options.copy()),
         _pk(pkIndexPattern.copy()),
+        _indexBuildInProgress(false),
         _nIndexes(0),
         _multiKeyIndexBits(0) {
 
@@ -200,8 +200,9 @@ namespace mongo {
     }
 
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
-        indexBuildInProgress(false),
         _options(serialized["options"].embeddedObject()),
+        _pk(serialized["pk"].embeddedObject()),
+        _indexBuildInProgress(false),
         _nIndexes(serialized["indexes"].Array().size()),
         _multiKeyIndexBits(static_cast<uint64_t>(serialized["_multiKeyIndexBits"].Long())) {
 
@@ -244,7 +245,7 @@ namespace mongo {
     void NamespaceDetails::createIndex(const BSONObj &idx_info, bool resetTransient) {
         uassert(16449, "dropDups is not supported and is likely to remain unsupported for some time because it deletes arbitrary data",
                 !idx_info["dropDups"].trueValue());
-        uassert(12588, "cannot add index with a background operation in progress", !indexBuildInProgress);
+        uassert(12588, "cannot add index with a background operation in progress", !_indexBuildInProgress);
 
         if (nIndexes() >= NIndexesMax ) {
             string s = (mongoutils::str::stream() <<
@@ -258,7 +259,7 @@ namespace mongo {
         // Ensure we initialize the spec in case the collection is empty.
         // This also causes an error to be thrown if we're trying to create an invalid index on an empty collection.
         index->getSpec();
-        indexBuildInProgress = true;
+        _indexBuildInProgress = true;
         _indexes.push_back(index);
         try {
             string thisns(index->parentNS());
@@ -271,11 +272,11 @@ namespace mongo {
             }
         } catch (DBException &e) {
             _indexes.pop_back();
-            indexBuildInProgress = false;
+            _indexBuildInProgress = false;
             throw;
         }
         _nIndexes++;
-        indexBuildInProgress = false;
+        _indexBuildInProgress = false;
 
         string idx_ns = idx_info["ns"].String();
         const char *ns = idx_ns.c_str();

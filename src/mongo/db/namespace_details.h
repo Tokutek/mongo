@@ -99,7 +99,7 @@ namespace mongo {
            complete, yet need to still use it in _indexRecord() - thus we use this function for that.
         */
         int nIndexesBeingBuilt() const { 
-            if (indexBuildInProgress) {
+            if (_indexBuildInProgress) {
                 verify(_nIndexes + 1 == (int) _indexes.size());
             } else {
                 verify(_nIndexes == (int) _indexes.size());
@@ -111,7 +111,7 @@ namespace mongo {
 
         /** get the IndexDetails for the index currently being built in the background. (there is at most one) */
         IndexDetails& inProgIdx() {
-            dassert(indexBuildInProgress);
+            dassert(_indexBuildInProgress);
             return idx(_nIndexes);
         }
 
@@ -191,9 +191,9 @@ namespace mongo {
             return 10; // TODO: Return something meaningful based on in-memory stats
         }
 
-        // TODO: Make this private or remove it
-        // true if an index is currently being built
-        bool indexBuildInProgress;
+        bool indexBuildInProgress() const {
+            return _indexBuildInProgress;
+        }
 
         // @return a BSON representation of this NamespaceDetail's state
         BSONObj serialize() const;
@@ -247,6 +247,7 @@ namespace mongo {
         BSONObj _pk;
 
         // Each index (including the _id) index has an IndexDetails that describes it.
+        bool _indexBuildInProgress;
         int _nIndexes;
         typedef std::vector<shared_ptr<IndexDetails> > IndexVector;
         IndexVector _indexes;
