@@ -243,6 +243,8 @@ namespace mongo {
         // The options used to create this namespace details. We serialize
         // this (among other things) to disk on close (see serialize())
         BSONObj _options;
+        // The primary index pattern.
+        BSONObj _pk;
 
         // Each index (including the _id) index has an IndexDetails that describes it.
         int _nIndexes;

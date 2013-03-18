@@ -150,41 +150,48 @@ namespace mongo {
         }
     };
 
-    static BSONObj id_index_info(const string &ns, const BSONObj &options) {
-        BSONObjBuilder id_info;
-        id_info.append("ns", ns);
-        id_info.append("key", idKeyPattern);
-        id_info.append("name", "_id_");
-        id_info.appendBool("unique", true);
+    static BSONObj pkIndexInfo(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) {
+        // We only know how to handle _id and $_ (implicit) primary keys.
+        dassert(pkIndexPattern.nFields() == 1);
+        dassert(pkIndexPattern["_id"].ok() || pkIndexPattern["$_"].ok());
+
+        BSONObjBuilder b;
+        b.append("ns", ns);
+        b.append("key", pkIndexPattern);
+        b.append("name", pkIndexPattern["_id"].ok() ? "_id_" : "$_");
+        b.appendBool("unique", true);
 
         // Choose which options are used for the _id index, manually. 
         BSONElement e;
         e = options["readPageSize"];
         if (e.ok() && !e.isNull()) {
-            id_info.append(e);
+            b.append(e);
         }
         e = options["pageSize"];
         if (e.ok() && !e.isNull()) {
-            id_info.append(e);
+            b.append(e);
         }
         e = options["compression"];
         if (e.ok() && !e.isNull()) {
-            id_info.append(e);
+            b.append(e);
         }
-        return id_info.obj();
+        return b.obj();
     }
 
     NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
         indexBuildInProgress(false),
         _options(options.copy()),
+        _pk(pkIndexPattern.copy()),
         _nIndexes(0),
         multiKeyIndexBits(0) {
 
         massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns.c_str()));
 
         tokulog(1) << "Creating NamespaceDetails " << ns << endl;
-        BSONObj id_info = id_index_info(ns, options);
-        createIndex(id_info, true);
+
+        // Create the primary key index, generating the info from the pk pattern and options.
+        BSONObj info = pkIndexInfo(ns, pkIndexPattern, options);
+        createIndex(info, true);
 
         addNewNamespaceToCatalog(ns, &options);
     }
@@ -215,6 +222,7 @@ namespace mongo {
             indexes_array.append(index->info());
         }
         return BSON("options" << _options <<
+                    "pk" << _pk <<
                     "multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
                     "indexes" << indexes_array.arr());
     }
