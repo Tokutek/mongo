@@ -208,6 +208,9 @@ namespace mongo {
         // Run optimize on each index.
         void optimize();
 
+        // Find by primary key (single element bson object, no field name).
+        bool findByPK(const BSONObj &pk, BSONObj &result);
+
         // optional to implement, return true if the namespace is capped
         virtual bool isCapped() const {
             return false;
@@ -218,10 +221,6 @@ namespace mongo {
         virtual bool hasIdIndex() {
             return false;
         }
-
-        // TODO: Does this actually need to be virtual? Maybe not...
-        // finds a document by primary key
-        virtual bool findByPK(const BSONObj &pk, BSONObj &result);
 
         // finds an objectl by _id field
         virtual bool findById(const BSONObj &query, BSONObj &result) {
@@ -243,6 +242,9 @@ namespace mongo {
     protected:
         NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit NamespaceDetails(const BSONObj &serialized);
+
+        void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, bool overwrite);
+        void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
 
         // fill the statistics for each index in the NamespaceDetails,
         // indexStats is an array of length nIndexes

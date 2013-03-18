@@ -113,7 +113,7 @@ namespace mongo {
         return NamespaceDetailsTransient::get_inlock( info()["ns"].valuestr() ).getIndexSpec( this );
     }
 
-    void IndexDetails::insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite) {
+    void IndexDetails::insert(const BSONObj &pk, const BSONObj &obj, bool overwrite) {
         BSONObjSet keys;
         getKeysFromObject(obj, keys);
         if (keys.size() > 1) {
@@ -126,14 +126,14 @@ namespace mongo {
 
         for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
             if (isIdIndex()) {
-                verify(!primary_key.isEmpty() == (*ki == primary_key));
+                verify(!pk.isEmpty() == (*ki == pk));
                 insertPair(*ki, NULL, obj, overwrite);
             } else if (clustering()) {
-                verify(!primary_key.isEmpty());
-                insertPair(*ki, &primary_key, obj, overwrite);
+                verify(!pk.isEmpty());
+                insertPair(*ki, &pk, obj, overwrite);
             } else {
-                verify(!primary_key.isEmpty());
-                insertPair(*ki, &primary_key, BSONObj(), overwrite);
+                verify(!pk.isEmpty());
+                insertPair(*ki, &pk, BSONObj(), overwrite);
             }
         }
     }
