@@ -284,11 +284,11 @@ namespace mongo {
         string idx_ns = idx_info["ns"].String();
         const char *ns = idx_ns.c_str();
 
-        // The first index we create should be the _id index, when we first create the collection.
+        // The first index we create should be the pk index, when we first create the collection.
         // Therefore the collection's NamespaceDetails should not already exist in the NamespaceIndex.
         const bool may_overwrite = _nIndexes > 1;
         if (!may_overwrite) {
-            massert(16435, "first index should be _id index", index->isIdIndex());
+            massert(16435, "first index should be pk index", index->keyPattern() == _pk);
         } else {
             dassert(nsdetails(ns) == this);
         }
