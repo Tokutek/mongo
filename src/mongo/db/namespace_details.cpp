@@ -402,7 +402,6 @@ namespace mongo {
         }
     }
 
-
     void NamespaceDetails::fillCollectionStats(
         struct NamespaceDetailsAccStats* accStats, 
         BSONObjBuilder* result, 
