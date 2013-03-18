@@ -183,7 +183,7 @@ namespace mongo {
         _options(options.copy()),
         _pk(pkIndexPattern.copy()),
         _nIndexes(0),
-        multiKeyIndexBits(0) {
+        _multiKeyIndexBits(0) {
 
         massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns.c_str()));
 
@@ -203,7 +203,7 @@ namespace mongo {
         indexBuildInProgress(false),
         _options(serialized["options"].embeddedObject()),
         _nIndexes(serialized["indexes"].Array().size()),
-        multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())) {
+        _multiKeyIndexBits(static_cast<uint64_t>(serialized["_multiKeyIndexBits"].Long())) {
 
         std::vector<BSONElement> index_array = serialized["indexes"].Array();
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
@@ -223,17 +223,17 @@ namespace mongo {
         }
         return BSON("options" << _options <<
                     "pk" << _pk <<
-                    "multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
+                    "_multiKeyIndexBits" << static_cast<long long>(_multiKeyIndexBits) <<
                     "indexes" << indexes_array.arr());
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
         dassert(i < NIndexesMax);
         unsigned long long x = ((unsigned long long) 1) << i;
-        if (multiKeyIndexBits & x) {
+        if (_multiKeyIndexBits & x) {
             return;
         }
-        multiKeyIndexBits |= x;
+        _multiKeyIndexBits |= x;
 
         dassert(nsdetails(thisns) == this);
         nsindex(thisns)->update_ns(thisns, this, true);
@@ -321,7 +321,7 @@ namespace mongo {
                 }
             }
             // Assuming id index isn't multikey
-            multiKeyIndexBits = 0;
+            _multiKeyIndexBits = 0;
             result.append("msg", (mayDeleteIdIndex
                                   ? "indexes dropped for collection"
                                   : "non-_id indexes dropped for collection"));
@@ -340,8 +340,8 @@ namespace mongo {
                 _indexes.erase(it);
                 _nIndexes--;
                 // Removes the nth bit, and shifts any bits higher than it down a slot.
-                multiKeyIndexBits = ((multiKeyIndexBits & ((1ULL << x) - 1)) |
-                                     ((multiKeyIndexBits >> (x + 1)) << x));
+                _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << x) - 1)) |
+                                     ((_multiKeyIndexBits >> (x + 1)) << x));
             } else {
                 // theoretically, this should not be needed, as we do all of our fileops
                 // transactionally, but keeping this here just in case at the moment
