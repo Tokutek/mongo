@@ -75,29 +75,6 @@ namespace mongo {
         }
     }
 
-    struct findByPKCallbackExtra {
-        const BSONObj &key;
-        BSONObj &obj;
-
-        findByPKCallbackExtra(const BSONObj &k, BSONObj &o) : key(k), obj(o) { }
-    };
-
-    static int findByPKCallback(const DBT *key, const DBT *value, void *extra) {
-        if (key != NULL) {
-            struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
-            DEV {
-                // We should have been called using an exact getf, so the
-                // key is non-null iff we found an exact match.
-                BSONObj idKey(reinterpret_cast<char *>(key->data));
-                verify(!idKey.isEmpty());
-                verify(idKey.woCompare(idKey, info->key) == 0);
-            }
-            BSONObj obj(reinterpret_cast<char *>(value->data));
-            info->obj = obj.getOwned();
-        }
-        return 0;
-    }
-
     class IndexedCollection : public NamespaceDetails {
     public:
         IndexedCollection(const string &ns, const BSONObj &options) :
@@ -134,20 +111,51 @@ namespace mongo {
         }
     };
 
+    struct findLastKeyExtra {
+        findLastKeyExtra(BSONObj &o) : obj(o) {
+        }
+        BSONObj &obj;
+    };
+
+    static int findLastKeyCallback(const DBT *key, const DBT *value, void *extra) {
+        struct findLastKeyExtra *info = reinterpret_cast<struct findLastKeyExtra *>(extra);
+        if (key) {
+            info->obj = BSONObj(reinterpret_cast<char *>(key->data));
+        }
+        return 0;
+    }
+
     class NaturalOrderCollection : public NamespaceDetails {
     public:
         NaturalOrderCollection(const string &ns, const BSONObj &options) :
-            NamespaceDetails(ns, fromjson("{\"$_\":1}"), options) {
-            // TODO: Find the current max pk of the collection.
+            NamespaceDetails(ns, fromjson("{\"$_\":1}"), options),
+            _nextPK(0) {
         }
         NaturalOrderCollection(const BSONObj &serialized) :
-            NamespaceDetails(serialized) {
+            NamespaceDetails(serialized),
+            _nextPK(0) {
+
+            // get a cursor over the primary key index
+            IndexDetails &pkIdx = getPKIndex();
+            DBC *cursor = pkIdx.newCursor();
+
+            // find the last key
+            BSONObj obj = BSONObj();
+            struct findLastKeyExtra extra(obj);
+            int r = cursor->c_getf_last(cursor, 0, findLastKeyCallback, &extra);
+            verify(r == 0 || r == DB_NOTFOUND);
+            r = cursor->c_close(cursor);
+            verify(r == 0);
+
+            // the next PK is the last key plus one
+            dassert(obj.nFields() == 1);
+            _nextPK = AtomicWord<long long>(obj.firstElement().Long() + 1);
         }
 
         // insert an object, using a fresh auto-increment primary key
         void insertObject(BSONObj &obj, bool overwrite) {
             BSONObjBuilder pk;
-            pk.appendNumber("", _nextPK.fetchAndAdd(1));
+            pk.append("", _nextPK.fetchAndAdd(1));
             insertIntoIndexes(pk.obj(), obj, overwrite);
         }
 
@@ -156,7 +164,35 @@ namespace mongo {
         }
 
     private:
-        AtomicWord<uint64_t> _nextPK;
+        AtomicWord<long long> _nextPK;
+    };
+
+    class SystemCollection : public NaturalOrderCollection {
+    public:
+        SystemCollection(const string &ns, const BSONObj &options) :
+            NaturalOrderCollection(ns, options) {
+        }
+        SystemCollection(const BSONObj &serialized) :
+            NaturalOrderCollection(serialized) {
+        }
+
+        // strip out the _id field before inserting into a system collection
+        void insertObject(BSONObj &obj, bool overwrite) {
+            obj = stripIdField(obj);
+            NaturalOrderCollection::insertObject(obj, overwrite);
+        }
+
+    private:
+        BSONObj stripIdField(const BSONObj &obj) {
+            BSONObjBuilder b;
+            for (BSONObjIterator i = obj.begin(); i.more(); ) {
+                BSONElement e = i.next();
+                if (!str::equals(e.fieldName(), "_id")) {
+                    b.append(e);
+                }
+            }
+            return b.obj();
+        }
     };
 
     static BSONObj pkIndexInfo(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) {
@@ -207,7 +243,7 @@ namespace mongo {
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
         if (str::contains(ns, "system.")) {
-            return shared_ptr<NamespaceDetails>(new NaturalOrderCollection(ns, options));
+            return shared_ptr<NamespaceDetails>(new SystemCollection(ns, options));
         } else {
             return shared_ptr<NamespaceDetails>(new IndexedCollection(ns, options));
         }
@@ -215,8 +251,8 @@ namespace mongo {
 
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
         _ns(serialized["ns"].String()),
-        _options(serialized["options"].embeddedObject()),
-        _pk(serialized["pk"].embeddedObject()),
+        _options(serialized["options"].embeddedObject().copy()),
+        _pk(serialized["pk"].embeddedObject().copy()),
         _indexBuildInProgress(false),
         _nIndexes(serialized["indexes"].Array().size()),
         _multiKeyIndexBits(static_cast<uint64_t>(serialized["_multiKeyIndexBits"].Long())) {
@@ -229,7 +265,7 @@ namespace mongo {
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
         if (str::contains(serialized["ns"], "system.")) {
-            return shared_ptr<NamespaceDetails>(new NaturalOrderCollection(serialized));
+            return shared_ptr<NamespaceDetails>(new SystemCollection(serialized));
         } else {
             return shared_ptr<NamespaceDetails>(new IndexedCollection(serialized));
         }
@@ -246,6 +282,29 @@ namespace mongo {
                     "pk" << _pk <<
                     "_multiKeyIndexBits" << static_cast<long long>(_multiKeyIndexBits) <<
                     "indexes" << indexes_array.arr());
+    }
+
+    struct findByPKCallbackExtra {
+        const BSONObj &key;
+        BSONObj &obj;
+
+        findByPKCallbackExtra(const BSONObj &k, BSONObj &o) : key(k), obj(o) { }
+    };
+
+    static int findByPKCallback(const DBT *key, const DBT *value, void *extra) {
+        if (key != NULL) {
+            struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
+            DEV {
+                // We should have been called using an exact getf, so the
+                // key is non-null iff we found an exact match.
+                BSONObj idKey(reinterpret_cast<char *>(key->data));
+                verify(!idKey.isEmpty());
+                verify(idKey.woCompare(idKey, info->key) == 0);
+            }
+            BSONObj obj(reinterpret_cast<char *>(value->data));
+            info->obj = obj.getOwned();
+        }
+        return 0;
     }
 
     bool NamespaceDetails::findByPK(const BSONObj &key, BSONObj &result) {
