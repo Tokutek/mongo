@@ -94,6 +94,7 @@ namespace mongo {
         GTID lastUnappliedGTID;
         GTID minLiveGTID;
         GTID minUnappliedGTID;
+        DiagStr syncingTo;
         int skew;
         bool authIssue;
         unsigned int ping; // milliseconds
