@@ -224,7 +224,7 @@ namespace mongo {
 
         // finds an objectl by _id field
         virtual bool findById(const BSONObj &query, BSONObj &result) {
-            massert(16456, "findById shouldn't be called unless it's implemented.", false);
+            massert(16456, "findById shouldn't be called unless it is implemented.", false);
         }
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
