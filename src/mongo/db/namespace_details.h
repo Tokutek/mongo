@@ -138,7 +138,7 @@ namespace mongo {
            for these, we have to do some dedup work on queries.
         */
         // TODO: Change the bit smashing to something simpler, eventually.
-        bool isMultikey(int i) const { return (multiKeyIndexBits & (((unsigned long long) 1) << i)) != 0; }
+        bool isMultikey(int i) const { return (_multiKeyIndexBits & (((unsigned long long) 1) << i)) != 0; }
         void setIndexIsMultikey(const char *thisns, int i);
 
         bool dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex, bool can_drop_system = false);
@@ -251,7 +251,7 @@ namespace mongo {
         typedef std::vector<shared_ptr<IndexDetails> > IndexVector;
         IndexVector _indexes;
 
-        unsigned long long multiKeyIndexBits;
+        unsigned long long _multiKeyIndexBits;
 
         friend class NamespaceIndex;
     }; // NamespaceDetails
