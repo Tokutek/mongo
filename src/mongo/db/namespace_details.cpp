@@ -94,19 +94,38 @@ namespace mongo {
 
         // TODO: Should adding an _id field be a policy of this call?
         // If so, should we modify obj in place with a basic reference to obj?
+        // The answer is yes, it should be this function's policy. Let's do that soon.
         //
         // inserts an object into this namespace, taking care of secondary indexes if they exist
         void insertObject(const BSONObj &obj, bool overwrite) {
-            if (overwrite && _indexes.size() > 1) {
-                wunimplemented("overwrite inserts on secondary keys right now don't work");
-                //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
-            }
             // TODO: It is inefficient to do this _id extraction/wrap
             BSONObj pk = obj["_id"].wrap("");
             insertIntoIndexes(pk, obj, overwrite);
         }
 
         // deletes an object from this namespace, taking care of secondary indexes if they exist
+        void deleteObject(const BSONObj &pk, const BSONObj &obj) {
+            deleteFromIndexes(pk, obj);
+        }
+    };
+
+    class NaturalOrderCollection : public NamespaceDetails {
+    public:
+        NaturalOrderCollection(const string &ns, const BSONObj &options) :
+            NamespaceDetails(ns, implicitPKPattern, options) {
+            // TODO: Find the current max pk of the collection.
+        }
+        NaturalOrderCollection(const BSONObj &serialized) :
+            NamespaceDetails(serialized) {
+        }
+
+        // insert an object, using a fresh auto-increment primary key
+        void insertObject(const BSONObj &obj, bool overwrite) {
+            // TODO: Generate next pk.
+            BSONObj pk = BSONObj();
+            insertIntoIndexes(pk, obj, overwrite);
+        }
+
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
             deleteFromIndexes(pk, obj);
         }
@@ -218,6 +237,10 @@ namespace mongo {
     }
 
     void NamespaceDetails::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, bool overwrite) {
+        if (overwrite && _indexes.size() > 1) {
+            wunimplemented("overwrite inserts on secondary keys right now don't work");
+            //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
+        }
         for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             IndexDetails *index = it->get();
             index->insert(pk, obj, overwrite);
