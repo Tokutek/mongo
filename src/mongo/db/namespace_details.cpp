@@ -92,37 +92,23 @@ namespace mongo {
             return findByPK(query["_id"].wrap(""), result);
         }
 
+        // TODO: Should adding an _id field be a policy of this call?
+        // If so, should we modify obj in place with a basic reference to obj?
+        //
         // inserts an object into this namespace, taking care of secondary indexes if they exist
         void insertObject(const BSONObj &obj, bool overwrite) {
             if (overwrite && _indexes.size() > 1) {
                 wunimplemented("overwrite inserts on secondary keys right now don't work");
                 //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
             }
-
-            BSONObj primary_key;
-            if (_indexes.size() > 1) {
-                // Have secondary indexes, it's worth it to precompute the key
-                IndexDetails &id_index = idx(findIdIndex());
-                BSONObjSet keys;
-                id_index.getKeysFromObject(obj, keys);
-                dassert(keys.size() == 1);
-                primary_key = *(keys.begin());
-                dassert(primary_key == obj["_id"].wrap(""));
-            }
-
-            // TODO: use put_multiple API
-            for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-                IndexDetails *index = it->get();
-                index->insert(obj, primary_key, overwrite);
-            }
+            // TODO: It is inefficient to do this _id extraction/wrap
+            BSONObj pk = obj["_id"].wrap("");
+            insertIntoIndexes(pk, obj, overwrite);
         }
 
         // deletes an object from this namespace, taking care of secondary indexes if they exist
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
-            for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-                IndexDetails *index = it->get();
-                index->deleteObject(pk, obj);
-            }
+            deleteFromIndexes(pk, obj);
         }
     };
 
@@ -228,6 +214,20 @@ namespace mongo {
             return true;
         } else {
             return false;
+        }
+    }
+
+    void NamespaceDetails::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, bool overwrite) {
+        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+            IndexDetails *index = it->get();
+            index->insert(pk, obj, overwrite);
+        }
+    }
+
+    void NamespaceDetails::deleteFromIndexes(const BSONObj &pk, const BSONObj &obj) {
+        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+            IndexDetails *index = it->get();
+            index->deleteObject(pk, obj);
         }
     }
 

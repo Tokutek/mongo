@@ -141,7 +141,7 @@ namespace mongo {
 
         const BSONObj &info() const { return _info; }
 
-        void insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite);
+        void insert(const BSONObj & pk, const BSONObj &obj, bool overwrite);
         void deleteObject(const BSONObj &pk, const BSONObj &obj);
         DBC *newCursor(int flags = 0) const;
         enum toku_compression_method getCompressionMethod() const;
