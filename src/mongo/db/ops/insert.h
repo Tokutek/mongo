@@ -24,8 +24,8 @@
 
 namespace mongo {
 
-    // Insert an object into the given namespace. Does not log.
-    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, const BSONObj &obj, bool overwrite);
+    // Insert an object into the given namespace. May modify the object (ie: maybe add _id field). Does not log.
+    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, BSONObj &obj, bool overwrite);
 
     // Insert an object into the given namespace. Logs the operation.
     void insertObject(const char *ns, const BSONObj &obj, bool overwrite=false);

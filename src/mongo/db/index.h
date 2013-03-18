@@ -25,6 +25,7 @@
 
 #include "mongo/db/client.h"
 #include "mongo/db/indexkey.h"
+#include "mongo/db/json.h" // for isPKIndexHack(), get rid of when necessary
 #include "mongo/db/jsobj.h"
 #include "mongo/db/namespace.h"
 #include "mongo/db/storage/env.h"
@@ -105,6 +106,13 @@ namespace mongo {
             return isIdIndexPattern( keyPattern() );
         }
 
+        /* HACK: Determine whether or not this is the $_ index. This will
+         * NOT work when capped collections have both a $_ index and _id index.
+         * Deprecate it very soon. */
+        bool isPKIndexHack() const {
+            return keyPattern() == fromjson("{\"$_\":1}") || keyPattern() == fromjson("{\"_id\":1}");
+        }
+
         /* gets not our namespace name (indexNamespace for that),
            but the collection we index, its name.
            */
@@ -123,11 +131,7 @@ namespace mongo {
 
         /** @return true if index is clustering */
         bool clustering() const {
-            bool ret = _info["clustering"].trueValue();
-            if (isIdIndex()) {
-                uassert(16437, "_id index must be clustering", ret);
-            }
-            return ret;
+            return _info["clustering"].trueValue();
         }
 
         /** delete this index. */
@@ -185,11 +189,7 @@ namespace mongo {
         uint64_t getStorageSize() const {
             return _stats.bt_fsize;
         }
-        bool isIdIndex() const {
-            return _isIdIndex;
-        }
     private:
-        bool _isIdIndex;
         string _name;
         DB_BTREE_STAT64 _stats;
         enum toku_compression_method _compressionMethod;

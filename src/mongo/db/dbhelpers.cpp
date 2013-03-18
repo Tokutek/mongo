@@ -27,7 +27,6 @@
 #include "mongo/db/oplog.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/repl_block.h"
-#include "mongo/db/idgen.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"

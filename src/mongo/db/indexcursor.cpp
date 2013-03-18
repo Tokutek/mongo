@@ -219,7 +219,7 @@ namespace mongo {
     }
 
     void IndexCursor::prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
-        const bool isSecondary = !_idx->isIdIndex();
+        const bool isSecondary = !_d->isPKIndex(*_idx);
 
         storage::Key sKey(startKey, isSecondary ? &minKey : NULL);
         storage::Key eKey(endKey, isSecondary ? &maxKey : NULL);
@@ -302,7 +302,7 @@ namespace mongo {
     }
 
     void IndexCursor::findKey(const BSONObj &key) {
-        const bool isSecondary = !_idx->isIdIndex();
+        const bool isSecondary = !_d->isPKIndex(*_idx);
         const BSONObj &pk = _direction > 0 ? minKey : maxKey;
         setPosition(key, isSecondary ? pk : BSONObj());
     };
@@ -377,7 +377,7 @@ namespace mongo {
 
         // This differs from findKey in that we set PK to max to move forward and min
         // to move backward, resulting in a "skip" of the key prefix, not a "find".
-        const bool isSecondary = !_idx->isIdIndex();
+        const bool isSecondary = !_d->isPKIndex(*_idx);
         const BSONObj &pk = _direction > 0 ? maxKey : minKey;
         setPosition( b.done(), isSecondary ? pk : BSONObj() );
     }

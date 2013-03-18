@@ -21,7 +21,6 @@
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/queryutil.h"
-#include "mongo/db/idgen.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
@@ -84,12 +83,13 @@ namespace mongo {
         checkNoMods( newObj );
         tokulog(3) << "insertAndLog for upsert: " << newObj << endl;
 
-        // Make sure to add an _id field if it doesn't exist.
-        newObj = addIdField(newObj);
         insertOneObject(d, nsdt, newObj, overwrite);
         if (logop) {
             logOp("i", ns, newObj, 0, 0, fromMigrate);
         }
+
+        // ns is not a system ns, so the object should have an _id field
+        dassert(!str::contains(ns, "system.") && newObj["_id"].ok());
     }
 
     static bool mayUpdateById(NamespaceDetails *d, const BSONObj &patternOrig) {
@@ -242,7 +242,8 @@ namespace mongo {
                 // this handles repl inserts
                 checkNoMods( updateobj );
                 debug.upsert = true;
-                insertOneObject( d, nsdt, updateobj, upsert );
+                BSONObj objModified = updateobj;
+                insertOneObject( d, nsdt, objModified, upsert );
                 return UpdateResult( 0 , 0 , 1 , updateobj );
             }
         }

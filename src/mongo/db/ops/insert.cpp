@@ -21,7 +21,6 @@
 #include "mongo/db/client.h"
 #include "mongo/db/database.h"
 #include "mongo/db/oplog.h"
-#include "mongo/db/idgen.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/ops/insert.h"
@@ -66,7 +65,7 @@ namespace mongo {
         return 0;
     }
 
-    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, const BSONObj &obj, bool overwrite) {
+    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, BSONObj &obj, bool overwrite) {
         details->insertObject(obj, overwrite);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
@@ -82,11 +81,10 @@ namespace mongo {
         NamespaceDetails *details = nsdetails_maybe_create(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
 
-        // objects in system namespaces do not have _id fields, all others do.
-        BSONObj objWithId = addIdField(obj);
-        BSONElementManipulator::lookForTimestamps(objWithId);
-        insertOneObject(details, nsdt, objWithId, overwrite);
-        logOp("i", ns, objWithId);
+        BSONObj objModified = obj;
+        BSONElementManipulator::lookForTimestamps(objModified);
+        insertOneObject(details, nsdt, objModified, overwrite); // may add _id field
+        logOp("i", ns, objModified);
     }
     
 } // namespace mongo

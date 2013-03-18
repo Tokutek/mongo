@@ -27,7 +27,6 @@
 #include "mongo/db/cursor.h"
 #include "mongo/db/db.h"
 #include "mongo/db/dbhelpers.h"
-#include "mongo/db/idgen.h"
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/namespace_details.h"
@@ -38,12 +37,43 @@
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/txn.h"
 #include "mongo/db/storage/key.h"
+#include "mongo/platform/atomic_word.h"
 #include "mongo/scripting/engine.h"
 
 namespace mongo {
 
-    static const BSONObj idKeyPattern = fromjson("{\"_id\":1}");
-    static const BSONObj implicitPKPattern = fromjson("{\"$_\":1}");
+#pragma pack(1)
+    struct IDToInsert_ {
+        char type;
+        char _id[4];
+        OID oid;
+        IDToInsert_() {
+            type = (char) jstOID;
+            strcpy(_id, "_id");
+            verify( sizeof(IDToInsert_) == 17 );
+        }
+    } idToInsert_;
+    struct IDToInsert : public BSONElement {
+        IDToInsert() : BSONElement( ( char * )( &idToInsert_ ) ) {}
+    } idToInsert;
+#pragma pack()
+
+    static BSONObj addIdField(const BSONObj &orig) {
+        // TODO: Remove the singleton IDToInsert, remove mutex, use local copies in caller.
+        static SimpleMutex mutex("addIdField");
+
+        if (orig.hasField("_id")) {
+            return orig;
+        } else {
+            SimpleMutex::scoped_lock lk(mutex);
+            BSONObjBuilder b;
+            idToInsert_.oid.init();
+            // _id first, everything else after
+            b.append(idToInsert);
+            b.appendElements(orig);
+            return b.obj();
+        }
+    }
 
     struct findByPKCallbackExtra {
         const BSONObj &key;
@@ -71,7 +101,7 @@ namespace mongo {
     class IndexedCollection : public NamespaceDetails {
     public:
         IndexedCollection(const string &ns, const BSONObj &options) :
-            NamespaceDetails(ns, idKeyPattern, options) {
+            NamespaceDetails(ns, fromjson("{\"_id\":1}"), options) {
         }
         IndexedCollection(const BSONObj &serialized) :
             NamespaceDetails(serialized) {
@@ -88,17 +118,12 @@ namespace mongo {
         bool findById(const BSONObj &query, BSONObj &result) {
             dassert(hasIdIndex());
             dassert(query["_id"].ok());
-            // TODO: It is inefficient to do this _id extraction/wrap
             return findByPK(query["_id"].wrap(""), result);
         }
 
-        // TODO: Should adding an _id field be a policy of this call?
-        // If so, should we modify obj in place with a basic reference to obj?
-        // The answer is yes, it should be this function's policy. Let's do that soon.
-        //
         // inserts an object into this namespace, taking care of secondary indexes if they exist
-        void insertObject(const BSONObj &obj, bool overwrite) {
-            // TODO: It is inefficient to do this _id extraction/wrap
+        void insertObject(BSONObj &obj, bool overwrite) {
+            obj = addIdField(obj);
             BSONObj pk = obj["_id"].wrap("");
             insertIntoIndexes(pk, obj, overwrite);
         }
@@ -112,7 +137,7 @@ namespace mongo {
     class NaturalOrderCollection : public NamespaceDetails {
     public:
         NaturalOrderCollection(const string &ns, const BSONObj &options) :
-            NamespaceDetails(ns, implicitPKPattern, options) {
+            NamespaceDetails(ns, fromjson("{\"$_\":1}"), options) {
             // TODO: Find the current max pk of the collection.
         }
         NaturalOrderCollection(const BSONObj &serialized) :
@@ -120,15 +145,18 @@ namespace mongo {
         }
 
         // insert an object, using a fresh auto-increment primary key
-        void insertObject(const BSONObj &obj, bool overwrite) {
-            // TODO: Generate next pk.
-            BSONObj pk = BSONObj();
-            insertIntoIndexes(pk, obj, overwrite);
+        void insertObject(BSONObj &obj, bool overwrite) {
+            BSONObjBuilder pk;
+            pk.appendNumber("", _nextPK.fetchAndAdd(1));
+            insertIntoIndexes(pk.obj(), obj, overwrite);
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
             deleteFromIndexes(pk, obj);
         }
+
+    private:
+        AtomicWord<uint64_t> _nextPK;
     };
 
     static BSONObj pkIndexInfo(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) {
@@ -160,6 +188,7 @@ namespace mongo {
     }
 
     NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
+        _ns(ns),
         _options(options.copy()),
         _pk(pkIndexPattern.copy()),
         _indexBuildInProgress(false),
@@ -177,10 +206,15 @@ namespace mongo {
         addNewNamespaceToCatalog(ns, &options);
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
-        return shared_ptr<NamespaceDetails>(new IndexedCollection(ns, options));
+        if (str::contains(ns, "system.")) {
+            return shared_ptr<NamespaceDetails>(new NaturalOrderCollection(ns, options));
+        } else {
+            return shared_ptr<NamespaceDetails>(new IndexedCollection(ns, options));
+        }
     }
 
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
+        _ns(serialized["ns"].String()),
         _options(serialized["options"].embeddedObject()),
         _pk(serialized["pk"].embeddedObject()),
         _indexBuildInProgress(false),
@@ -194,7 +228,11 @@ namespace mongo {
         }
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
-        return shared_ptr<NamespaceDetails>(new IndexedCollection(serialized));
+        if (str::contains(serialized["ns"], "system.")) {
+            return shared_ptr<NamespaceDetails>(new NaturalOrderCollection(serialized));
+        } else {
+            return shared_ptr<NamespaceDetails>(new IndexedCollection(serialized));
+        }
     }
 
     BSONObj NamespaceDetails::serialize() const {
@@ -203,7 +241,8 @@ namespace mongo {
             IndexDetails *index = it->get();
             indexes_array.append(index->info());
         }
-        return BSON("options" << _options <<
+        return BSON("ns" << _ns <<
+                    "options" << _options <<
                     "pk" << _pk <<
                     "_multiKeyIndexBits" << static_cast<long long>(_multiKeyIndexBits) <<
                     "indexes" << indexes_array.arr());
@@ -294,7 +333,7 @@ namespace mongo {
                 if (iter % 1000 == 0) {
                     killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
                 }
-                index->insert(cursor->current(), cursor->currPK(), false);
+                index->insert(cursor->currPK(), cursor->current(), false);
             }
         } catch (DBException &e) {
             _indexes.pop_back();
@@ -332,6 +371,7 @@ namespace mongo {
 
         //BackgroundOperation::assertNoBgOpInProgForNs(ns);
 
+        NamespaceDetails *d = nsdetails(ns);
         ClientCursor::invalidate(ns);
 
         if (mongoutils::str::equals(name, "*")) {
@@ -339,7 +379,7 @@ namespace mongo {
             // This is O(n^2), not great, but you can have at most 64 indexes anyway.
             for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ) {
                 IndexDetails *idx = it->get();
-                if (mayDeleteIdIndex || !idx->isIdIndex()) {
+                if (mayDeleteIdIndex || (!idx->isIdIndex() && !d->isPKIndex(*idx))) {
                     idx->kill_idx(can_drop_system);
                     it = _indexes.erase(it);
                     _nIndexes--;
@@ -359,8 +399,8 @@ namespace mongo {
                 result.append("nIndexesWas", (double) _nIndexes);
                 IndexVector::iterator it = _indexes.begin() + x;
                 IndexDetails *idx = it->get();
-                if ( !mayDeleteIdIndex && idx->isIdIndex() ) {
-                    errmsg = "may not delete _id index";
+                if ( !mayDeleteIdIndex && (idx->isIdIndex() || d->isPKIndex(*idx)) ) {
+                    errmsg = "may not delete _id or $_ index";
                     return false;
                 }
                 idx->kill_idx(can_drop_system);
@@ -419,23 +459,22 @@ namespace mongo {
         BSONArrayBuilder index_info;
         for (std::vector<IndexStats>::const_iterator it = indexStats.begin(); it != indexStats.end(); ++it) {
             index_info.append(it->bson(scale));
-            if (!it->isIdIndex()) {
+            // the primary key is at indexStats[0], secondary indexes come after
+            if (it - indexStats.begin() > 0) {
                 totalIndexDataSize += it->getDataSize();
                 totalIndexStorageSize += it->getStorageSize();
             }
         }
-        int idIndex = findIdIndex();
-        verify(idIndex >= 0);
 
-        accStats->count = indexStats[idIndex].getCount();
+        accStats->count = indexStats[0].getCount();
         result->appendNumber("count", (long long) accStats->count);
 
         result->append("nindexes" , numIndexes );
 
-        accStats->size = indexStats[idIndex].getDataSize();
+        accStats->size = indexStats[0].getDataSize();
         result->appendNumber("size", (long long) accStats->size/scale);
 
-        accStats->storageSize = indexStats[idIndex].getStorageSize();
+        accStats->storageSize = indexStats[0].getStorageSize();
         result->appendNumber("storageSize", (long long) accStats->storageSize/scale);
 
         accStats->indexSize = totalIndexDataSize;
@@ -593,9 +632,7 @@ namespace mongo {
     }
 
     void NamespaceDetails::addPKIndexToCatalog() {
-        int i = findIdIndex();
-        verify(i >= 0);
-        const BSONObj &info = idx(i).info();
+        BSONObj info = getPKIndex().info();
         string indexns = info["ns"].String();
         if (mongoutils::str::contains(indexns, ".system.indexes")) {
             // system.indexes holds all the others, so it is not explicitly listed in the catalog.
@@ -608,7 +645,7 @@ namespace mongo {
         const char *ns = s.c_str();
         NamespaceDetails *d = nsdetails_maybe_create(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
-        insertOneObject(d, nsdt, addIdField(info), false);
+        insertOneObject(d, nsdt, info, false);
     }
 
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).
@@ -633,7 +670,7 @@ namespace mongo {
         const char *system_ns = s.c_str();
         NamespaceDetails *d = nsdetails_maybe_create(system_ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(system_ns);
-        insertOneObject(d, nsdt, addIdField(info), false);
+        insertOneObject(d, nsdt, info, false);
     }
 
     void dropNS(const string &nsname, bool is_collection, bool can_drop_system) {

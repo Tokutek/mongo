@@ -124,15 +124,13 @@ namespace mongo {
             d->setIndexIsMultikey(ns, idxNo);
         }
 
+        verify(!pk.isEmpty());
         for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-            if (isIdIndex()) {
-                verify(!pk.isEmpty() == (*ki == pk));
-                insertPair(*ki, NULL, obj, overwrite);
+            if (isPKIndexHack()) {
+                insertPair(pk, NULL, obj, overwrite);
             } else if (clustering()) {
-                verify(!pk.isEmpty());
                 insertPair(*ki, &pk, obj, overwrite);
             } else {
-                verify(!pk.isEmpty());
                 insertPair(*ki, &pk, BSONObj(), overwrite);
             }
         }
@@ -185,7 +183,7 @@ namespace mongo {
         const int c_flags = DB_SERIALIZABLE;
         DBC *cursor = newCursor(c_flags);
 
-        storage::Key skey(key, !isIdIndex() ? &minKey : NULL);
+        storage::Key skey(key, !isPKIndexHack() ? &minKey : NULL);
         DBT kdbt = skey.dbt();
 
         bool isUnique = true;
@@ -224,12 +222,9 @@ namespace mongo {
         BSONObjSet keys;
         getKeysFromObject(obj, keys);
         for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-            const BSONObj &key = *ki;
-            if (isIdIndex()) {
-                verify(key == pk);
-            }
-            verify(!pk.isEmpty());
-            storage::Key skey(key, !isIdIndex() ? &pk : NULL);
+            const bool isSecondary = !isPKIndexHack();
+            const BSONObj &key = isSecondary ? *ki : pk;
+            storage::Key skey(key, isSecondary ? &pk : NULL);
             DBT kdbt = skey.dbt();
 
             const int flags = DB_DELETE_ANY;
@@ -310,8 +305,7 @@ namespace mongo {
     }
 
     IndexStats::IndexStats(const IndexDetails &idx)
-            : _isIdIndex(idx.isIdIndex()),
-              _name(idx.indexName()),
+            : _name(idx.indexName()),
               _compressionMethod(idx.getCompressionMethod()),
               _readPageSize(idx.getReadPageSize()),
               _pageSize(idx.getPageSize()) {

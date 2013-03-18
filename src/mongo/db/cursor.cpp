@@ -23,7 +23,7 @@
 namespace mongo {
 
     BasicCursor::BasicCursor(NamespaceDetails *d, int direction) :
-        _c(d, d != NULL ? &d->idx(d->findIdIndex()) : NULL, // pass null for idx if no ns details
+        _c(d, d != NULL ? &d->getPKIndex() : NULL, // pass null for pk idx if no ns details
         direction > 0 ? minKey : maxKey, // start at the beginning for forward cursor
         direction > 0 ? maxKey : minKey, // finish at the end for forward cursor
         true, // end key is inclusive, because we want to scan everything.

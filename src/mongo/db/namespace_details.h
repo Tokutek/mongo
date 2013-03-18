@@ -187,9 +187,14 @@ namespace mongo {
             return -1;
         }
 
+        bool isPKIndex(const IndexDetails &idx) const {
+            return idx.keyPattern() == _pk;
+        }
+
         IndexDetails &getPKIndex() const {
-            dassert(_indexes[0]->keyPattern() == _pk);
-            return *_indexes[0];
+            IndexDetails &idx = *_indexes[0];
+            dassert(isPKIndex(idx));
+            return idx;
         }
 
         int averageObjectSize() {
@@ -228,7 +233,7 @@ namespace mongo {
         }
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
-        virtual void insertObject(const BSONObj &obj, bool overwrite) = 0;
+        virtual void insertObject(BSONObj &obj, bool overwrite) = 0;
 
         // deletes an object from this namespace, taking care of secondary indexes if they exist
         virtual void deleteObject(const BSONObj &pk, const BSONObj &obj) = 0;
@@ -250,6 +255,7 @@ namespace mongo {
         // indexStats is an array of length nIndexes
         void fillIndexStats(std::vector<IndexStats> &indexStats);
 
+        const string _ns;
         // The options used to create this namespace details. We serialize
         // this (among other things) to disk on close (see serialize())
         const BSONObj _options;
