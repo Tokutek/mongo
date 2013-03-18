@@ -539,26 +539,24 @@ namespace mongo {
         bool upsert = flags & UpdateOption_Upsert;
         bool multi = flags & UpdateOption_Multi;
         bool broadcast = flags & UpdateOption_Broadcast;
-        
+
         op.debug().query = query;
         op.setQuery(query);
 
-        Lock::DBWrite lk(ns);
-        
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        Client::WriteContext ctx(ns);
+
         // void ReplSetImpl::relinquish() uses big write lock so 
         // this is thus synchronized given our lock above.
         uassert( 10054 ,  "not master", isMasterNs( ns ) );
-        
+
         // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
         if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
             return;
-        
-        Client::Context ctx( ns );
-        ctx.beginTransaction();
 
         UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
         lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
-        ctx.commitTransaction();
+        transaction.commit();
     }
 
     void receivedDelete(Message& m, CurOp& op) {
@@ -570,30 +568,28 @@ namespace mongo {
         bool broadcast = flags & RemoveOption_Broadcast;
         verify( d.moreJSObjs() );
         BSONObj pattern = d.nextJsObj();
-        
+
         op.debug().query = pattern;
         op.setQuery(pattern);
 
-        Lock::DBWrite lk(ns);
-                
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        Client::WriteContext ctx(ns);
+
         // writelock is used to synchronize stepdowns w/ writes
         uassert( 10056 ,  "not master", isMasterNs( ns ) );
 
         if (broadcast) {
             unimplemented("what do broadcast deletes do?");
         }
-                
+
         // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
         if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
             return;
-                
-        Client::Context ctx(ns, dbpath, true, true);
-        ctx.beginTransaction();
 
         long long n = deleteObjects(ns, pattern, justOne, true);
         lastError.getSafe()->recordDelete( n );
 
-        ctx.commitTransaction();
+        transaction.commit();
     }
 
     QueryResult* emptyMoreResult(long long);
@@ -769,17 +765,15 @@ namespace mongo {
             multi.push_back( d.nextJsObj() );
         }
 
-        Lock::DBWrite lk(ns);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        Client::WriteContext ctx(ns);
 
         // CONCURRENCY TODO: is being read locked in big log sufficient here?
         // writelock is used to synchronize stepdowns w/ writes
         uassert( 10058 , "not master", isMasterNs(ns) );
-                
+
         if ( handlePossibleShardedMessage( m , 0 ) )
             return;
-                
-        Client::Context ctx(ns);
-        ctx.beginTransaction();
 
         if( !multi.empty() ) {
             const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
@@ -788,7 +782,7 @@ namespace mongo {
             checkAndInsert(ns, first);
             globalOpCounters.incInsertInWriteLock(1);
         }
-        ctx.commitTransaction();
+        transaction.commit();
     }
 
     void getDatabaseNames( vector< string > &names , const string& usePath ) {

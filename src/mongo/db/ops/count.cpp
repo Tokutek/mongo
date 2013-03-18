@@ -25,24 +25,23 @@
 #include "mongo/client/dbclientinterface.h"
 
 namespace mongo {
-    
+
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
-        Client::Context ctx(ns, dbpath, true, true);
-        ctx.beginTransaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-        ctx.setReadOnly();
+        Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+        Client::Context ctx(ns);
         NamespaceDetails *d = nsdetails( ns );
         if ( !d ) {
             err = "ns missing";
             return -1;
         }
         BSONObj query = cmd.getObjectField("query");
-        
+
         // count of all objects
         if ( query.isEmpty() ) {
             // TODO: TokuDB: call this with in-memory stats once we maintain them
             //return applySkipLimit( d->stats.nrecords , cmd );
         }
-        
+
         long long count = 0;
         long long skip = cmd["skip"].numberLong();
         long long limit = cmd["limit"].numberLong();
@@ -57,7 +56,6 @@ namespace mongo {
                                              &simpleEqualityMatch );
         try {
             for ( ; cursor->ok() ; cursor->advance() ) {
-                
                 // With simple equality matching there is no need to use the matcher because the bounds
                 // are enforced by the FieldRangeVectorIterator and only key fields have constraints.  There
                 // is no need to do key deduping because an exact value is specified in the query for all key
@@ -67,7 +65,6 @@ namespace mongo {
                 // more performant, but I don't think we've measured the performance.
                 if ( simpleEqualityMatch ||
                     ( cursor->currentMatches() && !cursor->getsetdup( cursor->currPK() ) ) ) {
-                    
                     if ( skip > 0 ) {
                         --skip;
                     }
@@ -79,23 +76,22 @@ namespace mongo {
                     }
                 }
             }
-            ctx.commitTransaction();
+            transaction.commit();
             return count;
-            
         }
         catch ( const DBException &e ) {
             err = e.toString();
             errCode = e.getCode();
-        } 
+        }
         catch ( const std::exception &e ) {
             err = e.what();
             errCode = 0;
-        } 
+        }
         // Historically we have returned zero in many count assertion cases - see SERVER-2291.
         log() << "Count with ns: " << ns << " and query: " << query
               << " failed with exception: " << err << " code: " << errCode
               << endl;
         return -2;
     }
-    
+
 } // namespace mongo

@@ -520,8 +520,7 @@ namespace BasicTests {
             // this leaks as ~Database is private
             // if that changes, should put this on the stack
             {
-                Client::Context ctx("dbtests_basictests_ownsns");
-                ctx.beginTransaction();
+                Client::Transaction txn(DB_SERIALIZABLE);
                 Database * db = new Database( "dbtests_basictests_ownsns" , isNew );
                 verify( isNew );
 
@@ -529,7 +528,7 @@ namespace BasicTests {
                 ASSERT( db->ownsNS( "dbtests_basictests_ownsns.x.y" ) );
                 ASSERT( ! db->ownsNS( "dbtests_basictests_ownsn.x.y" ) );
                 ASSERT( ! db->ownsNS( "dbtests_basictests_ownsnsa.x.y" ) );
-                ctx.commitTransaction();
+                txn.commit();
             }
         }
     };

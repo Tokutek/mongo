@@ -26,16 +26,16 @@
 namespace mongo {
 
     DocumentSourceCursor::CursorWithContext::CursorWithContext( const string& ns )
-        : _readContext( ns ) // Take a read lock.
-        , _chunkMgr(shardingState.needShardChunkManager( ns )
-                    ? shardingState.getShardChunkManager( ns )
-                    : ShardChunkManagerPtr()) {
-        _readContext.ctx().beginTransaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-        _readContext.ctx().setReadOnly();
+            : _transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY)
+            , _context(ns)
+            , _chunkMgr(shardingState.needShardChunkManager( ns )
+                        ? shardingState.getShardChunkManager( ns )
+                        : ShardChunkManagerPtr()) {
     }
 
     DocumentSourceCursor::CursorWithContext::~CursorWithContext() {
-        _readContext.ctx().commitTransaction();
+        // Doesn't commit its transaction, will lead to inaccurate commit/abort counts but not a big deal since it's read-only.
+        // TODO: figure out if we were successful and commit in that case.
     }
 
     DocumentSourceCursor::~DocumentSourceCursor() {

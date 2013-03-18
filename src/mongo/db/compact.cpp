@@ -21,6 +21,7 @@
 #include "pch.h"
 
 #include "mongo/db/background.h"
+#include "mongo/db/client.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/curop.h"
@@ -57,18 +58,19 @@ namespace mongo {
 
         bool ok;
         {
-            Lock::DBWrite lk(ns);
+            Client::Transaction transaction(DB_SERIALIZABLE);
 
             //BackgroundOperation::assertNoBgOpInProgForNs(ns.c_str());
-            Client::Context ctx(ns);
-            ctx.beginTransaction();
+            Client::WriteContext ctx(ns);
             NamespaceDetails *d = nsdetails(ns.c_str());
             massert( 13660, str::stream() << "namespace " << ns << " does not exist", d );
             massert( 13661, "cannot compact capped collection", !d->isCapped() );
             log() << "compact " << ns << " begin" << endl;
             try { 
                 ok = _compact(ns.c_str(), d, errmsg, result);
-                ctx.commitTransaction();
+                if (ok) {
+                    transaction.commit();
+                }
             }
             catch(...) { 
                 log() << "compact " << ns << " end (with error)" << endl;

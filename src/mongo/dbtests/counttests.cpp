@@ -31,11 +31,10 @@
 namespace CountTests {
 
     class Base {
-        Lock::DBWrite lk;
-        Client::Context _context;
+        Client::Transaction _transaction;
+        Client::WriteContext _context;
     public:
-        Base() : lk(ns()), _context( ns() ) {
-            _context.beginTransaction();
+        Base() : _transaction(DB_SERIALIZABLE), _context(ns()) {
             addIndex( fromjson( "{\"a\":1}" ) );
         }
         ~Base() {
@@ -44,7 +43,7 @@ namespace CountTests {
                 for(; c->ok(); c->advance() ) {
                     deleteOneObject( nsdetails(ns()) , &NamespaceDetailsTransient::get(ns()), c->currPK(), c->current() );
                 }
-                _context.commitTransaction();
+                _transaction.commit();
                 DBDirectClient cl;
                 cl.dropIndexes( ns() );
             }

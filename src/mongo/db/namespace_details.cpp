@@ -152,14 +152,11 @@ namespace mongo {
 
         tokulog(1) << "Initializing NamespaceIndex " << database_ << endl;
         {
-            Client::Context *ctx = cc().getContext();
-            bool madeTxn = false;
-            if (!ctx->hasTransaction()) {
-                madeTxn = true;
-                ctx->beginTransaction();
-            }
+            scoped_ptr<Client::Transaction> txnp(cc().hasTxn()
+                                                 ? NULL
+                                                 : new Client::Transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY));
             DBC *cursor;
-            r = nsdb->cursor(nsdb, ctx->transaction().txn(), &cursor, 0);
+            r = nsdb->cursor(nsdb, cc().txn().db_txn(), &cursor, 0);
             verify(r == 0);
 
             while (r != DB_NOTFOUND) {
@@ -169,8 +166,8 @@ namespace mongo {
 
             r = cursor->c_close(cursor);
             verify(r == 0);
-            if (madeTxn) {
-                ctx->commitTransaction();
+            if (txnp.get()) {
+                txnp->commit(0);
             }
         }
 
@@ -210,7 +207,7 @@ namespace mongo {
         DBT ndbt;
         ndbt.data = const_cast<void *>(static_cast<const void *>(nsobj.objdata()));
         ndbt.size = nsobj.objsize();
-        int r = nsdb->del(nsdb, cc().getContext()->transaction().txn(), &ndbt, DB_DELETE_ANY);
+        int r = nsdb->del(nsdb, cc().txn().db_txn(), &ndbt, DB_DELETE_ANY);
         verify(r == 0);
 
         // Should really only do this after the commit of the del.
@@ -240,7 +237,7 @@ namespace mongo {
         ddbt.data = const_cast<void *>(static_cast<const void *>(serialized.objdata()));
         ddbt.size = serialized.objsize();
         const int flags = overwrite ? 0 : DB_NOOVERWRITE;
-        int r = nsdb->put(nsdb, cc().getContext()->transaction().txn(), &ndbt, &ddbt, flags);
+        int r = nsdb->put(nsdb, cc().txn().db_txn(), &ndbt, &ddbt, flags);
         verify(r == 0);
     }
 

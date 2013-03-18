@@ -76,8 +76,8 @@ namespace mongo {
                 long long n = 0;
                 {
                     string ns = idx["ns"].String();
-                    Client::WriteContext ctx( ns );
-                    ctx.ctx().beginTransaction();
+                    Client::Transaction transaction(DB_SERIALIZABLE);
+                    Client::WriteContext ctx(ns);
                     NamespaceDetails* nsd = nsdetails( ns.c_str() );
                     if ( ! nsd ) {
                         // collection was dropped
@@ -89,7 +89,7 @@ namespace mongo {
                     }
 
                     n = deleteObjects( ns.c_str() , query , false , true );
-                    ctx.ctx().commitTransaction();
+                    transaction.commit();
                 }
 
                 LOG(1) << "\tTTL deleted: " << n << endl;

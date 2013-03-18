@@ -99,8 +99,8 @@ namespace mongo {
                     bool touch_indexes, 
                     BSONObjBuilder& result ) {
 
+            Client::Transaction transaction(DB_READ_UNCOMMITTED | DB_TXN_READ_ONLY);
             Client::ReadContext ctx(ns);
-            ctx.ctx().beginTransaction(DB_READ_UNCOMMITTED | DB_TXN_READ_ONLY);
             NamespaceDetails *nsd = nsdetails(ns.c_str());
             if (!nsd) {
                 errmsg = "ns not found";
@@ -111,7 +111,7 @@ namespace mongo {
             if (touch_data) {
                 log() << " touching namespace " << ns << endl;
                 IndexDetails& idx = nsd->idx(id);
-                touchIndex(&idx);                
+                touchIndex(&idx);
             }
 
             if (touch_indexes) {
@@ -122,10 +122,10 @@ namespace mongo {
                 }
             }
 
-            ctx.ctx().commitTransaction();
+            transaction.commit();
             return true;
         }
-        
+
     };
     static TouchCmd touchCmd;
 }

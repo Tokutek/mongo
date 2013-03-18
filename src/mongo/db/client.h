@@ -25,6 +25,9 @@
 #pragma once
 
 #include "mongo/pch.h"
+
+#include <stack>
+
 #include "security.h"
 #include "namespace.h"
 #include "lasterror.h"
@@ -131,6 +134,66 @@ namespace mongo {
 
         LockState& lockState() { return _ls; }
 
+        /**
+         * A stack of transactions, with parent/child relationships.
+         */
+        class TransactionStack : boost::noncopyable {
+            // If we had emplace we wouldn't need a shared_ptr...
+            std::stack<shared_ptr<storage::Txn> > _txns;
+          public:
+            TransactionStack() {}
+            ~TransactionStack() {
+                while (hasLiveTxn()) {
+                    abortTxn();
+                }
+            }
+
+            /** Begin a new transaction as a child of the innermost, or as a new root. */
+            void beginTxn(int flags);
+            /** Commit the innermost transaction. */
+            void commitTxn(int flags);
+            /** Abort the innermost transaction. */
+            void abortTxn();
+
+            /** @return true iff this transaction stack has a live txn. */
+            bool hasLiveTxn() const;
+            /** @return the innermost transaction. */
+            const storage::Txn &txn() const;
+        };
+
+        /**
+         * A convenience object to create scoped transactions.
+         * Knows what txn it created in case the stack gets swapped out underneath.
+         */
+        class Transaction : boost::noncopyable {
+            const storage::Txn *_txn;
+          public:
+            explicit Transaction(int flags);
+            ~Transaction();
+            void commit(int flags = 0);
+            void abort();
+        };
+
+        bool hasTxn() const {
+            if (_transactions.get() == NULL) {
+                return false;
+            }
+            return _transactions->hasLiveTxn();
+        }
+
+        const storage::Txn &txn() const {
+            dassert(hasTxn());
+            return _transactions->txn();
+        }
+
+        /**
+         * Swap out the transaction stack to another location.
+         * This breaks the relationship with any Client::Transaction objects, which is useful for getMore() and one day multi-statement transactions.
+         */
+        void swapTransactionStack(shared_ptr<TransactionStack> &other) {
+            _transactions.swap(other);
+        }
+
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
         friend class CurOp;
@@ -138,6 +201,7 @@ namespace mongo {
         string _threadId; // "" on non support systems
         CurOp * _curOp;
         Context * _context;
+        shared_ptr<TransactionStack> _transactions;
         bool _shutdown; // to track if Client::shutdown() gets called
         std::string _desc;
         bool _god;
@@ -220,54 +284,6 @@ namespace mongo {
             /** call after going back into the lock, will re-establish non-thread safe stuff */
             void relocked() { _finishInit(); }
 
-            /**
-             * Wraps a DB_TXN in an exception-safe object.
-             * The destructor calls abort() unless it's already committed.
-             * The Context manages these (and parent-child relationships) through beginTransaction and commitTransaction and the stack of contexts.
-             */
-            class Transaction : boost::noncopyable {
-                DB_TXN *_txn;
-            public:
-                Transaction(const Transaction *parent, int flags);
-                ~Transaction();
-                void commit(int flags);
-                void abort();
-                DB_TXN *txn() const { return _txn; }
-            };
-
-            /** @return true iff there is a live transaction */
-            bool hasTransaction() const;
-            /** @return the current innermost transaction */
-            const Transaction &transaction() const;
-            /**
-             * @return true iff the current innermost transaction is also the outermost transaction
-             * error if there is no current transaction
-             */
-            bool transactionIsRoot() const;
-            /**
-             * Start a new transaction.
-             * If there is a transaction, the new one is a child of that.
-             * Flags are optional, 0 is the default (serializable isolation).
-             */
-            void beginTransaction(int flags = 0);
-            /**
-             * Commit this context's transaction.
-             * May not be used to commit a parent context's transaction.
-             * Flags are optional, 0 is the default (do the fsync).
-             */
-            void commitTransaction(int flags = 0);
-            /**
-             * Swap this context's transaction with another (usually NULL).
-             * Used by cursors to steal the context's transaction and keep it while the context gets destroyed, when waiting for a call to getMore().
-             * Also used by cursors to put back the transaction they stole.
-             * It is an error to swap a child away from its parent.
-             *  (If you did that, the parent would try to retire while the child is alive.)
-             */
-            void swapTransactions(shared_ptr<Transaction> &other);
-
-            bool isReadOnly() const;
-            void setReadOnly();
-
         private:
             friend class CurOp;
             void _finishInit( bool doauth=true);
@@ -282,10 +298,8 @@ namespace mongo {
             bool _doVersion;
             const string _ns;
             Database * _db;
-            shared_ptr<Transaction> _transaction;
             
             Timer _timer;
-            bool _isReadOnly;
         }; // class Client::Context
 
         class WriteContext : boost::noncopyable {

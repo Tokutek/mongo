@@ -192,29 +192,11 @@ namespace mongo {
         _justCreated(false),
         _doVersion( true ),
         _ns( ns ), 
-        _db(db),
-        _isReadOnly(false)
+        _db(db)
     {
         verify( db == 0 || db->isOk() );
         _client->_context = this;
         checkNsAccess( doauth );
-    }
-
-    bool Client::Context::isReadOnly() const {
-        // TODO: only trust the parent
-        if (!_isReadOnly && _oldContext) {
-            return _oldContext->isReadOnly();
-        } else {
-            return _isReadOnly;
-        }
-    }
-
-    void Client::Context::setReadOnly() {
-        if (_oldContext) {
-            // TODO: verify(_oldContext->isReadOnly());
-        } else {
-            _isReadOnly = true;
-        }
     }
 
     Client::Context::Context(const string& ns, string path , bool doauth, bool doVersion) :
@@ -224,22 +206,11 @@ namespace mongo {
         _justCreated(false), // set for real in finishInit
         _doVersion(doVersion),
         _ns( ns ), 
-        _db(0),
-        _isReadOnly(false)
+        _db(0)
     {
-        try {
-            _finishInit( doauth );
-        } catch (DBException &e) {
-            // We won't call the destructor in this case.
-            // For example, opening the DB might fail, we need to clean up.
-            _transaction.reset();
-            if (_client->_context == this) {
-                _client->_context = _oldContext;
-            }
-            throw;
-        }
+        _finishInit( doauth );
     }
-       
+
     /** "read lock, and set my context, all in one operation" 
      *  This handles (if not recursively locked) opening an unopened database.
      */
@@ -272,7 +243,7 @@ namespace mongo {
                 c.reset( new Context(ns, path, doauth) );
             }
             else { 
-                uasserted(15928, str::stream() << "can't open a database from a nested read lock " << ns);
+                uasserted(16456, str::stream() << "can't open a database from a nested read lock " << ns);
             }
         }
 
@@ -314,8 +285,7 @@ namespace mongo {
         _justCreated(false),
         _doVersion( true ),
         _ns( ns ), 
-        _db(db),
-        _isReadOnly(false)
+        _db(db)
     {
         verify(_db);
         checkNotStale();
@@ -331,13 +301,11 @@ namespace mongo {
             uassert(14031, "Can't take a write lock while out of disk space", false);
         }
         
-        // getOrCreate will try to open the database, for which we require a transaction.
-        // The storage layer relies on cc().getContext() to find the transaction, so we make a transaction and set the client's context before calling getOrCreate.
-        _client->_context = this;
         _db = dbHolderUnchecked().getOrCreate( _ns , _path , _justCreated );
         verify(_db);
         if( _doVersion ) checkNotStale();
         massert( 16107 , str::stream() << "Don't have a lock on: " << _ns , Lock::atLeastReadLocked( _ns ) );
+        _client->_context = this;
         _client->_curOp->enter( this );
         checkNsAccess( doauth, writeLocked ? 1 : 0 );
     }
