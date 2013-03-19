@@ -1385,73 +1385,7 @@ namespace mongo {
         }
     }
 
-    static void replMasterThread() {
-        sleepsecs(4);
-        Client::initThread("replmaster");
-        int toSleep = 10;
-        while( 1 ) {
-
-            sleepsecs( toSleep );
-            /* write a keep-alive like entry to the log.  this will make things like
-               printReplicationStatus() and printSlaveReplicationStatus() stay up-to-date
-               even when things are idle.
-            */
-            {
-                writelocktry lk(1);
-                if ( lk.got() ) {
-                    toSleep = 10;
-
-                    replLocalAuth();
-
-                    try {
-                        logKeepalive();
-                    }
-                    catch(...) {
-                        log() << "caught exception in replMasterThread()" << endl;
-                    }
-                }
-                else {
-                    log(5) << "couldn't logKeepalive" << endl;
-                    toSleep = 1;
-                }
-            }
-        }
-    }
-
-    void replSlaveThread() {
-        sleepsecs(1);
-        Client::initThread("replslave");
-        cc().iAmSyncThread();
-
-        {
-            Lock::GlobalWrite lk;
-            replLocalAuth();
-        }
-
-        while ( 1 ) {
-            try {
-                replMain();
-                sleepsecs(5);
-            }
-            catch ( AssertionException& ) {
-                ReplInfo r("Assertion in replSlaveThread(): sleeping 5 minutes before retry");
-                problem() << "Assertion in replSlaveThread(): sleeping 5 minutes before retry" << endl;
-                sleepsecs(300);
-            }
-            catch ( DBException& e ) {
-                problem() << "exception in replSlaveThread(): " << e.what()
-                          << ", sleeping 5 minutes before retry" << endl;
-                sleepsecs(300);
-            }
-            catch ( ... ) {
-                problem() << "error in replSlaveThread(): sleeping 5 minutes before retry" << endl;
-                sleepsecs(300);
-            }
-        }
-    }
-
     void newRepl();
-    void oldRepl();
     void startReplSets(ReplSetCmdline*);
     void startReplication() {
         /* if we are going to be a replica set, we aren't doing other forms of replication. */
@@ -1469,32 +1403,11 @@ namespace mongo {
 
             return;
         }
-
-        oldRepl();
-
-        if( !replSettings.slave && !replSettings.master )
+        // we should only be running with replica sets
+        // we do not support the old master/slave replication
+        else {
             return;
-
-        {
-            Lock::GlobalWrite lk;
-            replLocalAuth();
         }
-
-        if ( replSettings.slave ) {
-            verify( replSettings.slave == SimpleSlave );
-            log(1) << "slave=true" << endl;
-            boost::thread repl_thread(replSlaveThread);
-        }
-
-        if ( replSettings.master ) {
-            log(1) << "master=true" << endl;
-            replSettings.master = true;
-            createOplog();
-            boost::thread t(replMasterThread);
-        }
-
-        while( replSettings.fastsync ) // don't allow writes until we've set up from log
-            sleepmillis( 50 );
     }
 
     void testPretouch() {
