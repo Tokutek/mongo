@@ -33,7 +33,12 @@
 
 namespace mongo {
 
-    IndexDetails::IndexDetails(const BSONObj &info, bool may_create) : _info(info.getOwned()) {
+    IndexDetails::IndexDetails(const BSONObj &info, bool may_create) :
+        _info(info.copy()),
+        _keyPattern(info["key"].Obj().copy()),
+        _unique(info["unique"].trueValue()),
+        _clustering(info["clustering"].trueValue()) {
+
         string dbname = indexNamespace();
         tokulog(1) << "Opening IndexDetails " << dbname << endl;
         // Open the dictionary. Creates it if necessary.
@@ -113,29 +118,6 @@ namespace mongo {
         return NamespaceDetailsTransient::get_inlock( info()["ns"].valuestr() ).getIndexSpec( this );
     }
 
-    void IndexDetails::insert(const BSONObj &pk, const BSONObj &obj, bool overwrite) {
-        BSONObjSet keys;
-        getKeysFromObject(obj, keys);
-        if (keys.size() > 1) {
-            const char *ns = parentNS().c_str();
-            NamespaceDetails *d = nsdetails(ns);
-            const int idxNo = d->idxNo(*this);
-            dassert(idxNo >= 0);
-            d->setIndexIsMultikey(ns, idxNo);
-        }
-
-        verify(!pk.isEmpty());
-        for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-            if (isPKIndexHack()) {
-                insertPair(pk, NULL, obj, overwrite);
-            } else if (clustering()) {
-                insertPair(*ki, &pk, obj, overwrite);
-            } else {
-                insertPair(*ki, &pk, BSONObj(), overwrite);
-            }
-        }
-    }
-
     void IndexDetails::uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const {
         const BSONObj keyPattern(static_cast<char *>(_db->cmp_descriptor->dbt.data));
         const Ordering ordering = Ordering::make(keyPattern);
@@ -170,7 +152,7 @@ namespace mongo {
         return 0;
     }
 
-    void IndexDetails::uniqueCheck(const BSONObj &key) const {
+    void IndexDetails::uniqueCheck(const BSONObj &key, const BSONObj *pk) const {
         BSONObjIterator it(key);
         while (it.more()) {
             BSONElement id = it.next();
@@ -183,7 +165,7 @@ namespace mongo {
         const int c_flags = DB_SERIALIZABLE;
         DBC *cursor = newCursor(c_flags);
 
-        storage::Key skey(key, !isPKIndexHack() ? &minKey : NULL);
+        storage::Key skey(key, pk != NULL ? &minKey : NULL);
         DBT kdbt = skey.dbt();
 
         bool isUnique = true;
@@ -201,13 +183,14 @@ namespace mongo {
 
     void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite) {
         if (unique()) {
-            uniqueCheck(key);
+            uniqueCheck(key, pk);
         }
 
         storage::Key skey(key, pk);
         DBT kdbt = skey.dbt();
         DBT vdbt = storage::make_dbt(val.objdata(), val.objsize());
 
+        // TODO: We already did the unique check above. Can we just pass flags of 0?
         const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
         int r = _db->put(_db, cc().getContext()->transaction().txn(), &kdbt, &vdbt, flags);
         if (r != 0) {
@@ -215,22 +198,16 @@ namespace mongo {
         } else {
             tokulog(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
         }
-        verify(r == 0);
+        verify(r == 0); // TODO: Lock not granted, deadlock?
     }
 
-    void IndexDetails::deleteObject(const BSONObj &pk, const BSONObj &obj) {
-        BSONObjSet keys;
-        getKeysFromObject(obj, keys);
-        for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-            const bool isSecondary = !isPKIndexHack();
-            const BSONObj &key = isSecondary ? *ki : pk;
-            storage::Key skey(key, isSecondary ? &pk : NULL);
-            DBT kdbt = skey.dbt();
+    void IndexDetails::deletePair(const BSONObj &key, const BSONObj *pk, const BSONObj &obj) {
+        storage::Key skey(key, pk);
+        DBT kdbt = skey.dbt();
 
-            const int flags = DB_DELETE_ANY;
-            int r = _db->del(_db, cc().getContext()->transaction().txn(), &kdbt, flags);
-            verify(r == 0);
-        }
+        const int flags = DB_DELETE_ANY;
+        int r = _db->del(_db, cc().getContext()->transaction().txn(), &kdbt, flags);
+        verify(r == 0); // TODO: Lock not granted, deadlock?
     }
 
     // Get a new DB cursor over an index. Must already be in the context of a transction.

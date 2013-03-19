@@ -246,6 +246,7 @@ namespace mongo {
         NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit NamespaceDetails(const BSONObj &serialized);
 
+        void insertIntoOneIndex(const int i, const BSONObj &pk, const BSONObj &obj, bool overwrite);
         void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, bool overwrite);
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
 

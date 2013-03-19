@@ -522,6 +522,24 @@ namespace mongo {
         }
     }
 
+    // Temporarily factored out of insertIntoIndexes() for trickle-loaded index builds.
+    void NamespaceDetails::insertIntoOneIndex(const int i, const BSONObj &pk, const BSONObj &obj, bool overwrite) {
+        IndexDetails &idx = *_indexes[i];
+        if (i == 0) {
+            dassert(isPKIndex(idx));
+            idx.insertPair(pk, NULL, obj, overwrite);
+        } else {
+            BSONObjSet keys;
+            idx.getKeysFromObject(obj, keys);
+            if (keys.size() > 1) {
+                setIndexIsMultikey(_ns.c_str(), i);
+            }
+            for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
+                idx.insertPair(*ki, &pk, obj, overwrite);
+            }
+        }
+    }
+
     void NamespaceDetails::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, bool overwrite) {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
@@ -529,22 +547,32 @@ namespace mongo {
             wunimplemented("overwrite inserts on secondary keys right now don't work");
             //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
         }
-        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-            IndexDetails *index = it->get();
-            index->insert(pk, obj, overwrite);
+        for (int i = 0; i < nIndexes(); i++) {
+            insertIntoOneIndex(i, pk, obj, overwrite);
         }
     }
 
     void NamespaceDetails::deleteFromIndexes(const BSONObj &pk, const BSONObj &obj) {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
-        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-            IndexDetails *index = it->get();
-            index->deleteObject(pk, obj);
+        for (int i = 0; i < nIndexes(); i++) {
+            IndexDetails &idx = *_indexes[i];
+
+            if (i == 0) {
+                idx.deletePair(pk, NULL, obj);
+            } else {
+                BSONObjSet keys;
+                idx.getKeysFromObject(obj, keys);
+                dassert((keys.size() > 1) == isMultikey(i));
+                for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
+                    idx.deletePair(*ki, &pk, obj);
+                }
+            }
         }
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
+        dassert(string(thisns) == _ns);
         dassert(i < NIndexesMax);
         unsigned long long x = ((unsigned long long) 1) << i;
         if (_multiKeyIndexBits & x) {
@@ -580,11 +608,12 @@ namespace mongo {
         try {
             string thisns(index->parentNS());
             uint64_t iter = 0;
+            const int i = idxNo(*index);
             for (shared_ptr<Cursor> cursor(Helpers::findTableScan(thisns.c_str(), BSONObj())); cursor->ok(); cursor->advance(), iter++) {
                 if (iter % 1000 == 0) {
                     killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
                 }
-                index->insert(cursor->currPK(), cursor->current(), false);
+                insertIntoOneIndex(i, cursor->currPK(), cursor->current(), false);
             }
         } catch (DBException &e) {
             _indexes.pop_back();
