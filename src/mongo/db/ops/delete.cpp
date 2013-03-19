@@ -71,8 +71,7 @@ namespace mongo {
                 if( obj.getObjectID( e ) ) {
                     BSONObjBuilder b;
                     b.append( e );
-                    bool replJustOne = true;
-                    logOp( "d", ns, b.done(), 0, &replJustOne );
+                    logOp( "d", ns, b.done(), 0);
                 }
                 else {
                     problem() << "deleted object without id, not logging" << endl;

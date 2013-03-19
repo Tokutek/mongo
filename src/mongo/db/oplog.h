@@ -47,16 +47,12 @@ namespace mongo {
 
        See _logOp() in oplog.cpp for more details.
     */
-    void logOp( const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt = 0, bool *b = 0, bool fromMigrate = false );
-
-    void logKeepalive();
+    void logOp( const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt = 0, bool fromMigrate = false );
 
     /** puts obj in the oplog as a comment (a no-op).  Just for diags.
         convention is
           { msg : "text", ... }
     */
-    void logOpComment(const BSONObj& obj);
-
     void oplogCheckCloseDatabase( Database * db );
 
     extern int __findingStartInitialTimeout; // configurable for testing

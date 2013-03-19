@@ -307,7 +307,7 @@ namespace mongo {
                 // this is so that we don't have to handle this cursor in the delete code
                 c.reset(0);
                 
-                logOp( "d" , ns.c_str() , obj["_id"].wrap() , 0 , 0 , fromMigrate );
+                logOp( "d" , ns.c_str() , obj["_id"].wrap() , 0 , fromMigrate );
                 deleteOneObject( d, nsdt, pk, obj);
                 numDeleted++;
             }
