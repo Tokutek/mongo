@@ -278,15 +278,16 @@ namespace mongo {
 
         void get_status(BSONObjBuilder &status) {
             uint64_t num_rows;
+	    uint64_t max_rows;
             uint64_t panic;
             size_t panic_string_len = 128;
             char panic_string[panic_string_len];
             fs_redzone_state redzone_state;
 
-            int r = storage::env->get_engine_status_num_rows(storage::env, &num_rows);
+            int r = storage::env->get_engine_status_num_rows(storage::env, &max_rows);
             verify( r == 0 );
             TOKU_ENGINE_STATUS_ROW_S mystat[num_rows];
-            r = env->get_engine_status(env, mystat, num_rows, &redzone_state, &panic, panic_string, panic_string_len);
+            r = env->get_engine_status(env, mystat, max_rows, &num_rows, &redzone_state, &panic, panic_string, panic_string_len, TOKU_ENGINE_STATUS);
             verify( r == 0 );
             status.append( "panic code", (long long) panic );
             status.append( "panic string", panic_string );
