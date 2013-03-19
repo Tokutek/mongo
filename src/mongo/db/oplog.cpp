@@ -240,84 +240,33 @@ namespace mongo {
 
     void createOplog() {
         Lock::GlobalWrite lk;
-
-        const char * ns = "local.oplog.$main";
-
         bool rs = !cmdLine._replSet.empty();
-        if( rs ) {
-            ns = rsoplog;
-        }
+        verify(rs);
+        
+        const char * ns = rsoplog;
         Client::Context ctx(ns);
 
         NamespaceDetails * nsd = nsdetails( ns );
-
         if ( nsd ) {
-
             if ( cmdLine.oplogSize != 0 ) {
-                // TODO: Make sure we do this check if it's really necessary
-#if 0
-                int o = (int)(nsd->storageSize() / ( 1024 * 1024 ) );
-                int n = (int)(cmdLine.oplogSize / ( 1024 * 1024 ) );
-                if ( n != o ) {
-                    stringstream ss;
-                    ss << "cmdline oplogsize (" << n << ") different than existing (" << o << ") see: http://dochub.mongodb.org/core/increase-oplog";
-                    log() << ss.str() << endl;
-                    throw UserException( 13257 , ss.str() );
-                }
-#endif
-            }
-
-            if( rs ) return;
-
-            DBDirectClient c;
-            BSONObj lastOp = c.findOne( ns, Query().sort(reverseNaturalObj) );
-            if ( !lastOp.isEmpty() ) {
-                OpTime::setLast( lastOp[ "ts" ].date() );
+                // TODO: (Zardosht), figure out if there are any checks to do here
+                // not sure under what scenarios we can be here, so
+                // making a printf to catch this so we can investigate
+                tokulog() << "createOplog called with existing opLog, investigate why.\n" << endl;
             }
             return;
         }
 
         /* create an oplog collection, if it doesn't yet exist. */
         BSONObjBuilder b;
-        double sz;
-        if ( cmdLine.oplogSize != 0 )
-            sz = (double)cmdLine.oplogSize;
-        else {
-            /* not specified. pick a default size */
-            sz = 50.0 * 1000 * 1000;
-            if ( sizeof(int *) >= 8 ) {
-#if defined(__APPLE__)
-                // typically these are desktops (dev machines), so keep it smallish
-                sz = (256-64) * 1000 * 1000;
-#else
-                sz = 990.0 * 1000 * 1000;
-                boost::intmax_t free = File::freeSpace(dbpath); //-1 if call not supported.
-                double fivePct = free * 0.05;
-                if ( fivePct > sz )
-                    sz = fivePct;
-#endif
-            }
-        }
 
         log() << "******" << endl;
-        log() << "creating replication oplog of size: " << (int)( sz / ( 1024 * 1024 ) ) << "MB..." << endl;
-
-        b.append("size", sz);
-        b.appendBool("capped", 1);
-        b.appendBool("autoIndexId", false);
-
-        ::abort();
-#if 0
+        log() << "creating replication oplog." << endl;
+        log() << "TODO: FIGURE OUT SIZE!!!." << endl;
+        // create the namespace
         string err;
         BSONObj o = b.done();
         userCreateNS(ns, o, err, false);
-        if( !rs )
-            logOp( "n", "", BSONObj() );
-#endif
-
-        /* sync here so we don't get any surprising lag later when we try to sync */
-        // TODO: TokuDB - checkpoint?
-        //MemoryMappedFile::flushAll(true);
         log() << "******" << endl;
     }
 
