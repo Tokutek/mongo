@@ -50,7 +50,7 @@ namespace mongo {
         resetSlaveCache();
     }
 
-    static void _logOpUninitialized(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) {
+    static void _logOpUninitialized(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool fromMigrate ) {
         uassert(13288, "replSet error write op to db before replSet initialized", str::startsWith(ns, "local.") || *opstr == 'n');
     }
 
@@ -131,7 +131,7 @@ namespace mongo {
     // the compiler would use if inside the function.  the reason this is static is to avoid a malloc/free for this
     // on every logop call.
     static BufBuilder logopbufbuilder(8*1024);
-    static void _logOpRS(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) {
+    static void _logOpRS(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool fromMigrate ) {
         Lock::DBWrite lk1("local");
 
         if ( strncmp(ns, "local.", 6) == 0 ) {
@@ -166,8 +166,6 @@ namespace mongo {
         b.append("ns", ns);
         if (fromMigrate) 
             b.appendBool("fromMigrate", true);
-        if ( bb )
-            b.appendBool("b", *bb);
         if ( o2 )
             b.append("o2", *o2);
         ::abort();
@@ -211,7 +209,7 @@ namespace mongo {
 #endif
     }    
 
-    static void (*_logOp)(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) = _logOpUninitialized;
+    static void (*_logOp)(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool fromMigrate ) = _logOpUninitialized;
     void newReplUp() {
         replSettings.master = true;
         _logOp = _logOpRS;
@@ -222,7 +220,7 @@ namespace mongo {
     }
 
     void logOpInitiate(const BSONObj& obj) {
-        _logOpRS("n", "", 0, obj, 0, 0, false);
+        _logOpRS("n", "", 0, obj, 0, false);
     }
 
     /*@ @param opstr:
@@ -234,7 +232,7 @@ namespace mongo {
     */
     void logOp(const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt, bool fromMigrate) {
         if ( replSettings.master ) {
-            _logOp(opstr, ns, 0, obj, patt, b, fromMigrate);
+            _logOp(opstr, ns, 0, obj, patt, fromMigrate);
         }
 
         logOpForSharding( opstr , ns , obj , patt );
