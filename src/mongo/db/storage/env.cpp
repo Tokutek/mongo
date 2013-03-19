@@ -190,8 +190,6 @@ namespace mongo {
         }
 
         int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create) {
-            Client::Context *ctx = cc().getContext();
-
             // TODO: Refactor this option setting code to someplace else. It's here because
             // the YDB api doesn't allow a db->close to be called before db->open, and we
             // would leak memory if we chose to do nothing. So we validate all the
@@ -243,11 +241,10 @@ namespace mongo {
             verify(r == 0);
 
             const int db_flags = may_create ? DB_CREATE : 0;
+            DB_TXN *txn = NULL;
             if (may_create) {
-                verify(ctx->hasTransaction());
-                verify(ctx->transactionIsRoot());
+                txn = cc().txn().db_txn();
             }
-            DB_TXN *txn = ctx->hasTransaction() ? ctx->transaction().txn() : NULL;
             r = db->open(db, txn, name.c_str(), NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
             if (r == ENOENT) {
                 verify(!may_create);
@@ -267,9 +264,7 @@ namespace mongo {
         }
 
         void db_remove(const string &name) {
-            Client::Context *ctx = cc().getContext();
-            verify(ctx->transactionIsRoot());
-            int r = env->dbremove(env, ctx->transaction().txn(), name.c_str(), NULL, 0);
+            int r = env->dbremove(env, cc().txn().db_txn(), name.c_str(), NULL, 0);
             if (r == ENOENT) {
                 uasserted(16444, "TODO: dbremove bug, should crash but won't right now");
             }
@@ -278,15 +273,16 @@ namespace mongo {
 
         void get_status(BSONObjBuilder &status) {
             uint64_t num_rows;
+	    uint64_t max_rows;
             uint64_t panic;
             size_t panic_string_len = 128;
             char panic_string[panic_string_len];
             fs_redzone_state redzone_state;
 
-            int r = storage::env->get_engine_status_num_rows(storage::env, &num_rows);
+            int r = storage::env->get_engine_status_num_rows(storage::env, &max_rows);
             verify( r == 0 );
             TOKU_ENGINE_STATUS_ROW_S mystat[num_rows];
-            r = env->get_engine_status(env, mystat, num_rows, &redzone_state, &panic, panic_string, panic_string_len);
+            r = env->get_engine_status(env, mystat, max_rows, &num_rows, &redzone_state, &panic, panic_string, panic_string_len, TOKU_ENGINE_STATUS);
             verify( r == 0 );
             status.append( "panic code", (long long) panic );
             status.append( "panic string", panic_string );

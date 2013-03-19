@@ -192,7 +192,7 @@ namespace mongo {
 
         // TODO: We already did the unique check above. Can we just pass flags of 0?
         const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
-        int r = _db->put(_db, cc().getContext()->transaction().txn(), &kdbt, &vdbt, flags);
+        int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, flags);
         if (r != 0) {
             tokulog() << "error inserting " << key << ", " << val << endl;
         } else {
@@ -206,15 +206,16 @@ namespace mongo {
         DBT kdbt = skey.dbt();
 
         const int flags = DB_DELETE_ANY;
-        int r = _db->del(_db, cc().getContext()->transaction().txn(), &kdbt, flags);
+        int r = _db->del(_db, cc().txn().db_txn(), &kdbt, flags);
         verify(r == 0); // TODO: Lock not granted, deadlock?
     }
 
     // Get a new DB cursor over an index. Must already be in the context of a transction.
     DBC *IndexDetails::newCursor(int flags) const {
+        DB_TXN *txn = cc().txn().db_txn();
+        DEV { LOG(3) << "new cursor txn " << txn << " flags " << flags << endl; }
         DBC *cursor;
-        const Client::Context::Transaction &txn = cc().getContext()->transaction();
-        int r = _db->cursor(_db, txn.txn(), &cursor, flags);
+        int r = _db->cursor(_db, txn, &cursor, flags);
         verify(r == 0);
         return cursor;
     }

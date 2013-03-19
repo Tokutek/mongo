@@ -101,11 +101,9 @@ namespace mongo {
             // check for spoofing of the ns such that it does not match the one originally there for the cursor
             uassert(14833, "auth error", str::equals(ns, client_cursor->ns().c_str()));
 
-            // check that we properly set the transaction when the cursor was originally saved, and restore it into the current context
-            Client::Context *ctx = cc().getContext();
-            verify(client_cursor->transaction.get() != NULL);
-            ctx->swapTransactions(client_cursor->transaction);
-            ctx->setReadOnly();
+            // check that we properly set the transactions when the cursor was originally saved, and restore it into the current client
+            verify(client_cursor->transactions.get() != NULL);
+            cc().swapTransactionStack(client_cursor->transactions);
 
             if ( pass == 0 )
                 client_cursor->updateSlaveLocation( curop );
@@ -137,8 +135,17 @@ namespace mongo {
                         break;
                     }
                     p.release();
+
+                    // Done with this cursor, steal transaction stack back to commit or abort it here.
+                    shared_ptr<Client::TransactionStack> txns;
+                    cc().swapTransactionStack(txns);
                     bool ok = ClientCursor::erase(cursorid);
                     verify(ok);
+                    if (ok) {
+                        while (txns->hasLiveTxn()) {
+                            txns->commitTxn(0);
+                        }
+                    }
                     cursorid = 0;
                     client_cursor = 0;
                     break;
@@ -180,7 +187,7 @@ namespace mongo {
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
 
                 // The cursor is still live. Give back the transaction.
-                ctx->swapTransactions(client_cursor->transaction);
+                cc().swapTransactionStack(client_cursor->transactions);
             }
         }
 
@@ -618,6 +625,7 @@ namespace mongo {
                                     const shared_ptr<ParsedQuery> &pq_shared,
                                     const ConfigVersion &shardingVersionAtStart,
                                     const bool getCachedExplainPlan,
+                                    Client::Transaction &txn,
                                     Message &result ) {
 
         const ParsedQuery &pq( *pq_shared );
@@ -708,7 +716,6 @@ namespace mongo {
 
         ccPointer.reset();
         long long cursorid = 0;
-        Client::Context *ctx = cc().getContext();
         if ( saveClientCursor ) {
             // Create a new ClientCursor, with a default timeout.
             ccPointer.reset( new ClientCursor( queryOptions, cursor, ns,
@@ -736,15 +743,13 @@ namespace mongo {
             ccPointer->fields = pq.getFieldPtr();
             // Clones the transaction and hand's off responsibility
             // of its completion to the client cursor's destructor.
-            verify(ctx->transactionIsRoot());
-            verify(ccPointer->transaction.get() == NULL);
-            ctx->swapTransactions(ccPointer->transaction);
+            cc().swapTransactionStack(ccPointer->transactions);
             ccPointer.release();
         } else {
             // Not saving the cursor, so we can commit its transaction now.
-            ctx->commitTransaction();
+            txn.commit();
         }
-        
+
         QueryResult *qr = (QueryResult *) result.header();
         qr->cursorId = cursorid;
         curop.debug().cursorid = ( cursorid == 0 ? -1 : qr->cursorId );
@@ -754,7 +759,7 @@ namespace mongo {
         qr->setOperation(opReply);
         qr->startingFrom = 0;
         qr->nReturned = nReturned;
-        
+
         int duration = curop.elapsedMillis();
         bool dbprofile = curop.shouldDBProfile( duration );
         if ( dbprofile || duration >= cmdLine.slowMS ) {
@@ -770,21 +775,25 @@ namespace mongo {
         int n = 0;
         auto_ptr< QueryResult > qr;
         BSONObj resObject;
-        
-        Client::ReadContext ctx(ns, dbpath, true); // read locks
-        ctx.ctx().beginTransaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-        ctx.ctx().setReadOnly();
-        replVerifyReadsOk(&pq);
-        
-        NamespaceDetails *d = nsdetails(ns);
-        if (d != NULL && !d->hasIdIndex()) {
-            // we have to resort to a table-scan
-            return false;
+
+        bool found;
+        {
+            Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+            Client::ReadContext ctx(ns);
+            replVerifyReadsOk(&pq);
+
+            NamespaceDetails *d = nsdetails(ns);
+            if (d != NULL && !d->hasIdIndex()) {
+                // we have to resort to a table-scan
+                return false;
+            }
+
+            found = d->findById( query, resObject );
+            if (found) {
+                transaction.commit();
+            }
         }
 
-        bool found = d->findById( query, resObject );
-        ctx.ctx().commitTransaction();
-        
         if ( shardingState.needShardChunkManager( ns ) ) {
             ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
             if ( m && ! m->belongsToMe( resObject ) ) {
@@ -795,31 +804,31 @@ namespace mongo {
                 found = false;
             }
         }
-        
+
         BufBuilder bb(sizeof(QueryResult)+resObject.objsize()+32);
         bb.skip(sizeof(QueryResult));
-        
+
         curop.debug().idhack = true;
         if ( found ) {
             n = 1;
             fillQueryResultFromObj( bb , pq.getFields() , resObject );
         }
-        
+
         qr.reset( (QueryResult *) bb.buf() );
         bb.decouple();
         qr->setResultFlagsToOk();
         qr->len = bb.len();
-        
+
         curop.debug().responseLength = bb.len();
         qr->setOperation(opReply);
         qr->cursorId = 0;
         qr->startingFrom = 0;
         qr->nReturned = n;
-        
+
         result.setData( qr.release(), true );
         return true;
     }
-    
+
     /**
      * Run a query -- includes checking for and running a Command.
      * @return points to ns if exhaust mode. 0=normal mode
@@ -922,9 +931,8 @@ namespace mongo {
                 // Otherwise we default to a snapshot.
                 // XXX: TODO Read committed doesn't do what I want it to, so use an
                 // "incorrect" but mostly working UNCOMMITTED isolation.
-                Client::ReadContext ctx(ns , dbpath, true); // read locks
-                ctx.ctx().beginTransaction((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY);
-                ctx.ctx().setReadOnly();
+                Client::Transaction transaction((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY);
+                Client::ReadContext ctx(ns);
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
                 
                 replVerifyReadsOk(&pq);
@@ -947,7 +955,7 @@ namespace mongo {
                 // This will commit the transaction we created above if necessary.
                 return queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query, order,
                                                 pq_shared, shardingVersionAtStart, getCachedExplainPlan,
-                                                result );
+                                                transaction, result );
                     
             }
             catch ( const QueryRetryException & ) {

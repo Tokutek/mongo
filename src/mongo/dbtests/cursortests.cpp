@@ -71,8 +71,8 @@ namespace CursorTests {
                 }
                 int v[] = { 1, 2, 4, 6 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 4 ) );
-                Client::WriteContext ctx( ns );
-                ctx.ctx().beginTransaction();
+                Client::Transaction transaction(DB_SERIALIZABLE);
+                Client::WriteContext tc(ns);
                 {
                     scoped_ptr<IndexCursor> _c( new IndexCursor( nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, 1 ) );
                     IndexCursor &c = *_c.get();
@@ -85,7 +85,7 @@ namespace CursorTests {
                     }
                     ASSERT( !c.ok() );
                 }
-                ctx.ctx().commitTransaction();
+                transaction.commit();
             }
         };
 
@@ -103,8 +103,8 @@ namespace CursorTests {
                 }
                 int v[] = { -50, 2, 40, 60, 109, 200 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 6 ) );
-                Client::WriteContext ctx( ns );
-                ctx.ctx().beginTransaction();
+                Client::Transaction transaction(DB_SERIALIZABLE);
+                Client::WriteContext tc(ns);
                 {
                     scoped_ptr<IndexCursor> _c( new IndexCursor(nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, 1 ) );
                     IndexCursor &c = *_c.get();
@@ -117,7 +117,7 @@ namespace CursorTests {
                     }
                     ASSERT( !c.ok() );
                 }
-                ctx.ctx().commitTransaction();
+                transaction.commit();
             }
         };
 
@@ -133,8 +133,8 @@ namespace CursorTests {
                 }
                 int v[] = { 1, 2, 4, 6 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 4, -1 ) );
+                Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns );
-                ctx.ctx().beginTransaction();
                 {
                     scoped_ptr<IndexCursor> _c( new IndexCursor( nsdetails( ns ), &nsdetails( ns )->idx(1), frv, 0, -1 ) );
                     IndexCursor& c = *_c.get();
@@ -147,7 +147,7 @@ namespace CursorTests {
                     }
                     ASSERT( !c.ok() );
                 }
-                ctx.ctx().commitTransaction();
+                transaction.commit();
             }
         };
 
@@ -170,8 +170,8 @@ namespace CursorTests {
                     _c.ensureIndex( ns(), idx() );
                 }
 
+                Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns() );
-                ctx.ctx().beginTransaction();
                 FieldRangeSet frs( ns(), spec, true, true );
                 // orphan spec for this test.
                 IndexSpec *idxSpec = new IndexSpec( idx() );
@@ -196,7 +196,7 @@ namespace CursorTests {
                     }
                     ASSERT_EQUALS( expectedCount, count );
                 }
-                ctx.ctx().commitTransaction();
+                transaction.commit();
             }
         private:
             vector< BSONObj > _objs;
@@ -290,8 +290,8 @@ namespace CursorTests {
                 }
                 FieldRangeSet frs( ns(), BSON( "b" << 3 ), true, true );
                 boost::shared_ptr<FieldRangeVector> frv( new FieldRangeVector( frs, idx, 1 ) );
+                Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns() );
-                ctx.ctx().beginTransaction();
                 {
                     scoped_ptr<IndexCursor> c( new IndexCursor( nsdetails( ns() ), &nsdetails( ns() )->idx(1), frv, 0, 1 ) );
                     long long initialNscanned = c->nscanned();
@@ -302,7 +302,7 @@ namespace CursorTests {
                     ASSERT( c->nscanned() < 200 );
                     ASSERT( c->ok() );
                 }
-                ctx.ctx().commitTransaction();
+                transaction.commit();
             }
         };
 
@@ -320,18 +320,19 @@ namespace CursorTests {
             class Base {
             public:
                 Base() :
+                    _transaction(DB_SERIALIZABLE),
                     _ctx( ns() ),
                     _cursor( Helpers::findTableScan( ns(), BSONObj() ) ) {
-                        _ctx.ctx().beginTransaction();
                         ASSERT( _cursor );
                         _clientCursor.reset( new ClientCursor( 0, _cursor, ns() ) );
                 }
                 ~Base() {
-                    _ctx.ctx().commitTransaction();
+                    _transaction.commit();
                 }
             protected:
                 CursorId cursorid() const { return _clientCursor->cursorid(); }
             private:
+                Client::Transaction _transaction;
                 Client::WriteContext _ctx;
                 boost::shared_ptr<Cursor> _cursor;
                 ClientCursor::Holder _clientCursor;

@@ -732,6 +732,7 @@ namespace mongo {
     class CmdCount : public Command {
     public:
         virtual LockType locktype() const { return READ; }
+        virtual int txnFlags() const { return DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY; }
         CmdCount() : Command("count") { }
         virtual bool logTheOp() { return false; }
         virtual bool slaveOk() const {
@@ -1868,6 +1869,10 @@ namespace mongo {
         }
 
         bool retval = false;
+        scoped_ptr<Client::Transaction> transaction;
+        if (c->needsTxn()) {
+            transaction.reset(new Client::Transaction(c->txnFlags()));
+        }
         if ( c->locktype() == Command::NONE ) {
             verify( !c->lockGlobally() );
 
@@ -1897,15 +1902,9 @@ namespace mongo {
 
             // Read contexts use a snapshot transaction and are marked as read only.
             Client::ReadContext ctx( ns , dbpath, c->requiresAuth() ); // read locks
-            // TODO: figure out if we should pass DB_TXN_READ_ONLY here
-            ctx.ctx().beginTransaction(DB_TXN_SNAPSHOT);
-            ctx.ctx().setReadOnly();
 
             client.curop()->ensureStarted();
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
-            if (retval) {
-                ctx.ctx().commitTransaction();
-            }
         }
         else {
             dassert( c->locktype() == Command::WRITE );
@@ -1923,19 +1922,19 @@ namespace mongo {
                                              static_cast<Lock::ScopedLock*>( new Lock::GlobalWrite() ) :
                                              static_cast<Lock::ScopedLock*>( new Lock::DBWrite( dbname ) ) );
             client.curop()->ensureStarted();
-            Client::Context ctx( dbname , dbpath , c->requiresAuth() );
-            ctx.beginTransaction();
+            Client::Context tc(dbname, dbpath, c->requiresAuth());
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
             if ( retval && c->logTheOp() && ! fromRepl ) {
                 logOp("c", cmdns, cmdObj);
-            }
-            if (retval) {
-                ctx.commitTransaction();
             }
         }
 
         if (c->maintenanceMode() && theReplSet) {
             theReplSet->setMaintenanceMode(false);
+        }
+
+        if (retval) {
+            transaction->commit();
         }
 
         return retval;

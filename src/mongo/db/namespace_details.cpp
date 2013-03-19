@@ -196,7 +196,7 @@ namespace mongo {
         }
 
         void createIndex(const BSONObj &info, bool resetTransient) {
-            massert(16457, "bug: system collections should not be indexed.", false);
+            massert(16459, "bug: system collections should not be indexed.", false);
         }
 
     private:
@@ -321,7 +321,7 @@ namespace mongo {
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
-            massert(16458, "bug: cannot remove from a capped collection, "
+            massert(16460, "bug: cannot remove from a capped collection, "
                     " should have been enforced higher in the stack", false);
         }
 

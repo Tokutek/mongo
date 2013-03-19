@@ -25,7 +25,7 @@ BUILD_DIR=$PWD
 echo "Checking out MongoDB"
 git clone git@github.com:Tokutek/mongo.git
 pushd mongo
-    git checkout branch
+    git checkout $branch
     mkdir data
 popd
 
@@ -39,7 +39,7 @@ svn co -q https://svn.tokutek.com/tokudb/xz-4.999.9beta
 mkdir tokudb/dbg
 pushd tokudb/dbg
   CC=gcc47 CXX=g++47 cmake \
-      -D CMAKE_INSTALL_PREFIX=$TOKUDB_PATH \
+      -D CMAKE_INSTALL_PREFIX=$BUILD_DIR/mongo/src/third_party/tokudb \
       -D CMAKE_BUILD_TYPE=Debug \
       -D BUILD_TESTING=OFF \
       -D USE_BDB=OFF \

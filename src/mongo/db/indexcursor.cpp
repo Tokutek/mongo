@@ -180,7 +180,7 @@ namespace mongo {
         _numWanted(numWanted),
         _cursor(NULL),
         _tailable(false),
-        _readOnly(cc().getContext()->isReadOnly()),
+        _readOnly(cc().txn().isReadOnly()),
         _getf_iteration(0)
     {
         tokulog(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
@@ -202,7 +202,7 @@ namespace mongo {
         _numWanted(numWanted),
         _cursor(NULL),
         _tailable(false),
-        _readOnly(cc().getContext()->isReadOnly()),
+        _readOnly(cc().txn().isReadOnly()),
         _getf_iteration(0)
     {
         tokulog(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
@@ -325,7 +325,9 @@ namespace mongo {
         } else {
             r = _cursor->c_getf_set_range_reverse(_cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         }
-        verify(r == 0 || r == DB_NOTFOUND);
+        verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
+        uassert(16457, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
+        uassert(16458, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
         _getf_iteration++;
         _currKey = extra.rows_fetched > 0 ? _buffer.currentKey() : BSONObj();
         _currPK = extra.rows_fetched > 0 ? _buffer.currentPK() : BSONObj();

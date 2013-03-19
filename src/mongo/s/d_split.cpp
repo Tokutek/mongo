@@ -58,7 +58,7 @@ namespace mongo {
     public:
         CheckShardingIndex() : Command( "checkShardingIndex" , false ) {}
         virtual bool slaveOk() const { return false; }
-        virtual LockType locktype() const { return NONE; }
+        virtual LockType locktype() const { return READ; }
         virtual void help( stringstream &help ) const {
             help << "Internal command.\n";
         }
@@ -85,8 +85,6 @@ namespace mongo {
                 return false;
             }
 
-            Client::ReadContext ctx( ns );
-            ctx.ctx().beginTransaction();
             NamespaceDetails *d = nsdetails( ns );
             if ( ! d ) {
                 errmsg = "ns not found";
@@ -114,7 +112,6 @@ namespace mongo {
             auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
             if ( ! cc->ok() ) {
                 // range is empty
-                ctx.ctx().commitTransaction();
                 return true;
             }
 
@@ -167,7 +164,6 @@ namespace mongo {
 #endif
             }
 
-            ctx.ctx().commitTransaction();
             return true;
         }
     } cmdCheckShardingIndex;

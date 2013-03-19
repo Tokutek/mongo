@@ -41,11 +41,11 @@ namespace mongo {
 namespace QueryTests {
 
     class Base {
+        Client::Transaction _transaction;
         Lock::GlobalWrite lk;
         Client::Context _context;
     public:
-        Base() : _context( ns() ) {
-            _context.beginTransaction();
+        Base() : _transaction(DB_SERIALIZABLE), _context( ns() ) {
             addIndex( fromjson( "{\"a\":1}" ) );
         }
         ~Base() {
@@ -54,7 +54,7 @@ namespace QueryTests {
                 for(; c->ok(); c->advance() ) {
                     deleteOneObject( nsdetails(ns()), &NamespaceDetailsTransient::get(ns()), c->currPK(), c->current() );
                 }
-                _context.commitTransaction();
+                _transaction.commit();
                 DBDirectClient cl;
                 cl.dropIndexes( ns() );
             }
@@ -1016,6 +1016,7 @@ namespace QueryTests {
         }
 
         void run() {
+            Client::Transaction transaction(DB_SERIALIZABLE);
             Client::WriteContext ctx( "unittests" );
 
             for ( int i=0; i<50; i++ ) {
@@ -1023,8 +1024,6 @@ namespace QueryTests {
             }
 
             ASSERT_EQUALS( 50 , count() );
-
-            ctx.ctx().beginTransaction();
 
             BSONObj res;
             ASSERT( Helpers::findOne( ns() , BSON( "_id" << 20 ) , res , true ) );
@@ -1055,7 +1054,7 @@ namespace QueryTests {
             }
 
             cout << "HelperTest  slow:" << slow << " fast:" << fast << endl;
-            ctx.ctx().commitTransaction();
+            transaction.commit();
         }
     };
 
@@ -1066,6 +1065,7 @@ namespace QueryTests {
         }
 
         void run() {
+            Client::Transaction transaction(DB_SERIALIZABLE);
             Client::WriteContext ctx( "unittests" );
 
             for ( int i=0; i<1000; i++ ) {
@@ -1075,13 +1075,12 @@ namespace QueryTests {
                 client_.remove( ns() , BSON( "_id" << i ) );
             }
 
-            ctx.ctx().beginTransaction();
             BSONObj res;
             for ( int i=0; i<1000; i++ ) {
                 bool found = Helpers::findById( ns() , BSON( "_id" << i ) , res );
                 ASSERT_EQUALS( i % 2 , int(found) );
             }
-            ctx.ctx().commitTransaction();
+            transaction.commit();
         }
     };
 

@@ -18,6 +18,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/bson/util/builder.h"
+#include "mongo/db/client.h"
 #include "mongo/db/cloner.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/commands.h"
@@ -686,12 +687,8 @@ namespace mongo {
                 }
                 c.setConnection( authConn_.release() );
             }
-            Client::Context ctx(todb);
-            ctx.beginTransaction();
+            Client::Context tc(todb);
             bool res = c.go(fromhost.c_str(), errmsg, fromdb, /*logForReplication=*/!fromRepl, slaveOk, /*replauth*/false, /*snapshot*/true, /*mayYield*/true, /*mayBeInterrupted*/ false);
-            if (res) {
-                ctx.commitTransaction();
-            }
             return res;
         }
     } cmdcopydb;
