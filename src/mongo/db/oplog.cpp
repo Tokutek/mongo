@@ -296,6 +296,7 @@ namespace mongo {
         LOG( 6 ) << "logging op:" << BSONObj::make(r) << endl;
 #endif
     } 
+    
 
     static void (*_logOp)(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) = _logOpOld;
     void newReplUp() {
