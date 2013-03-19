@@ -347,50 +347,6 @@ namespace mongo {
 
     int _dummy_z;
 
-    void pretouchN(vector<BSONObj>& v, unsigned a, unsigned b) {
-        DEV verify( ! Lock::isW() );
-
-        Client *c = currentClient.get();
-        if( c == 0 ) {
-            Client::initThread("pretouchN");
-            c = &cc();
-        }
-
-        Lock::GlobalRead lk;
-        for( unsigned i = a; i <= b; i++ ) {
-            const BSONObj& op = v[i];
-            const char *which = "o";
-            const char *opType = op.getStringField("op");
-            if ( *opType == 'i' )
-                ;
-            else if( *opType == 'u' )
-                which = "o2";
-            else
-                continue;
-            /* todo : other operations */
-
-            try {
-                BSONObj o = op.getObjectField(which);
-                BSONElement _id;
-                if( o.getObjectID(_id) ) {
-                    const char *ns = op.getStringField("ns");
-                    BSONObjBuilder b;
-                    b.append(_id);
-                    BSONObj result;
-                    Client::Context ctx( ns );
-#if 0
-                    if( Helpers::findById(cc(), ns, b.done(), result) )
-                        _dummy_z += result.objsize(); // touch
-#endif
-                    ::abort();
-                }
-            }
-            catch( DBException& e ) {
-                log() << "ignoring assertion in pretouchN() " << a << ' ' << b << ' ' << i << ' ' << e.toString() << endl;
-            }
-        }
-    }
-
     void Sync::setHostname(const string& hostname) {
         hn = hostname;
     }

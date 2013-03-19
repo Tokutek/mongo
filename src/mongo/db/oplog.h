@@ -78,8 +78,6 @@ namespace mongo {
         void setHostname(const string& hostname);
     };
 
-    void pretouchN(vector<BSONObj>&, unsigned a, unsigned b);
-
     /**
      * take an op and apply locally
      * used for applying from an oplog
