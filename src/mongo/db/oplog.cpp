@@ -252,9 +252,9 @@ namespace mongo {
         const char * ns = "local.oplog.$main";
 
         bool rs = !cmdLine._replSet.empty();
-        if( rs )
+        if( rs ) {
             ns = rsoplog;
-
+        }
         Client::Context ctx(ns);
 
         NamespaceDetails * nsd = nsdetails( ns );
@@ -331,177 +331,6 @@ namespace mongo {
 
     // -------------------------------------
 
-#if 0
-    FindingStartCursor *FindingStartCursor::make( const QueryPlan &qp ) {
-        auto_ptr<FindingStartCursor> ret( new FindingStartCursor( qp ) );
-        ret->init();
-        return ret.release();
-    }
-
-    FindingStartCursor::FindingStartCursor( const QueryPlan &qp ) :
-    _qp( qp ),
-    _findingStart( true ),
-    _findingStartMode() {
-    }
-    
-    void FindingStartCursor::next() {
-        if ( !_findingStartCursor || !_findingStartCursor->ok() ) {
-            _findingStart = false;
-            _c = _qp.newCursor(); // on error, start from beginning
-            destroyClientCursor();
-            return;
-        }
-        switch( _findingStartMode ) {
-            // Initial mode: scan backwards from end of collection
-            case Initial: {
-                if ( !_matcher->matchesCurrent( _findingStartCursor->c() ) ) {
-                    _findingStart = false; // found first record out of query range, so scan normally
-                    _c = _qp.newCursor( _findingStartCursor->currLoc() );
-                    destroyClientCursor();
-                    return;
-                }
-                _findingStartCursor->advance();
-                RARELY {
-                    if ( _findingStartTimer.seconds() >= __findingStartInitialTimeout ) {
-                        // If we've scanned enough, switch to find extent mode.
-                        createClientCursor( extentFirstLoc( _findingStartCursor->currLoc() ) );
-                        _findingStartMode = FindExtent;
-                        return;
-                    }
-                }
-                return;
-            }
-            // FindExtent mode: moving backwards through extents, check first
-            // document of each extent.
-            case FindExtent: {
-                if ( !_matcher->matchesCurrent( _findingStartCursor->c() ) ) {
-                    _findingStartMode = InExtent;
-                    return;
-                }
-                DiskLoc prev = prevExtentFirstLoc( _findingStartCursor->currLoc() );
-                if ( prev.isNull() ) { // hit beginning, so start scanning from here
-                    createClientCursor();
-                    _findingStartMode = InExtent;
-                    return;
-                }
-                // There might be a more efficient implementation than creating new cursor & client cursor each time,
-                // not worrying about that for now
-                createClientCursor( prev );
-                return;
-            }
-            // InExtent mode: once an extent is chosen, find starting doc in the extent.
-            case InExtent: {
-                if ( _matcher->matchesCurrent( _findingStartCursor->c() ) ) {
-                    _findingStart = false; // found first record in query range, so scan normally
-                    _c = _qp.newCursor( _findingStartCursor->currLoc() );
-                    destroyClientCursor();
-                    return;
-                }
-                _findingStartCursor->advance();
-                return;
-            }
-            default: {
-                massert( 14038, "invalid _findingStartMode", false );
-            }
-        }
-    }
-    
-    DiskLoc FindingStartCursor::extentFirstLoc( const DiskLoc &rec ) {
-        Extent *e = rec.rec()->myExtent( rec );
-        if ( !_qp.nsd()->capLooped() || ( e->myLoc != _qp.nsd()->capExtent ) )
-            return e->firstRecord;
-        // Likely we are on the fresh side of capExtent, so return first fresh record.
-        // If we are on the stale side of capExtent, then the collection is small and it
-        // doesn't matter if we start the extent scan with capFirstNewRecord.
-        return _qp.nsd()->capFirstNewRecord;
-    }
-    
-    void wassertExtentNonempty( const Extent *e ) {
-        // TODO ensure this requirement is clearly enforced, or fix.
-        wassert( !e->firstRecord.isNull() );
-    }
-    
-    DiskLoc FindingStartCursor::prevExtentFirstLoc( const DiskLoc &rec ) {
-        Extent *e = rec.rec()->myExtent( rec );
-        if ( _qp.nsd()->capLooped() ) {
-            if ( e->xprev.isNull() ) {
-                e = _qp.nsd()->lastExtent.ext();
-            }
-            else {
-                e = e->xprev.ext();
-            }
-            if ( e->myLoc != _qp.nsd()->capExtent ) {
-                wassertExtentNonempty( e );
-                return e->firstRecord;
-            }
-        }
-        else {
-            if ( !e->xprev.isNull() ) {
-                e = e->xprev.ext();
-                wassertExtentNonempty( e );
-                return e->firstRecord;
-            }
-        }
-        return DiskLoc(); // reached beginning of collection
-    }
-    
-    void FindingStartCursor::createClientCursor( const DiskLoc &startLoc ) {
-        shared_ptr<Cursor> c = _qp.newCursor( startLoc );
-        _findingStartCursor.reset( new ClientCursor(QueryOption_NoCursorTimeout, c, _qp.ns()) );
-    }
-
-    bool FindingStartCursor::firstDocMatchesOrEmpty() const {
-        shared_ptr<Cursor> c = _qp.newCursor();
-        return !c->ok() || _matcher->matchesCurrent( c.get() );
-    }
-    
-    void FindingStartCursor::init() {
-        BSONElement tsElt = _qp.originalQuery()[ "ts" ];
-        massert( 13044, "no ts field in query", !tsElt.eoo() );
-        BSONObjBuilder b;
-        b.append( tsElt );
-        BSONObj tsQuery = b.obj();
-        _matcher.reset(new CoveredIndexMatcher(tsQuery, _qp.indexKey()));
-        if ( firstDocMatchesOrEmpty() ) {
-            _c = _qp.newCursor();
-            _findingStart = false;
-            return;
-        }
-        // Use a ClientCursor here so we can release db mutex while scanning
-        // oplog (can take quite a while with large oplogs).
-        shared_ptr<Cursor> c = _qp.newReverseCursor();
-        _findingStartCursor.reset( new ClientCursor(QueryOption_NoCursorTimeout, c, _qp.ns(), BSONObj()) );
-        _findingStartTimer.reset();
-        _findingStartMode = Initial;
-    }
-    
-    shared_ptr<Cursor> FindingStartCursor::getCursor( const char *ns, const BSONObj &query, const BSONObj &order ) {
-        NamespaceDetails *d = nsdetails(ns);
-        if ( !d ) {
-            return shared_ptr<Cursor>( new BasicCursor( DiskLoc() ) );
-        }
-        FieldRangeSetPair frsp( ns, query );
-        scoped_ptr<QueryPlan> oplogPlan( QueryPlan::make( d, -1, frsp, 0, query, order ) );
-        scoped_ptr<FindingStartCursor> finder( FindingStartCursor::make( *oplogPlan ) );
-        ElapsedTracker yieldCondition( 256, 20 );
-        while( !finder->done() ) {
-            if ( yieldCondition.intervalHasElapsed() ) {
-                if ( finder->prepareToYield() ) {
-                    ClientCursor::staticYield( -1, ns, 0 );
-                    finder->recoverFromYield();
-                }
-            }
-            finder->next();
-        }
-        shared_ptr<Cursor> ret = finder->cursor();
-        shared_ptr<CoveredIndexMatcher> matcher( new CoveredIndexMatcher( query, BSONObj() ) );
-        ret->setMatcher( matcher );
-        return ret;
-    }
-#endif
-    
-    // -------------------------------------
-
     struct TestOpTime : public StartupTest {
         void run() {
             OpTime t;
@@ -559,42 +388,6 @@ namespace mongo {
             catch( DBException& e ) {
                 log() << "ignoring assertion in pretouchN() " << a << ' ' << b << ' ' << i << ' ' << e.toString() << endl;
             }
-        }
-    }
-
-    void pretouchOperation(const BSONObj& op) {
-
-        if( Lock::somethingWriteLocked() )
-            return; // no point pretouching if write locked. not sure if this will ever fire, but just in case.
-
-        const char *which = "o";
-        const char *opType = op.getStringField("op");
-        if ( *opType == 'i' )
-            ;
-        else if( *opType == 'u' )
-            which = "o2";
-        else
-            return;
-        /* todo : other operations */
-
-        try {
-            BSONObj o = op.getObjectField(which);
-            BSONElement _id;
-            if( o.getObjectID(_id) ) {
-                const char *ns = op.getStringField("ns");
-                BSONObjBuilder b;
-                b.append(_id);
-                BSONObj result;
-                Client::ReadContext ctx( ns );
-#if 0
-                if( Helpers::findById(cc(), ns, b.done(), result) )
-                    _dummy_z += result.objsize(); // touch
-#endif
-                ::abort();
-            }
-        }
-        catch( DBException& ) {
-            log() << "ignoring assertion in pretouchOperation()" << endl;
         }
     }
 
