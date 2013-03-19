@@ -711,7 +711,7 @@ static int mongoDbMain(int argc, char* argv[]) {
 
     hidden_options.add_options()
     ("fastsync", "indicate that this instance is starting from a dbpath snapshot of the repl peer")
-    ("pretouch", po::value<int>(), "n pretouch threads for applying replicationed operations") // experimental
+    ("pretouch", po::value<int>(), "DEPRECATED")
     ("command", po::value< vector<string> >(), "command")
     ("nodur", "DEPRECATED")
     // things we don't want people to use
@@ -953,7 +953,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             cmdLine.source = params["source"].as<string>().c_str();
         }
         if( params.count("pretouch") ) {
-            cmdLine.pretouch = params["pretouch"].as<int>();
+            out() << " pretouch is a deprecated parameter" << endl;
         }
         if (params.count("replSet")) {
             if (params.count("slavedelay")) {
@@ -1074,8 +1074,6 @@ static int mongoDbMain(int argc, char* argv[]) {
             return 0;
         }
 
-        if( cmdLine.pretouch )
-            log() << "--pretouch " << cmdLine.pretouch << endl;
 
 #ifdef __linux__
         if (params.count("shutdown")){

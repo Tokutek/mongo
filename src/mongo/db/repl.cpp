@@ -615,43 +615,6 @@ namespace mongo {
         if ( !only.empty() && only != clientName )
             return;
 
-        if( cmdLine.pretouch && !alreadyLocked/*doesn't make sense if in write lock already*/ ) {
-            if( cmdLine.pretouch > 1 ) {
-                /* note: this is bad - should be put in ReplSource.  but this is first test... */
-                static int countdown;
-                verify( countdown >= 0 );
-                if( countdown > 0 ) {
-                    countdown--; // was pretouched on a prev pass
-                }
-                else {
-                    const int m = 4;
-                    if( tp.get() == 0 ) {
-                        int nthr = min(8, cmdLine.pretouch);
-                        nthr = max(nthr, 1);
-                        tp.reset( new ThreadPool(nthr) );
-                    }
-                    vector<BSONObj> v;
-                    oplogReader.peek(v, cmdLine.pretouch);
-                    unsigned a = 0;
-                    while( 1 ) {
-                        if( a >= v.size() ) break;
-                        unsigned b = a + m - 1; // v[a..b]
-                        if( b >= v.size() ) b = v.size() - 1;
-                        tp->schedule(pretouchN, v, a, b);
-                        DEV cout << "pretouch task: " << a << ".." << b << endl;
-                        a += m;
-                    }
-                    // we do one too...
-                    pretouchOperation(op);
-                    tp->join();
-                    countdown = v.size();
-                }
-            }
-            else {
-                pretouchOperation(op);
-            }
-        }
-
         scoped_ptr<Lock::GlobalWrite> lk( alreadyLocked ? 0 : new Lock::GlobalWrite() );
 
         if ( replAllDead ) {
