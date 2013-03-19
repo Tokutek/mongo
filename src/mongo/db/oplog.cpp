@@ -39,13 +39,11 @@ namespace mongo {
     int __findingStartInitialTimeout = 5; // configurable for testing
 
     // cached copies of these...so don't rename them, drop them, etc.!!!
-    static NamespaceDetails *localOplogMainDetails = 0;
     static Database *localDB = 0;
     static NamespaceDetails *rsOplogDetails = 0;
     void oplogCheckCloseDatabase( Database * db ) {
         verify( Lock::isW() );
         localDB = 0;
-        localOplogMainDetails = 0;
         rsOplogDetails = 0;
         resetSlaveCache();
     }
