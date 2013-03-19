@@ -18,6 +18,9 @@
  */
 
 #include "pch.h"
+
+#include <db.h>
+
 #include "jsobj.h"
 #include "commands.h"
 #include "client.h"
@@ -50,6 +53,17 @@ namespace mongo {
         }
 #endif
         return dbname + '.' + coll;
+    }
+
+    int Command::txnFlags() const {
+        if (locktype() == READ) {
+            // TODO: Maybe add DB_TXN_READ_ONLY?
+            return DB_TXN_SNAPSHOT;
+        } else if (locktype() == WRITE) {
+            return DB_SERIALIZABLE;
+        } else {
+            return DB_SERIALIZABLE;
+        }
     }
 
     void Command::htmlHelp(stringstream& ss) const {

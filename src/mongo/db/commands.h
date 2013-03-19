@@ -65,6 +65,12 @@ namespace mongo {
         */
         virtual bool lockGlobally() const { return false; }
 
+        /** @return true iff this command wants a transaction */
+        virtual bool needsTxn() const { return true; }
+
+        /** @return what transaction flags to use */
+        virtual int txnFlags() const;
+
         /* Return true if only the admin ns has privileges to run this command. */
         virtual bool adminOnly() const {
             return false;

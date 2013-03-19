@@ -944,19 +944,21 @@ namespace NamespaceTests {
 
         class Base {
             const char *ns_;
+            Client::Transaction _transaction;
             Lock::GlobalWrite lk;
             Client::Context _context;
         public:
-            Base( const char *ns = "unittests.NamespaceDetailsTests" ) : ns_( ns ) , _context( ns ) {}
+            Base( const char *ns = "unittests.NamespaceDetailsTests" ) : ns_( ns ) , _transaction(DB_SERIALIZABLE), _context( ns ) {}
             virtual ~Base() {
                 if ( !nsd() )
                     return;
+                _transaction.commit();
                 string s( ns() );
                 string errmsg;
                 BSONObjBuilder result;
-                ctx().beginTransaction();
+                Client::Transaction droptxn(DB_SERIALIZABLE);
                 dropCollection( s, errmsg, result );
-                ctx().commitTransaction();
+                droptxn.commit();
             }
             Client::Context &ctx() {
                 return _context;
@@ -1060,7 +1062,6 @@ namespace NamespaceTests {
                 
                 ASSERT( !nsd()->isMultikey( 1 ) );
                 
-                ctx().beginTransaction();
                 nsd()->setIndexIsMultikey( ns(), 1 );
                 ASSERT( nsd()->isMultikey( 1 ) );
                 assertCachedIndexKey( BSONObj() );
@@ -1068,7 +1069,6 @@ namespace NamespaceTests {
                 registerIndexKey( BSON( "a" << 1 ) );
                 nsd()->setIndexIsMultikey( ns(), 1 );
                 assertCachedIndexKey( BSON( "a" << 1 ) );
-                ctx().commitTransaction();
             }
         };
         

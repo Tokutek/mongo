@@ -25,9 +25,28 @@ namespace mongo {
 
     namespace storage {
 
-        DB_TXN *start_txn(DB_TXN *parent, int flags);
-        void commit_txn(DB_TXN *txn, int flags);
-        void abort_txn(DB_TXN *txn);
+        /**
+         * Wraps a DB_TXN in an exception-safe object.
+         * The destructor calls abort() unless it's already committed.
+         * Knows whether it's read-only (useful for the cursor).
+         */
+        class Txn : boost::noncopyable {
+            const int _flags;
+            DB_TXN *_db_txn;
+            void retire();
+          public:
+            Txn(const Txn *parent, int flags);
+            ~Txn();
+            void commit(int flags);
+            void abort();
+
+            /** @return the managed DB_TXN object */
+            DB_TXN *db_txn() const { return _db_txn; }
+            /** @return true iff this transaction is live */
+            bool isLive() const { return _db_txn != NULL; }
+            /** @return true iff this is a read only transaction */
+            bool isReadOnly() const;
+        };
 
     } // namespace storage
 
