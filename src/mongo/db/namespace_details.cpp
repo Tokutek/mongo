@@ -239,7 +239,8 @@ namespace mongo {
             _maxSize(options["size"].numberLong()),
             _maxObjects(options["max"].numberLong()),
             _currentObjects(0),
-            _currentSize(0) {
+            _currentSize(0),
+            _deleteMutex("cappedDeleteMutex") {
 
             if (options["autoIndexId"].trueValue()) {
                 // TODO: Create _id index
@@ -250,23 +251,25 @@ namespace mongo {
             _maxSize(serialized["size"].numberLong()),
             _maxObjects(serialized["max"].numberLong()),
             _currentObjects(0),
-            _currentSize(0) {
+            _currentSize(0),
+            _deleteMutex("cappedDeleteMutex") {
             
-            BSONObj minKey = getKey(-1);
-            if (!minKey.isEmpty()) {
-                long long k = minKey.firstElement().Long();
-                _currentObjects = AtomicWord<long long>(_nextPK.load() - k);
-                verify(_currentObjects.load() >= 0); // otherwise the primary keyspace is corrupt
+            // Determine the number of objects and the total size.
+            // We'll have to look at the data, but this might not be so bad because:
+            // - you pay for it once, on initialization.
+            // - capped collections are meant to be "small" (fit in memory)
+            // - capped collectiosn are meant to be "ready heavy",
+            //   so bringing it all into memory now helps warmup.
+            long long n = 0;
+            long long size = 0;
+            shared_ptr<Cursor> c( new BasicCursor(this) );
+            for ( ; c->ok(); n++, c->advance()) {
+                size += c->current().objsize();
             }
 
-            IndexStats stats(getPKIndex());
-            BSONObj pkStats = stats.bson(1);
-            _currentSize = AtomicWord<long long>(pkStats["size"].numberLong());
-
-            // some sanity checks.
-            verify(pkStats["count"].numberLong() == _currentObjects.load());
-            verify(_currentSize.load() >= 0);
-            verify((_currentSize.load() >= 0) == (_currentObjects.load() >= 0));
+            _currentObjects = AtomicWord<long long>(n);
+            _currentSize = AtomicWord<long long>(size);
+            verify((_currentSize.load() > 0) == (_currentObjects.load() > 0));
         }
 
         bool isCapped() const {
@@ -278,22 +281,47 @@ namespace mongo {
             return findIdIndex() >= 0;
         }
 
-        // TODO: Does the size of the secondary indexes matter?
+        // TODO: Does the size of the each secondary index matter?
         void insertObject(BSONObj &obj, bool overwrite) {
-            NaturalOrderCollection::insertObject(obj, overwrite);
-            long long n = _currentObjects.fetchAndAdd(1);
-            long long size = _currentSize.fetchAndAdd(obj.objsize());
-            while ((_maxObjects > 0 && n > _maxObjects) ||
-                    _maxSize > 0 && size > _maxSize) {
-                BSONObjBuilder pk;
-                const long long toDelete = n - _maxObjects - 1;
-                dassert(n >= 0);
-                pk.append("", toDelete);
-                NaturalOrderCollection::deleteObject(pk.obj(), obj);
-                // TODO: We did not necessarily delete something obj.objsize() large.
-                n = _currentObjects.fetchAndSubtract(1);
-                size = _currentSize.fetchAndSubtract(obj.objsize());
+            CappedInsertIntent intent(this, obj);
+
+            // If the insert is non-trivial, then we need to do some
+            // trimming work to make room for the object. Grab the 
+            // mutex and do any necessary work.
+            if (!intent.trivial()) {
+                SimpleMutex::scoped_lock lk(_deleteMutex);
+                long long n = _currentObjects.load();
+                long long size = _currentSize.load();
+                if (isGorged(n, size)) {
+                    shared_ptr<Cursor> c( new BasicCursor(this) );
+                    // Delete older objects until we've made enough room for
+                    // the new one. Opportunistically delete up to 8 total
+                    // while the collection is still gorged (because other
+                    // threads incremented _currObjects and _currSize to
+                    // declare their intent to insert, and they're waiting
+                    // on the deleteMutex.
+                    long long bytesTrimmed = 0;
+                    for ( long long i = 0;
+                          // cursor has more, we should to do more work, and its gorged
+                          c->ok() && (bytesTrimmed < obj.objsize() || (i < 8)) && isGorged(n, size);
+                          i++, c->advance()) {
+                        BSONObj oldestObj = c->current();
+                        tokulog(4) << "capped insert: deleting " << c->currPK()
+                            << ", obj " << oldestObj << endl;
+                        NaturalOrderCollection::deleteObject(c->currPK(), oldestObj);
+
+                        size_t objsize = oldestObj.objsize();
+                        n = _currentObjects.subtractAndFetch(1);
+                        size = _currentSize.subtractAndFetch(objsize);
+                        bytesTrimmed += objsize;
+                        tokulog(4) << "delete trimmed " << objsize <<
+                            " bytes, now: count " << n << ", size " << size << endl;
+                    }
+                }
             }
+
+            NaturalOrderCollection::insertObject(obj, overwrite);
+            intent.noteSuccess();
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
@@ -303,10 +331,58 @@ namespace mongo {
 
     private:
 
+        // Declares a thread's intent to insert into a capped collection.
+        // On creation, notes the objects size into the collection's 
+        // current size and rolls back the modification on error.
+        //
+        // By proactively increasing the collection size before inserting,
+        // we enable a single thread to perform trimming on behalf of many
+        // waiting threads (at that thread's discretion, that is. Do not
+        // do so much work that the calling client thread stalls noticably).
+        class CappedInsertIntent : boost::noncopyable {
+        public:
+            CappedInsertIntent(CappedCollection *collection, const BSONObj &obj) :
+                _collection(collection),
+                _obj(obj),
+                _succeeded(false),
+                _trivial(false) {
+
+                long long n = _collection->_currentObjects.addAndFetch(1);
+                long long size = _collection->_currentSize.addAndFetch(obj.objsize());
+                _trivial = !_collection->isGorged(n, size);
+                tokulog(4) << "capped insert intent obj, " << obj <<
+                    ", trivial? " << _trivial << endl;
+            }
+            ~CappedInsertIntent() {
+                if (!_succeeded) {
+                    // rollback size/count increments on failure
+                    _collection->_currentObjects.subtractAndFetch(1);
+                    _collection->_currentSize.subtractAndFetch(_obj.objsize());
+                }
+            }
+            bool trivial() const {
+                return _trivial;
+            }
+            void noteSuccess() {
+                _succeeded = true;
+            }
+        private:
+            CappedCollection *_collection;
+            const BSONObj &_obj;
+            bool _succeeded;
+            bool _trivial;
+        };
+
+        bool isGorged(long long n, long long size) const {
+            return (_maxObjects > 0 && n > _maxObjects)
+                || (_maxSize > 0 && size > _maxSize);
+        }
+
         const long long _maxSize;
         const long long _maxObjects;
         AtomicWord<long long> _currentObjects;
         AtomicWord<long long> _currentSize;
+        SimpleMutex _deleteMutex;
     };
 
     static BSONObj pkIndexInfo(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) {
@@ -453,6 +529,8 @@ namespace mongo {
     }
 
     void NamespaceDetails::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, bool overwrite) {
+        dassert(!pk.isEmpty());
+        dassert(!obj.isEmpty());
         if (overwrite && _indexes.size() > 1) {
             wunimplemented("overwrite inserts on secondary keys right now don't work");
             //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
@@ -464,6 +542,8 @@ namespace mongo {
     }
 
     void NamespaceDetails::deleteFromIndexes(const BSONObj &pk, const BSONObj &obj) {
+        dassert(!pk.isEmpty());
+        dassert(!obj.isEmpty());
         for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             IndexDetails *index = it->get();
             index->deleteObject(pk, obj);
@@ -663,6 +743,23 @@ namespace mongo {
         result->append("indexDetails", index_info.arr());        
     }
 
+    void NamespaceDetails::addPKIndexToCatalog() {
+        BSONObj info = getPKIndex().info();
+        string indexns = info["ns"].String();
+        if (mongoutils::str::contains(indexns, ".system.indexes")) {
+            // system.indexes holds all the others, so it is not explicitly listed in the catalog.
+            return;
+        }
+
+        char database[256];
+        nsToDatabase(indexns.c_str(), database);
+        string s = string(database) + ".system.indexes";
+        const char *ns = s.c_str();
+        NamespaceDetails *d = nsdetails_maybe_create(ns);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+        insertOneObject(d, nsdt, info, false);
+    }
+
     /* ------------------------------------------------------------------------- */
 
     SimpleMutex NamespaceDetailsTransient::_qcMutex("qc");
@@ -680,24 +777,17 @@ namespace mongo {
     /*static*/ NOINLINE_DECL NamespaceDetailsTransient& NamespaceDetailsTransient::make_inlock(const char *ns) {
         shared_ptr< NamespaceDetailsTransient > &t = _nsdMap[ ns ];
         verify( t.get() == 0 );
-        Database *database = cc().database();
-        verify( database );
         if( _nsdMap.size() % 20000 == 10000 ) { 
             // so we notice if insanely large #s
             log() << "opening namespace " << ns << endl;
             log() << _nsdMap.size() << " namespaces in nsdMap" << endl;
         }
-        t.reset( new NamespaceDetailsTransient(database, ns) );
+        t.reset( new NamespaceDetailsTransient(ns) );
         return *t;
     }
 
-    // note with repair there could be two databases with the same ns name.
-    // that is NOT handled here yet!  TODO
-    // repair may not use nsdt though not sure.  anyway, requires work.
-    NamespaceDetailsTransient::NamespaceDetailsTransient(Database *db, const char *ns) : 
-        _ns(ns), _keysComputed(false), _qcWriteCount() 
-    {
-        dassert(db);
+    NamespaceDetailsTransient::NamespaceDetailsTransient(const char *ns) : 
+        _ns(ns), _keysComputed(false), _qcWriteCount() {
     }
 
     NamespaceDetailsTransient::~NamespaceDetailsTransient() { 
@@ -806,23 +896,6 @@ namespace mongo {
         Top::global.collectionDropped(name);
         NamespaceDetailsTransient::eraseForPrefix(ns);
         dropNS(name, true, can_drop_system);
-    }
-
-    void NamespaceDetails::addPKIndexToCatalog() {
-        BSONObj info = getPKIndex().info();
-        string indexns = info["ns"].String();
-        if (mongoutils::str::contains(indexns, ".system.indexes")) {
-            // system.indexes holds all the others, so it is not explicitly listed in the catalog.
-            return;
-        }
-
-        char database[256];
-        nsToDatabase(indexns.c_str(), database);
-        string s = string(database) + ".system.indexes";
-        const char *ns = s.c_str();
-        NamespaceDetails *d = nsdetails_maybe_create(ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
-        insertOneObject(d, nsdt, info, false);
     }
 
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).

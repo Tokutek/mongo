@@ -178,12 +178,10 @@ namespace mongo {
         int findIdIndex() const {
             for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
                 const IndexDetails *index = it->get();
-                // TODO: Ask nsd->isIdIndex(idx);
                 if (index->isIdIndex()) {
                     return it - _indexes.begin();
                 }
             }
-            massert(16436, "_id index not found", false);
             return -1;
         }
 
@@ -291,12 +289,11 @@ namespace mongo {
     // todo: multiple db's with the same name (repairDatbase) is not handled herein.  that may be 
     //       the way to go, if not used by repair, but need some sort of enforcement / asserts.
     class NamespaceDetailsTransient : boost::noncopyable {
-        Database *database;
         const string _ns;
         void reset();
         static std::map< string, shared_ptr< NamespaceDetailsTransient > > _nsdMap;
 
-        NamespaceDetailsTransient(Database*,const char *ns);
+        NamespaceDetailsTransient(const char *ns);
     public:
         ~NamespaceDetailsTransient();
         void addedIndex() { reset(); }
