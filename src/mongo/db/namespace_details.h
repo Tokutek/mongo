@@ -175,7 +175,7 @@ namespace mongo {
         /* @return -1 = not found
            generally id is first index, so not that expensive an operation (assuming present).
         */
-        int findIdIndex() {
+        int findIdIndex() const {
             for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
                 const IndexDetails *index = it->get();
                 // TODO: Ask nsd->isIdIndex(idx);
@@ -223,7 +223,7 @@ namespace mongo {
 
         // optional to implement, return true of this namespace has an index on the
         // _id field and it is valid to use findById to find objects by _id.
-        virtual bool hasIdIndex() {
+        virtual bool hasIdIndex() const {
             return false;
         }
 

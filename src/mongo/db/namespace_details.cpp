@@ -85,7 +85,7 @@ namespace mongo {
         }
 
         // all indexed collections have an _id index
-        bool hasIdIndex() {
+        bool hasIdIndex() const {
             dassert(findIdIndex() >= 0);
             return true;
         }
@@ -111,14 +111,14 @@ namespace mongo {
         }
     };
 
-    struct findLastKeyExtra {
-        findLastKeyExtra(BSONObj &o) : obj(o) {
+    struct getKeyExtra {
+        getKeyExtra(BSONObj &o) : obj(o) {
         }
         BSONObj &obj;
     };
 
-    static int findLastKeyCallback(const DBT *key, const DBT *value, void *extra) {
-        struct findLastKeyExtra *info = reinterpret_cast<struct findLastKeyExtra *>(extra);
+    static int getKeyCallback(const DBT *key, const DBT *value, void *extra) {
+        struct getKeyExtra *info = reinterpret_cast<struct getKeyExtra *>(extra);
         if (key) {
             info->obj = BSONObj(reinterpret_cast<char *>(key->data));
         }
@@ -134,22 +134,12 @@ namespace mongo {
         NaturalOrderCollection(const BSONObj &serialized) :
             NamespaceDetails(serialized),
             _nextPK(0) {
-
-            // get a cursor over the primary key index
-            IndexDetails &pkIdx = getPKIndex();
-            DBC *cursor = pkIdx.newCursor();
-
-            // find the last key
-            BSONObj obj = BSONObj();
-            struct findLastKeyExtra extra(obj);
-            int r = cursor->c_getf_last(cursor, 0, findLastKeyCallback, &extra);
-            verify(r == 0 || r == DB_NOTFOUND);
-            r = cursor->c_close(cursor);
-            verify(r == 0);
-
-            // the next PK is the last key plus one
-            dassert(obj.nFields() == 1);
-            _nextPK = AtomicWord<long long>(obj.firstElement().Long() + 1);
+            // the next PK is the last key (getKey() with direction > 0)
+            // plus one, if it exists (otherwise the collection is empty).
+            BSONObj maxKey = getKey(1);
+            if (!maxKey.isEmpty()) {
+                _nextPK = AtomicWord<long long>(maxKey.firstElement().Long() + 1);
+            }
         }
 
         // insert an object, using a fresh auto-increment primary key
@@ -163,8 +153,31 @@ namespace mongo {
             deleteFromIndexes(pk, obj);
         }
 
-    private:
+    protected:
         AtomicWord<long long> _nextPK;
+
+        BSONObj getKey(int direction) {
+            // get a cursor over the primary key index
+            IndexDetails &pkIdx = getPKIndex();
+            DBC *cursor = pkIdx.newCursor();
+
+            // find the last key
+            int r;
+            BSONObj obj = BSONObj();
+            struct getKeyExtra extra(obj);
+            if (direction > 0) {
+                r = cursor->c_getf_last(cursor, 0, getKeyCallback, &extra);
+            } else {
+                r = cursor->c_getf_first(cursor, 0, getKeyCallback, &extra);
+            }
+            verify(r == 0 || r == DB_NOTFOUND);
+            dassert(obj.nFields() == 1);
+
+            r = cursor->c_close(cursor);
+            verify(r == 0);
+
+            return obj;
+        }
     };
 
     class SystemCollection : public NaturalOrderCollection {
@@ -178,21 +191,122 @@ namespace mongo {
 
         // strip out the _id field before inserting into a system collection
         void insertObject(BSONObj &obj, bool overwrite) {
-            obj = stripIdField(obj);
+            obj = beautifyAndRemoveId(obj);
             NaturalOrderCollection::insertObject(obj, overwrite);
         }
 
+        void createIndex(const BSONObj &info, bool resetTransient) {
+            massert(16457, "bug: system collections should not be indexed.", false);
+        }
+
     private:
-        BSONObj stripIdField(const BSONObj &obj) {
+        // For consistency with Vanilla MongoDB, system objects have no _id field and have
+        // the have the following fields in order, if they exist (so this code works for both
+        // system.namespaces and system.indexes)
+        //
+        //  { key, unique, ns, name, [everything else] }
+        //
+        // This code is largely borrowed from prepareToBuildIndex() in Vanilla.
+        BSONObj beautifyAndRemoveId(const BSONObj &obj) {
             BSONObjBuilder b;
+            if (obj["key"].ok()) {
+                b.append(obj["key"]);
+            }
+            if (obj["unique"].trueValue()) {
+                b.appendBool("unique", true);
+            }
+            if (obj["ns"].ok()) {
+                b.append(obj["ns"]);
+            }
+            if (obj["name"].ok()) { 
+                b.append(obj["name"]);
+            }
             for (BSONObjIterator i = obj.begin(); i.more(); ) {
                 BSONElement e = i.next();
-                if (!str::equals(e.fieldName(), "_id")) {
+                string s = e.fieldName();
+                if (s != "key" && s != "unique" && s != "ns" && s != "name" && s != "_id") {
                     b.append(e);
                 }
             }
             return b.obj();
         }
+    };
+
+    class CappedCollection : public NaturalOrderCollection {
+    public:
+        CappedCollection(const string &ns, const BSONObj &options) :
+            NaturalOrderCollection(ns, options),
+            _maxSize(options["size"].numberLong()),
+            _maxObjects(options["max"].numberLong()),
+            _currentObjects(0),
+            _currentSize(0) {
+
+            if (options["autoIndexId"].trueValue()) {
+                // TODO: Create _id index
+            }
+        }
+        CappedCollection(const BSONObj &serialized) :
+            NaturalOrderCollection(serialized),
+            _maxSize(serialized["size"].numberLong()),
+            _maxObjects(serialized["max"].numberLong()),
+            _currentObjects(0),
+            _currentSize(0) {
+            
+            BSONObj minKey = getKey(-1);
+            if (!minKey.isEmpty()) {
+                long long k = minKey.firstElement().Long();
+                _currentObjects = AtomicWord<long long>(_nextPK.load() - k);
+                verify(_currentObjects.load() >= 0); // otherwise the primary keyspace is corrupt
+            }
+
+            IndexStats stats(getPKIndex());
+            BSONObj pkStats = stats.bson(1);
+            _currentSize = AtomicWord<long long>(pkStats["size"].numberLong());
+
+            // some sanity checks.
+            verify(pkStats["count"].numberLong() == _currentObjects.load());
+            verify(_currentSize.load() >= 0);
+            verify((_currentSize.load() >= 0) == (_currentObjects.load() >= 0));
+        }
+
+        bool isCapped() const {
+            dassert(_options["capped"].trueValue());
+            return true;
+        }
+
+        bool hasIdIndex() const {
+            return findIdIndex() >= 0;
+        }
+
+        // TODO: Does the size of the secondary indexes matter?
+        void insertObject(BSONObj &obj, bool overwrite) {
+            NaturalOrderCollection::insertObject(obj, overwrite);
+            long long n = _currentObjects.fetchAndAdd(1);
+            long long size = _currentSize.fetchAndAdd(obj.objsize());
+            while ((_maxObjects > 0 && n > _maxObjects) ||
+                    _maxSize > 0 && size > _maxSize) {
+                BSONObjBuilder pk;
+                const long long toDelete = n - _maxObjects - 1;
+                dassert(n >= 0);
+                pk.append("", toDelete);
+                NaturalOrderCollection::deleteObject(pk.obj(), obj);
+                // TODO: We did not necessarily delete something obj.objsize() large.
+                n = _currentObjects.fetchAndSubtract(1);
+                size = _currentSize.fetchAndSubtract(obj.objsize());
+            }
+        }
+
+        void deleteObject(const BSONObj &pk, const BSONObj &obj) {
+            massert(16458, "bug: cannot remove from a capped collection, "
+                    " should have been enforced higher in the stack", false);
+        }
+
+    private:
+
+        const long long _maxSize;
+        const long long _maxObjects;
+        AtomicWord<long long> _currentObjects;
+        AtomicWord<long long> _currentSize;
     };
 
     static BSONObj pkIndexInfo(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) {
@@ -244,6 +358,8 @@ namespace mongo {
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
         if (str::contains(ns, "system.")) {
             return shared_ptr<NamespaceDetails>(new SystemCollection(ns, options));
+        } else if (options["capped"].trueValue()) {
+            return shared_ptr<NamespaceDetails>(new CappedCollection(ns, options));
         } else {
             return shared_ptr<NamespaceDetails>(new IndexedCollection(ns, options));
         }
@@ -266,6 +382,8 @@ namespace mongo {
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
         if (str::contains(serialized["ns"], "system.")) {
             return shared_ptr<NamespaceDetails>(new SystemCollection(serialized));
+        } else if (serialized["options"]["capped"].trueValue()) {
+            return shared_ptr<NamespaceDetails>(new CappedCollection(serialized));
         } else {
             return shared_ptr<NamespaceDetails>(new IndexedCollection(serialized));
         }
