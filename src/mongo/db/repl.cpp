@@ -1410,31 +1410,6 @@ namespace mongo {
         }
     }
 
-    void testPretouch() {
-        int nthr = min(8, 8);
-        nthr = max(nthr, 1);
-        int m = 8 / nthr;
-        ThreadPool tp(nthr);
-        vector<BSONObj> v;
-
-        BSONObj x = BSON( "ns" << "test.foo" << "o" << BSON( "_id" << 1 ) << "op" << "i" );
-
-        v.push_back(x);
-        v.push_back(x);
-        v.push_back(x);
-
-        unsigned a = 0;
-        while( 1 ) {
-            if( a >= v.size() ) break;
-            unsigned b = a + m - 1; // v[a..b]
-            if( b >= v.size() ) b = v.size() - 1;
-            tp.schedule(pretouchN, v, a, b);
-            DEV cout << "pretouch task: " << a << ".." << b << endl;
-            a += m;
-        }
-        tp.join();
-    }
-
     class ReplApplyBatchSizeValidator : public ParameterValidator {
     public:
         ReplApplyBatchSizeValidator() : ParameterValidator( "replApplyBatchSize" ) {}
