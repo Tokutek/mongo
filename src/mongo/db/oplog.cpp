@@ -209,96 +209,9 @@ namespace mongo {
             log( 6 ) << "logOp:" << BSONObj::make(r) << endl;
         }
 #endif
-    }
+    }    
 
-    /* we write to local.oplog.$main:
-         { ts : ..., op: ..., ns: ..., o: ... }
-       ts: an OpTime timestamp
-       op:
-        "i" insert
-        "u" update
-        "d" delete
-        "c" db cmd
-        "db" declares presence of a database (ns is set to the db name + '.')
-        "n" no op
-       logNS: where to log it.  0/null means "local.oplog.$main".
-       bb:
-         if not null, specifies a boolean to pass along to the other side as b: param.
-         used for "justOne" or "upsert" flags on 'd', 'u'
-       first: true
-         when set, indicates this is the first thing we have logged for this database.
-         thus, the slave does not need to copy down all the data when it sees this.
-
-       note this is used for single collection logging even when --replSet is enabled.
-    */
-    static void _logOpOld(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) {
-        Lock::DBWrite lk("local");
-        static BufBuilder bufbuilder(8*1024); // todo there is likely a mutex on this constructor
-
-        if ( strncmp(ns, "local.", 6) == 0 ) {
-            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-                resetSlaveCache();
-            }
-            return;
-        }
-
-        mutex::scoped_lock lk2(OpTime::m);
-
-        const OpTime ts = OpTime::now(lk2);
-        Client::Context context("",0,false);
-
-        /* we jump through a bunch of hoops here to avoid copying the obj buffer twice --
-           instead we do a single copy to the destination position in the memory mapped file.
-        */
-
-        bufbuilder.reset();
-        BSONObjBuilder b(bufbuilder);
-        b.appendTimestamp("ts", ts.asDate());
-        b.append("op", opstr);
-        b.append("ns", ns);
-        if (fromMigrate) 
-            b.appendBool("fromMigrate", true);
-        if ( bb )
-            b.appendBool("b", *bb);
-        if ( o2 )
-            b.append("o2", *o2);
-
-#if 0
-        ::abort();
-
-        BSONObj partial = b.done(); // partial is everything except the o:... part.
-        int po_sz = partial.objsize();
-        int len = po_sz + obj.objsize() + 1 + 2 /*o:*/;
-        Record *r;
-        if( logNS == 0 ) {
-            logNS = "local.oplog.$main";
-            if ( localOplogMainDetails == 0 ) {
-                Client::Context ctx( logNS , dbpath, false);
-                localDB = ctx.db();
-                verify( localDB );
-                localOplogMainDetails = nsdetails(logNS);
-                verify( localOplogMainDetails );
-            }
-            Client::Context ctx( logNS , localDB, false );
-            r = NULL; ::abort(); (void) len; //theDataFileMgr.fast_oplog_insert(localOplogMainDetails, logNS, len);
-        }
-        else {
-            Client::Context ctx( logNS, dbpath, false );
-            verify( nsdetails( logNS ) );
-            // first we allocate the space, then we fill it below.
-            r = NULL; ::abort(); //theDataFileMgr.fast_oplog_insert( nsdetails( logNS ), logNS, len);
-        }
-
-        append_O_Obj(r->data(), partial, obj);
-
-        context.getClient()->setLastOp( ts );
-
-        LOG( 6 ) << "logging op:" << BSONObj::make(r) << endl;
-#endif
-    } 
-    
-
-    static void (*_logOp)(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) = _logOpOld;
+    static void (*_logOp)(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) = _logOpUninitialized;
     void newReplUp() {
         replSettings.master = true;
         _logOp = _logOpRS;
@@ -307,7 +220,6 @@ namespace mongo {
         replSettings.master = true;
         _logOp = _logOpUninitialized;
     }
-    void oldRepl() { _logOp = _logOpOld; }
 
     void logKeepalive() {
         _logOp("n", "", 0, BSONObj(), 0, 0, false);
