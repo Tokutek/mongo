@@ -88,7 +88,7 @@ namespace mongo {
         newObj = addIdField(newObj);
         insertOneObject(d, nsdt, newObj, overwrite);
         if (logop) {
-            logOp("i", ns, newObj, 0, 0, fromMigrate);
+            logOp("i", ns, newObj, 0, fromMigrate);
         }
     }
 
@@ -161,10 +161,10 @@ namespace mongo {
                 }
 
                 if ( mss->needOpLogRewrite() ) {
-                    logOp("u", ns, mss->getOpLogRewrite(), &pattern, 0, fromMigrate );
+                    logOp("u", ns, mss->getOpLogRewrite(), &pattern, fromMigrate );
                 }
                 else {
-                    logOp("u", ns, updateobj, &pattern, 0, fromMigrate );
+                    logOp("u", ns, updateobj, &pattern, fromMigrate );
                 }
             }
             return UpdateResult( 1 , 1 , 1 , BSONObj() );
@@ -174,7 +174,7 @@ namespace mongo {
         updateNoMods( d, nsdt, pk, obj, updateobj );
 
         if ( logop ) {
-            logOp("u", ns, updateobj, &patternOrig, 0, fromMigrate );
+            logOp("u", ns, updateobj, &patternOrig, fromMigrate );
         }
         return UpdateResult( 1 , 0 , 1 , BSONObj() );
     }
@@ -349,10 +349,10 @@ namespace mongo {
                         }
 
                         if ( forceRewrite || mss->needOpLogRewrite() ) {
-                            logOp("u", ns, mss->getOpLogRewrite() , &pattern, 0, fromMigrate );
+                            logOp("u", ns, mss->getOpLogRewrite() , &pattern, fromMigrate );
                         }
                         else {
-                            logOp("u", ns, updateobj, &pattern, 0, fromMigrate );
+                            logOp("u", ns, updateobj, &pattern, fromMigrate );
                         }
                     }
                     numModded++;
@@ -368,7 +368,7 @@ namespace mongo {
 
                 if ( logop ) {
                     DEV wassert( !su ); // super used doesn't get logged, this would be bad.
-                    logOp("u", ns, updateobj, &pattern, 0, fromMigrate );
+                    logOp("u", ns, updateobj, &pattern, fromMigrate );
                 }
                 return UpdateResult( 1 , 0 , 1 , BSONObj() );
             } while ( c->ok() );

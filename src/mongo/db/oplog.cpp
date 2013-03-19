@@ -221,12 +221,6 @@ namespace mongo {
         _logOp = _logOpUninitialized;
     }
 
-    void logKeepalive() {
-        _logOp("n", "", 0, BSONObj(), 0, 0, false);
-    }
-    void logOpComment(const BSONObj& obj) {
-        _logOp("n", "", 0, obj, 0, 0, false);
-    }
     void logOpInitiate(const BSONObj& obj) {
         _logOpRS("n", "", 0, obj, 0, 0, false);
     }
@@ -238,7 +232,7 @@ namespace mongo {
           d delete / remove
           u update
     */
-    void logOp(const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt, bool *b, bool fromMigrate) {
+    void logOp(const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt, bool fromMigrate) {
         if ( replSettings.master ) {
             _logOp(opstr, ns, 0, obj, patt, b, fromMigrate);
         }
