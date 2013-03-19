@@ -306,16 +306,12 @@ namespace mongo {
                           c->ok() && (bytesTrimmed < obj.objsize() || (i < 8)) && isGorged(n, size);
                           i++, c->advance()) {
                         BSONObj oldestObj = c->current();
-                        tokulog(4) << "capped insert: deleting " << c->currPK()
-                            << ", obj " << oldestObj << endl;
                         NaturalOrderCollection::deleteObject(c->currPK(), oldestObj);
 
                         size_t objsize = oldestObj.objsize();
                         n = _currentObjects.subtractAndFetch(1);
                         size = _currentSize.subtractAndFetch(objsize);
                         bytesTrimmed += objsize;
-                        tokulog(4) << "delete trimmed " << objsize <<
-                            " bytes, now: count " << n << ", size " << size << endl;
                     }
                 }
             }
@@ -350,8 +346,6 @@ namespace mongo {
                 long long n = _collection->_currentObjects.addAndFetch(1);
                 long long size = _collection->_currentSize.addAndFetch(obj.objsize());
                 _trivial = !_collection->isGorged(n, size);
-                tokulog(4) << "capped insert intent obj, " << obj <<
-                    ", trivial? " << _trivial << endl;
             }
             ~CappedInsertIntent() {
                 if (!_succeeded) {
