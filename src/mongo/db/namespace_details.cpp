@@ -323,7 +323,6 @@ namespace mongo {
         }
 
     private:
-
         // Declares a thread's intent to insert into a capped collection.
         // On creation, notes the objects size into the collection's 
         // current size and rolls back the modification on error.
