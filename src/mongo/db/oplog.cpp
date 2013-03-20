@@ -146,8 +146,8 @@ namespace mongo {
             rsOplogDetails = nsdetails(logns);
             massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
         }
-        BSONObj obj = b.done();
-        rsOplogDetails->insertObject(const BSONObj & obj, true);
+        BSONObj bb = b.done();
+        rsOplogDetails->insertObject(bb, true);
 #if 0
         BSONObj partial = b.done();
         int posz = partial.objsize();
@@ -162,7 +162,6 @@ namespace mongo {
                 localDB = ctx.db();
                 verify( localDB );
                 rsOplogDetails = nsdetails(logns);
-                massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
             }
             Client::Context ctx( logns , localDB, false );
             r = NULL; ::abort(); (void) len; //theDataFileMgr.fast_oplog_insert(rsOplogDetails, logns, len);
