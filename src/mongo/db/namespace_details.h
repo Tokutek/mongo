@@ -219,9 +219,14 @@ namespace mongo {
             return false;
         }
 
-        // optional to implement, return true of this namespace has an index on the
-        // _id field and it is valid to use findById to find objects by _id.
+        // return true of this namespace has an index on the _id field.
         virtual bool hasIdIndex() const {
+            return findIdIndex() >= 0;
+        }
+
+        // Hack for ops/query.cpp queryIdHack.
+        // Lets us know if findById is okay to do. We should find a nicer way to do this eventually.
+        virtual bool mayFindById() const {
             return false;
         }
 

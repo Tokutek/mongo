@@ -116,15 +116,7 @@ namespace mongo {
             return shared_ptr<Cursor>( new BasicCursor(d) );
         } else {
             // "reverse natural order"
-            if ( !d->isCapped() ) {
-                return shared_ptr<Cursor>( new ReverseCursor(d) );
-            }
-            else {
-                // TODO: Capped collections
-                //return shared_ptr<Cursor>( new ReverseCappedCursor(d) );
-                ::abort();
-                return shared_ptr<Cursor>( new ReverseCursor(d) );
-            }
+            return shared_ptr<Cursor>( new ReverseCursor(d) );
         }
     }
 

@@ -783,8 +783,8 @@ namespace mongo {
             replVerifyReadsOk(&pq);
 
             NamespaceDetails *d = nsdetails(ns);
-            if (d != NULL && !d->hasIdIndex()) {
-                // we have to resort to a table-scan
+            if (d != NULL && !d->mayFindById()) {
+                // we have to resort to using the optimizer
                 return false;
             }
 

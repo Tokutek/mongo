@@ -80,16 +80,15 @@ namespace mongo {
             NamespaceDetails(serialized) {
         }
 
-        // all indexed collections have an _id index
-        bool hasIdIndex() const {
-            dassert(findIdIndex() >= 0);
+        // regular collections are eligble for queryIdHack(), see ops/query.cpp
+        bool mayFindById() const {
+            dassert(hasIdIndex());
             return true;
         }
 
         // finds an objectl by _id field, which in the case of indexed collections
         // is the primary key.
         bool findById(const BSONObj &query, BSONObj &result) {
-            dassert(hasIdIndex());
             dassert(query["_id"].ok());
             return findByPK(query["_id"].wrap(""), result);
         }
@@ -274,11 +273,6 @@ namespace mongo {
             return true;
         }
 
-        bool hasIdIndex() const {
-            return findIdIndex() >= 0;
-        }
-
-        // TODO: Does the size of the each secondary index matter?
         void insertObject(BSONObj &obj, bool overwrite) {
             CappedInsertIntent intent(this, obj);
 

@@ -1,5 +1,4 @@
 // Test NamespaceDetails::emptyCappedCollection via 'emptycapped' command
-assert(false, "capped collection tests disabled");
 Random.setRandomSeed();
 
 db.capped7.drop();

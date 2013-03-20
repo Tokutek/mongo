@@ -1,4 +1,4 @@
-assert(false, "capped collection tests disabled");t = db.jstests_capped3;
+t = db.jstests_capped3;
 t2 = db.jstests_capped3_clone;
 t.drop();
 t2.drop();

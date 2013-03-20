@@ -1,5 +1,4 @@
 // Test NamespaceDetails::cappedTruncateAfter with empty extents
-assert(false, "capped collection tests disabled");
 Random.setRandomSeed();
 
 t = db.jstests_capped8;

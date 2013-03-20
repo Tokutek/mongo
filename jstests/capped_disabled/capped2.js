@@ -1,9 +1,8 @@
-assert(false, "capped collection tests disabled");db.capped2.drop();
 db._dbCommand( { create: "capped2", capped: true, size: 1000, $nExtents: 11, autoIndexId: false } );
 tzz = db.capped2;
 
 function debug( x ) {
-//    print( x );
+    print( x );
 }
 
 var val = new Array( 2000 );
