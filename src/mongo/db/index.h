@@ -32,6 +32,8 @@
 
 namespace mongo {
 
+    int removeFromSysIndexes(const char *ns, const char *name);
+
     /* Details about a particular index. There is one of these effectively for each object in
        system.namespaces (although this also includes the head pointer, which is not in that
        collection).
@@ -192,9 +194,6 @@ namespace mongo {
         uint32_t _readPageSize;
         uint32_t _pageSize;
     };
-
-
-    int removeFromSysIndexes(const char *ns, const char *name);
 
 } // namespace mongo
 

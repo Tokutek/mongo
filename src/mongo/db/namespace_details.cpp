@@ -43,33 +43,29 @@
 namespace mongo {
 
 #pragma pack(1)
-    struct IDToInsert_ {
-        char type;
+    struct IDToInsert {
+        IDToInsert() : type((char) jstOID) {
+            memcpy(_id, "_id", sizeof(_id));
+            dassert( sizeof(IDToInsert) == 17 );
+            oid.init();
+        }
+        const char *rawdata() {
+            return reinterpret_cast<const char *>(this);
+        }
+        const char type;
         char _id[4];
         OID oid;
-        IDToInsert_() {
-            type = (char) jstOID;
-            strcpy(_id, "_id");
-            verify( sizeof(IDToInsert_) == 17 );
-        }
-    } idToInsert_;
-    struct IDToInsert : public BSONElement {
-        IDToInsert() : BSONElement( ( char * )( &idToInsert_ ) ) {}
-    } idToInsert;
+    };
 #pragma pack()
 
-    static BSONObj addIdField(const BSONObj &orig) {
-        // TODO: Remove the singleton IDToInsert, remove mutex, use local copies in caller.
-        static SimpleMutex mutex("addIdField");
-
+    BSONObj addIdField(const BSONObj &orig) {
         if (orig.hasField("_id")) {
             return orig;
         } else {
-            SimpleMutex::scoped_lock lk(mutex);
+            IDToInsert id;
             BSONObjBuilder b;
-            idToInsert_.oid.init();
             // _id first, everything else after
-            b.append(idToInsert);
+            b.append(BSONElement(id.rawdata()));
             b.appendElements(orig);
             return b.obj();
         }
@@ -195,7 +191,7 @@ namespace mongo {
             NaturalOrderCollection::insertObject(obj, overwrite);
         }
 
-        void createIndex(const BSONObj &info, bool resetTransient) {
+        void createIndex(const BSONObj &info) {
             massert(16459, "bug: system collections should not be indexed.", false);
         }
 
@@ -243,7 +239,8 @@ namespace mongo {
             _deleteMutex("cappedDeleteMutex") {
 
             if (options["autoIndexId"].trueValue()) {
-                // TODO: Create _id index
+                BSONObj info = indexInfo(fromjson("{\"_id\":1}"));
+                createIndex(info);
             }
         }
         CappedCollection(const BSONObj &serialized) :
@@ -379,28 +376,26 @@ namespace mongo {
         SimpleMutex _deleteMutex;
     };
 
-    static BSONObj pkIndexInfo(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) {
-        // We only know how to handle _id and $_ (implicit) primary keys.
-        dassert(pkIndexPattern.nFields() == 1);
-        dassert(pkIndexPattern["_id"].ok() || pkIndexPattern["$_"].ok());
+    BSONObj NamespaceDetails::indexInfo(const BSONObj &keyPattern) {
+        // Can only create the _id and $_ indexes internally.
+        dassert(keyPattern.nFields() == 1);
+        dassert(keyPattern["_id"].ok() || keyPattern["$_"].ok());
 
         BSONObjBuilder b;
-        b.append("ns", ns);
-        b.append("key", pkIndexPattern);
-        b.append("name", pkIndexPattern["_id"].ok() ? "_id_" : "$_");
-        b.appendBool("unique", true);
+        b.append("ns", _ns);
+        b.append("key", keyPattern);
+        b.append("name", keyPattern["_id"].ok() ? "_id_" : "$_");
 
-        // Choose which options are used for the _id index, manually. 
         BSONElement e;
-        e = options["readPageSize"];
+        e = _options["readPageSize"];
         if (e.ok() && !e.isNull()) {
             b.append(e);
         }
-        e = options["pageSize"];
+        e = _options["pageSize"];
         if (e.ok() && !e.isNull()) {
             b.append(e);
         }
-        e = options["compression"];
+        e = _options["compression"];
         if (e.ok() && !e.isNull()) {
             b.append(e);
         }
@@ -420,8 +415,8 @@ namespace mongo {
         tokulog(1) << "Creating NamespaceDetails " << ns << endl;
 
         // Create the primary key index, generating the info from the pk pattern and options.
-        BSONObj info = pkIndexInfo(ns, pkIndexPattern, options);
-        createIndex(info, true);
+        BSONObj info = indexInfo(pkIndexPattern);
+        createIndex(info);
 
         addNewNamespaceToCatalog(ns, &options);
     }
@@ -586,7 +581,7 @@ namespace mongo {
         NamespaceDetailsTransient::get(thisns).clearQueryCache();
     }
 
-    void NamespaceDetails::createIndex(const BSONObj &idx_info, bool resetTransient) {
+    void NamespaceDetails::createIndex(const BSONObj &idx_info) {
         uassert(16449, "dropDups is not supported and is likely to remain unsupported for some time because it deletes arbitrary data",
                 !idx_info["dropDups"].trueValue());
         uassert(12588, "cannot add index with a background operation in progress", !_indexBuildInProgress);
@@ -636,9 +631,7 @@ namespace mongo {
         }
         nsindex(ns)->update_ns(ns, this, may_overwrite);
 
-        if (resetTransient) {
-            NamespaceDetailsTransient::get(ns).addedIndex();
-        }
+        NamespaceDetailsTransient::get(ns).addedIndex();
     }
 
     // Normally, we cannot drop the _id_ index.

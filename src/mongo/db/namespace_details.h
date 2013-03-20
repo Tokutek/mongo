@@ -237,10 +237,7 @@ namespace mongo {
         virtual void deleteObject(const BSONObj &pk, const BSONObj &obj) = 0;
 
         // create a new index with the given info for this namespace.
-        //
-        // note this should only build the index and associate it with this
-        // namespace. should not insert into system.namespaces or system.indexes.
-        virtual void createIndex(const BSONObj &info, bool resetTransient = true);
+        virtual void createIndex(const BSONObj &info);
 
     protected:
         NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
@@ -249,6 +246,9 @@ namespace mongo {
         void insertIntoOneIndex(const int i, const BSONObj &pk, const BSONObj &obj, bool overwrite);
         void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, bool overwrite);
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
+
+        // generate an index info BSON for this namespace, with the same options
+        BSONObj indexInfo(const BSONObj &keyPattern);
 
         // fill the statistics for each index in the NamespaceDetails,
         // indexStats is an array of length nIndexes
