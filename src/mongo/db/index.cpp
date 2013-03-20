@@ -162,8 +162,8 @@ namespace mongo {
             }
         }
 
-        const int c_flags = DB_SERIALIZABLE;
-        DBC *cursor = newCursor(c_flags);
+        IndexDetails::Cursor c(this, DB_SERIALIZABLE);
+        DBC *cursor = c.dbc();
 
         storage::Key skey(key, pk != NULL ? &minKey : NULL);
         DBT kdbt = skey.dbt();
@@ -172,8 +172,6 @@ namespace mongo {
         UniqueCheckExtra extra(*this, key, isUnique);
         int r = cursor->c_getf_set_range(cursor, 0, &kdbt, mongo::uniqueCheckCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
-        r = cursor->c_close(cursor);
-        verify(r == 0);
 
         uassert(16453, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
         uassert(16454, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
@@ -208,16 +206,6 @@ namespace mongo {
         const int flags = DB_DELETE_ANY;
         int r = _db->del(_db, cc().txn().db_txn(), &kdbt, flags);
         verify(r == 0); // TODO: Lock not granted, deadlock?
-    }
-
-    // Get a new DB cursor over an index. Must already be in the context of a transction.
-    DBC *IndexDetails::newCursor(int flags) const {
-        DB_TXN *txn = cc().txn().db_txn();
-        DEV { LOG(3) << "new cursor txn " << txn << " flags " << flags << endl; }
-        DBC *cursor;
-        int r = _db->cursor(_db, txn, &cursor, flags);
-        verify(r == 0);
-        return cursor;
     }
 
     enum toku_compression_method IndexDetails::getCompressionMethod() const {

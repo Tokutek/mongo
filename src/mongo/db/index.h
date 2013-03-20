@@ -27,6 +27,7 @@
 #include "mongo/db/indexkey.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/namespace.h"
+#include "mongo/db/storage/cursor.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/txn.h"
 
@@ -117,7 +118,7 @@ namespace mongo {
 
         /** @return true if index has unique constraint */
         bool unique() const {
-            dassert(_info["unique"].trueValue() == _unique);
+            dassert((_info["unique"].trueValue() || isIdIndexPattern(_keyPattern)) == _unique);
             return _unique;
         }
 
@@ -138,7 +139,6 @@ namespace mongo {
 
         const BSONObj &info() const { return _info; }
 
-        DBC *newCursor(int flags = 0) const;
         void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite);
         void deletePair(const BSONObj &key, const BSONObj *pk, const BSONObj &obj);
 
@@ -149,6 +149,13 @@ namespace mongo {
         void uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const;
         void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
         void optimize();
+
+        class Cursor : public storage::Cursor {
+        public:
+            Cursor(const IndexDetails *idx, const int flags = 0) :
+                storage::Cursor(idx != NULL ? idx->_db : NULL, flags) {
+            }
+        };
 
     private:
         // Open dictionary representing the index on disk.

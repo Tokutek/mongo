@@ -28,6 +28,8 @@ smokeFlags = []
 # actions, I think.
 if has_option( 'smokedbprefix'):
     smokeFlags += ['--smoke-db-prefix', GetOption( 'smokedbprefix')]
+if has_option( 'smoke-continue-on-failure'):
+    smokeFlags += ['--continue-on-failure', GetOption( 'smoke-continue-on-failure')]
 if has_option( 'smoke-server-opts'):
     smokeFlags += ['--smoke-server-opts', GetOption('smoke-server-opts')]
 if has_option( 'smoke-quiet'):

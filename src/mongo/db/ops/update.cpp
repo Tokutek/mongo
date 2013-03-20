@@ -217,11 +217,12 @@ namespace mongo {
             modsAreIndexed = mods->isIndexed();
         }
 
-        if ( planPolicy.permitOptimalIdPlan() && !multi && !modsAreIndexed && mayUpdateById(d, patternOrig) ) {
-            int idxNo = d->findIdIndex();
-            verify(idxNo >= 0);
+
+        int idIdxNo = -1;
+        if ( planPolicy.permitOptimalIdPlan() && !multi && !modsAreIndexed &&
+                (idIdxNo = d->findIdIndex()) >= 0 && mayUpdateById(d, patternOrig) ) {
             debug.idhack = true;
-            IndexDetails &idx = d->idx(idxNo);
+            IndexDetails &idx = d->idx(idIdxNo);
             BSONObj pk = idx.getKeyFromQuery(patternOrig);
             tokulog(3) << "_updateObjects using simple _id query, pattern " << patternOrig << ", pk " << pk << endl;
             UpdateResult result = _updateById( pk,

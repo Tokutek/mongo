@@ -29,25 +29,6 @@
 
 namespace mongo {
 
-    static int touchIndexCursorCallback(const DBT *key, const DBT *val, void *extra) {
-        return TOKUDB_CURSOR_CONTINUE;
-    }
-    
-    static void touchIndex(IndexDetails* idx) {
-        DBC* cursor = idx->newCursor();
-        DB* db = NULL; // create a dummy db so we get access to negative and positive infinity
-        int r = 0;
-        r = db_create(&db, storage::env, 0);
-        verify(r == 0);
-        // prelock to induce prefetching
-        r = cursor->c_pre_acquire_range_lock(cursor, db->dbt_neg_infty(), db->dbt_pos_infty());
-        while (r != DB_NOTFOUND) {
-            killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
-            r = cursor->c_getf_next(cursor, 0, touchIndexCursorCallback, NULL);
-        }
-        db->close(db, 0);
-    }
-
     class TouchCmd : public Command {
     public:
         virtual LockType locktype() const { return NONE; }
@@ -106,18 +87,13 @@ namespace mongo {
                 errmsg = "ns not found";
                 return false;
             }
-            int id = nsd->findIdIndex();
 
-            if (touch_data) {
-                log() << " touching namespace " << ns << endl;
-                IndexDetails& idx = nsd->idx(id);
-                touchIndex(&idx);
-            }
-
-            if (touch_indexes) {
-                for (int i = 0; i < nsd->nIndexes(); i++) {
-                    if (i != id) {
-                        touchIndex(&nsd->idx(i));
+            for (int i = 0; i < nsd->nIndexes(); i++) {
+                IndexDetails &idx = nsd->idx(i);
+                if ((nsd->isPKIndex(idx) && touch_data) || (!nsd->isPKIndex(idx) && touch_indexes)) {
+                    shared_ptr<IndexCursor> c( new IndexCursor(nsd, &idx, minKey, maxKey, true, 1) );
+                    for ( ; c->ok(); c->advance()) {
+                        c->current();
                     }
                 }
             }
@@ -126,6 +102,6 @@ namespace mongo {
             return true;
         }
 
-    };
-    static TouchCmd touchCmd;
+    } touchCmd;
+
 }

@@ -40,6 +40,7 @@ namespace mongo {
         }
     }
 
+    // TODO: Callback is not exception safe.
     static int populate_nsindex_map(const DBT *key, const DBT *val, void *map_v) {
         BSONObj nobj(static_cast<const char *>(key->data));
         string ns = nobj["ns"].String();
@@ -78,6 +79,7 @@ namespace mongo {
             scoped_ptr<Client::Transaction> txnp(cc().hasTxn()
                                                  ? NULL
                                                  : new Client::Transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY));
+            // TODO: Cursor creation is not exception safe.
             DBC *cursor;
             r = nsdb->cursor(nsdb, cc().txn().db_txn(), &cursor, 0);
             verify(r == 0);

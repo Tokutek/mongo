@@ -155,7 +155,8 @@ namespace mongo {
         BSONObj getKey(int direction) {
             // get a cursor over the primary key index
             IndexDetails &pkIdx = getPKIndex();
-            DBC *cursor = pkIdx.newCursor();
+            IndexDetails::Cursor c(&pkIdx);
+            DBC *cursor = c.dbc();
 
             // find the last key
             int r;
@@ -168,9 +169,6 @@ namespace mongo {
             }
             verify(r == 0 || r == DB_NOTFOUND);
             dassert(obj.nFields() == 1);
-
-            r = cursor->c_close(cursor);
-            verify(r == 0);
 
             return obj;
         }
@@ -187,7 +185,7 @@ namespace mongo {
 
         // strip out the _id field before inserting into a system collection
         void insertObject(BSONObj &obj, bool overwrite) {
-            obj = beautifyAndRemoveId(obj);
+            obj = beautify(obj);
             NaturalOrderCollection::insertObject(obj, overwrite);
         }
 
@@ -196,14 +194,15 @@ namespace mongo {
         }
 
     private:
-        // For consistency with Vanilla MongoDB, system objects have no _id field and have
-        // the have the following fields in order, if they exist (so this code works for both
-        // system.namespaces and system.indexes)
+        // For consistency with Vanilla MongoDB, system objects have the following
+        // fields, in order, if they exist.
         //
         //  { key, unique, ns, name, [everything else] }
         //
         // This code is largely borrowed from prepareToBuildIndex() in Vanilla.
-        BSONObj beautifyAndRemoveId(const BSONObj &obj) {
+        //
+        // Also, for consistency, system.indexes and system.namespaces have no _id field.
+        BSONObj beautify(const BSONObj &obj) {
             BSONObjBuilder b;
             if (obj["key"].ok()) {
                 b.append(obj["key"]);
@@ -217,10 +216,11 @@ namespace mongo {
             if (obj["name"].ok()) { 
                 b.append(obj["name"]);
             }
+            const bool keepId = _ns != string("system.indexes") && _ns != string("system.namespaces");
             for (BSONObjIterator i = obj.begin(); i.more(); ) {
                 BSONElement e = i.next();
                 string s = e.fieldName();
-                if (s != "key" && s != "unique" && s != "ns" && s != "name" && s != "_id") {
+                if (s != "key" && s != "unique" && s != "ns" && s != "name" && (s != "_id" || keepId)) {
                     b.append(e);
                 }
             }
@@ -490,7 +490,8 @@ namespace mongo {
 
         // get a cursor over the primary key index
         IndexDetails &pkIdx = getPKIndex();
-        DBC *cursor = pkIdx.newCursor();
+        IndexDetails::Cursor c(&pkIdx);
+        DBC *cursor = c.dbc();
 
         // create an index key
         DBT key_dbt = storage::make_dbt(key.objdata(), key.objsize());
@@ -501,8 +502,6 @@ namespace mongo {
         struct findByPKCallbackExtra extra(key, obj);
         r = cursor->c_getf_set(cursor, 0, &key_dbt, findByPKCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND);
-        r = cursor->c_close(cursor);
-        verify(r == 0);
 
         if (!obj.isEmpty()) {
             result = obj;
