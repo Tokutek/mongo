@@ -101,6 +101,28 @@ namespace mongo {
     // the compiler would use if inside the function.  the reason this is static is to avoid a malloc/free for this
     // on every logop call.
     static BufBuilder logopbufbuilder(8*1024);
+
+    static BSONObj createOpBson(
+        const char *opstr, 
+        const char *ns, 
+        const BSONObj& obj, 
+        BSONObj *o2, 
+        bool fromMigrate
+        ) 
+    {
+        BSONObjBuilder b;
+        b.append("op", opstr);
+        b.append("ns", ns);
+        if (fromMigrate) {
+            b.appendBool("fromMigrate", true);
+        }
+        if ( o2 ) {
+            b.append("o2", *o2);
+        }
+        b.append("o", obj);
+        return b.obj();
+    }
+    
     static void _logOpRS(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool fromMigrate ) {
         Lock::DBWrite lk1("local");
 
@@ -125,25 +147,17 @@ namespace mongo {
             hashNew = 0;
         }
 
-        /* we jump through a bunch of hoops here to avoid copying the obj buffer twice --
-           instead we do a single copy to the destination position in the memory mapped file.
-        */
         // This is very temporary, and will likely fail on large row insertions
         logopbufbuilder.reset();
         tempId++;
         BSONObjBuilder b(logopbufbuilder);
         b.appendNumber("_id", tempId);
         b.appendTimestamp("ts", ts.asDate());
-        b.append("h", hashNew);
-        b.append("op", opstr);
-        b.append("ns", ns);
-        if (fromMigrate) {
-            b.appendBool("fromMigrate", true);
-        }
-        if ( o2 ) {
-            b.append("o2", *o2);
-        }
-        b.append("o", obj);
+        b.append("h", hashNew);        
+        BSONArrayBuilder opInfo;
+        opInfo.append(createOpBson(opstr, ns, obj, o2, fromMigrate));
+        b.append("ops", opInfo.arr());
+
         const char *logns = rsoplog;
         if ( rsOplogDetails == 0 ) {
             Client::Context ctx( logns , dbpath, false);
