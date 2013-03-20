@@ -584,7 +584,19 @@ namespace replset {
             fassert(16113, !Lock::isLocked());
 
             try {
-                _syncThread();
+                //
+                //
+                //
+                //
+                //
+                // Disabling sync thread
+                //
+                //
+                //
+                //
+                //
+                //
+                //_syncThread();
             }
             catch(DBException& e) {
                 sethbmsg(str::stream() << "syncThread: " << e.toString());
