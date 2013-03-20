@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dummy comment to test
+
 set -e
 set -u
 
