@@ -59,18 +59,17 @@ namespace mongo {
         checkRsConfig();
         log() << "replSet info saving a newer config version to local.system.replset" << rsLog;
         {
-            Lock::GlobalWrite lk; // TODO: does this really need to be a global lock?
+            // TODO: does this really need to be a global lock?
+            Lock::GlobalWrite lk;
             Client::Context cx( rsConfigNs );
-            cx.db()->flushFiles(true);
 
             //theReplSet->lastOpTimeWritten = ??;
             //rather than above, do a logOp()? probably
             BSONObj o = asBson();
             Helpers::putSingletonGod(rsConfigNs.c_str(), o, false/*logOp=false; local db so would work regardless...*/);
-            if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) )
+            if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
                 logOpInitiate(comment);
-
-            cx.db()->flushFiles(true);
+            }
         }
         log() << "replSet saveConfigLocally done" << rsLog;
     }
