@@ -95,36 +95,6 @@ namespace mongo {
         }
     }
 
-    /** given a BSON object, create a new one at dst which is the existing (partial) object
-        with a new object element appended at the end with fieldname "o".
-
-        @param partial already build object with everything except the o member.  e.g. something like:
-               { ts:..., ns:..., os2:... }
-        @param o a bson object to be added with fieldname "o"
-        @dst   where to put the newly built combined object.  e.g. ends up as something like:
-               { ts:..., ns:..., os2:..., o:... }
-    */
-    void append_O_Obj(char *dst, const BSONObj& partial, const BSONObj& o) {
-        const int size1 = partial.objsize() - 1;  // less the EOO char
-        const int oOfs = size1+3;                 // 3 = byte BSONOBJTYPE + byte 'o' + byte \0
-
-        void *p = (char*)dst + oOfs; //getDur().writingPtr(dst, oOfs+o.objsize()+1);
-
-        memcpy(p, partial.objdata(), size1);
-
-        // adjust overall bson object size for the o: field
-        *(static_cast<unsigned*>(p)) += o.objsize() + 1/*fieldtype byte*/ + 2/*"o" fieldname*/;
-
-        char *b = static_cast<char *>(p);
-        b += size1;
-        *b++ = (char) Object;
-        *b++ = 'o'; // { o : ... }
-        *b++ = 0;   // null terminate "o" fieldname
-        memcpy(b, o.objdata(), o.objsize());
-        b += o.objsize();
-        *b = EOO;
-    }
-
     // global is safe as we are in write lock. we put the static outside the function to avoid the implicit mutex 
     // the compiler would use if inside the function.  the reason this is static is to avoid a malloc/free for this
     // on every logop call.
@@ -132,6 +102,7 @@ namespace mongo {
     static void _logOpRS(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool fromMigrate ) {
         Lock::DBWrite lk1("local");
 
+        // TODO: (Zardosht) What is this code doing? Learn in.
         if ( strncmp(ns, "local.", 6) == 0 ) {
             if ( strncmp(ns, "local.slaves", 12) == 0 )
                 resetSlaveCache();
@@ -167,6 +138,16 @@ namespace mongo {
         if ( o2 ) {
             b.append("o2", *o2);
         }
+        const char *logns = rsoplog;
+        if ( rsOplogDetails == 0 ) {
+            Client::Context ctx( logns , dbpath, false);
+            localDB = ctx.db();
+            verify( localDB );
+            rsOplogDetails = nsdetails(logns);
+            massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
+        }
+        BSONObj obj = b.done();
+        rsOplogDetails->insertObject(const BSONObj & obj, true);
 #if 0
         BSONObj partial = b.done();
         int posz = partial.objsize();
