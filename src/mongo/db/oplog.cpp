@@ -95,6 +95,8 @@ namespace mongo {
         }
     }
 
+    static uint64_t tempId = 0;
+
     // global is safe as we are in write lock. we put the static outside the function to avoid the implicit mutex 
     // the compiler would use if inside the function.  the reason this is static is to avoid a malloc/free for this
     // on every logop call.
@@ -128,7 +130,9 @@ namespace mongo {
         */
 
         logopbufbuilder.reset();
+        tempId++;
         BSONObjBuilder b(logopbufbuilder);
+        b.appendNumber("_id", tempId);
         b.appendTimestamp("ts", ts.asDate());
         b.append("h", hashNew);
         b.append("op", opstr);
@@ -148,43 +152,6 @@ namespace mongo {
         }
         BSONObj bb = b.done();
         rsOplogDetails->insertObject(bb, true);
-#if 0
-        BSONObj partial = b.done();
-        int posz = partial.objsize();
-        int len = posz + obj.objsize() + 1 + 2 /*o:*/;
-
-        Record *r;
-        DEV verify( logNS == 0 );
-        {
-            const char *logns = rsoplog;
-            if ( rsOplogDetails == 0 ) {
-                Client::Context ctx( logns , dbpath, false);
-                localDB = ctx.db();
-                verify( localDB );
-                rsOplogDetails = nsdetails(logns);
-            }
-            Client::Context ctx( logns , localDB, false );
-            r = NULL; ::abort(); (void) len; //theDataFileMgr.fast_oplog_insert(rsOplogDetails, logns, len);
-            /* todo: now() has code to handle clock skew.  but if the skew server to server is large it will get unhappy.
-                     this code (or code in now() maybe) should be improved.
-                     */
-            if( theReplSet ) {
-                if( !(theReplSet->lastOpTimeWritten<ts) ) {
-                    log() << "replSet ERROR possible failover clock skew issue? " << theReplSet->lastOpTimeWritten << ' ' << ts << rsLog;
-                    log() << "replSet " << theReplSet->isPrimary() << rsLog;
-                }
-                theReplSet->lastOpTimeWritten = ts;
-                theReplSet->lastH = hashNew;
-                ctx.getClient()->setLastOp( ts );
-            }
-        }
-
-        append_O_Obj(r->data(), partial, obj);
-
-        if ( logLevel >= 6 ) {
-            log( 6 ) << "logOp:" << BSONObj::make(r) << endl;
-        }
-#endif
     }    
 
     static void (*_logOp)(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool fromMigrate ) = _logOpUninitialized;
