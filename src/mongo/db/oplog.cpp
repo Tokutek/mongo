@@ -137,11 +137,13 @@ namespace mongo {
         b.append("h", hashNew);
         b.append("op", opstr);
         b.append("ns", ns);
-        if (fromMigrate) 
+        if (fromMigrate) {
             b.appendBool("fromMigrate", true);
+        }
         if ( o2 ) {
             b.append("o2", *o2);
         }
+        b.append("o", obj);
         const char *logns = rsoplog;
         if ( rsOplogDetails == 0 ) {
             Client::Context ctx( logns , dbpath, false);
