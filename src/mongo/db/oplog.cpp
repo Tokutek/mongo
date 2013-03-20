@@ -128,7 +128,7 @@ namespace mongo {
         /* we jump through a bunch of hoops here to avoid copying the obj buffer twice --
            instead we do a single copy to the destination position in the memory mapped file.
         */
-
+        // This is very temporary, and will likely fail on large row insertions
         logopbufbuilder.reset();
         tempId++;
         BSONObjBuilder b(logopbufbuilder);
