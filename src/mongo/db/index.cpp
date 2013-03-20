@@ -36,7 +36,7 @@ namespace mongo {
     IndexDetails::IndexDetails(const BSONObj &info, bool may_create) :
         _info(info.copy()),
         _keyPattern(info["key"].Obj().copy()),
-        _unique(info["unique"].trueValue()),
+        _unique(info["unique"].trueValue() || isIdIndexPattern(_keyPattern)),
         _clustering(info["clustering"].trueValue()) {
 
         string dbname = indexNamespace();
