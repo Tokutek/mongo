@@ -714,39 +714,6 @@ namespace mongo {
         return ok;
     }
 
-    void checkAndInsert(const char *ns, /*modifies*/BSONObj& js) { 
-        uassert( 10059 , "object to insert too large", js.objsize() <= BSONObjMaxUserSize);
-        {
-            // check no $ modifiers.  note we only check top level.  (scanning deep would be quite expensive)
-            BSONObjIterator i( js );
-            while ( i.more() ) {
-                BSONElement e = i.next();
-                uassert( 13511 , "document to insert can't have $ fields" , e.fieldName()[0] != '$' );
-            }
-        }
-        BSONElement idField = js.getField( "_id" );
-        uassert( 16440 ,  "_id cannot be an array", idField.type() != Array );
-        insertObject(ns, js);
-    }
-
-    NOINLINE_DECL void insertMulti(bool keepGoing, const char *ns, vector<BSONObj>& objs) {
-        size_t i;
-        for (i=0; i<objs.size(); i++){
-            try {
-                checkAndInsert(ns, objs[i]);
-                //getDur().commitIfNeeded();
-            } catch (const UserException&) {
-                if (!keepGoing || i == objs.size()-1){
-                    globalOpCounters.incInsertInWriteLock(i);
-                    throw;
-                }
-                // otherwise ignore and keep going
-            }
-        }
-
-        globalOpCounters.incInsertInWriteLock(i);
-    }
-
     void receivedInsert(Message& m, CurOp& op) {
         DbMessage d(m);
         const char *ns = d.getns();
@@ -756,13 +723,10 @@ namespace mongo {
             // strange.  should we complain?
             return;
         }
-        BSONObj first = d.nextJsObj();
 
-        vector<BSONObj> multi;
+        vector<BSONObj> objs;
         while (d.moreJSObjs()){
-            if (multi.empty()) // first pass
-                multi.push_back(first);
-            multi.push_back( d.nextJsObj() );
+            objs.push_back( d.nextJsObj() );
         }
 
         Client::Transaction transaction(DB_SERIALIZABLE);
@@ -775,13 +739,10 @@ namespace mongo {
         if ( handlePossibleShardedMessage( m , 0 ) )
             return;
 
-        if( !multi.empty() ) {
-            const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
-            insertMulti(keepGoing, ns, multi);
-        } else {
-            checkAndInsert(ns, first);
-            globalOpCounters.incInsertInWriteLock(1);
-        }
+        const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
+        insertObjects(ns, objs, keepGoing);
+        globalOpCounters.incInsertInWriteLock(objs.size());
+
         transaction.commit();
     }
 

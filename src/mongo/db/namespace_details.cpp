@@ -293,13 +293,9 @@ namespace mongo {
                     shared_ptr<Cursor> c( new BasicCursor(this) );
                     // Delete older objects until we've made enough room for
                     // the new one. Opportunistically delete up to 8 total
-                    // while the collection is still gorged (because other
-                    // threads incremented _currObjects and _currSize to
-                    // declare their intent to insert, and they're waiting
-                    // on the deleteMutex.
+                    // while the collection is still gorged.
                     long long bytesTrimmed = 0;
                     for ( long long i = 0;
-                          // cursor has more, we should to do more work, and its gorged
                           c->ok() && (bytesTrimmed < obj.objsize() || (i < 8)) && isGorged(n, size);
                           i++, c->advance()) {
                         BSONObj oldestObj = c->current();
