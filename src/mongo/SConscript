@@ -102,6 +102,7 @@ env.StaticLibrary('mongocommon', commonFiles,
 
 env.StaticLibrary("coredb", [
         "client/parallel.cpp",
+        "db/client_transaction.cpp",
         "db/commands.cpp",
         "db/commands/hashcmd.cpp",
         "db/commands/isself.cpp",

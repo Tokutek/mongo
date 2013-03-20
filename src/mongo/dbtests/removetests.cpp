@@ -41,14 +41,13 @@ namespace RemoveTests {
             
             {
                 // Remove _id range [_min, _max).
-                Lock::DBWrite lk(ns);
-                Client::Context ctx( ns );
-                ctx.beginTransaction();
+                Client::Transaction transaction(DB_SERIALIZABLE);
+                Client::WriteContext ctx(ns);
                 Helpers::removeRange( ns,
                                       BSON( "_id" << _min ),
                                       BSON( "_id" << _max ),
                                       BSON( "_id" << 1 ) );
-                ctx.commitTransaction();
+                transaction.commit();
             }
 
             // Check that the expected documents remain.

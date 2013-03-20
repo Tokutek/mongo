@@ -70,18 +70,13 @@ namespace QueryOptimizerTests {
 
         class Base {
         public:
-            Base() : _ctx( ns() ) , indexNum_( 0 ) {
+            Base() : _transaction(DB_SERIALIZABLE), _ctx( ns() ) , indexNum_( 0 ) {
                 string err;
-                _ctx.beginTransaction();
                 userCreateNS( ns(), BSONObj(), err, false );
-                _ctx.commitTransaction();
             }
             ~Base() {
                 if ( !nsd() )
                     return;
-                _ctx.beginTransaction();
-                dropCollection( ns() );
-                _ctx.commitTransaction();
             }
         protected:
             static const char *ns() { return "unittests.QueryPlanTests"; }
@@ -116,6 +111,7 @@ namespace QueryOptimizerTests {
             }
             DBDirectClient &client() const { return client_; }
         private:
+            Client::Transaction _transaction;
             Lock::GlobalWrite lk_;
             Client::Context _ctx;
             int indexNum_;
@@ -848,17 +844,14 @@ namespace QueryOptimizerTests {
 
         class Base {
         public:
-            Base() : _context( ns() ) {
+            Base() : _transaction(DB_SERIALIZABLE), _context( ns() ) {
                 string err;
-                _context.beginTransaction();
                 userCreateNS( ns(), BSONObj(), err, false );
             }
             virtual ~Base() {
                 if ( !nsd() )
                     return;
                 NamespaceDetailsTransient::get_inlock( ns() ).clearQueryCache();
-                dropCollection( ns() );
-                _context.commitTransaction();
             }
         protected:
             static void assembleRequest( const string &ns, BSONObj query, int nToReturn, int nToSkip, BSONObj *fieldsToReturn, int queryOptions, Message &toSend ) {
@@ -894,6 +887,7 @@ namespace QueryOptimizerTests {
             static NamespaceDetails *nsd() { return nsdetails( ns() ); }
             DBDirectClient &client() { return _client; }
         private:
+            Client::Transaction _transaction;
             Lock::GlobalWrite lk_;
             Client::Context _context;
             DBDirectClient _client;
@@ -1408,19 +1402,15 @@ namespace QueryOptimizerTests {
 
     class Base {
     public:
-        Base() : _ctx( ns() ) {
+        Base() : _transaction(DB_SERIALIZABLE), _ctx( ns() ) {
             string err;
-            _ctx.beginTransaction();
             userCreateNS( ns(), BSONObj(), err, false );
-            //_ctx.commitTransaction();
         }
         ~Base() {
             if ( !nsd() )
                 return;
             string s( ns() );
-            //_ctx.beginTransaction();
             dropCollection( ns() );
-            _ctx.commitTransaction();
         }
     protected:
         static const char *ns() { return "unittests.QueryOptimizerTests"; }
@@ -1435,6 +1425,7 @@ namespace QueryOptimizerTests {
         }
         DBDirectClient &client() { return _client; }
     private:
+        Client::Transaction _transaction;
         Lock::GlobalWrite lk_;
         Client::Context _ctx;
         DBDirectClient _client;
