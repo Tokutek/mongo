@@ -565,12 +565,11 @@ namespace mongo {
             tokulog(2) << "Didn't find nsdetails(" << ns << "), creating it." << endl;
 
             Namespace ns_s(ns);
-            shared_ptr<NamespaceDetails> new_details(new NamespaceDetails(ns, options, false));
+            shared_ptr<NamespaceDetails> new_details( NamespaceDetails::make(ns, options) );
             ni->add_ns(ns, new_details);
 
             details = ni->details(ns);
-
-            details->addIdIndexToCatalog();
+            details->addPKIndexToCatalog();
         }
         return details;
     }

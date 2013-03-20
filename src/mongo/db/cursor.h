@@ -318,7 +318,7 @@ namespace mongo {
         long long _nscanned;
         int _numWanted;
 
-        DBC *_cursor;
+        IndexDetails::Cursor _cursor;
         bool _tailable;
         bool _readOnly;
 

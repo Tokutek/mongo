@@ -728,9 +728,7 @@ namespace mongo {
                 NamespaceDetails *nsd = nsdetails( source.c_str() );
                 uassert( 10026 ,  "source namespace does not exist", nsd );
                 capped = nsd->isCapped();
-                if ( capped ) {
-                    size = nsd->cappedSize();
-                }
+                // TODO: Get the capped size
             }
 
             Client::Context ctx( target ); //auths against target

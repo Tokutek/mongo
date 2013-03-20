@@ -113,6 +113,7 @@ namespace mongo {
     void _logOpObjRS(const BSONObj& op);
 
     static void emptyOplog() {
+#if 0
         Client::WriteContext ctx(rsoplog);
         NamespaceDetails *d = nsdetails(rsoplog);
 
@@ -122,7 +123,9 @@ namespace mongo {
         ::abort();
 
         LOG(1) << "replSet empty oplog" << rsLog;
-        d->emptyCappedCollection(rsoplog);
+        //d->emptyCappedCollection(rsoplog);
+        ::abort();
+#endif
     }
 
     Member* ReplSetImpl::getMemberToSyncTo() {

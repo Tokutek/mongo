@@ -1288,10 +1288,13 @@ namespace mongo {
             struct NamespaceDetailsAccStats accStats;
             nsd->fillCollectionStats(&accStats, &result, scale);
 
+            // TODO: Capped collection stats
+#if 0
             if ( nsd->isCapped() ) {
                 result.append( "capped" , nsd->isCapped() );
                 result.appendNumber( "max" , nsd->maxCappedDocs() );
             }
+#endif
 
             return true;
         }

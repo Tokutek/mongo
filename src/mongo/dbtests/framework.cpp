@@ -112,7 +112,7 @@ namespace mongo {
             ("debug", "run tests with verbose output")
             ("list,l", "list available test suites")
             ("filter,f" , po::value<string>() , "string substring filter on test name" )
-            ("verbose,v", "verbose")
+            ("verbose,v", "be more verbose (include multiple times for more verbosity e.g. -vvvvv)")
             ("dur", "enable journaling (currently the default)")
             ("nodur", "disable journaling")
             ("seed", po::value<unsigned long long>(&seed), "random number seed")
@@ -125,6 +125,11 @@ namespace mongo {
             ;
 
             positional_options.add("suites", -1);
+
+            /* support for -vv -vvvv etc. */
+            for (string s = "vv"; s.length() <= 10; s.append("v")) {
+                hidden_options.add_options()(s.c_str(), "verbose");
+            }
 
             cmdline_options.add(shell_options).add(hidden_options);
 
@@ -153,6 +158,12 @@ namespace mongo {
 
             if (params.count("debug") || params.count("verbose") ) {
                 logLevel = 1;
+            }
+
+            for (string s = "vv"; s.length() <= 10; s.append("v")) {
+                if (params.count(s)) {
+                    logLevel = s.length();
+                }
             }
 
             if (params.count("list")) {
