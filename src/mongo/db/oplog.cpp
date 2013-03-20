@@ -164,9 +164,9 @@ namespace mongo {
         b.append("ns", ns);
         if (fromMigrate) 
             b.appendBool("fromMigrate", true);
-        if ( o2 )
+        if ( o2 ) {
             b.append("o2", *o2);
-        ::abort();
+        }
 #if 0
         BSONObj partial = b.done();
         int posz = partial.objsize();
