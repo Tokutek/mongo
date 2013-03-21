@@ -136,6 +136,9 @@ namespace mongo {
 
         /**
          * A stack of transactions, with parent/child relationships.
+         * There is zero or one of these per Client.
+         * Client::Transaction is a proxy for calls to beginTxn, commitTxn, and abortTxn, you should probably use that instead.
+         * It is possible for one of these to get stolen from a Client, for example, if a cursor needs to persist it between requests.
          */
         class TransactionStack : boost::noncopyable {
             // If we had emplace we wouldn't need a shared_ptr...
@@ -143,6 +146,7 @@ namespace mongo {
           public:
             TransactionStack() {}
             ~TransactionStack() {
+                // This ensures that things get destroyed in the right order, I don't know if std::stack gives that guarantee.
                 while (hasLiveTxn()) {
                     abortTxn();
                 }
@@ -164,6 +168,9 @@ namespace mongo {
         /**
          * A convenience object to create scoped transactions.
          * Knows what txn it created in case the stack gets swapped out underneath.
+         * This class doesn't actually store the DB_TXN, that lives in storage::Txn.
+         * This class manages the *lifetime* of a transaction.
+         * If the TransactionStack gets swapped out during the lifetime of this object, that gets detected and the destructor becomes a no-op.
          */
         class Transaction : boost::noncopyable {
             const storage::Txn *_txn;
