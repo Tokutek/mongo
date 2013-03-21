@@ -172,9 +172,8 @@ namespace mongo {
         UniqueCheckExtra extra(*this, key, isUnique);
         int r = cursor->c_getf_set_range(cursor, 0, &kdbt, mongo::uniqueCheckCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
-
-        uassert(16453, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
-        uassert(16454, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
+        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
+        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
 
         uassert(ASSERT_ID_DUPKEY, mongoutils::str::stream() << "E11000 duplicate key error, " << key << " already exists in unique index", isUnique);
     }
@@ -191,12 +190,10 @@ namespace mongo {
         // TODO: We already did the unique check above. Can we just pass flags of 0?
         const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
         int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, flags);
-        if (r != 0) {
-            tokulog() << "error inserting " << key << ", " << val << endl;
-        } else {
-            tokulog(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
-        }
-        verify(r == 0); // TODO: Lock not granted, deadlock?
+        verify(r == 0 || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
+        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
+        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
+        tokulog(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
     }
 
     void IndexDetails::deletePair(const BSONObj &key, const BSONObj *pk, const BSONObj &obj) {

@@ -323,8 +323,8 @@ namespace mongo {
             r = cursor->c_getf_set_range_reverse(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         }
         verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
-        uassert(16457, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
-        uassert(16458, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
+        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
+        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
         _getf_iteration++;
         _currKey = extra.rows_fetched > 0 ? _buffer.currentKey() : BSONObj();
         _currPK = extra.rows_fetched > 0 ? _buffer.currentPK() : BSONObj();
@@ -500,7 +500,9 @@ namespace mongo {
             r = cursor->c_getf_prev(cursor, getf_flags(), cursor_getf, &extra);
         }
         _getf_iteration++;
-        verify(r == 0 || r == DB_NOTFOUND);
+        verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
+        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
+        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
         return extra.rows_fetched > 0 ? true : false;
     }
 
