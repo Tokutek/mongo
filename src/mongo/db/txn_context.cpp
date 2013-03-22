@@ -32,8 +32,10 @@ namespace mongo {
     }
 
     void TxnContext::commit(int flags) {
+        _txn.commit(flags);
     }
 
     void TxnContext::abort() {
+        _txn.abort();
     }
 } // namespace mongo

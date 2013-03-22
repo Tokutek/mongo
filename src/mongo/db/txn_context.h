@@ -36,6 +36,12 @@ namespace mongo {
         ~TxnContext();
         void commit(int flags);
         void abort();
+        /** @return the managed DB_TXN object */
+        DB_TXN *db_txn() const { return _txn.db_txn(); }
+        /** @return true iff this transaction is live */
+        bool isLive() const { return _txn.isLive(); }
+        /** @return true iff this is a read only transaction */
+        bool isReadOnly() const { return _txn.isReadOnly; };
     };
 
 
