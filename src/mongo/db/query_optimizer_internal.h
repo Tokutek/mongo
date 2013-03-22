@@ -21,7 +21,7 @@
 #include "mongo/db/explain.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/query_plan.h"
-#include "mongo/db/queryutil.h"
+#include "mongo/db/parsed_query.h"
 #include "mongo/util/elapsed_tracker.h"
 
 #pragma once
@@ -30,8 +30,10 @@ namespace mongo {
 
     static const int OutOfOrderDocumentsAssertionCode = 14810;
 
-    class IndexDetails;
+    class FieldRangeSetPair;
     class QueryPlanSelectionPolicy;
+    class OrRangeGenerator;
+    class ParsedQuery;
     
     /**
      * Helper class for a QueryPlanRunner to cache and count matches.  One object of this type is
@@ -567,9 +569,7 @@ namespace mongo {
         const QueryPlan* singlePlan() const;
         
         /** @return true if more $or clauses need to be scanned. */
-        bool hasMoreClauses() const {
-            return _or ? ( !_tableScanned && !_org->orRangesExhausted() ) : _i == 0;
-        }
+        bool hasMoreClauses() const;
 
         /**
          * @return plan information if there is a cached plan for a non $or query, otherwise an

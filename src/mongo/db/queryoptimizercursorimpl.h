@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "mongo/db/queryutil.h"
+#include "mongo/db/parsed_query.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/querypattern.h"
 

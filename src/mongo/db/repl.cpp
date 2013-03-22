@@ -48,6 +48,7 @@
 #include "pcrecpp.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/parsed_query.h"
 
 namespace mongo {
 

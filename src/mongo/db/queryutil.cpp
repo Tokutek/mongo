@@ -1,5 +1,3 @@
-// @file queryutil.cpp
-
 /*    Copyright 2009 10gen Inc.
  *    Copyright (C) 2013 Tokutek Inc.
  *
@@ -22,18 +20,11 @@
 #include "mongo/db/querypattern.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/queryutil.h"
-#include "../util/startup_test.h"
-#include "dbmessage.h"
-#include "../util/mongoutils/str.h"
+#include "mongo/util/startup_test.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
-    ParsedQuery::ParsedQuery( QueryMessage& qm )
-    : _ns( qm.ns ) , _ntoskip( qm.ntoskip ) , _ntoreturn( qm.ntoreturn ) , _options( qm.queryOptions ) {
-        init( qm.query );
-        initFields( qm.fields );
-    }
-    
     extern BSONObj staticNull;
     extern BSONObj staticUndefined;
 

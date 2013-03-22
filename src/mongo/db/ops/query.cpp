@@ -24,8 +24,9 @@
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/query_optimizer.h"
+#include "mongo/db/parsed_query.h"
 #include "mongo/db/query_plan_summary.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/scanandorder.h"
@@ -37,7 +38,7 @@ namespace mongo {
     /* We cut off further objects once we cross this threshold; thus, you might get
        a little bit more than this, it is a threshold rather than a limit.
     */
-    const int MaxBytesToReturnToClientAtOnce = 4 * 1024 * 1024;
+    const int32_t MaxBytesToReturnToClientAtOnce = 4 * 1024 * 1024;
 
     bool runCommands(const char *ns, BSONObj& jsobj, CurOp& curop, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions) {
         try {

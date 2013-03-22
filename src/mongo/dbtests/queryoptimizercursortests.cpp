@@ -28,6 +28,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/json.h"
+#include "mongo/db/queryutil.h"
 #include "mongo/dbtests/dbtests.h"
 
 namespace mongo {

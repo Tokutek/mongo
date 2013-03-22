@@ -24,6 +24,7 @@
 #include "mongo/db/explain.h"
 #include "mongo/db/query_plan_summary.h"
 #include "mongo/db/query_optimizer_internal.h"
+#include "mongo/db/queryutil.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/exception.h"
 
