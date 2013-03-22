@@ -308,7 +308,7 @@ namespace mongo {
                 // this is so that we don't have to handle this cursor in the delete code
                 c.reset(0);
                 
-                OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate, cc().txn());
+                OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate, &cc().txn());
                 deleteOneObject( d, nsdt, pk, obj);
                 numDeleted++;
             }

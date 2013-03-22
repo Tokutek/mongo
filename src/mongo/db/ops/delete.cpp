@@ -68,7 +68,7 @@ namespace mongo {
             tokulog(4) << "_deleteObjects iteration: pk " << pk << ", obj " << obj << endl;
 
             if ( logop ) {
-                OpLogHelpers::logDelete(ns, obj, false, cc().txn());
+                OpLogHelpers::logDelete(ns, obj, false, &cc().txn());
             }
 
             deleteOneObject(d, nsdt, pk, obj);

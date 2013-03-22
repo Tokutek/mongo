@@ -163,7 +163,7 @@ namespace mongo {
                 try {
                     insertObject(to_collection, js);
                     if ( logForRepl ) {
-                        OpLogHelpers::logInsert(to_collection, js, cc().txn());
+                        OpLogHelpers::logInsert(to_collection, js, &cc().txn());
                     }
                 }
                 catch( UserException& e ) {
@@ -222,7 +222,7 @@ namespace mongo {
                 try {
                     insertObject(to_collection, js);
                     if ( logForRepl ) {
-                        OpLogHelpers::logInsert(to_collection, js, cc().txn());
+                        OpLogHelpers::logInsert(to_collection, js, &cc().txn());
                     }
                 }
                 catch( UserException& e ) {
