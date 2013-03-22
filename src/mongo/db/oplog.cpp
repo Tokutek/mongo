@@ -153,7 +153,7 @@ namespace mongo {
         BSONObjBuilder b(logopbufbuilder);
         b.appendNumber("_id", tempId);
         b.appendTimestamp("ts", ts.asDate());
-        b.append("h", hashNew);        
+        b.append("h", hashNew);
         BSONArrayBuilder opInfo;
         opInfo.append(createOpBson(opstr, ns, obj, o2, fromMigrate));
         b.append("ops", opInfo.arr());

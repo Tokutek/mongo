@@ -14,33 +14,31 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "txn_context.h"
-
 #include "mongo/pch.h"
 
-#include <db.h>
-#include "mongo/db/storage/env.h"
-
 namespace mongo {
+    
+    OpLogHelpers::logComment(BSONObj comment, TxnContext* txn) {
+    }
+    
+    OpLogHelpers::logInsert(const char* ns, BSONObj row, TxnContext* txn) {
+        BSONObjBuilder b;
+        b.append("op", "i");
+        b.append("ns", ns);
+        b.append("o", row);
+        _txnOps.append(b.obj());
+    }
 
-    TxnContext::TxnContext(const TxnContext *parent, int txnFlags)
-            : _txn(&parent->_txn, txnFlags)
+    OpLogHelpers::logUpdate(
+        const char* ns, 
+        BSONObj oldRow, 
+        BSONObj newRow, 
+        TxnContext* txn
+        ) 
     {
     }
 
-    TxnContext::~TxnContext() {
+    OpLogHelpers::logDelete(const char* ns, BSONObj row, TxnContext* txn) {
     }
 
-    void TxnContext::commit(int flags) {
-        _txn.commit(flags);
-    }
-
-    void TxnContext::abort() {
-        _txn.abort();
-    }
-
-    void TxnContext::logOp(BSONObj op)
-    {
-        _txnOps.append(op);
-    }
 } // namespace mongo

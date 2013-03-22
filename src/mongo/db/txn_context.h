@@ -19,6 +19,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/storage/txn.h"
+#include "mongo/bson/bsonobjbuilder.h"
 
 #include <db.h>
 
@@ -30,8 +31,15 @@ namespace mongo {
      * Knows whether it's read-only (useful for the cursor).
      */
     class TxnContext: boost::noncopyable {
-      storage::Txn _txn;
-      public:
+        storage::Txn _txn;
+        //
+        // a BSON Array that will hold all of the operations done by
+        // this transaction. If the array gets too large, its contents
+        // will spill into the localOpRef collection on commit,
+        //
+        BSONArrayBuilder _txnOps;
+
+        public:
         TxnContext(const TxnContext *parent, int txnFlags);
         ~TxnContext();
         void commit(int flags);
@@ -42,6 +50,8 @@ namespace mongo {
         bool isLive() const { return _txn.isLive(); }
         /** @return true iff this is a read only transaction */
         bool isReadOnly() const { return _txn.isReadOnly(); };
+
+        void logOp(BSONObj op);
     };
 
 
