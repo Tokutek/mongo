@@ -17,6 +17,7 @@
 #include "mongo/pch.h"
 #include "oplog_helpers.h"
 #include "txn_context.h"
+#include "repl_block.h"
 
 
 #define KEY_STR_OP_NAME "op"
@@ -63,6 +64,8 @@ namespace OpLogHelpers{
     
     void logInsert(const char* ns, BSONObj row, TxnContext* txn) {
         BSONObjBuilder b;
+	if ( strncmp(ns, "local.slaves", 12) == 0 )
+	  resetSlaveCache();
         if (isLocalNs(ns)) {
             return;
         }
@@ -82,6 +85,8 @@ namespace OpLogHelpers{
         ) 
     {
         BSONObjBuilder b;
+	if ( strncmp(ns, "local.slaves", 12) == 0 )
+	  resetSlaveCache();
         if (isLocalNs(ns)) {
             return;
         }
@@ -96,6 +101,8 @@ namespace OpLogHelpers{
 
     void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn) {
         BSONObjBuilder b;
+	if ( strncmp(ns, "local.slaves", 12) == 0 )
+	  resetSlaveCache();
         if (isLocalNs(ns)) {
             return;
         }
@@ -109,6 +116,8 @@ namespace OpLogHelpers{
 
     void logCommand(const char* ns, BSONObj row, TxnContext* txn) {
         BSONObjBuilder b;
+	if ( strncmp(ns, "local.slaves", 12) == 0 )
+	  resetSlaveCache();
         if (isLocalNs(ns)) {
             return;
         }

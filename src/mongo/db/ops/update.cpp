@@ -114,7 +114,7 @@ namespace mongo {
         }
 
         // ns is not a system ns, so the object should have an _id field
-        dassert(!str::contains(ns, "system.") && newObj["_id"].ok());
+        //dassert(!str::contains(ns, "system.") && newObj["_id"].ok());
     }
 
     static bool mayUpdateById(NamespaceDetails *d, const BSONObj &patternOrig) {

@@ -116,6 +116,8 @@ namespace mongo {
             // must be initiation
             hashNew = 0;
         }
+	theReplSet->lastOpTimeWritten = ts;
+	theReplSet->lastH = hashNew;
 
         // This is very temporary, and will likely fail on large row insertions
         logopbufbuilder.reset();
