@@ -21,7 +21,6 @@
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/queryutil.h"
-#include "mongo/db/idgen.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
@@ -86,12 +85,13 @@ namespace mongo {
         checkNoMods( newObj );
         tokulog(3) << "insertAndLog for upsert: " << newObj << endl;
 
-        // Make sure to add an _id field if it doesn't exist.
-        newObj = addIdField(newObj);
         insertOneObject(d, nsdt, newObj, overwrite);
         if (logop) {
             OpLogHelpers::logInsert(ns, newObj, &cc().txn());
         }
+
+        // ns is not a system ns, so the object should have an _id field
+        dassert(!str::contains(ns, "system.") && newObj["_id"].ok());
     }
 
     static bool mayUpdateById(NamespaceDetails *d, const BSONObj &patternOrig) {
@@ -132,7 +132,8 @@ namespace mongo {
         BSONObj obj;
         {
             tokulog(3) << "_updateById looking for pk " << pk << endl;
-            bool found = d->findById( pk, obj, false );
+            dassert(pk == patternOrig["_id"].wrap(""));
+            bool found = d->findById( patternOrig, obj );
             tokulog(3) << "_updateById findById() got " << obj << endl;
             if ( !found ) {
                 // no upsert support in _updateById yet, so we are done.
@@ -207,7 +208,7 @@ namespace mongo {
         bool modsAreIndexed = false;
 
         if ( isOperatorUpdate ) {
-            if( d->indexBuildInProgress ) {
+            if ( d->indexBuildInProgress() ) {
                 set<string> bgKeys;
                 d->inProgIdx().keyPattern().getFieldNames(bgKeys);
                 mods.reset( new ModSet(updateobj, nsdt->indexKeys(), &bgKeys) );
@@ -218,11 +219,12 @@ namespace mongo {
             modsAreIndexed = mods->isIndexed();
         }
 
-        if ( planPolicy.permitOptimalIdPlan() && !multi && !modsAreIndexed && mayUpdateById(d, patternOrig) ) {
-            int idxNo = d->findIdIndex();
-            verify(idxNo >= 0);
+
+        int idIdxNo = -1;
+        if ( planPolicy.permitOptimalIdPlan() && !multi && !modsAreIndexed &&
+                (idIdxNo = d->findIdIndex()) >= 0 && mayUpdateById(d, patternOrig) ) {
             debug.idhack = true;
-            IndexDetails &idx = d->idx(idxNo);
+            IndexDetails &idx = d->idx(idIdxNo);
             BSONObj pk = idx.getKeyFromQuery(patternOrig);
             tokulog(3) << "_updateObjects using simple _id query, pattern " << patternOrig << ", pk " << pk << endl;
             UpdateResult result = _updateById( pk,
@@ -243,7 +245,8 @@ namespace mongo {
                 // this handles repl inserts
                 checkNoMods( updateobj );
                 debug.upsert = true;
-                insertOneObject( d, nsdt, updateobj, upsert );
+                BSONObj objModified = updateobj;
+                insertOneObject( d, nsdt, objModified, upsert );
                 return UpdateResult( 0 , 0 , 1 , updateobj );
             }
         }

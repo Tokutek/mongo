@@ -1,5 +1,5 @@
 /**
-*    Copyright (C) 2012 Tokutek Inc.
+*    Copyright (C) 2013 Tokutek Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -28,7 +28,9 @@ namespace mongo {
         /**
          * Wraps a DB_TXN in an exception-safe object.
          * The destructor calls abort() unless it's already committed.
-         * Knows whether it's read-only (useful for the cursor).
+         * Knows whether it's read-only (useful for the cursor right now, TODO: remove the local copy of _flags).
+         * Doesn't actually manage parent/child relationships, for that you need Client::TransactionStack, or better, Client::Transaction, see db/client.h.
+         * You should really only need to use this to get the DB_TXN out of it.
          */
         class Txn : boost::noncopyable {
             const int _flags;

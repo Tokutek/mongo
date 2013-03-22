@@ -1288,10 +1288,13 @@ namespace mongo {
             struct NamespaceDetailsAccStats accStats;
             nsd->fillCollectionStats(&accStats, &result, scale);
 
+            // TODO: Capped collection stats
+#if 0
             if ( nsd->isCapped() ) {
                 result.append( "capped" , nsd->isCapped() );
                 result.appendNumber( "max" , nsd->maxCappedDocs() );
             }
+#endif
 
             return true;
         }
@@ -1451,12 +1454,7 @@ namespace mongo {
             NamespaceDetails *nsd = nsdetails( fromNs.c_str() );
             massert( 10301 ,  "source collection " + fromNs + " does not exist", nsd );
 
-            CursorId id;
-            {
-                shared_ptr<Cursor> c = Helpers::findTableScan( fromNs.c_str(), BSONObj() );
-                ClientCursor *cc = new ClientCursor(0, c, fromNs.c_str());
-                id = cc->cursorid();
-            }
+            shared_ptr<Cursor> c = Helpers::findTableScan( fromNs.c_str(), BSONObj() );
 
             DBDirectClient client;
             Client::Context ctx( toNs );
@@ -1469,10 +1467,8 @@ namespace mongo {
             if ( !userCreateNS( toNs.c_str(), spec.done(), errmsg, true ) )
                 return false;
 
-            auto_ptr< DBClientCursor > c = client.getMore( fromNs, id );
-            while( c->more() ) {
-                BSONObj obj = c->next();
-                insertObject( toNs.c_str(), obj );
+            for ( ; c->ok(); c->advance()) {
+                insertObject( toNs.c_str(), c->current() );
             }
 
             return true;

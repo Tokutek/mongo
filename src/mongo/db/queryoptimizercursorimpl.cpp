@@ -45,7 +45,7 @@ namespace mongo {
     }
     BSONObj QueryPlanSelectionPolicy::IdElseNatural::planHint( const char *ns ) const {
         NamespaceDetails *nsd = nsdetails( ns );
-        if ( !nsd || !nsd->haveIdIndex() ) {
+        if ( !nsd || !nsd->hasIdIndex() ) {
             return BSON( "$hint" << BSON( "$natural" << 1 ) );
         }
         return BSON( "$hint" << nsd->idx( nsd->findIdIndex() ).indexName() );

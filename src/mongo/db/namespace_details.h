@@ -80,28 +80,16 @@ namespace mongo {
     /* NamespaceDetails : this is the "header" for a namespace that has all its details.
        It is stored in the NamespaceIndex (a TokuDB dictionary named foo.ns, for Database foo).
     */
-
     class NamespaceDetails {
     public:
         enum { NIndexesMax = 64 };
 
-        //explicit NamespaceDetails( const DiskLoc &loc, bool _capped );
-        NamespaceDetails(const string &ns, const BSONObj &options, bool _capped);
-        explicit NamespaceDetails(const BSONObj &serialized);
-        ~NamespaceDetails();
+        // Creates the appropriate NamespaceDetails implementation based on options.
+        static shared_ptr<NamespaceDetails> make(const string &ns, const BSONObj &options);
+        static shared_ptr<NamespaceDetails> make(const BSONObj &serialized);
 
-        /* called when loaded from disk */
-        void onLoad(const Namespace& k);
-
-        /* dump info on this namespace.  for debugging. */
-        void dump(const Namespace& k);
-
-        // TODO: Capped collections need are not yet implemented with TokuDB.
-        bool isCapped() const { return false; }
-        long long cappedSize() const { return 0; }
-        long long maxCappedDocs() const { return std::numeric_limits<long long>::max(); }
-        void setMaxCappedDocs( long long max ) { unimplemented("capped collections"); }
-        void emptyCappedCollection(const char *ns);
+        virtual ~NamespaceDetails() {
+        }
 
         int nIndexes() const {
             return _nIndexes;
@@ -111,7 +99,7 @@ namespace mongo {
            complete, yet need to still use it in _indexRecord() - thus we use this function for that.
         */
         int nIndexesBeingBuilt() const { 
-            if (indexBuildInProgress) {
+            if (_indexBuildInProgress) {
                 verify(_nIndexes + 1 == (int) _indexes.size());
             } else {
                 verify(_nIndexes == (int) _indexes.size());
@@ -119,11 +107,11 @@ namespace mongo {
             return _indexes.size();
         }
 
-        IndexDetails& idx(int idxNo, bool missingExpected = false );
+        IndexDetails& idx(int idxNo);
 
         /** get the IndexDetails for the index currently being built in the background. (there is at most one) */
         IndexDetails& inProgIdx() {
-            dassert(indexBuildInProgress);
+            dassert(_indexBuildInProgress);
             return idx(_nIndexes);
         }
 
@@ -149,25 +137,17 @@ namespace mongo {
              for a single document. see multikey in wiki.
            for these, we have to do some dedup work on queries.
         */
-        // TODO: Be sure to setIndexIsMultiKey on the insert path when we detect it.
-        bool isMultikey(int i) const { return (multiKeyIndexBits & (((unsigned long long) 1) << i)) != 0; }
+        // TODO: Change the bit smashing to something simpler, eventually.
+        bool isMultikey(int i) const { return (_multiKeyIndexBits & (((unsigned long long) 1) << i)) != 0; }
         void setIndexIsMultikey(const char *thisns, int i);
 
-#if 0
-        /* add a new index.  does not add to system.indexes etc. - just to NamespaceDetails.
-           caller must populate returned object.
-         */
-        IndexDetails& addIndex(const char *thisns, bool resetTransient=true);
-#endif
-        void fillNewIndex(IndexDetails &newIndex);
-        void createIndex(const BSONObj &idx_info, bool resetTransient=true);
         bool dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex, bool can_drop_system = false);
 
         /**
          * Record that a new index exists in <dbname>.system.indexes.
-         * Only used for the _id index, the others go through the normal insert path.
+         * Only used for the primary key index, the others go through the normal insert path.
          */
-        void addIdIndexToCatalog();
+        void addPKIndexToCatalog();
 
         // @return offset in indexes[]
         int findIndexByName(const char *name);
@@ -195,54 +175,104 @@ namespace mongo {
         /* @return -1 = not found
            generally id is first index, so not that expensive an operation (assuming present).
         */
-        int findIdIndex() {
+        int findIdIndex() const {
             for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
                 const IndexDetails *index = it->get();
                 if (index->isIdIndex()) {
                     return it - _indexes.begin();
                 }
             }
-            massert(16436, "_id index not found", false);
             return -1;
         }
 
-        // TODO: TokuDB-implemented namespaces always have an _id index. remove this.
-        bool haveIdIndex() { 
-            return true;
-            //return isSystemFlagSet( NamespaceDetails::Flag_HaveIdIndex ) || findIdIndex() >= 0;
+        bool isPKIndex(const IndexDetails &idx) const {
+            return idx.keyPattern() == _pk;
+        }
+
+        IndexDetails &getPKIndex() const {
+            IndexDetails &idx = *_indexes[0];
+            dassert(isPKIndex(idx));
+            return idx;
         }
 
         int averageObjectSize() {
             return 10; // TODO: Return something meaningful based on in-memory stats
         }
 
-        // TODO: Make this private or remove it
-        // true if an index is currently being built
-        bool indexBuildInProgress;
+        bool indexBuildInProgress() const {
+            return _indexBuildInProgress;
+        }
 
+        // @return a BSON representation of this NamespaceDetail's state
         BSONObj serialize() const;
 
-        // Query the _id index of this collection, get the full object in result
-        // If getKey is true, then the query object must have the _id key extracted.
-        // Otherwise, the query object is just an _id key value with no name.
-        bool findById(const BSONObj &query, BSONObj &result, bool getKey = true);
-        void insertObject(const BSONObj &obj, bool overwrite);
-        void deleteObject(const BSONObj &pk, const BSONObj &obj);
         void fillCollectionStats(struct NamespaceDetailsAccStats* accStats, BSONObjBuilder* result, int scale);
+
+        // Run optimize on each index.
         void optimize();
-    private:
+
+        // Find by primary key (single element bson object, no field name).
+        bool findByPK(const BSONObj &pk, BSONObj &result);
+
+        // optional to implement, return true if the namespace is capped
+        virtual bool isCapped() const {
+            return false;
+        }
+
+        // return true of this namespace has an index on the _id field.
+        virtual bool hasIdIndex() const {
+            return findIdIndex() >= 0;
+        }
+
+        // Hack for ops/query.cpp queryIdHack.
+        // Lets us know if findById is okay to do. We should find a nicer way to do this eventually.
+        virtual bool mayFindById() const {
+            return false;
+        }
+
+        // finds an objectl by _id field
+        virtual bool findById(const BSONObj &query, BSONObj &result) {
+            massert(16461, "findById shouldn't be called unless it is implemented.", false);
+        }
+
+        // inserts an object into this namespace, taking care of secondary indexes if they exist
+        virtual void insertObject(BSONObj &obj, bool overwrite) = 0;
+
+        // deletes an object from this namespace, taking care of secondary indexes if they exist
+        virtual void deleteObject(const BSONObj &pk, const BSONObj &obj) = 0;
+
+        // create a new index with the given info for this namespace.
+        virtual void createIndex(const BSONObj &info);
+
+    protected:
+        NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
+        explicit NamespaceDetails(const BSONObj &serialized);
+
+        void insertIntoOneIndex(const int i, const BSONObj &pk, const BSONObj &obj, bool overwrite);
+        void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, bool overwrite);
+        void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
+
+        // generate an index info BSON for this namespace, with the same options
+        BSONObj indexInfo(const BSONObj &keyPattern);
+
         // fill the statistics for each index in the NamespaceDetails,
         // indexStats is an array of length nIndexes
         void fillIndexStats(std::vector<IndexStats> &indexStats);
 
+        const string _ns;
+        // The options used to create this namespace details. We serialize
+        // this (among other things) to disk on close (see serialize())
+        const BSONObj _options;
+        // The primary index pattern.
+        const BSONObj _pk;
 
         // Each index (including the _id) index has an IndexDetails that describes it.
+        bool _indexBuildInProgress;
         int _nIndexes;
         typedef std::vector<shared_ptr<IndexDetails> > IndexVector;
         IndexVector _indexes;
 
-        // TODO: TokuDB: Add in memory stats
-        unsigned long long multiKeyIndexBits;
+        unsigned long long _multiKeyIndexBits;
 
         friend class NamespaceIndex;
     }; // NamespaceDetails
@@ -265,12 +295,11 @@ namespace mongo {
     // todo: multiple db's with the same name (repairDatbase) is not handled herein.  that may be 
     //       the way to go, if not used by repair, but need some sort of enforcement / asserts.
     class NamespaceDetailsTransient : boost::noncopyable {
-        Database *database;
         const string _ns;
         void reset();
         static std::map< string, shared_ptr< NamespaceDetailsTransient > > _nsdMap;
 
-        NamespaceDetailsTransient(Database*,const char *ns);
+        NamespaceDetailsTransient(const char *ns);
     public:
         ~NamespaceDetailsTransient();
         void addedIndex() { reset(); }
@@ -427,22 +456,15 @@ namespace mongo {
         return make_inlock(ns);
     }
 
-    /* NamespaceIndex is the ".ns" file you see in the data directory.  It is the "system catalog"
-       if you will: at least the core parts.  (Additional info in system.* collections.)
-    */
+    /* NamespaceIndex is the the "system catalog" if you will: at least the core parts.
+     * (Additional info in system.* collections.) */
     class NamespaceIndex {
     public:
-        NamespaceIndex(const string &dir, const string &database) :
-            nsdb(NULL), namespaces(NULL), dir_(dir), database_(database) {
-        }
+        NamespaceIndex(const string &dir, const string &database);
 
         ~NamespaceIndex();
 
-        void init(bool may_create = false) {
-            if (namespaces.get() == NULL) {
-                _init(may_create);
-            }
-        }
+        void init(bool may_create = false);
 
         void add_ns(const char *ns, shared_ptr<NamespaceDetails> details);
 
@@ -457,10 +479,6 @@ namespace mongo {
             }
             Namespace n(ns);
             NamespaceDetailsMap::iterator it = namespaces->find(n);
-            if ( it != namespaces->end() && it->second->isCapped() ) {
-                // What is the right thing to do here? //d->cappedCheckMigrate();
-                unimplemented("capped collections");
-            }
             return (it != namespaces->end()) ? it->second.get() : NULL;
         }
 
@@ -489,7 +507,7 @@ namespace mongo {
     NamespaceDetails *nsdetails(const char *ns);
     NamespaceDetails *nsdetails_maybe_create(const char *ns, BSONObj options = BSONObj());
 
-    inline IndexDetails& NamespaceDetails::idx(int idxNo, bool missingExpected ) {
+    inline IndexDetails& NamespaceDetails::idx(int idxNo) {
         if ( idxNo < NIndexesMax ) {
             verify(idxNo >= 0 && idxNo < (int) _indexes.size());
             return *_indexes[idxNo];

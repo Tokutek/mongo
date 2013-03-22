@@ -32,14 +32,25 @@ function retry() {
 
 function runsuite() {
     local python=python
-    if command -v python26 &>/dev/null; then
+    if command -v python2.7 &>/dev/null; then
+        python=python2.7
+    elif command -v python26 &>/dev/null; then
         python=python26
     elif command -v python2 &>/dev/null; then
         python=python2
     fi
-    if [ -d /usr/lib64/python2.4/site-packages/pymongo/ ]; then
-        PYTHONPATH=/usr/lib64/python2.4/site-packages/:$PYTHONPATH
-        export PYTHONPATH
+    if ! $python <<EOF ; then
+import sys
+try:
+    import pymongo
+    sys.exit(0)
+except ImportError:
+    sys.exit(1)
+EOF
+        if [ -d /usr/lib64/python2.4/site-packages/pymongo/ ]; then
+            PYTHONPATH=/usr/lib64/python2.4/site-packages/:$PYTHONPATH
+            export PYTHONPATH
+        fi
     fi
     local dir=$1
     local suite=$2
@@ -54,7 +65,6 @@ function runsuite() {
             --continue-on-failure \
             --smoke-db-prefix="smokedata-$suite" \
             --quiet \
-            --smoke-server-opts="--logFlushPeriod=100" \
             $suite
         )
     set -e

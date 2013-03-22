@@ -1,4 +1,3 @@
-assert(false, "capped collection tests disabled");
 tn = "capped5"
 
 t = db[tn]

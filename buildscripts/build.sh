@@ -45,9 +45,15 @@ function build_fractal_tree() {
     if [ ! -d $tokufractaltreedir ] ; then
         mkdir $tokufractaltreedir
 
-        retry svn export -q -r $svn_revision $svnserver/toku/$tokudb
-        retry svn export -q -r $svn_revision $svnserver/$jemalloc
-        retry svn export -q -r $svn_revision $svnserver/$xz
+        if [ ! -d $tokudb ] ; then
+            retry svn export -q -r $svn_revision $svnserver/toku/$tokudb
+        fi
+        if [ ! -d $jemalloc ] ; then
+            retry svn export -q -r $svn_revision $svnserver/$jemalloc
+        fi
+        if [ ! -d $xz ] ; then
+            retry svn export -q -r $svn_revision $svnserver/$xz
+        fi
 
         pushd $tokudb
             echo `date` make $tokudb $ftcc $($ftcc --version)

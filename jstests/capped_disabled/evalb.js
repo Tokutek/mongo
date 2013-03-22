@@ -1,4 +1,3 @@
-print("this test will fail because we haven't implemented profiling")
 t = db.evalb;
 t.drop();
 

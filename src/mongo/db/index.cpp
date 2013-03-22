@@ -33,7 +33,12 @@
 
 namespace mongo {
 
-    IndexDetails::IndexDetails(const BSONObj &info, bool may_create) : _info(info.getOwned()) {
+    IndexDetails::IndexDetails(const BSONObj &info, bool may_create) :
+        _info(info.copy()),
+        _keyPattern(info["key"].Obj().copy()),
+        _unique(info["unique"].trueValue() || isIdIndexPattern(_keyPattern)),
+        _clustering(info["clustering"].trueValue()) {
+
         string dbname = indexNamespace();
         tokulog(1) << "Opening IndexDetails " << dbname << endl;
         // Open the dictionary. Creates it if necessary.
@@ -104,35 +109,13 @@ namespace mongo {
         }
     }
 
-    void IndexDetails::getKeysFromObject( const BSONObj& obj, BSONObjSet& keys) const {
+    void IndexDetails::getKeysFromObject(const BSONObj& obj, BSONObjSet& keys) const {
         getSpec().getKeys( obj, keys );
     }
 
     const IndexSpec& IndexDetails::getSpec() const {
         SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
         return NamespaceDetailsTransient::get_inlock( info()["ns"].valuestr() ).getIndexSpec( this );
-    }
-
-    void IndexDetails::insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite) {
-        BSONObjSet keys;
-        getKeysFromObject(obj, keys);
-        if (keys.size() > 1) {
-            const char *ns = parentNS().c_str();
-            NamespaceDetails *d = nsdetails(ns);
-            const int idxNo = d->idxNo(*this);
-            dassert(idxNo >= 0);
-            d->setIndexIsMultikey(ns, idxNo);
-        }
-
-        for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-            if (isIdIndex()) {
-                insertPair(*ki, NULL, obj, overwrite);
-            } else if (clustering()) {
-                insertPair(*ki, &primary_key, obj, overwrite);
-            } else {
-                insertPair(*ki, &primary_key, BSONObj(), overwrite);
-            }
-        }
     }
 
     void IndexDetails::uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const {
@@ -169,7 +152,7 @@ namespace mongo {
         return 0;
     }
 
-    void IndexDetails::uniqueCheck(const BSONObj &key) const {
+    void IndexDetails::uniqueCheck(const BSONObj &key, const BSONObj *pk) const {
         BSONObjIterator it(key);
         while (it.more()) {
             BSONElement id = it.next();
@@ -179,66 +162,47 @@ namespace mongo {
             }
         }
 
-        const int c_flags = DB_SERIALIZABLE;
-        DBC *cursor = newCursor(c_flags);
+        IndexDetails::Cursor c(this, DB_SERIALIZABLE);
+        DBC *cursor = c.dbc();
 
-        storage::Key skey(key, !isIdIndex() ? &minKey : NULL);
+        storage::Key skey(key, pk != NULL ? &minKey : NULL);
         DBT kdbt = skey.dbt();
 
         bool isUnique = true;
         UniqueCheckExtra extra(*this, key, isUnique);
         int r = cursor->c_getf_set_range(cursor, 0, &kdbt, mongo::uniqueCheckCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
-        r = cursor->c_close(cursor);
-        verify(r == 0);
-
-        uassert(16453, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
-        uassert(16454, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
+        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
+        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
 
         uassert(ASSERT_ID_DUPKEY, mongoutils::str::stream() << "E11000 duplicate key error, " << key << " already exists in unique index", isUnique);
     }
 
     void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite) {
         if (unique()) {
-            uniqueCheck(key);
+            uniqueCheck(key, pk);
         }
 
         storage::Key skey(key, pk);
         DBT kdbt = skey.dbt();
         DBT vdbt = storage::make_dbt(val.objdata(), val.objsize());
 
+        // TODO: We already did the unique check above. Can we just pass flags of 0?
         const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
         int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, flags);
-        if (r != 0) {
-            tokulog() << "error inserting " << key << ", " << val << endl;
-        } else {
-            tokulog(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
-        }
-        verify(r == 0);
+        verify(r == 0 || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
+        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
+        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
+        tokulog(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
     }
 
-    void IndexDetails::deleteObject(const BSONObj &pk, const BSONObj &obj) {
-        BSONObjSet keys;
-        getKeysFromObject(obj, keys);
-        for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-            const BSONObj &key = *ki;
-            storage::Key skey(key, !isIdIndex() ? &pk : NULL);
-            DBT kdbt = skey.dbt();
+    void IndexDetails::deletePair(const BSONObj &key, const BSONObj *pk, const BSONObj &obj) {
+        storage::Key skey(key, pk);
+        DBT kdbt = skey.dbt();
 
-            const int flags = DB_DELETE_ANY;
-            int r = _db->del(_db, cc().txn().db_txn(), &kdbt, flags);
-            verify(r == 0);
-        }
-    }
-
-    // Get a new DB cursor over an index. Must already be in the context of a transction.
-    DBC *IndexDetails::newCursor(int flags) const {
-        DB_TXN *txn = cc().txn().db_txn();
-        DEV { LOG(3) << "new cursor txn " << txn << " flags " << flags << endl; }
-        DBC *cursor;
-        int r = _db->cursor(_db, txn, &cursor, flags);
-        verify(r == 0);
-        return cursor;
+        const int flags = DB_DELETE_ANY;
+        int r = _db->del(_db, cc().txn().db_txn(), &kdbt, flags);
+        verify(r == 0); // TODO: Lock not granted, deadlock?
     }
 
     enum toku_compression_method IndexDetails::getCompressionMethod() const {
@@ -304,8 +268,7 @@ namespace mongo {
     }
 
     IndexStats::IndexStats(const IndexDetails &idx)
-            : _isIdIndex(idx.isIdIndex()),
-              _name(idx.indexName()),
+            : _name(idx.indexName()),
               _compressionMethod(idx.getCompressionMethod()),
               _readPageSize(idx.getReadPageSize()),
               _pageSize(idx.getPageSize()) {

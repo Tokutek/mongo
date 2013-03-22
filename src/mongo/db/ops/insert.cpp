@@ -21,7 +21,6 @@
 #include "mongo/db/client.h"
 #include "mongo/db/database.h"
 #include "mongo/db/oplog.h"
-#include "mongo/db/idgen.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/ops/insert.h"
@@ -67,27 +66,51 @@ namespace mongo {
         return 0;
     }
 
-    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, const BSONObj &obj, bool overwrite) {
-        dassert(!obj["_id"].eoo());
+    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, BSONObj &obj, bool overwrite) {
         details->insertObject(obj, overwrite);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }
     }
 
-    void insertObject(const char *ns, const BSONObj &obj, bool overwrite) {
+    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool overwrite, bool keepGoing) {
         if (mongoutils::str::contains(ns, "system.")) {
             uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
-            if (handle_system_collection_insert(ns, obj))
+            massert(16462, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
+            if (handle_system_collection_insert(ns, objs[0]) != 0) {
                 return;
+            }
         }
+
         NamespaceDetails *details = nsdetails_maybe_create(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+        for (size_t i = 0; i < objs.size(); i++) {
+            const BSONObj &obj = objs[i];
+            try {
+                uassert( 10059 , "object to insert too large", obj.objsize() <= BSONObjMaxUserSize);
+                BSONObjIterator i( obj );
+                while ( i.more() ) {
+                    BSONElement e = i.next();
+                    uassert( 13511 , "document to insert can't have $ fields" , e.fieldName()[0] != '$' );
+                }
+                uassert( 16440 ,  "_id cannot be an array", obj["_id"].type() != Array );
 
-        BSONObj objWithId = addIdField(obj);
-        BSONElementManipulator::lookForTimestamps(objWithId);
-        insertOneObject(details, nsdt, objWithId, overwrite);
-        OpLogHelpers::logInsert(ns, obj, &cc().txn());
+                BSONObj objModified = obj;
+                BSONElementManipulator::lookForTimestamps(objModified);
+                insertOneObject(details, nsdt, objModified, overwrite); // may add _id field
+                OpLogHelpers::logInsert(ns, obj, &cc().txn());
+            } catch (const UserException &) {
+                if (!keepGoing || i == objs.size() - 1) {
+                    throw;
+                }
+            }
+        }
+    }
+
+    void insertObject(const char *ns, const BSONObj &obj, bool overwrite) {
+        vector<BSONObj> objs(1);
+        objs[0] = obj;
+        insertObjects(ns, objs, overwrite);
     }
     
 } // namespace mongo

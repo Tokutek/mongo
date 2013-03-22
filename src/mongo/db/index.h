@@ -27,10 +27,13 @@
 #include "mongo/db/indexkey.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/namespace.h"
+#include "mongo/db/storage/cursor.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/txn.h"
 
 namespace mongo {
+
+    int removeFromSysIndexes(const char *ns, const char *name);
 
     /* Details about a particular index. There is one of these effectively for each object in
        system.namespaces (although this also includes the head pointer, which is not in that
@@ -59,7 +62,8 @@ namespace mongo {
            e.g., { lastname:1, firstname:1 }
         */
         BSONObj keyPattern() const {
-            return _info["key"].Obj();
+            dassert(_info["key"].Obj() == _keyPattern);
+            return _keyPattern;
         }
 
         /**
@@ -114,20 +118,14 @@ namespace mongo {
 
         /** @return true if index has unique constraint */
         bool unique() const {
-            bool ret = _info["unique"].trueValue();
-            if (isIdIndex()) {
-                uassert(16434, "_id index must be unique", ret);
-            }
-            return ret;
+            dassert((_info["unique"].trueValue() || isIdIndexPattern(_keyPattern)) == _unique);
+            return _unique;
         }
 
         /** @return true if index is clustering */
         bool clustering() const {
-            bool ret = _info["clustering"].trueValue();
-            if (isIdIndex()) {
-                uassert(16437, "_id index must be clustering", ret);
-            }
-            return ret;
+            dassert(_info["clustering"].trueValue() == _clustering);
+            return _clustering;
         }
 
         /** delete this index. */
@@ -141,22 +139,28 @@ namespace mongo {
 
         const BSONObj &info() const { return _info; }
 
-        void insert(const BSONObj &obj, const BSONObj &primary_key, bool overwrite);
-        void deleteObject(const BSONObj &pk, const BSONObj &obj);
-        DBC *newCursor(int flags = 0) const;
+        void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite);
+        void deletePair(const BSONObj &key, const BSONObj *pk, const BSONObj &obj);
+
         enum toku_compression_method getCompressionMethod() const;
         uint32_t getPageSize() const;
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
         void uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const;
-        void uniqueCheck(const BSONObj &key) const;
+        void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
         void optimize();
+
+        class Cursor : public storage::Cursor {
+        public:
+            Cursor(const IndexDetails *idx, const int flags = 0) :
+                storage::Cursor(idx != NULL ? idx->_db : NULL, flags) {
+            }
+        };
 
     private:
         // Open dictionary representing the index on disk.
         DB *_db;
 
-        void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite);
 
         /* Info about the index. Stored on disk in the .ns file for this database
          * as a NamespaceDetails object.
@@ -166,7 +170,12 @@ namespace mongo {
                [, unique: <bool>, background: <bool>, v:<version>]
              }
         */
-        BSONObj _info;
+        const BSONObj _info;
+
+        // Precomputed values from _info, for speed.
+        const BSONObj _keyPattern;
+        const bool _unique;
+        const bool _clustering;
 
         friend class NamespaceDetails;
     };
@@ -185,11 +194,7 @@ namespace mongo {
         uint64_t getStorageSize() const {
             return _stats.bt_fsize;
         }
-        bool isIdIndex() const {
-            return _isIdIndex;
-        }
     private:
-        bool _isIdIndex;
         string _name;
         DB_BTREE_STAT64 _stats;
         enum toku_compression_method _compressionMethod;
@@ -197,16 +202,5 @@ namespace mongo {
         uint32_t _pageSize;
     };
 
-
-    int removeFromSysIndexes(const char *ns, const char *name);
-
 } // namespace mongo
-
-
-
-
-
-
-
-
 

@@ -178,7 +178,7 @@ namespace mongo {
         _bounds(),
         _nscanned(0),
         _numWanted(numWanted),
-        _cursor(NULL),
+        _cursor(_idx),
         _tailable(false),
         _readOnly(cc().txn().isReadOnly()),
         _getf_iteration(0)
@@ -200,7 +200,7 @@ namespace mongo {
         _bounds(bounds),
         _nscanned(0),
         _numWanted(numWanted),
-        _cursor(NULL),
+        _cursor(_idx),
         _tailable(false),
         _readOnly(cc().txn().isReadOnly()),
         _getf_iteration(0)
@@ -212,21 +212,18 @@ namespace mongo {
     }
 
     IndexCursor::~IndexCursor() {
-        if (_cursor != NULL) {
-            const int r = _cursor->c_close(_cursor);
-            verify(r == 0);
-        }
     }
 
     void IndexCursor::prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
-        const bool isSecondary = !_idx->isIdIndex();
+        const bool isSecondary = !_d->isPKIndex(*_idx);
 
         storage::Key sKey(startKey, isSecondary ? &minKey : NULL);
         storage::Key eKey(endKey, isSecondary ? &maxKey : NULL);
         DBT start = sKey.dbt();
         DBT end = eKey.dbt();
 
-        const int r = _cursor->c_pre_acquire_range_lock( _cursor, &start, &end );
+        DBC *cursor = _cursor.dbc();
+        const int r = cursor->c_pre_acquire_range_lock( cursor, &start, &end );
         if ( r != 0 ) {
             StringBuilder s;
             s << toString() << ": failed to acquire prelocked range on " <<
@@ -240,7 +237,6 @@ namespace mongo {
         // _d and _idx are mutually null when the collection doesn't
         // exist and is therefore treated as empty.
         if (_d != NULL && _idx != NULL) {
-            _cursor = _idx->newCursor();
             if ( _bounds != NULL) {
                 // Try skipping forward in the key space using the bounds iterator
                 // and the proposed startKey. If skipping wasn't necessary, then
@@ -302,7 +298,7 @@ namespace mongo {
     }
 
     void IndexCursor::findKey(const BSONObj &key) {
-        const bool isSecondary = !_idx->isIdIndex();
+        const bool isSecondary = !_d->isPKIndex(*_idx);
         const BSONObj &pk = _direction > 0 ? minKey : maxKey;
         setPosition(key, isSecondary ? pk : BSONObj());
     };
@@ -320,14 +316,15 @@ namespace mongo {
         int r;
         const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
+        DBC *cursor = _cursor.dbc();
         if (_direction > 0) {
-            r = _cursor->c_getf_set_range(_cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
+            r = cursor->c_getf_set_range(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         } else {
-            r = _cursor->c_getf_set_range_reverse(_cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
+            r = cursor->c_getf_set_range_reverse(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         }
         verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
-        uassert(16457, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
-        uassert(16458, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
+        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
+        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
         _getf_iteration++;
         _currKey = extra.rows_fetched > 0 ? _buffer.currentKey() : BSONObj();
         _currPK = extra.rows_fetched > 0 ? _buffer.currentPK() : BSONObj();
@@ -379,7 +376,7 @@ namespace mongo {
 
         // This differs from findKey in that we set PK to max to move forward and min
         // to move backward, resulting in a "skip" of the key prefix, not a "find".
-        const bool isSecondary = !_idx->isIdIndex();
+        const bool isSecondary = !_d->isPKIndex(*_idx);
         const BSONObj &pk = _direction > 0 ? maxKey : minKey;
         setPosition( b.done(), isSecondary ? pk : BSONObj() );
     }
@@ -496,13 +493,16 @@ namespace mongo {
         int r;
         const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
+        DBC *cursor = _cursor.dbc();
         if (_direction > 0) {
-            r = _cursor->c_getf_next(_cursor, getf_flags(), cursor_getf, &extra);
+            r = cursor->c_getf_next(cursor, getf_flags(), cursor_getf, &extra);
         } else {
-            r = _cursor->c_getf_prev(_cursor, getf_flags(), cursor_getf, &extra);
+            r = cursor->c_getf_prev(cursor, getf_flags(), cursor_getf, &extra);
         }
         _getf_iteration++;
-        verify(r == 0 || r == DB_NOTFOUND);
+        verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
+        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
+        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
         return extra.rows_fetched > 0 ? true : false;
     }
 
@@ -547,17 +547,17 @@ namespace mongo {
         // with the full document on the first call to current().
         if ( _currObj.isEmpty() && _d != NULL ) {
             verify( _idx != NULL );
-            bool found = _d->findById( _currPK, _currObj, false );
+            bool found = _d->findByPK( _currPK, _currObj );
             if ( !found ) {
                 // If we didn't find the associated object, we must be a non read-only
-                // cursor whose context deleted the current _id. In this case, we are
+                // cursor whose context deleted the current pk. In this case, we are
                 // allowed to advance and try again exactly once. If we still can't
                 // find the object, we're in trouble.
                 verify( !_readOnly );
                 tokulog(4) << "current() did not find associated object for pk " << _currPK << endl;
                 advance();
                 if ( ok() ) {
-                    found = _d->findById( _currPK, _currObj, false );
+                    found = _d->findByPK( _currPK, _currObj );
                     verify( found );
                 }
             }

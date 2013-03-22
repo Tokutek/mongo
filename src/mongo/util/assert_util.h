@@ -221,7 +221,11 @@ namespace mongo {
     // > 10000 asserts
     // < 10000 UserException
 
-    enum { ASSERT_ID_DUPKEY = 11000 };
+    enum {
+        ASSERT_ID_LOCK_DEADLOCK = 9998,
+        ASSERT_ID_LOCK_NOTGRANTED = 9999,
+        ASSERT_ID_DUPKEY = 11000,
+    };
 
     /* throws a uassertion with an appropriate msg */
     MONGO_COMPILER_NORETURN void streamNotGood( int code , std::string msg , std::ios& myios );
