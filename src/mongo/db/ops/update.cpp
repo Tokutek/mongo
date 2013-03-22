@@ -26,6 +26,8 @@
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/update_internal.h"
+#include "mongo/db/oplog_helpers.h"
+
 
 namespace mongo {
 

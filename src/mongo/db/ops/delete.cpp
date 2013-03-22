@@ -23,6 +23,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/util/stacktrace.h"
+#include "mongo/db/oplog_helpers.h"
 
 namespace mongo {
 

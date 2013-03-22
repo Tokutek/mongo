@@ -26,6 +26,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/db/oplog_helpers.h"
 
 namespace mongo {
 

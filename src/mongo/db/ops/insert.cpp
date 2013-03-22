@@ -25,6 +25,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/db/oplog_helpers.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
 

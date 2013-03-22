@@ -31,6 +31,7 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/db/oplog_helpers.h"
 
 #include <boost/filesystem/convenience.hpp>
 #include <boost/filesystem/operations.hpp>
