@@ -38,7 +38,8 @@
 #include "../util/concurrency/rwlock.h"
 #include "d_concurrency.h"
 #include "mongo/db/lockstate.h"
-#include "mongo/db/storage/txn.h"
+#include "mongo/db/txn_context.h"
+//#include "mongo/db/storage/txn.h"
 #include "mongo/util/paths.h"
 
 namespace mongo {
@@ -139,7 +140,7 @@ namespace mongo {
          */
         class TransactionStack : boost::noncopyable {
             // If we had emplace we wouldn't need a shared_ptr...
-            std::stack<shared_ptr<storage::TxnContext> > _txns;
+            std::stack<shared_ptr<TxnContext> > _txns;
           public:
             TransactionStack() {}
             ~TransactionStack() {
@@ -166,7 +167,7 @@ namespace mongo {
          * Knows what txn it created in case the stack gets swapped out underneath.
          */
         class Transaction : boost::noncopyable {
-            const storage::Txn *_txn;
+            const TxnContext *_txn;
           public:
             explicit Transaction(int flags);
             ~Transaction();
@@ -181,7 +182,7 @@ namespace mongo {
             return _transactions->hasLiveTxn();
         }
 
-        const storage::Txn &txn() const {
+        const TxnContext &txn() const {
             dassert(hasTxn());
             return _transactions->txn();
         }
