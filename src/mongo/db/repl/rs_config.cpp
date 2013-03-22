@@ -33,8 +33,6 @@ namespace mongo {
 
     mongo::mutex ReplSetConfig::groupMx("RS tag group");
 
-    void logOpInitiate(const bo&);
-
     void assertOnlyHas(BSONObj o, const set<string>& fields) {
         BSONObj::iterator i(o);
         while( i.more() ) {
@@ -68,7 +66,7 @@ namespace mongo {
             BSONObj o = asBson();
             Helpers::putSingletonGod(rsConfigNs.c_str(), o, false/*logOp=false; local db so would work regardless...*/);
             if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
-                logOpInitiate(comment);
+                OpLogHelpers::logComment(comment, &cc.txn());
             }
         }
         log() << "replSet saveConfigLocally done" << rsLog;

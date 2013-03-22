@@ -48,7 +48,7 @@ namespace mongo {
         resetSlaveCache();
     }
 
-    static void _logOpUninitialized(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool fromMigrate ) {
+    static void _logOpUninitialized(BSONArray& opInfo) {
         uassert(13288, "replSet error write op to db before replSet initialized", str::startsWith(ns, "local.") || *opstr == 'n');
     }
 
@@ -123,81 +123,7 @@ namespace mongo {
         return b.obj();
     }
     
-    static void _logOpRS(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool fromMigrate ) {
-        Lock::DBWrite lk1("local");
-
-        if ( strncmp(ns, "local.", 6) == 0 ) {
-            // TODO: (Zardosht) What is this code doing? Learn in.
-            if ( strncmp(ns, "local.slaves", 12) == 0 )
-                resetSlaveCache();
-            return;
-        }
-
-        mutex::scoped_lock lk2(OpTime::m);
-
-        const OpTime ts = OpTime::now(lk2);
-        long long hashNew;
-        if( theReplSet ) {
-            hashNew = (theReplSet->lastH * 131 + ts.asLL()) * 17 + theReplSet->selfId();
-        }
-        else {
-            // must be initiation
-            verify( *ns == 0 );
-            hashNew = 0;
-        }
-
-        // This is very temporary, and will likely fail on large row insertions
-        logopbufbuilder.reset();
-        tempId++;
-        BSONObjBuilder b(logopbufbuilder);
-        b.appendNumber("_id", tempId);
-        b.appendTimestamp("ts", ts.asDate());
-        b.append("h", hashNew);
-        BSONArrayBuilder opInfo;
-        opInfo.append(createOpBson(opstr, ns, obj, o2, fromMigrate));
-        b.append("ops", opInfo.arr());
-
-        const char *logns = rsoplog;
-        if ( rsOplogDetails == 0 ) {
-            Client::Context ctx( logns , dbpath, false);
-            localDB = ctx.db();
-            verify( localDB );
-            rsOplogDetails = nsdetails(logns);
-        }
-        BSONObj bb = b.done();
-        rsOplogDetails->insertObject(bb, true);
-    }    
-
-    static void (*_logOp)(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool fromMigrate ) = _logOpUninitialized;
-    void newReplUp() {
-        replSettings.master = true;
-        _logOp = _logOpRS;
-    }
-    void newRepl() {
-        replSettings.master = true;
-        _logOp = _logOpUninitialized;
-    }
-
-    void logOpInitiate(const BSONObj& obj) {
-        _logOpRS("n", "", 0, obj, 0, false);
-    }
-
-    /*@ @param opstr:
-          c userCreateNS
-          i insert
-          n no-op / keepalive
-          d delete / remove
-          u update
-    */
-    void logOp(const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt, bool fromMigrate) {
-        if ( replSettings.master ) {
-            _logOp(opstr, ns, 0, obj, patt, fromMigrate);
-        }
-
-        logOpForSharding( opstr , ns , obj , patt );
-    }
-
-    void logTransactionOps(BSONArray& opInfo) {
+    static void _logTransactionOps(BSONArray& opInfo) {
         Lock::DBWrite lk1("local");
         mutex::scoped_lock lk2(OpTime::m);
 
@@ -219,6 +145,7 @@ namespace mongo {
         b.appendNumber("_id", tempId);
         b.appendTimestamp("ts", ts.asDate());
         b.append("h", hashNew);
+        b.append("a", true);
         b.append("ops", opInfo);
 
         const char *logns = rsoplog;
@@ -231,6 +158,26 @@ namespace mongo {
         }
         BSONObj bb = b.done();
         rsOplogDetails->insertObject(bb, true);
+    }
+    
+    static void (*_logTransactionOp)(BSONArray& opInfo) = _logOpUninitialized;
+    // TODO: (Zardosht) hopefully remove these two phases
+    void newReplUp() {
+        replSettings.master = true;
+        _logTransactionOp = _logTransactionOps;
+    }
+    void newRepl() {
+        replSettings.master = true;
+        _logTransactionOp = _logOpUninitialized;
+    }
+
+    void logOpTransactions(BSONArray& opInfo) {
+        if ( replSettings.master ) {
+            _logTransactionOp(opInfo);
+        }
+
+        // TODO: Figure out for sharding
+        //logOpForSharding( opstr , ns , obj , patt );
     }
 
     void createOplog() {
