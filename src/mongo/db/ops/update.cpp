@@ -30,9 +30,32 @@
 
 namespace mongo {
 
-    void updateOneObject(NamespaceDetails *d, NamespaceDetailsTransient *nsdt, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
+    struct LogOpUpdateDetails {
+        bool logop;
+        const char* ns;
+        bool fromMigrate;
+    };
+
+    static void updateOneObject(
+        NamespaceDetails *d, 
+        NamespaceDetailsTransient *nsdt, 
+        const BSONObj &pk, 
+        const BSONObj &oldObj, 
+        const BSONObj &newObj, 
+        struct LogOpUpdateDetails* loud
+        ) 
+    {
         // if newObj has no _id field, it should inherit the existing value
         BSONObjBuilder b;
+        if (loud->logop) {
+            OpLogHelpers::logUpdate(
+                loud->ns, 
+                oldObj, 
+                newObj,
+                loud->fromMigrate,
+                &cc().txn()
+                );
+        }
         BSONObj newObjWithId = newObj;
         if ( newObj["_id"].eoo() ) {
             b.append( oldObj["_id"] );
@@ -60,23 +83,23 @@ namespace mongo {
     }
 
     static void updateUsingMods(NamespaceDetails *d, NamespaceDetailsTransient *nsdt,
-            const BSONObj &pk, const BSONObj &obj, ModSetState &mss) {
+            const BSONObj &pk, const BSONObj &obj, ModSetState &mss, struct LogOpUpdateDetails* loud) {
 
         BSONObj newObj = mss.createNewFromMods();
         checkTooLarge( newObj );
         tokulog(3) << "updateUsingMods used mod set, transformed " << obj << " to " << newObj << endl;
 
-        updateOneObject( d, nsdt, pk, obj, newObj );
+        updateOneObject( d, nsdt, pk, obj, newObj, loud );
     }
 
     static void updateNoMods(NamespaceDetails *d, NamespaceDetailsTransient *nsdt,
-            const BSONObj &pk, const BSONObj &obj, const BSONObj &updateobj) {
+            const BSONObj &pk, const BSONObj &obj, const BSONObj &updateobj, struct LogOpUpdateDetails* loud) {
 
         BSONElementManipulator::lookForTimestamps( updateobj );
         checkNoMods( updateobj );
         tokulog(3) << "updateNoMods replacing pk " << pk << ", obj " << obj << " with updateobj " << updateobj << endl;
 
-        updateOneObject( d, nsdt, pk, obj, updateobj );
+        updateOneObject( d, nsdt, pk, obj, updateobj, loud );
     }
 
     static void insertAndLog(const char *ns, NamespaceDetails *d, NamespaceDetailsTransient *nsdt,
@@ -146,39 +169,20 @@ namespace mongo {
 
         /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
            regular ones at the moment. */
+        struct LogOpUpdateDetails loud;
+        loud.logop = logop;
+        loud.ns = ns;
+        loud.fromMigrate = fromMigrate;
         if ( isOperatorUpdate ) {
             auto_ptr<ModSetState> mss = mods->prepare( obj );
 
             // mod set update, ie: $inc: 10 increments by 10.
-            updateUsingMods( d, nsdt, pk, obj, *mss );
-
-            if ( logop ) {
-                DEV verify( mods->size() );
-
-                BSONObj pattern = patternOrig;
-                if ( mss->haveArrayDepMod() ) {
-                    BSONObjBuilder patternBuilder;
-                    patternBuilder.appendElements( pattern );
-                    mss->appendSizeSpecForArrayDepMods( patternBuilder );
-                    pattern = patternBuilder.obj();
-                }
-
-                if ( mss->needOpLogRewrite() ) {
-                    logOp("u", ns, mss->getOpLogRewrite(), &pattern, fromMigrate );
-                }
-                else {
-                    logOp("u", ns, updateobj, &pattern, fromMigrate );
-                }
-            }
+            updateUsingMods( d, nsdt, pk, obj, *mss, &loud );
             return UpdateResult( 1 , 1 , 1 , BSONObj() );
         } // end $operator update
 
         // regular update, just replace obj with updateobj, inherting _id if necessary
-        updateNoMods( d, nsdt, pk, obj, updateobj );
-
-        if ( logop ) {
-            logOp("u", ns, updateobj, &patternOrig, fromMigrate );
-        }
+        updateNoMods( d, nsdt, pk, obj, updateobj, &loud );
         return UpdateResult( 1 , 0 , 1 , BSONObj() );
     }
 
@@ -304,6 +308,10 @@ namespace mongo {
 
                 /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
                     regular ones at the moment. */
+                struct LogOpUpdateDetails loud;
+                loud.logop = logop;
+                loud.ns = ns;
+                loud.fromMigrate = fromMigrate;
                 if ( isOperatorUpdate ) {
 
                     if ( multi ) {
@@ -341,25 +349,8 @@ namespace mongo {
                     }
 
                     auto_ptr<ModSetState> mss = useMods->prepare( currentObj );
-                    updateUsingMods( d, nsdt, currPK, currentObj, *mss );
+                    updateUsingMods( d, nsdt, currPK, currentObj, *mss, &loud );
 
-                    if ( logop ) {
-                        DEV verify( mods->size() );
-
-                        if ( mss->haveArrayDepMod() ) {
-                            BSONObjBuilder patternBuilder;
-                            patternBuilder.appendElements( pattern );
-                            mss->appendSizeSpecForArrayDepMods( patternBuilder );
-                            pattern = patternBuilder.obj();
-                        }
-
-                        if ( forceRewrite || mss->needOpLogRewrite() ) {
-                            logOp("u", ns, mss->getOpLogRewrite() , &pattern, fromMigrate );
-                        }
-                        else {
-                            logOp("u", ns, updateobj, &pattern, fromMigrate );
-                        }
-                    }
                     numModded++;
                     if ( ! multi )
                         return UpdateResult( 1 , 1 , numModded , BSONObj() );
@@ -369,12 +360,8 @@ namespace mongo {
 
                 uassert( 10158 ,  "multi update only works with $ operators" , ! multi );
 
-                updateNoMods( d, nsdt, currPK, currentObj, updateobj );
+                updateNoMods( d, nsdt, currPK, currentObj, updateobj, &loud );
 
-                if ( logop ) {
-                    DEV wassert( !su ); // super used doesn't get logged, this would be bad.
-                    logOp("u", ns, updateobj, &pattern, fromMigrate );
-                }
                 return UpdateResult( 1 , 0 , 1 , BSONObj() );
             } while ( c->ok() );
         } // endif
