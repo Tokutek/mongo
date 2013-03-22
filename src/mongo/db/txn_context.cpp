@@ -21,6 +21,7 @@
 #include <db.h>
 #include "mongo/db/storage/env.h"
 #include "mongo/bson/bsonobjiterator.h"
+#include "mongo/db/oplog.h"
 
 namespace mongo {
 
@@ -63,6 +64,6 @@ namespace mongo {
 
     void TxnContext::writeOpsToOplog() {
         BSONArray array = _txnOps.arr();        
-        logOpTransactions(array);
+        logTransactionOps(array);
     }
 } // namespace mongo

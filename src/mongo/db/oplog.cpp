@@ -152,7 +152,7 @@ namespace mongo {
         _logTransactionOp = _logOpUninitialized;
     }
 
-    void logOpTransactions(BSONArray& opInfo) {
+    void logTransactionOps(BSONArray& opInfo) {
         if ( replSettings.master ) {
             _logTransactionOp(opInfo);
         }
