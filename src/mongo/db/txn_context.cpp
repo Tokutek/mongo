@@ -14,29 +14,26 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "txn.h"
+#include "txn_context.h"
 
 #include "mongo/pch.h"
 
 #include <db.h>
-
-#include "mongo/db/client.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/storage/env.h"
 
 namespace mongo {
 
     TxnContext::TxnContext(const TxnContext *parent, int txnFlags)
-            : _txn(parent->_txn, txnFlags)
+            : _txn(&parent->_txn, txnFlags)
     {
     }
 
     TxnContext::~TxnContext() {
     }
 
-    void Txn::commit(int flags) {
+    void TxnContext::commit(int flags) {
     }
 
-    void Txn::abort() {
+    void TxnContext::abort() {
     }
 } // namespace mongo

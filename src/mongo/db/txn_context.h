@@ -14,10 +14,11 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef MONGO_DB_STORAGE_TXN_H
-#define MONGO_DB_STORAGE_TXN_H
+#ifndef MONGO_DB_TXNCONTEXT_H
+#define MONGO_DB_TXNCONTEXT_H
 
 #include "mongo/pch.h"
+#include "mongo/db/storage/txn.h"
 
 #include <db.h>
 
