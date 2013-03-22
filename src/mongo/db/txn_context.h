@@ -41,7 +41,7 @@ namespace mongo {
         /** @return true iff this transaction is live */
         bool isLive() const { return _txn.isLive(); }
         /** @return true iff this is a read only transaction */
-        bool isReadOnly() const { return _txn.isReadOnly; };
+        bool isReadOnly() const { return _txn.isReadOnly(); };
     };
 
 
