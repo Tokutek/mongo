@@ -32,6 +32,7 @@
 #define OP_STR_UPDATE "u"
 #define OP_STR_DELETE "d"
 #define OP_STR_COMMENT "n"
+#define OP_STR_COMMAND "c"
 
 namespace mongo {
 namespace OpLogHelpers{
@@ -85,6 +86,14 @@ namespace OpLogHelpers{
         appendOpType(OP_STR_DELETE, &b);
         appendNsStr(ns, &b);
         appendMigrate(fromMigrate, &b);
+        b.append(KEY_STR_ROW, row);
+        txn->logOp(b.obj());
+    }
+
+    void logCommand(const char* ns, BSONObj row, TxnContext* txn) {
+        BSONObjBuilder b;
+        appendOpType(OP_STR_COMMAND, &b);
+        appendNsStr(ns, &b);
         b.append(KEY_STR_ROW, row);
         txn->logOp(b.obj());
     }

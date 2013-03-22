@@ -30,6 +30,7 @@ namespace OpLogHelpers{
     void logInsert(const char* ns, BSONObj row, TxnContext* txn);
     void logUpdate(const char* ns, BSONObj oldRow, BSONObj newRow, bool fromMigrate, TxnContext* txn);
     void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn);
+    void logCommand(const char* ns, BSONObj row, TxnContext* txn);
 
 }
 
