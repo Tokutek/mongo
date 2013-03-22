@@ -15,21 +15,25 @@
 */
 
 #include "mongo/pch.h"
+#include "oplog_helpers.h"
+#include "txn_context.h"
+
 
 namespace mongo {
+namespace OpLogHelpers{
     
-    OpLogHelpers::logComment(BSONObj comment, TxnContext* txn) {
+    void logComment(BSONObj comment, TxnContext* txn) {
     }
     
-    OpLogHelpers::logInsert(const char* ns, BSONObj row, TxnContext* txn) {
+    void logInsert(const char* ns, BSONObj row, TxnContext* txn) {
         BSONObjBuilder b;
         b.append("op", "i");
         b.append("ns", ns);
         b.append("o", row);
-        _txnOps.append(b.obj());
+        //_txnOps.append(b.obj());
     }
 
-    OpLogHelpers::logUpdate(
+    void logUpdate(
         const char* ns, 
         BSONObj oldRow, 
         BSONObj newRow, 
@@ -38,7 +42,8 @@ namespace mongo {
     {
     }
 
-    OpLogHelpers::logDelete(const char* ns, BSONObj row, TxnContext* txn) {
+    void logDelete(const char* ns, BSONObj row, TxnContext* txn) {
     }
-
+    
+} // namespace OpLogHelpers
 } // namespace mongo
