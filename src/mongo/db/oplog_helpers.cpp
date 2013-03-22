@@ -48,14 +48,14 @@ namespace OpLogHelpers{
         }
     }
     
-    void logComment(BSONObj comment, TxnContext* txn) {
+    void logComment(BSONObj comment, const TxnContext* txn) {
         BSONObjBuilder b;
         appendOpType(OP_STR_COMMENT, &b);
         b.append(KEY_STR_COMMENT, comment);
         txn->logOp(b.obj());
     }
     
-    void logInsert(const char* ns, BSONObj row, TxnContext* txn) {
+    void logInsert(const char* ns, BSONObj row, const TxnContext* txn) {
         BSONObjBuilder b;
         appendOpType(OP_STR_INSERT, &b);
         appendNsStr(ns, &b);
@@ -68,7 +68,7 @@ namespace OpLogHelpers{
         BSONObj oldRow, 
         BSONObj newRow,
         bool fromMigrate,
-        TxnContext* txn
+        const TxnContext* txn
         ) 
     {
         BSONObjBuilder b;
@@ -80,7 +80,7 @@ namespace OpLogHelpers{
         txn->logOp(b.obj());
     }
 
-    void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn) {
+    void logDelete(const char* ns, BSONObj row, bool fromMigrate, const TxnContext* txn) {
         BSONObjBuilder b;
         appendOpType(OP_STR_DELETE, &b);
         appendNsStr(ns, &b);
