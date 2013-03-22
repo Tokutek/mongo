@@ -59,6 +59,7 @@ namespace mongo {
         bool hasParent();
         // transfer operations in _txnOps to _parent->_txnOps
         void transferOpsToParent();
+        void writeOpsToOplog();
     };
 
 

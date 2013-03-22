@@ -60,4 +60,9 @@ namespace mongo {
             _parent->logOp(curr.Obj());
         }
     }
+
+    void TxnContext::writeOpsToOplog() {
+        BSONArray array = _txnOps.arr();        
+        logOpTransactions(array);
+    }
 } // namespace mongo

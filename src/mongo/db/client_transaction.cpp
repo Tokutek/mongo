@@ -49,6 +49,7 @@ namespace mongo {
             // In this case, the transaction we are committing has
             // no parent, so we must write the transaction's 
             // logged operations to the opLog, as part of this transaction
+            txn_to_commit->writeOpsToOplog();
         }
         txn_to_commit->commit(flags);
         _txns.pop();
