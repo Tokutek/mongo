@@ -19,6 +19,7 @@
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/queryoptimizercursorimpl.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/storage/exception.h"
 
 namespace mongo {
 
@@ -30,15 +31,19 @@ namespace mongo {
                                            const shared_ptr<const ParsedQuery>& parsedQuery,
                                            bool requireOrder,
                                            QueryPlanSummary* singlePlanSummary ) {
-        CursorGenerator generator( ns,
-                                   query,
-                                   order,
-                                   planPolicy,
-                                   requestMatcher,
-                                   parsedQuery,
-                                   requireOrder,
-                                   singlePlanSummary );
-        return generator.generate();
+        try {
+            CursorGenerator generator( ns,
+                                       query,
+                                       order,
+                                       planPolicy,
+                                       requestMatcher,
+                                       parsedQuery,
+                                       requireOrder,
+                                       singlePlanSummary );
+            return generator.generate();
+        } catch (storage::RetryableException::MvccDictionaryTooNew) {
+            return shared_ptr<Cursor>( new DummyCursor() );
+        }
     }
 
     shared_ptr<Cursor> getBestGuessCursor( const char* ns,

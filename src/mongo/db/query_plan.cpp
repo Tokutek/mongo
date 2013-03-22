@@ -250,7 +250,7 @@ doneCheckOrder:
 
         if ( _utility == Impossible ) {
             // Dummy table scan cursor returning no results.  Allowed in --notablescan mode.
-            return shared_ptr<Cursor>( BasicCursor::make(NULL) );
+            return shared_ptr<Cursor>( new DummyCursor() );
         }
 
         if ( willScanTable() ) {
