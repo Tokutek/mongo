@@ -67,7 +67,7 @@ namespace mongo {
             BSONObj o = asBson();
             Helpers::putSingletonGod(rsConfigNs.c_str(), o, false/*logOp=false; local db so would work regardless...*/);
             if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
-                OpLogHelpers::logComment(comment, &cc.txn());
+                OpLogHelpers::logComment(comment, &cc().txn());
             }
         }
         log() << "replSet saveConfigLocally done" << rsLog;

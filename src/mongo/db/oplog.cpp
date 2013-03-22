@@ -49,7 +49,7 @@ namespace mongo {
     }
 
     static void _logOpUninitialized(BSONArray& opInfo) {
-        uassert(13288, "replSet error write op before replSet initialized");
+        log() << "WHAT IS GOING ON???????? " << << endl;
     }
 
     /** write an op to the oplog that is already built.
@@ -100,28 +100,7 @@ namespace mongo {
     // global is safe as we are in write lock. we put the static outside the function to avoid the implicit mutex 
     // the compiler would use if inside the function.  the reason this is static is to avoid a malloc/free for this
     // on every logop call.
-    static BufBuilder logopbufbuilder(8*1024);
-
-    static BSONObj createOpBson(
-        const char *opstr, 
-        const char *ns, 
-        const BSONObj& obj, 
-        BSONObj *o2, 
-        bool fromMigrate
-        ) 
-    {
-        BSONObjBuilder b;
-        b.append("op", opstr);
-        b.append("ns", ns);
-        if (fromMigrate) {
-            b.appendBool("fromMigrate", true);
-        }
-        if ( o2 ) {
-            b.append("o2", *o2);
-        }
-        b.append("o", obj);
-        return b.obj();
-    }
+    static BufBuilder logopbufbuilder(256*1024);
     
     static void _logTransactionOps(BSONArray& opInfo) {
         Lock::DBWrite lk1("local");
