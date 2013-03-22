@@ -49,7 +49,7 @@ namespace mongo {
     }
 
     static void _logOpUninitialized(BSONArray& opInfo) {
-        log() << "WHAT IS GOING ON???????? " << << endl;
+        log() << "WHAT IS GOING ON???????? " << endl;
     }
 
     /** write an op to the oplog that is already built.
