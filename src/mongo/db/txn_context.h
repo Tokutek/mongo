@@ -32,12 +32,14 @@ namespace mongo {
      */
     class TxnContext: boost::noncopyable {
         storage::Txn _txn;
+        const TxnContext* _parent;
         //
         // a BSON Array that will hold all of the operations done by
         // this transaction. If the array gets too large, its contents
         // will spill into the localOpRef collection on commit,
         //
         BSONArrayBuilder _txnOps;
+        uint64_t _numOperations; //number of operations added to _txnOps
 
         public:
         TxnContext(const TxnContext *parent, int txnFlags);
@@ -50,8 +52,13 @@ namespace mongo {
         bool isLive() const { return _txn.isLive(); }
         /** @return true iff this is a read only transaction */
         bool isReadOnly() const { return _txn.isReadOnly(); };
-
-        void logOp(BSONObj op);
+        // log an operations, represented in op, to _txnOps
+        // if and when the root transaction commits, the operation
+        // will be added to the opLog
+        void logOp(BSONObj op);        
+        bool hasParent();
+        // transfer operations in _txnOps to _parent->_txnOps
+        void transferOpsToParent();
     };
 
 

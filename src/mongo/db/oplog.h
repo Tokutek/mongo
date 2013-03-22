@@ -35,19 +35,9 @@ namespace mongo {
 
     void _logOpObjRS(const BSONObj& op);
 
-    /** Write operation to the log (local.oplog.$main)
-
-       @param opstr
-        "i" insert
-        "u" update
-        "d" delete
-        "c" db cmd
-        "n" no-op
-        "db" declares presence of a database (ns is set to the db name + '.')
-
-       See _logOp() in oplog.cpp for more details.
-    */
     void logOp( const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt = 0, bool fromMigrate = false );
+    // Write operations to the log (local.oplog.$main)
+    void logTransactionOps(BSONArray& opInfo);
 
     /** puts obj in the oplog as a comment (a no-op).  Just for diags.
         convention is

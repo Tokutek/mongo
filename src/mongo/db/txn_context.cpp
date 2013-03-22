@@ -24,7 +24,9 @@
 namespace mongo {
 
     TxnContext::TxnContext(const TxnContext *parent, int txnFlags)
-            : _txn(&parent->_txn, txnFlags)
+            : _txn((parent == NULL) ? NULL : &parent->_txn, txnFlags), 
+              _parent(parent),
+              _numOperations(0)
     {
     }
 
@@ -42,5 +44,18 @@ namespace mongo {
     void TxnContext::logOp(BSONObj op)
     {
         _txnOps.append(op);
+        _numOperations++;
+    }
+
+    bool TxnContext::hasParent() {
+        return (_parent != NULL);
+    }
+
+    void TxnContext::transferOpsToParent() {
+        BSONArray array = _txnOps.done();
+        BSONObjIterator iter(array);
+        while (iter.more()) {
+            _parent->_txnOps.append(iter.next());
+        }
     }
 } // namespace mongo

@@ -199,6 +199,42 @@ namespace mongo {
         logOpForSharding( opstr , ns , obj , patt );
     }
 
+    void logTransactionOps(BSONArray& opInfo) {
+        Lock::DBWrite lk1("local");
+        mutex::scoped_lock lk2(OpTime::m);
+
+        const OpTime ts = OpTime::now(lk2);
+        long long hashNew;
+        if( theReplSet ) {
+            massert(13312, "replSet error : logOp() but not primary?", theReplSet->box.getState().primary());
+            hashNew = (theReplSet->lastH * 131 + ts.asLL()) * 17 + theReplSet->selfId();
+        }
+        else {
+            // must be initiation
+            hashNew = 0;
+        }
+
+        // This is very temporary, and will likely fail on large row insertions
+        logopbufbuilder.reset();
+        tempId++;
+        BSONObjBuilder b(logopbufbuilder);
+        b.appendNumber("_id", tempId);
+        b.appendTimestamp("ts", ts.asDate());
+        b.append("h", hashNew);
+        b.append("ops", opInfo);
+
+        const char *logns = rsoplog;
+        if ( rsOplogDetails == 0 ) {
+            Client::Context ctx( logns , dbpath, false);
+            localDB = ctx.db();
+            verify( localDB );
+            rsOplogDetails = nsdetails(logns);
+            massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
+        }
+        BSONObj bb = b.done();
+        rsOplogDetails->insertObject(bb, true);
+    }
+
     void createOplog() {
         Lock::GlobalWrite lk;
         bool rs = !cmdLine._replSet.empty();

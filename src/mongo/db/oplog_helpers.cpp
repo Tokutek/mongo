@@ -48,6 +48,11 @@ namespace OpLogHelpers{
             b->append(KEY_STR_MIGRATE, true);
         }
     }
+
+    static inline bool isLocalNs(const char* ns) {
+        return (strncmp(ns, "local.", 6) == 0);
+        // TODO: (Zardosht) figure out what resetSlaveCache does and when we should call it
+    }
     
     void logComment(BSONObj comment, TxnContext* txn) {
         BSONObjBuilder b;
@@ -58,6 +63,10 @@ namespace OpLogHelpers{
     
     void logInsert(const char* ns, BSONObj row, TxnContext* txn) {
         BSONObjBuilder b;
+        if (isLocalNs(ns)) {
+            return;
+        }
+
         appendOpType(OP_STR_INSERT, &b);
         appendNsStr(ns, &b);
         b.append(KEY_STR_ROW, row);
@@ -73,6 +82,10 @@ namespace OpLogHelpers{
         ) 
     {
         BSONObjBuilder b;
+        if (isLocalNs(ns)) {
+            return;
+        }
+
         appendOpType(OP_STR_UPDATE, &b);
         appendNsStr(ns, &b);
         appendMigrate(fromMigrate, &b);
@@ -83,6 +96,10 @@ namespace OpLogHelpers{
 
     void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn) {
         BSONObjBuilder b;
+        if (isLocalNs(ns)) {
+            return;
+        }
+
         appendOpType(OP_STR_DELETE, &b);
         appendNsStr(ns, &b);
         appendMigrate(fromMigrate, &b);
@@ -92,6 +109,10 @@ namespace OpLogHelpers{
 
     void logCommand(const char* ns, BSONObj row, TxnContext* txn) {
         BSONObjBuilder b;
+        if (isLocalNs(ns)) {
+            return;
+        }
+
         appendOpType(OP_STR_COMMAND, &b);
         appendNsStr(ns, &b);
         b.append(KEY_STR_ROW, row);
