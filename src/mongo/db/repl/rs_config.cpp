@@ -25,6 +25,7 @@
 #include "../oplog.h"
 #include "../instance.h"
 #include "../../util/text.h"
+#include "mongo/db/oplog_helpers.h"
 #include <boost/algorithm/string.hpp>
 
 using namespace bson;

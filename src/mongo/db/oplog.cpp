@@ -49,7 +49,7 @@ namespace mongo {
     }
 
     static void _logOpUninitialized(BSONArray& opInfo) {
-        uassert(13288, "replSet error write op to db before replSet initialized", str::startsWith(ns, "local.") || *opstr == 'n');
+        uassert(13288, "replSet error write op before replSet initialized");
     }
 
     /** write an op to the oplog that is already built.
