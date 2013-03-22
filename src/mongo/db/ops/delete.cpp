@@ -53,7 +53,7 @@ namespace mongo {
         while ( ccc->ok() ) {
 
             if ( ccc->currentIsDup() || !c->currentMatches() ) {
-                tokulog(4) << "_deleteObjects skipping " << cc->currPK() << ", dup or doesn't match" << endl;
+                tokulog(4) << "_deleteObjects skipping " << ccc->currPK() << ", dup or doesn't match" << endl;
                 ccc->advance();
                 continue;
             }
