@@ -139,7 +139,7 @@ namespace mongo {
          */
         class TransactionStack : boost::noncopyable {
             // If we had emplace we wouldn't need a shared_ptr...
-            std::stack<shared_ptr<storage::Txn> > _txns;
+            std::stack<shared_ptr<storage::TxnContext> > _txns;
           public:
             TransactionStack() {}
             ~TransactionStack() {
@@ -158,7 +158,7 @@ namespace mongo {
             /** @return true iff this transaction stack has a live txn. */
             bool hasLiveTxn() const;
             /** @return the innermost transaction. */
-            const storage::Txn &txn() const;
+            const TxnContext &txn() const;
         };
 
         /**

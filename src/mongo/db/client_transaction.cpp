@@ -28,10 +28,10 @@ namespace mongo {
 
     void Client::TransactionStack::beginTxn(int flags) {
         DEV { LOG(3) << "begin transaction(" << _txns.size() << ") " << flags << endl; }
-        const storage::Txn *currentTxn = (hasLiveTxn()
+        const TxnContext *currentTxn = (hasLiveTxn()
                                           ? &txn()
                                           : NULL);
-        shared_ptr<storage::Txn> newTxn(new storage::Txn(currentTxn, flags));
+        shared_ptr<TxnContext> newTxn(new TxnContext(currentTxn, flags));
         _txns.push(newTxn);
     }
 
@@ -51,13 +51,13 @@ namespace mongo {
         if (_txns.empty()) {
             return false;
         }
-        const storage::Txn &currentTxn = txn();
+        const TxnContext &currentTxn = txn();
         // We should not be keeping around retired transactions.
         dassert(currentTxn.isLive());
         return currentTxn.isLive();
     }
 
-    const storage::Txn &Client::TransactionStack::txn() const {
+    const TxnContext &Client::TransactionStack::txn() const {
         dassert(!_txns.empty());
         return *(_txns.top());
     }
