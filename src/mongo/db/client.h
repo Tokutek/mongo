@@ -159,7 +159,7 @@ namespace mongo {
             /** @return true iff this transaction stack has a live txn. */
             bool hasLiveTxn() const;
             /** @return the innermost transaction. */
-            const TxnContext &txn() const;
+            TxnContext &txn() const;
         };
 
         /**
@@ -182,7 +182,7 @@ namespace mongo {
             return _transactions->hasLiveTxn();
         }
 
-        const TxnContext &txn() const {
+        TxnContext &txn() const {
             dassert(hasTxn());
             return _transactions->txn();
         }

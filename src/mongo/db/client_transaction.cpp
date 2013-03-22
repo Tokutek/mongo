@@ -57,7 +57,7 @@ namespace mongo {
         return currentTxn.isLive();
     }
 
-    const TxnContext &Client::TransactionStack::txn() const {
+    TxnContext &Client::TransactionStack::txn() const {
         dassert(!_txns.empty());
         return *(_txns.top());
     }

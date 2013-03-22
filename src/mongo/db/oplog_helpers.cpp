@@ -21,11 +21,11 @@
 
 #define KEY_STR_OP_NAME "op"
 #define KEY_STR_NS "ns"
-#define KEY_STR_ROW "o";
-#define KEY_STR_OLD_ROW "o";
-#define KEY_STR_NEW_ROW "o2";
-#define KEY_STR_COMMENT "o";
-#define KEY_STR_MIGRATE "fromMigrate";
+#define KEY_STR_ROW "o"
+#define KEY_STR_OLD_ROW "o"
+#define KEY_STR_NEW_ROW "o2"
+#define KEY_STR_COMMENT "o"
+#define KEY_STR_MIGRATE "fromMigrate"
 
 // values for types of operations in opLog
 #define OP_STR_INSERT "i"
@@ -48,14 +48,14 @@ namespace OpLogHelpers{
         }
     }
     
-    void logComment(BSONObj comment, const TxnContext* txn) {
+    void logComment(BSONObj comment, TxnContext* txn) {
         BSONObjBuilder b;
         appendOpType(OP_STR_COMMENT, &b);
         b.append(KEY_STR_COMMENT, comment);
         txn->logOp(b.obj());
     }
     
-    void logInsert(const char* ns, BSONObj row, const TxnContext* txn) {
+    void logInsert(const char* ns, BSONObj row, TxnContext* txn) {
         BSONObjBuilder b;
         appendOpType(OP_STR_INSERT, &b);
         appendNsStr(ns, &b);
@@ -68,7 +68,7 @@ namespace OpLogHelpers{
         BSONObj oldRow, 
         BSONObj newRow,
         bool fromMigrate,
-        const TxnContext* txn
+        TxnContext* txn
         ) 
     {
         BSONObjBuilder b;
@@ -80,7 +80,7 @@ namespace OpLogHelpers{
         txn->logOp(b.obj());
     }
 
-    void logDelete(const char* ns, BSONObj row, bool fromMigrate, const TxnContext* txn) {
+    void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn) {
         BSONObjBuilder b;
         appendOpType(OP_STR_DELETE, &b);
         appendNsStr(ns, &b);

@@ -26,10 +26,10 @@ namespace mongo {
 // helpers for opLog stuff
 namespace OpLogHelpers{
 
-    void logComment(BSONObj comment, const TxnContext* txn);
-    void logInsert(const char* ns, BSONObj row, const TxnContext* txn);
-    void logUpdate(const char* ns, BSONObj oldRow, BSONObj newRow, bool fromMigrate, const TxnContext* txn);
-    void logDelete(const char* ns, BSONObj row, bool fromMigrate, const TxnContext* txn);
+    void logComment(BSONObj comment, TxnContext* txn);
+    void logInsert(const char* ns, BSONObj row, TxnContext* txn);
+    void logUpdate(const char* ns, BSONObj oldRow, BSONObj newRow, bool fromMigrate, TxnContext* txn);
+    void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn);
 
 }
 
