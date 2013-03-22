@@ -33,6 +33,7 @@ namespace mongo {
     class TxnContext: boost::noncopyable {
         storage::Txn _txn;
         TxnContext* _parent;
+        bool _logOperations;
         //
         // a BSON Array that will hold all of the operations done by
         // this transaction. If the array gets too large, its contents

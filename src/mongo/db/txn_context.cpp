@@ -28,6 +28,7 @@ namespace mongo {
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
             : _txn((parent == NULL) ? NULL : &parent->_txn, txnFlags), 
               _parent(parent),
+              _logOperations(replSettings.master)
               _numOperations(0)
     {
     }
@@ -45,8 +46,10 @@ namespace mongo {
 
     void TxnContext::logOp(BSONObj op)
     {
-        _txnOps.append(op);
-        _numOperations++;
+        if (_logOperations) {
+            _txnOps.append(op);
+            _numOperations++;
+        }
     }
 
     bool TxnContext::hasParent() {
@@ -63,9 +66,9 @@ namespace mongo {
     }
 
     void TxnContext::writeOpsToOplog() {
-      if (_numOperations > 0) {
-        BSONArray array = _txnOps.arr();        
-        logTransactionOps(array);
-      }
+        if (_numOperations > 0) {
+            BSONArray array = _txnOps.arr();        
+            logTransactionOps(array);
+        }
     }
 } // namespace mongo
