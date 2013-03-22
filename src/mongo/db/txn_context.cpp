@@ -20,10 +20,11 @@
 
 #include <db.h>
 #include "mongo/db/storage/env.h"
+#include "mongo/bson/bsonobjiterator.h"
 
 namespace mongo {
 
-    TxnContext::TxnContext(const TxnContext *parent, int txnFlags)
+    TxnContext::TxnContext(TxnContext *parent, int txnFlags)
             : _txn((parent == NULL) ? NULL : &parent->_txn, txnFlags), 
               _parent(parent),
               _numOperations(0)
@@ -52,10 +53,11 @@ namespace mongo {
     }
 
     void TxnContext::transferOpsToParent() {
-        BSONArray array = _txnOps.done();
+        BSONArray array = _txnOps.arr();
         BSONObjIterator iter(array);
         while (iter.more()) {
-            _parent->_txnOps.append(iter.next());
+            BSONElement curr = iter.next();
+            _parent->logOp(curr.Obj());
         }
     }
 } // namespace mongo

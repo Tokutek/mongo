@@ -32,7 +32,7 @@ namespace mongo {
      */
     class TxnContext: boost::noncopyable {
         storage::Txn _txn;
-        const TxnContext* _parent;
+        TxnContext* _parent;
         //
         // a BSON Array that will hold all of the operations done by
         // this transaction. If the array gets too large, its contents
@@ -42,7 +42,7 @@ namespace mongo {
         uint64_t _numOperations; //number of operations added to _txnOps
 
         public:
-        TxnContext(const TxnContext *parent, int txnFlags);
+        TxnContext(TxnContext *parent, int txnFlags);
         ~TxnContext();
         void commit(int flags);
         void abort();

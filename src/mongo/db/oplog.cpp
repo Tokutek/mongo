@@ -138,7 +138,6 @@ namespace mongo {
         const OpTime ts = OpTime::now(lk2);
         long long hashNew;
         if( theReplSet ) {
-            massert(13312, "replSet error : logOp() but not primary?", theReplSet->box.getState().primary());
             hashNew = (theReplSet->lastH * 131 + ts.asLL()) * 17 + theReplSet->selfId();
         }
         else {
@@ -164,7 +163,6 @@ namespace mongo {
             localDB = ctx.db();
             verify( localDB );
             rsOplogDetails = nsdetails(logns);
-            massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
         }
         BSONObj bb = b.done();
         rsOplogDetails->insertObject(bb, true);

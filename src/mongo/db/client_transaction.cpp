@@ -28,7 +28,7 @@ namespace mongo {
 
     void Client::TransactionStack::beginTxn(int flags) {
         DEV { LOG(3) << "begin transaction(" << _txns.size() << ") " << flags << endl; }
-        const TxnContext *currentTxn = (hasLiveTxn()
+        TxnContext *currentTxn = (hasLiveTxn()
                                           ? &txn()
                                           : NULL);
         shared_ptr<TxnContext> newTxn(new TxnContext(currentTxn, flags));
