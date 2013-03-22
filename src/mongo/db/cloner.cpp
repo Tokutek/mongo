@@ -161,8 +161,9 @@ namespace mongo {
 
                 try {
                     insertObject(to_collection, js);
-                    if ( logForRepl )
-                        logOp("i", to_collection, js);
+                    if ( logForRepl ) {
+                        OpLogHelpers::logInsert(to_collection, js, cc().txn());
+                    }
                 }
                 catch( UserException& e ) {
                     error() << "error: exception cloning object in " << from_collection << ' ' << e.what() << " obj:" << js.toString() << '\n';
@@ -219,10 +220,9 @@ namespace mongo {
                 BSONObj js = *i;
                 try {
                     insertObject(to_collection, js);
-                    if ( logForRepl )
-                        logOp("i", to_collection, js);
-
-                    //getDur().commitIfNeeded();
+                    if ( logForRepl ) {
+                        OpLogHelpers::logInsert(to_collection, js, cc().txn());
+                    }
                 }
                 catch( UserException& e ) {
                     error() << "error: exception cloning object in " << from_collection << ' ' << e.what() << " obj:" << js.toString() << '\n';

@@ -67,15 +67,7 @@ namespace mongo {
             tokulog(4) << "_deleteObjects iteration: pk " << pk << ", obj " << obj << endl;
 
             if ( logop ) {
-                BSONElement e;
-                if( obj.getObjectID( e ) ) {
-                    BSONObjBuilder b;
-                    b.append( e );
-                    logOp( "d", ns, b.done(), 0);
-                }
-                else {
-                    problem() << "deleted object without id, not logging" << endl;
-                }
+                OpLogHelpers::logDelete(ns, obj, false, cc().txn());
             }
 
             deleteOneObject(d, nsdt, pk, obj);

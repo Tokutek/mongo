@@ -19,30 +19,74 @@
 #include "txn_context.h"
 
 
+#define KEY_STR_OP_NAME "op"
+#define KEY_STR_NS "ns"
+#define KEY_STR_ROW "o";
+#define KEY_STR_OLD_ROW "o";
+#define KEY_STR_NEW_ROW "o2";
+#define KEY_STR_COMMENT "o";
+#define KEY_STR_MIGRATE "fromMigrate";
+
+// values for types of operations in opLog
+#define OP_STR_INSERT "i"
+#define OP_STR_UPDATE "u"
+#define OP_STR_DELETE "d"
+#define OP_STR_COMMENT "n"
+
 namespace mongo {
 namespace OpLogHelpers{
+
+    static inline void appendOpType(const char *opstr, BSONObjBuilder* b) {
+        b->append(KEY_STR_OP_NAME, opstr);
+    }
+    static inline void appendNsStr(const char *ns, BSONObjBuilder* b) {
+        b->append(KEY_STR_NS, ns);
+    }
+    static inline void appendMigrate(bool fromMigrate, BSONObjBuilder* b) {
+        if (fromMigrate) {
+            b->append(KEY_STR_MIGRATE, true);
+        }
+    }
     
     void logComment(BSONObj comment, TxnContext* txn) {
+        BSONObjBuilder b;
+        appendOpType(OP_STR_COMMENT, &b);
+        b.append(KEY_STR_COMMENT, comment);
+        txn->logOp(b.obj());
     }
     
     void logInsert(const char* ns, BSONObj row, TxnContext* txn) {
         BSONObjBuilder b;
-        b.append("op", "i");
-        b.append("ns", ns);
-        b.append("o", row);
-        //_txnOps.append(b.obj());
+        appendOpType(OP_STR_INSERT, &b);
+        appendNsStr(ns, &b);
+        b.append(KEY_STR_ROW, row);
+        txn->logOp(b.obj());
     }
 
     void logUpdate(
         const char* ns, 
         BSONObj oldRow, 
-        BSONObj newRow, 
+        BSONObj newRow,
+        bool fromMigrate,
         TxnContext* txn
         ) 
     {
+        BSONObjBuilder b;
+        appendOpType(OP_STR_UPDATE, &b);
+        appendNsStr(ns, &b);
+        appendMigrate(fromMigrate, &b);
+        b.append(KEY_STR_OLD_ROW, oldRow);
+        b.append(KEY_STR_NEW_ROW, newRow);
+        txn->logOp(b.obj());
     }
 
-    void logDelete(const char* ns, BSONObj row, TxnContext* txn) {
+    void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn) {
+        BSONObjBuilder b;
+        appendOpType(OP_STR_DELETE, &b);
+        appendNsStr(ns, &b);
+        appendMigrate(fromMigrate, &b);
+        b.append(KEY_STR_ROW, row);
+        txn->logOp(b.obj());
     }
     
 } // namespace OpLogHelpers

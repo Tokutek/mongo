@@ -522,8 +522,9 @@ namespace mongo {
                 // so we re-wrap without the pre-condition for speed
 
                 string tempNS = str::stream() << dbname << ".$cmd";
-
-                logOp( "c" , tempNS.c_str() , cmdObj.firstElement().wrap() );
+                // TODO: Zardosht, figure out what this does
+                ::abort();
+                //logOp( "c" , tempNS.c_str() , cmdObj.firstElement().wrap() );
             }
 
             return errors == 0;

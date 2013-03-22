@@ -88,7 +88,7 @@ namespace mongo {
         newObj = addIdField(newObj);
         insertOneObject(d, nsdt, newObj, overwrite);
         if (logop) {
-            logOp("i", ns, newObj, 0, fromMigrate);
+            OpLogHelpers::logInsert(ns, newObj, cc().txn());
         }
     }
 

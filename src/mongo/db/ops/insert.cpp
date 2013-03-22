@@ -86,7 +86,7 @@ namespace mongo {
         BSONObj objWithId = addIdField(obj);
         BSONElementManipulator::lookForTimestamps(objWithId);
         insertOneObject(details, nsdt, objWithId, overwrite);
-        logOp("i", ns, obj);
+        OpLogHelpers::logInsert(ns, obj, cc().txn());
     }
     
 } // namespace mongo
