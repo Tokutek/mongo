@@ -63,7 +63,9 @@ namespace mongo {
     }
 
     void TxnContext::writeOpsToOplog() {
+      if (_numOperations > 0) {
         BSONArray array = _txnOps.arr();        
         logTransactionOps(array);
+      }
     }
 } // namespace mongo
