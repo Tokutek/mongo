@@ -126,8 +126,8 @@ namespace mongo {
     static void _logOpRS(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool fromMigrate ) {
         Lock::DBWrite lk1("local");
 
-        // TODO: (Zardosht) What is this code doing? Learn in.
         if ( strncmp(ns, "local.", 6) == 0 ) {
+            // TODO: (Zardosht) What is this code doing? Learn in.
             if ( strncmp(ns, "local.slaves", 12) == 0 )
                 resetSlaveCache();
             return;
