@@ -447,7 +447,9 @@ namespace mongo {
     /* call after constructing to start - returns fairly quickly after launching its threads */
     void ReplSetImpl::_go() {
         try {
+            Client::Transaction txn(DB_SERIALIZABLE);
             loadLastOpTimeWritten();
+            txn.commit();
         }
         catch(std::exception& e) {
             log() << "replSet error fatal couldn't query the local " << rsoplog << " collection.  Terminating mongod after 30 seconds." << rsLog;
