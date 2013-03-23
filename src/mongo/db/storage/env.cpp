@@ -127,6 +127,9 @@ namespace mongo {
             db_env_set_direct_io(cmdLine.directio);
 
             int r = db_env_create(&env, 0);
+            if (r == TOKUDB_HUGE_PAGES_ENABLED) {
+                LOG() << "Huge pages are enabled, please disable them to continue (echo never > /sys/kernel/mm/transparent_hugepages/enabled)" << endl;
+            }
             verify(r == 0);
 
             const uint64_t cachesize = (cmdLine.cacheSize > 0
