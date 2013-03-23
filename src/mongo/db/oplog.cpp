@@ -111,13 +111,13 @@ namespace mongo {
         if( theReplSet ) {
       //massert(13312, "replSet error : logOp() but not primary?", theReplSet->box.getState().primary());
             hashNew = (theReplSet->lastH * 131 + ts.asLL()) * 17 + theReplSet->selfId();
+        theReplSet->lastOpTimeWritten = ts;
+        theReplSet->lastH = hashNew;
         }
         else {
             // must be initiation
             hashNew = 0;
         }
-        theReplSet->lastOpTimeWritten = ts;
-        theReplSet->lastH = hashNew;
 
         // This is very temporary, and will likely fail on large row insertions
         logopbufbuilder.reset();
@@ -149,7 +149,7 @@ namespace mongo {
     }
     void newRepl() {
         replSettings.master = true;
-        _logTransactionOp = _logOpUninitialized;
+        _logTransactionOp = _logTransactionOps;
     }
 
     void logTransactionOps(BSONArray& opInfo) {
