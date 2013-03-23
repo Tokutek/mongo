@@ -22,13 +22,14 @@
 #include "mongo/db/storage/env.h"
 #include "mongo/bson/bsonobjiterator.h"
 #include "mongo/db/oplog.h"
+#include "mongo/db/repl.h"
 
 namespace mongo {
 
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
             : _txn((parent == NULL) ? NULL : &parent->_txn, txnFlags), 
               _parent(parent),
-              _logOperations(replSettings.master)
+              _logOperations(replSettings.master),
               _numOperations(0)
     {
     }
