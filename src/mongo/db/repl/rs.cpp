@@ -34,8 +34,8 @@ namespace mongo {
     using namespace bson;
 
 #ifdef MONGO_PLATFORM_64
-    const int ReplSetImpl::replWriterThreadCount = 16;
-    const int ReplSetImpl::replPrefetcherThreadCount = 16;
+    const int ReplSetImpl::replWriterThreadCount = 2;
+    const int ReplSetImpl::replPrefetcherThreadCount = 2;
 #else
     const int ReplSetImpl::replWriterThreadCount = 2;
     const int ReplSetImpl::replPrefetcherThreadCount = 2;
