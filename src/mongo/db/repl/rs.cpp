@@ -812,7 +812,7 @@ namespace mongo {
     void startReplSets(ReplSetCmdline *replSetCmdline) {
         Client::initThread("rsStart");
         try {
-            Client::Transaction transaction(DB_SERIALIZABLE);
+	  //Client::Transaction transaction(DB_SERIALIZABLE);
             verify( theReplSet == 0 );
             if( replSetCmdline == 0 ) {
                 verify(!replSet);
@@ -820,7 +820,7 @@ namespace mongo {
             }
             replLocalAuth();
             (theReplSet = new ReplSet(*replSetCmdline))->go();
-            transaction.commit();
+            //transaction.commit();
         }
         catch(std::exception& e) {
             log() << "replSet caught exception in startReplSets thread: " << e.what() << rsLog;
