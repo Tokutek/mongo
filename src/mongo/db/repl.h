@@ -59,7 +59,6 @@ namespace mongo {
 
         ReplSettings()
             : slave(NotSlave),
-            master(false),
             fastsync(),
             autoresync(false),
             slavedelay(),
