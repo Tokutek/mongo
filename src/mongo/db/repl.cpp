@@ -81,7 +81,7 @@ namespace mongo {
     };
 
     bool anyReplEnabled() {
-        return replSettings.slave || theReplSet;
+        return theReplSet;
     }
 
     bool replAuthenticate(DBClientBase *conn);
@@ -1295,11 +1295,6 @@ namespace mongo {
     void startReplication() {
         /* if we are going to be a replica set, we aren't doing other forms of replication. */
         if( !cmdLine._replSet.empty() ) {
-            if( replSettings.slave ) {
-                log() << "***" << endl;
-                log() << "ERROR: can't use --slave or --master replication options with --replSet" << endl;
-                log() << "***" << endl;
-            }
             newRepl();
 
             replSet = true;
@@ -1321,22 +1316,7 @@ namespace mongo {
         ReplApplyBatchSizeValidator() : ParameterValidator( "replApplyBatchSize" ) {}
 
         virtual bool isValid( BSONElement e , string& errmsg ) const {
-            int b = e.numberInt();
-            if( b < 1 || b > 1024 ) {
-                errmsg = "replApplyBatchSize has to be >= 1 and < 1024";
-                return false;
-            }
-
-            if ( replSettings.slavedelay != 0 && b > 1 ) {
-                errmsg = "can't use a batch size > 1 with slavedelay";
-                return false;
-            }
-            if ( ! replSettings.slave ) {
-                errmsg = "can't set replApplyBatchSize on a non-slave machine";
-                return false;
-            }
-
-            return true;
+            return false;
         }
     } replApplyBatchSizeValidator;
     
@@ -1351,10 +1331,6 @@ namespace mongo {
             uassert(13436,
                     "not master or secondary; cannot currently read from this replSet member",
                     theReplSet && theReplSet->isSecondary() );
-        }
-        else {
-            notMasterUnless(isMaster() || (!pq || pq->hasOption(QueryOption_SlaveOk)) ||
-                            replSettings.slave == SimpleSlave );
         }
     }
 

@@ -737,8 +737,7 @@ namespace mongo {
         CmdCount() : Command("count") { }
         virtual bool logTheOp() { return false; }
         virtual bool slaveOk() const {
-            // ok on --slave setups
-            return replSettings.slave == SimpleSlave;
+            return false;
         }
         virtual bool slaveOverrideOk() const { return true; }
         virtual bool maintenanceOk() const { return false; }

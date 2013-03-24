@@ -42,17 +42,7 @@ namespace mongo {
                 return theReplSet->isPrimary();
             return false;
         }
-
-        if( ! replSettings.slave )
-            return true;
-
-        if ( replAllDead )
-            return false;
-
-        if ( cc().isGod() )
-            return true;
-
-        return false;
+        return true;
     }
     inline bool isMaster(const char * dbname = 0) {
         if( _isMaster() )

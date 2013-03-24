@@ -37,14 +37,8 @@
 
 namespace mongo {
 
-    /* replication slave? (possibly with slave)
-       --slave cmd line setting -> SimpleSlave
-    */
-    typedef enum { NotSlave=0, SimpleSlave } SlaveTypes;
-
     class ReplSettings {
     public:
-        SlaveTypes slave;
         bool replOn;
 
         bool fastsync;
@@ -59,8 +53,7 @@ namespace mongo {
         BSONObj reconfig;
 
         ReplSettings()
-            : slave(NotSlave),
-            replOn(false),
+            : replOn(false),
             fastsync(),
             autoresync(false),
             slavedelay(),
