@@ -60,9 +60,9 @@ namespace mongo {
 
         ReplSettings()
             : slave(NotSlave),
+            replOn(false),
             fastsync(),
             autoresync(false),
-            replOn(false),
             slavedelay(),
             discoveredSeeds(),
             discoveredSeeds_mx("ReplSettings::discoveredSeeds") {
