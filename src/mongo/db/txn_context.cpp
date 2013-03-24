@@ -29,7 +29,7 @@ namespace mongo {
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
             : _txn((parent == NULL) ? NULL : &parent->_txn, txnFlags), 
               _parent(parent),
-              _logOperations(replSettings.master),
+              _logOperations(theReplSet != NULL),
               _numOperations(0)
     {
     }

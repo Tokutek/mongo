@@ -49,11 +49,6 @@ namespace mongo {
         if ( replAllDead )
             return false;
 
-        if( replSettings.master ) {
-            // if running with --master --slave, allow.
-            return true;
-        }
-
         if ( cc().isGod() )
             return true;
 

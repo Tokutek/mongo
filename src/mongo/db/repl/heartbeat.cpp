@@ -390,6 +390,8 @@ namespace mongo {
     */
     void ReplSetImpl::startThreads() {
         task::fork(mgr);
+
+        // TODO: Figure out if this call is blocking in any cases
         mgr->send( boost::bind(&Manager::msgCheckNewState, theReplSet->mgr) );
 
         if (myConfig().arbiterOnly) {

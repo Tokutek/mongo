@@ -81,7 +81,7 @@ namespace mongo {
     };
 
     bool anyReplEnabled() {
-        return replSettings.slave || replSettings.master || theReplSet;
+        return replSettings.slave || theReplSet;
     }
 
     bool replAuthenticate(DBClientBase *conn);
@@ -1295,7 +1295,7 @@ namespace mongo {
     void startReplication() {
         /* if we are going to be a replica set, we aren't doing other forms of replication. */
         if( !cmdLine._replSet.empty() ) {
-            if( replSettings.slave || replSettings.master ) {
+            if( replSettings.slave ) {
                 log() << "***" << endl;
                 log() << "ERROR: can't use --slave or --master replication options with --replSet" << endl;
                 log() << "***" << endl;

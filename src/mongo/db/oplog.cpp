@@ -109,10 +109,10 @@ namespace mongo {
         const OpTime ts = OpTime::now(lk2);
         long long hashNew;
         if( theReplSet ) {
-      //massert(13312, "replSet error : logOp() but not primary?", theReplSet->box.getState().primary());
+            //massert(13312, "replSet error : logOp() but not primary?", theReplSet->box.getState().primary());
             hashNew = (theReplSet->lastH * 131 + ts.asLL()) * 17 + theReplSet->selfId();
-        theReplSet->lastOpTimeWritten = ts;
-        theReplSet->lastH = hashNew;
+            theReplSet->lastOpTimeWritten = ts;
+            theReplSet->lastH = hashNew;
         }
         else {
             // must be initiation
@@ -144,19 +144,14 @@ namespace mongo {
     static void (*_logTransactionOp)(BSONArray& opInfo) = _logOpUninitialized;
     // TODO: (Zardosht) hopefully remove these two phases
     void newReplUp() {
-        replSettings.master = true;
         _logTransactionOp = _logTransactionOps;
     }
     void newRepl() {
-        replSettings.master = true;
         _logTransactionOp = _logTransactionOps;
     }
 
     void logTransactionOps(BSONArray& opInfo) {
-        if ( replSettings.master ) {
-            _logTransactionOp(opInfo);
-        }
-
+        _logTransactionOp(opInfo);
         // TODO: Figure out for sharding
         //logOpForSharding( opstr , ns , obj , patt );
     }
@@ -291,7 +286,6 @@ namespace mongo {
         NamespaceDetails *nsd = nsdetails(ns);
         (void) nsd; // TODO: Suppress unused warning
 
-        // operation type -- see logOp() comments for types
         const char *opType = fields[2].valuestrsafe();
 
         if ( *opType == 'i' ) {

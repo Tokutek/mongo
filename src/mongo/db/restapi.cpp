@@ -288,7 +288,6 @@ namespace mongo {
             if ( replAllDead )
                 ss << "\n<b>replication replAllDead=" << replAllDead << "</b>\n";
             else {
-                ss << "\nmaster: " << replSettings.master << '\n';
                 ss << "slave:  " << replSettings.slave << '\n';
                 ss << '\n';
             }

@@ -462,7 +462,6 @@ namespace mongo {
 #endif
             Nullstream& l = log();
             l << "MongoDB starting : pid=" << pid << " port=" << cmdLine.port << " dbpath=" << dbpath;
-            if( replSettings.master ) l << " master=" << replSettings.master;
             if( replSettings.slave )  l << " slave=" << (int) replSettings.slave;
             l << ( is32bit ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() << endl;
         }
@@ -929,7 +928,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             cmdLine.noTableScan = true;
         }
         if (params.count("master")) {
-            replSettings.master = true;
+            out() << " master is a deprecated parameter" << endl;
         }
         if (params.count("slave")) {
             replSettings.slave = SimpleSlave;
@@ -1017,7 +1016,7 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
         if ( params.count("configsvr" ) ) {
             cmdLine.configsvr = true;
-            if (cmdLine.usingReplSets() || replSettings.master || replSettings.slave) {
+            if (cmdLine.usingReplSets() || replSettings.slave) {
                 log() << "replication should not be enabled on a config server" << endl;
                 ::_exit(-1);
             }
