@@ -45,6 +45,7 @@ namespace mongo {
     class ReplSettings {
     public:
         SlaveTypes slave;
+        bool replOn;
 
         bool fastsync;
 
@@ -61,6 +62,7 @@ namespace mongo {
             : slave(NotSlave),
             fastsync(),
             autoresync(false),
+            replOn(false),
             slavedelay(),
             discoveredSeeds(),
             discoveredSeeds_mx("ReplSettings::discoveredSeeds") {
