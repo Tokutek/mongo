@@ -274,7 +274,18 @@ namespace mongo {
             int idx = _cd->findIndexByKeyPattern(extendedSystemUsersKeyPattern);
             if (idx < 0) {
                 BSONObj info = SystemUsersCollection::extendedSystemUsersIndexInfo(_ns);
-                _cd->ensureIndex(info);
+                try {
+                    _cd->ensureIndex(info);
+                } catch (const DBException& e) {
+                    if (e.getCode() == ASSERT_ID_DUPKEY) {
+                        log() << "Duplicate key exception while trying to build unique index on " <<
+                                ns << ".  You most likely have user documents with duplicate \"user\" "
+                                "fields.  To resolve this, start up with a version of MongoDB prior to "
+                                "2.4, drop the duplicate user documents, then start up again with the "
+                                "current version." << endl;
+                    }
+                    throw;
+                }
                 addToIndexesCatalog(info);
                 reserializeNeeded = true;
             }
