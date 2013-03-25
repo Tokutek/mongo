@@ -98,7 +98,7 @@ namespace mongo {
                 BSONObj objModified = obj;
                 BSONElementManipulator::lookForTimestamps(objModified);
                 insertOneObject(details, nsdt, objModified, overwrite); // may add _id field
-                OpLogHelpers::logInsert(ns, obj, &cc().txn());
+                OpLogHelpers::logInsert(ns, objModified, &cc().txn());
             } catch (const UserException &) {
                 if (!keepGoing || i == objs.size() - 1) {
                     throw;
