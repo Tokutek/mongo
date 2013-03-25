@@ -28,7 +28,7 @@ namespace mongo {
         uint64_t _GTSeqNo;
         public:
         static int cmp(GTID a, GTID b);
-
+        GTID();
         GTID(uint64_t primarySeqNo, uint64_t GTSeqNo);
         GTID(BSONObj b);
         ~GTID(){};

@@ -29,6 +29,11 @@ namespace mongo {
         return (a._GTSeqNo < b._GTSeqNo) ? -1 : 1;
     }
 
+    GTID::GTID() {
+        _primarySeqNo = 0;
+        _GTSeqNo = 0;
+    }
+
     GTID::GTID(uint64_t primarySeqNo, uint64_t GTSeqNo) {
         _primarySeqNo = primarySeqNo;
         _GTSeqNo = GTSeqNo;
