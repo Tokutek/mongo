@@ -31,9 +31,14 @@ namespace mongo {
     // compiled with coredb. So, in startReplication, we will set this
     // to true
     static bool logTxnOperations = false;
+    static void (*_logTxnToOplog)(BSONArray& opInfo) = NULL;
 
     void setTxnLogOperations(bool val) {
         logTxnOperations = val;
+    }
+
+    void setLogTxnToOplog(void (*f)(BSONArray& opInfo)) {
+        _logTxnToOplog = f;
     }
 
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
@@ -77,8 +82,10 @@ namespace mongo {
 
     void TxnContext::writeOpsToOplog() {
         if (_numOperations > 0) {
+            dassert(logTxnOperations);
+            dassert(_logTxnToOplog);
             BSONArray array = _txnOps.arr();        
-            logTransactionOps(array);
+            _logTxnToOplog(array);
         }
     }
 } // namespace mongo

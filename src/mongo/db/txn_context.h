@@ -26,6 +26,7 @@
 namespace mongo {
 
     void setTxnLogOperations(bool val);
+    void setLogTxnToOplog(void (*f)(BSONArray& opInfo));
 
     // class to wrap operations surrounding a storage::Txn.
     // as of now, includes writing of operations to opLog
