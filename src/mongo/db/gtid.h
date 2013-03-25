@@ -61,5 +61,6 @@ namespace mongo {
         // and either committed or aborted transaction associated with
         // GTID
         void noteGTIDDone(GTID gtid);
+        void resetManager(GTID lastGTID);
     };
 } // namespace mongo

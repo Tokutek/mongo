@@ -108,6 +108,8 @@ namespace mongo {
         if ( !lastOp.isEmpty() ) {
             OpTime::setLast( lastOp[ "ts" ].date() );
         }
+        GTID lastGTID(lastOp["_id"].Obj());
+        gtidManager->resetManager(lastGTID);
 
         changeState(MemberState::RS_PRIMARY);
     }

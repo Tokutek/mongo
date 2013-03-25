@@ -106,4 +106,13 @@ namespace mongo {
         _lock.unlock();
     }
 
+    void GTIDManager::resetManager(GTID lastGTID) {
+        _lock.lock();
+        dassert(_liveGTIDs.size() == 0);
+        _nextGTID = lastGTID;
+        _nextGTID.inc_primary();
+        _minLiveGTID = _nextGTID;
+        _lock.unlock();
+    }
+
 } // namespace mongo
