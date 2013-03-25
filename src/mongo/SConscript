@@ -112,6 +112,7 @@ env.StaticLibrary("coredb", [
         "db/dbwebserver.cpp",
         "db/matcher.cpp",
         "db/txn_context.cpp",
+        "db/gtid.cpp",
         "db/pipeline/accumulator.cpp",
         "db/pipeline/accumulator_add_to_set.cpp",
         "db/pipeline/accumulator_avg.cpp",
