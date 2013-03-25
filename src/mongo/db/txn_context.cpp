@@ -32,6 +32,7 @@ namespace mongo {
     // to true
     static bool logTxnOperations = false;
     static void (*_logTxnToOplog)(BSONArray& opInfo) = NULL;
+    static GTIDManager* txnGTIDManager = NULL;
 
     void setTxnLogOperations(bool val) {
         logTxnOperations = val;
@@ -39,6 +40,10 @@ namespace mongo {
 
     void setLogTxnToOplog(void (*f)(BSONArray& opInfo)) {
         _logTxnToOplog = f;
+    }
+
+    void setTxnGTIDManager(GTIDManager* m) {
+        txnGTIDManager = m;
     }
 
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
@@ -52,6 +57,8 @@ namespace mongo {
     }
 
     void TxnContext::commit(int flags) {
+        bool gotGTID = false;
+        GTID gtid;
         // handle work related to logging of transaction for replication
         if (_numOperations > 0) {
             if (hasParent()) {
@@ -61,6 +68,9 @@ namespace mongo {
                 transferOpsToParent();
             }
             else {
+                dassert(txnGTIDManager);
+                gtid = txnGTIDManager->getGTID();
+                gotGTID = true;
                 // In this case, the transaction we are committing has
                 // no parent, so we must write the transaction's 
                 // logged operations to the opLog, as part of this transaction
@@ -68,6 +78,12 @@ namespace mongo {
             }
         }
         _txn.commit(flags);
+        // if the commit of this transaction got a GTID, then notify 
+        // the GTIDManager that the commit is now done.
+        if (gotGTID) {
+            dassert(txnGTIDManager);
+            txnGTIDManager->noteGTIDDone(gtid);
+        }
     }
 
     void TxnContext::abort() {

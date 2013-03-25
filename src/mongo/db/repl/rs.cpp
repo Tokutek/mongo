@@ -26,6 +26,8 @@
 #include "../instance.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/platform/bits.h"
+#include "mongo/db/gtid.h"
+#include "mongo/db/txn_context.h"
 
 using namespace std;
 
@@ -372,6 +374,7 @@ namespace mongo {
         _prefetcherPool(replPrefetcherThreadCount),
         _indexPrefetchConfig(PREFETCH_ALL) {
 
+        gtidManager = NULL; // will be initialized in loadLastOpTimeWritten
         _cfg = 0;
         memset(_hbmsg, 0, sizeof(_hbmsg));
         strcpy( _hbmsg , "initial startup" );
@@ -438,9 +441,19 @@ namespace mongo {
         Lock::DBRead lk(rsoplog);
         BSONObj o;
         if( Helpers::getLast(rsoplog, o) ) {
+            GTID lastGTID((o["_id").obj());
+            gtidManager = new GTIDManager(lastGTID);
+            setTxnGTIDManager(gtidManager);
+            
             lastH = o["h"].numberLong();
             lastOpTimeWritten = o["ts"]._opTime();
             uassert(13290, "bad replSet oplog entry?", quiet || !lastOpTimeWritten.isNull());
+        }
+        else {
+            // make a GTIDManager that starts from scratch
+            GTID lastGTID;
+            gtidManager = new GTIDManager(lastGTID);
+            setTxnGTIDManager(gtidManager);
         }
     }
 
@@ -814,7 +827,6 @@ namespace mongo {
     void startReplSets(ReplSetCmdline *replSetCmdline) {
         Client::initThread("rsStart");
         try {
-	  //Client::Transaction transaction(DB_SERIALIZABLE);
             verify( theReplSet == 0 );
             if( replSetCmdline == 0 ) {
                 verify(!replSet);
@@ -822,7 +834,6 @@ namespace mongo {
             }
             replLocalAuth();
             (theReplSet = new ReplSet(*replSetCmdline))->go();
-            //transaction.commit();
         }
         catch(std::exception& e) {
             log() << "replSet caught exception in startReplSets thread: " << e.what() << rsLog;
