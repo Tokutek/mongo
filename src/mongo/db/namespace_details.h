@@ -255,7 +255,7 @@ namespace mongo {
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
 
         // generate an index info BSON for this namespace, with the same options
-        BSONObj indexInfo(const BSONObj &keyPattern);
+        BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering);
 
         // fill the statistics for each index in the NamespaceDetails,
         // indexStats is an array of length nIndexes

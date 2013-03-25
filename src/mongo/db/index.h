@@ -117,7 +117,7 @@ namespace mongo {
 
         /** @return true if index has unique constraint */
         bool unique() const {
-            dassert((_info["unique"].trueValue() || isIdIndexPattern(_keyPattern)) == _unique);
+            dassert(_info["unique"].trueValue() == _unique);
             return _unique;
         }
 

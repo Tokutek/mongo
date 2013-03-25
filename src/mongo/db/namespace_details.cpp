@@ -238,7 +238,7 @@ namespace mongo {
             _deleteMutex("cappedDeleteMutex") {
 
             if (options["autoIndexId"].trueValue()) {
-                BSONObj info = indexInfo(fromjson("{\"_id\":1}"));
+                BSONObj info = indexInfo(fromjson("{\"_id\":1}"), true, false);
                 createIndex(info);
             }
         }
@@ -365,7 +365,7 @@ namespace mongo {
         SimpleMutex _deleteMutex;
     };
 
-    BSONObj NamespaceDetails::indexInfo(const BSONObj &keyPattern) {
+    BSONObj NamespaceDetails::indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) {
         // Can only create the _id and $_ indexes internally.
         dassert(keyPattern.nFields() == 1);
         dassert(keyPattern["_id"].ok() || keyPattern["$_"].ok());
@@ -374,6 +374,12 @@ namespace mongo {
         b.append("ns", _ns);
         b.append("key", keyPattern);
         b.append("name", keyPattern["_id"].ok() ? "_id_" : "$_");
+        if (unique) {
+            b.appendBool("unique", true);
+        }
+        if (clustering) {
+            b.appendBool("clustering", true);
+        }
 
         BSONElement e;
         e = _options["readPageSize"];
@@ -404,7 +410,7 @@ namespace mongo {
         tokulog(1) << "Creating NamespaceDetails " << ns << endl;
 
         // Create the primary key index, generating the info from the pk pattern and options.
-        BSONObj info = indexInfo(pkIndexPattern);
+        BSONObj info = indexInfo(pkIndexPattern, true, true);
         createIndex(info);
 
         addNewNamespaceToCatalog(ns, &options);

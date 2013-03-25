@@ -36,7 +36,7 @@ namespace mongo {
     IndexDetails::IndexDetails(const BSONObj &info, bool may_create) :
         _info(info.copy()),
         _keyPattern(info["key"].Obj().copy()),
-        _unique(info["unique"].trueValue() || isIdIndexPattern(_keyPattern)),
+        _unique(info["unique"].trueValue()),
         _clustering(info["clustering"].trueValue()) {
 
         string dbname = indexNamespace();
@@ -185,7 +185,10 @@ namespace mongo {
 
         storage::Key skey(key, pk);
         DBT kdbt = skey.dbt();
-        DBT vdbt = storage::make_dbt(val.objdata(), val.objsize());
+        DBT vdbt = storage::make_dbt(NULL, 0);
+        if (clustering()) {
+            vdbt = storage::make_dbt(val.objdata(), val.objsize());
+        }
 
         // We already did the unique check above. We can just pass flags of zero.
         const int flags = 0;
