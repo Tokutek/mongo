@@ -35,7 +35,20 @@ namespace mongo {
         BSONObj getBSON();
         void inc();
         void inc_primary();
-        
     };
 
+    class GTIDManager {
+        boost::mutex _lock;
+        GTID _lastGTID;
+        public:            
+        GTIDManager( GTID lastGTID );
+        ~GTIDManager();
+        // returns a GTID that is an increment of _lastGTID
+        // also notes that GTID has been handed out
+        GTID getGTID();
+        // notification that user of GTID has completed work
+        // and either committed or aborted transaction associated with
+        // GTID
+        void noteGTIDDone();
+    };
 } // namespace mongo

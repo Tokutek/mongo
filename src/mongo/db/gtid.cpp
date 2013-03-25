@@ -55,5 +55,28 @@ namespace mongo {
     void GTID::inc_primary() {
         _primarySeqNo++;
     }
+  
+    GTIDManager::GTIDManager( GTID lastGTID ) {
+        _lastGTID = lastGTID;
+    }
+
+    GTIDManager::~GTIDManager() {
+    }
+
+    // returns a GTID that is an increment of _lastGTID
+    // also notes that GTID has been handed out
+    GTID GTIDManager::getGTID() {
+        GTID ret;
+        _lock.lock();
+        ret = _lastGTID.inc();
+        _lock.unlock();
+        return ret;
+    }
+    
+    // notification that user of GTID has completed work
+    // and either committed or aborted transaction associated with
+    // GTID
+    void GTIDManager::noteGTIDDone() {
+    }
 
 } // namespace mongo
