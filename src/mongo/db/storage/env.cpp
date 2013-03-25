@@ -274,6 +274,13 @@ namespace mongo {
             verify(r == 0);
         }
 
+        void db_rename(const string &oldIdxNS, const string &newIdxNS) {
+            int r = env->dbrename(env, cc().txn().db_txn(), oldIdxNS.c_str(), NULL, newIdxNS.c_str(), 0);
+            massert(16463, str::stream() << "tokudb dictionary rename failed: old " << oldIdxNS
+                           << ", new " << newIdxNS << ", r = " << r,
+                           r == 0);
+        }
+
         void get_status(BSONObjBuilder &status) {
             uint64_t num_rows;
 	    uint64_t max_rows;

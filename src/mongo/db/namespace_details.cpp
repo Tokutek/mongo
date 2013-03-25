@@ -425,7 +425,7 @@ namespace mongo {
         _pk(serialized["pk"].embeddedObject().copy()),
         _indexBuildInProgress(false),
         _nIndexes(serialized["indexes"].Array().size()),
-        _multiKeyIndexBits(static_cast<uint64_t>(serialized["_multiKeyIndexBits"].Long())) {
+        _multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())) {
 
         std::vector<BSONElement> index_array = serialized["indexes"].Array();
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
@@ -443,17 +443,22 @@ namespace mongo {
         }
     }
 
+    BSONObj NamespaceDetails::serialize(const char *ns, const BSONObj &options, const BSONObj &pk,
+            unsigned long long multiKeyIndexBits, const BSONArray &indexes_array) {
+        return BSON("ns" << ns <<
+                    "options" << options <<
+                    "pk" << pk <<
+                    "multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
+                    "indexes" << indexes_array);
+    }
+
     BSONObj NamespaceDetails::serialize() const {
         BSONArrayBuilder indexes_array;
         for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); it++) {
             IndexDetails *index = it->get();
             indexes_array.append(index->info());
         }
-        return BSON("ns" << _ns <<
-                    "options" << _options <<
-                    "pk" << _pk <<
-                    "_multiKeyIndexBits" << static_cast<long long>(_multiKeyIndexBits) <<
-                    "indexes" << indexes_array.arr());
+        return serialize(_ns.c_str(), _options, _pk, _multiKeyIndexBits, indexes_array.arr());
     }
 
     struct findByPKCallbackExtra {
@@ -564,7 +569,7 @@ namespace mongo {
         _multiKeyIndexBits |= x;
 
         dassert(nsdetails(thisns) == this);
-        nsindex(thisns)->update_ns(thisns, this, true);
+        nsindex(thisns)->update_ns(thisns, serialize(), true);
 
         NamespaceDetailsTransient::get(thisns).clearQueryCache();
     }
@@ -617,7 +622,7 @@ namespace mongo {
         } else {
             dassert(nsdetails(ns) == this);
         }
-        nsindex(ns)->update_ns(ns, this, may_overwrite);
+        nsindex(ns)->update_ns(ns, serialize(), may_overwrite);
 
         NamespaceDetailsTransient::get(ns).addedIndex();
     }
@@ -684,7 +689,7 @@ namespace mongo {
             }
         }
         // Updated whatever in memory structures are necessary, now update the nsindex.
-        nsindex(ns)->update_ns(ns, this, true);
+        nsindex(ns)->update_ns(ns, serialize(), true);
         return true;
     }
 
@@ -747,8 +752,7 @@ namespace mongo {
         result->append("indexDetails", index_info.arr());        
     }
 
-    void NamespaceDetails::addPKIndexToCatalog() {
-        BSONObj info = getPKIndex().info();
+    static void addIndexToCatalog(const BSONObj &info) {
         string indexns = info["ns"].String();
         if (mongoutils::str::contains(indexns, ".system.indexes")) {
             // system.indexes holds all the others, so it is not explicitly listed in the catalog.
@@ -761,7 +765,12 @@ namespace mongo {
         const char *ns = s.c_str();
         NamespaceDetails *d = nsdetails_maybe_create(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
-        insertOneObject(d, nsdt, info, false);
+        BSONObj objMod = info;
+        insertOneObject(d, nsdt, objMod, false);
+    }
+
+    void NamespaceDetails::addPKIndexToCatalog() {
+        addIndexToCatalog(getPKIndex().info());
     }
 
     /* ------------------------------------------------------------------------- */
@@ -835,6 +844,8 @@ namespace mongo {
             i.next().keyPattern().getFieldNames(_indexKeys);
         _keysComputed = true;
     }
+
+    // TODO: All global functions manipulating namespaces should be static in NamespaceDetails
 
     bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication) {
         const char *coll = strchr( ns, '.' ) + 1;
@@ -958,88 +969,123 @@ namespace mongo {
         }
     }
 
-    void renameNamespace( const char *from, const char *to, bool stayTemp) {
-        // TODO: TokuDB: Pay attention to the usage of the NamespaceIndex object.
-        // That's still important. Anything to do with disklocs (ie: storage code)
-        // is probably not.
-        ::abort();
-#if 0
-        NamespaceIndex *ni = nsindex( from );
-        verify( ni );
-        verify( ni->details( from ) );
-        verify( ! ni->details( to ) );
+    static BSONObj replaceNSField(const BSONObj &obj, const char *to) {
+        BSONObjBuilder b;
+        BSONObjIterator i( obj );
+        while ( i.more() ) {
+            BSONElement e = i.next();
+            if ( strcmp( e.fieldName(), "ns" ) != 0 ) {
+                b.append( e );
+            } else {
+                b << "ns" << to;
+            }
+        }
+        return b.obj();
+    }
 
-        // Our namespace and index details will move to a different
-        // memory location.  The only references to namespace and
-        // index details across commands are in cursors and nsd
-        // transient (including query cache) so clear these.
+    void renameNamespace(const char *from, const char *to, bool stayTemp) {
+        class Rollback {
+        public:
+            Rollback(const char *to) :
+                _to(to), _success(false) {
+            }
+            ~Rollback() {
+                if (!_success) {
+                    nsindex(_to)->kill_ns(_to);
+                }
+            }
+            void success() {
+                _success = true;
+            }
+        private:
+            const char *_to;
+            bool _success;
+        };
+
+        Lock::assertWriteLocked(from);
+        verify( nsdetails(from) != NULL );
+        verify( nsdetails(to) == NULL );
+
+        // Invalidate any existing cursors on the old namespace details,
+        // and reset the query cache.
         ClientCursor::invalidate( from );
         NamespaceDetailsTransient::eraseForPrefix( from );
 
-        NamespaceDetails *details = ni->details( from );
-        ni->add_ns( to, *details );
-        NamespaceDetails *todetails = ni->details( to );
-        try {
-            todetails->copyingFrom(to, details); // fixes extraOffset
-        }
-        catch( DBException& ) {
-            // could end up here if .ns is full - if so try to clean up / roll back a little
-            ni->kill_ns(to);
-            throw;
-        }
-        ni->kill_ns( from );
-        details = todetails;
-
-        BSONObj oldSpec;
         char database[MaxDatabaseNameLen];
         nsToDatabase(from, database);
-        string s = database;
-        s += ".system.namespaces";
-        verify( Helpers::findOne( s.c_str(), BSON( "name" << from ), oldSpec ) );
+        string sysIndexes = string(database) + ".system.indexes";
+        string sysNamespaces = string(database) + ".system.namespaces";
 
-        BSONObjBuilder newSpecB;
-        BSONObjIterator i( oldSpec.getObjectField( "options" ) );
-        while( i.more() ) {
-            BSONElement e = i.next();
-            if ( strcmp( e.fieldName(), "create" ) != 0 ) {
-                if (stayTemp || (strcmp(e.fieldName(), "temp") != 0))
-                    newSpecB.append( e );
-            }
-            else {
-                newSpecB << "create" << to;
+        Rollback rollback(to);
+
+        // Grab the serialized form of the namespace, and then close it.
+        // This will close the underlying dictionaries and allow us to
+        // rename them in the environment.
+        BSONObj serialized = nsdetails(from)->serialize();
+        nsindex(from)->close_ns(from);
+
+        // Rename each index in system.indexes and system.namespaces
+        {
+            BSONObj oldIndexSpec;
+            while ( Helpers::findOne( sysIndexes.c_str(), BSON( "ns" << from ), oldIndexSpec ) ) {
+                string idxName = oldIndexSpec["name"].String();
+                string oldIdxNS = IndexDetails::indexNamespace(from, idxName);
+                string newIdxNS = IndexDetails::indexNamespace(to, idxName);
+
+                storage::db_rename(oldIdxNS, newIdxNS);
+
+                BSONObj newIndexSpec = replaceNSField( oldIndexSpec, to );
+                addIndexToCatalog( newIndexSpec );
+                _deleteObjects( sysIndexes.c_str(), oldIndexSpec, false, false );
+                addNewNamespaceToCatalog( newIdxNS, newIndexSpec.isEmpty() ? 0 : &newIndexSpec );
+                _deleteObjects( sysNamespaces.c_str(), BSON( "name" << oldIdxNS ), false, false );
             }
         }
-        BSONObj newSpec = newSpecB.done();
-        addNewNamespaceToCatalog( to, newSpec.isEmpty() ? 0 : &newSpec );
 
-        deleteObjects( s.c_str(), BSON( "name" << from ), false, false, true );
-        // oldSpec variable no longer valid memory
-
-        BSONObj oldIndexSpec;
-        s = database;
-        s += ".system.indexes";
-        while( Helpers::findOne( s.c_str(), BSON( "ns" << from ), oldIndexSpec ) ) {
-            BSONObjBuilder newIndexSpecB;
-            BSONObjIterator i( oldIndexSpec );
-            while( i.more() ) {
+        // Rename the namespace in system.namespaces
+        BSONObj newSpec;
+        {
+            BSONObj oldSpec;
+            verify( Helpers::findOne( sysNamespaces.c_str(), BSON( "name" << from ), oldSpec ) );
+            BSONObjBuilder b;
+            BSONObjIterator i( oldSpec.getObjectField( "options" ) );
+            while ( i.more() ) {
                 BSONElement e = i.next();
-                if ( strcmp( e.fieldName(), "ns" ) != 0 )
-                    newIndexSpecB.append( e );
-                else
-                    newIndexSpecB << "ns" << to;
+                if ( strcmp( e.fieldName(), "create" ) != 0 ) {
+                    if (stayTemp || (strcmp(e.fieldName(), "temp") != 0)) {
+                        b.append( e );
+                    }
+                }
+                else {
+                    b << "create" << to;
+                }
             }
-            BSONObj newIndexSpec = newIndexSpecB.done();
-            DiskLoc newIndexSpecLoc = theDataFileMgr.insert( s.c_str(), newIndexSpec.objdata(), newIndexSpec.objsize(), true, false );
-            int indexI = details->findIndexByName( oldIndexSpec.getStringField( "name" ) );
-            IndexDetails &indexDetails = details->idx(indexI);
-            string oldIndexNs = indexDetails.indexNamespace();
-            indexDetails.info = newIndexSpecLoc;
-            string newIndexNs = indexDetails.indexNamespace();
-
-            renameNamespace( oldIndexNs.c_str(), newIndexNs.c_str(), false );
-            deleteObjects( s.c_str(), oldIndexSpec.getOwned(), true, false, true );
+            newSpec = b.obj();
+            addNewNamespaceToCatalog( to, newSpec.isEmpty() ? 0 : &newSpec );
+            _deleteObjects( sysNamespaces.c_str(), BSON( "name" << from ), false, false );
         }
-#endif
+
+        // Update the namespace index
+        {
+            NamespaceIndex *ni = nsindex( from );
+            // Kill the old entry. Create a new serialized form of this namespace
+            // using the new name, modified spec, and modified indexes array. This
+            // will let us make a NamespaceDetails object and put it in the nsindex.
+            ni->kill_ns( from );
+            BSONArrayBuilder newIndexesArray;
+            vector<BSONElement> indexes = serialized["indexes"].Array();
+            for (vector<BSONElement>::const_iterator it = indexes.begin(); it != indexes.end(); it++) {
+                newIndexesArray.append( replaceNSField( it->Obj(), to ) );
+            }
+            BSONObj newSerialized = NamespaceDetails::serialize( to, newSpec, serialized["pk"].Obj(),
+                                                                 serialized["multiKeyIndexBits"].Long(),
+                                                                 newIndexesArray.arr());
+            ni->update_ns( to, newSerialized, false );
+            ni->add_ns( to, shared_ptr<NamespaceDetails>() );
+            verify( nsdetails(from) == NULL );
+        }
+
+        rollback.success();
     }
 
     bool legalClientSystemNS( const string& ns , bool write ) {
