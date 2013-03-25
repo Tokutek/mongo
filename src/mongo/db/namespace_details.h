@@ -216,23 +216,24 @@ namespace mongo {
         // Find by primary key (single element bson object, no field name).
         bool findByPK(const BSONObj &pk, BSONObj &result);
 
+        // return true if this namespace has an index on the _id field.
+        bool hasIdIndex() const {
+            return findIdIndex() >= 0;
+        }
+
         // optional to implement, return true if the namespace is capped
         virtual bool isCapped() const {
             return false;
         }
 
-        // return true of this namespace has an index on the _id field.
-        virtual bool hasIdIndex() const {
-            return findIdIndex() >= 0;
-        }
-
         // Hack for ops/query.cpp queryIdHack.
         // Lets us know if findById is okay to do. We should find a nicer way to do this eventually.
+        // Even though a capped collection may have an _id index, it may not use the findById code path.
         virtual bool mayFindById() const {
             return false;
         }
 
-        // finds an objectl by _id field
+        // finds an object by _id field
         virtual bool findById(const BSONObj &query, BSONObj &result) {
             massert(16461, "findById shouldn't be called unless it is implemented.", false);
         }

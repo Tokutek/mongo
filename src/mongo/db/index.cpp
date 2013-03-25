@@ -75,9 +75,6 @@ namespace mongo {
         return (int) _deleteObjects(system_indexes.c_str(), obj, false, false);
     }
 
-    /* delete this index.  does NOT clean up the system catalog
-       (system.indexes or system.namespaces) -- only NamespaceIndex.
-    */
     void IndexDetails::kill_idx(bool can_drop_system) {
         string ns = indexNamespace(); // e.g. foo.coll.$ts_1
         try {
