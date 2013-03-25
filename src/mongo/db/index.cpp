@@ -179,7 +179,7 @@ namespace mongo {
     }
 
     void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite) {
-        if (unique()) {
+        if (unique() && !overwrite) {
             uniqueCheck(key, pk);
         }
 
@@ -187,8 +187,8 @@ namespace mongo {
         DBT kdbt = skey.dbt();
         DBT vdbt = storage::make_dbt(val.objdata(), val.objsize());
 
-        // TODO: We already did the unique check above. Can we just pass flags of 0?
-        const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
+        // We already did the unique check above. We can just pass flags of zero.
+        const int flags = 0;
         int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, flags);
         verify(r == 0 || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
         uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
