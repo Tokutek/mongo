@@ -38,7 +38,4 @@ namespace mongo {
         
     };
 
-    class GTID_Manager {
-    }
-
 } // namespace mongo

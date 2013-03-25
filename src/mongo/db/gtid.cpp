@@ -20,7 +20,7 @@
 
 namespace mongo {
 
-    static int GTID::cmp(GTID a, GTID b) {
+    int GTID::cmp(GTID a, GTID b) {
         if (a._primarySeqNo != b._primarySeqNo) {
             return (a._primarySeqNo < b._primarySeqNo) ? -1 : 1;
         }
@@ -33,8 +33,8 @@ namespace mongo {
     }
 
     GTID::GTID(BSONObj b) {
-        _primarySeqNo = b["p"];
-        _GTSeqNo = b["t"];
+        _primarySeqNo = static_cast<uint64_t>(b["p"].Long());
+        _GTSeqNo = static_cast<uint64_t>(b["t"].Long());
     }
 
     BSONObj GTID::getBSON() {
