@@ -217,7 +217,6 @@ namespace mongo {
     Client::ReadContext::ReadContext(const string& ns, string path, bool doauth) {
         // TODO: What did I do here to get runQuery operate on a null database object?
 
-        bool nsdetailsNeedsOpen = false;
         {
             lk.reset( new Lock::DBRead(ns) );
             Database *db = dbHolder().get(ns, path);
@@ -225,10 +224,15 @@ namespace mongo {
                 c.reset( new Context(path, ns, db, doauth) );
                 try {
                     nsdetails(ns.c_str());
-                    return;
                 } catch (NamespaceIndex::ReadLockedDuringFileOps &e) {
-                    nsdetailsNeedsOpen = true;
+                    lk.reset(0);
+                    {
+                        Lock::GlobalWrite w;
+                        nsdetails(ns.c_str()); // open the nsdetails now that we have a write lock, which must succeed.
+                    }
+                    lk.reset( new Lock::DBRead(ns) );
                 }
+                return;
             }
         }
 
@@ -237,7 +241,6 @@ namespace mongo {
             DEV log() << "_DEBUG ReadContext db wasn't open, will try to open " << ns << endl;
             if( Lock::isW() ) { 
                 // write locked already, so we should have have failed to open the NS
-                verify( !nsdetailsNeedsOpen );
                 DEV RARELY log() << "write locked on ReadContext construction " << ns << endl;
                 c.reset( new Context(ns, path, doauth) );
             }
@@ -246,7 +249,6 @@ namespace mongo {
                 {
                     Lock::GlobalWrite w;
                     Context c(ns, path, doauth);
-                    nsdetails(ns.c_str()); // open the nsdetails now that we have a write lock, which must succeed.
                 }
                 // db could be closed at this interim point -- that is ok, we will throw, and don't mind throwing.
                 lk.reset( new Lock::DBRead(ns) );
