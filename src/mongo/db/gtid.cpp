@@ -62,7 +62,9 @@ namespace mongo {
     }
     
     GTIDManager::GTIDManager( GTID lastGTID ) {
-        _lastGTID = lastGTID;
+        _nextGTID = lastGTID;
+        _nextGTID.inc();
+        _minLiveGTID = _nextGTID;
     }
 
     GTIDManager::~GTIDManager() {
@@ -73,8 +75,9 @@ namespace mongo {
     GTID GTIDManager::getGTID() {
         GTID ret;
         _lock.lock();
-        _lastGTID.inc();
-	ret = _lastGTID;
+        ret = _nextGTID;
+        _liveGTIDs.insert(ret);
+        _nextGTID.inc();
         _lock.unlock();
         return ret;
     }
@@ -82,7 +85,24 @@ namespace mongo {
     // notification that user of GTID has completed work
     // and either committed or aborted transaction associated with
     // GTID
-    void GTIDManager::noteGTIDDone() {
+    void GTIDManager::noteGTIDDone(GTID gtid) {
+        _lock.lock();
+        dassert(GTID::cmp(gtid, _minLiveGTID) >= 0);
+        dassert(_liveGTIDs.size() > 0);
+        // remove from list of GTIDs
+        _liveGTIDs.erase(gtid);
+        // if what we are removing is currently the minumum live GTID
+        // we need to update the minimum live GTID
+        if (GTID::cmp(_minLiveGTID, gtid) == 0) {
+            if (_liveGTIDs.size() == 0) {
+                _minLiveGTID = _nextGTID;
+            }
+            else {
+                // get the minumum from _liveGTIDs and set it to _minLiveGTIDs
+                _minLiveGTID = *(_liveGTIDs.begin());
+            }
+        }
+        _lock.unlock();
     }
 
 } // namespace mongo

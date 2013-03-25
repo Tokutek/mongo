@@ -37,9 +37,20 @@ namespace mongo {
         void inc_primary();
     };
 
+    struct GTIDCmp {
+        bool operator()( const GTID& l, const GTID& r ) const {
+            return GTID::cmp(l, r) < 0;
+        }
+    };
+
+    typedef std::set<GTID, GTIDCmp> GTIDSet;
+
     class GTIDManager {
         boost::mutex _lock;
-        GTID _lastGTID;
+        GTID _nextGTID;
+        GTID _minLiveGTID;
+        GTIDSet _liveGTIDs;
+        
         public:            
         GTIDManager( GTID lastGTID );
         ~GTIDManager();
@@ -49,6 +60,6 @@ namespace mongo {
         // notification that user of GTID has completed work
         // and either committed or aborted transaction associated with
         // GTID
-        void noteGTIDDone();
+        void noteGTIDDone(GTID gtid);
     };
 } // namespace mongo
