@@ -24,6 +24,11 @@ target_link_libraries(foundation LINK_PUBLIC
   ${Boost_LIBRARIES}
   )
 
+add_library(synchronization STATIC
+  concurrency/synchronization
+  )
+add_dependencies(synchronization generate_error_codes generate_action_types install_tdb_h)
+
 add_library(mongocommon_util STATIC
   background
   intrusive_counter
@@ -40,7 +45,6 @@ add_library(mongocommon_util STATIC
   concurrency/spin_lock
   text_startuptest
   stack_introspect
-  concurrency/synchronization
   net/sock
   net/ssl_manager
   net/httpclient
@@ -57,6 +61,7 @@ target_link_libraries(mongocommon_util LINK_PUBLIC
   mongohasher
   md5
   processinfo
+  synchronization
   stacktrace
   stringutils
   fail_point
