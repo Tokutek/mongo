@@ -35,6 +35,8 @@ namespace mongo {
         BSONObj getBSON();
         void inc();
         void inc_primary();
+        
+        GTID operator=(const GTID& s);
     };
 
     class GTIDManager {

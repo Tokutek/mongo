@@ -60,7 +60,7 @@ namespace mongo {
     void GTID::inc_primary() {
         _primarySeqNo++;
     }
-  
+    
     GTIDManager::GTIDManager( GTID lastGTID ) {
         _lastGTID = lastGTID;
     }
