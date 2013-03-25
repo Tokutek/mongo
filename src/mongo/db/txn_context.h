@@ -58,6 +58,8 @@ namespace mongo {
         // will be added to the opLog
         void logOp(BSONObj op);        
         bool hasParent();
+
+        private:
         // transfer operations in _txnOps to _parent->_txnOps
         void transferOpsToParent();
         void writeOpsToOplog();

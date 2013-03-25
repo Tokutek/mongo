@@ -52,6 +52,21 @@ namespace mongo {
     }
 
     void TxnContext::commit(int flags) {
+        // handle work related to logging of transaction for replication
+        if (_numOperations > 0) {
+            if (hasParent()) {
+                // In this case, what transaction we are committing has a parent
+                // and therefore we must transfer the opLog information from 
+                // this transaction to the parent
+                transferOpsToParent();
+            }
+            else {
+                // In this case, the transaction we are committing has
+                // no parent, so we must write the transaction's 
+                // logged operations to the opLog, as part of this transaction
+                writeOpsToOplog();
+            }
+        }
         _txn.commit(flags);
     }
 
@@ -59,8 +74,7 @@ namespace mongo {
         _txn.abort();
     }
 
-    void TxnContext::logOp(BSONObj op)
-    {
+    void TxnContext::logOp(BSONObj op) {
         if (logTxnOperations) {
             _txnOps.append(op);
             _numOperations++;
@@ -81,11 +95,9 @@ namespace mongo {
     }
 
     void TxnContext::writeOpsToOplog() {
-        if (_numOperations > 0) {
-            dassert(logTxnOperations);
-            dassert(_logTxnToOplog);
-            BSONArray array = _txnOps.arr();        
-            _logTxnToOplog(array);
-        }
+        dassert(logTxnOperations);
+        dassert(_logTxnToOplog);
+        BSONArray array = _txnOps.arr();        
+        _logTxnToOplog(array);
     }
 } // namespace mongo

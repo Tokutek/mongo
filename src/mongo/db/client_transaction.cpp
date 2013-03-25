@@ -38,19 +38,6 @@ namespace mongo {
     void Client::TransactionStack::commitTxn(int flags) {
         DEV { LOG(3) << "commit transaction(" << _txns.size() - 1 << ") " << flags << endl; }
         shared_ptr<TxnContext> txn_to_commit = _txns.top();
-
-        if (txn_to_commit->hasParent()) {
-            // In this case, what transaction we are committing has a parent
-            // and therefore we must transfer the opLog information from 
-            // this transaction to the parent
-            txn_to_commit->transferOpsToParent();
-        }
-        else {
-            // In this case, the transaction we are committing has
-            // no parent, so we must write the transaction's 
-            // logged operations to the opLog, as part of this transaction
-            txn_to_commit->writeOpsToOplog();
-        }
         txn_to_commit->commit(flags);
         _txns.pop();
     }
