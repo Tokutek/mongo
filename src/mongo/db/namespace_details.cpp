@@ -131,6 +131,7 @@ namespace mongo {
             _nextPK(0) {
             // the next PK is the last key (getKey() with direction > 0)
             // plus one, if it exists (otherwise the collection is empty).
+            // TODO: doesn't need to be its own function anymore because we don't call with -1.
             BSONObj maxKey = getKey(1);
             if (!maxKey.isEmpty()) {
                 _nextPK = AtomicWord<long long>(maxKey.firstElement().Long() + 1);
@@ -201,6 +202,8 @@ namespace mongo {
         // This code is largely borrowed from prepareToBuildIndex() in Vanilla.
         //
         // Also, for consistency, system.indexes and system.namespaces have no _id field.
+        //
+        // TODO: what is the correct format for system.users, system.profile, and system.js?
         BSONObj beautify(const BSONObj &obj) {
             BSONObjBuilder b;
             if (obj["key"].ok()) {
@@ -254,7 +257,7 @@ namespace mongo {
             // We'll have to look at the data, but this might not be so bad because:
             // - you pay for it once, on initialization.
             // - capped collections are meant to be "small" (fit in memory)
-            // - capped collectiosn are meant to be "ready heavy",
+            // - capped collectiosn are meant to be "read heavy",
             //   so bringing it all into memory now helps warmup.
             long long n = 0;
             long long size = 0;
@@ -284,13 +287,14 @@ namespace mongo {
                 long long n = _currentObjects.load();
                 long long size = _currentSize.load();
                 if (isGorged(n, size)) {
-                    shared_ptr<Cursor> c( new BasicCursor(this) );
+                    scoped_ptr<Cursor> c( new BasicCursor(this) );
                     // Delete older objects until we've made enough room for
-                    // the new one. Opportunistically delete up to 8 total
-                    // while the collection is still gorged.
+                    // the new one.
+                    // If other threads are trying to insert concurrently, we will do some work on their behalf (until !isGorged).
+                    // But we stop if we've deleted 8 objects and done enough to satisfy our own intent, to limit latency.
                     long long bytesTrimmed = 0;
                     for ( long long i = 0;
-                          c->ok() && (bytesTrimmed < obj.objsize() || (i < 8)) && isGorged(n, size);
+                          c->ok() && isGorged(n, size) && (bytesTrimmed < obj.objsize() || (i < 8));
                           i++, c->advance()) {
                         BSONObj oldestObj = c->current();
                         NaturalOrderCollection::deleteObject(c->currPK(), oldestObj);
