@@ -44,6 +44,12 @@ namespace mongo {
         BSONArrayBuilder _txnOps;
         uint64_t _numOperations; //number of operations added to _txnOps
 
+        // this is a hack. During rs initiation, where we log a comment
+        // to the opLog, we don't have a gtidManager available yet. We
+        // set this bool to let commit know that it is ok to not have a gtidManager
+        // and to just write to the opLog with a GTID of (0,0)
+        bool _initiatingRS;
+
         public:
         TxnContext(TxnContext *parent, int txnFlags);
         ~TxnContext();
@@ -60,6 +66,7 @@ namespace mongo {
         // will be added to the opLog
         void logOp(BSONObj op);        
         bool hasParent();
+        void txnIntiatingRs();
 
         private:
         // transfer operations in _txnOps to _parent->_txnOps

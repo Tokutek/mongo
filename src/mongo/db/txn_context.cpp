@@ -50,7 +50,8 @@ namespace mongo {
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
             : _txn((parent == NULL) ? NULL : &parent->_txn, txnFlags), 
               _parent(parent),
-              _numOperations(0)
+              _numOperations(0),
+              _initiatingRS(false)
     {
     }
 
@@ -69,8 +70,13 @@ namespace mongo {
                 transferOpsToParent();
             }
             else {
-                dassert(txnGTIDManager);
-                gtid = txnGTIDManager->getGTID();
+                if (!_initiatingRS) {
+                    dassert(txnGTIDManager);
+                    gtid = txnGTIDManager->getGTID();
+                }
+                else {
+                    dassert(!txnGTIDManager);
+                }
                 gotGTID = true;
                 // In this case, the transaction we are committing has
                 // no parent, so we must write the transaction's 
@@ -100,6 +106,10 @@ namespace mongo {
 
     bool TxnContext::hasParent() {
         return (_parent != NULL);
+    }
+
+    void TxnContext::txnIntiatingRs() {
+        _initiatingRS = true;
     }
 
     void TxnContext::transferOpsToParent() {
