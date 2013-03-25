@@ -48,7 +48,7 @@ namespace mongo {
         resetSlaveCache();
     }
 
-    static void _logOpUninitialized(BSONArray& opInfo) {
+    static void _logOpUninitialized(BSONObj id, BSONArray& opInfo) {
         log() << "WHAT IS GOING ON???????? " << endl;
     }
 
@@ -57,6 +57,7 @@ namespace mongo {
         */
     void _logOpObjRS(const BSONObj& op) {
         Lock::DBWrite lk("local");
+        ::abort();
 
         const OpTime ts = op["ts"]._opTime();
         long long h = op["h"].numberLong();
@@ -95,14 +96,12 @@ namespace mongo {
         }
     }
 
-    static uint64_t tempId = 0;
-
     // global is safe as we are in write lock. we put the static outside the function to avoid the implicit mutex 
     // the compiler would use if inside the function.  the reason this is static is to avoid a malloc/free for this
     // on every logop call.
     static BufBuilder logopbufbuilder(256*1024);
     
-    static void _logTransactionOps(BSONArray& opInfo) {
+    static void _logTransactionOps(BSONObj id, BSONArray& opInfo) {
         Lock::DBWrite lk1("local");
         mutex::scoped_lock lk2(OpTime::m);
 
@@ -121,9 +120,8 @@ namespace mongo {
 
         // This is very temporary, and will likely fail on large row insertions
         logopbufbuilder.reset();
-        tempId++;
         BSONObjBuilder b(logopbufbuilder);
-        b.appendNumber("_id", tempId);
+        b.append("_id", id);
         b.appendTimestamp("ts", ts.asDate());
         b.append("h", hashNew);
         b.append("a", true);
@@ -141,7 +139,7 @@ namespace mongo {
         rsOplogDetails->insertObject(bb, true);
     }
     
-    static void (*_logTransactionOp)(BSONArray& opInfo) = _logOpUninitialized;
+    static void (*_logTransactionOp)(BSONObj id, BSONArray& opInfo) = _logOpUninitialized;
     // TODO: (Zardosht) hopefully remove these two phases
     void newReplUp() {
         _logTransactionOp = _logTransactionOps;
@@ -150,8 +148,8 @@ namespace mongo {
         _logTransactionOp = _logTransactionOps;
     }
 
-    void logTransactionOps(BSONArray& opInfo) {
-        _logTransactionOp(opInfo);
+    void logTransactionOps(BSONObj id, BSONArray& opInfo) {
+        _logTransactionOp(id, opInfo);
         // TODO: Figure out for sharding
         //logOpForSharding( opstr , ns , obj , patt );
     }

@@ -31,14 +31,14 @@ namespace mongo {
     // compiled with coredb. So, in startReplication, we will set this
     // to true
     static bool logTxnOperations = false;
-    static void (*_logTxnToOplog)(BSONArray& opInfo) = NULL;
+    static void (*_logTxnToOplog)(BSONObj id, BSONArray& opInfo) = NULL;
     static GTIDManager* txnGTIDManager = NULL;
 
     void setTxnLogOperations(bool val) {
         logTxnOperations = val;
     }
 
-    void setLogTxnToOplog(void (*f)(BSONArray& opInfo)) {
+    void setLogTxnToOplog(void (*f)(BSONObj id, BSONArray& opInfo)) {
         _logTxnToOplog = f;
     }
 
@@ -74,7 +74,7 @@ namespace mongo {
                 // In this case, the transaction we are committing has
                 // no parent, so we must write the transaction's 
                 // logged operations to the opLog, as part of this transaction
-                writeOpsToOplog();
+                writeOpsToOplog(gtid);
             }
         }
         _txn.commit(flags);
@@ -110,10 +110,10 @@ namespace mongo {
         }
     }
 
-    void TxnContext::writeOpsToOplog() {
+    void TxnContext::writeOpsToOplog(GTID gtid) {
         dassert(logTxnOperations);
         dassert(_logTxnToOplog);
         BSONArray array = _txnOps.arr();        
-        _logTxnToOplog(array);
+        _logTxnToOplog(gtid.getBSON(), array);
     }
 } // namespace mongo
