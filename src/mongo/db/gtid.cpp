@@ -20,10 +20,12 @@
 
 namespace mongo {
 
+    // TODO: Is there a faster comparison function for this?
     int GTID::cmp(GTID a, GTID b) {
         if (a._primarySeqNo != b._primarySeqNo) {
             return (a._primarySeqNo < b._primarySeqNo) ? -1 : 1;
         }
+        if (a._GTSeqNo == b._GTSeqNo) return 0;
         return (a._GTSeqNo < b._GTSeqNo) ? -1 : 1;
     }
 
@@ -37,6 +39,8 @@ namespace mongo {
         _GTSeqNo = static_cast<uint64_t>(b["t"].Long());
     }
 
+    // This is doing a malloc. Would be nice to find a way to do
+    // this without a malloc.
     BSONObj GTID::getBSON() {
         BSONObjBuilder b;
         b.appendNumber("p", _primarySeqNo);
