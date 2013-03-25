@@ -25,15 +25,14 @@
 
 namespace mongo {
 
-    /**
-     * Wraps a DB_TXN in an exception-safe object.
-     * The destructor calls abort() unless it's already committed.
-     * Knows whether it's read-only (useful for the cursor).
-     */
+    void setTxnLogOperations(bool val);
+
+    // class to wrap operations surrounding a storage::Txn.
+    // as of now, includes writing of operations to opLog
+    // and the committing/aborting of storage::Txn
     class TxnContext: boost::noncopyable {
         storage::Txn _txn;
         TxnContext* _parent;
-        bool _logOperations;
         //
         // a BSON Array that will hold all of the operations done by
         // this transaction. If the array gets too large, its contents

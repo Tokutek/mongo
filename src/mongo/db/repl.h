@@ -39,8 +39,6 @@ namespace mongo {
 
     class ReplSettings {
     public:
-        bool replOn;
-
         bool fastsync;
 
         bool autoresync;
@@ -53,8 +51,7 @@ namespace mongo {
         BSONObj reconfig;
 
         ReplSettings()
-            : replOn(false),
-            fastsync(),
+            : fastsync(),
             autoresync(false),
             slavedelay(),
             discoveredSeeds(),

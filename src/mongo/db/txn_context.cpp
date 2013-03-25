@@ -26,10 +26,19 @@
 
 namespace mongo {
 
+    // making a static bool to tell us whether logging of operations is on
+    // because this bool depends on replication, and replication is not
+    // compiled with coredb. So, in startReplication, we will set this
+    // to true
+    static bool logTxnOperations = false;
+
+    void setTxnLogOperations(bool val) {
+        logTxnOperations = val;
+    }
+
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
             : _txn((parent == NULL) ? NULL : &parent->_txn, txnFlags), 
               _parent(parent),
-              _logOperations(replSettings.replOn),
               _numOperations(0)
     {
     }
@@ -47,7 +56,7 @@ namespace mongo {
 
     void TxnContext::logOp(BSONObj op)
     {
-        if (_logOperations) {
+        if (logTxnOperations) {
             _txnOps.append(op);
             _numOperations++;
         }

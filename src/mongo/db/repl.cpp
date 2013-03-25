@@ -1298,7 +1298,7 @@ namespace mongo {
             newRepl();
 
             replSet = true;
-            replSettings.replOn = true;
+            setTxnLogOperations(true);
             ReplSetCmdline *replSetCmdline = new ReplSetCmdline(cmdLine._replSet);
             boost::thread t( boost::bind( &startReplSets, replSetCmdline) );
 
