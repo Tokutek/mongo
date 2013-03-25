@@ -441,7 +441,7 @@ namespace mongo {
         Lock::DBRead lk(rsoplog);
         BSONObj o;
         if( Helpers::getLast(rsoplog, o) ) {
-            GTID lastGTID((o["_id").obj());
+            GTID lastGTID(o["_id"].Obj());
             gtidManager = new GTIDManager(lastGTID);
             setTxnGTIDManager(gtidManager);
             

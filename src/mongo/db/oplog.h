@@ -37,7 +37,7 @@ namespace mongo {
 
     void logOp( const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt = 0, bool fromMigrate = false );
     // Write operations to the log (local.oplog.$main)
-    void logTransactionOps(BSONArray& opInfo);
+    void logTransactionOps(BSONObj id, BSONArray& opInfo);
 
     /** puts obj in the oplog as a comment (a no-op).  Just for diags.
         convention is

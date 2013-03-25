@@ -23,6 +23,7 @@
 #include "mongo/bson/bsonobjiterator.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/repl.h"
+#include "mongo/db/gtid.h"
 
 namespace mongo {
 
