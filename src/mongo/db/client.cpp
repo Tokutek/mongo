@@ -215,12 +215,20 @@ namespace mongo {
      *  This handles (if not recursively locked) opening an unopened database.
      */
     Client::ReadContext::ReadContext(const string& ns, string path, bool doauth) {
+        // TODO: What did I do here to get runQuery operate on a null database object?
+
+        bool nsdetailsNeedsOpen = false;
         {
             lk.reset( new Lock::DBRead(ns) );
             Database *db = dbHolder().get(ns, path);
             if( db ) {
                 c.reset( new Context(path, ns, db, doauth) );
-                return;
+                try {
+                    nsdetails(ns.c_str());
+                    return;
+                } catch (NamespaceIndex::ReadLockedDuringFileOps &e) {
+                    nsdetailsNeedsOpen = true;
+                }
             }
         }
 
@@ -228,7 +236,8 @@ namespace mongo {
         {
             DEV log() << "_DEBUG ReadContext db wasn't open, will try to open " << ns << endl;
             if( Lock::isW() ) { 
-                // write locked already
+                // write locked already, so we should have have failed to open the NS
+                verify( !nsdetailsNeedsOpen );
                 DEV RARELY log() << "write locked on ReadContext construction " << ns << endl;
                 c.reset( new Context(ns, path, doauth) );
             }
@@ -237,6 +246,7 @@ namespace mongo {
                 {
                     Lock::GlobalWrite w;
                     Context c(ns, path, doauth);
+                    nsdetails(ns.c_str()); // open the nsdetails now that we have a write lock, which must succeed.
                 }
                 // db could be closed at this interim point -- that is ok, we will throw, and don't mind throwing.
                 lk.reset( new Lock::DBRead(ns) );

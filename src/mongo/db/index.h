@@ -76,16 +76,15 @@ namespace mongo {
         /* true if the specified key is in the index */
         bool hasKey(const BSONObj& key);
 
+        static string indexNamespace(const string &ns, const string &idxName) {
+            dassert(ns != "" && idxName != "");
+            return ns + ".$" + idxName;
+        }
+
         // returns name of this index's storage area
         // database.table.$index
         string indexNamespace() const {
-            string s;
-            s.reserve(Namespace::MaxNsLen);
-            s = parentNS();
-            verify( !s.empty() );
-            s += ".$";
-            s += indexName();
-            return s;
+            return indexNamespace(parentNS(), indexName());
         }
 
         string indexName() const { // e.g. "ts_1"
