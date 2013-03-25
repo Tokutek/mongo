@@ -87,7 +87,7 @@ namespace mongo {
         _txn.commit(flags);
         // if the commit of this transaction got a GTID, then notify 
         // the GTIDManager that the commit is now done.
-        if (gotGTID) {
+        if (gotGTID && !_initiatingRS) {
             dassert(txnGTIDManager);
             txnGTIDManager->noteGTIDDone(gtid);
         }

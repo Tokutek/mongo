@@ -48,8 +48,8 @@ namespace mongo {
     // this without a malloc.
     BSONObj GTID::getBSON() {
         BSONObjBuilder b;
-        b.appendNumber("p", _primarySeqNo);
-        b.appendNumber("t", _GTSeqNo);
+        b.append("p", static_cast<long long>(_primarySeqNo));
+        b.append("t", static_cast<long long>(_GTSeqNo));
         return b.obj();
     }
 
@@ -59,6 +59,7 @@ namespace mongo {
 
     void GTID::inc_primary() {
         _primarySeqNo++;
+        _GTSeqNo = 0;
     }
     
     GTIDManager::GTIDManager( GTID lastGTID ) {
