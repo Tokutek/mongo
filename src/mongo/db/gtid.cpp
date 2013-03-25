@@ -33,10 +33,6 @@ namespace mongo {
         _primarySeqNo = 0;
         _GTSeqNo = 0;
     }
-  GTID::GTID(const GTID& a) {
-    _primarySeqNo = a._primarySeqNo;
-    _GTSeqNo = a._GTSeqNo;
-  }
 
     GTID::GTID(uint64_t primarySeqNo, uint64_t GTSeqNo) {
         _primarySeqNo = primarySeqNo;
@@ -59,10 +55,6 @@ namespace mongo {
 
     void GTID::inc() {
         _GTSeqNo++;
-    }
-
-    GTID GTID::operator=(const GTID& s) {
-        return GTID(s._primarySeqNo, s._GTSeqNo);
     }
 
     void GTID::inc_primary() {
