@@ -38,9 +38,10 @@ namespace mongo {
             newObjWithId = b.done();
         }
 
-        tokulog(3) << "updateOneObject: del pk " << pk << ", obj " << oldObj << " and inserting " << newObjWithId << endl;
-        deleteOneObject( d, nsdt, pk, oldObj );
-        insertOneObject( d, nsdt, newObjWithId, false );
+        d->updateObject( pk, oldObj, newObjWithId );
+        if (nsdt != NULL) {
+            nsdt->notifyOfWriteOp();
+        }
     }
 
     static void checkNoMods( const BSONObj &o ) {
