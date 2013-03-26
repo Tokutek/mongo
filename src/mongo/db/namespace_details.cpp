@@ -201,12 +201,12 @@ namespace mongo {
         AtomicWord<long long> _nextPK;
     };
 
-    class SystemCollection : public NaturalOrderCollection {
+    class SystemCatalog : public NaturalOrderCollection {
     public:
-        SystemCollection(const string &ns, const BSONObj &options) :
+        SystemCatalog(const string &ns, const BSONObj &options) :
             NaturalOrderCollection(ns, options) {
         }
-        SystemCollection(const BSONObj &serialized) :
+        SystemCatalog(const BSONObj &serialized) :
             NaturalOrderCollection(serialized) {
         }
 
@@ -221,16 +221,12 @@ namespace mongo {
         }
 
     private:
-        // For consistency with Vanilla MongoDB, system objects have the following
+        // For consistency with Vanilla MongoDB, the system catalogs have the following
         // fields, in order, if they exist.
         //
         //  { key, unique, ns, name, [everything else] }
         //
         // This code is largely borrowed from prepareToBuildIndex() in Vanilla.
-        //
-        // Also, for consistency, system.indexes and system.namespaces have no _id field.
-        //
-        // TODO: what is the correct format for system.users, system.profile, and system.js?
         BSONObj beautify(const BSONObj &obj) {
             BSONObjBuilder b;
             if (obj["key"].ok()) {
@@ -245,11 +241,10 @@ namespace mongo {
             if (obj["name"].ok()) { 
                 b.append(obj["name"]);
             }
-            const bool keepId = _ns != string("system.indexes") && _ns != string("system.namespaces");
             for (BSONObjIterator i = obj.begin(); i.more(); ) {
                 BSONElement e = i.next();
                 string s = e.fieldName();
-                if (s != "key" && s != "unique" && s != "ns" && s != "name" && (s != "_id" || keepId)) {
+                if (s != "key" && s != "unique" && s != "ns" && s != "name" && s != "_id") {
                     b.append(e);
                 }
             }
@@ -439,6 +434,10 @@ namespace mongo {
         return b.obj();
     }
 
+    static bool isSystemCatalog(const string &ns) {
+        return str::contains(ns, ".system.indexes") || str::contains(ns, ".system.namespaces");
+    }
+
     NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
         _ns(ns),
         _options(options.copy()),
@@ -458,8 +457,8 @@ namespace mongo {
         addNewNamespaceToCatalog(ns, !options.isEmpty() ? &options : NULL);
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
-        if (str::contains(ns, "system.")) {
-            return shared_ptr<NamespaceDetails>(new SystemCollection(ns, options));
+        if (isSystemCatalog(ns)) {
+            return shared_ptr<NamespaceDetails>(new SystemCatalog(ns, options));
         } else if (options["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(ns, options));
         } else {
@@ -482,8 +481,8 @@ namespace mongo {
         }
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
-        if (str::contains(serialized["ns"], "system.")) {
-            return shared_ptr<NamespaceDetails>(new SystemCollection(serialized));
+        if (isSystemCatalog(serialized["ns"])) {
+            return shared_ptr<NamespaceDetails>(new SystemCatalog(serialized));
         } else if (serialized["options"]["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(serialized));
         } else {
@@ -633,6 +632,7 @@ namespace mongo {
         uassert(16449, "dropDups is not supported and is likely to remain unsupported for some time because it deletes arbitrary data",
                 !idx_info["dropDups"].trueValue());
         uassert(12588, "cannot add index with a background operation in progress", !_indexBuildInProgress);
+        uassert(12523, "no index name specified", idx_info["name"].ok());
 
         if (nIndexes() >= NIndexesMax ) {
             string s = (mongoutils::str::stream() <<
