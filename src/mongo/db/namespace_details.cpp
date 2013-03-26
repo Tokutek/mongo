@@ -366,6 +366,8 @@ namespace mongo {
                 _succeeded(false),
                 _trivial(false) {
 
+                uassert(16465, "object to insert is larger than the capped collection itself",
+                        _obj.objsize() <= _collection->_maxSize);
                 long long n = _collection->_currentObjects.addAndFetch(1);
                 long long size = _collection->_currentSize.addAndFetch(obj.objsize());
                 _trivial = !_collection->isGorged(n, size);
@@ -1045,7 +1047,7 @@ namespace mongo {
                 _to(to), _success(false) {
             }
             ~Rollback() {
-                if (!_success) {
+                if (!_success && nsdetails(_to) != NULL) {
                     nsindex(_to)->kill_ns(_to);
                 }
             }

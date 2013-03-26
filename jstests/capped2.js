@@ -1,3 +1,4 @@
+db.capped2.drop()
 db._dbCommand( { create: "capped2", capped: true, size: 1000, $nExtents: 11, autoIndexId: false } );
 tzz = db.capped2;
 
@@ -17,7 +18,7 @@ function checkIncreasing( i ) {
     var j = i;
     while( res.hasNext() ) {
         try {
-             assert.eq( val[ j-- ].a, res.next().a, "B" );
+            assert.eq( val[ j-- ].a, res.next().a, "B" );
         } catch( e ) {
             debug( "capped2 err " + j );
             throw e;
@@ -47,15 +48,22 @@ function checkDecreasing( i ) {
 for( i = 0 ;; ++i ) {
     debug( "capped 2: " + i );
     tzz.insert( val[ i ] );
-    if ( tzz.count() == 0 ) {
+    if ( i > 1 && tzz.count() == 1 ) {
     	assert( i > 100, "K" );
         break;
     }
     checkIncreasing( i );
 }
 
-for( i = 600 ; i >= 0 ; --i ) {
+// val[159] won't fit in the capped collection,
+// so check decreasing from 158 and under.
+for( i = 158 ; i >= 0 ; --i ) {
     debug( "capped 2: " + i );
     tzz.insert( val[ i ] );
     checkDecreasing( i );
 }
+
+// the last object generated is too big for the capped collection itself.
+countBefore = tzz.count();
+assert.throws( tzz.insert( val[1999] ) );
+assert.eq( tzz.count(), countBefore );
