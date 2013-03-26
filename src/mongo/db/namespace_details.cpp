@@ -824,7 +824,7 @@ namespace mongo {
 
     void NamespaceDetails::addDefaultIndexesToCatalog() {
         // Either a single primary key or a hidden primary key + _id index.
-        dassert(_nIndexes == 1 || _nIndexes == 2 && findIdIndex() == 1);
+        dassert(_nIndexes == 1 || (_nIndexes == 2 && findIdIndex() == 1));
         for (int i = 0; i < nIndexes(); i++) {
             addIndexToCatalog(_indexes[i]->info());
         }
