@@ -36,7 +36,7 @@ namespace mongo {
     static GTIDManager* txnGTIDManager = NULL;
 
     void setTxnLogOperations(bool val) {
-        logTxnOperations = val;
+        _logTxnOperations = val;
     }
 
     bool logTxnOperations() {
