@@ -737,7 +737,7 @@ function appendSetParameterArgs(argArray) {
         if (jsTest.options().enableTestCommands) {
             argArray.push.apply(argArray, ['--setParameter', "enableTestCommands=1"]);
         }
-        if (jsTest.options().authMechanism) {
+        if (jsTest.options().authMechanism && jsTest.options().authMechanism != "MONGODB-CR") {
             argArray.push.apply(argArray,
                                 ['--setParameter',
                                  "authenticationMechanisms=" + jsTest.options().authMechanism]);
