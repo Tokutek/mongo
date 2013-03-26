@@ -245,6 +245,9 @@ namespace mongo {
         // deletes an object from this namespace, taking care of secondary indexes if they exist
         virtual void deleteObject(const BSONObj &pk, const BSONObj &obj) = 0;
 
+        // update an object in the namespace by pk, replacing oldObj with newObj
+        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj);
+
         // create a new index with the given info for this namespace.
         virtual void createIndex(const BSONObj &info);
 

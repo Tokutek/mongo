@@ -345,6 +345,15 @@ namespace mongo {
                     " should have been enforced higher in the stack", false);
         }
 
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
+            long long diff = newObj.objsize() - oldObj.objsize();
+            uassert( 10003 , "failing update: objects in a capped ns cannot grow", diff <= 0 );
+            NaturalOrderCollection::updateObject(pk, oldObj, newObj);
+            if (diff < 0) {
+                _currentSize.addAndFetch(diff);
+            }
+        }
+
     private:
         // Declares a thread's intent to insert into a capped collection.
         // On creation, notes the objects size into the collection's 
@@ -596,6 +605,13 @@ namespace mongo {
                 }
             }
         }
+    }
+
+    void NamespaceDetails::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
+        tokulog(4) << "NamespaceDetails::updateObject pk "
+            << pk << ", old " << oldObj << ", new " << newObj << endl;
+        deleteFromIndexes(pk, oldObj);
+        insertIntoIndexes(pk, newObj, false);
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
