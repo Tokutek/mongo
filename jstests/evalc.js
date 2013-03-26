@@ -1,5 +1,6 @@
 t = db.jstests_evalc;
 t.drop();
+assert(false);
 
 t2 = db.evalc_done
 t2.drop()

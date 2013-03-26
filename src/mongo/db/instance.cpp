@@ -457,7 +457,9 @@ namespace mongo {
                 Lock::DBWrite lk( currentOp.getNS() );
                 if ( dbHolder()._isLoaded( nsToDatabase( currentOp.getNS() ) , dbpath ) ) {
                     Client::Context cx( currentOp.getNS(), dbpath, false );
+                    Client::Transaction txn(DB_SERIALIZABLE);
                     profile(c , currentOp );
+                    txn.commit();
                 }
                 else {
                     mongo::log() << "note: not profiling because db went away - probably a close on: " << currentOp.getNS() << endl;

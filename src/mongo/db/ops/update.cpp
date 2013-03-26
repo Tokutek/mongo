@@ -63,9 +63,10 @@ namespace mongo {
             newObjWithId = b.done();
         }
 
-        tokulog(3) << "updateOneObject: del pk " << pk << ", obj " << oldObj << " and inserting " << newObjWithId << endl;
-        deleteOneObject( d, nsdt, pk, oldObj );
-        insertOneObject( d, nsdt, newObjWithId, false );
+        d->updateObject( pk, oldObj, newObjWithId );
+        if (nsdt != NULL) {
+            nsdt->notifyOfWriteOp();
+        }
     }
 
     static void checkNoMods( const BSONObj &o ) {
@@ -112,9 +113,6 @@ namespace mongo {
         if (logop) {
             OpLogHelpers::logInsert(ns, newObj, &cc().txn());
         }
-
-        // ns is not a system ns, so the object should have an _id field
-        //dassert(!str::contains(ns, "system.") && newObj["_id"].ok());
     }
 
     static bool mayUpdateById(NamespaceDetails *d, const BSONObj &patternOrig) {
