@@ -88,7 +88,8 @@ namespace mongo {
             log() << "creating profile collection: " << profileName << endl;
             string errmsg;
             if (!userCreateNS(db->profileName.c_str(),
-                              BSON("capped" << true << "size" << 1024 * 1024), errmsg , false)) {
+                              BSON("capped" << true << "size" << 1024 * 1024 << "autoIndexId" << false),
+                              errmsg , false)) {
                 log() << "could not create ns " << db->profileName << ": " << errmsg << endl;
                 return NULL;
             }
