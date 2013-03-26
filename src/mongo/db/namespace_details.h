@@ -145,9 +145,10 @@ namespace mongo {
 
         /**
          * Record that a new index exists in <dbname>.system.indexes.
-         * Only used for the primary key index, the others go through the normal insert path.
+         * Only used for the primary key index or an automatic _id index (capped collections),
+         * the others go through the normal insert path.
          */
-        void addPKIndexToCatalog();
+        void addDefaultIndexesToCatalog();
 
         // @return offset in indexes[]
         int findIndexByName(const char *name);

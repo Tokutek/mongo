@@ -631,8 +631,6 @@ namespace mongo {
         const bool may_overwrite = _nIndexes > 1;
         if (!may_overwrite) {
             massert(16435, "first index should be pk index", index->keyPattern() == _pk);
-        } else {
-            dassert(nsdetails(ns) == this);
         }
         nsindex(ns)->update_ns(ns, serialize(), may_overwrite);
 
@@ -781,8 +779,12 @@ namespace mongo {
         insertOneObject(d, nsdt, objMod, false);
     }
 
-    void NamespaceDetails::addPKIndexToCatalog() {
-        addIndexToCatalog(getPKIndex().info());
+    void NamespaceDetails::addDefaultIndexesToCatalog() {
+        // Either a single primary key or a hidden primary key + _id index.
+        dassert(_nIndexes == 1 || _nIndexes == 2 && findIdIndex() == 1);
+        for (int i = 0; i < nIndexes(); i++) {
+            addIndexToCatalog(_indexes[i]->info());
+        }
     }
 
     /* ------------------------------------------------------------------------- */

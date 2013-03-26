@@ -569,7 +569,7 @@ namespace mongo {
             ni->add_ns(ns, new_details);
 
             details = ni->details(ns);
-            details->addPKIndexToCatalog();
+            details->addDefaultIndexesToCatalog();
         }
         return details;
     }
