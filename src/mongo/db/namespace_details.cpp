@@ -180,8 +180,8 @@ namespace mongo {
             struct getfExtra extra(obj);
             r = cursor->c_getf_last(cursor, 0, getfCallback, &extra);
             verify(r == 0 || r == DB_NOTFOUND);
-            dassert(obj.nFields() == 1);
             if (!obj.isEmpty()) {
+                dassert(obj.nFields() == 1);
                 _nextPK = AtomicWord<long long>(obj.firstElement().Long() + 1);
             }
         }
@@ -598,7 +598,9 @@ namespace mongo {
             } else {
                 BSONObjSet keys;
                 idx.getKeysFromObject(obj, keys);
-                dassert((keys.size() > 1) == isMultikey(i));
+                if (keys.size() > 1) {
+                    dassert(isMultikey(i)); // the previous insert should have marked it as multikey
+                }
                 for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
                     idx.deletePair(*ki, &pk, obj);
                 }
