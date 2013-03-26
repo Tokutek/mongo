@@ -23,6 +23,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/util/stacktrace.h"
+#include "mongo/db/oplog_helpers.h"
 
 namespace mongo {
 
@@ -46,37 +47,28 @@ namespace mongo {
             return 0;
 
         shared_ptr< Cursor > cPtr = c;
-        auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout, cPtr, ns) );
+        auto_ptr<ClientCursor> ccc( new ClientCursor( QueryOption_NoCursorTimeout, cPtr, ns) );
 
         long long nDeleted = 0;
-        while ( cc->ok() ) {
+        while ( ccc->ok() ) {
 
-            if ( cc->currentIsDup() || !c->currentMatches() ) {
-                tokulog(4) << "_deleteObjects skipping " << cc->currPK() << ", dup or doesn't match" << endl;
-                cc->advance();
+            if ( ccc->currentIsDup() || !c->currentMatches() ) {
+                tokulog(4) << "_deleteObjects skipping " << ccc->currPK() << ", dup or doesn't match" << endl;
+                ccc->advance();
                 continue;
             }
 
-            BSONObj pk = cc->currPK().copy();
-            BSONObj obj = cc->current().copy();
+            BSONObj pk = ccc->currPK().copy();
+            BSONObj obj = ccc->current().copy();
 
-            while ( cc->ok() && cc->currPK() == pk ) {
-                cc->advance();
+            while ( ccc->ok() && ccc->currPK() == pk ) {
+                ccc->advance();
             }
 
             tokulog(4) << "_deleteObjects iteration: pk " << pk << ", obj " << obj << endl;
 
             if ( logop ) {
-                BSONElement e;
-                if( obj.getObjectID( e ) ) {
-                    BSONObjBuilder b;
-                    b.append( e );
-                    bool replJustOne = true;
-                    logOp( "d", ns, b.done(), 0, &replJustOne );
-                }
-                else {
-                    problem() << "deleted object without id, not logging" << endl;
-                }
+                OpLogHelpers::logDelete(ns, obj, false, &cc().txn());
             }
 
             deleteOneObject(d, nsdt, pk, obj);

@@ -38,7 +38,8 @@
 #include "../util/concurrency/rwlock.h"
 #include "d_concurrency.h"
 #include "mongo/db/lockstate.h"
-#include "mongo/db/storage/txn.h"
+#include "mongo/db/txn_context.h"
+//#include "mongo/db/storage/txn.h"
 #include "mongo/util/paths.h"
 
 namespace mongo {
@@ -142,7 +143,7 @@ namespace mongo {
          */
         class TransactionStack : boost::noncopyable {
             // If we had emplace we wouldn't need a shared_ptr...
-            std::stack<shared_ptr<storage::Txn> > _txns;
+            std::stack<shared_ptr<TxnContext> > _txns;
           public:
             TransactionStack() {}
             ~TransactionStack() {
@@ -162,7 +163,7 @@ namespace mongo {
             /** @return true iff this transaction stack has a live txn. */
             bool hasLiveTxn() const;
             /** @return the innermost transaction. */
-            const storage::Txn &txn() const;
+            TxnContext &txn() const;
         };
 
         /**
@@ -173,7 +174,7 @@ namespace mongo {
          * If the TransactionStack gets swapped out during the lifetime of this object, that gets detected and the destructor becomes a no-op.
          */
         class Transaction : boost::noncopyable {
-            const storage::Txn *_txn;
+            const TxnContext *_txn;
           public:
             explicit Transaction(int flags);
             ~Transaction();
@@ -188,7 +189,7 @@ namespace mongo {
             return _transactions->hasLiveTxn();
         }
 
-        const storage::Txn &txn() const {
+        TxnContext &txn() const {
             dassert(hasTxn());
             return _transactions->txn();
         }

@@ -39,19 +39,17 @@ namespace mongo {
     int __findingStartInitialTimeout = 5; // configurable for testing
 
     // cached copies of these...so don't rename them, drop them, etc.!!!
-    static NamespaceDetails *localOplogMainDetails = 0;
     static Database *localDB = 0;
     static NamespaceDetails *rsOplogDetails = 0;
     void oplogCheckCloseDatabase( Database * db ) {
         verify( Lock::isW() );
         localDB = 0;
-        localOplogMainDetails = 0;
         rsOplogDetails = 0;
         resetSlaveCache();
     }
 
-    static void _logOpUninitialized(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) {
-        uassert(13288, "replSet error write op to db before replSet initialized", str::startsWith(ns, "local.") || *opstr == 'n');
+    static void _logOpUninitialized(BSONObj id, BSONArray& opInfo) {
+        log() << "WHAT IS GOING ON???????? " << endl;
     }
 
     /** write an op to the oplog that is already built.
@@ -59,6 +57,7 @@ namespace mongo {
         */
     void _logOpObjRS(const BSONObj& op) {
         Lock::DBWrite lk("local");
+        ::abort();
 
         const OpTime ts = op["ts"]._opTime();
         long long h = op["h"].numberLong();
@@ -97,496 +96,96 @@ namespace mongo {
         }
     }
 
-    /** given a BSON object, create a new one at dst which is the existing (partial) object
-        with a new object element appended at the end with fieldname "o".
-
-        @param partial already build object with everything except the o member.  e.g. something like:
-               { ts:..., ns:..., os2:... }
-        @param o a bson object to be added with fieldname "o"
-        @dst   where to put the newly built combined object.  e.g. ends up as something like:
-               { ts:..., ns:..., os2:..., o:... }
-    */
-    void append_O_Obj(char *dst, const BSONObj& partial, const BSONObj& o) {
-        const int size1 = partial.objsize() - 1;  // less the EOO char
-        const int oOfs = size1+3;                 // 3 = byte BSONOBJTYPE + byte 'o' + byte \0
-
-        void *p = (char*)dst + oOfs; //getDur().writingPtr(dst, oOfs+o.objsize()+1);
-
-        memcpy(p, partial.objdata(), size1);
-
-        // adjust overall bson object size for the o: field
-        *(static_cast<unsigned*>(p)) += o.objsize() + 1/*fieldtype byte*/ + 2/*"o" fieldname*/;
-
-        char *b = static_cast<char *>(p);
-        b += size1;
-        *b++ = (char) Object;
-        *b++ = 'o'; // { o : ... }
-        *b++ = 0;   // null terminate "o" fieldname
-        memcpy(b, o.objdata(), o.objsize());
-        b += o.objsize();
-        *b = EOO;
-    }
-
     // global is safe as we are in write lock. we put the static outside the function to avoid the implicit mutex 
     // the compiler would use if inside the function.  the reason this is static is to avoid a malloc/free for this
     // on every logop call.
-    static BufBuilder logopbufbuilder(8*1024);
-    static void _logOpRS(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) {
+    static BufBuilder logopbufbuilder(256*1024);
+    
+    static void _logTransactionOps(BSONObj id, BSONArray& opInfo) {
         Lock::DBWrite lk1("local");
-
-        if ( strncmp(ns, "local.", 6) == 0 ) {
-            if ( strncmp(ns, "local.slaves", 12) == 0 )
-                resetSlaveCache();
-            return;
-        }
-
         mutex::scoped_lock lk2(OpTime::m);
 
         const OpTime ts = OpTime::now(lk2);
         long long hashNew;
         if( theReplSet ) {
-            massert(13312, "replSet error : logOp() but not primary?", theReplSet->box.getState().primary());
+            //massert(13312, "replSet error : logOp() but not primary?", theReplSet->box.getState().primary());
             hashNew = (theReplSet->lastH * 131 + ts.asLL()) * 17 + theReplSet->selfId();
+            theReplSet->lastOpTimeWritten = ts;
+            theReplSet->lastH = hashNew;
         }
         else {
             // must be initiation
-            verify( *ns == 0 );
             hashNew = 0;
         }
 
-        /* we jump through a bunch of hoops here to avoid copying the obj buffer twice --
-           instead we do a single copy to the destination position in the memory mapped file.
-        */
-
+        // This is very temporary, and will likely fail on large row insertions
         logopbufbuilder.reset();
         BSONObjBuilder b(logopbufbuilder);
+        b.append("_id", id);
         b.appendTimestamp("ts", ts.asDate());
         b.append("h", hashNew);
-        b.append("op", opstr);
-        b.append("ns", ns);
-        if (fromMigrate) 
-            b.appendBool("fromMigrate", true);
-        if ( bb )
-            b.appendBool("b", *bb);
-        if ( o2 )
-            b.append("o2", *o2);
-        ::abort();
-#if 0
-        BSONObj partial = b.done();
-        int posz = partial.objsize();
-        int len = posz + obj.objsize() + 1 + 2 /*o:*/;
+        b.append("a", true);
+        b.append("ops", opInfo);
 
-        Record *r;
-        DEV verify( logNS == 0 );
-        {
-            const char *logns = rsoplog;
-            if ( rsOplogDetails == 0 ) {
-                Client::Context ctx( logns , dbpath, false);
-                localDB = ctx.db();
-                verify( localDB );
-                rsOplogDetails = nsdetails(logns);
-                massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
-            }
-            Client::Context ctx( logns , localDB, false );
-            r = NULL; ::abort(); (void) len; //theDataFileMgr.fast_oplog_insert(rsOplogDetails, logns, len);
-            /* todo: now() has code to handle clock skew.  but if the skew server to server is large it will get unhappy.
-                     this code (or code in now() maybe) should be improved.
-                     */
-            if( theReplSet ) {
-                if( !(theReplSet->lastOpTimeWritten<ts) ) {
-                    log() << "replSet ERROR possible failover clock skew issue? " << theReplSet->lastOpTimeWritten << ' ' << ts << rsLog;
-                    log() << "replSet " << theReplSet->isPrimary() << rsLog;
-                }
-                theReplSet->lastOpTimeWritten = ts;
-                theReplSet->lastH = hashNew;
-                ctx.getClient()->setLastOp( ts );
-            }
+        const char *logns = rsoplog;
+        if ( rsOplogDetails == 0 ) {
+            Client::Context ctx( logns , dbpath, false);
+            localDB = ctx.db();
+            verify( localDB );
+            rsOplogDetails = nsdetails(logns);
+            massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
         }
-
-        append_O_Obj(r->data(), partial, obj);
-
-        if ( logLevel >= 6 ) {
-            log( 6 ) << "logOp:" << BSONObj::make(r) << endl;
-        }
-#endif
+        BSONObj bb = b.done();
+        rsOplogDetails->insertObject(bb, true);
     }
-
-    /* we write to local.oplog.$main:
-         { ts : ..., op: ..., ns: ..., o: ... }
-       ts: an OpTime timestamp
-       op:
-        "i" insert
-        "u" update
-        "d" delete
-        "c" db cmd
-        "db" declares presence of a database (ns is set to the db name + '.')
-        "n" no op
-       logNS: where to log it.  0/null means "local.oplog.$main".
-       bb:
-         if not null, specifies a boolean to pass along to the other side as b: param.
-         used for "justOne" or "upsert" flags on 'd', 'u'
-       first: true
-         when set, indicates this is the first thing we have logged for this database.
-         thus, the slave does not need to copy down all the data when it sees this.
-
-       note this is used for single collection logging even when --replSet is enabled.
-    */
-    static void _logOpOld(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) {
-        Lock::DBWrite lk("local");
-        static BufBuilder bufbuilder(8*1024); // todo there is likely a mutex on this constructor
-
-        if ( strncmp(ns, "local.", 6) == 0 ) {
-            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-                resetSlaveCache();
-            }
-            return;
-        }
-
-        mutex::scoped_lock lk2(OpTime::m);
-
-        const OpTime ts = OpTime::now(lk2);
-        Client::Context context("",0,false);
-
-        /* we jump through a bunch of hoops here to avoid copying the obj buffer twice --
-           instead we do a single copy to the destination position in the memory mapped file.
-        */
-
-        bufbuilder.reset();
-        BSONObjBuilder b(bufbuilder);
-        b.appendTimestamp("ts", ts.asDate());
-        b.append("op", opstr);
-        b.append("ns", ns);
-        if (fromMigrate) 
-            b.appendBool("fromMigrate", true);
-        if ( bb )
-            b.appendBool("b", *bb);
-        if ( o2 )
-            b.append("o2", *o2);
-
-#if 0
-        ::abort();
-
-        BSONObj partial = b.done(); // partial is everything except the o:... part.
-        int po_sz = partial.objsize();
-        int len = po_sz + obj.objsize() + 1 + 2 /*o:*/;
-        Record *r;
-        if( logNS == 0 ) {
-            logNS = "local.oplog.$main";
-            if ( localOplogMainDetails == 0 ) {
-                Client::Context ctx( logNS , dbpath, false);
-                localDB = ctx.db();
-                verify( localDB );
-                localOplogMainDetails = nsdetails(logNS);
-                verify( localOplogMainDetails );
-            }
-            Client::Context ctx( logNS , localDB, false );
-            r = NULL; ::abort(); (void) len; //theDataFileMgr.fast_oplog_insert(localOplogMainDetails, logNS, len);
-        }
-        else {
-            Client::Context ctx( logNS, dbpath, false );
-            verify( nsdetails( logNS ) );
-            // first we allocate the space, then we fill it below.
-            r = NULL; ::abort(); //theDataFileMgr.fast_oplog_insert( nsdetails( logNS ), logNS, len);
-        }
-
-        append_O_Obj(r->data(), partial, obj);
-
-        context.getClient()->setLastOp( ts );
-
-        LOG( 6 ) << "logging op:" << BSONObj::make(r) << endl;
-#endif
-    } 
-
-    static void (*_logOp)(const char *opstr, const char *ns, const char *logNS, const BSONObj& obj, BSONObj *o2, bool *bb, bool fromMigrate ) = _logOpOld;
+    
+    static void (*_logTransactionOp)(BSONObj id, BSONArray& opInfo) = _logOpUninitialized;
+    // TODO: (Zardosht) hopefully remove these two phases
     void newReplUp() {
-        replSettings.master = true;
-        _logOp = _logOpRS;
+        _logTransactionOp = _logTransactionOps;
     }
     void newRepl() {
-        replSettings.master = true;
-        _logOp = _logOpUninitialized;
-    }
-    void oldRepl() { _logOp = _logOpOld; }
-
-    void logKeepalive() {
-        _logOp("n", "", 0, BSONObj(), 0, 0, false);
-    }
-    void logOpComment(const BSONObj& obj) {
-        _logOp("n", "", 0, obj, 0, 0, false);
-    }
-    void logOpInitiate(const BSONObj& obj) {
-        _logOpRS("n", "", 0, obj, 0, 0, false);
+        _logTransactionOp = _logTransactionOps;
     }
 
-    /*@ @param opstr:
-          c userCreateNS
-          i insert
-          n no-op / keepalive
-          d delete / remove
-          u update
-    */
-    void logOp(const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt, bool *b, bool fromMigrate) {
-        if ( replSettings.master ) {
-            _logOp(opstr, ns, 0, obj, patt, b, fromMigrate);
-        }
-
-        logOpForSharding( opstr , ns , obj , patt );
+    void logTransactionOps(BSONObj id, BSONArray& opInfo) {
+        _logTransactionOp(id, opInfo);
+        // TODO: Figure out for sharding
+        //logOpForSharding( opstr , ns , obj , patt );
     }
 
     void createOplog() {
         Lock::GlobalWrite lk;
-
-        const char * ns = "local.oplog.$main";
-
         bool rs = !cmdLine._replSet.empty();
-        if( rs )
-            ns = rsoplog;
-
+        verify(rs);
+        
+        const char * ns = rsoplog;
         Client::Context ctx(ns);
 
         NamespaceDetails * nsd = nsdetails( ns );
-
         if ( nsd ) {
-
             if ( cmdLine.oplogSize != 0 ) {
-                // TODO: Make sure we do this check if it's really necessary
-#if 0
-                int o = (int)(nsd->storageSize() / ( 1024 * 1024 ) );
-                int n = (int)(cmdLine.oplogSize / ( 1024 * 1024 ) );
-                if ( n != o ) {
-                    stringstream ss;
-                    ss << "cmdline oplogsize (" << n << ") different than existing (" << o << ") see: http://dochub.mongodb.org/core/increase-oplog";
-                    log() << ss.str() << endl;
-                    throw UserException( 13257 , ss.str() );
-                }
-#endif
-            }
-
-            if( rs ) return;
-
-            DBDirectClient c;
-            BSONObj lastOp = c.findOne( ns, Query().sort(reverseNaturalObj) );
-            if ( !lastOp.isEmpty() ) {
-                OpTime::setLast( lastOp[ "ts" ].date() );
+                // TODO: (Zardosht), figure out if there are any checks to do here
+                // not sure under what scenarios we can be here, so
+                // making a printf to catch this so we can investigate
+                tokulog() << "createOplog called with existing opLog, investigate why.\n" << endl;
             }
             return;
         }
 
         /* create an oplog collection, if it doesn't yet exist. */
         BSONObjBuilder b;
-        double sz;
-        if ( cmdLine.oplogSize != 0 )
-            sz = (double)cmdLine.oplogSize;
-        else {
-            /* not specified. pick a default size */
-            sz = 50.0 * 1000 * 1000;
-            if ( sizeof(int *) >= 8 ) {
-#if defined(__APPLE__)
-                // typically these are desktops (dev machines), so keep it smallish
-                sz = (256-64) * 1000 * 1000;
-#else
-                sz = 990.0 * 1000 * 1000;
-                boost::intmax_t free = File::freeSpace(dbpath); //-1 if call not supported.
-                double fivePct = free * 0.05;
-                if ( fivePct > sz )
-                    sz = fivePct;
-#endif
-            }
-        }
 
         log() << "******" << endl;
-        log() << "creating replication oplog of size: " << (int)( sz / ( 1024 * 1024 ) ) << "MB..." << endl;
-
-        b.append("size", sz);
-        b.appendBool("capped", 1);
-        b.appendBool("autoIndexId", false);
-
-        ::abort();
-#if 0
+        log() << "creating replication oplog." << endl;
+        log() << "TODO: FIGURE OUT SIZE!!!." << endl;
+        // create the namespace
         string err;
         BSONObj o = b.done();
         userCreateNS(ns, o, err, false);
-        if( !rs )
-            logOp( "n", "", BSONObj() );
-#endif
-
-        /* sync here so we don't get any surprising lag later when we try to sync */
-        // TODO: TokuDB - checkpoint?
-        //MemoryMappedFile::flushAll(true);
         log() << "******" << endl;
     }
 
-    // -------------------------------------
-
-#if 0
-    FindingStartCursor *FindingStartCursor::make( const QueryPlan &qp ) {
-        auto_ptr<FindingStartCursor> ret( new FindingStartCursor( qp ) );
-        ret->init();
-        return ret.release();
-    }
-
-    FindingStartCursor::FindingStartCursor( const QueryPlan &qp ) :
-    _qp( qp ),
-    _findingStart( true ),
-    _findingStartMode() {
-    }
-    
-    void FindingStartCursor::next() {
-        if ( !_findingStartCursor || !_findingStartCursor->ok() ) {
-            _findingStart = false;
-            _c = _qp.newCursor(); // on error, start from beginning
-            destroyClientCursor();
-            return;
-        }
-        switch( _findingStartMode ) {
-            // Initial mode: scan backwards from end of collection
-            case Initial: {
-                if ( !_matcher->matchesCurrent( _findingStartCursor->c() ) ) {
-                    _findingStart = false; // found first record out of query range, so scan normally
-                    _c = _qp.newCursor( _findingStartCursor->currLoc() );
-                    destroyClientCursor();
-                    return;
-                }
-                _findingStartCursor->advance();
-                RARELY {
-                    if ( _findingStartTimer.seconds() >= __findingStartInitialTimeout ) {
-                        // If we've scanned enough, switch to find extent mode.
-                        createClientCursor( extentFirstLoc( _findingStartCursor->currLoc() ) );
-                        _findingStartMode = FindExtent;
-                        return;
-                    }
-                }
-                return;
-            }
-            // FindExtent mode: moving backwards through extents, check first
-            // document of each extent.
-            case FindExtent: {
-                if ( !_matcher->matchesCurrent( _findingStartCursor->c() ) ) {
-                    _findingStartMode = InExtent;
-                    return;
-                }
-                DiskLoc prev = prevExtentFirstLoc( _findingStartCursor->currLoc() );
-                if ( prev.isNull() ) { // hit beginning, so start scanning from here
-                    createClientCursor();
-                    _findingStartMode = InExtent;
-                    return;
-                }
-                // There might be a more efficient implementation than creating new cursor & client cursor each time,
-                // not worrying about that for now
-                createClientCursor( prev );
-                return;
-            }
-            // InExtent mode: once an extent is chosen, find starting doc in the extent.
-            case InExtent: {
-                if ( _matcher->matchesCurrent( _findingStartCursor->c() ) ) {
-                    _findingStart = false; // found first record in query range, so scan normally
-                    _c = _qp.newCursor( _findingStartCursor->currLoc() );
-                    destroyClientCursor();
-                    return;
-                }
-                _findingStartCursor->advance();
-                return;
-            }
-            default: {
-                massert( 14038, "invalid _findingStartMode", false );
-            }
-        }
-    }
-    
-    DiskLoc FindingStartCursor::extentFirstLoc( const DiskLoc &rec ) {
-        Extent *e = rec.rec()->myExtent( rec );
-        if ( !_qp.nsd()->capLooped() || ( e->myLoc != _qp.nsd()->capExtent ) )
-            return e->firstRecord;
-        // Likely we are on the fresh side of capExtent, so return first fresh record.
-        // If we are on the stale side of capExtent, then the collection is small and it
-        // doesn't matter if we start the extent scan with capFirstNewRecord.
-        return _qp.nsd()->capFirstNewRecord;
-    }
-    
-    void wassertExtentNonempty( const Extent *e ) {
-        // TODO ensure this requirement is clearly enforced, or fix.
-        wassert( !e->firstRecord.isNull() );
-    }
-    
-    DiskLoc FindingStartCursor::prevExtentFirstLoc( const DiskLoc &rec ) {
-        Extent *e = rec.rec()->myExtent( rec );
-        if ( _qp.nsd()->capLooped() ) {
-            if ( e->xprev.isNull() ) {
-                e = _qp.nsd()->lastExtent.ext();
-            }
-            else {
-                e = e->xprev.ext();
-            }
-            if ( e->myLoc != _qp.nsd()->capExtent ) {
-                wassertExtentNonempty( e );
-                return e->firstRecord;
-            }
-        }
-        else {
-            if ( !e->xprev.isNull() ) {
-                e = e->xprev.ext();
-                wassertExtentNonempty( e );
-                return e->firstRecord;
-            }
-        }
-        return DiskLoc(); // reached beginning of collection
-    }
-    
-    void FindingStartCursor::createClientCursor( const DiskLoc &startLoc ) {
-        shared_ptr<Cursor> c = _qp.newCursor( startLoc );
-        _findingStartCursor.reset( new ClientCursor(QueryOption_NoCursorTimeout, c, _qp.ns()) );
-    }
-
-    bool FindingStartCursor::firstDocMatchesOrEmpty() const {
-        shared_ptr<Cursor> c = _qp.newCursor();
-        return !c->ok() || _matcher->matchesCurrent( c.get() );
-    }
-    
-    void FindingStartCursor::init() {
-        BSONElement tsElt = _qp.originalQuery()[ "ts" ];
-        massert( 13044, "no ts field in query", !tsElt.eoo() );
-        BSONObjBuilder b;
-        b.append( tsElt );
-        BSONObj tsQuery = b.obj();
-        _matcher.reset(new CoveredIndexMatcher(tsQuery, _qp.indexKey()));
-        if ( firstDocMatchesOrEmpty() ) {
-            _c = _qp.newCursor();
-            _findingStart = false;
-            return;
-        }
-        // Use a ClientCursor here so we can release db mutex while scanning
-        // oplog (can take quite a while with large oplogs).
-        shared_ptr<Cursor> c = _qp.newReverseCursor();
-        _findingStartCursor.reset( new ClientCursor(QueryOption_NoCursorTimeout, c, _qp.ns(), BSONObj()) );
-        _findingStartTimer.reset();
-        _findingStartMode = Initial;
-    }
-    
-    shared_ptr<Cursor> FindingStartCursor::getCursor( const char *ns, const BSONObj &query, const BSONObj &order ) {
-        NamespaceDetails *d = nsdetails(ns);
-        if ( !d ) {
-            return shared_ptr<Cursor>( new BasicCursor( DiskLoc() ) );
-        }
-        FieldRangeSetPair frsp( ns, query );
-        scoped_ptr<QueryPlan> oplogPlan( QueryPlan::make( d, -1, frsp, 0, query, order ) );
-        scoped_ptr<FindingStartCursor> finder( FindingStartCursor::make( *oplogPlan ) );
-        ElapsedTracker yieldCondition( 256, 20 );
-        while( !finder->done() ) {
-            if ( yieldCondition.intervalHasElapsed() ) {
-                if ( finder->prepareToYield() ) {
-                    ClientCursor::staticYield( -1, ns, 0 );
-                    finder->recoverFromYield();
-                }
-            }
-            finder->next();
-        }
-        shared_ptr<Cursor> ret = finder->cursor();
-        shared_ptr<CoveredIndexMatcher> matcher( new CoveredIndexMatcher( query, BSONObj() ) );
-        ret->setMatcher( matcher );
-        return ret;
-    }
-#endif
-    
     // -------------------------------------
 
     struct TestOpTime : public StartupTest {
@@ -604,86 +203,6 @@ namespace mongo {
     } testoptime;
 
     int _dummy_z;
-
-    void pretouchN(vector<BSONObj>& v, unsigned a, unsigned b) {
-        DEV verify( ! Lock::isW() );
-
-        Client *c = currentClient.get();
-        if( c == 0 ) {
-            Client::initThread("pretouchN");
-            c = &cc();
-        }
-
-        Lock::GlobalRead lk;
-        for( unsigned i = a; i <= b; i++ ) {
-            const BSONObj& op = v[i];
-            const char *which = "o";
-            const char *opType = op.getStringField("op");
-            if ( *opType == 'i' )
-                ;
-            else if( *opType == 'u' )
-                which = "o2";
-            else
-                continue;
-            /* todo : other operations */
-
-            try {
-                BSONObj o = op.getObjectField(which);
-                BSONElement _id;
-                if( o.getObjectID(_id) ) {
-                    const char *ns = op.getStringField("ns");
-                    BSONObjBuilder b;
-                    b.append(_id);
-                    BSONObj result;
-                    Client::Context ctx( ns );
-#if 0
-                    if( Helpers::findById(cc(), ns, b.done(), result) )
-                        _dummy_z += result.objsize(); // touch
-#endif
-                    ::abort();
-                }
-            }
-            catch( DBException& e ) {
-                log() << "ignoring assertion in pretouchN() " << a << ' ' << b << ' ' << i << ' ' << e.toString() << endl;
-            }
-        }
-    }
-
-    void pretouchOperation(const BSONObj& op) {
-
-        if( Lock::somethingWriteLocked() )
-            return; // no point pretouching if write locked. not sure if this will ever fire, but just in case.
-
-        const char *which = "o";
-        const char *opType = op.getStringField("op");
-        if ( *opType == 'i' )
-            ;
-        else if( *opType == 'u' )
-            which = "o2";
-        else
-            return;
-        /* todo : other operations */
-
-        try {
-            BSONObj o = op.getObjectField(which);
-            BSONElement _id;
-            if( o.getObjectID(_id) ) {
-                const char *ns = op.getStringField("ns");
-                BSONObjBuilder b;
-                b.append(_id);
-                BSONObj result;
-                Client::ReadContext ctx( ns );
-#if 0
-                if( Helpers::findById(cc(), ns, b.done(), result) )
-                    _dummy_z += result.objsize(); // touch
-#endif
-                ::abort();
-            }
-        }
-        catch( DBException& ) {
-            log() << "ignoring assertion in pretouchOperation()" << endl;
-        }
-    }
 
     void Sync::setHostname(const string& hostname) {
         hn = hostname;
@@ -765,7 +284,6 @@ namespace mongo {
         NamespaceDetails *nsd = nsdetails(ns);
         (void) nsd; // TODO: Suppress unused warning
 
-        // operation type -- see logOp() comments for types
         const char *opType = fields[2].valuestrsafe();
 
         if ( *opType == 'i' ) {
@@ -958,8 +476,9 @@ namespace mongo {
                 // so we re-wrap without the pre-condition for speed
 
                 string tempNS = str::stream() << dbname << ".$cmd";
-
-                logOp( "c" , tempNS.c_str() , cmdObj.firstElement().wrap() );
+                // TODO: Zardosht, figure out what this does
+                ::abort();
+                //logOp( "c" , tempNS.c_str() , cmdObj.firstElement().wrap() );
             }
 
             return errors == 0;

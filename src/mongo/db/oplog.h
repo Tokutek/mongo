@@ -35,104 +35,20 @@ namespace mongo {
 
     void _logOpObjRS(const BSONObj& op);
 
-    /** Write operation to the log (local.oplog.$main)
-
-       @param opstr
-        "i" insert
-        "u" update
-        "d" delete
-        "c" db cmd
-        "n" no-op
-        "db" declares presence of a database (ns is set to the db name + '.')
-
-       See _logOp() in oplog.cpp for more details.
-    */
-    void logOp( const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt = 0, bool *b = 0, bool fromMigrate = false );
-
-    void logKeepalive();
+    void logOp( const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt = 0, bool fromMigrate = false );
+    // Write operations to the log (local.oplog.$main)
+    void logTransactionOps(BSONObj id, BSONArray& opInfo);
 
     /** puts obj in the oplog as a comment (a no-op).  Just for diags.
         convention is
           { msg : "text", ... }
     */
-    void logOpComment(const BSONObj& obj);
-
     void oplogCheckCloseDatabase( Database * db );
 
     extern int __findingStartInitialTimeout; // configurable for testing
 
     class QueryPlan;
     
-    /** Implements an optimized procedure for finding the first op in the oplog. */
-#if 0
-    class FindingStartCursor {
-    public:
-
-        /**
-         * The cursor will attempt to find the first op in the oplog matching the
-         * 'ts' field of the qp's query.
-         */
-        static FindingStartCursor *make( const QueryPlan &qp );
-
-        /** @return true if the first matching op in the oplog has been found. */
-        bool done() const { return !_findingStart; }
-
-        /** @return cursor pointing to the first matching op, if done(). */
-        shared_ptr<Cursor> cursor() { verify( done() ); return _c; }
-
-        /** Iterate the cursor, to continue trying to find matching op. */
-        void next();
-
-        /** Yield cursor, if not done(). */
-        bool prepareToYield() {
-            if ( _findingStartCursor ) {
-                return _findingStartCursor->prepareToYield( _yieldData );
-            }
-            return false;
-        }
-        
-        /** Recover from cursor yield. */
-        void recoverFromYield() {
-            if ( _findingStartCursor ) {
-                if ( !ClientCursor::recoverFromYield( _yieldData ) ) {
-                    _findingStartCursor.reset( 0 );
-                    msgassertedNoTrace( 15889, "FindingStartCursor::recoverFromYield() failed to recover" );
-                }
-            }
-        }
-        
-        /**
-         * @return a BasicCursor constructed using a FindingStartCursor with the provided query and
-         * order parameters.
-         * @yields the db lock.
-         * @asserts on yield recovery failure.
-         */
-        static shared_ptr<Cursor> getCursor( const char *ns, const BSONObj &query, const BSONObj &order );
-
-    private:
-        FindingStartCursor( const QueryPlan &qp );
-        void init();
-
-        enum FindingStartMode { Initial, FindExtent, InExtent };
-        const QueryPlan &_qp;
-        bool _findingStart;
-        FindingStartMode _findingStartMode;
-        auto_ptr< CoveredIndexMatcher > _matcher;
-        Timer _findingStartTimer;
-        ClientCursor::Holder _findingStartCursor;
-        shared_ptr<Cursor> _c;
-        ClientCursor::YieldData _yieldData;
-        DiskLoc extentFirstLoc( const DiskLoc &rec );
-
-        DiskLoc prevExtentFirstLoc( const DiskLoc &rec );
-        void createClientCursor( const DiskLoc &startLoc = DiskLoc() );
-        void destroyClientCursor() {
-            _findingStartCursor.reset( 0 );
-        }
-        bool firstDocMatchesOrEmpty() const;
-    };
-#endif
-
     class Sync {
     protected:
         string hn;
@@ -147,9 +63,6 @@ namespace mongo {
         virtual bool shouldRetry(const BSONObj& o);
         void setHostname(const string& hostname);
     };
-
-    void pretouchOperation(const BSONObj& op);
-    void pretouchN(vector<BSONObj>&, unsigned a, unsigned b);
 
     /**
      * take an op and apply locally

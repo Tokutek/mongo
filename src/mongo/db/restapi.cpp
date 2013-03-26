@@ -285,14 +285,9 @@ namespace mongo {
             if( replSet ) {
                 ss << a("", "see replSetGetStatus link top of page") << "--replSet </a>" << cmdLine._replSet;
             }
-            if ( replAllDead )
+            if ( replAllDead ) {
                 ss << "\n<b>replication replAllDead=" << replAllDead << "</b>\n";
-            else {
-                ss << "\nmaster: " << replSettings.master << '\n';
-                ss << "slave:  " << replSettings.slave << '\n';
-                ss << '\n';
             }
-
             // TokuDB: Do we care?
             //BackgroundOperation::dump(ss);
             ss << "</pre>\n";

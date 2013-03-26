@@ -30,6 +30,7 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/db/oplog_helpers.h"
 
 #include <boost/filesystem/convenience.hpp>
 #include <boost/filesystem/operations.hpp>
@@ -298,7 +299,7 @@ namespace mongo {
                 // this is so that we don't have to handle this cursor in the delete code
                 c.reset(0);
                 
-                logOp( "d" , ns.c_str() , obj["_id"].wrap() , 0 , 0 , fromMigrate );
+                OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate, &cc().txn());
                 deleteOneObject( d, nsdt, pk, obj);
                 numDeleted++;
             }

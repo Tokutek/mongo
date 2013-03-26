@@ -39,6 +39,7 @@
 #include "mongo/db/storage/key.h"
 #include "mongo/platform/atomic_word.h"
 #include "mongo/scripting/engine.h"
+#include "mongo/db/oplog_helpers.h"
 
 namespace mongo {
 
@@ -925,7 +926,7 @@ namespace mongo {
                     options = b.obj();
                 }
                 string logNs = string( cl ) + ".$cmd";
-                logOp("c", logNs.c_str(), options);
+                OpLogHelpers::logCommand(logNs.c_str(), options, &cc().txn());
             }
             // TODO: Identify error paths for this function
             return true;

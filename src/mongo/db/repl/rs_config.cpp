@@ -25,6 +25,7 @@
 #include "../oplog.h"
 #include "../instance.h"
 #include "../../util/text.h"
+#include "mongo/db/oplog_helpers.h"
 #include <boost/algorithm/string.hpp>
 
 using namespace bson;
@@ -32,8 +33,6 @@ using namespace bson;
 namespace mongo {
 
     mongo::mutex ReplSetConfig::groupMx("RS tag group");
-
-    void logOpInitiate(const bo&);
 
     void assertOnlyHas(BSONObj o, const set<string>& fields) {
         BSONObj::iterator i(o);
@@ -59,18 +58,18 @@ namespace mongo {
         checkRsConfig();
         log() << "replSet info saving a newer config version to local.system.replset" << rsLog;
         {
-            Lock::GlobalWrite lk; // TODO: does this really need to be a global lock?
+            // TODO: does this really need to be a global lock?
+            Lock::GlobalWrite lk;
             Client::Context cx( rsConfigNs );
-            cx.db()->flushFiles(true);
 
             //theReplSet->lastOpTimeWritten = ??;
             //rather than above, do a logOp()? probably
             BSONObj o = asBson();
-            Helpers::putSingletonGod(rsConfigNs.c_str(), o, false/*logOp=false; local db so would work regardless...*/);
-            if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) )
-                logOpInitiate(comment);
-
-            cx.db()->flushFiles(true);
+            Helpers::putSingletonGod(rsConfigNs.c_str(), o, false/*logop=false; local db so would work regardless...*/);
+            if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
+                cc().txn().txnIntiatingRs();
+                OpLogHelpers::logComment(comment, &cc().txn());
+            }
         }
         log() << "replSet saveConfigLocally done" << rsLog;
     }

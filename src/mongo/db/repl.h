@@ -37,18 +37,8 @@
 
 namespace mongo {
 
-    /* replication slave? (possibly with slave)
-       --slave cmd line setting -> SimpleSlave
-    */
-    typedef enum { NotSlave=0, SimpleSlave } SlaveTypes;
-
     class ReplSettings {
     public:
-        SlaveTypes slave;
-
-        /** true means we are master and doing replication.  if we are not writing to oplog, this won't be true. */
-        bool master;
-
         bool fastsync;
 
         bool autoresync;
@@ -61,9 +51,7 @@ namespace mongo {
         BSONObj reconfig;
 
         ReplSettings()
-            : slave(NotSlave),
-            master(false),
-            fastsync(),
+            : fastsync(),
             autoresync(false),
             slavedelay(),
             discoveredSeeds(),

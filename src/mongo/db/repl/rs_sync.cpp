@@ -563,8 +563,10 @@ namespace replset {
         }
 
         /* we have some data.  continue tailing. */
+        Client::Transaction transaction(DB_READ_UNCOMMITTED | DB_TXN_READ_ONLY);
         replset::SyncTail tail(replset::BackgroundSync::get());
         tail.oplogApplication();
+        transaction.commit();
     }
 
     void ReplSetImpl::syncThread() {
@@ -584,6 +586,18 @@ namespace replset {
             fassert(16113, !Lock::isLocked());
 
             try {
+                //
+                //
+                //
+                //
+                //
+                // Figure out exactly what this does
+                //
+                //
+                //
+                //
+                //
+                //
                 _syncThread();
             }
             catch(DBException& e) {

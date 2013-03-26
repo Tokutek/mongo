@@ -462,8 +462,6 @@ namespace mongo {
 #endif
             Nullstream& l = log();
             l << "MongoDB starting : pid=" << pid << " port=" << cmdLine.port << " dbpath=" << dbpath;
-            if( replSettings.master ) l << " master=" << replSettings.master;
-            if( replSettings.slave )  l << " slave=" << (int) replSettings.slave;
             l << ( is32bit ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() << endl;
         }
         DEV log() << "_DEBUG build (which is slower)" << endl;
@@ -563,8 +561,6 @@ namespace mongo {
         // listen() will return when exit code closes its socket.
         exitCleanly(EXIT_NET_ERROR);
     }
-
-    void testPretouch();
 
     void initAndListen(int listenPort) {
         try {
@@ -713,7 +709,7 @@ static int mongoDbMain(int argc, char* argv[]) {
 
     hidden_options.add_options()
     ("fastsync", "indicate that this instance is starting from a dbpath snapshot of the repl peer")
-    ("pretouch", po::value<int>(), "n pretouch threads for applying replicationed operations") // experimental
+    ("pretouch", po::value<int>(), "DEPRECATED")
     ("command", po::value< vector<string> >(), "command")
     ("nodur", "DEPRECATED")
     // things we don't want people to use
@@ -931,10 +927,10 @@ static int mongoDbMain(int argc, char* argv[]) {
             cmdLine.noTableScan = true;
         }
         if (params.count("master")) {
-            replSettings.master = true;
+            out() << " master is a deprecated parameter" << endl;
         }
         if (params.count("slave")) {
-            replSettings.slave = SimpleSlave;
+            out() << " slave is a deprecated parameter" << endl;
         }
         if (params.count("slavedelay")) {
             replSettings.slavedelay = params["slavedelay"].as<int>();
@@ -955,7 +951,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             cmdLine.source = params["source"].as<string>().c_str();
         }
         if( params.count("pretouch") ) {
-            cmdLine.pretouch = params["pretouch"].as<int>();
+            out() << " pretouch is a deprecated parameter" << endl;
         }
         if (params.count("replSet")) {
             if (params.count("slavedelay")) {
@@ -1019,7 +1015,7 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
         if ( params.count("configsvr" ) ) {
             cmdLine.configsvr = true;
-            if (cmdLine.usingReplSets() || replSettings.master || replSettings.slave) {
+            if (cmdLine.usingReplSets()) {
                 log() << "replication should not be enabled on a config server" << endl;
                 ::_exit(-1);
             }
@@ -1076,8 +1072,6 @@ static int mongoDbMain(int argc, char* argv[]) {
             return 0;
         }
 
-        if( cmdLine.pretouch )
-            log() << "--pretouch " << cmdLine.pretouch << endl;
 
 #ifdef __linux__
         if (params.count("shutdown")){

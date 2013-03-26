@@ -80,66 +80,8 @@ namespace mongo {
         }
     };
 
-    /* operator requested resynchronization of replication (on the slave).  { resync : 1 } */
-    class CmdResync : public Command {
-    public:
-        virtual bool slaveOk() const {
-            return true;
-        }
-        virtual bool adminOnly() const {
-            return true;
-        }
-        virtual bool logTheOp() { return false; }
-        virtual bool lockGlobally() const { return true; }
-        virtual LockType locktype() const { return WRITE; }
-        void help(stringstream&h) const { h << "resync (from scratch) an out of date replica slave.\nhttp://dochub.mongodb.org/core/masterslave"; }
-        CmdResync() : Command("resync") { }
-        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            if( cmdLine.usingReplSets() ) {
-                errmsg = "resync command not currently supported with replica sets.  See RS102 info in the mongodb documentations";
-                result.append("info", "http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember");
-                return false;
-            }
-
-            if ( cmdObj.getBoolField( "force" ) ) {
-                if ( !waitForSyncToFinish( errmsg ) )
-                    return false;
-                replAllDead = "resync forced";
-            }
-            if ( !replAllDead ) {
-                errmsg = "not dead, no need to resync";
-                return false;
-            }
-            if ( !waitForSyncToFinish( errmsg ) )
-                return false;
-
-            ReplSource::forceResyncDead( "client" );
-            result.append( "info", "triggered resync for all sources" );
-            return true;
-        }
-        bool waitForSyncToFinish( string &errmsg ) const {
-            // Wait for slave thread to finish syncing, so sources will be be
-            // reloaded with new saved state on next pass.
-            Timer t;
-            while ( 1 ) {
-                if ( syncing == 0 || t.millis() > 30000 )
-                    break;
-                {
-                    Lock::TempRelease t;
-                    relinquishSyncingSome = 1;
-                    sleepmillis(1);
-                }
-            }
-            if ( syncing ) {
-                errmsg = "timeout waiting for sync() to finish";
-                return false;
-            }
-            return true;
-        }
-    } cmdResync;
-
     bool anyReplEnabled() {
-        return replSettings.slave || replSettings.master || theReplSet;
+        return theReplSet;
     }
 
     bool replAuthenticate(DBClientBase *conn);
@@ -672,43 +614,6 @@ namespace mongo {
 
         if ( !only.empty() && only != clientName )
             return;
-
-        if( cmdLine.pretouch && !alreadyLocked/*doesn't make sense if in write lock already*/ ) {
-            if( cmdLine.pretouch > 1 ) {
-                /* note: this is bad - should be put in ReplSource.  but this is first test... */
-                static int countdown;
-                verify( countdown >= 0 );
-                if( countdown > 0 ) {
-                    countdown--; // was pretouched on a prev pass
-                }
-                else {
-                    const int m = 4;
-                    if( tp.get() == 0 ) {
-                        int nthr = min(8, cmdLine.pretouch);
-                        nthr = max(nthr, 1);
-                        tp.reset( new ThreadPool(nthr) );
-                    }
-                    vector<BSONObj> v;
-                    oplogReader.peek(v, cmdLine.pretouch);
-                    unsigned a = 0;
-                    while( 1 ) {
-                        if( a >= v.size() ) break;
-                        unsigned b = a + m - 1; // v[a..b]
-                        if( b >= v.size() ) b = v.size() - 1;
-                        tp->schedule(pretouchN, v, a, b);
-                        DEV cout << "pretouch task: " << a << ".." << b << endl;
-                        a += m;
-                    }
-                    // we do one too...
-                    pretouchOperation(op);
-                    tp->join();
-                    countdown = v.size();
-                }
-            }
-            else {
-                pretouchOperation(op);
-            }
-        }
 
         scoped_ptr<Lock::GlobalWrite> lk( alreadyLocked ? 0 : new Lock::GlobalWrite() );
 
@@ -1385,141 +1290,26 @@ namespace mongo {
         }
     }
 
-    static void replMasterThread() {
-        sleepsecs(4);
-        Client::initThread("replmaster");
-        int toSleep = 10;
-        while( 1 ) {
-
-            sleepsecs( toSleep );
-            /* write a keep-alive like entry to the log.  this will make things like
-               printReplicationStatus() and printSlaveReplicationStatus() stay up-to-date
-               even when things are idle.
-            */
-            {
-                writelocktry lk(1);
-                if ( lk.got() ) {
-                    toSleep = 10;
-
-                    replLocalAuth();
-
-                    try {
-                        logKeepalive();
-                    }
-                    catch(...) {
-                        log() << "caught exception in replMasterThread()" << endl;
-                    }
-                }
-                else {
-                    log(5) << "couldn't logKeepalive" << endl;
-                    toSleep = 1;
-                }
-            }
-        }
-    }
-
-    void replSlaveThread() {
-        sleepsecs(1);
-        Client::initThread("replslave");
-        cc().iAmSyncThread();
-
-        {
-            Lock::GlobalWrite lk;
-            replLocalAuth();
-        }
-
-        while ( 1 ) {
-            try {
-                replMain();
-                sleepsecs(5);
-            }
-            catch ( AssertionException& ) {
-                ReplInfo r("Assertion in replSlaveThread(): sleeping 5 minutes before retry");
-                problem() << "Assertion in replSlaveThread(): sleeping 5 minutes before retry" << endl;
-                sleepsecs(300);
-            }
-            catch ( DBException& e ) {
-                problem() << "exception in replSlaveThread(): " << e.what()
-                          << ", sleeping 5 minutes before retry" << endl;
-                sleepsecs(300);
-            }
-            catch ( ... ) {
-                problem() << "error in replSlaveThread(): sleeping 5 minutes before retry" << endl;
-                sleepsecs(300);
-            }
-        }
-    }
-
     void newRepl();
-    void oldRepl();
     void startReplSets(ReplSetCmdline*);
     void startReplication() {
         /* if we are going to be a replica set, we aren't doing other forms of replication. */
         if( !cmdLine._replSet.empty() ) {
-            if( replSettings.slave || replSettings.master ) {
-                log() << "***" << endl;
-                log() << "ERROR: can't use --slave or --master replication options with --replSet" << endl;
-                log() << "***" << endl;
-            }
             newRepl();
 
             replSet = true;
+            setTxnLogOperations(true);
+            setLogTxnToOplog(logTransactionOps);
             ReplSetCmdline *replSetCmdline = new ReplSetCmdline(cmdLine._replSet);
             boost::thread t( boost::bind( &startReplSets, replSetCmdline) );
 
             return;
         }
-
-        oldRepl();
-
-        if( !replSettings.slave && !replSettings.master )
+        // we should only be running with replica sets
+        // we do not support the old master/slave replication
+        else {
             return;
-
-        {
-            Lock::GlobalWrite lk;
-            replLocalAuth();
         }
-
-        if ( replSettings.slave ) {
-            verify( replSettings.slave == SimpleSlave );
-            log(1) << "slave=true" << endl;
-            boost::thread repl_thread(replSlaveThread);
-        }
-
-        if ( replSettings.master ) {
-            log(1) << "master=true" << endl;
-            replSettings.master = true;
-            createOplog();
-            boost::thread t(replMasterThread);
-        }
-
-        while( replSettings.fastsync ) // don't allow writes until we've set up from log
-            sleepmillis( 50 );
-    }
-
-    void testPretouch() {
-        int nthr = min(8, 8);
-        nthr = max(nthr, 1);
-        int m = 8 / nthr;
-        ThreadPool tp(nthr);
-        vector<BSONObj> v;
-
-        BSONObj x = BSON( "ns" << "test.foo" << "o" << BSON( "_id" << 1 ) << "op" << "i" );
-
-        v.push_back(x);
-        v.push_back(x);
-        v.push_back(x);
-
-        unsigned a = 0;
-        while( 1 ) {
-            if( a >= v.size() ) break;
-            unsigned b = a + m - 1; // v[a..b]
-            if( b >= v.size() ) b = v.size() - 1;
-            tp.schedule(pretouchN, v, a, b);
-            DEV cout << "pretouch task: " << a << ".." << b << endl;
-            a += m;
-        }
-        tp.join();
     }
 
     class ReplApplyBatchSizeValidator : public ParameterValidator {
@@ -1527,22 +1317,7 @@ namespace mongo {
         ReplApplyBatchSizeValidator() : ParameterValidator( "replApplyBatchSize" ) {}
 
         virtual bool isValid( BSONElement e , string& errmsg ) const {
-            int b = e.numberInt();
-            if( b < 1 || b > 1024 ) {
-                errmsg = "replApplyBatchSize has to be >= 1 and < 1024";
-                return false;
-            }
-
-            if ( replSettings.slavedelay != 0 && b > 1 ) {
-                errmsg = "can't use a batch size > 1 with slavedelay";
-                return false;
-            }
-            if ( ! replSettings.slave ) {
-                errmsg = "can't set replApplyBatchSize on a non-slave machine";
-                return false;
-            }
-
-            return true;
+            return false;
         }
     } replApplyBatchSizeValidator;
     
@@ -1557,10 +1332,6 @@ namespace mongo {
             uassert(13436,
                     "not master or secondary; cannot currently read from this replSet member",
                     theReplSet && theReplSet->isSecondary() );
-        }
-        else {
-            notMasterUnless(isMaster() || (!pq || pq->hasOption(QueryOption_SlaveOk)) ||
-                            replSettings.slave == SimpleSlave );
         }
     }
 

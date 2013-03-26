@@ -26,6 +26,8 @@
 #include "../instance.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/platform/bits.h"
+#include "mongo/db/gtid.h"
+#include "mongo/db/txn_context.h"
 
 using namespace std;
 
@@ -34,8 +36,8 @@ namespace mongo {
     using namespace bson;
 
 #ifdef MONGO_PLATFORM_64
-    const int ReplSetImpl::replWriterThreadCount = 16;
-    const int ReplSetImpl::replPrefetcherThreadCount = 16;
+    const int ReplSetImpl::replWriterThreadCount = 2;
+    const int ReplSetImpl::replPrefetcherThreadCount = 2;
 #else
     const int ReplSetImpl::replWriterThreadCount = 2;
     const int ReplSetImpl::replPrefetcherThreadCount = 2;
@@ -106,6 +108,8 @@ namespace mongo {
         if ( !lastOp.isEmpty() ) {
             OpTime::setLast( lastOp[ "ts" ].date() );
         }
+        GTID lastGTID(lastOp["_id"].Obj());
+        gtidManager->resetManager(lastGTID);
 
         changeState(MemberState::RS_PRIMARY);
     }
@@ -372,6 +376,7 @@ namespace mongo {
         _prefetcherPool(replPrefetcherThreadCount),
         _indexPrefetchConfig(PREFETCH_ALL) {
 
+        gtidManager = NULL; // will be initialized in loadLastOpTimeWritten
         _cfg = 0;
         memset(_hbmsg, 0, sizeof(_hbmsg));
         strcpy( _hbmsg , "initial startup" );
@@ -438,16 +443,28 @@ namespace mongo {
         Lock::DBRead lk(rsoplog);
         BSONObj o;
         if( Helpers::getLast(rsoplog, o) ) {
+            GTID lastGTID(o["_id"].Obj());
+            gtidManager = new GTIDManager(lastGTID);
+            setTxnGTIDManager(gtidManager);
+            
             lastH = o["h"].numberLong();
             lastOpTimeWritten = o["ts"]._opTime();
             uassert(13290, "bad replSet oplog entry?", quiet || !lastOpTimeWritten.isNull());
+        }
+        else {
+            // make a GTIDManager that starts from scratch
+            GTID lastGTID;
+            gtidManager = new GTIDManager(lastGTID);
+            setTxnGTIDManager(gtidManager);
         }
     }
 
     /* call after constructing to start - returns fairly quickly after launching its threads */
     void ReplSetImpl::_go() {
         try {
+            Client::Transaction txn(DB_SERIALIZABLE);
             loadLastOpTimeWritten();
+            txn.commit();
         }
         catch(std::exception& e) {
             log() << "replSet error fatal couldn't query the local " << rsoplog << " collection.  Terminating mongod after 30 seconds." << rsLog;

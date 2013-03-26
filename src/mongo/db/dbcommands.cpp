@@ -45,6 +45,7 @@
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/db/oplog_helpers.h"
 #include "mongo/s/d_writeback.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/version.h"
@@ -736,8 +737,7 @@ namespace mongo {
         CmdCount() : Command("count") { }
         virtual bool logTheOp() { return false; }
         virtual bool slaveOk() const {
-            // ok on --slave setups
-            return replSettings.slave == SimpleSlave;
+            return false;
         }
         virtual bool slaveOverrideOk() const { return true; }
         virtual bool maintenanceOk() const { return false; }
@@ -1918,7 +1918,7 @@ namespace mongo {
             Client::Context tc(dbname, dbpath, c->requiresAuth());
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
             if ( retval && c->logTheOp() && ! fromRepl ) {
-                logOp("c", cmdns, cmdObj);
+                OpLogHelpers::logCommand(cmdns, cmdObj, &cc().txn());
             }
         }
 

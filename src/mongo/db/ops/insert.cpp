@@ -24,6 +24,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/db/oplog_helpers.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
 
@@ -99,7 +100,7 @@ namespace mongo {
                 BSONObj objModified = obj;
                 BSONElementManipulator::lookForTimestamps(objModified);
                 insertOneObject(details, nsdt, objModified, overwrite); // may add _id field
-                logOp("i", ns, objModified);
+                OpLogHelpers::logInsert(ns, objModified, &cc().txn());
             } catch (const UserException &) {
                 if (!keepGoing || i == objs.size() - 1) {
                     throw;

@@ -44,12 +44,10 @@ namespace ReplTests {
         Client::Context _context;
     public:
         Base() : _context( ns() ) {
-            replSettings.master = true;
             createOplog();
         }
         ~Base() {
             try {
-                replSettings.master = false;
                 deleteAll( ns() );
                 deleteAll( cllNS() );
             }
