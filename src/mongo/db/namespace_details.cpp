@@ -683,11 +683,10 @@ namespace mongo {
     }
 
     // Normally, we cannot drop the _id_ index.
-    // The parameters mayDeleteIdIndex and can_drop_system are here 
-    // for the case where we call dropIndexes through dropCollection, in which
-    // case we are dropping an entire collection, hence the _id_ index will have 
-    // to go
-    bool NamespaceDetails::dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex, bool can_drop_system) {
+    // The parameters mayDeleteIdIndex is here for the case where we call dropIndexes
+    // through dropCollection, in which case we are dropping an entire collection,
+    // hence the _id_ index will have to go.
+    bool NamespaceDetails::dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex) {
         tokulog(1) << "dropIndexes " << name << endl;
 
         //BackgroundOperation::assertNoBgOpInProgForNs(ns);
@@ -701,7 +700,7 @@ namespace mongo {
             for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ) {
                 IndexDetails *idx = it->get();
                 if (mayDeleteIdIndex || (!idx->isIdIndex() && !d->isPKIndex(*idx))) {
-                    idx->kill_idx(can_drop_system);
+                    idx->kill_idx();
                     it = _indexes.erase(it);
                     _nIndexes--;
                 } else {
@@ -714,7 +713,6 @@ namespace mongo {
                                   ? "indexes dropped for collection"
                                   : "non-_id indexes dropped for collection"));
         } else {
-            verify(!can_drop_system);
             int x = findIndexByName(name);
             if (x >= 0) {
                 result.append("nIndexesWas", (double) _nIndexes);
@@ -724,7 +722,7 @@ namespace mongo {
                     errmsg = "may not delete _id or $_ index";
                     return false;
                 }
-                idx->kill_idx(can_drop_system);
+                idx->kill_idx();
                 _indexes.erase(it);
                 _nIndexes--;
                 // Removes the nth bit, and shifts any bits higher than it down a slot.
@@ -960,16 +958,30 @@ namespace mongo {
             return;
         }
 
-        //BackgroundOperation::assertNoBgOpInProgForNs(ns);
+        // Check that we are allowed to drop the namespace.
+        NamespaceString s(name);
+        verify(s.db == cc().database()->name);
+        if (s.isSystem()) {
+            if (s.coll == "system.profile") {
+                uassert(10087, "turn off profiling before dropping system.profile collection", cc().database()->profile == 0);
+            } else if (!can_drop_system) {
+                uasserted(12502, "can't drop system ns");
+            }
+        }
 
-        d->dropIndexes(ns, "*", errmsg, result, true, can_drop_system);
-        verify(d->nIndexes() == 0);
-        log(1) << "\t dropIndexes done" << endl;
-        result.append("ns", name);
+        // Invalidate cursors and query cache, then drop all of the indexes.
         ClientCursor::invalidate(ns);
-        Top::global.collectionDropped(name);
         NamespaceDetailsTransient::eraseForPrefix(ns);
-        dropNS(name, true, can_drop_system);
+
+        log(1) << "\t dropIndexes done" << endl;
+        d->dropIndexes(ns, "*", errmsg, result, true);
+        verify(d->nIndexes() == 0);
+        removeNamespaceFromCatalog(name);
+
+        // If everything succeeds, kill the namespace from the nsindex.
+        Top::global.collectionDropped(name);
+        nsindex(ns)->kill_ns(ns);
+        result.append("ns", name);
     }
 
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).
@@ -998,35 +1010,18 @@ namespace mongo {
         insertOneObject(d, nsdt, info, false);
     }
 
-    void dropNS(const string &nsname, bool is_collection, bool can_drop_system) {
-        const char *ns = nsname.c_str();
-        if (is_collection) {
-            NamespaceDetails *d = nsdetails(ns);
-            uassert(10086, mongoutils::str::stream() << "ns not found: " + nsname, d);
-
-            NamespaceString s(nsname);
-            verify(s.db == cc().database()->name);
-            if (s.isSystem()) {
-                if (s.coll == "system.profile") {
-                    uassert(10087, "turn off profiling before dropping system.profile collection", cc().database()->profile == 0);
-                } else if (!can_drop_system) {
-                    uasserted(12502, "can't drop system ns");
-                }
-            }
-        }
-
-        //BackgroundOperation::assertNoBgOpInProgForNs(ns);
-
+    void removeNamespaceFromCatalog(const string &ns) {
         if (!mongoutils::str::contains(ns, ".system.namespaces")) {
             string system_namespaces = cc().database()->name + ".system.namespaces";
-            _deleteObjects(system_namespaces.c_str(),
-                           BSON("name" << nsname),
-                           false, false);
+            _deleteObjects(system_namespaces.c_str(), BSON("name" << ns), false, false);
         }
+    }
 
-        if (is_collection) {
-            nsindex(ns)->kill_ns(ns);
-        }
+    int removeFromSysIndexes(const char *ns, const char *name) {
+        string system_indexes = cc().database()->name + ".system.indexes";
+        BSONObj obj = BSON("ns" << ns << "name" << name);
+        tokulog(2) << "removeFromSysIndexes removing " << obj << endl;
+        return (int) _deleteObjects(system_indexes.c_str(), obj, false, false);
     }
 
     static BSONObj replaceNSField(const BSONObj &obj, const char *to) {

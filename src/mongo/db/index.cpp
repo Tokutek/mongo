@@ -68,14 +68,7 @@ namespace mongo {
         return -1;
     }
 
-    int removeFromSysIndexes(const char *ns, const char *name) {
-        string system_indexes = cc().database()->name + ".system.indexes";
-        BSONObj obj = BSON("ns" << ns << "name" << name);
-        tokulog(2) << "removeFromSysIndexes removing " << obj << endl;
-        return (int) _deleteObjects(system_indexes.c_str(), obj, false, false);
-    }
-
-    void IndexDetails::kill_idx(bool can_drop_system) {
+    void IndexDetails::kill_idx() {
         string ns = indexNamespace(); // e.g. foo.coll.$ts_1
         try {
 
@@ -90,7 +83,7 @@ namespace mongo {
 
             /* important to catch exception here so we can finish cleanup below. */
             try {
-                dropNS(ns.c_str(), false, can_drop_system);
+                removeNamespaceFromCatalog(ns);
             }
             catch(DBException& ) {
                 log(2) << "IndexDetails::kill(): couldn't drop ns " << ns << endl;
