@@ -240,7 +240,9 @@ namespace mongo {
             _currentSize(0),
             _deleteMutex("cappedDeleteMutex") {
 
-            if (options["autoIndexId"].trueValue()) {
+            // Create an _id index if "autoIndexId" is missing or it exists as true.
+            const BSONElement e = options["autoIndexId"];
+            if (!e.ok() || e.trueValue()) {
                 BSONObj info = indexInfo(fromjson("{\"_id\":1}"), true, false);
                 createIndex(info);
             }
