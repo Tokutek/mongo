@@ -36,7 +36,7 @@ namespace mongo {
     IndexDetails::IndexDetails(const BSONObj &info, bool may_create) :
         _info(info.copy()),
         _keyPattern(info["key"].Obj().copy()),
-        _unique(info["unique"].trueValue() || isIdIndexPattern(_keyPattern)),
+        _unique(info["unique"].trueValue()),
         _clustering(info["clustering"].trueValue()) {
 
         string dbname = indexNamespace();
@@ -75,9 +75,6 @@ namespace mongo {
         return (int) _deleteObjects(system_indexes.c_str(), obj, false, false);
     }
 
-    /* delete this index.  does NOT clean up the system catalog
-       (system.indexes or system.namespaces) -- only NamespaceIndex.
-    */
     void IndexDetails::kill_idx(bool can_drop_system) {
         string ns = indexNamespace(); // e.g. foo.coll.$ts_1
         try {
@@ -179,16 +176,19 @@ namespace mongo {
     }
 
     void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite) {
-        if (unique()) {
+        if (unique() && !overwrite) {
             uniqueCheck(key, pk);
         }
 
         storage::Key skey(key, pk);
         DBT kdbt = skey.dbt();
-        DBT vdbt = storage::make_dbt(val.objdata(), val.objsize());
+        DBT vdbt = storage::make_dbt(NULL, 0);
+        if (clustering()) {
+            vdbt = storage::make_dbt(val.objdata(), val.objsize());
+        }
 
-        // TODO: We already did the unique check above. Can we just pass flags of 0?
-        const int flags = (unique() && !overwrite) ? DB_NOOVERWRITE : 0;
+        // We already did the unique check above. We can just pass flags of zero.
+        const int flags = 0;
         int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, flags);
         verify(r == 0 || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
         uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);

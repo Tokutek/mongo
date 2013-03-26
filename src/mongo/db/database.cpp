@@ -534,44 +534,4 @@ namespace mongo {
         return db;
     }
 
-    NamespaceIndex* nsindex(const char *ns) {
-        Database *database = cc().database();
-        verify( database );
-        DEV {
-            char buf[256];
-            nsToDatabase(ns, buf);
-            if ( database->name != buf ) {
-                out() << "ERROR: attempt to write to wrong database\n";
-                out() << " ns:" << ns << '\n';
-                out() << " database->name:" << database->name << endl;
-                verify( database->name == buf );
-            }
-        }
-        return &database->namespaceIndex;
-    }
-
-    NamespaceDetails* nsdetails(const char *ns) {
-        return nsindex(ns)->details(ns);
-    }
-
-    NamespaceDetails* nsdetails_maybe_create(const char *ns, BSONObj options) {
-        NamespaceIndex *ni = nsindex(ns);
-        if (!ni->allocated()) {
-            // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
-            ni->init(true);
-        }
-        NamespaceDetails *details = ni->details(ns);
-        if (details == NULL) {
-            tokulog(2) << "Didn't find nsdetails(" << ns << "), creating it." << endl;
-
-            Namespace ns_s(ns);
-            shared_ptr<NamespaceDetails> new_details( NamespaceDetails::make(ns, options) );
-            ni->add_ns(ns, new_details);
-
-            details = ni->details(ns);
-            details->addPKIndexToCatalog();
-        }
-        return details;
-    }
-
 } // namespace mongo

@@ -18,6 +18,7 @@
 
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/json.h"
+#include "mongo/db/storage/key.h"
 #include "mongo/db/storage/env.h"
 
 namespace mongo {
@@ -128,15 +129,59 @@ namespace mongo {
         Namespace n(ns);
         NamespaceDetailsMap::iterator it = namespaces->find(n);
         verify(it != namespaces->end());
+
         BSONObj nsobj = BSON("ns" << ns);
-        DBT ndbt;
-        ndbt.data = const_cast<void *>(static_cast<const void *>(nsobj.objdata()));
-        ndbt.size = nsobj.objsize();
+        DBT ndbt = storage::make_dbt(nsobj.objdata(), nsobj.objsize());
         int r = nsdb->del(nsdb, cc().txn().db_txn(), &ndbt, DB_DELETE_ANY);
         verify(r == 0);
 
         // Should really only do this after the commit of the del.
         namespaces->erase(it);
+    }
+
+    static int getf_serialized(const DBT *key, const DBT *val, void *extra) {
+        BSONObj *serialized = reinterpret_cast<BSONObj *>(extra);
+        if (key != NULL) {
+            verify(val != NULL);
+            BSONObj obj(static_cast<char *>(val->data));
+            *serialized = obj.copy();
+        }
+        return 0;
+    }
+
+    void NamespaceIndex::open_ns(const char *ns) {
+        Lock::assertWriteLocked(ns);
+
+        init();
+        Namespace n(ns);
+        BSONObj serialized;
+
+        BSONObj nsobj = BSON("ns" << ns);
+        DBT ndbt = storage::make_dbt(nsobj.objdata(), nsobj.objsize());
+        int r = nsdb->getf_set(nsdb, cc().txn().db_txn(), 0, &ndbt, getf_serialized, &serialized);
+        verify(r == 0);
+
+        shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized );
+        std::pair<NamespaceDetailsMap::iterator, bool> ret;
+        ret = namespaces->insert(make_pair(n, details));
+        dassert(ret.second == true);
+    }
+
+    void NamespaceIndex::close_ns(const char *ns) {
+        Lock::assertWriteLocked(ns);
+
+        init();
+        Namespace n(ns);
+
+        // Find and erase the old entry.
+        NamespaceDetailsMap::iterator it = namespaces->find(n);
+        verify(it != namespaces->end());
+        namespaces->erase(it);
+
+        // Insert it as NULL, marking it as existing but closed.
+        std::pair<NamespaceDetailsMap::iterator, bool> ret;
+        ret = namespaces->insert(make_pair(n, shared_ptr<NamespaceDetails>()));
+        dassert(ret.second == true);
     }
 
     void NamespaceIndex::add_ns(const char *ns, shared_ptr<NamespaceDetails> details) {
@@ -150,17 +195,13 @@ namespace mongo {
         dassert(ret.second == true);
     }
 
-    void NamespaceIndex::update_ns(const char *ns, NamespaceDetails *details, bool overwrite) {
+    void NamespaceIndex::update_ns(const char *ns, const BSONObj &serialized, bool overwrite) {
         Lock::assertWriteLocked(ns);
         dassert(namespaces.get() != NULL);
 
         BSONObj nsobj = BSON("ns" << ns);
-        DBT ndbt, ddbt;
-        ndbt.data = const_cast<void *>(static_cast<const void *>(nsobj.objdata()));
-        ndbt.size = nsobj.objsize();
-        BSONObj serialized = details->serialize();
-        ddbt.data = const_cast<void *>(static_cast<const void *>(serialized.objdata()));
-        ddbt.size = serialized.objsize();
+        DBT ndbt = storage::make_dbt(nsobj.objdata(), nsobj.objsize());
+        DBT ddbt = storage::make_dbt(serialized.objdata(), serialized.objsize());
         const int flags = overwrite ? 0 : DB_NOOVERWRITE;
         int r = nsdb->put(nsdb, cc().txn().db_txn(), &ndbt, &ddbt, flags);
         verify(r == 0);

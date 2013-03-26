@@ -1,4 +1,4 @@
-//t namespace_details.h
+// namespace_details.h
 
 /**
 *    Copyright (C) 2008 10gen Inc.
@@ -145,9 +145,10 @@ namespace mongo {
 
         /**
          * Record that a new index exists in <dbname>.system.indexes.
-         * Only used for the primary key index, the others go through the normal insert path.
+         * Only used for the primary key index or an automatic _id index (capped collections),
+         * the others go through the normal insert path.
          */
-        void addPKIndexToCatalog();
+        void addDefaultIndexesToCatalog();
 
         // @return offset in indexes[]
         int findIndexByName(const char *name);
@@ -204,6 +205,8 @@ namespace mongo {
         }
 
         // @return a BSON representation of this NamespaceDetail's state
+        static BSONObj serialize(const char *ns, const BSONObj &options, const BSONObj &pk,
+                unsigned long long multiKeyIndexBits, const BSONArray &indexes_array);
         BSONObj serialize() const;
 
         void fillCollectionStats(struct NamespaceDetailsAccStats* accStats, BSONObjBuilder* result, int scale);
@@ -214,23 +217,24 @@ namespace mongo {
         // Find by primary key (single element bson object, no field name).
         bool findByPK(const BSONObj &pk, BSONObj &result);
 
+        // return true if this namespace has an index on the _id field.
+        bool hasIdIndex() const {
+            return findIdIndex() >= 0;
+        }
+
         // optional to implement, return true if the namespace is capped
         virtual bool isCapped() const {
             return false;
         }
 
-        // return true of this namespace has an index on the _id field.
-        virtual bool hasIdIndex() const {
-            return findIdIndex() >= 0;
-        }
-
         // Hack for ops/query.cpp queryIdHack.
         // Lets us know if findById is okay to do. We should find a nicer way to do this eventually.
+        // Even though a capped collection may have an _id index, it may not use the findById code path.
         virtual bool mayFindById() const {
             return false;
         }
 
-        // finds an objectl by _id field
+        // finds an object by _id field
         virtual bool findById(const BSONObj &query, BSONObj &result) {
             massert(16461, "findById shouldn't be called unless it is implemented.", false);
         }
@@ -253,7 +257,7 @@ namespace mongo {
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
 
         // generate an index info BSON for this namespace, with the same options
-        BSONObj indexInfo(const BSONObj &keyPattern);
+        BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering);
 
         // fill the statistics for each index in the NamespaceDetails,
         // indexStats is an array of length nIndexes
@@ -466,27 +470,50 @@ namespace mongo {
 
         void init(bool may_create = false);
 
+        void open_ns(const char *ns);
+
+        void close_ns(const char *ns);
+
         void add_ns(const char *ns, shared_ptr<NamespaceDetails> details);
 
         // If something changes that causes details->serialize() to be different, call this to persist it to the nsdb.
-        void update_ns(const char *ns, NamespaceDetails *details, bool overwrite);
+        void update_ns(const char *ns, const BSONObj &serialized, bool overwrite);
 
         void kill_ns(const char *ns);
 
+        // TODO: if it->second.get() == NULL, open it and update the mapping
         NamespaceDetails *details(const char *ns) {
             if (namespaces.get() == NULL) {
                 return 0;
             }
             Namespace n(ns);
             NamespaceDetailsMap::iterator it = namespaces->find(n);
-            return (it != namespaces->end()) ? it->second.get() : NULL;
+            if (it == namespaces->end()) {
+                return NULL;
+            }
+            if (it->second.get() == NULL) {
+                if (!Lock::isWriteLocked(ns)) {
+                    throw ReadLockedDuringFileOps();
+                }
+                namespaces->erase(it);
+                open_ns(ns);
+                it = namespaces->find(n);
+                verify(it != namespaces->end());
+                verify(it->second.get() != NULL);
+            }
+            return it->second.get();
         }
+
+        class ReadLockedDuringFileOps : public DBException {
+        public:
+            ReadLockedDuringFileOps() :
+                DBException("Need to be write locked when opening a namespace", 0) {
+            }
+        };
 
         bool allocated() const { return namespaces.get() != NULL; }
 
         void getNamespaces( list<string>& tofill , bool onlyCollections = true ) const;
-
-        unsigned long long fileLength() const { unimplemented("NamespaceIndex::fileLength"); return 0; }
 
         // drop all collections and the nsindex, we're removing this database
         void drop();

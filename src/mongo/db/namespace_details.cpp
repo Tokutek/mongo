@@ -43,6 +43,46 @@
 
 namespace mongo {
 
+    NamespaceIndex* nsindex(const char *ns) {
+        Database *database = cc().database();
+        verify( database );
+        DEV {
+            char buf[256];
+            nsToDatabase(ns, buf);
+            if ( database->name != buf ) {
+                out() << "ERROR: attempt to write to wrong database\n";
+                out() << " ns:" << ns << '\n';
+                out() << " database->name:" << database->name << endl;
+                verify( database->name == buf );
+            }
+        }
+        return &database->namespaceIndex;
+    }
+
+    NamespaceDetails* nsdetails(const char *ns) {
+        return nsindex(ns)->details(ns);
+    }
+
+    NamespaceDetails* nsdetails_maybe_create(const char *ns, BSONObj options) {
+        NamespaceIndex *ni = nsindex(ns);
+        if (!ni->allocated()) {
+            // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
+            ni->init(true);
+        }
+        NamespaceDetails *details = ni->details(ns);
+        if (details == NULL) {
+            tokulog(2) << "Didn't find nsdetails(" << ns << "), creating it." << endl;
+
+            Namespace ns_s(ns);
+            shared_ptr<NamespaceDetails> new_details( NamespaceDetails::make(ns, options) );
+            ni->add_ns(ns, new_details);
+
+            details = ni->details(ns);
+            details->addDefaultIndexesToCatalog();
+        }
+        return details;
+    }
+
 #pragma pack(1)
     struct IDToInsert {
         IDToInsert() : type((char) jstOID) {
@@ -107,14 +147,14 @@ namespace mongo {
         }
     };
 
-    struct getKeyExtra {
-        getKeyExtra(BSONObj &o) : obj(o) {
+    struct getfExtra {
+        getfExtra(BSONObj &o) : obj(o) {
         }
         BSONObj &obj;
     };
 
-    static int getKeyCallback(const DBT *key, const DBT *value, void *extra) {
-        struct getKeyExtra *info = reinterpret_cast<struct getKeyExtra *>(extra);
+    static int getfCallback(const DBT *key, const DBT *value, void *extra) {
+        struct getfExtra *info = reinterpret_cast<struct getfExtra *>(extra);
         if (key) {
             info->obj = BSONObj(reinterpret_cast<char *>(key->data));
         }
@@ -130,11 +170,20 @@ namespace mongo {
         NaturalOrderCollection(const BSONObj &serialized) :
             NamespaceDetails(serialized),
             _nextPK(0) {
-            // the next PK is the last key (getKey() with direction > 0)
-            // plus one, if it exists (otherwise the collection is empty).
-            BSONObj maxKey = getKey(1);
-            if (!maxKey.isEmpty()) {
-                _nextPK = AtomicWord<long long>(maxKey.firstElement().Long() + 1);
+
+            // the next PK, if it exists, is the last key + 1
+            int r;
+            IndexDetails &pkIdx = getPKIndex();
+            IndexDetails::Cursor c(&pkIdx);
+            DBC *cursor = c.dbc();
+
+            BSONObj obj = BSONObj();
+            struct getfExtra extra(obj);
+            r = cursor->c_getf_last(cursor, 0, getfCallback, &extra);
+            verify(r == 0 || r == DB_NOTFOUND);
+            dassert(obj.nFields() == 1);
+            if (!obj.isEmpty()) {
+                _nextPK = AtomicWord<long long>(obj.firstElement().Long() + 1);
             }
         }
 
@@ -151,27 +200,6 @@ namespace mongo {
 
     protected:
         AtomicWord<long long> _nextPK;
-
-        BSONObj getKey(int direction) {
-            // get a cursor over the primary key index
-            IndexDetails &pkIdx = getPKIndex();
-            IndexDetails::Cursor c(&pkIdx);
-            DBC *cursor = c.dbc();
-
-            // find the last key
-            int r;
-            BSONObj obj = BSONObj();
-            struct getKeyExtra extra(obj);
-            if (direction > 0) {
-                r = cursor->c_getf_last(cursor, 0, getKeyCallback, &extra);
-            } else {
-                r = cursor->c_getf_first(cursor, 0, getKeyCallback, &extra);
-            }
-            verify(r == 0 || r == DB_NOTFOUND);
-            dassert(obj.nFields() == 1);
-
-            return obj;
-        }
     };
 
     class SystemCollection : public NaturalOrderCollection {
@@ -202,6 +230,8 @@ namespace mongo {
         // This code is largely borrowed from prepareToBuildIndex() in Vanilla.
         //
         // Also, for consistency, system.indexes and system.namespaces have no _id field.
+        //
+        // TODO: what is the correct format for system.users, system.profile, and system.js?
         BSONObj beautify(const BSONObj &obj) {
             BSONObjBuilder b;
             if (obj["key"].ok()) {
@@ -238,8 +268,10 @@ namespace mongo {
             _currentSize(0),
             _deleteMutex("cappedDeleteMutex") {
 
-            if (options["autoIndexId"].trueValue()) {
-                BSONObj info = indexInfo(fromjson("{\"_id\":1}"));
+            // Create an _id index if "autoIndexId" is missing or it exists as true.
+            const BSONElement e = options["autoIndexId"];
+            if (!e.ok() || e.trueValue()) {
+                BSONObj info = indexInfo(fromjson("{\"_id\":1}"), true, false);
                 createIndex(info);
             }
         }
@@ -255,7 +287,7 @@ namespace mongo {
             // We'll have to look at the data, but this might not be so bad because:
             // - you pay for it once, on initialization.
             // - capped collections are meant to be "small" (fit in memory)
-            // - capped collectiosn are meant to be "ready heavy",
+            // - capped collectiosn are meant to be "read heavy",
             //   so bringing it all into memory now helps warmup.
             long long n = 0;
             long long size = 0;
@@ -285,13 +317,14 @@ namespace mongo {
                 long long n = _currentObjects.load();
                 long long size = _currentSize.load();
                 if (isGorged(n, size)) {
-                    shared_ptr<Cursor> c( new BasicCursor(this) );
+                    scoped_ptr<Cursor> c( new BasicCursor(this) );
                     // Delete older objects until we've made enough room for
-                    // the new one. Opportunistically delete up to 8 total
-                    // while the collection is still gorged.
+                    // the new one.
+                    // If other threads are trying to insert concurrently, we will do some work on their behalf (until !isGorged).
+                    // But we stop if we've deleted 8 objects and done enough to satisfy our own intent, to limit latency.
                     long long bytesTrimmed = 0;
                     for ( long long i = 0;
-                          c->ok() && (bytesTrimmed < obj.objsize() || (i < 8)) && isGorged(n, size);
+                          c->ok() && isGorged(n, size) && (bytesTrimmed < obj.objsize() || (i < 8));
                           i++, c->advance()) {
                         BSONObj oldestObj = c->current();
                         NaturalOrderCollection::deleteObject(c->currPK(), oldestObj);
@@ -305,7 +338,7 @@ namespace mongo {
             }
 
             NaturalOrderCollection::insertObject(obj, overwrite);
-            intent.noteSuccess();
+            intent.success();
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
@@ -344,7 +377,7 @@ namespace mongo {
             bool trivial() const {
                 return _trivial;
             }
-            void noteSuccess() {
+            void success() {
                 _succeeded = true;
             }
         private:
@@ -366,7 +399,7 @@ namespace mongo {
         SimpleMutex _deleteMutex;
     };
 
-    BSONObj NamespaceDetails::indexInfo(const BSONObj &keyPattern) {
+    BSONObj NamespaceDetails::indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) {
         // Can only create the _id and $_ indexes internally.
         dassert(keyPattern.nFields() == 1);
         dassert(keyPattern["_id"].ok() || keyPattern["$_"].ok());
@@ -375,6 +408,12 @@ namespace mongo {
         b.append("ns", _ns);
         b.append("key", keyPattern);
         b.append("name", keyPattern["_id"].ok() ? "_id_" : "$_");
+        if (unique) {
+            b.appendBool("unique", true);
+        }
+        if (clustering) {
+            b.appendBool("clustering", true);
+        }
 
         BSONElement e;
         e = _options["readPageSize"];
@@ -405,7 +444,7 @@ namespace mongo {
         tokulog(1) << "Creating NamespaceDetails " << ns << endl;
 
         // Create the primary key index, generating the info from the pk pattern and options.
-        BSONObj info = indexInfo(pkIndexPattern);
+        BSONObj info = indexInfo(pkIndexPattern, true, true);
         createIndex(info);
 
         addNewNamespaceToCatalog(ns, &options);
@@ -426,7 +465,7 @@ namespace mongo {
         _pk(serialized["pk"].embeddedObject().copy()),
         _indexBuildInProgress(false),
         _nIndexes(serialized["indexes"].Array().size()),
-        _multiKeyIndexBits(static_cast<uint64_t>(serialized["_multiKeyIndexBits"].Long())) {
+        _multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())) {
 
         std::vector<BSONElement> index_array = serialized["indexes"].Array();
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
@@ -444,17 +483,22 @@ namespace mongo {
         }
     }
 
+    BSONObj NamespaceDetails::serialize(const char *ns, const BSONObj &options, const BSONObj &pk,
+            unsigned long long multiKeyIndexBits, const BSONArray &indexes_array) {
+        return BSON("ns" << ns <<
+                    "options" << options <<
+                    "pk" << pk <<
+                    "multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
+                    "indexes" << indexes_array);
+    }
+
     BSONObj NamespaceDetails::serialize() const {
         BSONArrayBuilder indexes_array;
         for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); it++) {
             IndexDetails *index = it->get();
             indexes_array.append(index->info());
         }
-        return BSON("ns" << _ns <<
-                    "options" << _options <<
-                    "pk" << _pk <<
-                    "_multiKeyIndexBits" << static_cast<long long>(_multiKeyIndexBits) <<
-                    "indexes" << indexes_array.arr());
+        return serialize(_ns.c_str(), _options, _pk, _multiKeyIndexBits, indexes_array.arr());
     }
 
     struct findByPKCallbackExtra {
@@ -565,7 +609,7 @@ namespace mongo {
         _multiKeyIndexBits |= x;
 
         dassert(nsdetails(thisns) == this);
-        nsindex(thisns)->update_ns(thisns, this, true);
+        nsindex(thisns)->update_ns(thisns, serialize(), true);
 
         NamespaceDetailsTransient::get(thisns).clearQueryCache();
     }
@@ -615,10 +659,8 @@ namespace mongo {
         const bool may_overwrite = _nIndexes > 1;
         if (!may_overwrite) {
             massert(16435, "first index should be pk index", index->keyPattern() == _pk);
-        } else {
-            dassert(nsdetails(ns) == this);
         }
-        nsindex(ns)->update_ns(ns, this, may_overwrite);
+        nsindex(ns)->update_ns(ns, serialize(), may_overwrite);
 
         NamespaceDetailsTransient::get(ns).addedIndex();
     }
@@ -685,7 +727,7 @@ namespace mongo {
             }
         }
         // Updated whatever in memory structures are necessary, now update the nsindex.
-        nsindex(ns)->update_ns(ns, this, true);
+        nsindex(ns)->update_ns(ns, serialize(), true);
         return true;
     }
 
@@ -748,8 +790,7 @@ namespace mongo {
         result->append("indexDetails", index_info.arr());        
     }
 
-    void NamespaceDetails::addPKIndexToCatalog() {
-        BSONObj info = getPKIndex().info();
+    static void addIndexToCatalog(const BSONObj &info) {
         string indexns = info["ns"].String();
         if (mongoutils::str::contains(indexns, ".system.indexes")) {
             // system.indexes holds all the others, so it is not explicitly listed in the catalog.
@@ -762,7 +803,16 @@ namespace mongo {
         const char *ns = s.c_str();
         NamespaceDetails *d = nsdetails_maybe_create(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
-        insertOneObject(d, nsdt, info, false);
+        BSONObj objMod = info;
+        insertOneObject(d, nsdt, objMod, false);
+    }
+
+    void NamespaceDetails::addDefaultIndexesToCatalog() {
+        // Either a single primary key or a hidden primary key + _id index.
+        dassert(_nIndexes == 1 || _nIndexes == 2 && findIdIndex() == 1);
+        for (int i = 0; i < nIndexes(); i++) {
+            addIndexToCatalog(_indexes[i]->info());
+        }
     }
 
     /* ------------------------------------------------------------------------- */
@@ -836,6 +886,8 @@ namespace mongo {
             i.next().keyPattern().getFieldNames(_indexKeys);
         _keysComputed = true;
     }
+
+    // TODO: All global functions manipulating namespaces should be static in NamespaceDetails
 
     bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication) {
         const char *coll = strchr( ns, '.' ) + 1;
@@ -959,88 +1011,123 @@ namespace mongo {
         }
     }
 
-    void renameNamespace( const char *from, const char *to, bool stayTemp) {
-        // TODO: TokuDB: Pay attention to the usage of the NamespaceIndex object.
-        // That's still important. Anything to do with disklocs (ie: storage code)
-        // is probably not.
-        ::abort();
-#if 0
-        NamespaceIndex *ni = nsindex( from );
-        verify( ni );
-        verify( ni->details( from ) );
-        verify( ! ni->details( to ) );
+    static BSONObj replaceNSField(const BSONObj &obj, const char *to) {
+        BSONObjBuilder b;
+        BSONObjIterator i( obj );
+        while ( i.more() ) {
+            BSONElement e = i.next();
+            if ( strcmp( e.fieldName(), "ns" ) != 0 ) {
+                b.append( e );
+            } else {
+                b << "ns" << to;
+            }
+        }
+        return b.obj();
+    }
 
-        // Our namespace and index details will move to a different
-        // memory location.  The only references to namespace and
-        // index details across commands are in cursors and nsd
-        // transient (including query cache) so clear these.
+    void renameNamespace(const char *from, const char *to, bool stayTemp) {
+        class Rollback {
+        public:
+            Rollback(const char *to) :
+                _to(to), _success(false) {
+            }
+            ~Rollback() {
+                if (!_success) {
+                    nsindex(_to)->kill_ns(_to);
+                }
+            }
+            void success() {
+                _success = true;
+            }
+        private:
+            const char *_to;
+            bool _success;
+        };
+
+        Lock::assertWriteLocked(from);
+        verify( nsdetails(from) != NULL );
+        verify( nsdetails(to) == NULL );
+
+        // Invalidate any existing cursors on the old namespace details,
+        // and reset the query cache.
         ClientCursor::invalidate( from );
         NamespaceDetailsTransient::eraseForPrefix( from );
 
-        NamespaceDetails *details = ni->details( from );
-        ni->add_ns( to, *details );
-        NamespaceDetails *todetails = ni->details( to );
-        try {
-            todetails->copyingFrom(to, details); // fixes extraOffset
-        }
-        catch( DBException& ) {
-            // could end up here if .ns is full - if so try to clean up / roll back a little
-            ni->kill_ns(to);
-            throw;
-        }
-        ni->kill_ns( from );
-        details = todetails;
-
-        BSONObj oldSpec;
         char database[MaxDatabaseNameLen];
         nsToDatabase(from, database);
-        string s = database;
-        s += ".system.namespaces";
-        verify( Helpers::findOne( s.c_str(), BSON( "name" << from ), oldSpec ) );
+        string sysIndexes = string(database) + ".system.indexes";
+        string sysNamespaces = string(database) + ".system.namespaces";
 
-        BSONObjBuilder newSpecB;
-        BSONObjIterator i( oldSpec.getObjectField( "options" ) );
-        while( i.more() ) {
-            BSONElement e = i.next();
-            if ( strcmp( e.fieldName(), "create" ) != 0 ) {
-                if (stayTemp || (strcmp(e.fieldName(), "temp") != 0))
-                    newSpecB.append( e );
-            }
-            else {
-                newSpecB << "create" << to;
+        Rollback rollback(to);
+
+        // Grab the serialized form of the namespace, and then close it.
+        // This will close the underlying dictionaries and allow us to
+        // rename them in the environment.
+        BSONObj serialized = nsdetails(from)->serialize();
+        nsindex(from)->close_ns(from);
+
+        // Rename each index in system.indexes and system.namespaces
+        {
+            BSONObj oldIndexSpec;
+            while ( Helpers::findOne( sysIndexes.c_str(), BSON( "ns" << from ), oldIndexSpec ) ) {
+                string idxName = oldIndexSpec["name"].String();
+                string oldIdxNS = IndexDetails::indexNamespace(from, idxName);
+                string newIdxNS = IndexDetails::indexNamespace(to, idxName);
+
+                storage::db_rename(oldIdxNS, newIdxNS);
+
+                BSONObj newIndexSpec = replaceNSField( oldIndexSpec, to );
+                addIndexToCatalog( newIndexSpec );
+                _deleteObjects( sysIndexes.c_str(), oldIndexSpec, false, false );
+                addNewNamespaceToCatalog( newIdxNS, newIndexSpec.isEmpty() ? 0 : &newIndexSpec );
+                _deleteObjects( sysNamespaces.c_str(), BSON( "name" << oldIdxNS ), false, false );
             }
         }
-        BSONObj newSpec = newSpecB.done();
-        addNewNamespaceToCatalog( to, newSpec.isEmpty() ? 0 : &newSpec );
 
-        deleteObjects( s.c_str(), BSON( "name" << from ), false, false, true );
-        // oldSpec variable no longer valid memory
-
-        BSONObj oldIndexSpec;
-        s = database;
-        s += ".system.indexes";
-        while( Helpers::findOne( s.c_str(), BSON( "ns" << from ), oldIndexSpec ) ) {
-            BSONObjBuilder newIndexSpecB;
-            BSONObjIterator i( oldIndexSpec );
-            while( i.more() ) {
+        // Rename the namespace in system.namespaces
+        BSONObj newSpec;
+        {
+            BSONObj oldSpec;
+            verify( Helpers::findOne( sysNamespaces.c_str(), BSON( "name" << from ), oldSpec ) );
+            BSONObjBuilder b;
+            BSONObjIterator i( oldSpec.getObjectField( "options" ) );
+            while ( i.more() ) {
                 BSONElement e = i.next();
-                if ( strcmp( e.fieldName(), "ns" ) != 0 )
-                    newIndexSpecB.append( e );
-                else
-                    newIndexSpecB << "ns" << to;
+                if ( strcmp( e.fieldName(), "create" ) != 0 ) {
+                    if (stayTemp || (strcmp(e.fieldName(), "temp") != 0)) {
+                        b.append( e );
+                    }
+                }
+                else {
+                    b << "create" << to;
+                }
             }
-            BSONObj newIndexSpec = newIndexSpecB.done();
-            DiskLoc newIndexSpecLoc = theDataFileMgr.insert( s.c_str(), newIndexSpec.objdata(), newIndexSpec.objsize(), true, false );
-            int indexI = details->findIndexByName( oldIndexSpec.getStringField( "name" ) );
-            IndexDetails &indexDetails = details->idx(indexI);
-            string oldIndexNs = indexDetails.indexNamespace();
-            indexDetails.info = newIndexSpecLoc;
-            string newIndexNs = indexDetails.indexNamespace();
-
-            renameNamespace( oldIndexNs.c_str(), newIndexNs.c_str(), false );
-            deleteObjects( s.c_str(), oldIndexSpec.getOwned(), true, false, true );
+            newSpec = b.obj();
+            addNewNamespaceToCatalog( to, newSpec.isEmpty() ? 0 : &newSpec );
+            _deleteObjects( sysNamespaces.c_str(), BSON( "name" << from ), false, false );
         }
-#endif
+
+        // Update the namespace index
+        {
+            NamespaceIndex *ni = nsindex( from );
+            // Kill the old entry. Create a new serialized form of this namespace
+            // using the new name, modified spec, and modified indexes array. This
+            // will let us make a NamespaceDetails object and put it in the nsindex.
+            ni->kill_ns( from );
+            BSONArrayBuilder newIndexesArray;
+            vector<BSONElement> indexes = serialized["indexes"].Array();
+            for (vector<BSONElement>::const_iterator it = indexes.begin(); it != indexes.end(); it++) {
+                newIndexesArray.append( replaceNSField( it->Obj(), to ) );
+            }
+            BSONObj newSerialized = NamespaceDetails::serialize( to, newSpec, serialized["pk"].Obj(),
+                                                                 serialized["multiKeyIndexBits"].Long(),
+                                                                 newIndexesArray.arr());
+            ni->update_ns( to, newSerialized, false );
+            ni->add_ns( to, shared_ptr<NamespaceDetails>() );
+            verify( nsdetails(from) == NULL );
+        }
+
+        rollback.success();
     }
 
     bool legalClientSystemNS( const string& ns , bool write ) {

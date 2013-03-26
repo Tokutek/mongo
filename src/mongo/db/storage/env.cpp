@@ -127,6 +127,9 @@ namespace mongo {
             db_env_set_direct_io(cmdLine.directio);
 
             int r = db_env_create(&env, 0);
+            if (r == TOKUDB_HUGE_PAGES_ENABLED) {
+                LOG(LL_ERROR) << "Huge pages are enabled, please disable them to continue (echo never > /sys/kernel/mm/transparent_hugepages/enabled)" << endl;
+            }
             verify(r == 0);
 
             const uint64_t cachesize = (cmdLine.cacheSize > 0
@@ -269,6 +272,13 @@ namespace mongo {
                 uasserted(16444, "TODO: dbremove bug, should crash but won't right now");
             }
             verify(r == 0);
+        }
+
+        void db_rename(const string &oldIdxNS, const string &newIdxNS) {
+            int r = env->dbrename(env, cc().txn().db_txn(), oldIdxNS.c_str(), NULL, newIdxNS.c_str(), 0);
+            massert(16463, str::stream() << "tokudb dictionary rename failed: old " << oldIdxNS
+                           << ", new " << newIdxNS << ", r = " << r,
+                           r == 0);
         }
 
         void get_status(BSONObjBuilder &status) {
