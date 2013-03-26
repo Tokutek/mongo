@@ -126,14 +126,18 @@ env.CppUnitTest('string_map_test', ['util/string_map_test.cpp'],
 
 env.CppUnitTest('partitioned_counter_test', ['util/concurrency/partitioned_counter_test.cpp'])
 
+env.StaticLibrary('mutable_bson_test_utils', [
+        'bson/mutable/mutable_bson_test_utils.cpp'
+        ], LIBDEPS=['bson'])
+
 env.CppUnitTest('builder_test', ['bson/util/builder_test.cpp'],
                 LIBDEPS=['bson'])
 
 env.CppUnitTest('mutable_bson_test', ['bson/mutable/mutable_bson_test.cpp'],
-                 LIBDEPS=['bson'])
+                 LIBDEPS=['bson', 'mutable_bson_test_utils'])
 
 env.CppUnitTest('mutable_bson_algo_test', ['bson/mutable/mutable_bson_algo_test.cpp'],
-                LIBDEPS=['bson'])
+                LIBDEPS=['bson', 'mutable_bson_test_utils'])
 
 env.CppUnitTest('safe_num_test', ['util/safe_num_test.cpp'],
                 LIBDEPS=['bson'])

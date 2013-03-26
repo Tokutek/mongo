@@ -350,8 +350,6 @@ if (BUILD_TESTING)
   foreach (test_source
       util/builder_test
       util/bson_extract_test
-      mutable/mutable_bson_test
-      mutable/mutable_bson_algo_test
       bson_field_test
       bson_validate_test
       )
@@ -361,6 +359,23 @@ if (BUILD_TESTING)
     link_recursive_deps(${test}
       COMBINED_LIBNAME bson_unittest_deps
       bson
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test_source
+      mutable/mutable_bson_test
+      mutable/mutable_bson_algo_test
+      )
+    string(REGEX REPLACE "^.*/" "" test ${test_source})
+    add_executable(${test} bson/${test_source})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME mutable_bson_unittest_deps
+      bson
+      mutable_bson_test_utils
       unittest_main
       unittest_crutch
       ${TOKUMX_SSL_LIBRARIES}
