@@ -16,14 +16,15 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "introspect.h"
-#include "../bson/util/builder.h"
-#include "../util/goodies.h"
-#include "jsobj.h"
-#include "curop.h"
+#include "mongo/pch.h"
 
+#include "mongo/bson/util/builder.h"
 #include "mongo/db/database.h"
+#include "mongo/db/introspect.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/ops/insert.h"
+#include "mongo/util/goodies.h"
 
 namespace mongo {
 
@@ -69,16 +70,12 @@ namespace mongo {
             p = b.done();
         }
 
-        // write: not replicated
         // get or create the profiling collection
         NamespaceDetails *details = getOrCreateProfileCollection(db);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         if (details) {
-            // TODO: Figure out what this fast_oplog_insert is all about
-#if 0
-            int len = p.objsize();
-            Record *r = NULL; //theDataFileMgr.fast_oplog_insert(details, ns, len); TODO: Get rid of theDataFileMgr
-            memcpy(getDur().writingPtr(r->data(), len), p.objdata(), len);
-#endif
+            // write: not replicated
+            insertOneObject(details, nsdt, p, false);
         }
     }
 

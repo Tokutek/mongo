@@ -61,6 +61,8 @@ namespace mongo {
                 uassert( 14053 , "system.users entry needs 'user' field to be non-empty", obj["user"].String().size() );
                 uassert( 14054 , "system.users entry needs 'pwd' field to be non-empty", obj["pwd"].String().size() );
             }
+        } else {
+            uasserted(16459, str::stream() << "attempt to insert in system namespace '" << ns << "'");
         }
         return 0;
     }
