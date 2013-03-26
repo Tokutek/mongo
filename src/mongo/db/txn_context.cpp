@@ -31,12 +31,16 @@ namespace mongo {
     // because this bool depends on replication, and replication is not
     // compiled with coredb. So, in startReplication, we will set this
     // to true
-    static bool logTxnOperations = false;
+    static bool _logTxnOperations = false;
     static void (*_logTxnToOplog)(BSONObj id, BSONArray& opInfo) = NULL;
     static GTIDManager* txnGTIDManager = NULL;
 
     void setTxnLogOperations(bool val) {
         logTxnOperations = val;
+    }
+
+    bool logTxnOperations() {
+        return _logTxnOperations;
     }
 
     void setLogTxnToOplog(void (*f)(BSONObj id, BSONArray& opInfo)) {
@@ -98,7 +102,7 @@ namespace mongo {
     }
 
     void TxnContext::logOp(BSONObj op) {
-        if (logTxnOperations) {
+        if (_logTxnOperations) {
             _txnOps.append(op);
             _numOperations++;
         }
@@ -122,7 +126,7 @@ namespace mongo {
     }
 
     void TxnContext::writeOpsToOplog(GTID gtid) {
-        dassert(logTxnOperations);
+        dassert(_logTxnOperations);
         dassert(_logTxnToOplog);
         BSONArray array = _txnOps.arr();        
         _logTxnToOplog(gtid.getBSON(), array);

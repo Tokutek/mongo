@@ -27,6 +27,7 @@
 namespace mongo {
 
     void setTxnLogOperations(bool val);
+    bool logTxnOperations();
     void setLogTxnToOplog(void (*f)(BSONObj id, BSONArray& opInfo));
     void setTxnGTIDManager(GTIDManager* m);
 

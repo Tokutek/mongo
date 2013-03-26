@@ -56,25 +56,29 @@ namespace OpLogHelpers{
     }
     
     void logComment(BSONObj comment, TxnContext* txn) {
-        BSONObjBuilder b;
-        appendOpType(OP_STR_COMMENT, &b);
-        b.append(KEY_STR_COMMENT, comment);
-        txn->logOp(b.obj());
+        if (logTxnOperations()) {
+            BSONObjBuilder b;
+            appendOpType(OP_STR_COMMENT, &b);
+            b.append(KEY_STR_COMMENT, comment);
+            txn->logOp(b.obj());
+        }
     }
     
     void logInsert(const char* ns, BSONObj row, TxnContext* txn) {
-        BSONObjBuilder b;
-        if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-          resetSlaveCache();
-        }
-        if (isLocalNs(ns)) {
-            return;
-        }
+        if (logTxnOperations()) {
+            BSONObjBuilder b;
+            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
+              resetSlaveCache();
+            }
+            if (isLocalNs(ns)) {
+                return;
+            }
 
-        appendOpType(OP_STR_INSERT, &b);
-        appendNsStr(ns, &b);
-        b.append(KEY_STR_ROW, row);
-        txn->logOp(b.obj());
+            appendOpType(OP_STR_INSERT, &b);
+            appendNsStr(ns, &b);
+            b.append(KEY_STR_ROW, row);
+            txn->logOp(b.obj());
+        }
     }
 
     void logUpdate(
@@ -85,51 +89,57 @@ namespace OpLogHelpers{
         TxnContext* txn
         ) 
     {
-        BSONObjBuilder b;
-        if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-          resetSlaveCache();
-        }
-        if (isLocalNs(ns)) {
-            return;
-        }
+        if (logTxnOperations()) {
+            BSONObjBuilder b;
+            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
+              resetSlaveCache();
+            }
+            if (isLocalNs(ns)) {
+                return;
+            }
 
-        appendOpType(OP_STR_UPDATE, &b);
-        appendNsStr(ns, &b);
-        appendMigrate(fromMigrate, &b);
-        b.append(KEY_STR_OLD_ROW, oldRow);
-        b.append(KEY_STR_NEW_ROW, newRow);
-        txn->logOp(b.obj());
+            appendOpType(OP_STR_UPDATE, &b);
+            appendNsStr(ns, &b);
+            appendMigrate(fromMigrate, &b);
+            b.append(KEY_STR_OLD_ROW, oldRow);
+            b.append(KEY_STR_NEW_ROW, newRow);
+            txn->logOp(b.obj());
+        }
     }
 
     void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn) {
-        BSONObjBuilder b;
-        if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-          resetSlaveCache();
-        }
-        if (isLocalNs(ns)) {
-            return;
-        }
+        if (logTxnOperations()) {
+            BSONObjBuilder b;
+            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
+              resetSlaveCache();
+            }
+            if (isLocalNs(ns)) {
+                return;
+            }
 
-        appendOpType(OP_STR_DELETE, &b);
-        appendNsStr(ns, &b);
-        appendMigrate(fromMigrate, &b);
-        b.append(KEY_STR_ROW, row);
-        txn->logOp(b.obj());
+            appendOpType(OP_STR_DELETE, &b);
+            appendNsStr(ns, &b);
+            appendMigrate(fromMigrate, &b);
+            b.append(KEY_STR_ROW, row);
+            txn->logOp(b.obj());
+        }
     }
 
     void logCommand(const char* ns, BSONObj row, TxnContext* txn) {
-        BSONObjBuilder b;
-        if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-          resetSlaveCache();
-        }
-        if (isLocalNs(ns)) {
-            return;
-        }
+        if (logTxnOperations()) {
+            BSONObjBuilder b;
+            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
+              resetSlaveCache();
+            }
+            if (isLocalNs(ns)) {
+                return;
+            }
 
-        appendOpType(OP_STR_COMMAND, &b);
-        appendNsStr(ns, &b);
-        b.append(KEY_STR_ROW, row);
-        txn->logOp(b.obj());
+            appendOpType(OP_STR_COMMAND, &b);
+            appendNsStr(ns, &b);
+            b.append(KEY_STR_ROW, row);
+            txn->logOp(b.obj());
+        }
     }
     
 } // namespace OpLogHelpers
