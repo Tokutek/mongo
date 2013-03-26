@@ -455,7 +455,7 @@ namespace mongo {
         BSONObj info = indexInfo(pkIndexPattern, true, true);
         createIndex(info);
 
-        addNewNamespaceToCatalog(ns, &options);
+        addNewNamespaceToCatalog(ns, !options.isEmpty() ? &options : NULL);
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
         if (str::contains(ns, "system.")) {
@@ -982,8 +982,9 @@ namespace mongo {
 
         BSONObjBuilder b;
         b.append("name", ns);
-        if ( options )
+        if ( options ) {
             b.append("options", *options);
+        }
         BSONObj info = b.done();
 
         char database[256];
