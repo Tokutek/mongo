@@ -217,7 +217,7 @@ namespace mongo {
         }
 
         void createIndex(const BSONObj &info) {
-            massert(16459, "bug: system collections should not be indexed.", false);
+            massert(16464, "bug: system collections should not be indexed.", false);
         }
 
     private:
