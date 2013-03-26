@@ -54,12 +54,14 @@ namespace mongo {
 
     void dropDatabase(const string &db);
 
-    void dropNS(const string &nsname, bool is_collection = true, bool can_drop_system = false);
-
     /**
      * Record that a new namespace exists in <dbname>.system.namespaces.
      */
     void addNewNamespaceToCatalog(const string &name, const BSONObj *options = NULL);
+
+    void removeNamespaceFromCatalog(const string &name);
+
+    int removeFromSysIndexes(const char *ns, const char *name);
 
     // Rename a namespace within current 'client' db.
     // (Arguments should include db name)
@@ -141,7 +143,7 @@ namespace mongo {
         bool isMultikey(int i) const { return (_multiKeyIndexBits & (((unsigned long long) 1) << i)) != 0; }
         void setIndexIsMultikey(const char *thisns, int i);
 
-        bool dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex, bool can_drop_system = false);
+        bool dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex);
 
         /**
          * Record that a new index exists in <dbname>.system.indexes.

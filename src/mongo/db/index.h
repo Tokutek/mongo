@@ -33,8 +33,6 @@
 
 namespace mongo {
 
-    int removeFromSysIndexes(const char *ns, const char *name);
-
     /* Details about a particular index. There is one of these effectively for each object in
        system.namespaces (although this also includes the head pointer, which is not in that
        collection).
@@ -128,7 +126,7 @@ namespace mongo {
         }
 
         /** delete this index. */
-        void kill_idx(bool can_drop_system = false);
+        void kill_idx();
 
         const IndexSpec& getSpec() const;
 
