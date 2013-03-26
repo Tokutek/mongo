@@ -106,14 +106,14 @@ namespace mongo {
         }
     };
 
-    struct getKeyExtra {
-        getKeyExtra(BSONObj &o) : obj(o) {
+    struct getfExtra {
+        getfExtra(BSONObj &o) : obj(o) {
         }
         BSONObj &obj;
     };
 
-    static int getKeyCallback(const DBT *key, const DBT *value, void *extra) {
-        struct getKeyExtra *info = reinterpret_cast<struct getKeyExtra *>(extra);
+    static int getfCallback(const DBT *key, const DBT *value, void *extra) {
+        struct getfExtra *info = reinterpret_cast<struct getfExtra *>(extra);
         if (key) {
             info->obj = BSONObj(reinterpret_cast<char *>(key->data));
         }
@@ -129,12 +129,20 @@ namespace mongo {
         NaturalOrderCollection(const BSONObj &serialized) :
             NamespaceDetails(serialized),
             _nextPK(0) {
-            // the next PK is the last key (getKey() with direction > 0)
-            // plus one, if it exists (otherwise the collection is empty).
-            // TODO: doesn't need to be its own function anymore because we don't call with -1.
-            BSONObj maxKey = getKey(1);
-            if (!maxKey.isEmpty()) {
-                _nextPK = AtomicWord<long long>(maxKey.firstElement().Long() + 1);
+
+            // the next PK, if it exists, is the last key + 1
+            int r;
+            IndexDetails &pkIdx = getPKIndex();
+            IndexDetails::Cursor c(&pkIdx);
+            DBC *cursor = c.dbc();
+
+            BSONObj obj = BSONObj();
+            struct getfExtra extra(obj);
+            r = cursor->c_getf_last(cursor, 0, getfCallback, &extra);
+            verify(r == 0 || r == DB_NOTFOUND);
+            dassert(obj.nFields() == 1);
+            if (!obj.isEmpty()) {
+                _nextPK = AtomicWord<long long>(obj.firstElement().Long() + 1);
             }
         }
 
@@ -151,27 +159,6 @@ namespace mongo {
 
     protected:
         AtomicWord<long long> _nextPK;
-
-        BSONObj getKey(int direction) {
-            // get a cursor over the primary key index
-            IndexDetails &pkIdx = getPKIndex();
-            IndexDetails::Cursor c(&pkIdx);
-            DBC *cursor = c.dbc();
-
-            // find the last key
-            int r;
-            BSONObj obj = BSONObj();
-            struct getKeyExtra extra(obj);
-            if (direction > 0) {
-                r = cursor->c_getf_last(cursor, 0, getKeyCallback, &extra);
-            } else {
-                r = cursor->c_getf_first(cursor, 0, getKeyCallback, &extra);
-            }
-            verify(r == 0 || r == DB_NOTFOUND);
-            dassert(obj.nFields() == 1);
-
-            return obj;
-        }
     };
 
     class SystemCollection : public NaturalOrderCollection {
@@ -310,7 +297,7 @@ namespace mongo {
             }
 
             NaturalOrderCollection::insertObject(obj, overwrite);
-            intent.noteSuccess();
+            intent.success();
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
@@ -349,7 +336,7 @@ namespace mongo {
             bool trivial() const {
                 return _trivial;
             }
-            void noteSuccess() {
+            void success() {
                 _succeeded = true;
             }
         private:
