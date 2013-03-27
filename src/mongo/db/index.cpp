@@ -30,6 +30,7 @@
 #include "mongo/db/storage/key.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/scopeguard.h"
+#include "mongo/db/db_flags.h"
 
 namespace mongo {
 
@@ -168,8 +169,8 @@ namespace mongo {
         uassert(ASSERT_ID_DUPKEY, mongoutils::str::stream() << "E11000 duplicate key error, " << key << " already exists in unique index", isUnique);
     }
 
-    void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, bool overwrite) {
-        if (unique() && !overwrite) {
+    void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, uint64_t flags) {
+        if (unique() && !(flags & ND_UNIQUE_CHECKS_OFF)) {
             uniqueCheck(key, pk);
         }
 
@@ -181,8 +182,8 @@ namespace mongo {
         }
 
         // We already did the unique check above. We can just pass flags of zero.
-        const int flags = 0;
-        int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, flags);
+        const int put_flags = (flags & ND_LOCK_TREE_OFF) ? DB_PRELOCKED_WRITE : 0;
+        int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, put_flags);
         verify(r == 0 || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
         uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
         uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);

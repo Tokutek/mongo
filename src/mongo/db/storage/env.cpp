@@ -121,6 +121,10 @@ namespace mongo {
             return cache_size;
         }
 
+        static void tokudb_print_error(const DB_ENV * db_env, const char *db_errpfx, const char *buffer) {
+            tokulog() << db_errpfx << ": " << buffer << endl;
+        }
+
         void startup(void) {
             tokulog() << "startup" << endl;
 
@@ -131,6 +135,9 @@ namespace mongo {
                 LOG(LL_ERROR) << "Huge pages are enabled, please disable them to continue (echo never > /sys/kernel/mm/transparent_hugepages/enabled)" << endl;
             }
             verify(r == 0);
+
+            env->set_errcall(env, tokudb_print_error);
+            env->set_errpfx(env, "TokuDB");
 
             const uint64_t cachesize = (cmdLine.cacheSize > 0
                                         ? cmdLine.cacheSize
@@ -178,6 +185,9 @@ namespace mongo {
             // It's possible for startup to fail before storage::startup() is called
             if (env != NULL) {
                 int r = env->close(env, 0);
+                if (r != 0) {
+                    tokulog() << "error closing env: " << r << endl;
+                }
                 verify(r == 0);
             }
         }
@@ -283,7 +293,7 @@ namespace mongo {
 
         void get_status(BSONObjBuilder &status) {
             uint64_t num_rows;
-	    uint64_t max_rows;
+            uint64_t max_rows;
             uint64_t panic;
             size_t panic_string_len = 128;
             char panic_string[panic_string_len];
@@ -291,7 +301,7 @@ namespace mongo {
 
             int r = storage::env->get_engine_status_num_rows(storage::env, &max_rows);
             verify( r == 0 );
-            TOKU_ENGINE_STATUS_ROW_S mystat[num_rows];
+            TOKU_ENGINE_STATUS_ROW_S mystat[max_rows];
             r = env->get_engine_status(env, mystat, max_rows, &num_rows, &redzone_state, &panic, panic_string, panic_string_len, TOKU_ENGINE_STATUS);
             verify( r == 0 );
             status.append( "panic code", (long long) panic );

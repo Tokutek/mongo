@@ -28,9 +28,9 @@ namespace mongo {
     void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, BSONObj &obj, bool overwrite);
 
     // Insert a vector of objects into the given namespace, logging each operation individually.
-    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, bool overwrite = false);
+    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags = 0);
 
     // Insert an object into the given namespace. Logs the operation.
-    void insertObject(const char *ns, const BSONObj &obj, bool overwrite = false);
+    void insertObject(const char *ns, const BSONObj &obj, uint64_t flags = 0);
     
 }  // namespace mongo

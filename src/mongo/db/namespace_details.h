@@ -37,6 +37,8 @@
 #include "mongo/db/storage/env.h"
 
 namespace mongo {
+
+
     class Database;
 
     // TODO: Put this in the cmdline abstraction, not extern global.
@@ -246,7 +248,7 @@ namespace mongo {
         }
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
-        virtual void insertObject(BSONObj &obj, bool overwrite) = 0;
+        virtual void insertObject(BSONObj &obj, uint64_t flags) = 0;
 
         // deletes an object from this namespace, taking care of secondary indexes if they exist
         virtual void deleteObject(const BSONObj &pk, const BSONObj &obj) = 0;
@@ -261,8 +263,8 @@ namespace mongo {
         NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit NamespaceDetails(const BSONObj &serialized);
 
-        void insertIntoOneIndex(const int i, const BSONObj &pk, const BSONObj &obj, bool overwrite);
-        void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, bool overwrite);
+        void insertIntoOneIndex(const int i, const BSONObj &pk, const BSONObj &obj, uint64_t flags);
+        void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
 
         // generate an index info BSON for this namespace, with the same options
