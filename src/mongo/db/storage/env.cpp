@@ -136,8 +136,8 @@ namespace mongo {
             }
             verify(r == 0);
 
-            db_env->set_errcall(db_env, tokudb_print_error);
-            db_env->set_errpfx(db_env, "TokuDB");
+            env->set_errcall(env, tokudb_print_error);
+            env->set_errpfx(env, "TokuDB");
 
             const uint64_t cachesize = (cmdLine.cacheSize > 0
                                         ? cmdLine.cacheSize
