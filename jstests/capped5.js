@@ -6,7 +6,7 @@ t.drop();
 
 db.createCollection( tn , {capped: true, size: 1024 * 1024 * 1 } );
 t.insert( { _id : 5 , x : 11 , z : 52 } );
-assert.eq( 1 , t.getIndexKeys().length , "A0" )  //now we assume _id index even on capped coll
+assert.eq( 2 , t.getIndexKeys().length , "A0" )  //now we assume _id index even on capped coll (tokudb: 2 keys, $_ and _id)
 assert.eq( 52 , t.findOne( { x : 11 } ).z , "A1" );
 
 t.ensureIndex( { _id : 1 } )
@@ -20,22 +20,22 @@ db.createCollection( tn , {capped: true, size: 1024 * 1024 * 1 } );
 t.insert( { _id : 5 , x : 11 } );
 t.insert( { _id : 6 , x : 11 } );
 t.ensureIndex( { x:1 }, {unique:true, dropDups:true } );
-assert.eq( 1, db.system.indexes.count( {ns:"test."+tn} ) ); //now we assume _id index
+assert.eq( 2, db.system.indexes.count( {ns:"test."+tn} ) ); //now we assume _id index (tokudb: 2 keys, $_ and _id)
 assert.eq( 2, t.find().toArray().length );
 
 t.drop();
 db.createCollection( tn , {capped: true, size: 1024 * 1024 * 1 } );
 t.insert( { _id : 5 , x : 11 } );
 t.insert( { _id : 5 , x : 12 } );
-assert.eq( 1, db.system.indexes.count( {ns:"test."+tn} ) ); //now we assume _id index
+assert.eq( 2, db.system.indexes.count( {ns:"test."+tn} ) ); //now we assume _id index
 assert.eq( 1, t.find().toArray().length ); //_id index unique, so second insert fails
 
 t.drop();
 db.createCollection( tn , {capped: true, size: 1024 * 1024 * 1 } );
 t.insert( { _id : 5 , x : 11 } );
 t.insert( { _id : 6 , x : 12 } );
-t.ensureIndex( { x:1 }, {unique:true, dropDups:true } );
-assert.eq( 2, db.system.indexes.count( {ns:"test."+tn} ) ); //now we assume _id index
+t.ensureIndex( { x:1 }, {unique:true } ); // (tokudb: got rid of dropDups:true which is not supported
+assert.eq( 3, db.system.indexes.count( {ns:"test."+tn} ) ); //now we assume _id index (tokudb: 3 keys, $_ and _id and x)
 assert.eq( 2, t.find().hint( {x:1} ).toArray().length );
 
 // SERVER-525 (closed) unique indexes in capped collection
