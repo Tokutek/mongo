@@ -165,6 +165,8 @@ namespace mongo {
             return true;
         }
         virtual LockType locktype() const { return NONE; }
+        // Cannot have a transaction while shutting down the server.
+        virtual bool needsTxn() const { return false; }
         virtual void help( stringstream& help ) const;
         CmdShutdown() : Command("shutdown") {}
         bool run(const string& dbname, BSONObj& cmdObj, int options, string& errmsg, BSONObjBuilder& result, bool fromRepl);

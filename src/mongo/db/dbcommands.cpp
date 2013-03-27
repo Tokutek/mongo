@@ -1309,52 +1309,14 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << 
                 "Sets collection options.\n"
-                "Example: { collMod: 'foo', usePowerOf2Sizes:true }";
+                "Example: { collMod: 'foo', usePowerOf2Sizes:true } (deprecated)";
         }
 
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
-            string ns = dbname + "." + jsobj.firstElement().valuestr();
-            Client::Context ctx( ns );
-            NamespaceDetails* nsd = nsdetails( ns.c_str() );
-            if ( ! nsd ) {
-                errmsg = "ns does not exist";
-                return false;
-            }
-            
-            bool ok = true;
-            //int oldFlags = nsd->userFlags();
-            
-            BSONObjIterator i( jsobj );
-            while ( i.more() ) {
-                const BSONElement& e = i.next();
-                if ( str::equals( "collMod", e.fieldName() ) ) {
-                    // no-op
-                }
-                else if ( str::equals( "usePowerOf2Sizes", e.fieldName() ) ) {
-#if 0
-                    result.appendBool( "usePowerOf2Sizes_old" , nsd->isUserFlagSet( NamespaceDetails::Flag_UsePowerOf2Sizes ) );
-                    if ( e.trueValue() ) {
-                        nsd->setUserFlag( NamespaceDetails::Flag_UsePowerOf2Sizes );
-                    }
-                    else {
-                        nsd->clearUserFlag( NamespaceDetails::Flag_UsePowerOf2Sizes );
-                    }
-#endif
-                    log() << "usesPowerOf2Sizes is a deprecated parameter" << endl;
-                }
-                else {
-                    errmsg = str::stream() << "unknown command: " << e.fieldName();
-                    ok = false;
-                }
-            }
-            
-#if 0
-            if ( oldFlags != nsd->userFlags() ) {
-                nsd->syncUserFlags( ns );
-            }
-#endif
-
-            return ok;
+            errmsg = "CollectionModCommand is deprecated.";
+            result.append( "errmsg" , errmsg );
+            result.append( "ok", false );
+            return false;
         }
     } collectionModCommand;
 
@@ -1437,41 +1399,13 @@ namespace mongo {
         virtual bool slaveOk() const { return false; }
         virtual LockType locktype() const { return WRITE; }
         virtual void help( stringstream &help ) const {
-            help << "{ cloneCollectionAsCapped:<fromName>, toCollection:<toName>, size:<sizeInBytes> }";
+            help << "{ cloneCollectionAsCapped:<fromName>, toCollection:<toName>, size:<sizeInBytes> } (deprecated)";
         }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
-            string from = jsobj.getStringField( "cloneCollectionAsCapped" );
-            string to = jsobj.getStringField( "toCollection" );
-            long long size = (long long)jsobj.getField( "size" ).number();
-
-            if ( from.empty() || to.empty() || size == 0 ) {
-                errmsg = "invalid command spec";
-                return false;
-            }
-
-            string fromNs = dbname + "." + from;
-            string toNs = dbname + "." + to;
-            NamespaceDetails *nsd = nsdetails( fromNs.c_str() );
-            massert( 10301 ,  "source collection " + fromNs + " does not exist", nsd );
-
-            shared_ptr<Cursor> c = Helpers::findTableScan( fromNs.c_str(), BSONObj() );
-
-            DBDirectClient client;
-            Client::Context ctx( toNs );
-            BSONObjBuilder spec;
-            spec.appendBool( "capped", true );
-            spec.append( "size", double( size ) );
-            if (jsobj.hasField("temp"))
-                spec.append(jsobj["temp"]);
-
-            if ( !userCreateNS( toNs.c_str(), spec.done(), errmsg, true ) )
-                return false;
-
-            for ( ; c->ok(); c->advance()) {
-                insertObject( toNs.c_str(), c->current() );
-            }
-
-            return true;
+            errmsg = "CmdCloneCollectionAsCapped is deprecated.";
+            result.append( "errmsg" , errmsg );
+            result.append( "ok", false );
+            return false;
         }
     } cmdCloneCollectionAsCapped;
 
@@ -1488,51 +1422,14 @@ namespace mongo {
         // calls renamecollection which does a global lock, so we must too:
         virtual bool lockGlobally() const { return true; }
         virtual void help( stringstream &help ) const {
-            help << "{ convertToCapped:<fromCollectionName>, size:<sizeInBytes> }";
+            help << "{ convertToCapped:<fromCollectionName>, size:<sizeInBytes> } (deprecated)";
         }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
-            // Tokudb: Do we care?
-            //BackgroundOperation::assertNoBgOpInProgForDb(dbname.c_str());
-
-            string from = jsobj.getStringField( "convertToCapped" );
-            long long size = (long long)jsobj.getField( "size" ).number();
-
-            if ( from.empty() || size == 0 ) {
-                errmsg = "invalid command spec";
-                return false;
-            }
-
-            string shortTmpName = str::stream() << "tmp.convertToCapped." << from;
-            string longTmpName = str::stream() << dbname << "." << shortTmpName;
-
-            DBDirectClient client;
-            client.dropCollection( longTmpName );
-
-            BSONObj info;
-            if ( !client.runCommand( dbname ,
-                                     BSON( "cloneCollectionAsCapped" << from << "toCollection" << shortTmpName << "size" << double( size ) << "temp" << true ),
-                                     info ) ) {
-                errmsg = "cloneCollectionAsCapped failed: " + info.toString();
-                return false;
-            }
-
-            if ( !client.dropCollection( dbname + "." + from ) ) {
-                errmsg = "failed to drop original collection";
-                return false;
-            }
-
-            if ( !client.runCommand( "admin",
-                                     BSON( "renameCollection" << longTmpName <<
-                                           "to" << ( dbname + "." + from ) <<
-                                           "stayTemp" << false // explicit
-                                           ),
-                                     info ) ) {
-                errmsg = "renameCollection failed: " + info.toString();
-                return false;
-            }
-
-            return true;
-        }
+            errmsg = "CmdConvertToCapped is deprecated.";
+            result.append( "errmsg" , errmsg );
+            result.append( "ok", false );
+            return false;
+        } 
     } cmdConvertToCapped;
 
     /* Returns client's uri */

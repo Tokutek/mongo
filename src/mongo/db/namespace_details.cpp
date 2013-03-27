@@ -1090,14 +1090,18 @@ namespace mongo {
                 string oldIdxNS = IndexDetails::indexNamespace(from, idxName);
                 string newIdxNS = IndexDetails::indexNamespace(to, idxName);
 
+                tokulog(1) << "renaming " << oldIdxNS << " to " << newIdxNS << endl;
                 storage::db_rename(oldIdxNS, newIdxNS);
 
                 BSONObj newIndexSpec = replaceNSField( oldIndexSpec, to );
                 addIndexToCatalog( newIndexSpec );
-                _deleteObjects( sysIndexes.c_str(), oldIndexSpec, false, false );
                 addNewNamespaceToCatalog( newIdxNS, newIndexSpec.isEmpty() ? 0 : &newIndexSpec );
                 _deleteObjects( sysNamespaces.c_str(), BSON( "name" << oldIdxNS ), false, false );
             }
+            // Clean out the old entries from system.indexes. We already removed them
+            // from system.namespaces in the loop above.
+            _deleteObjects( sysIndexes.c_str(), BSON( "ns" << from ), false, false);
+            verify ( !Helpers::findOne( sysIndexes.c_str(), BSON( "ns" << from ), oldIndexSpec ) );
         }
 
         // Rename the namespace in system.namespaces
