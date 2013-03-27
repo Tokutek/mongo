@@ -273,8 +273,8 @@ namespace mongo {
         }
         CappedCollection(const BSONObj &serialized) :
             NaturalOrderCollection(serialized),
-            _maxSize(serialized["size"].numberLong()),
-            _maxObjects(serialized["max"].numberLong()),
+            _maxSize(serialized["options"]["size"].numberLong()),
+            _maxObjects(serialized["options"]["max"].numberLong()),
             _currentObjects(0),
             _currentSize(0),
             _deleteMutex("cappedDeleteMutex") {
@@ -651,9 +651,11 @@ namespace mongo {
         uassert(12523, "no index name specified", idx_info["name"].ok());
 
         if (nIndexes() >= NIndexesMax ) {
+            // calling BSONObj::str() (with NOINLINE) ensures the symbol exists in gdb.
+            // don't modify that line without putting a call to str() elsewhere.
             string s = (mongoutils::str::stream() <<
                         "add index fails, too many indexes for " << idx_info["ns"].String() <<
-                        " key:" << idx_info["key"].Obj().toString());
+                        " key:" << idx_info["key"].Obj().str());
             log() << s << endl;
             uasserted(12505,s);
         }
