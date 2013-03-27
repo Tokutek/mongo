@@ -223,6 +223,10 @@ namespace mongo {
         bool hasIdIndex() const {
             return findIdIndex() >= 0;
         }
+        
+        // optional to implement, populate the obj builder with collection specific stats
+        virtual void fillSpecificStats(BSONObjBuilder *result, int scale) {
+        }
 
         // optional to implement, return true if the namespace is capped
         virtual bool isCapped() const {

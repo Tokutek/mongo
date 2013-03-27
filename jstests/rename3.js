@@ -1,5 +1,3 @@
-assert(false, "rename tests disabled");
-
 
 a = db.rename3a
 b = db.rename3b

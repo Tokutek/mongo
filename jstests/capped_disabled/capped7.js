@@ -2,7 +2,7 @@
 Random.setRandomSeed();
 
 db.capped7.drop();
-db._dbCommand( { create: "capped7", capped: true, size: 1000, $nExtents: 11, autoIndexId: false } );
+db._dbCommand( { create: "capped7", capped: true, size: 1000, autoIndexId: false } );
 tzz = db.capped7;
 
 var ten = new Array( 11 ).toString().replace( /,/g, "-" );
@@ -31,16 +31,7 @@ insertUntilFull();
 // oldCount == count before empty
 oldCount = count;
 
-assert.eq.automsg( "11", "tzz.stats().numExtents" );
-
-// oldSize == size before empty
-var oldSize = tzz.stats().storageSize;
-
 assert.commandWorked( db._dbCommand( { emptycapped: "capped7" } ) );
-
-// check that collection storage parameters are the same after empty
-assert.eq.automsg( "11", "tzz.stats().numExtents" );
-assert.eq.automsg( "oldSize", "tzz.stats().storageSize" );
 
 // check that the collection is empty after empty
 assert.eq.automsg( "0", "tzz.find().itcount()" );
@@ -53,14 +44,7 @@ assert.eq.automsg( "oldCount", "count" );
 assert.eq.automsg( "oldCount", "tzz.find().itcount()" );
 assert.eq.automsg( "oldCount", "tzz.count()" );
 
-assert.eq.automsg( "11", "tzz.stats().numExtents" );
-var oldSize = tzz.stats().storageSize;
-
 assert.commandWorked( db._dbCommand( { emptycapped: "capped7" } ) );
-
-// check that the collection storage parameters are unchanged after another empty
-assert.eq.automsg( "11", "tzz.stats().numExtents" );
-assert.eq.automsg( "oldSize", "tzz.stats().storageSize" );
 
 // insert an arbitrary number of documents
 var total = Random.randInt( 2000 );

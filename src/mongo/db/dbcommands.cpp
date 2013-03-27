@@ -1592,39 +1592,6 @@ namespace mongo {
     } cmdSleep;
 
     // just for testing
-    class CapTrunc : public Command {
-    public:
-        CapTrunc() : Command( "captrunc" ) {}
-        virtual bool slaveOk() const { return false; }
-        virtual LockType locktype() const { return WRITE; }
-        virtual bool requiresAuth() { return true; }
-        virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
-            // TODO: Capped collections
-            return false;
-#if 0
-            string coll = cmdObj[ "captrunc" ].valuestrsafe();
-            uassert( 13416, "captrunc must specify a collection", !coll.empty() );
-            string ns = dbname + "." + coll;
-            int n = cmdObj.getIntField( "n" );
-
-            // inclusive range?
-            bool inc = cmdObj.getBoolField( "inc" );
-            NamespaceDetails *nsd = nsdetails( ns.c_str() );
-            ReverseCappedCursor c( nsd );
-            massert( 13417, "captrunc collection not found or empty", c.ok() );
-            for( int i = 0; i < n; ++i ) {
-                massert( 13418, "captrunc invalid n", c.advance() );
-            }
-            // TODO: TokuDB: Implement me 
-            (void) inc;
-            //DiskLoc end = c.currLoc();
-            //nsd->cappedTruncateAfter( ns.c_str(), end, inc );
-            return true;
-#endif
-        }
-    } capTruncCmd;
-
-    // just for testing
     class EmptyCapped : public Command {
     public:
         EmptyCapped() : Command( "emptycapped" ) {}

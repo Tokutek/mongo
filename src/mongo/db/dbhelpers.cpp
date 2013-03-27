@@ -91,7 +91,7 @@ namespace mongo {
                                                   QueryPlanSelectionPolicy::any() );
         while( c->ok() ) {
             if ( c->currentMatches() && !c->getsetdup( c->currPK() ) ) {
-                return c->current();
+                return c->current().copy();
             }
             c->advance();
         }
@@ -132,7 +132,7 @@ namespace mongo {
 
         while( c->ok() ) {
             if ( c->currentMatches() && !c->getsetdup( c->currPK() ) ) {
-                all.push_back( c->current() );
+                all.push_back( c->current().copy() );
             }
             c->advance();
         }
@@ -160,7 +160,7 @@ namespace mongo {
             return false;
         }
 
-        result = c->current();
+        result = c->current().copy();
         context.getClient()->curop()->done();
         return true;
     }
@@ -174,7 +174,7 @@ namespace mongo {
         shared_ptr<Cursor> c = findTableScan(ns, reverseNaturalObj);
         if( !c->ok() )
             return false;
-        result = c->current();
+        result = c->current().copy();
         return true;
     }
 

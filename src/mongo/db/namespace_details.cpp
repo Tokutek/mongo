@@ -296,6 +296,16 @@ namespace mongo {
             verify((_currentSize.load() > 0) == (_currentObjects.load() > 0));
         }
 
+        void fillSpecificStats(BSONObjBuilder *result, int scale) {
+            result->appendBool("capped", true);
+            if (_maxObjects) {
+                result->appendNumber("max", _maxObjects);
+            }
+            result->appendNumber("cappedCount", _currentObjects.load());
+            result->appendNumber("cappedSizeMax", _maxSize);
+            result->appendNumber("cappedSizeCurrent", _currentSize.load());
+        }
+
         bool isCapped() const {
             dassert(_options["capped"].trueValue());
             return true;
@@ -366,9 +376,9 @@ namespace mongo {
                 _obj(obj),
                 _succeeded(false),
                 _trivial(false) {
-
-                uassert(16465, "object to insert is larger than the capped collection itself",
-                        _obj.objsize() <= _collection->_maxSize);
+                uassert( 16328 , str::stream() << "document is larger than capped size "
+                         << _obj.objsize() << " > " << _collection->_maxSize,
+                         obj.objsize() <= _collection->_maxSize );
                 long long n = _collection->_currentObjects.addAndFetch(1);
                 long long size = _collection->_currentSize.addAndFetch(obj.objsize());
                 _trivial = !_collection->isGorged(n, size);
@@ -806,6 +816,8 @@ namespace mongo {
         result->appendNumber("totalIndexStorageSize", (long long) totalIndexStorageSize/scale);
 
         result->append("indexDetails", index_info.arr());        
+
+        fillSpecificStats(result, scale);
     }
 
     static void addIndexToCatalog(const BSONObj &info) {
@@ -1084,8 +1096,10 @@ namespace mongo {
 
         // Rename each index in system.indexes and system.namespaces
         {
-            BSONObj oldIndexSpec;
-            while ( Helpers::findOne( sysIndexes.c_str(), BSON( "ns" << from ), oldIndexSpec ) ) {
+            BSONObj nsQuery = BSON( "ns" << from );
+            vector<BSONObj> indexSpecs = Helpers::findAll( sysIndexes.c_str(), nsQuery );
+            for ( vector<BSONObj>::const_iterator it = indexSpecs.begin() ; it != indexSpecs.end(); it++) {
+                BSONObj oldIndexSpec = *it;
                 string idxName = oldIndexSpec["name"].String();
                 string oldIdxNS = IndexDetails::indexNamespace(from, idxName);
                 string newIdxNS = IndexDetails::indexNamespace(to, idxName);
@@ -1100,8 +1114,7 @@ namespace mongo {
             }
             // Clean out the old entries from system.indexes. We already removed them
             // from system.namespaces in the loop above.
-            _deleteObjects( sysIndexes.c_str(), BSON( "ns" << from ), false, false);
-            verify ( !Helpers::findOne( sysIndexes.c_str(), BSON( "ns" << from ), oldIndexSpec ) );
+            _deleteObjects( sysIndexes.c_str(), nsQuery, false, false);
         }
 
         // Rename the namespace in system.namespaces
