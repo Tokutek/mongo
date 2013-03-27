@@ -30,6 +30,7 @@
 #include "ops/delete.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/repl/bgsync.h"
+#include "mongo/db/db_flags.h"
 
 namespace mongo {
 
@@ -136,7 +137,8 @@ namespace mongo {
             massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
         }
         BSONObj bb = b.done();
-        rsOplogDetails->insertObject(bb, true);
+        uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
+        rsOplogDetails->insertObject(bb, flags);
     }
     
     static void (*_logTransactionOp)(BSONObj id, BSONArray& opInfo) = _logOpUninitialized;
