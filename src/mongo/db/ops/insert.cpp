@@ -27,6 +27,7 @@
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/db/db_flags.h"
 
 namespace mongo {
 
@@ -69,13 +70,14 @@ namespace mongo {
     }
 
     void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, BSONObj &obj, bool overwrite) {
-        details->insertObject(obj, overwrite);
+      uint64_t flags = overwrite ? ND_UNIQUE_CHECKS_OFF : 0;
+        details->insertObject(obj, flags);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }
     }
 
-    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool overwrite, bool keepGoing) {
+    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags ) {
         if (mongoutils::str::contains(ns, "system.")) {
             uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
             massert(16462, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
@@ -99,7 +101,7 @@ namespace mongo {
 
                 BSONObj objModified = obj;
                 BSONElementManipulator::lookForTimestamps(objModified);
-                insertOneObject(details, nsdt, objModified, overwrite); // may add _id field
+                insertOneObject(details, nsdt, objModified, flags); // may add _id field
                 OpLogHelpers::logInsert(ns, objModified, &cc().txn());
             } catch (const UserException &) {
                 if (!keepGoing || i == objs.size() - 1) {
@@ -109,10 +111,10 @@ namespace mongo {
         }
     }
 
-    void insertObject(const char *ns, const BSONObj &obj, bool overwrite) {
+    void insertObject(const char *ns, const BSONObj &obj, uint64_t flags) {
         vector<BSONObj> objs(1);
         objs[0] = obj;
-        insertObjects(ns, objs, overwrite);
+        insertObjects(ns, objs, flags);
     }
     
 } // namespace mongo

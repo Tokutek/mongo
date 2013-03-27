@@ -40,6 +40,7 @@
 #include "mongo/platform/atomic_word.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/db/oplog_helpers.h"
+#include "mongo/db/db_flags.h"
 
 namespace mongo {
 
@@ -135,10 +136,10 @@ namespace mongo {
         }
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
-        void insertObject(BSONObj &obj, bool overwrite) {
+        void insertObject(BSONObj &obj, uint64_t flags) {
             obj = addIdField(obj);
             BSONObj pk = obj["_id"].wrap("");
-            insertIntoIndexes(pk, obj, overwrite);
+            insertIntoIndexes(pk, obj, flags);
         }
 
         // deletes an object from this namespace, taking care of secondary indexes if they exist
@@ -188,10 +189,10 @@ namespace mongo {
         }
 
         // insert an object, using a fresh auto-increment primary key
-        void insertObject(BSONObj &obj, bool overwrite) {
+        void insertObject(BSONObj &obj, uint64_t flags) {
             BSONObjBuilder pk;
             pk.append("", _nextPK.fetchAndAdd(1));
-            insertIntoIndexes(pk.obj(), obj, overwrite);
+            insertIntoIndexes(pk.obj(), obj, flags);
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
@@ -212,9 +213,9 @@ namespace mongo {
         }
 
         // strip out the _id field before inserting into a system collection
-        void insertObject(BSONObj &obj, bool overwrite) {
+        void insertObject(BSONObj &obj, uint64_t flags) {
             obj = beautify(obj);
-            NaturalOrderCollection::insertObject(obj, overwrite);
+            NaturalOrderCollection::insertObject(obj, flags);
         }
 
         void createIndex(const BSONObj &info) {
@@ -301,7 +302,7 @@ namespace mongo {
             return true;
         }
 
-        void insertObject(BSONObj &obj, bool overwrite) {
+        void insertObject(BSONObj &obj, uint64_t flags) {
             CappedInsertIntent intent(this, obj);
 
             // If the insert is non-trivial, then we need to do some
@@ -332,7 +333,7 @@ namespace mongo {
                 }
             }
 
-            NaturalOrderCollection::insertObject(obj, overwrite);
+            NaturalOrderCollection::insertObject(obj, flags);
             intent.success();
         }
 
@@ -561,11 +562,11 @@ namespace mongo {
     }
 
     // Temporarily factored out of insertIntoIndexes() for trickle-loaded index builds.
-    void NamespaceDetails::insertIntoOneIndex(const int i, const BSONObj &pk, const BSONObj &obj, bool overwrite) {
+    void NamespaceDetails::insertIntoOneIndex(const int i, const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         IndexDetails &idx = *_indexes[i];
         if (i == 0) {
             dassert(isPKIndex(idx));
-            idx.insertPair(pk, NULL, obj, overwrite);
+            idx.insertPair(pk, NULL, obj, flags);
         } else {
             BSONObjSet keys;
             idx.getKeysFromObject(obj, keys);
@@ -573,20 +574,20 @@ namespace mongo {
                 setIndexIsMultikey(_ns.c_str(), i);
             }
             for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                idx.insertPair(*ki, &pk, obj, overwrite);
+                idx.insertPair(*ki, &pk, obj, flags);
             }
         }
     }
 
-    void NamespaceDetails::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, bool overwrite) {
+    void NamespaceDetails::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
-        if (overwrite && _indexes.size() > 1) {
+        if ((flags & ND_UNIQUE_CHECKS_OFF) && _indexes.size() > 1) {
             wunimplemented("overwrite inserts on secondary keys right now don't work");
             //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
         }
         for (int i = 0; i < nIndexes(); i++) {
-            insertIntoOneIndex(i, pk, obj, overwrite);
+            insertIntoOneIndex(i, pk, obj, flags);
         }
     }
 
@@ -615,7 +616,7 @@ namespace mongo {
         tokulog(4) << "NamespaceDetails::updateObject pk "
             << pk << ", old " << oldObj << ", new " << newObj << endl;
         deleteFromIndexes(pk, oldObj);
-        insertIntoIndexes(pk, newObj, false);
+        insertIntoIndexes(pk, newObj, 0);
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
@@ -661,7 +662,7 @@ namespace mongo {
                 if (iter % 1000 == 0) {
                     killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
                 }
-                insertIntoOneIndex(i, cursor->currPK(), cursor->current(), false);
+                insertIntoOneIndex(i, cursor->currPK(), cursor->current(), 0);
             }
         } catch (DBException &e) {
             _indexes.pop_back();
