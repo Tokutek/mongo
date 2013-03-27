@@ -17,7 +17,7 @@
 #pragma once
 
 #include "mongo/pch.h"
-#include "mongo/bson/bsonobjbuilder.h"
+#include "mongo/db/jsobj.h"
 
 #include <db.h>
 

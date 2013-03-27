@@ -19,7 +19,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/storage/txn.h"
-#include "mongo/bson/bsonobjbuilder.h"
+#include "mongo/db/jsobj.h"
 #include "mongo/db/gtid.h"
 
 #include <db.h>
