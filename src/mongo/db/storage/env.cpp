@@ -121,6 +121,10 @@ namespace mongo {
             return cache_size;
         }
 
+        static void tokudb_print_error(const DB_ENV * db_env, const char *db_errpfx, const char *buffer) {
+            tokulog() << db_errpfx << ": " << buffer << endl;
+        }
+
         void startup(void) {
             tokulog() << "startup" << endl;
 
@@ -131,6 +135,9 @@ namespace mongo {
                 LOG(LL_ERROR) << "Huge pages are enabled, please disable them to continue (echo never > /sys/kernel/mm/transparent_hugepages/enabled)" << endl;
             }
             verify(r == 0);
+
+            db_env->set_errcall(db_env, tokudb_print_error);
+            db_env->set_errpfx(db_env, "TokuDB");
 
             const uint64_t cachesize = (cmdLine.cacheSize > 0
                                         ? cmdLine.cacheSize
@@ -178,6 +185,9 @@ namespace mongo {
             // It's possible for startup to fail before storage::startup() is called
             if (env != NULL) {
                 int r = env->close(env, 0);
+                if (r != 0) {
+                    tokulog() << "error closing env: " << r << endl;
+                }
                 verify(r == 0);
             }
         }
