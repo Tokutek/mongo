@@ -41,7 +41,7 @@ pushd $mongodbsrc
             --file $tokufractaltreetarball
     fi
 
-    build_type_option=""
+    build_type_options=""
     if [ $debugbuild = 1 ] ; then
         build_type_options="--d --nostrip"
     else
@@ -55,7 +55,7 @@ pushd $mongodbsrc
 
     export LIBTOKUDB_NAME LIBTOKUPORTABILITY_NAME
     scons \
-        $build_type_option \
+        $build_type_options \
         $allocator_option \
         --force-git-version=$force_git_version \
         -j$makejobs --mute \
