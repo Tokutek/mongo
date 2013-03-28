@@ -98,9 +98,6 @@ v( {a:{z:1,tomato:1,potato:1}}, {$rename:{'a.tomato':'a.potato'}}, {a:{potato:1,
 v( {a:{z:1,b:1}}, {$rename:{'a.b':'a.cc'}}, {a:{cc:1,z:1}} );
 v( {a:{z:1,b:1,c:1}}, {$rename:{'a.b':'aa.c'}}, {a:{c:1,z:1},aa:{c:1}} );
 
-// invalid target, but missing source
-v( {a:1,c:4}, {$rename:{b:'c.d'}}, {a:1,c:4} );
-
 // check index
 t.drop();
 t.ensureIndex( {a:1} );

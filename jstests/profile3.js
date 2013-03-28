@@ -39,7 +39,6 @@ try {
     assert.eq(profileCursor({nupdated: {$exists:1}}).count(), 3)
     assert.eq(profileCursor({nupdated: 1}).count(), 2)
     assert.eq(profileCursor({nupdated: 0}).count(), 1)
-    assert.eq(profileCursor({nmoved: 1}).count(), 1)
 
     db.system.profile.drop();
 

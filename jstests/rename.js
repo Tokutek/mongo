@@ -40,7 +40,7 @@ for( i = 0.1; i < 10; ++i ) {
 }
 assert.commandWorked( admin.runCommand( {renameCollection:"test.jstests_rename_a", to:"test.jstests_rename_b"} ) );
 assert.eq( 1, b.count( {i:9.1} ) );
-for( i = 10.1; i < 250; ++i ) {
+for( i = 10.1; i < 315; ++i ) {
     b.save( { i: i } );
 }
 

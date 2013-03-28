@@ -313,6 +313,7 @@ namespace mongo {
         }
 
         void insertObject(BSONObj &obj, uint64_t flags) {
+            obj = addIdField(obj);
             CappedInsertIntent intent(this, obj);
 
             // If the insert is non-trivial, then we need to do some

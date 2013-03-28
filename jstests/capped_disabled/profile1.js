@@ -44,9 +44,6 @@ try {
     db.runCommand({profile: 2});
     assert.eq(2, db.runCommand({profile: -1}).was, "B");
     assert.eq(1, db.system.profile.stats().capped, "C");
-    var capped_size = db.system.profile.storageSize();
-    assert.gt(capped_size, 9999, "D");
-    assert.lt(capped_size, 20000, "E");
     
     db.foo.findOne()
     
@@ -73,8 +70,6 @@ try {
     db.runCommand({profile: 2});
     assert.eq(2, db.runCommand({profile: -1}).was, "I");
     assert.eq(1, db.system.profile.stats().capped, "J");
-    var auto_size = db.system.profile.storageSize();
-    assert.gt(auto_size, capped_size, "K");
     
 
     db.eval("sleep(1)") // pre-load system.js
