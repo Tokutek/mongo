@@ -45,6 +45,8 @@ namespace mongo {
             help << "Just for regression tests.\n";
         }
         CmdReplSetTest() : ReplSetCommand("replSetTest") { }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             log() << "replSet replSetTest command received: " << cmdObj.toString() << rsLog;
 
@@ -118,6 +120,8 @@ namespace mongo {
             help << "\nhttp://dochub.mongodb.org/core/replicasetcommands";
         }
         CmdReplSetGetStatus() : ReplSetCommand("replSetGetStatus", true) { }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if ( cmdObj["forShell"].trueValue() )
                 lastError.disableForCommand();

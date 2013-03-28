@@ -35,6 +35,7 @@ namespace mongo {
     public:
         // virtuals from Command
         virtual ~PipelineCommand();
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool run(const string &db, BSONObj &cmdObj, int options,
                          string &errmsg, BSONObjBuilder &result, bool fromRepl);
         virtual LockType locktype() const;

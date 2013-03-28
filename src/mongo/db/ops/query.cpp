@@ -37,7 +37,6 @@ namespace mongo {
     const int MaxBytesToReturnToClientAtOnce = 4 * 1024 * 1024;
 
     bool runCommands(const char *ns, BSONObj& jsobj, CurOp& curop, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions) {
-        // TODO: Create a transaction here fore _runCommands to use internally.
         try {
             return _runCommands(ns, jsobj, b, anObjBuilder, fromRepl, queryOptions);
         }
@@ -137,14 +136,13 @@ namespace mongo {
                     p.release();
 
                     // Done with this cursor, steal transaction stack back to commit or abort it here.
-                    shared_ptr<Client::TransactionStack> txns;
-                    cc().swapTransactionStack(txns);
                     bool ok = ClientCursor::erase(cursorid);
                     verify(ok);
                     if (ok) {
-                        while (txns->hasLiveTxn()) {
-                            txns->commitTxn(0);
-                        }
+                        // transaction for this query is done,
+                        // commit it
+                        verify(cc().hasTxn());
+                        cc().commitTopTxn();
                     }
                     cursorid = 0;
                     client_cursor = 0;
@@ -776,6 +774,9 @@ namespace mongo {
 
         bool found;
         {
+            TokuCommandSettings settings;
+            settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
+            cc().setTokuCommandSettings(settings);
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             Client::ReadContext ctx(ns);
             replVerifyReadsOk(&pq);
@@ -929,6 +930,10 @@ namespace mongo {
                 // Otherwise we default to a snapshot.
                 // XXX: TODO Read committed doesn't do what I want it to, so use an
                 // "incorrect" but mostly working UNCOMMITTED isolation.
+                TokuCommandSettings settings;
+                settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
+                settings.setBulkFetch(true);
+                cc().setTokuCommandSettings(settings);
                 Client::Transaction transaction((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY);
                 Client::ReadContext ctx(ns);
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );

@@ -112,6 +112,8 @@ namespace mongo {
     class CmdResetError : public Command {
     public:
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool logTheOp() {
             return false;
         }
@@ -143,6 +145,8 @@ namespace mongo {
         CmdGetLastError() : Command("getLastError", false, "getlasterror") { }
         virtual LockType locktype() const { return NONE;  }
         virtual bool logTheOp()           { return false; }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool slaveOk() const      { return true;  }
         virtual void help( stringstream& help ) const {
             help << "return error status of the last operation on this connection\n"
@@ -187,22 +191,26 @@ namespace mongo {
                 return true;
             }
 
-            //
-            // slight change from MongoDB originally
-            // MongoDB allows only j or fsync to be set, not both
-            // we allow to set both
-            //
-            if ( cmdObj["j"].trueValue() || cmdObj["fsync"].trueValue()) {
-                // only bother to flush recovery log 
-                // if we are not already fsyncing on commit
-                if (!cmdLine.logFlushPeriod != 0) {
-                    storage::log_flush();
+            // write concern is only relevant if we are NOT in a multi statement transaction
+            // therefore, do nothing if a transaction is live
+            if (!cc().hasTxn()) {
+                //
+                // slight change from MongoDB originally
+                // MongoDB allows only j or fsync to be set, not both
+                // we allow to set both
+                //
+                if ( cmdObj["j"].trueValue() || cmdObj["fsync"].trueValue()) {
+                    // only bother to flush recovery log 
+                    // if we are not already fsyncing on commit
+                    if (!cmdLine.logFlushPeriod != 0) {
+                        storage::log_flush();
+                    }
                 }
-            }
 
-            BSONElement e = cmdObj["w"];
-            if ( e.ok() ) {
-                problem() << "replication not supported yet, ignoring!" << endl;
+                BSONElement e = cmdObj["w"];
+                if ( e.ok() ) {
+                    problem() << "replication not supported yet, ignoring!" << endl;
+                }
             }
 
             result.appendNull( "err" );
@@ -213,6 +221,8 @@ namespace mongo {
     class CmdGetPrevError : public Command {
     public:
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool logTheOp() {
             return false;
         }
@@ -329,28 +339,6 @@ namespace mongo {
             return true;
         }
     } cmdDropDatabase;
-
-    class CmdRepairDatabase : public Command {
-    public:
-        virtual bool logTheOp() {
-            return false;
-        }
-        virtual bool slaveOk() const {
-            return true;
-        }
-        virtual bool maintenanceMode() const { return true; }
-        virtual void help( stringstream& help ) const {
-            help << "repair database.  also compacts. note: slow.";
-        }
-        virtual LockType locktype() const { return WRITE; }
-        // SERVER-4328 todo don't lock globally. currently syncDataAndTruncateJournal is being called within, and that requires a global lock i believe.
-        virtual bool lockGlobally() const { return true; }
-        CmdRepairDatabase() : Command("repairDatabase") {}
-        bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            problem() << "repairDatabase is a deprecated command, ignoring!" << endl;
-            return true;
-        }
-    } cmdRepairDatabase;
 
     /* set db profiling level
        todo: how do we handle profiling information put in the db with replication?
@@ -637,6 +625,8 @@ namespace mongo {
         CmdEngineStatus() : Command("engineStatus") {
         }
 
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual LockType locktype() const { return NONE; }
 
         virtual void help( stringstream& help ) const {
@@ -657,6 +647,8 @@ namespace mongo {
             return true;
         }
         virtual void help( stringstream& help ) const { help << "internal"; }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual LockType locktype() const { return NONE; }
         CmdGetOpTime() : Command("getoptime") { }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
@@ -733,6 +725,7 @@ namespace mongo {
     class CmdCount : public Command {
     public:
         virtual LockType locktype() const { return READ; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual int txnFlags() const { return DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY; }
         CmdCount() : Command("count") { }
         virtual bool logTheOp() { return false; }
@@ -897,6 +890,9 @@ namespace mongo {
         virtual bool slaveOk() const {
             return true;
         }
+
+        virtual bool canRunInMultiStmtTxn() const { return true; }
+
         virtual bool slaveOverrideOk() const {
             return true;
         }
@@ -1300,26 +1296,6 @@ namespace mongo {
         }
     } cmdCollectionStats;
 
-    class CollectionModCommand : public Command {
-    public:
-        CollectionModCommand() : Command( "collMod" ){}
-        virtual bool slaveOk() const { return true; }
-        virtual LockType locktype() const { return WRITE; }
-        virtual bool logTheOp() { return true; }
-        virtual void help( stringstream &help ) const {
-            help << 
-                "Sets collection options.\n"
-                "Example: { collMod: 'foo', usePowerOf2Sizes:true } (deprecated)";
-        }
-
-        bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
-            errmsg = "CollectionModCommand is deprecated.";
-            result.append( "errmsg" , errmsg );
-            result.append( "ok", false );
-            return false;
-        }
-    } collectionModCommand;
-
     class DBStats : public Command {
     public:
         DBStats() : Command( "dbStats", false, "dbstats" ) {}
@@ -1392,46 +1368,6 @@ namespace mongo {
         }
     } cmdDBStats;
 
-    /* convertToCapped seems to use this */
-    class CmdCloneCollectionAsCapped : public Command {
-    public:
-        CmdCloneCollectionAsCapped() : Command( "cloneCollectionAsCapped" ) {}
-        virtual bool slaveOk() const { return false; }
-        virtual LockType locktype() const { return WRITE; }
-        virtual void help( stringstream &help ) const {
-            help << "{ cloneCollectionAsCapped:<fromName>, toCollection:<toName>, size:<sizeInBytes> } (deprecated)";
-        }
-        bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
-            errmsg = "CmdCloneCollectionAsCapped is deprecated.";
-            result.append( "errmsg" , errmsg );
-            result.append( "ok", false );
-            return false;
-        }
-    } cmdCloneCollectionAsCapped;
-
-    /* jan2010:
-       Converts the given collection to a capped collection w/ the specified size.
-       This command is not highly used, and is not currently supported with sharded
-       environments.
-       */
-    class CmdConvertToCapped : public Command {
-    public:
-        CmdConvertToCapped() : Command( "convertToCapped" ) {}
-        virtual bool slaveOk() const { return false; }
-        virtual LockType locktype() const { return WRITE; }
-        // calls renamecollection which does a global lock, so we must too:
-        virtual bool lockGlobally() const { return true; }
-        virtual void help( stringstream &help ) const {
-            help << "{ convertToCapped:<fromCollectionName>, size:<sizeInBytes> } (deprecated)";
-        }
-        bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
-            errmsg = "CmdConvertToCapped is deprecated.";
-            result.append( "errmsg" , errmsg );
-            result.append( "ok", false );
-            return false;
-        } 
-    } cmdConvertToCapped;
-
     /* Returns client's uri */
     class CmdWhatsMyUri : public Command {
     public:
@@ -1450,39 +1386,6 @@ namespace mongo {
         }
     } cmdWhatsMyUri;
 
-    /* For testing only, not for general use */
-    class GodInsert : public Command {
-    public:
-        GodInsert() : Command( "godinsert" ) { }
-        virtual bool adminOnly() const { return false; }
-        virtual bool logTheOp() { return false; }
-        virtual bool slaveOk() const { return true; }
-        virtual LockType locktype() const { return NONE; }
-        virtual bool requiresAuth() { return true; }
-        virtual void help( stringstream &help ) const {
-            help << "internal. for testing only.";
-        }
-        virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
-
-            AuthenticationInfo *ai = cc().getAuthenticationInfo();
-            if ( ! ai->isLocalHost() ) {
-                errmsg = "godinsert only works locally";
-                return false;
-            }
-
-            string coll = cmdObj[ "godinsert" ].valuestrsafe();
-            log() << "test only command godinsert invoked coll:" << coll << endl;
-            uassert( 13049, "godinsert must specify a collection", !coll.empty() );
-            string ns = dbname + "." + coll;
-            BSONObj obj = cmdObj[ "obj" ].embeddedObjectUserCheck();
-            {
-                Lock::DBWrite lk(ns);
-                Client::Context ctx( ns );
-                insertObject( ns.c_str(), obj );
-            }
-            return true;
-        }
-    } cmdGodInsert;
     
     class DBHashCmd : public Command {
     public:
@@ -1725,10 +1628,29 @@ namespace mongo {
             theReplSet->setMaintenanceMode(true);
         }
 
+        // before we start this command, check if we can run in a multi statement transaction
+        // If we cannot and are in a multi statement transaction, 
+        // then we must automatically commit the multi statement transaction
+        // before proceeding
+        if (!c->canRunInMultiStmtTxn() && cc().hasTxn()) {
+            cc().commitTopTxn();
+            // after commiting the top transaction
+            // assert that there is no other transaction
+            // on the stack. There shouldn't be one
+            dassert(!cc().hasTxn());
+        }
+
         bool retval = false;
+        TokuCommandSettings settings = c->getTokuCommandSettings();
+        cc().setTokuCommandSettings(settings);
+        
         scoped_ptr<Client::Transaction> transaction;
         if (c->needsTxn()) {
-            transaction.reset(new Client::Transaction(c->txnFlags()));
+            // if we are running in a multi statement transaction, then the 
+            // command's flags are irrelevant. We must run with 
+            // DB_INHERIT_ISOLATION.
+            int flags = (cc().hasTxn()) ? DB_INHERIT_ISOLATION : c->txnFlags();
+            transaction.reset(new Client::Transaction(flags));
         }
         if ( c->locktype() == Command::NONE ) {
             verify( !c->lockGlobally() );
@@ -1790,7 +1712,7 @@ namespace mongo {
             theReplSet->setMaintenanceMode(false);
         }
 
-        if (retval) {
+        if (retval && transaction) {
             transaction->commit();
         }
 

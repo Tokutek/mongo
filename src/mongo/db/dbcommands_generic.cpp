@@ -104,6 +104,8 @@ namespace mongo {
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return false; }
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual void help( stringstream &help ) const {
             help << "get version #, etc.\n";
             help << "{ buildinfo:1 }";
@@ -145,6 +147,8 @@ namespace mongo {
             help << "  syncdelay\n";
             help << "{ getParameter:'*' } to get everything\n";
         }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             bool all = *cmdObj.firstElement().valuestrsafe() == '*';
 
@@ -292,6 +296,8 @@ namespace mongo {
     class PingCommand : public Command {
     public:
         PingCommand() : Command( "ping" ) {}
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool slaveOk() const { return true; }
         virtual void help( stringstream &help ) const { help << "a way to check that the server is alive. responds immediately even if server is in a db lock."; }
         virtual LockType locktype() const { return NONE; }
@@ -305,6 +311,8 @@ namespace mongo {
     class FeaturesCmd : public Command {
     public:
         FeaturesCmd() : Command( "features", true ) {}
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         void help(stringstream& h) const { h << "return build level feature settings"; }
         virtual bool slaveOk() const { return true; }
         virtual bool readOnly() { return true; }
@@ -332,6 +340,8 @@ namespace mongo {
             return true;
         }
 
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual LockType locktype() const { return NONE; }
 
         virtual void help( stringstream& help ) const {
@@ -362,19 +372,6 @@ namespace mongo {
 
     } hostInfoCmd;
 
-    class LogRotateCmd : public Command {
-    public:
-        LogRotateCmd() : Command( "logRotate" ) {}
-        virtual LockType locktype() const { return NONE; }
-        virtual bool slaveOk() const { return true; }
-        virtual bool adminOnly() const { return true; }
-        virtual bool run(const string& ns, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            fassert(16175, rotateLogs());
-            return 1;
-        }
-
-    } logRotateCmd;
-
     class ListCommandsCmd : public Command {
     public:
         virtual void help( stringstream &help ) const { help << "get a list of all db commands"; }
@@ -382,6 +379,8 @@ namespace mongo {
         virtual LockType locktype() const { return NONE; }
         virtual bool slaveOk() const { return true; }
         virtual bool adminOnly() const { return false; }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool run(const string& ns, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             BSONObjBuilder b( result.subobjStart( "commands" ) );
             for ( map<string,Command*>::iterator i=_commands->begin(); i!=_commands->end(); ++i ) {
@@ -450,6 +449,8 @@ namespace mongo {
         AvailableQueryOptions() : Command( "availableQueryOptions" , false , "availablequeryoptions" ) {}
         virtual bool slaveOk() const { return true; }
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             result << "options" << QueryOption_AllSupported;
             return true;

@@ -41,6 +41,7 @@
 #include "mongo/db/txn_context.h"
 //#include "mongo/db/storage/txn.h"
 #include "mongo/util/paths.h"
+#include "mongo/db/toku_command_settings.h"
 
 namespace mongo {
 
@@ -159,11 +160,24 @@ namespace mongo {
             void commitTxn(int flags);
             /** Abort the innermost transaction. */
             void abortTxn();
+            uint32_t numLiveTxns();
 
             /** @return true iff this transaction stack has a live txn. */
             bool hasLiveTxn() const;
             /** @return the innermost transaction. */
             TxnContext &txn() const;
+        };
+
+        /**
+         * A convenience object to create an alternate transaction stack for a temporary scope.
+         * Useful if you need a new transaction with a different root than the current client's transactions.
+         * Swaps back the old one when it gets destroyed.
+         */
+        class AlternateTransactionStack : boost::noncopyable {
+            shared_ptr<TransactionStack> _saved;
+          public:
+            AlternateTransactionStack();
+            ~AlternateTransactionStack();
         };
 
         /**
@@ -189,9 +203,41 @@ namespace mongo {
             return _transactions->hasLiveTxn();
         }
 
+        void commitTopTxn() {
+            _transactions->commitTxn(0);
+        }
+
+        void abortTopTxn() {
+            _transactions->abortTxn();
+        }
+
+        void beginClientTxn(int flags) {
+            if (!_transactions) {
+                shared_ptr<TransactionStack> stack (new TransactionStack());
+                dassert(stack != NULL);
+                _transactions = stack;
+            }
+            _transactions->beginTxn(flags);
+        }
+
+        uint32_t txnStackSize() {
+            if (!_transactions) {
+                return 0;
+            }
+            return _transactions->numLiveTxns();
+        }
+
         TxnContext &txn() const {
             dassert(hasTxn());
             return _transactions->txn();
+        }
+
+        TokuCommandSettings tokuCommandSettings() const {
+            return _tokuCommandSettings;
+        }
+
+        void setTokuCommandSettings (const TokuCommandSettings& settings) {
+            _tokuCommandSettings = settings;
         }
 
         /**
@@ -218,6 +264,7 @@ namespace mongo {
         BSONObj _handshake;
         BSONObj _remoteId;
         AbstractMessagingPort * const _mp;
+        TokuCommandSettings _tokuCommandSettings;
 
         bool _hasWrittenThisPass;
         //PageFaultRetryableSection *_pageFaultRetryableSection;

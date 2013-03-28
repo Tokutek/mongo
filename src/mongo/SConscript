@@ -103,6 +103,7 @@ env.StaticLibrary('mongocommon', commonFiles,
 env.StaticLibrary("coredb", [
         "client/parallel.cpp",
         "db/client_transaction.cpp",
+        "db/toku_command_settings.cpp",
         "db/commands.cpp",
         "db/commands/hashcmd.cpp",
         "db/commands/isself.cpp",
@@ -294,7 +295,7 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/ops/update_internal.cpp",
                     "db/ops/insert.cpp",
                     "db/dbcommands.cpp",
-                    "db/dbcommands_admin.cpp",
+                    "db/commands/dbcommands_deprecated.cpp",
 
                     # most commands are only for mongod
                     "db/commands/fsync.cpp",
@@ -305,6 +306,7 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/commands/pipeline_command.cpp",
                     "db/pipeline/pipeline_d.cpp",
                     "db/pipeline/document_source_cursor.cpp",
+                    "db/commands/txn_commands.cpp",
                     "db/driverHelpers.cpp" ]
 
 env.Library( "dbcmdline", "db/cmdline.cpp" )

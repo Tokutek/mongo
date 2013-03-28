@@ -373,6 +373,8 @@ namespace mongo {
     public:
         CmdCursorInfo() : Command( "cursorInfo", true ) {}
         virtual bool slaveOk() const { return true; }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual void help( stringstream& help ) const {
             help << " example: { cursorInfo : 1 }";
         }

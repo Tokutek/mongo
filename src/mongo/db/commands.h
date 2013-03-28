@@ -19,6 +19,7 @@
 
 #include "jsobj.h"
 #include "../util/mongoutils/str.h"
+#include "mongo/db/toku_command_settings.h"
 
 namespace mongo {
 
@@ -67,6 +68,15 @@ namespace mongo {
 
         /** @return true iff this command wants a transaction */
         virtual bool needsTxn() const { return true; }
+
+        /** @return true iff this command can run in a multi statement transaction */
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+
+        virtual TokuCommandSettings getTokuCommandSettings() const {
+            TokuCommandSettings settings;
+            settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
+            return settings;
+        }
 
         /** @return what transaction flags to use */
         virtual int txnFlags() const;

@@ -38,6 +38,7 @@ namespace mongo {
         }
 
         CmdFindAndModify() : Command("findAndModify", false, "findandmodify") { }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool logTheOp() { return false; } // the modifications will be logged directly
         virtual bool slaveOk() const { return false; }
         virtual LockType locktype() const { return WRITE; }

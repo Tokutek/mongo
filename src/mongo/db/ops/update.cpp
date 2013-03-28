@@ -202,8 +202,18 @@ namespace mongo {
 
         debug.updateobj = updateobj;
 
-        NamespaceDetails* d = nsdetails_maybe_create(ns);
-        NamespaceDetailsTransient* nsdt = &NamespaceDetailsTransient::get(ns);
+        NamespaceDetails *d = NULL;
+        // if the txn stack size is greater than 1, we cannot be doing
+        // fileops. Fileops must happen in the context of a single
+        // transaction.
+        if (cc().txnStackSize() > 1) {
+            d = nsdetails(ns);
+            uassert(16469, "Cannot insert into a non-existent collection when running a multi-statement transaction", d);
+        }
+        else {
+            d = nsdetails_maybe_create(ns);
+        }
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
 
         auto_ptr<ModSet> mods;
         const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';

@@ -123,7 +123,6 @@ namespace mongo {
         else {
             string systemUsers = dbname + ".system.users";
             {
-                Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
                 Client::ReadContext tc(systemUsers, dbpath, false);
 
                 BSONObjBuilder b;
@@ -133,7 +132,6 @@ namespace mongo {
                     log() << "auth: couldn't find user " << user << ", " << systemUsers << endl;
                     return false;
                 }
-                transaction.commit();
             }
 
             pwd = userObj.getStringField("pwd");

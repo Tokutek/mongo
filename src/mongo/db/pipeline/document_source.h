@@ -362,7 +362,6 @@ namespace mongo {
 
             // Must be the first struct member for proper construction and destruction, as other
             // members may depend on the read lock it acquires.
-            Client::Transaction _transaction;
             Client::ReadContext _context;
             shared_ptr<ShardChunkManager> _chunkMgr;
             ClientCursor::Holder _cursor;

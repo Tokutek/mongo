@@ -79,14 +79,26 @@ namespace mongo {
 
     void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags ) {
         if (mongoutils::str::contains(ns, "system.")) {
+            massert(16466, "need transaction to run insertObjects", cc().txnStackSize() > 0);
+            uassert(16467, "cannot insert into system in a multi statement transaction", (cc().txnStackSize() == 1));
             uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
             massert(16462, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
             if (handle_system_collection_insert(ns, objs[0]) != 0) {
                 return;
             }
         }
-
-        NamespaceDetails *details = nsdetails_maybe_create(ns);
+        
+        NamespaceDetails *details = NULL;
+        // if the txn stack size is greater than 1, we cannot be doing
+        // fileops. Fileops must happen in the context of a single
+        // transaction.
+        if (cc().txnStackSize() > 1) {
+            details = nsdetails(ns);
+            uassert(16468, "Cannot insert into a non-existent collection when running a multi-statement transaction", details);
+        }
+        else {
+            details = nsdetails_maybe_create(ns);
+        }
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         for (size_t i = 0; i < objs.size(); i++) {
             const BSONObj &obj = objs[i];

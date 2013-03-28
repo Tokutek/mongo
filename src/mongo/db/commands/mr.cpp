@@ -989,6 +989,7 @@ namespace mongo {
             /* why !replset ?
                bad things happen with --slave (i think because of this)
             */
+            virtual bool canRunInMultiStmtTxn() const { return true; }
             virtual bool slaveOk() const { return !replSet; }
 
             virtual bool slaveOverrideOk() const { return true; }

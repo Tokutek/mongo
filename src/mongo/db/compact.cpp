@@ -58,7 +58,6 @@ namespace mongo {
 
         bool ok;
         {
-            Client::Transaction transaction(DB_SERIALIZABLE);
 
             //BackgroundOperation::assertNoBgOpInProgForNs(ns.c_str());
             Client::WriteContext ctx(ns);
@@ -68,9 +67,6 @@ namespace mongo {
             log() << "compact " << ns << " begin" << endl;
             try { 
                 ok = _compact(ns.c_str(), d, errmsg, result);
-                if (ok) {
-                    transaction.commit();
-                }
             }
             catch(...) { 
                 log() << "compact " << ns << " end (with error)" << endl;

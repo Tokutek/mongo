@@ -340,8 +340,13 @@ namespace mongo {
         globalOpCounters.gotOp( op , isCommand );
 
         Client& c = cc();
-        if ( c.getAuthenticationInfo() )
+        if ( c.getAuthenticationInfo() ) {
             c.getAuthenticationInfo()->startRequest();
+        }
+
+        // initialize the default TokuCommandSettings, 
+        TokuCommandSettings settings;
+        c.setTokuCommandSettings(settings);
         
         auto_ptr<CurOp> nestedOp;
         CurOp* currentOpP = c.curop();
@@ -457,6 +462,7 @@ namespace mongo {
                 Lock::DBWrite lk( currentOp.getNS() );
                 if ( dbHolder()._isLoaded( nsToDatabase( currentOp.getNS() ) , dbpath ) ) {
                     Client::Context cx( currentOp.getNS(), dbpath, false );
+                    Client::AlternateTransactionStack altStack;
                     Client::Transaction txn(DB_SERIALIZABLE);
                     profile(c , currentOp );
                     txn.commit();
@@ -545,6 +551,9 @@ namespace mongo {
         op.debug().query = query;
         op.setQuery(query);
 
+        TokuCommandSettings settings;
+        settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+        cc().setTokuCommandSettings(settings);
         Client::Transaction transaction(DB_SERIALIZABLE);
         Client::WriteContext ctx(ns);
 
@@ -574,6 +583,9 @@ namespace mongo {
         op.debug().query = pattern;
         op.setQuery(pattern);
 
+        TokuCommandSettings settings;
+        settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+        cc().setTokuCommandSettings(settings);
         Client::Transaction transaction(DB_SERIALIZABLE);
         Client::WriteContext ctx(ns);
 
@@ -731,6 +743,9 @@ namespace mongo {
             objs.push_back( d.nextJsObj() );
         }
 
+        TokuCommandSettings settings;
+        settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+        cc().setTokuCommandSettings(settings);
         Client::Transaction transaction(DB_SERIALIZABLE);
         Client::WriteContext ctx(ns);
 

@@ -76,6 +76,9 @@ namespace mongo {
                 long long n = 0;
                 {
                     string ns = idx["ns"].String();
+                    TokuCommandSettings settings;
+                    settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+                    cc().setTokuCommandSettings(settings);
                     Client::Transaction transaction(DB_SERIALIZABLE);
                     Client::WriteContext ctx(ns);
                     NamespaceDetails* nsd = nsdetails( ns.c_str() );

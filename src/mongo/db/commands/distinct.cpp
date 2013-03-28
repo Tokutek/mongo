@@ -27,6 +27,7 @@ namespace mongo {
         DistinctCommand() : Command("distinct") {}
         virtual bool slaveOk() const { return true; }
         virtual LockType locktype() const { return READ; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual void help( stringstream &help ) const {
             help << "{ distinct : 'collection name' , key : 'a.b' , query : {} }";
         }

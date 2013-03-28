@@ -95,6 +95,14 @@ namespace mongo {
     Client::~Client() {
         _god = 0;
 
+        // client is being destroyed, if there are any transactions on our stack,
+        // abort them
+        if (_transactions) {
+            while (_transactions->hasLiveTxn()) {
+                _transactions->abortTxn();
+            }
+        }
+
         if ( _context )
             error() << "Client::~Client _context should be null but is not; client:" << _desc << endl;
 

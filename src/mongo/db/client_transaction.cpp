@@ -47,7 +47,10 @@ namespace mongo {
         _txns.top()->abort();
         _txns.pop();
     }
-
+    uint32_t Client::TransactionStack::numLiveTxns() {
+        return _txns.size();
+    }
+    
     bool Client::TransactionStack::hasLiveTxn() const {
         if (_txns.empty()) {
             return false;
@@ -64,10 +67,11 @@ namespace mongo {
     }
 
     Client::Transaction::Transaction(int flags) {
-        Client::TransactionStack *stack = cc()._transactions.get();
+        shared_ptr<TransactionStack> stack = cc()._transactions;
         if (stack == NULL) {
-            stack = new TransactionStack();
-            cc()._transactions.reset(stack);
+            shared_ptr<TransactionStack> newStack (new TransactionStack());
+            stack = newStack;
+            cc()._transactions = stack;
         }
         dassert(stack != NULL);
         stack->beginTxn(flags);
@@ -105,6 +109,13 @@ namespace mongo {
         dassert(_txn->isLive());
         stack->abortTxn();
         _txn = NULL;
+    }
+
+    Client::AlternateTransactionStack::AlternateTransactionStack() {
+        cc().swapTransactionStack(_saved);
+    }
+    Client::AlternateTransactionStack::~AlternateTransactionStack() {
+        cc().swapTransactionStack(_saved);
     }
 
 } // namespace mongo

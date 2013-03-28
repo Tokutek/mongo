@@ -320,7 +320,6 @@ namespace mongo {
 
         IndexDetails::Cursor _cursor;
         bool _tailable;
-        bool _readOnly;
 
         // The current key, pk, and obj for this cursor.
         BSONObj _currKey;

@@ -115,6 +115,7 @@ namespace mongo {
         }
         virtual LockType locktype() const { return NONE; }
         CmdEval() : Command("eval", false, "$eval") { }
+        virtual bool needsTxn() const { return false; }
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
 
             AuthenticationInfo *ai = cc().getAuthenticationInfo();

@@ -26,8 +26,7 @@
 namespace mongo {
 
     DocumentSourceCursor::CursorWithContext::CursorWithContext( const string& ns )
-            : _transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY)
-            , _context(ns)
+            : _context(ns)
             , _chunkMgr(shardingState.needShardChunkManager( ns )
                         ? shardingState.getShardChunkManager( ns )
                         : ShardChunkManagerPtr()) {

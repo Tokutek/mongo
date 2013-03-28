@@ -80,7 +80,6 @@ namespace mongo {
                     bool touch_indexes, 
                     BSONObjBuilder& result ) {
 
-            Client::Transaction transaction(DB_READ_UNCOMMITTED | DB_TXN_READ_ONLY);
             Client::ReadContext ctx(ns);
             NamespaceDetails *nsd = nsdetails(ns.c_str());
             if (!nsd) {
@@ -98,7 +97,6 @@ namespace mongo {
                 }
             }
 
-            transaction.commit();
             return true;
         }
     } touchCmd;

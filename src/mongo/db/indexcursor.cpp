@@ -180,7 +180,6 @@ namespace mongo {
         _numWanted(numWanted),
         _cursor(_idx),
         _tailable(false),
-        _readOnly(cc().txn().isReadOnly()),
         _getf_iteration(0)
     {
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
@@ -202,7 +201,6 @@ namespace mongo {
         _numWanted(numWanted),
         _cursor(_idx),
         _tailable(false),
-        _readOnly(cc().txn().isReadOnly()),
         _getf_iteration(0)
     {
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
@@ -265,13 +263,25 @@ namespace mongo {
     int IndexCursor::getf_flags() {
         // Read-only cursors pass no special flags, non read-only cursors pass
         // DB_RMW in order to obtain write locks in the ydb-layer.
-        const int lockFlags = _readOnly ? 0 : DB_RMW;
+        int lockFlags = 0;
+        QueryCursorMode lockMode = cc().tokuCommandSettings().getQueryCursorMode();
+        switch (lockMode) {
+            case READ_LOCK_CURSOR:
+                lockFlags |= DB_SERIALIZABLE;
+                break;
+            case WRITE_LOCK_CURSOR:
+                lockFlags |= (DB_RMW | DB_SERIALIZABLE);
+                break;
+            case DEFAULT_LOCK_CURSOR:
+                break;
+        }
         const int prefetchFlags = _numWanted > 0 ? DBC_DISABLE_PREFETCHING : 0;
         return lockFlags | prefetchFlags;
     }
 
     int IndexCursor::getf_fetch_count() {
-        if ( _readOnly ) {
+        bool shouldBulkFetch = cc().tokuCommandSettings().shouldBulkFetch();
+        if ( shouldBulkFetch ) {
             // Read-only cursor may bulk fetch rows into a buffer, for speed.
             // The number of rows fetched is proportional to the number of
             // times we've called getf.
@@ -553,7 +563,8 @@ namespace mongo {
                 // cursor whose context deleted the current pk. In this case, we are
                 // allowed to advance and try again exactly once. If we still can't
                 // find the object, we're in trouble.
-                verify( !_readOnly );
+                //verify( !_readOnly );
+                // TODO: (John), find a better invariant than above
                 TOKULOG(4) << "current() did not find associated object for pk " << _currPK << endl;
                 advance();
                 if ( ok() ) {

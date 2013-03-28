@@ -31,6 +31,8 @@ namespace mongo {
             Cursor(DB *db, const int flags = 0) : _dbc(NULL) {
                 if (db != NULL) {
                     int r = db->cursor(db, cc().txn().db_txn(), &_dbc, flags);
+                    // until #6424 is fixed, this may cause really bad behavior by sending an exception through ydb code
+                    uassert(16471, "Dictionary trying to be read was created after the transaction began. Try restarting tranasaction.", r != TOKUDB_MVCC_DICTIONARY_TOO_NEW);
                     verify(r == 0 && _dbc != NULL);
                 }
             }

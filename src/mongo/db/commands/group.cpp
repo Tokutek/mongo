@@ -29,6 +29,7 @@ namespace mongo {
         virtual LockType locktype() const { return READ; }
         virtual bool slaveOk() const { return false; }
         virtual bool slaveOverrideOk() const { return true; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual void help( stringstream &help ) const {
             help << "http://dochub.mongodb.org/core/aggregation";
         }
