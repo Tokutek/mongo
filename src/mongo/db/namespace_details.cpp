@@ -138,7 +138,7 @@ namespace mongo {
         // inserts an object into this namespace, taking care of secondary indexes if they exist
         void insertObject(BSONObj &obj, uint64_t flags) {
             obj = addIdField(obj);
-            BSONObj pk = obj["_id"].wrap("");
+            BSONObj pk = obj["_id"].wrap(""); // TODO: .wrap() is a malloc/copy, let's try not to do that.
             insertIntoIndexes(pk, obj, flags);
         }
 

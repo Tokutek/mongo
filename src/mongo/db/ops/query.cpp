@@ -853,7 +853,7 @@ namespace mongo {
         curop.debug().query = jsobj;
         curop.setQuery(jsobj);
 
-        const NamespaceString nsString( ns );
+        const NamespaceString nsString( ns ); // TODO: Use a c string for speed
         uassert( 16256, str::stream() << "Invalid ns [" << ns << "]", nsString.isValid() );
 
         // Run a command.
