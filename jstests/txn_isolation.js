@@ -35,8 +35,44 @@ sleep(1000);
 r = db.runCommand({"beginTransaction":1, "isolation":"readUncommitted"});
 count = t.count();
 assert(count == 2);
+r = db.runCommand({"commitTransaction":1});
+s();
+
+// simple serializable test
+t.drop();
+t.insert({a:"before"});
+s = startParallelShell(' \
+        t = db.jstests_txn_isolation; \
+        sleep(1000); \
+        r = db.runCommand("beginTransaction"); \
+        t.insert({a:"during"}); \
+        r = db.runCommand({"commitTransaction":1}); \
+        assert(r.ok == 1);      \
+');
+
+r = db.runCommand({"beginTransaction":1, "isolation":"serializable"});
+sleep(2000);
+count = t.count();
+assert(count == 2);
 r = t.find();
 assert(r[1].a == "during");
 r = db.runCommand({"commitTransaction":1});
 s();
 
+// simple lock wait timeout test
+t.drop();
+t.insert({a:"before"});
+s = startParallelShell(' \
+        t = db.jstests_txn_isolation; \
+        r = db.runCommand("beginTransaction"); \
+        t.insert({a:"during"}); \
+        sleep(10000); \
+        r = db.runCommand({"commitTransaction":1}); \
+        assert(r.ok == 1);      \
+');
+
+r = db.runCommand({"beginTransaction":1, "isolation":"serializable"});
+sleep(1000);
+assert.throws(function(){t.count()});
+r = db.runCommand({"commitTransaction":1});
+s();
