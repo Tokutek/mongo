@@ -143,6 +143,7 @@ namespace mongo {
         */
         enum { maxToStringRecursionDepth = 100 };
 
+        NOINLINE_DECL std::string str() const { return toString(false, false); }
         std::string toString( bool isArray = false, bool full=false ) const;
         void toString( StringBuilder& s, bool isArray = false, bool full=false, int depth=0 ) const;
 
