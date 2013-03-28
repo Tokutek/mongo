@@ -502,6 +502,7 @@ namespace mongo {
         // ----- status ------
 
         virtual bool isFailed() const { return ! _master || _master->isFailed(); }
+        bool isStillConnected();
 
         // ----- informational ----
 
