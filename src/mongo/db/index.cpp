@@ -41,7 +41,7 @@ namespace mongo {
         _clustering(info["clustering"].trueValue()) {
 
         string dbname = indexNamespace();
-        tokulog(1) << "Opening IndexDetails " << dbname << endl;
+        TOKULOG(1) << "Opening IndexDetails " << dbname << endl;
         // Open the dictionary. Creates it if necessary.
         int r = storage::db_open(&_db, dbname, info, may_create);
         verify(r == 0);
@@ -51,7 +51,7 @@ namespace mongo {
     }
 
     IndexDetails::~IndexDetails() {
-        tokulog(1) << "Closing IndexDetails " << indexNamespace() << endl;
+        TOKULOG(1) << "Closing IndexDetails " << indexNamespace() << endl;
         if (_db) {
             storage::db_close(_db);
         }
@@ -187,7 +187,7 @@ namespace mongo {
         verify(r == 0 || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
         uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
         uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
-        tokulog(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
+        TOKULOG(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
     }
 
     void IndexDetails::deletePair(const BSONObj &key, const BSONObj *pk, const BSONObj &obj) {

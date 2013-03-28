@@ -390,6 +390,8 @@ namespace mongo {
 
 #define MONGO_LOG(level) if ( MONGO_likely(logLevel < (level)) ) { } else log( level )
 #define LOG MONGO_LOG
+#define MONGO_TOKULOG(level) if ( MONGO_likely(logLevel < (level)) ) { } else tokulog( level )
+#define TOKULOG MONGO_TOKULOG
 
     inline Nullstream& log( LogLevel l ) {
         return Logstream::get().prolog().setLogLevel( l );

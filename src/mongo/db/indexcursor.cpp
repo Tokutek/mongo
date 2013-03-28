@@ -151,7 +151,7 @@ namespace mongo {
 
             // Append the new row to the buffer.
             buffer->append(keyObj, pkObj, valObj);
-            tokulog(3) << "cursor_getf appended to row buffer " << keyObj << pkObj << valObj << endl;
+            TOKULOG(3) << "cursor_getf appended to row buffer " << keyObj << pkObj << valObj << endl;
             
             // request more bulk fetching if we are allowed to fetch more rows
             // and the row buffer is not too full.
@@ -183,7 +183,7 @@ namespace mongo {
         _readOnly(cc().txn().isReadOnly()),
         _getf_iteration(0)
     {
-        tokulog(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
     }
 
@@ -205,7 +205,7 @@ namespace mongo {
         _readOnly(cc().txn().isReadOnly()),
         _getf_iteration(0)
     {
-        tokulog(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
         _boundsIterator->prepDive();
         initializeDBC();
@@ -304,7 +304,7 @@ namespace mongo {
     };
 
     void IndexCursor::setPosition(const BSONObj &key, const BSONObj &pk) {
-        tokulog(3) << toString() << ": setPosition(): getf " << key << ", pk " << pk << ", direction " << _direction << endl;
+        TOKULOG(3) << toString() << ": setPosition(): getf " << key << ", pk " << pk << ", direction " << _direction << endl;
 
         // Empty row buffer, reset fetch iteration, go get more rows.
         _buffer.empty();
@@ -329,7 +329,7 @@ namespace mongo {
         _currKey = extra.rows_fetched > 0 ? _buffer.currentKey() : BSONObj();
         _currPK = extra.rows_fetched > 0 ? _buffer.currentPK() : BSONObj();
         _currObj = extra.rows_fetched > 0 ? _buffer.currentObj() : BSONObj();
-        tokulog(3) << "setPosition hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
+        TOKULOG(3) << "setPosition hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
     }
 
     // Check the current key with respect to our key bounds, whether
@@ -357,7 +357,7 @@ namespace mongo {
     // Skip the key comprised of the first k fields of currentKey and the
     // rest set to max/min key for direction > 0 or < 0 respectively.
     void IndexCursor::skipPrefix(const BSONObj &key, const int k) {
-        tokulog(3) << "skipPrefix skipping first " << k << " elements in key " << key << endl;
+        TOKULOG(3) << "skipPrefix skipping first " << k << " elements in key " << key << endl;
         BSONObjBuilder b;
         BSONObjIterator it = key.begin();
         for ( int i = 0; i < key.nFields(); i++ ) {
@@ -481,7 +481,7 @@ namespace mongo {
             if ( ( cmp != 0 && cmp != _direction ) ||
                     ( cmp == 0 && !_endKeyInclusive ) ) {
                 _currKey = BSONObj();
-                tokulog(3) << toString() << ": checkEnd() stopping @ curr, end: " << currKey() << _endKey << endl;
+                TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << currKey() << _endKey << endl;
             }
         }
     }
@@ -516,7 +516,7 @@ namespace mongo {
             _currKey = ok ? _buffer.currentKey() : BSONObj();
             _currPK = ok ? _buffer.currentPK() : BSONObj();
             _currObj = ok ? _buffer.currentObj() : BSONObj();
-            tokulog(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
+            TOKULOG(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
         } else {
             // new inserts will not be read by this cursor, because there was no
             // namespace details or index at the time of creation. we can either
@@ -554,7 +554,7 @@ namespace mongo {
                 // allowed to advance and try again exactly once. If we still can't
                 // find the object, we're in trouble.
                 verify( !_readOnly );
-                tokulog(4) << "current() did not find associated object for pk " << _currPK << endl;
+                TOKULOG(4) << "current() did not find associated object for pk " << _currPK << endl;
                 advance();
                 if ( ok() ) {
                     found = _d->findByPK( _currPK, _currObj );

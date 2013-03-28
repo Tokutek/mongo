@@ -72,7 +72,7 @@ namespace mongo {
         }
         NamespaceDetails *details = ni->details(ns);
         if (details == NULL) {
-            tokulog(2) << "Didn't find nsdetails(" << ns << "), creating it." << endl;
+            TOKULOG(2) << "Didn't find nsdetails(" << ns << "), creating it." << endl;
 
             Namespace ns_s(ns);
             shared_ptr<NamespaceDetails> new_details( NamespaceDetails::make(ns, options) );
@@ -463,7 +463,7 @@ namespace mongo {
 
         massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns.c_str()));
 
-        tokulog(1) << "Creating NamespaceDetails " << ns << endl;
+        TOKULOG(1) << "Creating NamespaceDetails " << ns << endl;
 
         // Create the primary key index, generating the info from the pk pattern and options.
         BSONObj info = indexInfo(pkIndexPattern, true, true);
@@ -559,7 +559,7 @@ namespace mongo {
 
         // Try to find it.
         BSONObj obj = BSONObj();
-        tokulog(3) << "NamespaceDetails::findByPK looking for " << key << endl;
+        TOKULOG(3) << "NamespaceDetails::findByPK looking for " << key << endl;
         struct findByPKCallbackExtra extra(key, obj);
         r = cursor->c_getf_set(cursor, 0, &key_dbt, findByPKCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND);
@@ -624,7 +624,7 @@ namespace mongo {
     }
 
     void NamespaceDetails::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
-        tokulog(4) << "NamespaceDetails::updateObject pk "
+        TOKULOG(4) << "NamespaceDetails::updateObject pk "
             << pk << ", old " << oldObj << ", new " << newObj << endl;
         deleteFromIndexes(pk, oldObj);
         insertIntoIndexes(pk, newObj, 0);
@@ -704,7 +704,7 @@ namespace mongo {
     // through dropCollection, in which case we are dropping an entire collection,
     // hence the _id_ index will have to go.
     bool NamespaceDetails::dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex) {
-        tokulog(1) << "dropIndexes " << name << endl;
+        TOKULOG(1) << "dropIndexes " << name << endl;
 
         //BackgroundOperation::assertNoBgOpInProgForNs(ns);
 
@@ -950,7 +950,7 @@ namespace mongo {
     }
 
     void dropDatabase(const string &name) {
-        tokulog(1) << "dropDatabase " << name << endl;
+        TOKULOG(1) << "dropDatabase " << name << endl;
         Lock::assertWriteLocked(name);
         Database *d = cc().database();
         verify(d != NULL);
@@ -970,7 +970,7 @@ namespace mongo {
     }
 
     void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system) {
-        tokulog(1) << "dropCollection " << name << endl;
+        TOKULOG(1) << "dropCollection " << name << endl;
         const char *ns = name.c_str();
         NamespaceDetails *d = nsdetails(ns);
         if (d == NULL) {
@@ -1039,7 +1039,7 @@ namespace mongo {
     int removeFromSysIndexes(const char *ns, const char *name) {
         string system_indexes = cc().database()->name + ".system.indexes";
         BSONObj obj = BSON("ns" << ns << "name" << name);
-        tokulog(2) << "removeFromSysIndexes removing " << obj << endl;
+        TOKULOG(2) << "removeFromSysIndexes removing " << obj << endl;
         return (int) _deleteObjects(system_indexes.c_str(), obj, false, false);
     }
 
@@ -1108,7 +1108,7 @@ namespace mongo {
                 string oldIdxNS = IndexDetails::indexNamespace(from, idxName);
                 string newIdxNS = IndexDetails::indexNamespace(to, idxName);
 
-                tokulog(1) << "renaming " << oldIdxNS << " to " << newIdxNS << endl;
+                TOKULOG(1) << "renaming " << oldIdxNS << " to " << newIdxNS << endl;
                 storage::db_rename(oldIdxNS, newIdxNS);
 
                 BSONObj newIndexSpec = replaceNSField( oldIndexSpec, to );

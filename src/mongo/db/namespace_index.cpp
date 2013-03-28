@@ -29,7 +29,7 @@ namespace mongo {
 
     NamespaceIndex::~NamespaceIndex() {
         if (nsdb != NULL) {
-            tokulog(1) << "Closing NamespaceIndex " << database_ << endl;
+            TOKULOG(1) << "Closing NamespaceIndex " << database_ << endl;
             storage::db_close(nsdb);
             dassert(namespaces.get() != NULL);
         }
@@ -47,7 +47,7 @@ namespace mongo {
         string ns = nobj["ns"].String();
         Namespace n(ns.c_str());
         BSONObj dobj(static_cast<const char *>(val->data));
-        tokulog(1) << "Loading NamespaceDetails " << (string) n << endl;
+        TOKULOG(1) << "Loading NamespaceDetails " << (string) n << endl;
         shared_ptr<NamespaceDetails> d( NamespaceDetails::make(dobj) );
 
         NamespaceIndex::NamespaceDetailsMap *m = static_cast<NamespaceIndex::NamespaceDetailsMap *>(map_v);
@@ -75,7 +75,7 @@ namespace mongo {
 
         namespaces.reset(new NamespaceDetailsMap());
 
-        tokulog(1) << "Initializing NamespaceIndex " << database_ << endl;
+        TOKULOG(1) << "Initializing NamespaceIndex " << database_ << endl;
         {
             scoped_ptr<Client::Transaction> txnp(cc().hasTxn()
                                                  ? NULL

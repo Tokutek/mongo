@@ -480,7 +480,7 @@ namespace mongo {
                 }
                 // TOKUDB: can't trust the number for mapped because it doesn't mean anything
                 t.appendBool( "supported" , false );
-                tokulog(1) << "TODO: report something about tokudb memory status in serverStatus" << endl;
+                TOKULOG(1) << "TODO: report something about tokudb memory status in serverStatus" << endl;
 
                 timeBuilder.appendNumber( "middle of mem" , Listener::getElapsedTimeMillis() - start );
 

@@ -53,7 +53,7 @@ namespace mongo {
         while ( ccc->ok() ) {
 
             if ( ccc->currentIsDup() || !c->currentMatches() ) {
-                tokulog(4) << "_deleteObjects skipping " << ccc->currPK() << ", dup or doesn't match" << endl;
+                TOKULOG(4) << "_deleteObjects skipping " << ccc->currPK() << ", dup or doesn't match" << endl;
                 ccc->advance();
                 continue;
             }
@@ -65,7 +65,7 @@ namespace mongo {
                 ccc->advance();
             }
 
-            tokulog(4) << "_deleteObjects iteration: pk " << pk << ", obj " << obj << endl;
+            TOKULOG(4) << "_deleteObjects iteration: pk " << pk << ", obj " << obj << endl;
 
             if ( logop ) {
                 OpLogHelpers::logDelete(ns, obj, false, &cc().txn());

@@ -146,7 +146,7 @@ namespace mongo {
             const uint32_t gigabytes = cachesize >> 30;
             r = env->set_cachesize(env, gigabytes, bytes, 1);
             verify(r == 0);
-            tokulog(1) << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
+            TOKULOG(1) << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
 
             // Use 10% the size of the cachetable for lock tree memory
             const int32_t lock_memory = cachesize / 10;
@@ -167,17 +167,17 @@ namespace mongo {
             const int checkpoint_period = cmdLine.checkpointPeriod;
             r = env->checkpointing_set_period(env, checkpoint_period);
             verify(r == 0);
-            tokulog(1) << "checkpoint period set to " << checkpoint_period << " seconds." << endl;
+            TOKULOG(1) << "checkpoint period set to " << checkpoint_period << " seconds." << endl;
 
             const int cleaner_period = cmdLine.cleanerPeriod;
             r = env->cleaner_set_period(env, cleaner_period);
             verify(r == 0);
-            tokulog(1) << "cleaner period set to " << cleaner_period << " seconds." << endl;
+            TOKULOG(1) << "cleaner period set to " << cleaner_period << " seconds." << endl;
 
             const int cleaner_iterations = cmdLine.cleanerIterations;
             r = env->cleaner_set_iterations(env, cleaner_iterations);
             verify(r == 0);
-            tokulog(1) << "cleaner iterations set to " << cleaner_iterations << "." << endl;
+            TOKULOG(1) << "cleaner iterations set to " << cleaner_iterations << "." << endl;
         }
 
         void shutdown(void) {
@@ -199,7 +199,7 @@ namespace mongo {
             const int flags = DB_UPDATE_CMP_DESCRIPTOR;
             int r = db->change_descriptor(db, txn, &dbt, flags);
             verify(r == 0);
-            tokulog(1) << "set db " << db << " descriptor to key pattern: " << key_pattern << endl;
+            TOKULOG(1) << "set db " << db << " descriptor to key pattern: " << key_pattern << endl;
         }
 
         int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create) {
@@ -217,13 +217,13 @@ namespace mongo {
             if (e.ok() && !e.isNull()) {
                 readPageSize = e.numberInt();
                 uassert(16441, "readPageSize must be a number > 0.", e.isNumber () && readPageSize > 0);
-                tokulog(1) << "db " << name << ", using read page size " << readPageSize << endl;
+                TOKULOG(1) << "db " << name << ", using read page size " << readPageSize << endl;
             }
             e = info["pageSize"];
             if (e.ok() && !e.isNull()) {
                 pageSize = e.numberInt();
                 uassert(16445, "pageSize must be a number > 0.", e.isNumber () && pageSize > 0);
-                tokulog(1) << "db " << name << ", using page size " << pageSize << endl;
+                TOKULOG(1) << "db " << name << ", using page size " << pageSize << endl;
             }
             e = info["compression"];
             if (e.ok() && !e.isNull()) {
@@ -239,7 +239,7 @@ namespace mongo {
                 } else {
                     uassert(16442, "compression must be one of: lzma, quicklz, zlib, none.", false);
                 }
-                tokulog(1) << "db " << name << ", using compression method \"" << str << "\"" << endl;
+                TOKULOG(1) << "db " << name << ", using compression method \"" << str << "\"" << endl;
             }
 
             DB *db;
@@ -371,25 +371,25 @@ namespace mongo {
         void set_log_flush_interval(uint32_t period_ms) {
             cmdLine.logFlushPeriod = period_ms;
             env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
-            tokulog(1) << "fsync log period set to " << period_ms << " milliseconds." << endl;
+            TOKULOG(1) << "fsync log period set to " << period_ms << " milliseconds." << endl;
         }
         void set_checkpoint_period(uint32_t period_seconds) {
             cmdLine.checkpointPeriod = period_seconds;
             int r = env->checkpointing_set_period(env, period_seconds);
             verify(r == 0);
-            tokulog(1) << "checkpoint period set to " << period_seconds << " seconds." << endl;
+            TOKULOG(1) << "checkpoint period set to " << period_seconds << " seconds." << endl;
         }
         void set_cleaner_period(uint32_t period_seconds) {
             cmdLine.cleanerPeriod = period_seconds;
             int r = env->cleaner_set_period(env, period_seconds);
             verify(r == 0);
-            tokulog(1) << "cleaner period set to " << period_seconds << " seconds." << endl;
+            TOKULOG(1) << "cleaner period set to " << period_seconds << " seconds." << endl;
         }
         void set_cleaner_iterations(uint32_t num_iterations) {
             cmdLine.cleanerPeriod = num_iterations;
             int r = env->cleaner_set_iterations(env, num_iterations);
             verify(r == 0);
-            tokulog(1) << "cleaner iterations set to " << num_iterations << "." << endl;
+            TOKULOG(1) << "cleaner iterations set to " << num_iterations << "." << endl;
         }
     
     } // namespace storage

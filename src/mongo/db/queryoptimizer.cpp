@@ -273,7 +273,7 @@ doneCheckOrder:
         int numWanted = 0;
         if ( _parsedQuery ) {
             // SERVER-5390
-            tokulog(2) << "QueryPlan:: newCursor has _parsedQuery skip " <<
+            TOKULOG(2) << "QueryPlan:: newCursor has _parsedQuery skip " <<
                 _parsedQuery->getSkip() << ", limit " << _parsedQuery->getNumToReturn() << endl;
 
             numWanted = _parsedQuery->getSkip() + _parsedQuery->getNumToReturn();

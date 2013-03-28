@@ -88,7 +88,7 @@ namespace mongo {
 
         BSONObj newObj = mss.createNewFromMods();
         checkTooLarge( newObj );
-        tokulog(3) << "updateUsingMods used mod set, transformed " << obj << " to " << newObj << endl;
+        TOKULOG(3) << "updateUsingMods used mod set, transformed " << obj << " to " << newObj << endl;
 
         updateOneObject( d, nsdt, pk, obj, newObj, loud );
     }
@@ -98,7 +98,7 @@ namespace mongo {
 
         BSONElementManipulator::lookForTimestamps( updateobj );
         checkNoMods( updateobj );
-        tokulog(3) << "updateNoMods replacing pk " << pk << ", obj " << obj << " with updateobj " << updateobj << endl;
+        TOKULOG(3) << "updateNoMods replacing pk " << pk << ", obj " << obj << " with updateobj " << updateobj << endl;
 
         updateOneObject( d, nsdt, pk, obj, updateobj, loud );
     }
@@ -107,7 +107,7 @@ namespace mongo {
             BSONObj &newObj, bool overwrite, bool logop, bool fromMigrate) {
 
         checkNoMods( newObj );
-        tokulog(3) << "insertAndLog for upsert: " << newObj << endl;
+        TOKULOG(3) << "insertAndLog for upsert: " << newObj << endl;
 
         insertOneObject(d, nsdt, newObj, overwrite);
         if (logop) {
@@ -152,10 +152,10 @@ namespace mongo {
 
         BSONObj obj;
         {
-            tokulog(3) << "_updateById looking for pk " << pk << endl;
+            TOKULOG(3) << "_updateById looking for pk " << pk << endl;
             dassert(pk == patternOrig["_id"].wrap(""));
             bool found = d->findById( patternOrig, obj );
-            tokulog(3) << "_updateById findById() got " << obj << endl;
+            TOKULOG(3) << "_updateById findById() got " << obj << endl;
             if ( !found ) {
                 // no upsert support in _updateById yet, so we are done.
                 return UpdateResult( 0 , 0 , 0 , BSONObj() );
@@ -195,7 +195,7 @@ namespace mongo {
                                  bool fromMigrate,
                                  const QueryPlanSelectionPolicy& planPolicy ) {
 
-        tokulog(2) << "update: " << ns
+        TOKULOG(2) << "update: " << ns
                    << " update: " << updateobj
                    << " query: " << patternOrig
                    << " upsert: " << upsert << " multi: " << multi << endl;
@@ -228,7 +228,7 @@ namespace mongo {
             debug.idhack = true;
             IndexDetails &idx = d->idx(idIdxNo);
             BSONObj pk = idx.getKeyFromQuery(patternOrig);
-            tokulog(3) << "_updateObjects using simple _id query, pattern " << patternOrig << ", pk " << pk << endl;
+            TOKULOG(3) << "_updateObjects using simple _id query, pattern " << patternOrig << ", pk " << pk << endl;
             UpdateResult result = _updateById( pk,
                                                isOperatorUpdate,
                                                mods.get(),
