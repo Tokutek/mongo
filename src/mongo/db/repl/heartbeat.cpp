@@ -398,6 +398,8 @@ namespace mongo {
             return;
         }
 
+        // reads from primary oplog and writes to a memory buffer,
+        // 
         boost::thread t(startSyncThread);
 
         replset::BackgroundSync* sync = replset::BackgroundSync::get();
