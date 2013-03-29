@@ -73,13 +73,11 @@ EOF
 # checkout the mongodb tests and run them against a mongodb tarball
 function test_mongodb() {
     extracted=$(basename ${source_tarball%.tar.gz})
-    if [ -d $extracted ] ; then
-        echo 1>&2 "directory $extracted already exists, won't overwrite.  Exiting..."
-        exit 1
+    if [ ! -d $extracted ] ; then
+        tar --extract \
+            --gzip \
+            --file $origdir/$source_tarball
     fi
-    tar --extract \
-        --gzip \
-        --file $origdir/$source_tarball
     test -d $extracted
     wildcardopt=''
     if [ $(uname -s) != "Darwin" ] ; then
@@ -123,6 +121,9 @@ if [ ! -f $binary_tarball ] ; then
     echo "Need tarball to test"
     exit 1
 fi
+# expand file glob
+source_tarball=$(echo $source_tarball)
+binary_tarball=$(echo $binary_tarball)
 
 origdir=$PWD
 
