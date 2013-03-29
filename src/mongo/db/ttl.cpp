@@ -50,6 +50,10 @@ namespace mongo {
         static string secondsExpireField;
         
         void doTTLForDB( const string& dbName ) {
+
+            //check isMaster before becoming god
+            bool isMaster = isMasterNs( dbName.c_str() );
+
             Client::GodScope god;
 
             vector<BSONObj> indexes;
@@ -100,7 +104,7 @@ namespace mongo {
                         continue;
                     }
                     // only do deletes if on master
-                    if (!isMasterNs(dbName.c_str())) {
+                    if ( ! isMaster ) {
                         continue;
                     }
                     n = deleteObjects(ns.c_str(), query, false, true);
