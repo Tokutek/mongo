@@ -47,8 +47,8 @@ namespace spidermonkey {
 
     using std::string;
 
-    typedef std::map<double, NativeFunction> FunctionMap;
-    typedef std::map<double, void*> ArgumentMap;
+    typedef std::map<uint32_t, NativeFunction> FunctionMap;
+    typedef std::map<uint32_t, void*> ArgumentMap;
 
     string trim( string s );
 

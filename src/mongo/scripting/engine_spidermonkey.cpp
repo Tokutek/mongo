@@ -1678,16 +1678,16 @@ namespace spidermonkey {
             smlock;
             string name = field;
             jsval v;
-            double funcId = static_cast<double>(_functionMap.size());
+            uint32_t funcId = _functionMap.size();
             _functionMap.insert(make_pair(funcId, func));
-            v = _convertor->toval(funcId);
+            v = _convertor->toval(static_cast<double>(funcId));
             _convertor->setProperty( _global, (name + "_").c_str(), v );
 
             stringstream code;
             if (data) {
-                double argsId = static_cast<double>(_argumentMap.size());
+                uint32_t argsId = _argumentMap.size();
                 _argumentMap.insert(make_pair(argsId, data));
-                v = _convertor->toval(argsId);
+                v = _convertor->toval(static_cast<double>(argsId));
                 _convertor->setProperty( _global, (name + "_data_").c_str(), v );
                 code << field << "_" << " = { x : " << field << "_ , y: " << field << "_data_ }; ";
             } else {
