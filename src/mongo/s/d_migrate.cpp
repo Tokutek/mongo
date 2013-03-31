@@ -73,6 +73,7 @@
 #include "mongo/s/d_logic.h"
 #include "mongo/s/shard.h"
 #include "mongo/s/type_chunk.h"
+#include "mongo/util/assert_util.h"
 #include "mongo/util/elapsed_tracker.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/queue.h"
@@ -990,7 +991,7 @@ namespace mongo {
             dist_lock_try dlk;
 
             try{
-                dlk = dist_lock_try( &lockSetup , (string)"migrate-" + min.toString() );
+                dlk = dist_lock_try( &lockSetup , (string)"migrate-" + min.toString(), 30.0 /*timeout*/ );
             }
             catch( LockException& e ){
                 errmsg = str::stream() << "error locking distributed lock for migration " << "migrate-" << min.toString() << causedBy( e );
@@ -1200,6 +1201,22 @@ namespace mongo {
             timing.done(4);
 
             // 5.
+
+            // Before we get into the critical section of the migration, let's double check
+            // that the config servers are reachable and the lock is in place.
+            log() << "About to check if it is safe to enter critical section";
+
+            string lockHeldMsg;
+            bool lockHeld = dlk.isLockHeld( 30.0 /* timeout */, &lockHeldMsg );
+            if ( !lockHeld ) {
+                errmsg = str::stream() << "not entering migrate critical section because "
+                                       << lockHeldMsg;
+                warning() << errmsg << endl;
+                return false;
+            }
+
+            log() << "About to enter migrate critical section";
+
             {
                 // 5.a
                 // we're under the collection lock here, so no other migrate can change maxVersion or ShardChunkManager state
@@ -1357,6 +1374,41 @@ namespace mongo {
 
                     txn.commit();
                     conn->done();
+                }
+                catch (DBException& e) {
+                    warning() << e << migrateLog;
+                    int exceptionCode = e.getCode();
+
+                    if (exceptionCode == PrepareConfigsFailedCode) {
+
+                        // In the process of issuing the migrate commit, the SyncClusterConnection
+                        // checks that the config servers are reachable. If they are not, we are
+                        // sure that the applyOps command was not sent to any of the configs, so we
+                        // can safely back out of the migration here, by resetting the shard
+                        // version that we bumped up to in the donateChunk() call above.
+
+                        log() << "About to acquire moveChunk global lock to reset shard version from "
+                              << "failed migration" << endl;
+
+                        {
+                            Lock::GlobalWrite lk;
+
+                            // Revert the chunk manager back to the state before "forgetting"
+                            // about the chunk.
+                            shardingState.undoDonateChunk(ns, min, max, startingVersion);
+                        }
+
+                        log() << "Shard version successfully reset to clean up failed migration" << endl;
+                        e.getInfo().append(result);
+
+                        return false;
+                    }
+                    else {
+                        // same as if we catch any other exception
+                        error() << "moveChunk failed to get confirmation of commit" << migrateLog;
+                        error() << "TERMINATING" << migrateLog;
+                        dbexit(EXIT_SHARDING_ERROR);
+                    }
                 }
                 catch (...) {
                     // TODO(leif): Vanilla, if it fails, waits 10 seconds and does a query to see if somehow the commit made it through anyway.  Maybe we need such a mechanism too?

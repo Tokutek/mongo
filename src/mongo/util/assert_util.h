@@ -32,8 +32,10 @@
 namespace mongo {
 
     enum CommonErrorCodes {
-        SendStaleConfigCode = 13388 ,
-        RecvStaleConfigCode = 9996
+        OkCode = 0,
+        SendStaleConfigCode = 13388 ,     // uassert( 13388 )
+        RecvStaleConfigCode = 9996,       // uassert( 9996 )
+        PrepareConfigsFailedCode = 13104  // uassert( 13104 )
     };
 
     class AssertionCount {
