@@ -618,15 +618,16 @@ namespace mongo {
     /**
      * Run a query with a cursor provided by the query optimizer, or FindingStartCursor.
      * @yields the db lock.
+     * @returns true if client cursor was saved, false if the query has completed.
      */
-    string queryWithQueryOptimizer( int queryOptions, const string& ns,
-                                    const BSONObj &jsobj, CurOp& curop,
-                                    const BSONObj &query, const BSONObj &order,
-                                    const shared_ptr<ParsedQuery> &pq_shared,
-                                    const ConfigVersion &shardingVersionAtStart,
-                                    const bool getCachedExplainPlan,
-                                    Client::Transaction &txn,
-                                    Message &result ) {
+    bool queryWithQueryOptimizer( int queryOptions, const string& ns,
+                                  const BSONObj &jsobj, CurOp& curop,
+                                  const BSONObj &query, const BSONObj &order,
+                                  const shared_ptr<ParsedQuery> &pq_shared,
+                                  const ConfigVersion &shardingVersionAtStart,
+                                  const bool getCachedExplainPlan,
+                                  Client::Transaction &txn,
+                                  Message &result ) {
 
         const ParsedQuery &pq( *pq_shared );
         shared_ptr<Cursor> cursor;
@@ -745,9 +746,6 @@ namespace mongo {
             // of its completion to the client cursor's destructor.
             cc().swapTransactionStack(ccPointer->transactions);
             ccPointer.release();
-        } else {
-            // Not saving the cursor, so we can commit its transaction now.
-            txn.commit();
         }
 
         QueryResult *qr = (QueryResult *) result.header();
@@ -768,7 +766,7 @@ namespace mongo {
         }
         curop.debug().nreturned = nReturned;
 
-        return curop.debug().exhaust ? ns : "";
+        return saveClientCursor;
     }
 
     bool queryIdHack( const char* ns, const BSONObj& query, const ParsedQuery& pq, CurOp& curop, Message& result ) {
@@ -952,11 +950,14 @@ namespace mongo {
                 // Run a regular query.
 
                 const bool getCachedExplainPlan = ! hasRetried && explain && ! pq.hasIndexSpecifier();
-                // This will commit the transaction we created above if necessary.
-                return queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query, order,
-                                                pq_shared, shardingVersionAtStart, getCachedExplainPlan,
-                                                transaction, result );
-                    
+                const bool savedCursor = queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query,
+                                                                  order, pq_shared, shardingVersionAtStart,
+                                                                  getCachedExplainPlan, transaction, result );
+                // Did not save the cursor, so we can commit the transaction now.
+                if (!savedCursor) {
+                    transaction.commit();
+                }
+                return curop.debug().exhaust ? ns : "";
             }
             catch ( const QueryRetryException & ) {
                 // In some cases the query may be retried if there is an in memory sort size assertion.

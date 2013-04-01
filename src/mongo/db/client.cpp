@@ -44,51 +44,6 @@ namespace mongo {
 
     TSP_DEFINE(Client, currentClient)
 
-#if defined(_DEBUG)
-    struct StackChecker;
-    ThreadLocalValue<StackChecker *> checker;
-
-    struct StackChecker { 
-#if defined(_WIN32)
-        enum { SZ = 256 * 1024 };
-#else
-        enum { SZ = 192 * 1024 };
-#endif
-        char buf[SZ];
-        StackChecker() { 
-            checker.set(this);
-        }
-        void init() { 
-            memset(buf, 42, sizeof(buf)); 
-        }
-        static void check(const char *tname) { 
-            static int max;
-            StackChecker *sc = checker.get();
-            const char *p = sc->buf;
-
-            int lastStackByteModifed = 0;
-            for( ; lastStackByteModifed < SZ; lastStackByteModifed++ ) { 
-                if( p[lastStackByteModifed] != 42 )
-                    break;
-            }
-            int numberBytesUsed = SZ-lastStackByteModifed;
-            
-            if( numberBytesUsed > max ) {
-                max = numberBytesUsed;
-                log() << "thread " << tname << " stack usage was " << numberBytesUsed << " bytes, " 
-                      << " which is the most so far" << endl;
-            }
-            
-            if ( numberBytesUsed > ( SZ - 16000 ) ) {
-                // we are within 16000 bytes of SZ
-                log() << "used " << numberBytesUsed << " bytes, max is " << (int)SZ << " exiting" << endl;
-                fassertFailed( 16151 );
-            }
-
-        }
-    };
-#endif
-
     /* each thread which does db operations has a Client object in TLS.
        call this when your thread starts.
     */
@@ -103,13 +58,7 @@ namespace mongo {
 
     Client& Client::initThread(const char *desc, AbstractMessagingPort *mp) {
 #if defined(_DEBUG)
-        { 
-            nThreads++; // never decremented.  this is for casi class asserts
-            if( sizeof(void*) == 8 ) {
-                StackChecker sc;
-                sc.init();
-            }
-        }
+        nThreads++; // never decremented.  this is for casi class asserts
 #endif
         verify( currentClient.get() == 0 );
         Client *c = new Client(desc, mp);
@@ -163,13 +112,6 @@ namespace mongo {
     }
 
     bool Client::shutdown() {
-#if defined(_DEBUG)
-        { 
-            if( sizeof(void*) == 8 ) {
-                StackChecker::check( desc().c_str() );
-            }
-        }
-#endif
         _shutdown = true;
         if ( inShutdown() )
             return false;
