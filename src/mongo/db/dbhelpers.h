@@ -167,6 +167,11 @@ namespace mongo {
          */
         void emptyCollection(const char *ns);
 
+        /**
+         * Test-only wrapper for runCount with a read-only snapshot txn.
+         * See ops/count.cpp for the real thing.
+         */
+        long long runCount(const char *ns, const BSONObj& cmd, string& err, int& errCode);
     };
 
 } // namespace mongo

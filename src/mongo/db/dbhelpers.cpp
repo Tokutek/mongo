@@ -27,6 +27,7 @@
 #include "mongo/db/oplog.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/repl_block.h"
+#include "mongo/db/ops/count.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
@@ -333,6 +334,13 @@ namespace mongo {
     void Helpers::emptyCollection(const char *ns) {
         Client::Context context(ns);
         deleteObjects(ns, BSONObj(), false);
+    }
+
+    long long Helpers::runCount(const char *ns, const BSONObj& cmd, string& err, int& errCode ) {
+        Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+        long long r = mongo::runCount(ns, cmd, err, errCode);
+        transaction.commit();
+        return r;
     }
 
 } // namespace mongo

@@ -27,7 +27,6 @@
 namespace mongo {
 
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
-        Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         Client::Context ctx(ns);
         NamespaceDetails *d = nsdetails( ns );
         if ( !d ) {
@@ -50,11 +49,12 @@ namespace mongo {
             limit  = -limit;
         }
 
-        bool simpleEqualityMatch = false;
-        shared_ptr<Cursor> cursor =
-        NamespaceDetailsTransient::getCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
-                                             &simpleEqualityMatch );
+        Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         try {
+            bool simpleEqualityMatch = false;
+            shared_ptr<Cursor> cursor =
+            NamespaceDetailsTransient::getCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
+                                                  &simpleEqualityMatch );
             for ( ; cursor->ok() ; cursor->advance() ) {
                 // With simple equality matching there is no need to use the matcher because the bounds
                 // are enforced by the FieldRangeVectorIterator and only key fields have constraints.  There
@@ -76,22 +76,27 @@ namespace mongo {
                     }
                 }
             }
-            transaction.commit();
             return count;
         }
         catch ( const DBException &e ) {
             err = e.toString();
             errCode = e.getCode();
+            count = -2;
         }
         catch ( const std::exception &e ) {
             err = e.what();
             errCode = 0;
+            count = -2;
         }
-        // Historically we have returned zero in many count assertion cases - see SERVER-2291.
-        log() << "Count with ns: " << ns << " and query: " << query
-              << " failed with exception: " << err << " code: " << errCode
-              << endl;
-        return -2;
+        if ( count != -2 ) { // keeping the magical -2 return value for legacy reasons...
+            transaction.commit();
+        } else {
+            // Historically we have returned zero in many count assertion cases - see SERVER-2291.
+            log() << "Count with ns: " << ns << " and query: " << query
+                  << " failed with exception: " << err << " code: " << errCode
+                  << endl;
+        }
+        return count;
     }
 
 } // namespace mongo
