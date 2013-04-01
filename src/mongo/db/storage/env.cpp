@@ -154,6 +154,11 @@ namespace mongo {
             verify(r == 0);
             tokulog() << "locktree max memory set to " << lock_memory << " bytes." << endl;
 
+            const int lock_timeout = cmdLine.lockTimeout;
+            r = env->set_lock_timeout(env, lock_timeout);
+            verify(r == 0);
+            TOKULOG(1) << "lock timeout set to " << lock_timeout << " milliseconds." << endl;
+
             r = env->set_default_bt_compare(env, dbt_bson_compare);
             verify(r == 0);
 

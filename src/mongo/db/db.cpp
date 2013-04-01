@@ -643,16 +643,22 @@ static int mongoDbMain(int argc, char* argv[]) {
 
     general_options.add_options()
     ("auth", "run with security")
+    ("cacheSize", po::value<uint64_t>(), "tokudb cache size (in bytes) for data and indexes")
+    ("checkpointPeriod", po::value<uint32_t>(), "tokudb time between checkpoints, 0 means never checkpoint")
+    ("cleanerIterations", po::value<uint32_t>(), "tokudb number of iterations per cleaner thread operation, 0 means never run")
+    ("cleanerPeriod", po::value<uint32_t>(), "tokudb time between cleaner thread operations, 0 means never run")
     ("cpu", "periodically show cpu and iowait utilization")
     ("dbpath", po::value<string>() , dbpathBuilder.str().c_str())
     ("diaglog", po::value<int>(), "0=off 1=W 2=R 3=both 7=W+some reads")
-    //("directoryperdb", "each database will be stored in a separate directory")
+    ("directio", "use direct I/O in tokudb")
+    ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
     ("journalCommitInterval", po::value<uint32_t>(), "how often to fsync recovery log (same as logFlushPeriod)")
     ("logFlushPeriod", po::value<uint32_t>(), "how often to fsync recovery log")
     ("journalOptions", po::value<int>(), "DEPRECATED")
     ("jsonp","allow JSONP access via http (has security implications)")
+    ("lockTimeout", po::value<uint64_t>(), "tokudb row lock wait timeout (in ms), 0 means wait as long as necessary")
     ("noauth", "run without security")
     ("nohttpinterface", "disable http interface")
     ("nojournal", "DEPRECATED)")
@@ -664,7 +670,6 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("quota", "limits each database to a certain number of files (8 default)")
     ("quotaFiles", po::value<int>(), "number of files allowed per db, requires --quota")
     ("repair", "run repair on all dbs")
-    //("repairpath", po::value<string>() , "root directory for repair files - defaults to dbpath" )
     ("rest","turn on simple rest api")
 #if defined(__linux__)
     ("shutdown", "kill a running server (for init scripts)")
@@ -674,9 +679,6 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("syncdelay",po::value<double>(&cmdLine.syncdelay)->default_value(60), "seconds between disk syncs (0=never, but not recommended)")
     ("sysinfo", "print some diagnostic system information")
     ("upgrade", "upgrade db if needed")
-    ("cacheSize", po::value<uint64_t>(), "cache size (in bytes) for rec store")
-    ("directio", "use direct I/O in tokudb")
-    ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers")
     ;
 
 #if defined(_WIN32)
@@ -721,9 +723,6 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("pairwith", "DEPRECATED")
     ("arbiter", "DEPRECATED")
     ("opIdMem", "DEPRECATED")
-    ("checkpointPeriod", po::value<uint32_t>(), "tokudb time between checkpoints, 0 means never checkpoint")
-    ("cleanerPeriod", po::value<uint32_t>(), "tokudb time between cleaner thread operations, 0 means never run")
-    ("cleanerIterations", po::value<uint32_t>(), "tokudb number of iterations per cleaner thread operation, 0 means never run")
     ;
 
     positional_options.add("command", 3);
