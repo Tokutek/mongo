@@ -45,8 +45,6 @@ namespace mongo {
         struct LogOpUpdateDetails* loud
         ) 
     {
-        // if newObj has no _id field, it should inherit the existing value
-        BSONObjBuilder b;
         if (loud->logop) {
             OpLogHelpers::logUpdate(
                 loud->ns, 
@@ -56,14 +54,8 @@ namespace mongo {
                 &cc().txn()
                 );
         }
-        BSONObj newObjWithId = newObj;
-        if ( newObj["_id"].eoo() ) {
-            b.append( oldObj["_id"] );
-            b.appendElements( newObj );
-            newObjWithId = b.done();
-        }
 
-        d->updateObject( pk, oldObj, newObjWithId );
+        d->updateObject( pk, oldObj, newObj );
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }
@@ -179,7 +171,7 @@ namespace mongo {
             return UpdateResult( 1 , 1 , 1 , BSONObj() );
         } // end $operator update
 
-        // regular update, just replace obj with updateobj, inherting _id if necessary
+        // replace-style update
         updateNoMods( d, nsdt, pk, obj, updateobj, &loud );
         return UpdateResult( 1 , 0 , 1 , BSONObj() );
     }

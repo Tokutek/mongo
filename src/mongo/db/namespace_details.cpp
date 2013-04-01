@@ -91,24 +91,36 @@ namespace mongo {
             dassert( sizeof(IDToInsert) == 17 );
             oid.init();
         }
-        const char *rawdata() {
-            return reinterpret_cast<const char *>(this);
-        }
         const char type;
         char _id[4];
         OID oid;
     };
 #pragma pack()
 
-    BSONObj addIdField(const BSONObj &orig) {
-        if (orig.hasField("_id")) {
-            return orig;
+    BSONObj addIdField(const BSONObj &obj) {
+        if (obj.hasField("_id")) {
+            return obj;
         } else {
             IDToInsert id;
             BSONObjBuilder b;
             // _id first, everything else after
-            b.append(BSONElement(id.rawdata()));
-            b.appendElements(orig);
+            b.append(BSONElement(reinterpret_cast<const char *>(&id)));
+            b.appendElements(obj);
+            return b.obj();
+        }
+    }
+
+    BSONObj inheritIdField(const BSONObj &oldObj, const BSONObj &newObj) {
+        const BSONElement &e = newObj["_id"];
+        if (e.ok()) {
+            uassert( 13596 ,
+                     str::stream() << "cannot change _id of a document old:" << oldObj << " new:" << newObj,
+                     e.valuesEqual(oldObj["_id"]) );
+            return newObj;
+        } else {
+            BSONObjBuilder b;
+            b.append(oldObj["_id"]);
+            b.appendElements(newObj);
             return b.obj();
         }
     }
@@ -145,6 +157,12 @@ namespace mongo {
         // deletes an object from this namespace, taking care of secondary indexes if they exist
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
             deleteFromIndexes(pk, obj);
+        }
+
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
+            // if newObj has no _id field, it should inherit the existing value
+            BSONObj newObjWithId = inheritIdField(oldObj, newObj);
+            NamespaceDetails::updateObject(pk, oldObj, newObjWithId);
         }
     };
 
@@ -354,9 +372,12 @@ namespace mongo {
         }
 
         void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
-            long long diff = newObj.objsize() - oldObj.objsize();
+            // if newObj has no _id field, it should inherit the existing value
+            BSONObj newObjWithId = inheritIdField(oldObj, newObj);
+            long long diff = newObjWithId.objsize() - oldObj.objsize();
             uassert( 10003 , "failing update: objects in a capped ns cannot grow", diff <= 0 );
-            NaturalOrderCollection::updateObject(pk, oldObj, newObj);
+
+            NamespaceDetails::updateObject(pk, oldObj, newObjWithId);
             if (diff < 0) {
                 _currentSize.addAndFetch(diff);
             }
