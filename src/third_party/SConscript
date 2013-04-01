@@ -24,13 +24,6 @@ else:
                                  'boost/boost_thread',
                                  'boost/boost_system',
                                  ] )
-if use_system_version_of_library("snappy"):
-    env.StaticLibrary("shim_snappy", ['shim_snappy.cpp'],
-                      SYSLIBDEPS=['snappy'])
-else:
-    env.Append(CPPPATH='$BUILD_DIR/third_party/snappy')
-    env.SConscript('snappy/SConscript')
-    env.StaticLibrary('shim_snappy', ['shim_snappy.cpp'], LIBDEPS=['snappy/snappy'])
 
 if use_system_version_of_library("sm"):
     env.StaticLibrary("shim_spidermonkey", ['shim_spidermonkey.cpp'], SYSLIBDEPS=['js'])
