@@ -50,13 +50,11 @@ namespace mongo {
 
         /* slaveOk     - if true it is ok if the source of the data is !ismaster.
            useReplAuth - use the credentials we normally use as a replication slave for the cloning
-           snapshot    - use $snapshot mode for copying collections.  note this should not be used when it isn't required, as it will be slower.
-                         for example repairDatabase need not use it.
         */
         void setConnection( DBClientBase *c ) { conn.reset( c ); }
 
         /** copy the entire database */
-        bool go(const char *masterHost, string& errmsg, const string& fromdb, bool logForRepl, bool slaveOk, bool useReplAuth, bool snapshot, bool mayBeInterrupted, int *errCode = 0);
+        bool go(const char *masterHost, string& errmsg, const string& fromdb, bool logForRepl, bool slaveOk, bool useReplAuth, bool mayBeInterrupted, int *errCode = 0);
         bool go(const char *masterHost, const CloneOptions& opts, set<string>& clonedColls, string& errmsg, int *errCode = 0);
 
         bool copyCollection( const string& ns , const BSONObj& query , string& errmsg , bool mayBeInterrupted, bool copyIndexes = true, bool logForRepl = true );
@@ -248,7 +246,7 @@ namespace mongo {
 
         {
             // main data
-            copy( ns.c_str() , ns.c_str() , /*isindex*/false , logForRepl , false , true , mayBeInterrupted, Query(query).snapshot() );
+            copy( ns.c_str() , ns.c_str() , /*isindex*/false , logForRepl , false , true , mayBeInterrupted, Query(query) );
         }
 
         /* TODO : copyIndexes bool does not seem to be implemented! */
@@ -265,7 +263,7 @@ namespace mongo {
         return true;
     }
 
-    bool Cloner::go(const char *masterHost, string& errmsg, const string& fromdb, bool logForRepl, bool slaveOk, bool useReplAuth, bool snapshot, bool mayBeInterrupted, int *errCode) {
+    bool Cloner::go(const char *masterHost, string& errmsg, const string& fromdb, bool logForRepl, bool slaveOk, bool useReplAuth, bool mayBeInterrupted, int *errCode) {
 
         CloneOptions opts;
 
@@ -273,7 +271,6 @@ namespace mongo {
         opts.logForRepl = logForRepl;
         opts.slaveOk = slaveOk;
         opts.useReplAuth = useReplAuth;
-        opts.snapshot = snapshot;
         opts.mayBeInterrupted = mayBeInterrupted;
 
         set<string> clonedColls;
@@ -331,12 +328,6 @@ namespace mongo {
             mayInterrupt( opts.mayBeInterrupted );
 
             // just using exhaust for collection copying right now
-            
-            // todo: if snapshot (bool param to this func) is true, we need to snapshot this query?
-            //       only would be relevant if a thousands of collections -- maybe even then it is hard
-            //       to exceed a single cursor batch.
-            //       for repl it is probably ok as we apply oplog section after the clone (i.e. repl 
-            //       doesnt not use snapshot=true).
             auto_ptr<DBClientCursor> c = conn->query( ns.c_str(), BSONObj(), 0, 0, 0, opts.slaveOk ? QueryOption_SlaveOk : 0 );
 
             if ( c.get() == 0 ) {
@@ -418,8 +409,6 @@ namespace mongo {
             }
             log(1) << "\t\t cloning " << from_name << " -> " << to_name << endl;
             Query q;
-            if( opts.snapshot )
-                q.snapshot();
             copy(from_name, to_name.c_str(), false, opts.logForRepl, masterSameProcess, opts.slaveOk, opts.mayBeInterrupted, q);
         }
 
@@ -441,18 +430,17 @@ namespace mongo {
             
             // Also don't copy the _id_ index
             BSONObj query = BSON( "name" << NE << "_id_" << "ns" << NIN << arr );
-            
-            // won't need a snapshot of the query of system.indexes as there can never be very many.
+            Query q;
             copy(system_indexes_from.c_str(), system_indexes_to.c_str(), true, opts.logForRepl, masterSameProcess, opts.slaveOk, opts.mayBeInterrupted, query );
         }
         return true;
     }
 
     bool cloneFrom(const char *masterHost, string& errmsg, const string& fromdb, bool logForReplication,
-                   bool slaveOk, bool useReplAuth, bool snapshot, bool mayBeInterrupted,
+                   bool slaveOk, bool useReplAuth, bool mayBeInterrupted,
                    int *errCode) {
         Cloner c;
-        return c.go(masterHost, errmsg, fromdb, logForReplication, slaveOk, useReplAuth, snapshot, mayBeInterrupted, errCode);
+        return c.go(masterHost, errmsg, fromdb, logForReplication, slaveOk, useReplAuth,  mayBeInterrupted, errCode);
     }
 
     bool cloneFrom( const string& masterHost , 
@@ -681,7 +669,6 @@ namespace mongo {
                 !fromRepl, /*logForReplication=*/
                 slaveOk,
                 false, /*replauth*/
-                true, /*snapshot*/
                 false /*mayBeInterrupted*/
                 );
             return res;
