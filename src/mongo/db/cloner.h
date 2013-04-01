@@ -29,7 +29,6 @@ namespace mongo {
             slaveOk = false;
             useReplAuth = false;
             snapshot = true;
-            mayYield = true;
             mayBeInterrupted = false;
 
             syncData = true;
@@ -43,7 +42,6 @@ namespace mongo {
         bool slaveOk;
         bool useReplAuth;
         bool snapshot;
-        bool mayYield;
         bool mayBeInterrupted;
 
         bool syncData;
@@ -65,7 +63,7 @@ namespace mongo {
      *                      this will only be set if there is an error in the initial system.namespaces query.
      */
     bool cloneFrom(const char *masterHost, string& errmsg, const string& fromdb, bool logForReplication,
-                   bool slaveOk, bool useReplAuth, bool snapshot, bool mayYield,
+                   bool slaveOk, bool useReplAuth, bool snapshot,
                    bool mayBeInterrupted, int *errCode = 0);
 
     bool copyCollectionFromRemote(const string& host, const string& ns, string& errmsg);
