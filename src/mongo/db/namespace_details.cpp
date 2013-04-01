@@ -31,6 +31,7 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/oplog.h"
+#include "mongo/db/relock.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
@@ -73,6 +74,9 @@ namespace mongo {
         NamespaceDetails *details = ni->details(ns);
         if (details == NULL) {
             TOKULOG(2) << "Didn't find nsdetails(" << ns << "), creating it." << endl;
+            if (!Lock::isWriteLocked(ns)) {
+                throw RetryWithWriteLock();
+            }
 
             Namespace ns_s(ns);
             shared_ptr<NamespaceDetails> new_details( NamespaceDetails::make(ns, options) );
@@ -701,6 +705,9 @@ namespace mongo {
         if (_multiKeyIndexBits & x) {
             return;
         }
+        if (!Lock::isWriteLocked(_ns)) {
+            throw RetryWithWriteLock();
+        }
         _multiKeyIndexBits |= x;
 
         dassert(nsdetails(thisns) == this);
@@ -723,6 +730,10 @@ namespace mongo {
                         " key:" << idx_info["key"].Obj().str());
             log() << s << endl;
             uasserted(12505,s);
+        }
+
+        if (!Lock::isWriteLocked(_ns)) {
+            throw RetryWithWriteLock();
         }
 
         shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
@@ -921,7 +932,8 @@ namespace mongo {
     typedef map< string, shared_ptr< NamespaceDetailsTransient > >::iterator ouriter;
 
     void NamespaceDetailsTransient::reset() {
-        Lock::assertWriteLocked(_ns); 
+        // TODO(leif): why is this here?
+        //Lock::assertWriteLocked(_ns); 
         clearQueryCache();
         _keysComputed = false;
         _indexSpecs.clear();
