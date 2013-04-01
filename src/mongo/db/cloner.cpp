@@ -43,8 +43,8 @@ namespace mongo {
     };
     
     void mayInterrupt( bool mayBeInterrupted ) {
-     	if ( mayBeInterrupted ) {
-         	killCurrentOp.checkForInterrupt( false );   
+        if ( mayBeInterrupted ) {
+            killCurrentOp.checkForInterrupt( false );   
         }
     }
 
@@ -689,7 +689,17 @@ namespace mongo {
                 c.setConnection( authConn_.release() );
             }
             Client::Context tc(todb);
-            bool res = c.go(fromhost.c_str(), errmsg, fromdb, /*logForReplication=*/!fromRepl, slaveOk, /*replauth*/false, /*snapshot*/true, /*mayYield*/true, /*mayBeInterrupted*/ false);
+            bool res = c.go(
+                fromhost.c_str(),
+                errmsg,
+                fromdb,
+                !fromRepl, /*logForReplication=*/
+                slaveOk,
+                false, /*replauth*/
+                true, /*snapshot*/
+                true, /*mayYield*/
+                false /*mayBeInterrupted*/
+                );
             return res;
         }
     } cmdcopydb;
