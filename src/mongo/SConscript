@@ -365,8 +365,7 @@ env.StaticLibrary("defaultversion", "s/default_version.cpp")
 env.StaticLibrary("serveronly", serverOnlyFiles,
                   LIBDEPS=["coreshard",
                            "dbcmdline",
-                           "defaultversion",
-                           '$BUILD_DIR/third_party/shim_snappy'])
+                           "defaultversion"])
 
 # These files go into mongos and mongod only, not into the shell or any tools.
 mongodAndMongosFiles = [
