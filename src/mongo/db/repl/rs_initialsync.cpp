@@ -76,6 +76,7 @@ namespace mongo {
         options.slaveOk = true;
         options.useReplAuth = true;
         options.snapshot = false;
+        options.mayYield = true;
         options.mayBeInterrupted = false;
         
         options.syncData = dataPass;
