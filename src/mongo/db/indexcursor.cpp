@@ -446,11 +446,18 @@ namespace mongo {
             // save us from really big linear scans across the key space in
             // some pathological cases. It's not clear whether or not small
             // cases are hurt too badly by this algorithm.
-            while ( ok() ) {
-                BSONObj key = currKey();
+            bool allInclusive = true;
+            const vector<bool> &inclusive = _boundsIterator->inc();
+            for ( int i = 0; i < nFields; i++ ) {
+                if ( !inclusive[i] ) {
+                    allInclusive = false;
+                    break;
+                }
+            }
+again:      while ( !allInclusive && ok() ) {
+                BSONObj key = _currKey;
                 it = key.begin();
-                const vector<bool> &inclusive = _boundsIterator->inc();
-                const int nFields = key.nFields();
+                dassert( nFields == key.nFields() );
                 for ( int i = 0; i < nFields; i++ ) {
                     const BSONElement e = it.next();
                     if ( i >= skipPrefixIndex && !inclusive[i] && e.valuesEqual(*endKeys[i]) ) {
@@ -458,7 +465,7 @@ namespace mongo {
                         // Skipping to the next value for the ith element involves skipping a prefix 
                         // with i + 1 elements.
                         skipPrefix( key, i + 1 );
-                        continue;
+                        goto again;
                     }
                 }
                 break;
@@ -470,7 +477,7 @@ namespace mongo {
     bool IndexCursor::skipOutOfRangeKeysAndCheckEnd() {
         if ( ok() ) { 
             // If r is -2, the cursor is exhausted. We're not supposed to count that.
-            const int r = skipToNextKey( currKey() );
+            const int r = skipToNextKey( _currKey );
             if ( r != -2 ) {
                 _nscanned++;
             }
@@ -498,7 +505,7 @@ namespace mongo {
             if ( ( cmp != 0 && cmp != _direction ) ||
                     ( cmp == 0 && !_endKeyInclusive ) ) {
                 _currKey = BSONObj();
-                TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << currKey() << _endKey << endl;
+                TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
             }
         }
     }
