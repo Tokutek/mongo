@@ -206,9 +206,6 @@ add_option( "clang" , "use clang++ rather than g++ (experimental)" , 0 , True )
 
 # debugging/profiling help
 
-add_option( "allocator" , "allocator to use (tcmalloc or system)" , 1 , True,
-            default=((sys.platform.startswith('linux') and (os.uname()[-1] == 'x86_64')) and
-                     'tcmalloc' or 'system') )
 add_option( "gdbserver" , "build in gdb server support" , 0 , True )
 add_option( "heapcheck", "link to heap-checking malloc-lib and look for memory leaks during tests" , 0 , False )
 add_option( "gcov" , "compile with flags for gcov" , 0 , True )
@@ -854,21 +851,19 @@ def doConfigure(myenv):
         if not conf.CheckLib("execinfo"):
             Exit(1)
 
-    # 'tcmalloc' needs to be the last library linked. Please, add new libraries before this 
+    # 'jemalloc' needs to be the last library linked. Please, add new libraries before this
     # point.
-    if get_option('allocator') == 'tcmalloc':
-        if use_system_version_of_library('tcmalloc'):
-            if not conf.CheckLib("tcmalloc"):
-                Exit(1)
-        elif has_option("heapcheck"):
-            print ("--heapcheck does not work with the tcmalloc embedded in the mongodb source "
-                   "tree.  Use --use-system-tcmalloc.")
-            Exit(1)
-    elif get_option('allocator') == 'system':
-        pass
+    # TODO: make this easier once builds are incorporated with the fractal tree in github.
+    if os.path.exists(os.getenv('JEMALLOC_PATH', 'src/third_party/jemalloc')):
+        myenv.Append(LIBPATH=['%s/lib' % (os.getenv('JEMALLOC_PATH', '$BUILD_DIR/third_party/jemalloc'))])
+        # This is a cheap way of always getting a static library.  We don't need PIC but there's
+        # anly a static version of one with that name.
+        myenv.Append(LIBS=['jemalloc_pic'])
     else:
-        print "Invalid --allocator parameter: \"%s\"" % get_option('allocator')
-        Exit(1)
+        print ("Cannot find jemalloc. Make sure that one of JEMALLOC_PATH or "
+               "src/third_party/jemalloc point to a top-level jemalloc build/install, "
+               "and it contains lib/libjemalloc_pic.a.")
+        print ("Building without jemalloc for now.")
 
     if has_option("heapcheck"):
         if ( not debugBuild ) and ( not debugLogging ):
