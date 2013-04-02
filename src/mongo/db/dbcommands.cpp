@@ -971,7 +971,8 @@ namespace mongo {
                         break;
                 }
                 BSONObj o = c->next();
-                insertObject( target.c_str(), o );
+                // logop set to false, because command is logged
+                insertObject( target.c_str(), o, 0, false );
             }
 
             char cl[256];
@@ -1002,7 +1003,8 @@ namespace mongo {
                     }
                 }
                 BSONObj n = b.done();
-                insertObject( targetIndexes.c_str(), n );
+                // logop set to false, because command is logged
+                insertObject( targetIndexes.c_str(), n, 0, false );
             }
 
             {

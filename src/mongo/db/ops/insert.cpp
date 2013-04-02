@@ -77,7 +77,7 @@ namespace mongo {
         }
     }
 
-    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags ) {
+    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
         if (mongoutils::str::contains(ns, "system.")) {
             massert(16466, "need transaction to run insertObjects", cc().txnStackSize() > 0);
             uassert(16467, "cannot insert into system in a multi statement transaction", (cc().txnStackSize() == 1));
@@ -114,7 +114,9 @@ namespace mongo {
                 BSONObj objModified = obj;
                 BSONElementManipulator::lookForTimestamps(objModified);
                 insertOneObject(details, nsdt, objModified, flags); // may add _id field
-                OpLogHelpers::logInsert(ns, objModified, &cc().txn());
+                if (logop) {
+                    OpLogHelpers::logInsert(ns, objModified, &cc().txn());
+                }
             } catch (const UserException &) {
                 if (!keepGoing || i == objs.size() - 1) {
                     throw;
@@ -123,10 +125,10 @@ namespace mongo {
         }
     }
 
-    void insertObject(const char *ns, const BSONObj &obj, uint64_t flags) {
+    void insertObject(const char *ns, const BSONObj &obj, uint64_t flags, bool logop) {
         vector<BSONObj> objs(1);
         objs[0] = obj;
-        insertObjects(ns, objs, flags);
+        insertObjects(ns, objs, false, flags, logop);
     }
     
 } // namespace mongo

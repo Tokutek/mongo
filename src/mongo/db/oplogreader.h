@@ -25,6 +25,7 @@ namespace mongo {
             cursor.reset();
             _conn.reset();
         }
+        shared_ptr<DBClientConnection> conn_shared() { return _conn; }
         DBClientConnection* conn() { return _conn.get(); }
         BSONObj findOne(const char *ns, const Query& q) {
             return conn()->findOne(ns, q, 0, QueryOption_SlaveOk);

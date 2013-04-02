@@ -67,7 +67,7 @@ namespace mongo {
         b.appendBool("unique", unique);
         BSONObj o = b.done();
 
-        insertObject(system_indexes.c_str(), o);
+        insertObject(system_indexes.c_str(), o, 0, true);
     }
 
     /* fetch a single object from collection ns that matches query

@@ -400,8 +400,12 @@ namespace mongo {
                     dropCollection(ns, errmsg, res);
                     {
                         dbtemprelease r;
-                        bool ok = copyCollectionFromRemote(them->getServerAddress(), ns, errmsg);
-                        uassert(15909, str::stream() << "replSet rollback error resyncing collection " << ns << ' ' << errmsg, ok);
+                        // hoping all this code becomes unnecessary soon
+                        // doing this so I can remove copyCollectionFromRemote
+                        // from code
+                        ::abort();
+                        //bool ok = copyCollectionFromRemote(them->getServerAddress(), ns, errmsg);
+                        //uassert(15909, str::stream() << "replSet rollback error resyncing collection " << ns << ' ' << errmsg, ok);
                     }
                 }
             }

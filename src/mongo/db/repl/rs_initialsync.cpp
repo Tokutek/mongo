@@ -75,7 +75,6 @@ namespace mongo {
         options.logForRepl = false;
         options.slaveOk = true;
         options.useReplAuth = true;
-        options.snapshot = false;
         options.mayYield = true;
         options.mayBeInterrupted = false;
         

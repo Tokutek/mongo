@@ -757,7 +757,7 @@ namespace mongo {
             return;
 
         const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
-        insertObjects(ns, objs, keepGoing);
+        insertObjects(ns, objs, keepGoing, 0, true);
         globalOpCounters.incInsertInWriteLock(objs.size());
 
         transaction.commit();

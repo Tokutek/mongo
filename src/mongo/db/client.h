@@ -53,6 +53,7 @@ namespace mongo {
     class Client;
     class AbstractMessagingPort;
     class LockCollectionForReading;
+    class DBClientConnection;
     //class PageFaultRetryableSection;
 
     TSP_DECLARE(Client, currentClient)
@@ -232,6 +233,14 @@ namespace mongo {
             return _transactions->txn();
         }
 
+        shared_ptr<DBClientConnection> authConn() {
+            return _authConn;
+        }
+
+        void setAuthConn(shared_ptr<DBClientConnection> conn) {
+            _authConn = conn;
+        }
+
         TokuCommandSettings tokuCommandSettings() const {
             return _tokuCommandSettings;
         }
@@ -265,6 +274,9 @@ namespace mongo {
         BSONObj _remoteId;
         AbstractMessagingPort * const _mp;
         TokuCommandSettings _tokuCommandSettings;
+
+        // for CmdCopyDb and CmdCopyDbGetNonce
+        shared_ptr< DBClientConnection > _authConn;
 
         bool _hasWrittenThisPass;
         //PageFaultRetryableSection *_pageFaultRetryableSection;

@@ -440,7 +440,14 @@ namespace mongo {
             ReplInfo r("resync: cloning a database");
             string errmsg;
             int errCode = 0;
-            bool ok = cloneFrom(hostName.c_str(), errmsg, cc().database()->name, false, /*slaveOk*/ true, /*replauth*/ true, /*snapshot*/false, /*mayYield*/true, /*mayBeInterrupted*/false, &errCode);
+            // putting an abort here because we are trying to limit
+            // the places where cloneFrom is called.
+            // Hope is to make creating of connection be done
+            // ouside of cloneFrom
+            ::abort();
+            // temporary until we figure this out
+            bool ok = true;
+            //bool ok = cloneFrom(hostName.c_str(), errmsg, cc().database()->name, false, /*slaveOk*/ true, /*replauth*/ true, /*mayYield*/true, /*mayBeInterrupted*/false, &errCode);
             if ( !ok ) {
                 if ( errCode == DatabaseDifferCaseCode ) {
                     resyncDrop( db.c_str(), "internal" );
