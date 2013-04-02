@@ -235,23 +235,30 @@ namespace mongo {
         // _d and _idx are mutually null when the collection doesn't
         // exist and is therefore treated as empty.
         if (_d != NULL && _idx != NULL) {
+            // Don't prelock point ranges.
             if ( _bounds != NULL) {
                 // Try skipping forward in the key space using the bounds iterator
                 // and the proposed startKey. If skipping wasn't necessary, then
                 // use that start key to set our position and reset the iterator.
-                prelockRange( _bounds->startKey(), _bounds->endKey() );
-                const int r = skipToNextKey( _bounds->startKey() );
+                const BSONObj startKey = _bounds->startKey();
+                const BSONObj endKey = _bounds->endKey();
+                if ( startKey != endKey ) {
+                    prelockRange( startKey, endKey );
+                }
+                const int r = skipToNextKey( _startKey );
                 if ( r == -1 ) {
                     // The bounds iterator suggests _bounds->startKey() is within
                     // the current interval, so that's a good place to start. We
                     // need to prepDive() on the iterator to reset its current
                     // state so that further calls to skipToNextKey work properly.
                     _boundsIterator->prepDive();
-                    findKey( _bounds->startKey() );
+                    findKey( startKey );
                 }
             } else {
                 // Seek to an initial key described by _startKey 
-                prelockRange( _startKey, _endKey );
+                if ( _startKey != _endKey ) {
+                    prelockRange( _startKey, _endKey );
+                }
                 findKey( _startKey );
             }
             checkCurrentAgainstBounds();
@@ -362,7 +369,7 @@ namespace mongo {
                     if ( _nscanned > startNscanned + 20 ) {
                         break;
                     }
-                } while( skipOutOfRangeKeysAndCheckEnd() );
+                } while ( skipOutOfRangeKeysAndCheckEnd() );
             }
         }
         return ok();
@@ -487,11 +494,13 @@ namespace mongo {
 
     // Check if the current key is beyond endKey.
     void IndexCursor::checkEnd() {
-        if ( _currKey.isEmpty() )
+        if ( _currKey.isEmpty() ) {
             return;
+        }
         if ( !_endKey.isEmpty() ) {
-            verify( _idx != NULL );
-            const int cmp = sgn( _endKey.woCompare( currKey(), _idx->keyPattern() ) );
+            dassert( _d != NULL &&_idx != NULL );
+            // TODO: Change _idx->keyPattern() to _ordering, which is cheaper
+            const int cmp = sgn( _endKey.woCompare( _currKey, _idx->keyPattern() ) );
             if ( ( cmp != 0 && cmp != _direction ) ||
                     ( cmp == 0 && !_endKeyInclusive ) ) {
                 _currKey = BSONObj();

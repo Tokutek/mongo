@@ -582,6 +582,7 @@ namespace mongo {
         BSONObj obj = BSONObj();
         TOKULOG(3) << "NamespaceDetails::findByPK looking for " << key << endl;
         struct findByPKCallbackExtra extra(key, obj);
+        // TODO: Use db->getf_set which does less malloc and free.
         r = cursor->c_getf_set(cursor, 0, &key_dbt, findByPKCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND);
 
