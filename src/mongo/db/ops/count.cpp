@@ -45,7 +45,7 @@ namespace mongo {
         long long skip = cmd["skip"].numberLong();
         long long limit = cmd["limit"].numberLong();
 
-        if( limit < 0 ){
+        if ( limit < 0 ) {
             limit  = -limit;
         }
 

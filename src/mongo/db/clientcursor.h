@@ -281,14 +281,20 @@ namespace mongo {
         static unsigned numCursors() { return clientCursorsById.size(); }
         static void find( const string& ns , set<CursorId>& all );
 
+    public:
+
+        // The Cursor destructor closes its ydb cursor, which reqquires that the
+        // transaction that created it be live. Becuse of this, the transaction
+        // stack pointer needs to stay in scope around the cursor, and so we
+        // declare it first.
+        shared_ptr<Client::TransactionStack> transactions; // the transaction this cursor is under,
+                                                           // only set to support getMore() 
 
     private: // methods
 
         // cursors normally timeout after an inactivy period to prevent excess memory use
         // setting this prevents timeout of the cursor in question.
         void noTimeout() { _pinValue++; }
-
-    private:
 
         CursorId _cursorid;
 
@@ -317,8 +323,6 @@ namespace mongo {
     public:
         shared_ptr<ParsedQuery> pq;
         shared_ptr<Projection> fields; // which fields query wants returned
-        shared_ptr<Client::TransactionStack> transactions; // the transaction this cursor is under,
-                                                           // only set to support getMore() 
 
     private: // static members
 
