@@ -208,7 +208,7 @@ namespace mongo {
 
         // insert an object, using a fresh auto-increment primary key
         void insertObject(BSONObj &obj, uint64_t flags) {
-            BSONObjBuilder pk;
+            BSONObjBuilder pk(64);
             pk.append("", _nextPK.fetchAndAdd(1));
             insertIntoIndexes(pk.obj(), obj, flags);
         }
