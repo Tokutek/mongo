@@ -287,7 +287,11 @@ namespace mongo {
             // times we've called getf.
             switch ( _getf_iteration ) {
                 case 0:
-                    return 1;
+                    // read two rows on the first iteration. if this
+                    // cursor is for a point query, the first result
+                    // is the answer to the query and the next is to
+                    // check the end, to see that the query is done.
+                    return 2;
                 case 1:
                     return 16;
                 case 2:
