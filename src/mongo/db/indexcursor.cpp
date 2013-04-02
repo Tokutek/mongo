@@ -245,7 +245,7 @@ namespace mongo {
                 if ( startKey != endKey ) {
                     prelockRange( startKey, endKey );
                 }
-                const int r = skipToNextKey( _startKey );
+                const int r = skipToNextKey( startKey );
                 if ( r == -1 ) {
                     // The bounds iterator suggests _bounds->startKey() is within
                     // the current interval, so that's a good place to start. We
@@ -294,21 +294,12 @@ namespace mongo {
             // times we've called getf.
             switch ( _getf_iteration ) {
                 case 0:
-                    // read two rows on the first iteration. if this
-                    // cursor is for a point query, the first result
-                    // is the answer to the query and the next is to
-                    // check the end, to see that the query is done.
-                    return 2;
                 case 1:
-                    return 16;
-                case 2:
-                    return 128;
-                case 3:
-                    return 1024;
-                case 4:
-                    return 4096;
+                    // The first and second iterations should only fetch
+                    // 1 row, to optimize point queries.
+                    return 1;
                 default:
-                    return 16384;
+                    return 2 << (_getf_iteration < 20 ? _getf_iteration : 20);
             }
         } else {
             // Cursors that are not read only may not buffer rows, because they
