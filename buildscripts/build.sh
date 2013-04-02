@@ -257,7 +257,7 @@ fi
 
 if [[ $debugbuild != 0 && ( -z $suffix ) ]] ; then suffix=-debug; fi
 
-builddir=build-$tokudb-${svn_revision}${suffix}
+builddir=build-mongodb-$tokudb-${svn_revision}${suffix}
 if [ ! -d $builddir ] ; then mkdir $builddir; fi
 pushd $builddir
 
