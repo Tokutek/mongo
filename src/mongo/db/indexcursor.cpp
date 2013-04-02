@@ -370,9 +370,10 @@ namespace mongo {
     // rest set to max/min key for direction > 0 or < 0 respectively.
     void IndexCursor::skipPrefix(const BSONObj &key, const int k) {
         TOKULOG(3) << "skipPrefix skipping first " << k << " elements in key " << key << endl;
-        BSONObjBuilder b;
+        BSONObjBuilder b(key.objsize());
         BSONObjIterator it = key.begin();
-        for ( int i = 0; i < key.nFields(); i++ ) {
+        const int nFields = key.nFields();
+        for ( int i = 0; i < nFields; i++ ) {
             if ( i < k ) {
                 b.append( it.next() );
             } else {
@@ -420,10 +421,11 @@ namespace mongo {
         if ( _boundsIterator->after() ) {
             skipPrefix( currentKey, skipPrefixIndex );
         } else {
-            BSONObjBuilder b;
+            BSONObjBuilder b(currentKey.objsize());
             BSONObjIterator it = currentKey.begin();
-            const vector<const BSONElement *> endKeys = _boundsIterator->cmp();
-            for ( int i = 0; i < currentKey.nFields(); i++ ) {
+            const vector<const BSONElement *> &endKeys = _boundsIterator->cmp();
+            const int nFields = currentKey.nFields();
+            for ( int i = 0; i < nFields; i++ ) {
                 if ( i < skipPrefixIndex ) {
                     verify( it.more() );
                     b.append( it.next() );
@@ -448,7 +450,8 @@ namespace mongo {
                 BSONObj key = currKey();
                 it = key.begin();
                 const vector<bool> &inclusive = _boundsIterator->inc();
-                for ( int i = 0; i < key.nFields(); i++ ) {
+                const int nFields = key.nFields();
+                for ( int i = 0; i < nFields; i++ ) {
                     const BSONElement e = it.next();
                     if ( i >= skipPrefixIndex && !inclusive[i] && e.valuesEqual(*endKeys[i]) ) {
                         // The ith element equals the ith endKey but it's not supposed to be inclusive.
