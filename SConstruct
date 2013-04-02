@@ -206,6 +206,9 @@ add_option( "clang" , "use clang++ rather than g++ (experimental)" , 0 , True )
 
 # debugging/profiling help
 
+add_option( "allocator" , "allocator to use (tcmalloc or system)" , 1 , True,
+            default=((sys.platform.startswith('linux') and (os.uname()[-1] == 'x86_64')) and
+                     'tcmalloc' or 'system') )
 add_option( "gdbserver" , "build in gdb server support" , 0 , True )
 add_option( "heapcheck", "link to heap-checking malloc-lib and look for memory leaks during tests" , 0 , False )
 add_option( "gcov" , "compile with flags for gcov" , 0 , True )
@@ -805,20 +808,6 @@ env.Append(LIBS=[ltokudb, ltokuportability, 'm', 'dl', 'z'])
 if has_option( 'force-git-version' ):
     env.Append(FORCEGITVERSION=get_option( 'force-git-version' ))
 
-# jemalloc
-# - always link statically with libjemalloc.a, not libjemalloc.so - you have been warned.
-# TODO: make this easier once builds are incorporated with the fractal tree in github.
-if os.path.exists(os.getenv('JEMALLOC_PATH') or 'src/third_party/jemalloc'):
-    env.Append(LIBPATH=['%s/lib' % (os.getenv('JEMALLOC_PATH') or '$BUILD_DIR/third_party/jemalloc')])
-    env.Append(LIBS=['jemalloc'])
-else:
-    print ("Cannot find jemalloc. Make sure that one of JEMALLOC_PATH or "
-           "src/third_party/jemalloc point to a top-level jemalloc build/install, "
-           "and it contains lib/libjemalloc.a (NOT lib/libjemalloc.so, rename "
-           "this library if it exists (eg: to lib/libjemalloc_shared.so).")
-    print ("Temporarily proceeding without jemalloc, relying on system malloc...")
-    #Exit(1)
-
 # --- check system ---
 
 def doConfigure(myenv):
@@ -869,6 +858,22 @@ def doConfigure(myenv):
     if freebsd or openbsd:
         if not conf.CheckLib("execinfo"):
             Exit(1)
+
+    # 'tcmalloc' needs to be the last library linked. Please, add new libraries before this 
+    # point.
+    if get_option('allocator') == 'tcmalloc':
+        if use_system_version_of_library('tcmalloc'):
+            if not conf.CheckLib("tcmalloc"):
+                Exit(1)
+        elif has_option("heapcheck"):
+            print ("--heapcheck does not work with the tcmalloc embedded in the mongodb source "
+                   "tree.  Use --use-system-tcmalloc.")
+            Exit(1)
+    elif get_option('allocator') == 'system':
+        pass
+    else:
+        print "Invalid --allocator parameter: \"%s\"" % get_option('allocator')
+        Exit(1)
 
     if has_option("heapcheck"):
         if ( not debugBuild ) and ( not debugLogging ):
