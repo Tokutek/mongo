@@ -816,7 +816,8 @@ else:
            "src/third_party/jemalloc point to a top-level jemalloc build/install, "
            "and it contains lib/libjemalloc.a (NOT lib/libjemalloc.so, rename "
            "this library if it exists (eg: to lib/libjemalloc_shared.so).")
-    Exit(1)
+    print ("Temporarily proceeding without jemalloc, relying on system malloc...")
+    #Exit(1)
 
 # --- check system ---
 
