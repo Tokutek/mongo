@@ -339,13 +339,11 @@ namespace mongo {
                     }
 
                     ModSet* useMods = mods.get();
-                    bool forceRewrite = false;
 
                     auto_ptr<ModSet> mymodset;
                     if ( details.hasElemMatchKey() && mods->hasDynamicArray() ) {
                         useMods = mods->fixDynamicArray( details.elemMatchKey() );
                         mymodset.reset( useMods );
-                        forceRewrite = true;
                     }
 
                     auto_ptr<ModSetState> mss = useMods->prepare( currentObj );
