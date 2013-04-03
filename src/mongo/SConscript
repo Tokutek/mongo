@@ -505,12 +505,14 @@ def checkGlibc(target,source,env):
         Exit(-3)
 
 distBinaries = []
+debuginfoBinaries = []
 
 if windows:
     distBinaries.extend(['mongod.pdb', 'mongos.pdb'])
 
 def installBinary( e, name ):
     global distBinaries
+    global debuginfoBinaries
 
     name = add_exe( name )
 
@@ -518,8 +520,13 @@ def installBinary( e, name ):
         e.AddPostAction( name, checkGlibc )
 
     if (solaris or linux) and (not has_option("nostrip")):
-        name = e.Command('stripped/%s' % name, name, Copy('$TARGET', '$SOURCE'))[0]
+        dbgname = e.Command('stripped/%s.dbg' % name, name, Copy('$TARGET', '$SOURCE'))[0]
+        e.AddPostAction(dbgname, 'objcopy --only-keep-debug $TARGET')
+        debuginfoBinaries.append(dbgname)
+
+        name = e.Command('stripped/%s' % name, [name, dbgname], Copy('$TARGET', '$SOURCE'))[0]
         e.AddPostAction(name, 'strip $TARGET')
+        e.AddPostAction(name, 'objcopy --add-gnu-debuglink=${TARGET}.dbg $TARGET')
 
     distBinaries.append(name)
 
@@ -573,6 +580,16 @@ env.Command(
     '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=$SERVER_DIST_BASENAME/bin '
     '--transform ${str(Dir(BUILD_DIR))}/mongo=$SERVER_DIST_BASENAME/bin '
     '${TEMPFILE(SOURCES[1:])}')
+
+if (solaris or linux) and (not has_option("nostrip")):
+    debugtgt = env.Command(
+        '#/${SERVER_DEBUGINFO_ARCHIVE}',
+        ['#buildscripts/make_archive.py',
+         debuginfoBinaries],
+        '$PYTHON ${SOURCES[0]} -o $TARGET '
+        '--transform distsrc=${SERVER_DIST_BASENAME}-debuginfo '
+        '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=${SERVER_DIST_BASENAME}-debuginfo/bin '
+        '${TEMPFILE(SOURCES[1:])}')
 
 #final alias
 env.Alias( "install", "$INSTALL_DIR" )
