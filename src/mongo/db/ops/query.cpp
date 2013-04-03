@@ -100,6 +100,11 @@ namespace mongo {
             // check for spoofing of the ns such that it does not match the one originally there for the cursor
             uassert(14833, "auth error", str::equals(ns, client_cursor->ns().c_str()));
 
+            TokuCommandSettings settings;
+            settings.setBulkFetch(true);
+            settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
+            cc().setTokuCommandSettings(settings);
+
             // check that we properly set the transactions when the cursor was originally saved, and restore it into the current client
             verify(client_cursor->transactions.get() != NULL);
             cc().swapTransactionStack(client_cursor->transactions);
