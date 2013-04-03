@@ -3,6 +3,7 @@
 # This SConscript describes build rules for the "mongo" project.
 
 import os
+import os.path
 from buildscripts import utils
 
 Import("env")
@@ -574,11 +575,19 @@ env.Command(
      '#distsrc/GNU-AGPL-3.0',
      '#distsrc/README',
      '#distsrc/THIRD-PARTY-NOTICES',
+     '/lib64/libc.so.6',
+     '/lib64/libgcc_s.so.1',
+     '/usr/lib64/libstdc++.so.6',
+     os.path.realpath('/lib64/libc.so.6'),
+     os.path.realpath('/lib64/libgcc_s.so.1'),
+     os.path.realpath('/usr/lib64/libstdc++.so.6'),
      distBinaries],
     '$PYTHON ${SOURCES[0]} -o $TARGET '
     '--transform distsrc=$SERVER_DIST_BASENAME '
     '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=$SERVER_DIST_BASENAME/bin '
     '--transform ${str(Dir(BUILD_DIR))}/mongo=$SERVER_DIST_BASENAME/bin '
+    '--transform /lib64=$SERVER_DIST_BASENAME/lib64 '
+    '--transform /usr/lib64=$SERVER_DIST_BASENAME/lib64 '
     '${TEMPFILE(SOURCES[1:])}')
 
 if (solaris or linux) and (not has_option("nostrip")):

@@ -810,7 +810,7 @@ env.Append(LIBS=[ltokudb, ltokuportability, 'm', 'dl', 'z'])
 if has_option( 'force-git-version' ):
     env.Append(FORCEGITVERSION=get_option( 'force-git-version' ))
 
-env.Append(LINKFLAGS=["-static-libgcc", "-static", "-lstdc++", "-dynamic"])
+env.Append(LINKFLAGS=["-Wl,-rpath,'$$ORIGIN/../lib64:$$$$ORIGIN/../lib64'"])
 
 # --- check system ---
 
