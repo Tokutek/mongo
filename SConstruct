@@ -702,7 +702,7 @@ if nix:
 
     env.Append( CPPDEFINES=["_FILE_OFFSET_BITS=64"] )
     env.Append( CXXFLAGS=["-Wnon-virtual-dtor", "-Woverloaded-virtual"] )
-    env.Append( LINKFLAGS=["-fPIC", "-pthread", "-rdynamic", "-static-libgcc", "-static", "-lstdc++", "-dynamic"] )
+    env.Append( LINKFLAGS=["-fPIC", "-pthread", "-rdynamic"] )
     env.Append( LIBS=[] )
 
     #make scons colorgcc and ccache and distcc friendly
@@ -809,6 +809,8 @@ env.Append(LIBPATH=['%s/lib' % tokupath])
 env.Append(LIBS=[ltokudb, ltokuportability, 'm', 'dl', 'z'])
 if has_option( 'force-git-version' ):
     env.Append(FORCEGITVERSION=get_option( 'force-git-version' ))
+
+env.Append(LINKFLAGS=["-static-libgcc", "-static", "-lstdc++", "-dynamic"])
 
 # --- check system ---
 
