@@ -28,10 +28,6 @@ namespace mongo {
             logForRepl = true;
             slaveOk = false;
             useReplAuth = false;
-<<<<<<< HEAD
-            snapshot = true;
-=======
->>>>>>> refs #6435, get clone functionality working
             mayYield = true;
             mayBeInterrupted = false;
 

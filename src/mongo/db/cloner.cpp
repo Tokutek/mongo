@@ -37,12 +37,8 @@ namespace mongo {
     /** Selectively release the mutex based on a parameter. */
     class dbtempreleaseif {
     public:
-<<<<<<< HEAD
-        dbtempreleaseif( bool release ) : _impl( release ? new dbtemprelease() : 0 ) {}
-=======
         dbtempreleaseif( bool release ) : 
             _impl( release ? new dbtemprelease() : 0 ) {}
->>>>>>> refs #6435, get clone functionality working
     private:
         shared_ptr< dbtemprelease > _impl;
     };
@@ -101,11 +97,6 @@ namespace mongo {
     }
 
     class Cloner: boost::noncopyable {
-<<<<<<< HEAD
-        auto_ptr< DBClientBase > conn;
-        void copy(const char *from_ns, const char *to_ns, bool isindex, bool logForRepl,
-                  bool masterSameProcess, bool slaveOk, bool mayYield, bool mayBeInterrupted, Query q = Query());
-=======
         shared_ptr< DBClientBase > conn;
         void copy(
             const char *from_ns, 
@@ -117,7 +108,6 @@ namespace mongo {
             bool mayBeInterrupted, 
             Query q = Query()
             );
->>>>>>> refs #6435, get clone functionality working
         struct Fun;
     public:
         Cloner() { }
@@ -130,12 +120,6 @@ namespace mongo {
         void setConnection( shared_ptr<DBClientBase> c ) { conn = c; }
 
         /** copy the entire database */
-<<<<<<< HEAD
-        bool go(const char *masterHost, string& errmsg, const string& fromdb, bool logForRepl, bool slaveOk, bool useReplAuth, bool snapshot, bool mayYield, bool mayBeInterrupted, int *errCode = 0);
-        bool go(const char *masterHost, const CloneOptions& opts, set<string>& clonedColls, string& errmsg, int *errCode = 0);
-
-        bool copyCollection( const string& ns , const BSONObj& query , string& errmsg , bool mayYield, bool mayBeInterrupted, bool copyIndexes = true, bool logForRepl = true );
-=======
         bool go(
             const char *masterHost, 
             string& errmsg, 
@@ -161,7 +145,6 @@ namespace mongo {
             string& errmsg , 
             bool copyIndexes
             );
->>>>>>> refs #6435, get clone functionality working
     };
 
     /* for index info object:
@@ -281,9 +264,6 @@ namespace mongo {
     /* copy the specified collection
        isindex - if true, this is system.indexes collection, in which we do some transformation when copying.
     */
-<<<<<<< HEAD
-    void Cloner::copy(const char *from_collection, const char *to_collection, bool isindex, bool logForRepl, bool masterSameProcess, bool slaveOk, bool mayYield, bool mayBeInterrupted, Query query) {
-=======
     void Cloner::copy(
         const char *from_collection, 
         const char *to_collection, 
@@ -295,7 +275,6 @@ namespace mongo {
         Query query
         ) 
     {
->>>>>>> refs #6435, get clone functionality working
         list<BSONObj> storedForLater;
 
         LOG(2) << "\t\tcloning collection " << from_collection << " to " << to_collection << " on " << conn->getServerAddress() << " with filter " << query.toString() << endl;
@@ -341,24 +320,6 @@ namespace mongo {
         }
     }
 
-<<<<<<< HEAD
-    bool copyCollectionFromRemote(const string& host, const string& ns, string& errmsg) {
-        Cloner c;
-
-        DBClientConnection *conn = new DBClientConnection();
-        // cloner owns conn in auto_ptr
-        c.setConnection(conn);
-        uassert(15908, errmsg, conn->connect(host, errmsg) && replAuthenticate(conn));
-
-        return c.copyCollection(ns, BSONObj(), errmsg, true, false, /*copyIndexes*/ true, false);
-    }
-
-    bool Cloner::copyCollection( const string& ns, const BSONObj& query, string& errmsg,
-                                 bool mayYield, bool mayBeInterrupted, bool copyIndexes, bool logForRepl ) {
-
-        Client::WriteContext ctx(ns);
-
-=======
     bool Cloner::copyCollection(
         const string& ns, 
         const BSONObj& query,
@@ -366,7 +327,6 @@ namespace mongo {
         bool copyIndexes
         ) 
     {
->>>>>>> refs #6435, get clone functionality working
         {
             // config
             string temp = cc().getContext()->db()->name + ".system.namespaces";
