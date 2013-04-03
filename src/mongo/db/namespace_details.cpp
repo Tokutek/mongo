@@ -175,7 +175,8 @@ namespace mongo {
     static int getfCallback(const DBT *key, const DBT *value, void *extra) {
         struct getfExtra *info = reinterpret_cast<struct getfExtra *>(extra);
         if (key) {
-            info->obj = BSONObj(reinterpret_cast<char *>(key->data));
+            const storage::Key sKey(key);
+            info->obj = sKey.key().getOwned();
         }
         return 0;
     }
@@ -545,22 +546,14 @@ namespace mongo {
     }
 
     struct findByPKCallbackExtra {
-        const BSONObj &key;
         BSONObj &obj;
 
-        findByPKCallbackExtra(const BSONObj &k, BSONObj &o) : key(k), obj(o) { }
+        findByPKCallbackExtra(BSONObj &o) : obj(o) { }
     };
 
     static int findByPKCallback(const DBT *key, const DBT *value, void *extra) {
         if (key != NULL) {
             struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
-            DEV {
-                // We should have been called using an exact getf, so the
-                // key is non-null iff we found an exact match.
-                BSONObj idKey(reinterpret_cast<char *>(key->data));
-                verify(!idKey.isEmpty());
-                verify(idKey.woCompare(idKey, info->key) == 0);
-            }
             BSONObj obj(reinterpret_cast<char *>(value->data));
             info->obj = obj.getOwned();
         }
@@ -576,12 +569,14 @@ namespace mongo {
         DBC *cursor = c.dbc();
 
         // create an index key
-        DBT key_dbt = storage::make_dbt(key.objdata(), key.objsize());
+        storage::Key sKey(key, NULL);
+        DBT key_dbt = sKey.dbt();
+
+        TOKULOG(3) << "NamespaceDetails::findByPK looking for " << key << endl;
 
         // Try to find it.
         BSONObj obj = BSONObj();
-        TOKULOG(3) << "NamespaceDetails::findByPK looking for " << key << endl;
-        struct findByPKCallbackExtra extra(key, obj);
+        struct findByPKCallbackExtra extra(obj);
         // TODO: Use db->getf_set which does less malloc and free.
         r = cursor->c_getf_set(cursor, 0, &key_dbt, findByPKCallback, &extra);
         verify(r == 0 || r == DB_NOTFOUND);

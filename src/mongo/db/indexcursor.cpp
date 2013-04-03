@@ -124,27 +124,19 @@ namespace mongo {
             struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
             RowBuffer *buffer = info->buffer;
 
-            BSONObj keyObj, pkObj, valObj;
+            BSONObj valObj;
 
-            // There is always a non-empty bson object key to start.
-            keyObj = BSONObj(static_cast<char *>(key->data));
-            verify(keyObj.objsize() <= (int) key->size);
-            verify(!keyObj.isEmpty());
-
-            // Check if there a PK attached to the end of the first key.
-            // If not, then this is the primary index, so PK == key.
-            if (keyObj.objsize() < (int) key->size) {
-                pkObj = BSONObj(static_cast<char *>(key->data) + keyObj.objsize());
-                verify(keyObj.objsize() + pkObj.objsize() == (int) key->size);
-                verify(!pkObj.isEmpty());
-            } else {
-                pkObj = keyObj;
-            }
+            // There is always a key at the to start.
+            const storage::Key sKey(key);
+            BSONObj keyObj(sKey.key());
+            BSONObj pkObj(sKey.pk().isEmpty()
+                          ? sKey.pk()
+                          : keyObj);
 
             // Check if an object lives in the val buffer.
             if (val->size > 0) {
                 valObj = BSONObj(static_cast<char *>(val->data));
-                verify(valObj.objsize() == (int) val->size);
+                dassert(valObj.objsize() == (int) val->size);
             } else {
                 valObj = BSONObj();
             }
@@ -152,7 +144,7 @@ namespace mongo {
             // Append the new row to the buffer.
             buffer->append(keyObj, pkObj, valObj);
             TOKULOG(3) << "cursor_getf appended to row buffer " << keyObj << pkObj << valObj << endl;
-            
+
             // request more bulk fetching if we are allowed to fetch more rows
             // and the row buffer is not too full.
             if (++info->rows_fetched < info->rows_to_fetch && !buffer->isGorged()) {

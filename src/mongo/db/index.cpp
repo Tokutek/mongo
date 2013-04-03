@@ -128,17 +128,9 @@ namespace mongo {
 
     int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
         if (key != NULL) {
-            const BSONObj oldkey(static_cast<char *>(key->data));
-            verify(oldkey.objsize() <= (int) key->size);
-            verify(!oldkey.isEmpty());
-            if (oldkey.objsize() < (int) key->size) {
-                // Sanity check that the pk is what we expect, but we won't use it to check uniqueness.
-                const BSONObj pk(static_cast<char *>(key->data) + oldkey.objsize());
-                verify(!pk.isEmpty());
-                verify(pk.objsize() == ((int) key->size) - oldkey.objsize());
-            }
+            const storage::Key sKey(key);
             UniqueCheckExtra *e = static_cast<UniqueCheckExtra *>(extra);
-            e->d.uniqueCheckCallback(e->newkey, oldkey, e->isUnique);
+            e->d.uniqueCheckCallback(e->newkey, sKey.key(), e->isUnique);
         }
         return 0;
     }

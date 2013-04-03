@@ -46,25 +46,22 @@ namespace mongo {
 
         DB_ENV *env;
 
-        static int dbt_bson_compare(DB *db, const DBT *key1, const DBT *key2) {
+        static int dbt_key_compare(DB *db, const DBT *dbt1, const DBT *dbt2) {
             try {
-                verify(db->cmp_descriptor);
-
-                // Primary _id keys are represented by exactly one BSON Object.
+                // Primary _id keys are represented by exactly one key.
                 // Secondary keys are represented by exactly two, the secondary
                 // key plus an associated _id key.
-                dassert(key1->size > 0);
-                dassert(key2->size > 0);
-                const BSONObj obj1(static_cast<char *>(key1->data));
-                const BSONObj obj2(static_cast<char *>(key2->data));
-                dassert((int) key1->size >= obj1.objsize());
-                dassert((int) key2->size >= obj2.objsize());
+                dassert(dbt1->size > 0);
+                dassert(dbt2->size > 0);
+                const KeyV1 key1(static_cast<char *>(dbt1->data));
+                const KeyV1 key2(static_cast<char *>(dbt2->data));
+                dassert((int) dbt1->size >= key1.dataSize());
+                dassert((int) dbt2->size >= key2.dataSize());
 
-                // Compare by the first object. The ordering comes from the key pattern.
+                // Compare by the first key. The ordering comes from the key pattern.
                 {
-                    const BSONObj key_pattern(static_cast<char *>(db->cmp_descriptor->dbt.data));
-                    const Ordering ordering = Ordering::make(key_pattern);
-                    const int c = obj1.woCompare(obj2, ordering);
+                    const Ordering &ordering = *static_cast<Ordering *>(db->cmp_descriptor->dbt.data);
+                    const int c = key1.woCompare(key2, ordering);
                     if (c < 0) {
                         return -1;
                     } else if (c > 0) {
@@ -72,17 +69,19 @@ namespace mongo {
                     }
                 }
 
-                // Compare by the second object, if it exists.
-                int key1_bytes_left = key1->size - obj1.objsize();
-                int key2_bytes_left = key2->size - obj2.objsize();
-                if (key1_bytes_left > 0 && key2_bytes_left > 0) {
-                    const BSONObj other_obj1(static_cast<char *>(key1->data) + obj1.objsize());
-                    const BSONObj other_obj2(static_cast<char *>(key2->data) + obj2.objsize());
-                    dassert(obj1.objsize() + other_obj1.objsize() == (int) key1->size);
-                    dassert(obj2.objsize() + other_obj2.objsize() == (int) key2->size);
+                // Compare by the second key, stored as BSON, if it exists.
+                int key1_size = key1.dataSize();
+                int key2_size = key2.dataSize();
+                int dbt1_bytes_left = dbt1->size - key1_size;
+                int dbt2_bytes_left = dbt2->size - key2_size;
+                if (dbt1_bytes_left > 0 && dbt2_bytes_left > 0) {
+                    const BSONObj other_key1(static_cast<char *>(dbt1->data) + key1_size);
+                    const BSONObj other_key2(static_cast<char *>(dbt2->data) + key2_size);
+                    dassert(key1.dataSize() + other_key1.objsize() == (int) dbt1->size);
+                    dassert(key2.dataSize() + other_key2.objsize() == (int) dbt2->size);
 
                     static const Ordering id_ordering = Ordering::make(BSON("_id" << 1));
-                    const int c = other_obj1.woCompare(other_obj2, id_ordering);
+                    const int c = other_key1.woCompare(other_key2, id_ordering);
                     if (c < 0) {
                         return -1;
                     } else if (c > 0) {
@@ -90,7 +89,7 @@ namespace mongo {
                     }
                 } else {
                     // The associated primary key must exist in both keys, or neither.
-                    dassert(key1_bytes_left == 0 && key2_bytes_left == 0);
+                    dassert(dbt1_bytes_left == 0 && dbt2_bytes_left == 0);
                 }
                 return 0;
             } catch (std::exception &e) {
@@ -159,7 +158,7 @@ namespace mongo {
             verify(r == 0);
             TOKULOG(1) << "lock timeout set to " << lock_timeout << " milliseconds." << endl;
 
-            r = env->set_default_bt_compare(env, dbt_bson_compare);
+            r = env->set_default_bt_compare(env, dbt_key_compare);
             verify(r == 0);
 
             env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
@@ -198,9 +197,10 @@ namespace mongo {
         }
 
         // set a descriptor for the given dictionary. the descriptor is
-        // a serialization of the index's key pattern.
+        // a serialization of the index's ordering bits.
         static void set_db_descriptor(DB *db, DB_TXN *txn, const BSONObj &key_pattern) {
-            DBT dbt = make_dbt(key_pattern.objdata(), key_pattern.objsize());
+            const Ordering ordering = Ordering::make(key_pattern);
+            DBT dbt = make_dbt((const char *) &ordering, sizeof(Ordering));
             const int flags = DB_UPDATE_CMP_DESCRIPTOR;
             int r = db->change_descriptor(db, txn, &dbt, flags);
             verify(r == 0);

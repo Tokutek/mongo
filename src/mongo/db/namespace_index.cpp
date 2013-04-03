@@ -43,8 +43,8 @@ namespace mongo {
 
     // TODO: Callback is not exception safe.
     static int populate_nsindex_map(const DBT *key, const DBT *val, void *map_v) {
-        BSONObj nobj(static_cast<const char *>(key->data));
-        string ns = nobj["ns"].String();
+        const storage::Key sKey(key);
+        string ns = sKey.key().firstElement().String();
         Namespace n(ns.c_str());
         BSONObj dobj(static_cast<const char *>(val->data));
         TOKULOG(1) << "Loading NamespaceDetails " << (string) n << endl;
@@ -131,7 +131,8 @@ namespace mongo {
         verify(it != namespaces->end());
 
         BSONObj nsobj = BSON("ns" << ns);
-        DBT ndbt = storage::make_dbt(nsobj.objdata(), nsobj.objsize());
+        storage::Key sKey(nsobj, NULL);
+        DBT ndbt = sKey.dbt();
         int r = nsdb->del(nsdb, cc().txn().db_txn(), &ndbt, DB_DELETE_ANY);
         verify(r == 0);
 
@@ -157,7 +158,8 @@ namespace mongo {
         BSONObj serialized;
 
         BSONObj nsobj = BSON("ns" << ns);
-        DBT ndbt = storage::make_dbt(nsobj.objdata(), nsobj.objsize());
+        storage::Key sKey(nsobj, NULL);
+        DBT ndbt = sKey.dbt();
         int r = nsdb->getf_set(nsdb, cc().txn().db_txn(), 0, &ndbt, getf_serialized, &serialized);
         verify(r == 0);
 
@@ -200,7 +202,8 @@ namespace mongo {
         dassert(namespaces.get() != NULL);
 
         BSONObj nsobj = BSON("ns" << ns);
-        DBT ndbt = storage::make_dbt(nsobj.objdata(), nsobj.objsize());
+        storage::Key sKey(nsobj, NULL);
+        DBT ndbt = sKey.dbt();
         DBT ddbt = storage::make_dbt(serialized.objdata(), serialized.objsize());
         const int flags = overwrite ? 0 : DB_NOOVERWRITE;
         int r = nsdb->put(nsdb, cc().txn().db_txn(), &ndbt, &ddbt, flags);
