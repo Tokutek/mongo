@@ -174,6 +174,25 @@ function build_mongodb_src() {
 
         mongodbdir=mongodb-$mongodb_version-tokutek-$git_commit-$tokudb-${svn_revision}${suffix}-$system-$arch
 
+        if [ -f $mongodbsrc/mongodb*-debuginfo.tgz ]; then
+            # copy the debuginfo tarball to a name of our choosing
+            mkdir $mongodbdir-debuginfo
+            tar --extract \
+                --gzip \
+                --directory $mongodbdir-debuginfo \
+                --strip-components 1 \
+                --file $mongodbsrc/mongodb*-debuginfo.tgz
+            tar --create \
+                --gzip \
+                --file $mongodbdir-debuginfo.tar.gz \
+                $mongodbdir-debuginfo
+            md5sum $mongodbdir-debuginfo.tar.gz >$mongodbdir-debuginfo.tar.gz.md5
+            md5sum --check $mongodbdir-debuginfo.tar.gz.md5
+
+            # now remove it so the next file glob doesn't get confused
+            rm $mongodbsrc/mongodb*-debuginfo.tgz
+        fi
+
         # copy the release tarball to a name of our choosing
         mkdir $mongodbdir
         tar --extract \

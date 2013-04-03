@@ -43,7 +43,7 @@ pushd $mongodbsrc
 
     build_type_options=""
     if [ $debugbuild = 1 ] ; then
-        build_type_options="--d --nostrip"
+        build_type_options="--d"
     else
         build_type_options="--release"
     fi

@@ -1171,9 +1171,8 @@ namespace mongo {
         printStackTrace( oss );
         rawOut( oss.str() );
 
-        // Don't go through normal shutdown procedure. It may make things worse.
-        ::_exit(EXIT_ABRUPT);
-
+        // Reinstall default signal handler, to generate core if necessary.
+        signal(x, SIG_DFL);
     }
 
     void abruptQuitWithAddrSignal( int signal, siginfo_t *siginfo, void * ) {

@@ -300,6 +300,7 @@ env = Environment( BUILD_DIR=variantDir,
                    MSVS_ARCH=msarch ,
                    PYTHON=utils.find_python(),
                    SERVER_ARCHIVE='${SERVER_DIST_BASENAME}${DIST_ARCHIVE_SUFFIX}',
+                   SERVER_DEBUGINFO_ARCHIVE='${SERVER_DIST_BASENAME}-debuginfo${DIST_ARCHIVE_SUFFIX}',
                    TARGET_ARCH=msarch ,
                    tools=["default", "gch", "jsheader", "mergelib", "unittest"],
                    UNITTEST_ALIAS='unittests',
@@ -697,7 +698,7 @@ if nix:
 
     env.Append( CPPDEFINES=["_FILE_OFFSET_BITS=64"] )
     env.Append( CXXFLAGS=["-Wnon-virtual-dtor", "-Woverloaded-virtual"] )
-    env.Append( LINKFLAGS=["-fPIC", "-pthread",  "-rdynamic"] )
+    env.Append( LINKFLAGS=["-fPIC", "-pthread", "-rdynamic"] )
     env.Append( LIBS=[] )
 
     #make scons colorgcc and ccache and distcc friendly
@@ -799,6 +800,8 @@ env.Append(LIBPATH=['%s/lib' % tokupath])
 env.Append(LIBS=[ltokudb, ltokuportability, 'm', 'dl', 'z'])
 if has_option( 'force-git-version' ):
     env.Append(FORCEGITVERSION=get_option( 'force-git-version' ))
+
+env.Append(LINKFLAGS=["-Wl,-rpath,'$$ORIGIN/../lib64:$$$$ORIGIN/../lib64'"])
 
 # --- check system ---
 
@@ -1004,6 +1007,7 @@ else:
 env['SERVER_DIST_BASENAME'] = 'mongodb-%s-%s' % (getSystemInstallName(), distName)
 
 distFile = "${SERVER_ARCHIVE}"
+debuginfoFile = "${SERVER_DEBUGINFO_ARCHIVE}"
 
 env['NIX_LIB_DIR'] = nixLibPrefix
 env['INSTALL_DIR'] = installDir
@@ -1090,7 +1094,10 @@ def s3dist( env , target , source ):
 def s3distclient(env, target, source):
     s3push(str(source[0]), "cxx-driver/mongodb", platformDir=False)
 
-env.Alias( "dist" , '$SERVER_ARCHIVE' )
+if (solaris or linux) and (not has_option("nostrip")):
+    env.Alias( "dist" , ['$SERVER_ARCHIVE', '$SERVER_DEBUGINFO_ARCHIVE'] )
+else:
+    env.Alias( "dist" , '$SERVER_ARCHIVE' )
 env.Alias( "distclient", "$CLIENT_ARCHIVE")
 env.AlwaysBuild(env.Alias( "s3dist" , [ '$SERVER_ARCHIVE' ] , [ s3dist ] ))
 env.AlwaysBuild(env.Alias( "s3distclient" , [ '$CLIENT_ARCHIVE' ] , [ s3distclient ] ))
