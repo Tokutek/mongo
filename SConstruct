@@ -856,16 +856,10 @@ def doConfigure(myenv):
     # 'jemalloc' needs to be the last library linked. Please, add new libraries before this
     # point.
     # TODO: make this easier once builds are incorporated with the fractal tree in github.
-    if os.path.exists(os.getenv('JEMALLOC_PATH', 'src/third_party/jemalloc')):
-        myenv.Append(LIBPATH=['%s/lib' % (os.getenv('JEMALLOC_PATH', '$BUILD_DIR/third_party/jemalloc'))])
-        # This is a cheap way of always getting a static library.  We don't need PIC but there's
-        # anly a static version of one with that name.
-        myenv.Append(LIBS=['jemalloc_pic'])
-    else:
-        print ("Cannot find jemalloc. Make sure that one of JEMALLOC_PATH or "
-               "src/third_party/jemalloc point to a top-level jemalloc build/install, "
-               "and it contains lib/libjemalloc_pic.a.")
-        print ("Building without jemalloc for now.")
+    myenv.Append(LIBPATH=['%s/lib' % (os.getenv('TOKUDB_PATH', '$BUILD_DIR/third_party/tokudb'))])
+    # This is a cheap way of always getting a static library.  We don't need PIC but there's
+    # anly a static version of one with that name.
+    myenv.Append(LIBS=['jemalloc_pic'])
 
     # discover modules (subdirectories of db/modules/), and
     # load the (python) module for each module's build.py
