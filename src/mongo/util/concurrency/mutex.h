@@ -26,7 +26,6 @@
 #include <boost/thread/xtime.hpp>
 
 #include "mongo/util/assert_util.h"
-#include "mongo/util/heapcheck.h"
 #include "mongo/util/concurrency/threadlocal.h"
 #include "mongo/util/time_support.h"
 
@@ -68,11 +67,9 @@ namespace mongo {
         mutex(const char *name) : _name(name)
         {
             _m = new boost::timed_mutex();
-            IGNORE_OBJECT( _m  );   // Turn-off heap checking on _m
         }
         ~mutex() {
             if( !StaticObserver::_destroyingStatics ) {
-                UNIGNORE_OBJECT( _m );
                 delete _m;
             }
         }

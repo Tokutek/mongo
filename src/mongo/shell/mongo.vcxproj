@@ -1204,7 +1204,6 @@ cscript //Nologo createCPPfromJavaScriptFiles.js "$(ProjectDir).."</Command>
     <ClInclude Include="..\util\file_allocator.h" />
     <ClInclude Include="..\util\goodies.h" />
     <ClInclude Include="..\util\hashtab.h" />
-    <ClInclude Include="..\util\heapcheck.h" />
     <ClInclude Include="..\util\hex.h" />
     <ClInclude Include="..\util\log.h" />
     <ClInclude Include="..\util\md5.h" />

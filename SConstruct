@@ -207,7 +207,6 @@ add_option( "clang" , "use clang++ rather than g++ (experimental)" , 0 , True )
 # debugging/profiling help
 
 add_option( "gdbserver" , "build in gdb server support" , 0 , True )
-add_option( "heapcheck", "link to heap-checking malloc-lib and look for memory leaks during tests" , 0 , False )
 add_option( "gcov" , "compile with flags for gcov" , 0 , True )
 
 add_option("smokedbprefix", "prefix to dbpath et al. for smoke tests", 1 , False )
@@ -867,18 +866,6 @@ def doConfigure(myenv):
                "src/third_party/jemalloc point to a top-level jemalloc build/install, "
                "and it contains lib/libjemalloc_pic.a.")
         print ("Building without jemalloc for now.")
-
-    if has_option("heapcheck"):
-        if ( not debugBuild ) and ( not debugLogging ):
-            print( "--heapcheck needs --d or --dd" )
-            Exit( 1 )
-
-        if not conf.CheckCXXHeader( "google/heap-checker.h" ):
-            print( "--heapcheck neads header 'google/heap-checker.h'" )
-            Exit( 1 )
-
-        myenv.Append( CPPDEFINES=[ "HEAP_CHECKING" ] )
-        myenv.Append( CCFLAGS=["-fno-omit-frame-pointer"] )
 
     # discover modules (subdirectories of db/modules/), and
     # load the (python) module for each module's build.py

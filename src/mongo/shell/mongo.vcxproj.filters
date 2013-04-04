@@ -916,9 +916,6 @@
     <ClInclude Include="..\util\hashtab.h">
       <Filter>util\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\util\heapcheck.h">
-      <Filter>util\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\util\hex.h">
       <Filter>util\Header Files</Filter>
     </ClInclude>
