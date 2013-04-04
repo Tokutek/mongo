@@ -62,12 +62,6 @@ namespace mongo {
 
     extern ReplSettings replSettings;
 
-    /* A replication exception */
-    class SyncException : public DBException {
-    public:
-        SyncException() : DBException( "sync exception" , 10001 ) {}
-    };
-
     bool anyReplEnabled();
     void appendReplicationInfo( BSONObjBuilder& result , bool authed , int level = 0 );
 } // namespace mongo
