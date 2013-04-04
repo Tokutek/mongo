@@ -530,6 +530,13 @@ namespace mongo {
         void drop();
 
         typedef std::map<Namespace, shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
+
+        struct PopulateExtra {
+            NamespaceDetailsMap &map;
+            std::exception *exc;
+            PopulateExtra(NamespaceDetailsMap &m) : map(m) {}
+        };
+
     private:
         void _init(bool may_create);
 

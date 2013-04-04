@@ -41,20 +41,26 @@ namespace mongo {
         }
     }
 
-    // TODO: Callback is not exception safe.
-    static int populate_nsindex_map(const DBT *key, const DBT *val, void *map_v) {
-        const storage::Key sKey(key);
-        string ns = sKey.key().firstElement().String();
-        Namespace n(ns.c_str());
-        BSONObj dobj(static_cast<const char *>(val->data));
-        TOKULOG(1) << "Loading NamespaceDetails " << (string) n << endl;
-        shared_ptr<NamespaceDetails> d( NamespaceDetails::make(dobj) );
+    static int populateNamespaceIndex(const DBT *key, const DBT *val, void *extra) {
+        NamespaceIndex::PopulateExtra *e = static_cast<NamespaceIndex::PopulateExtra *>(extra);
+        try {
+            const storage::Key sKey(key);
+            string ns = sKey.key().firstElement().String();
+            Namespace n(ns.c_str());
+            BSONObj dobj(static_cast<const char *>(val->data));
+            TOKULOG(1) << "Loading NamespaceDetails " << (string) n << endl;
+            shared_ptr<NamespaceDetails> d( NamespaceDetails::make(dobj) );
 
-        NamespaceIndex::NamespaceDetailsMap *m = static_cast<NamespaceIndex::NamespaceDetailsMap *>(map_v);
-        std::pair<NamespaceIndex::NamespaceDetailsMap::iterator, bool> ret;
-        ret = m->insert(make_pair(n, d));
-        dassert(ret.second == true);
-        return 0;
+            std::pair<NamespaceIndex::NamespaceDetailsMap::iterator, bool> ret;
+            ret = e->map.insert(make_pair(n, d));
+            dassert(ret.second == true);
+            return 0;
+        }
+        catch (std::exception &exc) {
+            // We're not allowed to throw exceptions through the ydb so trap it here and reclaim it on the other side.
+            e->exc = &exc;
+            return -1;
+        }
     }
 
     NOINLINE_DECL void NamespaceIndex::_init(bool may_create) {
@@ -86,7 +92,12 @@ namespace mongo {
             verify(r == 0);
 
             while (r != DB_NOTFOUND) {
-                r = cursor->c_getf_next(cursor, 0, populate_nsindex_map, namespaces.get());
+                PopulateExtra e(*namespaces);
+                r = cursor->c_getf_next(cursor, 0, populateNamespaceIndex, &e);
+                if (r == -1) {
+                    dassert(e.exc != NULL);
+                    throw *e.exc;
+                }
                 verify(r == 0 || r == DB_NOTFOUND);
             }
 
