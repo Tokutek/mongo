@@ -124,13 +124,10 @@ function build_mongodb_src() {
         # clone mongo
         if [ -d mongo-git ] ; then
             pushd mongo-git
-                retry git remote prune origin
-                retry git pull
+                retry git fetch
             popd
         else
-            retry git clone \
-                --depth 1 \
-                $gitserver mongo-git
+            retry git clone $gitserver mongo-git
         fi
 
         # export the right branch or tag
