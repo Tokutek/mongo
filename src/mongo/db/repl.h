@@ -68,25 +68,6 @@ namespace mongo {
         SyncException() : DBException( "sync exception" , 10001 ) {}
     };
 
-
     bool anyReplEnabled();
     void appendReplicationInfo( BSONObjBuilder& result , bool authed , int level = 0 );
-
-    /**
-     * Helper class used to set and query an ignore state for a named database.
-     * The ignore state will expire after a specified OpTime.
-     */
-    class DatabaseIgnorer {
-    public:
-        /** Indicate that operations for 'db' should be ignored until after 'futureOplogTime' */
-        void doIgnoreUntilAfter( const string &db, const OpTime &futureOplogTime );
-        /**
-         * Query ignore state of 'db'; if 'currentOplogTime' is after the ignore
-         * limit, the ignore state will be cleared.
-         */
-        bool ignoreAt( const string &db, const OpTime &currentOplogTime );
-    private:
-        map< string, OpTime > _ignores;
-    };
-
 } // namespace mongo

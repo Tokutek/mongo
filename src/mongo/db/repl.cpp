@@ -196,28 +196,7 @@ namespace mongo {
         }
     } cmdismaster;
 
-    BSONObj opTimeQuery = fromjson("{\"getoptime\":1}");    
-    DatabaseIgnorer ___databaseIgnorer;
-    
-    void DatabaseIgnorer::doIgnoreUntilAfter( const string &db, const OpTime &futureOplogTime ) {
-        if ( futureOplogTime > _ignores[ db ] ) {
-            _ignores[ db ] = futureOplogTime;   
-        }
-    }
-
-    bool DatabaseIgnorer::ignoreAt( const string &db, const OpTime &currentOplogTime ) {
-        if ( _ignores[ db ].isNull() ) {
-            return false;
-        }
-        if ( _ignores[ db ] >= currentOplogTime ) {
-            return true;
-        } else {
-            // The ignore state has expired, so clear it.
-            _ignores.erase( db );
-            return false;
-        }
-    }
-
+    BSONObj opTimeQuery = fromjson("{\"getoptime\":1}");
     extern unsigned replApplyBatchSize;
 
     BSONObj userReplQuery = fromjson("{\"user\":\"repl\"}");
