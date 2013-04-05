@@ -182,6 +182,7 @@ namespace mongo {
     }
 
     void GTIDManager::resetManager(GTID lastGTID) {
+        // TODO: figure out what to do with unapplied GTID info here
         _lock.lock();
         dassert(_liveGTIDs.size() == 0);
         _nextLiveGTID = lastGTID;
