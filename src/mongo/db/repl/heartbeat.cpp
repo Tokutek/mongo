@@ -411,6 +411,10 @@ namespace mongo {
         // member heartbeats are started in ReplSetImpl::initFromConfig
     }
 
+    void ReplSetImpl::updateReplInfoThread() {
+        return;
+    }
+
 }
 
 /* todo:

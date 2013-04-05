@@ -161,17 +161,16 @@ namespace mongo {
         bool rs = !cmdLine._replSet.empty();
         verify(rs);
         
-        const char * ns = rsoplog;
-        Client::Context ctx(ns);
-
-        NamespaceDetails * nsd = nsdetails( ns );
-        if ( nsd ) {
-            if ( cmdLine.oplogSize != 0 ) {
-                // TODO: (Zardosht), figure out if there are any checks to do here
-                // not sure under what scenarios we can be here, so
-                // making a printf to catch this so we can investigate
-                tokulog() << "createOplog called with existing opLog, investigate why.\n" << endl;
-            }
+        const char * oplogNS = rsoplog;
+        const char * replInfoNS = rsReplInfo;
+        Client::Context ctx(oplogNS);
+        NamespaceDetails * oplogNSD = nsdetails(oplogNS);
+        NamespaceDetails * replInfoNSD = nsdetails(replInfoNS);
+        if (oplogNSD || replInfoNSD) {
+            // TODO: (Zardosht), figure out if there are any checks to do here
+            // not sure under what scenarios we can be here, so
+            // making a printf to catch this so we can investigate
+            tokulog() << "createOplog called with existing collections, investigate why.\n" << endl;
             return;
         }
 
@@ -184,7 +183,10 @@ namespace mongo {
         // create the namespace
         string err;
         BSONObj o = b.done();
-        userCreateNS(ns, o, err, false);
+        bool ret = userCreateNS(oplogNS, o, err, false);
+        verify(ret);
+        ret = userCreateNS(replInfoNS, o, err, false);
+        verify(ret);
         log() << "******" << endl;
     }
 

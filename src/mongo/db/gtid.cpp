@@ -61,24 +61,34 @@ namespace mongo {
         _primarySeqNo++;
         _GTSeqNo = 0;
     }
+
+
+
+
     
     GTIDManager::GTIDManager( GTID lastGTID ) {
-        _nextGTID = lastGTID;
-        _nextGTID.inc();
-        _minLiveGTID = _nextGTID;
+        _nextLiveGTID = lastGTID;
+        _nextLiveGTID.inc();
+        _minLiveGTID = _nextLiveGTID;
+        // note that _minUnappliedGTID is not set
     }
 
     GTIDManager::~GTIDManager() {
     }
 
+    // This function is meant to only be called on a primary,
+    // it assumes that we are fully up to date and are the ones
+    // getting GTIDs for transactions that will be applying
+    // new data to the replica set. 
+    //
     // returns a GTID that is an increment of _lastGTID
     // also notes that GTID has been handed out
-    GTID GTIDManager::getGTID() {
+    GTID GTIDManager::getGTIDForPrimary() {
         GTID ret;
         _lock.lock();
-        ret = _nextGTID;
+        ret = _nextLiveGTID;
         _liveGTIDs.insert(ret);
-        _nextGTID.inc();
+        _nextLiveGTID.inc();
         _lock.unlock();
         return ret;
     }
@@ -86,7 +96,10 @@ namespace mongo {
     // notification that user of GTID has completed work
     // and either committed or aborted transaction associated with
     // GTID
-    void GTIDManager::noteGTIDDone(GTID gtid) {
+    //
+    // THIS MUST BE DONE ON A PRIMARY
+    //
+    void GTIDManager::noteLiveGTIDDone(GTID gtid) {
         _lock.lock();
         dassert(GTID::cmp(gtid, _minLiveGTID) >= 0);
         dassert(_liveGTIDs.size() > 0);
@@ -96,22 +109,84 @@ namespace mongo {
         // we need to update the minimum live GTID
         if (GTID::cmp(_minLiveGTID, gtid) == 0) {
             if (_liveGTIDs.size() == 0) {
-                _minLiveGTID = _nextGTID;
+                _minLiveGTID = _nextLiveGTID;
             }
             else {
                 // get the minumum from _liveGTIDs and set it to _minLiveGTIDs
                 _minLiveGTID = *(_liveGTIDs.begin());
             }
+            // note that on a primary, which we must be, these are equivalent
+            _minUnappliedGTID = _minLiveGTID;
         }
+        _lock.unlock();
+    }
+
+
+    // This function is called on a secondary when a GTID 
+    // from the primary is added and committed to the opLog
+    void GTIDManager::noteGTIDAdded(GTID gtid) {
+        _lock.lock();
+        // if we are adding a GTID on a secondary, then 
+        // these values must be equal
+        dassert(GTID::cmp(_nextLiveGTID, _minLiveGTID) == 0);
+        dassert(GTID::cmp(_nextLiveGTID, gtid) <= 0);
+        _nextLiveGTID = gtid;
+        _minLiveGTID = gtid;
+        _lock.unlock();
+    }
+
+    // called when a secondary takes an unapplied GTID it has read in the oplog
+    // and starts to apply it
+    void GTIDManager::noteApplyingGTID(GTID gtid) {
+        _lock.lock();
+        dassert(GTID::cmp(gtid, _minUnappliedGTID) > 0);
+        dassert(GTID::cmp(gtid, _nextUnappliedGTID) >= 0);
+        if (_unappliedGTIDs.size() == 0) {
+            _minUnappliedGTID = gtid;
+        }
+
+        _unappliedGTIDs.insert(gtid);        
+        _nextUnappliedGTID = gtid;
+        _nextUnappliedGTID.inc();
+        _lock.unlock();
+    }
+
+    // called when a GTID has finished being applied, which means
+    // we can remove it from the unappliedGTIDs set
+    void GTIDManager::noteGTIDApplied(GTID gtid) {
+        _lock.lock();
+        dassert(GTID::cmp(gtid, _minUnappliedGTID) >= 0);
+        dassert(_unappliedGTIDs.size() > 0);
+        // remove from list of GTIDs
+        _unappliedGTIDs.erase(gtid);
+        // if what we are removing is currently the minumum live GTID
+        // we need to update the minimum live GTID
+        if (GTID::cmp(_minUnappliedGTID, gtid) == 0) {
+            if (_unappliedGTIDs.size() == 0) {
+                _minUnappliedGTID= _nextUnappliedGTID;
+            }
+            else {
+                // get the minumum from _liveGTIDs and set it to _minLiveGTIDs
+                _minUnappliedGTID = *(_unappliedGTIDs.begin());
+            }
+        }
+        _lock.unlock();
+    }
+
+
+    void GTIDManager::getMins(GTID* minLiveGTID, GTID* minUnappliedGTID) {
+        _lock.lock();
+        *minLiveGTID = _minLiveGTID;
+        *minUnappliedGTID = _minUnappliedGTID;
         _lock.unlock();
     }
 
     void GTIDManager::resetManager(GTID lastGTID) {
         _lock.lock();
         dassert(_liveGTIDs.size() == 0);
-        _nextGTID = lastGTID;
-        _nextGTID.inc_primary();
-        _minLiveGTID = _nextGTID;
+        _nextLiveGTID = lastGTID;
+        _nextLiveGTID.inc_primary();
+        _minLiveGTID = _nextLiveGTID;
         _lock.unlock();
     }
 

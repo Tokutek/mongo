@@ -76,7 +76,7 @@ namespace mongo {
             else {
                 if (!_initiatingRS) {
                     dassert(txnGTIDManager);
-                    gtid = txnGTIDManager->getGTID();
+                    gtid = txnGTIDManager->getGTIDForPrimary();
                 }
                 else {
                     dassert(!txnGTIDManager);
@@ -93,7 +93,7 @@ namespace mongo {
         // the GTIDManager that the commit is now done.
         if (gotGTID && !_initiatingRS) {
             dassert(txnGTIDManager);
-            txnGTIDManager->noteGTIDDone(gtid);
+            txnGTIDManager->noteLiveGTIDDone(gtid);
         }
     }
 

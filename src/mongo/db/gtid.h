@@ -47,20 +47,66 @@ namespace mongo {
 
     class GTIDManager {
         boost::mutex _lock;
-        GTID _nextGTID;
+        
+        // GTID to give out should a primary ask for one to use
+        // On a secondary, this is the last GTID seen incremented
+        GTID _nextLiveGTID;
+
+        GTID _nextUnappliedGTID;
+
+        // the minimum live GTID
+        // on a primary, this is the minimum value in _liveGTIDs
+        // on a secondary, this is simply _nextGTID,
         GTID _minLiveGTID;
+
+        // the minimum unapplied GTID
+        // on a primary, this is equal to the _minLiveGTID, because
+        // if we are a primary, then there should be nothing 
+        // committed in the opLog that is not also applied
+        // on a secondary, this is the minumum GTID in the opLog
+        // that has yet to be applied to the collections on the secondary
+        GTID _minUnappliedGTID;
+
+        // set of GTIDs that are live and not committed.
+        // on a primary, these GTIDs have been handed out
+        // by the GTIDManager to be used in the oplog, and
+        // the GTIDManager has yet to get notification that 
+        // the associated transaction to this GTID has been committed
         GTIDSet _liveGTIDs;
+
+        // set of GTIDs committed to the opLog, but not applied
+        // to the collections. On a primary, this should be empty
+        // on a secondary, this is the set of GTIDs that are in process
+        // of being applied
+        GTIDSet _unappliedGTIDs;
         
         public:            
         GTIDManager( GTID lastGTID );
         ~GTIDManager();
-        // returns a GTID that is an increment of _lastGTID
+
+        // methods for running on a primary
+        
+        // returns a GTID equal to _nextGTID on a primary
+        // this should not be called on a secondary
         // also notes that GTID has been handed out
-        GTID getGTID();
+        GTID getGTIDForPrimary();
+
         // notification that user of GTID has completed work
         // and either committed or aborted transaction associated with
         // GTID
-        void noteGTIDDone(GTID gtid);
+        void noteLiveGTIDDone(GTID gtid);
+
+        // methods for running on a secondary
+
+        // This function is called on a secondary when a GTID 
+        // from the primary is added and committed to the opLog
+        void noteGTIDAdded(GTID gtid);
+        void noteApplyingGTID(GTID gtid);
+        void noteGTIDApplied(GTID gtid);
+
+        void getMins(GTID* minLiveGTID, GTID* minUnappliedGTID);
         void resetManager(GTID lastGTID);
+
+        
     };
 } // namespace mongo
