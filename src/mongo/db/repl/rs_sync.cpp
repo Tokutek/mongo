@@ -221,7 +221,8 @@ namespace replset {
         }
 
         syncApply(applyGTEObj);
-        _logOpObjRS(applyGTEObj);
+        ::abort();
+        //_logOpObjRS(applyGTEObj);
 
 
         // if there were no writes during the initial sync, there will be nothing in the queue so
@@ -376,9 +377,10 @@ namespace replset {
         {
             Lock::DBWrite lk("local");
             while (!ops->empty()) {
-                const BSONObj& op = ops->front();
+                //const BSONObj& op = ops->front();
                 // this updates theReplSet->lastOpTimeWritten
-                _logOpObjRS(op);
+                ::abort();
+                //_logOpObjRS(op);
                 ops->pop_front();
              }
         }

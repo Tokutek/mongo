@@ -854,6 +854,36 @@ namespace mongo {
             return;
         cc().getAuthenticationInfo()->authorize("local","_repl");
     }
+
+    void ReplSetImpl::_updateReplInfo() {
+        GTID minUnappliedGTID;
+        GTID minLiveGTID;
+        verify(gtidManager != NULL);
+        gtidManager->getMins(&minLiveGTID, &minUnappliedGTID);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        logToReplInfo(minLiveGTID, minUnappliedGTID);
+        transaction.commit();
+    }
+
+    void ReplSetImpl::updateReplInfoThread() {
+        Client::initThread("updateReplInfo");
+        replLocalAuth();
+        // not sure if this is correct, don't yet know how to ensure
+        // that we don't have race conditions with shutdown
+        while (!inShutdown()) {
+            if (theReplSet) {
+                try {
+                    _updateReplInfo();
+                }
+                catch (...) {
+                    log() << "exception cought in updateReplInfo thread: " << rsLog;
+                }
+            }
+            sleepsecs(1);
+        }
+
+        cc().shutdown();
+    }
     
 }
 

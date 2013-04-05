@@ -41,11 +41,14 @@ namespace mongo {
 
     // cached copies of these...so don't rename them, drop them, etc.!!!
     static Database *localDB = 0;
-    static NamespaceDetails *rsOplogDetails = 0;
+    static NamespaceDetails *rsOplogDetails = NULL;
+    static NamespaceDetails *replInfoDetails = NULL;
+    
     void oplogCheckCloseDatabase( Database * db ) {
         verify( Lock::isW() );
         localDB = 0;
-        rsOplogDetails = 0;
+        rsOplogDetails = NULL;
+        replInfoDetails = NULL;
         resetSlaveCache();
     }
 
@@ -53,49 +56,6 @@ namespace mongo {
         log() << "WHAT IS GOING ON???????? " << endl;
     }
 
-    /** write an op to the oplog that is already built.
-        todo : make _logOpRS() call this so we don't repeat ourself?
-        */
-    void _logOpObjRS(const BSONObj& op) {
-        Lock::DBWrite lk("local");
-        ::abort();
-
-        const OpTime ts = op["ts"]._opTime();
-        long long h = op["h"].numberLong();
-
-        {
-            const char *logns = rsoplog;
-            if ( rsOplogDetails == 0 ) {
-                Client::Context ctx( logns , dbpath, false);
-                localDB = ctx.db();
-                verify( localDB );
-                rsOplogDetails = nsdetails(logns);
-                massert(13389, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
-            }
-            Client::Context ctx( logns , localDB, false );
-            {
-                ::abort();
-#if 0
-                int len = op.objsize();
-                Record *r = NULL; ::abort(); //theDataFileMgr.fast_oplog_insert(rsOplogDetails, logns, len);
-                memcpy(getDur().writingPtr(r->data(), len), op.objdata(), len);
-#endif
-            }
-            /* todo: now() has code to handle clock skew.  but if the skew server to server is large it will get unhappy.
-                     this code (or code in now() maybe) should be improved.
-                     */
-            if( theReplSet ) {
-                if( !(theReplSet->lastOpTimeWritten<ts) ) {
-                    log() << "replSet error possible failover clock skew issue? " << theReplSet->lastOpTimeWritten.toString() << ' ' << endl;
-                }
-                theReplSet->lastOpTimeWritten = ts;
-                theReplSet->lastH = h;
-                ctx.getClient()->setLastOp( ts );
-
-                replset::BackgroundSync::notify();
-            }
-        }
-    }
 
     // global is safe as we are in write lock. we put the static outside the function to avoid the implicit mutex 
     // the compiler would use if inside the function.  the reason this is static is to avoid a malloc/free for this
@@ -139,6 +99,32 @@ namespace mongo {
         BSONObj bb = b.done();
         uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
         rsOplogDetails->insertObject(bb, flags);
+    }
+
+    void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID) {
+        Lock::DBRead lk("local");
+        if (replInfoDetails == NULL) {
+            Client::Context ctx( rsReplInfo , dbpath, false);
+            localDB = ctx.db();
+            verify( localDB );
+            replInfoDetails = nsdetails(rsReplInfo);
+            massert(16472, "local.replInfo missing. did you drop it? if so restart server", replInfoDetails);
+        }
+        
+        BufBuilder bufbuilder(256);
+        BSONObjBuilder b(bufbuilder);
+        b.append("_id", "minLive");
+        b.append("GTID", minLiveGTID.getBSON());
+        BSONObj bb = b.done();
+        uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
+        replInfoDetails->insertObject(bb, flags);
+
+        bufbuilder.reset();
+        BSONObjBuilder b2(bufbuilder);
+        b2.append("_id", "minUnapplied");
+        b2.append("GTID", minUnappliedGTID.getBSON());
+        BSONObj bb2 = b2.done();
+        replInfoDetails->insertObject(bb2, flags);
     }
     
     static void (*_logTransactionOp)(BSONObj id, BSONArray& opInfo) = _logOpUninitialized;

@@ -109,8 +109,6 @@ namespace mongo {
         return true;
     }
 
-    void _logOpObjRS(const BSONObj& op);
-
     static void emptyOplog() {
 #if 0
         Client::WriteContext ctx(rsoplog);

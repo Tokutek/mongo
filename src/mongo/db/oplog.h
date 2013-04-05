@@ -32,8 +32,7 @@
 namespace mongo {
 
     void createOplog();
-
-    void _logOpObjRS(const BSONObj& op);
+    void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID);
 
     void logOp( const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt = 0, bool fromMigrate = false );
     // Write operations to the log (local.oplog.$main)
