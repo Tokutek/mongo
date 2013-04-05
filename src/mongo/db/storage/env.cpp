@@ -60,7 +60,7 @@ namespace mongo {
 
                 // Compare by the first key. The ordering comes from the key pattern.
                 {
-                    const Ordering &ordering = *static_cast<Ordering *>(db->cmp_descriptor->dbt.data);
+                    const Ordering &ordering(*reinterpret_cast<const Ordering *>(db->cmp_descriptor->dbt.data));
                     const int c = key1.woCompare(key2, ordering);
                     if (c < 0) {
                         return -1;

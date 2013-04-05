@@ -110,8 +110,7 @@ namespace mongo {
     }
 
     void IndexDetails::uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const {
-        const BSONObj keyPattern(static_cast<char *>(_db->cmp_descriptor->dbt.data));
-        const Ordering ordering = Ordering::make(keyPattern);
+        const Ordering &ordering(*reinterpret_cast<const Ordering *>(_db->cmp_descriptor->dbt.data));
         const int c = newkey.woCompare(oldkey, ordering);
         if (c == 0) {
             isUnique = false;
