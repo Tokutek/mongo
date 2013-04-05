@@ -129,9 +129,7 @@ namespace mongo {
             // There is always a key at the to start.
             const storage::Key sKey(key);
             BSONObj keyObj(sKey.key());
-            BSONObj pkObj(sKey.pk().isEmpty()
-                          ? sKey.pk()
-                          : keyObj);
+            BSONObj pkObj(!sKey.pk().isEmpty() ? sKey.pk() : keyObj);
 
             // Check if an object lives in the val buffer.
             if (val->size > 0) {
