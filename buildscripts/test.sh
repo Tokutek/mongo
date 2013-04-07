@@ -48,8 +48,10 @@ except ImportError:
     sys.exit(1)
 EOF
         if [ -d /usr/lib64/python2.4/site-packages/pymongo/ ]; then
+            set +u
             PYTHONPATH=/usr/lib64/python2.4/site-packages/:$PYTHONPATH
             export PYTHONPATH
+            set -u
         fi
     fi
     local dir=$1
