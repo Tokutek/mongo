@@ -777,7 +777,7 @@ namespace mongo {
         auto_ptr< QueryResult > qr;
         BSONObj resObject;
 
-        bool found;
+        bool found = false;
         {
             TokuCommandSettings settings;
             settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
@@ -787,14 +787,15 @@ namespace mongo {
             replVerifyReadsOk(&pq);
 
             NamespaceDetails *d = nsdetails(ns);
-            if (d != NULL && !d->mayFindById()) {
-                // we have to resort to using the optimizer
-                return false;
-            }
-
-            found = d->findById( query, resObject );
-            if (found) {
-                transaction.commit();
+            if (d != NULL) {
+                if (!d->mayFindById()) {
+                    // we have to resort to using the optimizer
+                    return false;
+                }
+                found = d->findById( query, resObject );
+                if (found) {
+                    transaction.commit();
+                }
             }
         }
 
