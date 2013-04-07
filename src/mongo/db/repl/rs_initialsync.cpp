@@ -387,8 +387,19 @@ namespace mongo {
             ::abort();
             sethbmsg("initial sync clone all databases", 0);
 
-            list<string> dbs = r.conn()->getDatabaseNames();
+            
+            BSONObj beginCommand = BSON( 
+                "beginTransaction" << 1 << 
+                "isolation" << "mvcc"
+                );
+            BSONObj commandRet;
+            if( !r.conn()->runCommand("local", beginCommand, commandRet)) {
+                sethbmsg("failed to begin transaction for copying data", 0);
+                sleepsecs(1);
+                return;
+            }
 
+            list<string> dbs = r.conn()->getDatabaseNames();
             bool ret = _syncDoInitialSync_clone(
                 sourceHostname.c_str(), 
                 dbs, 
@@ -403,6 +414,15 @@ namespace mongo {
 
             // TODO: copy relevant pieces of remote oplog
             // and replinfo dictionary
+            BSONObj commitCommand = BSON("commitTransaction" << 1);
+            // does not matter if we can't commit,
+            // when we leave, killing connection will abort
+            // the transaction on the connection
+            if (!r.conn()->runCommand("local", commitCommand, commandRet)) {
+                sethbmsg("failed to commit transaction for copying data", 0);
+                sleepsecs(1);
+                return;
+            }
 
         }
         // TODO: figure out what to do with these
