@@ -27,13 +27,27 @@
 #include "mongo/db/repl/rs_optime.h"
 #include "mongo/db/repl/rs_sync.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/db/instance.h"
 
 namespace mongo {
 
     using namespace mongoutils;
     using namespace bson;
 
-    void dropAllDatabasesExceptLocal();
+    static void dropAllDatabasesExceptLocal() {
+        Lock::GlobalWrite lk;
+
+        vector<string> n;
+        getDatabaseNames(n);
+        if( n.size() == 0 ) return;
+        log() << "dropAllDatabasesExceptLocal " << n.size() << endl;
+        for( vector<string>::iterator i = n.begin(); i != n.end(); i++ ) {
+            if( *i != "local" ) {
+                Client::Context ctx(*i);
+                dropDatabase(*i);
+            }
+        }
+    }
 
     // add try/catch with sleep
 
@@ -355,9 +369,9 @@ namespace mongo {
         }
         else {
             sethbmsg("initial sync drop all databases", 0);
-            ::abort();
-            //dropAllDatabasesExceptLocal();
+            dropAllDatabasesExceptLocal();
 
+            ::abort();
             sethbmsg("initial sync clone all databases", 0);
 
             list<string> dbs = r.conn()->getDatabaseNames();
