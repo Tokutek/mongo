@@ -56,14 +56,25 @@ namespace mongo {
         log() << "WHAT IS GOING ON???????? " << endl;
     }
 
-
-    // global is safe as we are in write lock. we put the static outside the function to avoid the implicit mutex 
-    // the compiler would use if inside the function.  the reason this is static is to avoid a malloc/free for this
-    // on every logop call.
-    static BufBuilder logopbufbuilder(256*1024);
+    void openOplogFiles() {
+        Lock::DBRead lk1("local");
+        const char *logns = rsoplog;
+        if ( rsOplogDetails == 0 ) {
+            Client::Context ctx( logns , dbpath, false);
+            localDB = ctx.db();
+            verify( localDB );
+            rsOplogDetails = nsdetails(logns);
+            massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
+        }
+        if (replInfoDetails == NULL) {
+            Client::Context ctx( rsReplInfo , dbpath, false);
+            replInfoDetails = nsdetails(rsReplInfo);
+            massert(16472, "local.replInfo missing. did you drop it? if so restart server", replInfoDetails);
+        }
+    }
     
     static void _logTransactionOps(BSONObj id, BSONArray& opInfo) {
-        Lock::DBWrite lk1("local");
+        Lock::DBRead lk1("local");
         mutex::scoped_lock lk2(OpTime::m);
 
         const OpTime ts = OpTime::now(lk2);
@@ -79,23 +90,14 @@ namespace mongo {
             hashNew = 0;
         }
 
-        // This is very temporary, and will likely fail on large row insertions
-        logopbufbuilder.reset();
-        BSONObjBuilder b(logopbufbuilder);
+        BSONObjBuilder b;
         b.append("_id", id);
         b.appendTimestamp("ts", ts.asDate());
         b.append("h", hashNew);
         b.append("a", true);
         b.append("ops", opInfo);
 
-        const char *logns = rsoplog;
-        if ( rsOplogDetails == 0 ) {
-            Client::Context ctx( logns , dbpath, false);
-            localDB = ctx.db();
-            verify( localDB );
-            rsOplogDetails = nsdetails(logns);
-            massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
-        }
+        verify(rsOplogDetails);
         BSONObj bb = b.done();
         uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
         rsOplogDetails->insertObject(bb, flags);
@@ -103,14 +105,6 @@ namespace mongo {
 
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID) {
         Lock::DBRead lk("local");
-        if (replInfoDetails == NULL) {
-            Client::Context ctx( rsReplInfo , dbpath, false);
-            localDB = ctx.db();
-            verify( localDB );
-            replInfoDetails = nsdetails(rsReplInfo);
-            massert(16472, "local.replInfo missing. did you drop it? if so restart server", replInfoDetails);
-        }
-        
         BufBuilder bufbuilder(256);
         BSONObjBuilder b(bufbuilder);
         b.append("_id", "minLive");

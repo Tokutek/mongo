@@ -238,6 +238,7 @@ namespace mongo {
                 log() << "replSet replSetInitiate all members seem up" << rsLog;
 
                 createOplog();
+                openOplogFiles();
 
                 Lock::GlobalWrite lk;
                 bo comment = BSON( "msg" << "initiating set");

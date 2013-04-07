@@ -462,6 +462,10 @@ namespace mongo {
     /* call after constructing to start - returns fairly quickly after launching its threads */
     void ReplSetImpl::_go() {
         try {
+            // this might now work on secondaries
+            // on secondaries, at this point in the code, we may not have yet created
+            // the oplog, but we will see
+            openOplogFiles();
             Client::Transaction txn(DB_SERIALIZABLE);
             loadLastOpTimeWritten();
             txn.commit();
