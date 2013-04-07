@@ -51,9 +51,8 @@ namespace mongo {
     bool cloneFrom(
         const string& masterHost , 
         const CloneOptions& options , 
-        string& errmsg /* out */ , 
-        int* errCode = 0 /* out */ , 
-        set<string>* clonedCollections = 0 /* out */
+        shared_ptr<DBClientConnection> conn,
+        string& errmsg /* out */
         );
     
 } // namespace mongo

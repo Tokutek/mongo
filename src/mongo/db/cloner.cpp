@@ -566,24 +566,23 @@ namespace mongo {
     bool cloneFrom( 
         const string& masterHost , 
         const CloneOptions& options , 
-        string& errmsg /* out */ , 
-        int* errCode  /* out */ , 
-        set<string>* clonedCollections /* out */ 
+        shared_ptr<DBClientConnection> conn,
+        string& errmsg /* out */
         ) 
     {
+        set<string>* clonedCollections; 
         scoped_ptr< set<string> > myset;
-        if ( ! clonedCollections ) {
-            myset.reset( new set<string>() );
-            clonedCollections = myset.get();
-        }
+        myset.reset( new set<string>() );
+        clonedCollections = myset.get();
         
         Cloner c;
+        c.setConnection(conn);
         return c.go(
             masterHost.c_str(),
             options,
             *clonedCollections,
             errmsg,
-            errCode
+            NULL
             );
     }
 

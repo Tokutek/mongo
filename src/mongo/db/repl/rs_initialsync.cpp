@@ -80,7 +80,12 @@ namespace mongo {
     }
 
     /* todo : progress metering to sethbmsg. */
-    static bool clone(const char *master, string db, bool dataPass ) {
+    static bool clone(
+        const char *master, 
+        string db,
+        shared_ptr<DBClientConnection> conn
+        ) 
+    {
         CloneOptions options;
 
         options.fromDB = db;
@@ -91,30 +96,32 @@ namespace mongo {
         options.mayYield = true;
         options.mayBeInterrupted = false;
         
-        options.syncData = dataPass;
-        options.syncIndexes = ! dataPass;
+        options.syncData = true;
+        options.syncIndexes = true;
 
         string err;
-        return cloneFrom(master, options , err );
+        return cloneFrom(master, options, conn, err);
     }
 
 
-    bool ReplSetImpl::_syncDoInitialSync_clone( const char *master, const list<string>& dbs , bool dataPass ) {
+    bool ReplSetImpl::_syncDoInitialSync_clone( 
+        const char *master, 
+        const list<string>& dbs,
+        shared_ptr<DBClientConnection> conn
+        ) 
+    {
         for( list<string>::const_iterator i = dbs.begin(); i != dbs.end(); i++ ) {
             string db = *i;
             if( db == "local" ) 
                 continue;
             
-            if ( dataPass )
-                sethbmsg( str::stream() << "initial sync cloning db: " << db , 0);
-            else
-                sethbmsg( str::stream() << "initial sync cloning indexes for : " << db , 0);
+            sethbmsg( str::stream() << "initial sync cloning db: " << db , 0);
 
             Client::WriteContext ctx(db);
-            if ( ! clone( master, db, dataPass ) ) {
+            if ( ! clone( master, db,  conn) ) {
                 sethbmsg( str::stream() 
                               << "initial sync error clone of " << db 
-                              << " dataPass: " << dataPass << " failed sleeping 5 minutes" ,0);
+                              << " failed sleeping 5 minutes" ,0);
                 return false;
             }
         }
@@ -382,43 +389,25 @@ namespace mongo {
 
             list<string> dbs = r.conn()->getDatabaseNames();
 
-            if ( ! _syncDoInitialSync_clone( sourceHostname.c_str(), dbs, true ) ) {
+            bool ret = _syncDoInitialSync_clone(
+                sourceHostname.c_str(), 
+                dbs, 
+                r.conn_shared()
+                );
+
+            if (!ret) {
                 veto(source->fullName(), 600);
                 sleepsecs(300);
                 return;
             }
 
-            sethbmsg("initial sync data copy, starting syncup",0);
-            
-            BSONObj minValid;
-            if ( ! _syncDoInitialSync_applyToHead( init, &r , source , lastOp , minValid ) ) {
-                return;
-            }
+            // TODO: copy relevant pieces of remote oplog
+            // and replinfo dictionary
 
-            lastOp = minValid;
-            // its currently important that lastOp is equal to the last op we actually pulled
-            // this is because the background thread only pulls each op once now
-            // so if its now, we'll be waiting forever
-            {
-                // this takes whatever the last op the we got is
-                // and stores it locally before we wipe it out below
-                Lock::DBRead lk(rsoplog);
-                Helpers::getLast(rsoplog, lastOp);
-                lastOp = lastOp.getOwned();
-            }
-
-            // reset state, as that "didn't count"
-            emptyOplog(); 
-            lastOpTimeWritten = OpTime();
-            lastH = 0;
-
-            sethbmsg("initial sync building indexes",0);
-            if ( ! _syncDoInitialSync_clone( sourceHostname.c_str(), dbs, false ) ) {
-                veto(source->fullName(), 600);
-                sleepsecs(300);
-                return;
-            }
         }
+        // TODO: figure out what to do with these
+        //lastOpTimeWritten = OpTime();
+        //lastH = 0;
 
         sethbmsg("initial sync query minValid",0);
 
