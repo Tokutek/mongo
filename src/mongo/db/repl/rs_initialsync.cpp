@@ -61,7 +61,6 @@ namespace mongo {
 
     void ReplSetImpl::syncDoInitialSync() {
         const static int maxFailedAttempts = 10;
-        createOplog();
         int failedAttempts = 0;
         while ( failedAttempts < maxFailedAttempts ) {
             try {
@@ -370,6 +369,13 @@ namespace mongo {
         else {
             sethbmsg("initial sync drop all databases", 0);
             dropAllDatabasesExceptLocal();
+
+            // now deal with creation of oplog
+            // first delete any existing data in the oplog
+            deleteOplogFiles();
+            // now recreate the oplog
+            createOplog();
+            openOplogFiles();
 
             ::abort();
             sethbmsg("initial sync clone all databases", 0);

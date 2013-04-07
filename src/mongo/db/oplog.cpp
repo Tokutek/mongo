@@ -56,8 +56,26 @@ namespace mongo {
         log() << "WHAT IS GOING ON???????? " << endl;
     }
 
+    void deleteOplogFiles() {
+        Lock::DBWrite lk1("local");
+        localDB = NULL;
+        rsOplogDetails = NULL;
+        replInfoDetails = NULL;
+        
+        Client::Context ctx( rsoplog, dbpath, false);
+        // TODO: code review this for possible error cases
+        // although, I don't think we care about error cases,
+        // just that after we exit, oplog files don't exist
+        BSONObjBuilder out;
+        string errmsg;
+        dropCollection(rsoplog, errmsg, out);
+        BSONObjBuilder out2;
+        string errmsg2;
+        dropCollection(rsReplInfo, errmsg, out);
+    }
+
     void openOplogFiles() {
-        Lock::DBRead lk1("local");
+        Lock::DBWrite lk1("local");
         const char *logns = rsoplog;
         if ( rsOplogDetails == 0 ) {
             Client::Context ctx( logns , dbpath, false);
