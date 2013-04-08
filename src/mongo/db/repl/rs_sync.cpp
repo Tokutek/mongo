@@ -246,6 +246,9 @@ namespace mongo {
         }
 
         try {
+            // haveCursor() does not necessarily tell us if we have a non-dead cursor, so we check
+            // tailCheck() as well; see SERVER-8420
+            slave->reader.tailCheck();
             if (!slave->reader.haveCursor()) {
                 if (!slave->reader.connect(id, slave->slave->id(), target->fullName())) {
                     // error message logged in OplogReader::connect
