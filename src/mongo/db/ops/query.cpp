@@ -646,17 +646,11 @@ namespace mongo {
             oldPlan = mps->cachedPlanExplainSummary();
         }
         
-        if ( pq.hasOption( QueryOption_OplogReplay ) ) {
-            ::abort();
-            //cursor = FindingStartCursor::getCursor( ns.c_str(), query, order );
-        }
-        else {
-            cursor =
-                NamespaceDetailsTransient::getCursor( ns.c_str(), query, order, QueryPlanSelectionPolicy::any(),
-                                                      0, pq_shared, false, &queryPlan );
-        }
+        cursor =
+            NamespaceDetailsTransient::getCursor( ns.c_str(), query, order, QueryPlanSelectionPolicy::any(),
+                                                  0, pq_shared, false, &queryPlan );
         verify( cursor );
-        
+
         scoped_ptr<QueryResponseBuilder> queryResponseBuilder
                 ( QueryResponseBuilder::make( pq, cursor, queryPlan, oldPlan ) );
         bool saveClientCursor = false;
