@@ -55,4 +55,11 @@ namespace mongo {
         string& errmsg /* out */
         );
     
+    void cloneCollectionData(
+        shared_ptr<DBClientConnection> conn,
+        const string& ns, 
+        const BSONObj& query,
+        bool copyIndexes,
+        bool logForRepl
+        );
 } // namespace mongo

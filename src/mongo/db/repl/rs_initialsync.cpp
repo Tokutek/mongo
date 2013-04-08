@@ -129,22 +129,6 @@ namespace mongo {
         return true;
     }
 
-    static void emptyOplog() {
-#if 0
-        Client::WriteContext ctx(rsoplog);
-        NamespaceDetails *d = nsdetails(rsoplog);
-
-        // temp
-        //if( d && d->stats.nrecords == 0 )
-        //    return; // already empty, ok.
-        ::abort();
-
-        LOG(1) << "replSet empty oplog" << rsLog;
-        //d->emptyCappedCollection(rsoplog);
-        ::abort();
-#endif
-    }
-
     Member* ReplSetImpl::getMemberToSyncTo() {
         lock lk(this);
 
@@ -308,7 +292,7 @@ namespace mongo {
             catch (const DBException&) {
                 log() << "replSet initial sync failed during oplog application phase" << rsLog;
 
-                emptyOplog(); // otherwise we'll be up!
+                //emptyOplog(); // otherwise we'll be up!
 
                 lastOpTimeWritten = OpTime();
                 lastH = 0;
@@ -379,10 +363,12 @@ namespace mongo {
 
             // now deal with creation of oplog
             // first delete any existing data in the oplog
+            Client::Transaction fileOpsTransaction(DB_SERIALIZABLE);
             deleteOplogFiles();
             // now recreate the oplog
             createOplog();
             openOplogFiles();
+            fileOpsTransaction.commit(0);
 
             ::abort();
             sethbmsg("initial sync clone all databases", 0);
@@ -400,6 +386,14 @@ namespace mongo {
             }
 
             list<string> dbs = r.conn()->getDatabaseNames();
+
+            //
+            // Not sure if it is necessary to have a separate fileOps 
+            // transaction and clone transaction. The cloneTransaction
+            // has a higher chance of failing, and I don't know at the moment
+            // if it is ok to do fileops successfully, and then an operation (cloning) that
+            // later causes an abort. So, to be cautious, they are separate
+            Client::Transaction cloneTransaction(DB_SERIALIZABLE);
             bool ret = _syncDoInitialSync_clone(
                 sourceHostname.c_str(), 
                 dbs, 
@@ -414,10 +408,19 @@ namespace mongo {
 
             // TODO: copy relevant pieces of remote oplog
             // and replinfo dictionary
+            {                
+                Client::WriteContext ctx(rsReplInfo);
+                BSONObj q;
+                cloneCollectionData(
+                    r.conn_shared(),
+                    rsReplInfo,
+                    q,
+                    true, //copyIndexes
+                    false //logForRepl
+                    );
+            }
+
             BSONObj commitCommand = BSON("commitTransaction" << 1);
-            // does not matter if we can't commit,
-            // when we leave, killing connection will abort
-            // the transaction on the connection
             if (!r.conn()->runCommand("local", commitCommand, commandRet)) {
                 sethbmsg("failed to commit transaction for copying data", 0);
                 sleepsecs(1);

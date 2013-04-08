@@ -131,6 +131,7 @@ namespace mongo {
             bool mayBeInterrupted, 
             int *errCode = 0
             );
+        
         bool go(
             const char *masterHost, 
             const CloneOptions& opts, 
@@ -145,6 +146,13 @@ namespace mongo {
             string& errmsg , 
             bool copyIndexes
             );
+        
+        void copyCollectionData(
+            const string& ns, 
+            const BSONObj& query,
+            bool copyIndexes,
+            bool logForRepl
+            ); 
     };
 
     /* for index info object:
@@ -320,6 +328,41 @@ namespace mongo {
         }
     }
 
+    void Cloner::copyCollectionData(
+        const string& ns, 
+        const BSONObj& query,
+        bool copyIndexes,
+        bool logForRepl
+        ) 
+    {
+        // main data
+        copy(
+            ns.c_str(), 
+            ns.c_str(), 
+            false, // isindex
+            logForRepl, //logForRepl
+            true,
+            true, //mayYield
+            false, //maybeInterrupted
+            Query(query)
+            );
+
+        if( copyIndexes ) {
+            // indexes
+            string temp = cc().getContext()->db()->name + ".system.indexes";
+            copy(
+                temp.c_str(),
+                temp.c_str(),
+                true, //isindex
+                logForRepl, //logForRepl
+                true,
+                true, //mayYield
+                false, // mayBeInterrupted
+                BSON( "ns" << ns )
+                );
+        }
+    }
+
     bool Cloner::copyCollection(
         const string& ns, 
         const BSONObj& query,
@@ -344,33 +387,7 @@ namespace mongo {
                 }
             }
         }
-
-        // main data
-        copy(
-            ns.c_str(), 
-            ns.c_str(), 
-            false, // isindex
-            true, //logForRepl
-            true,
-            true, //mayYield
-            false, //maybeInterrupted
-            Query(query)
-            );
-
-        if( copyIndexes ) {
-            // indexes
-            string temp = cc().getContext()->db()->name + ".system.indexes";
-            copy(
-                temp.c_str(),
-                temp.c_str(),
-                true, //isindex
-                true, //logForRepl
-                true,
-                true, //mayYield
-                false, // mayBeInterrupted
-                BSON( "ns" << ns )
-                );
-        }
+        copyCollectionData(ns, query, copyIndexes, true);
         return true;
     }
 
@@ -586,6 +603,23 @@ namespace mongo {
             );
     }
 
+    void cloneCollectionData(
+        shared_ptr<DBClientConnection> conn,
+        const string& ns, 
+        const BSONObj& query,
+        bool copyIndexes,
+        bool logForRepl
+        ) 
+    {
+        Cloner c;
+        c.setConnection(conn);
+        c.copyCollectionData(
+            ns,
+            query,
+            copyIndexes,
+            logForRepl
+            );
+    }
 
     /* Usage:
        mydb.$cmd.findOne( { clone: "fromhost" } );
