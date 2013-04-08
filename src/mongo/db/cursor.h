@@ -23,6 +23,7 @@
 #include "mongo/db/projection.h"
 #include "mongo/db/client.h"
 #include "mongo/db/index.h"
+#include "mongo/db/storage/key.h"
 
 namespace mongo {
 
@@ -150,39 +151,19 @@ namespace mongo {
         RowBuffer();
         ~RowBuffer();
 
-        bool ok() {
-            return _current_offset < _end_offset;
-        }
+        bool ok() const;
 
-        bool isGorged() const {
-            const int threshold = 100;
-            const bool almost_full = _end_offset + threshold > _size;
-            const bool too_big = _size > _BUF_SIZE_PREFERRED;
-            return almost_full || too_big;
-        }
+        bool isGorged() const;
 
-        // get the current key from the buffer.
-        BSONObj currentKey() const {
-            return BSONObj(_buf + _current_offset);
-        }
+        void current(storage::Key &sKey, BSONObj &obj) const;
 
-        // get the current pk from the buffer, which is just after the key
-        BSONObj currentPK() const {
-            return BSONObj(_buf + _current_offset + currentKey().objsize());
-        }
+        // Append a key and obj onto the buffer 
+        void append(const storage::Key &sKey, const BSONObj &obj);
 
-        // get the current obj from the buffer, which is after the key and the pk
-        BSONObj currentObj() const {
-            return BSONObj(_buf + _current_offset + currentKey().objsize() + currentPK().objsize());
-        }
-
-        // Append a key, pk, and obj in-order into the buffer.
-        void append(const BSONObj &key, const BSONObj &pk, const BSONObj &obj);
-
-        // move the internal buffer position to the next key, pk, obj triple
+        // moves the buffer to the next key/pk/obj
         // returns:
-        //      true, the buffer is reading to be read via current()
-        //      false, the buffer has no more data. don't call next again without append()'ing.
+        //      true, the buffer has data, you may call current().
+        //      false, the buffer has no more data. don't call current() until append()
         bool next();
 
         // empty the row buffer, resetting all data and internal positions
@@ -190,6 +171,12 @@ namespace mongo {
         void empty();
 
     private:
+        class HeaderBits {
+        public:
+            static const unsigned char hasPK = 1;
+            static const unsigned char hasObj = 2;
+        };
+
         // store rows in a buffer that has a "preferred size". if we need to 
         // fit more in the buf, then it's okay to go over. _size captures the
         // real size of the buffer.
@@ -221,7 +208,7 @@ namespace mongo {
 
         ~IndexCursor();
 
-        bool ok() { return !currKey().isEmpty(); }
+        bool ok() { return !_currKey.isEmpty(); }
         bool advance();
         bool supportGetMore() { return true; }
 
@@ -277,6 +264,11 @@ namespace mongo {
         void init( const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
         void init( const shared_ptr< FieldRangeVector > &_bounds, int singleIntervalLimit, int _direction );
 
+        /** Set the current key/pk/obj to empty, marking the cursor has exhausted */
+        void exhausted();
+        /** Get the current key/pk/obj from the row buffer and set _currKey/PK/Obj */
+        void getCurrentFromBuffer();
+
         /** Initialize the internal DBC */
         void initializeDBC();
         void prelockRange(const BSONObj &startKey, const BSONObj &endKey);
@@ -321,10 +313,14 @@ namespace mongo {
         IndexDetails::Cursor _cursor;
         bool _tailable;
 
-        // The current key, pk, and obj for this cursor.
+        // The current key, pk, and obj for this cursor. Keys are stored
+        // in a compacted format and built into bson format, so we reuse
+        // a BufBuilder to prevent a malloc/free on each row read.
         BSONObj _currKey;
         BSONObj _currPK;
         BSONObj _currObj;
+        BufBuilder _currKeyBufBuilder;
+
         // Row buffer to store rows in using bulk fetch. Also track the iteration
         // of bulk fetch so we know an appropriate amount of rows to fetch.
         RowBuffer _buffer;
@@ -375,31 +371,5 @@ namespace mongo {
         }
         virtual string toString() const { return "ReverseCursor"; }
     };
-
-    // TODO: Capped collections
-#if 0
-    class ForwardCappedCursor : public BasicCursor {
-    public:
-        static ForwardCappedCursor* make( NamespaceDetails* nsd = 0 /*, const DiskLoc& startLoc = DiskLoc()*/ );
-        virtual string toString() {
-            return "ForwardCappedCursor";
-        }
-        //virtual DiskLoc next( const DiskLoc &prev ) const;
-        virtual bool capped() const { return true; }
-    private:
-        ForwardCappedCursor( NamespaceDetails* nsd );
-        //void init( const DiskLoc& startLoc );
-    };
-
-    class ReverseCappedCursor : public BasicCursor {
-    public:
-        ReverseCappedCursor( NamespaceDetails *nsd = 0 /*, const DiskLoc &startLoc = DiskLoc() */ );
-        virtual string toString() {
-            return "ReverseCappedCursor";
-        }
-        //virtual DiskLoc next( const DiskLoc &prev ) const;
-        virtual bool capped() const { return true; }
-    };
-#endif
 
 } // namespace mongo

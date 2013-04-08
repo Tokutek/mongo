@@ -35,6 +35,7 @@ namespace mongo {
         virtual bool adminOnly() const { return false; }
         virtual bool slaveOk() const { return true; }
         virtual bool maintenanceMode() const { return true; }
+        virtual int txnFlags() const { return DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY; }
         virtual bool logTheOp() { return false; }
         virtual void help( stringstream& help ) const {
             help << "touch collection\n"
@@ -86,6 +87,11 @@ namespace mongo {
                 errmsg = "ns not found";
                 return false;
             }
+
+            TokuCommandSettings settings;
+            settings.setBulkFetch(true);
+            settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
+            cc().setTokuCommandSettings(settings);
 
             for (int i = 0; i < nsd->nIndexes(); i++) {
                 IndexDetails &idx = nsd->idx(i);

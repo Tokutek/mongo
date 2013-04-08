@@ -64,10 +64,14 @@ namespace mongo {
 
             int woCompare(const KeyV1& r, const Ordering &o) const;
             bool woEqual(const KeyV1& r) const;
-            BSONObj toBson() const;
+            BSONObj toBson() const {
+                BufBuilder bb;
+                return toBson(bb).getOwned();
+            }
+            BSONObj toBson(BufBuilder &bb) const;
             string toString() const { return toBson().toString(); }
 
-            /** get the key data we want to store in the btree bucket */
+            /** get the key data we want to store as the index key */
             const char * data() const { return (const char *) _keyData; }
 
             /** @return size of data() */
@@ -117,42 +121,74 @@ namespace mongo {
 
         // Dictionary key format:
         // KeyV1Owned key [, BSONObj primary key]
+        //
+        // TODO: Use separate classes serializing and deserializing. Mixing them
+        // here muddies the waters, especially when performanc is a concern.
         class Key {
         public:
+            // For serializing
             Key(const BSONObj &key, const BSONObj *pk) {
                 KeyV1Owned keyOwned(key);
                 _b.appendBuf(keyOwned.data(), keyOwned.dataSize());
                 if (pk != NULL) {
                     _b.appendBuf(pk->objdata(), pk->objsize());
                 }
-            }
-            DBT dbt() const {
-                return make_dbt(_b.buf(), _b.len());
+                _buf = _b.buf();
+                _size = _b.len();
             }
 
-            Key(const DBT *dbt) {
-                storage::KeyV1 kv1(static_cast<const char *>(dbt->data));
-                _key = kv1.toBson();
-                const int keyv1Size = kv1.dataSize();
-                if (keyv1Size < (int) dbt->size) {
-                    _pk = BSONObj(static_cast<const char *>(dbt->data) + keyv1Size);
-                    dassert(keyv1Size + _pk.objsize() == (int) dbt->size);
-                }
-                else {
-                    dassert(keyv1Size == (int) dbt->size);
-                }
+            DBT dbt() const {
+                return make_dbt(_buf, _size);
             }
-            const BSONObj &key() const {
-                return _key;
+
+            // For deserializing
+            Key() : _buf(NULL), _size(0) {
             }
-            const BSONObj &pk() const {
-                return _pk;
+
+            Key(const DBT *dbt) :
+                _buf(static_cast<const char *>(dbt->data)), _size(dbt->size) {
+            }
+
+            Key(const char *buf, const bool hasPK) : _buf(buf) {
+                storage::KeyV1 kv1(_buf);
+                const size_t keySize = kv1.dataSize();
+                _size = keySize + (hasPK ? BSONObj(_buf + keySize).objsize() : 0);
+            }
+
+            // HACK This isn't so nice.
+            void set(const char *buf, size_t size) {
+                _buf = buf;
+                _size = size;
+            }
+
+            BSONObj key() const {
+                BufBuilder bb;
+                return key(bb).getOwned();
+            }
+
+            BSONObj key(BufBuilder &bb) const {
+                storage::KeyV1 kv1(_buf);
+                return kv1.toBson(bb);
+            }
+
+            BSONObj pk() const {
+                storage::KeyV1 kv1(_buf);
+                const size_t keySize = kv1.dataSize();
+                return keySize < _size ? BSONObj(_buf + keySize) : BSONObj();
+            }
+
+            const char *buf() const {
+                return _buf;
+            }
+
+            int size() const {
+                return _size;
             }
 
         private:
             StackBufBuilder _b;
-            BSONObj _key;
-            BSONObj _pk;
+            const char *_buf;
+            size_t _size;
         };
 
     } // namespace storage

@@ -22,7 +22,6 @@
 #include "mongo/db/queryutil.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/cursor.h"
-#include "mongo/db/storage/key.h"
 
 namespace mongo {
 
@@ -37,12 +36,42 @@ namespace mongo {
         delete []_buf;
     }
 
-    // append the given key, pk and obj to the end of the buffer
-    void RowBuffer::append(const BSONObj &key, const BSONObj &pk, const BSONObj &obj) {
-        size_t key_size = key.objsize();
-        size_t pk_size = pk.objsize();
-        size_t obj_size = obj.objsize();
-        size_t size_needed = _end_offset + key_size + pk_size + obj_size;
+    bool RowBuffer::ok() const {
+        return _current_offset < _end_offset;
+    }
+
+    bool RowBuffer::isGorged() const {
+        const int threshold = 100;
+        const bool almost_full = _end_offset + threshold > _size;
+        const bool too_big = _size > _BUF_SIZE_PREFERRED;
+        return almost_full || too_big;
+    }
+
+    // get the current key/pk/obj from the buffer, or set them
+    // to empty if they don't exist.
+    void RowBuffer::current(storage::Key &sKey, BSONObj &obj) const {
+        dassert(ok());
+
+        const char *buf = _buf + _current_offset;
+        const char headerBits = *buf++;
+        dassert(headerBits >= 1 && headerBits <= 3);
+
+        storage::Key sk(buf, headerBits & HeaderBits::hasPK);
+        sKey.set(buf, sk.size());
+        obj = headerBits & HeaderBits::hasObj ? BSONObj(buf + sKey.size()) : BSONObj();
+
+        dassert(_current_offset
+                + 1
+                + sk.size()
+                + (headerBits & HeaderBits::hasObj ? obj.objsize() : 0)
+                <= _end_offset);
+    }
+
+    void RowBuffer::append(const storage::Key &sKey, const BSONObj &obj) {
+
+        size_t key_size = sKey.size();
+        size_t obj_size = obj.isEmpty() ? 0 : obj.objsize();
+        size_t size_needed = _end_offset + 1 + key_size + obj_size;
 
         // if we need more than we have, realloc.
         if (size_needed > _size) {
@@ -53,32 +82,47 @@ namespace mongo {
             _size = size_needed;
         }
 
-        // append the key, update the end offset
-        memcpy(_buf + _end_offset, key.objdata(), key_size);
-        _end_offset += key_size;
-        // append the pk, update the end offset
-        memcpy(_buf + _end_offset, pk.objdata(), pk_size);
-        _end_offset += pk_size;
-        // append the obj, update the end offset
-        memcpy(_buf + _end_offset, obj.objdata(), obj_size);
-        _end_offset += obj_size;
+        // Determine what to put in the header byte.
+        const bool hasPK = !sKey.pk().isEmpty();
+        const bool hasObj = obj_size > 0;
+        const unsigned char headerBits = (hasPK ? HeaderBits::hasPK : 0) | (hasObj ? HeaderBits::hasObj : 0);
+        dassert(headerBits >= 1 && headerBits <= 3);
+        memcpy(_buf + _end_offset, &headerBits, 1);
+        _end_offset += 1;
 
-        // postcondition: end offset is correctly bounded
+        // Append the new key/obj row to the buffer.
+        // We'll know how to interpet it later because
+        // the header bit says whether a pk/obj exists.
+        memcpy(_buf + _end_offset, sKey.buf(), key_size);
+        _end_offset += key_size;
+        if (obj_size > 0) {
+            memcpy(_buf + _end_offset, obj.objdata(), obj_size);
+            _end_offset += obj_size;
+        }
+
         verify(_end_offset <= _size);
     }
 
-    // move the internal buffer position to the next key, pk, obj triple
+    // moves the internal position to the next key/pk/obj and returns them
     // returns:
-    //      true, the buffer is reading to be read via current()
-    //      false, the buffer has no more data. don't call next again without append()'ing.
+    //      true, the buffer had more and key/pk/obj were set appropriately
+    //      false, the buffer has no more data. don't call current() until append()
     bool RowBuffer::next() {
+        if (!ok()) {
+            return false;
+        }
 
-        // if the buffer has more, seek passed the current one.
-        if (ok()) {
-            size_t key_size = currentKey().objsize();
-            size_t pk_size = currentPK().objsize();
-            size_t obj_size = currentObj().objsize();
-            _current_offset += key_size + pk_size + obj_size;
+        // the buffer has more, seek passed the current one.
+        const char headerBits = *(_buf + _current_offset);
+        dassert(headerBits >= 1 && headerBits <= 3);
+        _current_offset += 1;
+
+        storage::Key sKey(_buf + _current_offset, headerBits & HeaderBits::hasPK);
+        _current_offset += sKey.size();
+
+        if (headerBits & HeaderBits::hasObj) {
+            BSONObj obj(_buf + _current_offset);
+            _current_offset += obj.objsize();
         }
 
         // postcondition: we did not seek passed the end of the buffer.
@@ -123,25 +167,9 @@ namespace mongo {
         if (key) {
             struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
             RowBuffer *buffer = info->buffer;
-
-            BSONObj valObj;
-
-            // There is always a key at the to start.
-            const storage::Key sKey(key);
-            BSONObj keyObj(sKey.key());
-            BSONObj pkObj(!sKey.pk().isEmpty() ? sKey.pk() : keyObj);
-
-            // Check if an object lives in the val buffer.
-            if (val->size > 0) {
-                valObj = BSONObj(static_cast<char *>(val->data));
-                dassert(valObj.objsize() == (int) val->size);
-            } else {
-                valObj = BSONObj();
-            }
-
-            // Append the new row to the buffer.
-            buffer->append(keyObj, pkObj, valObj);
-            TOKULOG(3) << "cursor_getf appended to row buffer " << keyObj << pkObj << valObj << endl;
+            storage::Key sKey(key);
+            buffer->append(sKey, val->size > 0 ?
+                    BSONObj(static_cast<const char *>(val->data)) : BSONObj());
 
             // request more bulk fetching if we are allowed to fetch more rows
             // and the row buffer is not too full.
@@ -232,7 +260,9 @@ namespace mongo {
                 // use that start key to set our position and reset the iterator.
                 const BSONObj startKey = _bounds->startKey();
                 const BSONObj endKey = _bounds->endKey();
-                if ( startKey != endKey ) {
+                // Don't prelock ranges when there's a field range vector until we
+                // know how to isolate the start/end keys for the current interval.
+                if ( false && startKey != endKey ) {
                     prelockRange( startKey, endKey );
                 }
                 const int r = skipToNextKey( startKey );
@@ -305,6 +335,24 @@ namespace mongo {
         setPosition(key, isSecondary ? pk : BSONObj());
     };
 
+    void IndexCursor::exhausted() {
+        _currKey = BSONObj();
+        _currPK = BSONObj();
+        _currObj = BSONObj();
+    }
+
+    void IndexCursor::getCurrentFromBuffer() {
+        storage::Key sKey;
+        _buffer.current(sKey, _currObj);
+
+        _currKeyBufBuilder.reset(512);
+        _currKey = sKey.key(_currKeyBufBuilder);
+        _currPK = sKey.pk();
+        if (_currPK.isEmpty()) {
+            _currPK = BSONObj(_currKey.objdata());
+        }
+    }
+
     void IndexCursor::setPosition(const BSONObj &key, const BSONObj &pk) {
         TOKULOG(3) << toString() << ": setPosition(): getf " << key << ", pk " << pk << ", direction " << _direction << endl;
 
@@ -328,9 +376,11 @@ namespace mongo {
         uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
         uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
         _getf_iteration++;
-        _currKey = extra.rows_fetched > 0 ? _buffer.currentKey() : BSONObj();
-        _currPK = extra.rows_fetched > 0 ? _buffer.currentPK() : BSONObj();
-        _currObj = extra.rows_fetched > 0 ? _buffer.currentObj() : BSONObj();
+        if (extra.rows_fetched > 0) {
+            getCurrentFromBuffer();
+        } else {
+            exhausted();
+        }
         TOKULOG(3) << "setPosition hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
     }
 
@@ -388,7 +438,7 @@ namespace mongo {
         int skipPrefixIndex = _boundsIterator->advance( currentKey );
         if ( skipPrefixIndex == -2 ) { 
             // We are done iterating completely.
-            _currKey = BSONObj();
+            exhausted();
             return -2;
         }
         else if ( skipPrefixIndex == -1 ) { 
@@ -491,10 +541,11 @@ again:      while ( !allInclusive && ok() ) {
         if ( !_endKey.isEmpty() ) {
             dassert( _d != NULL &&_idx != NULL );
             // TODO: Change _idx->keyPattern() to _ordering, which is cheaper
-            const int cmp = sgn( _endKey.woCompare( _currKey, _idx->keyPattern() ) );
+            //const int cmp = sgn( _endKey.woCompare( _currKey, _idx->keyPattern() ) );
+            const int cmp = sgn( _endKey.woCompare( _currKey, _ordering ) );
             if ( ( cmp != 0 && cmp != _direction ) ||
                     ( cmp == 0 && !_endKeyInclusive ) ) {
-                _currKey = BSONObj();
+                exhausted()
                 TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
             }
         }
@@ -527,9 +578,11 @@ again:      while ( !allInclusive && ok() ) {
             if ( !ok ) {
                 ok = fetchMoreRows();
             }
-            _currKey = ok ? _buffer.currentKey() : BSONObj();
-            _currPK = ok ? _buffer.currentPK() : BSONObj();
-            _currObj = ok ? _buffer.currentObj() : BSONObj();
+            if ( ok ) {
+                getCurrentFromBuffer();
+            } else {
+                exhausted();
+            }
             TOKULOG(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
         } else {
             // new inserts will not be read by this cursor, because there was no

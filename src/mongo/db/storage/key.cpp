@@ -199,12 +199,12 @@ namespace mongo {
             dassert( (*_keyData & cNOTUSED) == 0 );
         }
 
-        BSONObj KeyV1::toBson() const { 
+        BSONObj KeyV1::toBson(BufBuilder &bb) const { 
             verify( _keyData != 0 );
             if( !isCompactFormat() )
                 return bson();
 
-            BSONObjBuilder b(512);
+            BSONObjBuilder b(bb);
             const unsigned char *p = _keyData;
             while( 1 ) { 
                 unsigned bits = *p++;
@@ -268,7 +268,7 @@ namespace mongo {
                 if( (bits & cHASMORE) == 0 )
                     break;
             }
-            return b.obj();
+            return b.done();
         }
 
         static int compare(const unsigned char *&l, const unsigned char *&r) { 

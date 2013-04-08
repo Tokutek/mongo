@@ -167,16 +167,16 @@ namespace mongo {
     };
 
     struct getfExtra {
-        getfExtra(BSONObj &o) : obj(o) {
+        getfExtra(BSONObj &k) : key(k) {
         }
-        BSONObj &obj;
+        BSONObj &key;
     };
 
     static int getfCallback(const DBT *key, const DBT *value, void *extra) {
         struct getfExtra *info = reinterpret_cast<struct getfExtra *>(extra);
         if (key) {
             const storage::Key sKey(key);
-            info->obj = sKey.key().getOwned();
+            info->key = sKey.key().getOwned();
         }
         return 0;
     }
@@ -197,13 +197,13 @@ namespace mongo {
             IndexDetails::Cursor c(&pkIdx);
             DBC *cursor = c.dbc();
 
-            BSONObj obj = BSONObj();
-            struct getfExtra extra(obj);
+            BSONObj key = BSONObj();
+            struct getfExtra extra(key);
             r = cursor->c_getf_last(cursor, 0, getfCallback, &extra);
             verify(r == 0 || r == DB_NOTFOUND);
-            if (!obj.isEmpty()) {
-                dassert(obj.nFields() == 1);
-                _nextPK = AtomicWord<long long>(obj.firstElement().Long() + 1);
+            if (!key.isEmpty()) {
+                dassert(key.nFields() == 1);
+                _nextPK = AtomicWord<long long>(key.firstElement().Long() + 1);
             }
         }
 
