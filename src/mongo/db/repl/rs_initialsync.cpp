@@ -457,6 +457,7 @@ namespace mongo {
                         );
                 }
             }
+            cloneTransaction.commit(0);
 
             BSONObj commitCommand = BSON("commitTransaction" << 1);
             if (!r.conn()->runCommand("local", commitCommand, commandRet)) {
