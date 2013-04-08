@@ -50,7 +50,7 @@ namespace mongo {
         return theReplSet && theReplSet->isPrimary();
     }
 
-    void replset::sethbmsg(const string& s, const int level) {
+    void sethbmsg(const string& s, const int level) {
         if (theReplSet) {
             theReplSet->sethbmsg(s, logLevel);
         }
@@ -850,7 +850,7 @@ namespace mongo {
     }
 
     void ReplSet::shutdown() {
-        replset::BackgroundSync::shutdown();
+        BackgroundSync::shutdown();
     }
 
     void replLocalAuth() {

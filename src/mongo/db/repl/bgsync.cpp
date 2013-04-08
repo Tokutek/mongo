@@ -22,7 +22,6 @@
 #include "mongo/db/repl/rs_sync.h"
 
 namespace mongo {
-namespace replset {
     BackgroundSync* BackgroundSync::s_instance = 0;
     boost::mutex BackgroundSync::s_mutex;
 
@@ -528,5 +527,4 @@ namespace replset {
         LOG(1) << "replset bgsync fetch queue set to: " << _lastOpTimeFetched << " " << _lastH << rsLog;
    }
 
-} // namespace replset
 } // namespace mongo

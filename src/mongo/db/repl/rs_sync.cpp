@@ -35,8 +35,6 @@ namespace mongo {
     using namespace bson;
     extern unsigned replSetForceInitialSyncFailure;
 
-namespace replset {
-
     SyncTail::SyncTail(BackgroundSyncInterface *q) :
         Sync(""), _networkQueue(q)
     {}
@@ -422,8 +420,6 @@ namespace replset {
         } // endif slaveDelay
     }
 
-} // namespace replset
-
     /* should be in RECOVERING state on arrival here.
        readlocks
        @return true if transitioned to SECONDARY
@@ -532,7 +528,7 @@ namespace replset {
         }
 
         // record the previous member we were syncing from
-        Member *prev = replset::BackgroundSync::get()->getSyncTarget();
+        Member *prev = BackgroundSync::get()->getSyncTarget();
         if (prev) {
             result.append("prevSyncTarget", prev->fullName());
         }
@@ -566,7 +562,7 @@ namespace replset {
 
         /* we have some data.  continue tailing. */
         Client::Transaction transaction(DB_READ_UNCOMMITTED | DB_TXN_READ_ONLY);
-        replset::SyncTail tail(replset::BackgroundSync::get());
+        SyncTail tail(BackgroundSync::get());
         tail.oplogApplication();
         transaction.commit();
     }
@@ -706,7 +702,7 @@ namespace replset {
 
         verify(slave->slave);
 
-        const Member *target = replset::BackgroundSync::get()->getSyncTarget();
+        const Member *target = BackgroundSync::get()->getSyncTarget();
         if (!target || rs->box.getState().primary()
             // we are currently syncing from someone who's syncing from us
             // the target might end up with a new Member, but s.slave never

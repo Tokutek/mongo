@@ -402,9 +402,9 @@ namespace mongo {
         // 
         boost::thread t(startSyncThread);
 
-        replset::BackgroundSync* sync = replset::BackgroundSync::get();
-        boost::thread producer(boost::bind(&replset::BackgroundSync::producerThread, sync));
-        boost::thread notifier(boost::bind(&replset::BackgroundSync::notifierThread, sync));
+        BackgroundSync* sync = BackgroundSync::get();
+        boost::thread producer(boost::bind(&BackgroundSync::producerThread, sync));
+        boost::thread notifier(boost::bind(&BackgroundSync::notifierThread, sync));
         boost::thread replInfoUpdater(boost::bind(&ReplSetImpl::updateReplInfoThread, this));
 
         task::fork(ghost);

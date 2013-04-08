@@ -68,7 +68,7 @@ namespace mongo {
             }
 
             if (cmdObj.hasElement("sethbmsg")) {
-                replset::sethbmsg(cmdObj["sethbmsg"].String());
+                sethbmsg(cmdObj["sethbmsg"].String());
                 return true;
             }
 

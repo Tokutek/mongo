@@ -25,7 +25,6 @@
 #include "mongo/util/concurrency/thread_pool.h"
 
 namespace mongo {
-namespace replset {
 
     class BackgroundSyncInterface;
 
@@ -109,5 +108,4 @@ namespace replset {
     void multiSyncApply(const std::vector<BSONObj>& ops, SyncTail* st);
     void multiInitialSyncApply(const std::vector<BSONObj>& ops, SyncTail* st);
 
-} // namespace replset
 } // namespace mongo

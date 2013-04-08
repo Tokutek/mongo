@@ -253,7 +253,7 @@ namespace mongo {
         _veto[host] = time(0)+secs;
     }
 
-    bool ReplSetImpl::_syncDoInitialSync_applyToHead( replset::InitialSync& init, OplogReader* r, 
+    bool ReplSetImpl::_syncDoInitialSync_applyToHead( InitialSync& init, OplogReader* r, 
                                                       const Member* source, const BSONObj& lastOp , 
                                                       BSONObj& minValid ) {
         /* our cloned copy will be strange until we apply oplog events that occurred
@@ -318,7 +318,7 @@ namespace mongo {
      * Do the initial sync for this member.
      */
     void ReplSetImpl::_syncDoInitialSync() {
-        replset::InitialSync init(replset::BackgroundSync::get());
+        InitialSync init(BackgroundSync::get());
         sethbmsg("initial sync pending",0);
 
         // if this is the first node, it may have already become primary

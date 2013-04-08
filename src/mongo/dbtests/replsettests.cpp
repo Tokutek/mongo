@@ -38,7 +38,7 @@ namespace ReplSetTests {
     class ReplSetTest : public ReplSet {
         ReplSetConfig *_config;
         ReplSetConfig::MemberCfg *_myConfig;
-        replset::BackgroundSyncInterface *_syncTail;
+        BackgroundSyncInterface *_syncTail;
     public:
         static const int replWriterThreadCount;
         static const int replPrefetcherThreadCount;
@@ -70,12 +70,12 @@ namespace ReplSetTests {
         virtual bool buildIndexes() const {
             return true;
         }
-        void setSyncTail(replset::BackgroundSyncInterface *syncTail) {
+        void setSyncTail(BackgroundSyncInterface *syncTail) {
             _syncTail = syncTail;
         }
     };
 
-    class BackgroundSyncTest : public replset::BackgroundSyncInterface {
+    class BackgroundSyncTest : public BackgroundSyncInterface {
         std::queue<BSONObj> _queue;
     public:
         BackgroundSyncTest() {}
@@ -107,7 +107,7 @@ namespace ReplSetTests {
         static DBDirectClient client_;
     protected:
         BackgroundSyncTest* _bgsync;
-        replset::SyncTail* _tailer;
+        SyncTail* _tailer;
     public:
         Base() {
             cmdLine._replSet = "foo";
@@ -152,7 +152,7 @@ namespace ReplSetTests {
             _bgsync = new BackgroundSyncTest();
 
             // setup tail
-            _tailer = new replset::SyncTail(_bgsync);
+            _tailer = new SyncTail(_bgsync);
 
             // setup theReplSet
             ReplSetTest *rst = new ReplSetTest();
@@ -165,7 +165,7 @@ namespace ReplSetTests {
     DBDirectClient Base::client_;
 
 
-    class MockInitialSync : public replset::InitialSync {
+    class MockInitialSync : public InitialSync {
         int step;
     public:
         MockInitialSync() : InitialSync(0), step(0), failOnStep(SUCCEED), retry(true) {}
@@ -212,19 +212,19 @@ namespace ReplSetTests {
             // all three should succeed
             std::vector<BSONObj> ops;
             ops.push_back(obj);
-            replset::multiInitialSyncApply(ops, &mock);
+            multiInitialSyncApply(ops, &mock);
 
             mock.failOnStep = MockInitialSync::FAIL_FIRST_APPLY;
-            replset::multiInitialSyncApply(ops, &mock);
+            multiInitialSyncApply(ops, &mock);
 
             mock.retry = false;
-            replset::multiInitialSyncApply(ops, &mock);
+            multiInitialSyncApply(ops, &mock);
 
             drop();
         }
     };
 
-    class SyncTest2 : public replset::InitialSync {
+    class SyncTest2 : public InitialSync {
     public:
         bool insertOnRetry;
         SyncTest2() : InitialSync(0), insertOnRetry(false) {}

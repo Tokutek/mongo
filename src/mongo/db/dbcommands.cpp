@@ -536,7 +536,7 @@ namespace mongo {
                 }
 
                 if (theReplSet) {
-                    result.append( "replNetworkQueue", replset::BackgroundSync::get()->getCounters());
+                    result.append( "replNetworkQueue", BackgroundSync::get()->getCounters());
                 }
             }
 
