@@ -71,14 +71,6 @@ namespace mongo {
 
     /* output by the web console */
     const char *replInfo = "";
-    struct ReplInfo {
-        ReplInfo(const char *msg) {
-            replInfo = msg;
-        }
-        ~ReplInfo() {
-            replInfo = "?";
-        }
-    };
 
     bool anyReplEnabled() {
         return theReplSet;
@@ -199,167 +191,6 @@ namespace mongo {
     BSONObj opTimeQuery = fromjson("{\"getoptime\":1}");
     extern unsigned replApplyBatchSize;
 
-    BSONObj userReplQuery = fromjson("{\"user\":\"repl\"}");
-
-    bool replAuthenticate(DBClientBase *conn) {
-        if( noauth ) {
-            return true;
-        }
-        if( ! cc().isAdmin() ) {
-            log() << "replauthenticate: requires admin permissions, failing\n";
-            return false;
-        }
-
-        string u;
-        string p;
-        if (internalSecurity.pwd.length() > 0) {
-            u = internalSecurity.user;
-            p = internalSecurity.pwd;
-        }
-        else {
-            BSONObj user;
-            {
-                Lock::GlobalWrite lk;
-                Client::Context ctxt("local.");
-                if( !Helpers::findOne("local.system.users", userReplQuery, user) ||
-                        // try the first user in local
-                        !Helpers::getSingleton("local.system.users", user) ) {
-                    log() << "replauthenticate: no user in local.system.users to use for authentication\n";
-                    return false;
-                }
-            }
-            u = user.getStringField("user");
-            p = user.getStringField("pwd");
-            massert( 10392 , "bad user object? [1]", !u.empty());
-            massert( 10393 , "bad user object? [2]", !p.empty());
-        }
-
-        string err;
-        if( !conn->auth("local", u.c_str(), p.c_str(), err, false) ) {
-            log() << "replauthenticate: can't authenticate to master server, user:" << u << endl;
-            return false;
-        }
-        if ( internalSecurity.pwd.length() > 0 ) {
-            conn->setAuthenticationTable(
-                    AuthenticationTable::getInternalSecurityAuthenticationTable() );
-        }
-        return true;
-    }
-
-    bool replHandshake(DBClientConnection *conn) {
-        string myname = getHostName();
-
-        BSONObj me;
-        {
-            
-            Lock::DBWrite l("local");
-            // local.me is an identifier for a server for getLastError w:2+
-            if ( ! Helpers::getSingleton( "local.me" , me ) ||
-                 ! me.hasField("host") ||
-                 me["host"].String() != myname ) {
-
-                // clean out local.me
-                Helpers::emptyCollection("local.me");
-
-                // repopulate
-                BSONObjBuilder b;
-                b.appendOID( "_id" , 0 , true );
-                b.append( "host", myname );
-                me = b.obj();
-                Helpers::putSingleton( "local.me" , me );
-            }
-        }
-
-        BSONObjBuilder cmd;
-        cmd.appendAs( me["_id"] , "handshake" );
-        if (theReplSet) {
-            cmd.append("member", theReplSet->selfId());
-        }
-
-        BSONObj res;
-        bool ok = conn->runCommand( "admin" , cmd.obj() , res );
-        // ignoring for now on purpose for older versions
-        log(ok) << "replHandshake res not: " << ok << " res: " << res << endl;
-        return true;
-    }
-
-    OplogReader::OplogReader( bool doHandshake ) : 
-        _doHandshake( doHandshake ) { 
-        
-        _tailingQueryOptions = QueryOption_SlaveOk;
-        _tailingQueryOptions |= QueryOption_CursorTailable | QueryOption_OplogReplay;
-        
-        /* TODO: slaveOk maybe shouldn't use? */
-        _tailingQueryOptions |= QueryOption_AwaitData;
-    }
-
-    bool OplogReader::commonConnect(const string& hostName) {
-        if( conn() == 0 ) {
-            _conn = shared_ptr<DBClientConnection>(new DBClientConnection( false, 0, 60*10 /* tcp timeout */));
-            string errmsg;
-            ReplInfo r("trying to connect to sync source");
-            if ( !_conn->connect(hostName.c_str(), errmsg) ||
-                 (!noauth && !replAuthenticate(_conn.get())) ) {
-                resetConnection();
-                log() << "repl: " << errmsg << endl;
-                return false;
-            }
-        }
-        return true;
-    }
-    
-    bool OplogReader::connect(string hostName) {
-        if (conn() != 0) {
-            return true;
-        }
-
-        if ( ! commonConnect(hostName) ) {
-            return false;
-        }
-        
-        
-        if ( _doHandshake && ! replHandshake(_conn.get() ) ) {
-            return false;
-        }
-
-        return true;
-    }
-
-    bool OplogReader::connect(const BSONObj& rid, const int from, const string& to) {
-        if (conn() != 0) {
-            return true;
-        }
-        if (commonConnect(to)) {
-            log() << "handshake between " << from << " and " << to << endl;
-            return passthroughHandshake(rid, from);
-        }
-        return false;
-    }
-
-    bool OplogReader::passthroughHandshake(const BSONObj& rid, const int f) {
-        BSONObjBuilder cmd;
-        cmd.appendAs( rid["_id"], "handshake" );
-        cmd.append( "member" , f );
-
-        BSONObj res;
-        return conn()->runCommand( "admin" , cmd.obj() , res );
-    }
-
-    void OplogReader::tailingQuery(const char *ns, const BSONObj& query, const BSONObj* fields ) {
-        verify( !haveCursor() );
-        LOG(2) << "repl: " << ns << ".find(" << query.toString() << ')' << endl;
-        cursor.reset( _conn->query( ns, query, 0, 0, fields, _tailingQueryOptions ).release() );
-    }
-    
-    void OplogReader::tailingQueryGTE(const char *ns, OpTime t, const BSONObj* fields ) {
-        BSONObjBuilder q;
-        q.appendDate("$gte", t.asDate());
-        BSONObjBuilder query;
-        query.append("ts", q.done());
-        tailingQuery(ns, query.done(), fields);
-    }
-
-
     void newRepl();
     void startReplSets(ReplSetCmdline*);
     void startReplication() {
@@ -382,15 +213,6 @@ namespace mongo {
         }
     }
 
-    class ReplApplyBatchSizeValidator : public ParameterValidator {
-    public:
-        ReplApplyBatchSizeValidator() : ParameterValidator( "replApplyBatchSize" ) {}
-
-        virtual bool isValid( BSONElement e , string& errmsg ) const {
-            return false;
-        }
-    } replApplyBatchSizeValidator;
-    
     /** we allow queries to SimpleSlave's */
     void replVerifyReadsOk(const ParsedQuery* pq) {
         if( replSet ) {

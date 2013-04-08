@@ -48,28 +48,6 @@ namespace mongo {
 
         bool haveCursor() { return cursor.get() != 0; }
 
-        /** this is ok but commented out as when used one should consider if QueryOption_OplogReplay
-           is needed; if not fine, but if so, need to change.
-        *//*
-        void query(const char *ns, const BSONObj& query) {
-            verify( !haveCursor() );
-            cursor.reset( _conn->query(ns, query, 0, 0, 0, QueryOption_SlaveOk).release() );
-        }*/
-
-        /** this can be used; it is commented out as it does not indicate
-            QueryOption_OplogReplay and that is likely important.  could be uncommented
-            just need to add that.
-            */
-        /*
-        void queryGTE(const char *ns, OpTime t) {
-            BSONObjBuilder q;
-            q.appendDate("$gte", t.asDate());
-            BSONObjBuilder q2;
-            q2.append("ts", q.done());
-            query(ns, q2.done());
-        }
-        */
-
         void tailingQuery(const char *ns, const BSONObj& query, const BSONObj* fields=0);
 
         void tailingQueryGTE(const char *ns, OpTime t, const BSONObj* fields=0);
@@ -99,8 +77,9 @@ namespace mongo {
         void setTailingQueryOptions( int tailingQueryOptions ) { _tailingQueryOptions = tailingQueryOptions; }
 
         void peek(vector<BSONObj>& v, int n) {
-            if( cursor.get() )
+            if( cursor.get() ) {
                 cursor->peek(v,n);
+            }
         }
         BSONObj nextSafe() { return cursor->nextSafe(); }
         BSONObj next() { return cursor->next(); }
@@ -111,5 +90,4 @@ namespace mongo {
         bool commonConnect(const string& hostName);
         bool passthroughHandshake(const BSONObj& rid, const int f);
     };
-
 }
