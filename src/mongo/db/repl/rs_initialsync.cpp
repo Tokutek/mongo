@@ -406,10 +406,15 @@ namespace mongo {
                 return;
             }
 
-            // TODO: copy relevant pieces of remote oplog
-            // and replinfo dictionary
+            // at this point, we have copied all of the data from the 
+            // remote machine. Now we need to copy the replication information
+            // on the remote machine's local database, we need to copy
+            // the entire (small) replInfo dictionary, and the necessary portion
+            // of the oplog
             {                
                 Client::WriteContext ctx(rsReplInfo);
+                // first copy the replInfo, as we will use its information
+                // to determine  how much of the opLog to copy
                 BSONObj q;
                 cloneCollectionData(
                     r.conn_shared(),
@@ -418,6 +423,39 @@ namespace mongo {
                     true, //copyIndexes
                     false //logForRepl
                     );
+
+                // now we should have replInfo on this machine,
+                // let's query the minUnappliedGTID to figure out from where
+                // we should copy the opLog
+                BSONObj result;
+                bool foundMinUnapplied = Helpers::findOne(
+                    rsReplInfo, 
+                    BSON( "_id" << "minUnapplied" ), 
+                    result
+                    );
+                // just for debugging for now
+                if (foundMinUnapplied) {
+                    log() << "foundMinUnapplied" << rsLog;
+                    // copy the oplog with a query
+                    cloneCollectionData(
+                        r.conn_shared(),
+                        rsoplog,
+                        BSON( "_id" << GTE << result["GTID"].Obj() ),
+                        true, //copyIndexes
+                        false //logForRepl
+                        );
+                }
+                else {
+                    log() << "did not find min unapplied" << rsLog;
+                    // copy entire oplog
+                    cloneCollectionData(
+                        r.conn_shared(),
+                        rsoplog,
+                        q,
+                        true, //copyIndexes
+                        false //logForRepl
+                        );
+                }
             }
 
             BSONObj commitCommand = BSON("commitTransaction" << 1);
