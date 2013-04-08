@@ -48,8 +48,6 @@ namespace mongo {
 
         bool haveCursor() { return cursor.get() != 0; }
 
-        void tailingQuery(const char *ns, const BSONObj& query, const BSONObj* fields=0);
-
         void tailingQueryGTE(const char *ns, OpTime t, const BSONObj* fields=0);
 
         /* Do a tailing query, but only send the ts field back. */
@@ -68,11 +66,6 @@ namespace mongo {
             return cursor->moreInCurrentBatch();
         }
 
-        /* old mongod's can't do the await flag... */
-        bool awaitCapable() {
-            return cursor->hasResultFlag(ResultFlag_AwaitCapable);
-        }
-
         int getTailingQueryOptions() const { return _tailingQueryOptions; }
         void setTailingQueryOptions( int tailingQueryOptions ) { _tailingQueryOptions = tailingQueryOptions; }
 
@@ -83,11 +76,11 @@ namespace mongo {
         }
         BSONObj nextSafe() { return cursor->nextSafe(); }
         BSONObj next() { return cursor->next(); }
-        void putBack(BSONObj op) { cursor->putBack(op); }
         
     private:
         /** @return true iff connection was successful */ 
         bool commonConnect(const string& hostName);
         bool passthroughHandshake(const BSONObj& rid, const int f);
+        void tailingQuery(const char *ns, const BSONObj& query, const BSONObj* fields=0);
     };
 }
