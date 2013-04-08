@@ -463,7 +463,8 @@ namespace replset {
                 OpTime theirTS = theirLastOp["ts"]._opTime();
                 if (theirTS < _lastOpTimeFetched) {
                     log() << "replSet we are ahead of the primary, will try to roll back" << rsLog;
-                    theReplSet->syncRollback(r);
+                    ::abort();
+                    //theReplSet->syncRollback(r);
                     return true;
                 }
                 /* we're not ahead?  maybe our new query got fresher data.  best to come back and try again */
@@ -483,7 +484,8 @@ namespace replset {
         if( ts != _lastOpTimeFetched || h != _lastH ) {
             log() << "replSet our last op time fetched: " << _lastOpTimeFetched.toStringPretty() << rsLog;
             log() << "replset source's GTE: " << ts.toStringPretty() << rsLog;
-            theReplSet->syncRollback(r);
+            ::abort();
+            //theReplSet->syncRollback(r);
             return true;
         }
 

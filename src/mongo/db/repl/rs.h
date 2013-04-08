@@ -507,8 +507,6 @@ namespace mongo {
         void syncDoInitialSync();
         void _syncThread();
         void syncTail();
-        unsigned _syncRollback(OplogReader& r);
-        void syncFixUp(HowToFixUp& h, OplogReader& r);
 
         // keep a list of hosts that we've tried recently that didn't work
         map<string,time_t> _veto;
@@ -538,7 +536,6 @@ namespace mongo {
 
         const ReplSetConfig::MemberCfg& myConfig() const { return _config; }
         bool tryToGoLiveAsASecondary(OpTime&); // readlocks
-        void syncRollback(OplogReader& r);
         void syncThread();
         const OpTime lastOtherOpTime() const;
 

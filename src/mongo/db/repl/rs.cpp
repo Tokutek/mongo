@@ -888,6 +888,5 @@ namespace mongo {
 
         cc().shutdown();
     }
-    
 }
 
