@@ -1400,6 +1400,7 @@ namespace mongo {
 
                         log() << "Shard version successfully reset to clean up failed migration" << endl;
                         e.getInfo().append(result);
+                        errmsg = "Failed to send migrate commit to configs because " + e.getInfo().toString();
 
                         return false;
                     }
@@ -1448,6 +1449,7 @@ namespace mongo {
 
                         if ( checkVersion.isEquivalentTo( nextVersion ) ) {
                             log() << "moveChunk commit confirmed" << migrateLog;
+                            errmsg.clear();
 
                         }
                         else {
