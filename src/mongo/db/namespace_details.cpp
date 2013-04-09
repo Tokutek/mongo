@@ -172,6 +172,13 @@ namespace mongo {
     };
 
     class OplogCollection : public IndexedCollection {
+        public:
+        OplogCollection(const string &ns, const BSONObj &options) :
+            IndexedCollection(ns, options) {
+        }
+        OplogCollection(const BSONObj &serialized) :
+            IndexedCollection(serialized) {
+        }
     };
 
     struct getfExtra {
@@ -507,7 +514,7 @@ namespace mongo {
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
         if (isOplog(ns)) {
-            return shared_ptr<NamespaceDetails>(new IndexedCollection(ns, options));
+            return shared_ptr<NamespaceDetails>(new OplogCollection(ns, options));
         } else if (isSystemCatalog(ns)) {
             return shared_ptr<NamespaceDetails>(new SystemCatalog(ns, options));
         } else if (options["capped"].trueValue()) {
@@ -533,7 +540,7 @@ namespace mongo {
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
         if (isOplog(serialized["ns"])) {
-            return shared_ptr<NamespaceDetails>(new IndexedCollection(serialized));
+            return shared_ptr<NamespaceDetails>(new OplogCollection(serialized));
         } else if (isSystemCatalog(serialized["ns"])) {
             return shared_ptr<NamespaceDetails>(new SystemCatalog(serialized));
         } else if (serialized["options"]["capped"].trueValue()) {
