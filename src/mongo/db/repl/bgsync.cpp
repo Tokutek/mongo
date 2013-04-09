@@ -36,8 +36,6 @@ namespace mongo {
                                        _lastH(0),
                                        _pause(true),
                                        _currentSyncTarget(NULL),
-                                       _oplogMarkerTarget(NULL),
-                                       _oplogMarker(true /* doHandshake */),
                                        _consumedOpTime(0, 0) {
     }
 
@@ -76,119 +74,6 @@ namespace mongo {
 
         boost::unique_lock<boost::mutex> opLock(s_instance->_lastOpMutex);
         s_instance->_lastOpCond.notify_all();
-    }
-
-    void BackgroundSync::notifierThread() {
-        Client::initThread("rsSyncNotifier");
-        replLocalAuth();
-
-        while (!inShutdown()) {
-            bool clearTarget = false;
-
-            if (!theReplSet) {
-                sleepsecs(5);
-                continue;
-            }
-
-            MemberState state = theReplSet->state();
-            if (state.primary() || state.fatal() || state.startup()) {
-                sleepsecs(5);
-                continue;
-            }
-
-            try {
-                {
-                    boost::unique_lock<boost::mutex> lock(_lastOpMutex);
-                    while (_consumedOpTime == theReplSet->lastOpTimeWritten) {
-                        _lastOpCond.wait(lock);
-                    }
-                }
-
-                markOplog();
-            }
-            catch (DBException &e) {
-                clearTarget = true;
-                log() << "replset tracking exception: " << e.getInfo() << rsLog;
-                sleepsecs(1);
-            }
-            catch (std::exception &e2) {
-                clearTarget = true;
-                log() << "replset tracking error" << e2.what() << rsLog;
-                sleepsecs(1);
-            }
-
-            if (clearTarget) {
-                boost::unique_lock<boost::mutex> lock(_mutex);
-                _oplogMarkerTarget = NULL;
-            }
-        }
-
-        cc().shutdown();
-    }
-
-    void BackgroundSync::markOplog() {
-        LOG(3) << "replset markOplog: " << _consumedOpTime << " " << theReplSet->lastOpTimeWritten << rsLog;
-
-        if (!hasCursor()) {
-            sleepsecs(1);
-            return;
-        }
-
-        if (!_oplogMarker.moreInCurrentBatch()) {
-            _oplogMarker.more();
-        }
-
-        if (!_oplogMarker.more()) {
-            _oplogMarker.tailCheck();
-            sleepsecs(1);
-            return;
-        }
-
-        // if this member has written the op at optime T, we want to nextSafe up to and including T
-        while (_consumedOpTime < theReplSet->lastOpTimeWritten && _oplogMarker.more()) {
-            BSONObj temp = _oplogMarker.nextSafe();
-            _consumedOpTime = temp["ts"]._opTime();
-        }
-
-        // call more() to signal the sync target that we've synced T
-        _oplogMarker.more();
-    }
-
-    bool BackgroundSync::hasCursor() {
-        {
-            // prevent writers from blocking readers during fsync
-            SimpleMutex::scoped_lock fsynclk(filesLockedFsync); 
-            // we don't need the local write lock yet, but it's needed by OplogReader::connect
-            // so we take it preemptively to avoid deadlocking.
-            Lock::DBWrite lk("local");
-
-            boost::unique_lock<boost::mutex> lock(_mutex);
-
-            if (!_oplogMarkerTarget || _currentSyncTarget != _oplogMarkerTarget) {
-                if (!_currentSyncTarget) {
-                    return false;
-                }
-
-                log() << "replset setting oplog notifier to " << _currentSyncTarget->fullName() << rsLog;
-                _oplogMarkerTarget = _currentSyncTarget;
-
-                _oplogMarker.resetConnection();
-
-                if (!_oplogMarker.connect(_oplogMarkerTarget->fullName())) {
-                    LOG(1) << "replset could not connect to " << _oplogMarkerTarget->fullName() << rsLog;
-                    _oplogMarkerTarget = NULL;
-                    return false;
-                }
-            }
-        }
-
-        if (!_oplogMarker.haveCursor()) {
-            BSONObj fields = BSON("ts" << 1);
-            ::abort();
-            //_oplogMarker.tailingQueryGTE(rsoplog, theReplSet->lastOpTimeWritten, &fields);
-        }
-
-        return _oplogMarker.haveCursor();
     }
 
     void BackgroundSync::producerThread() {
@@ -345,14 +230,6 @@ namespace mongo {
     }
 
     bool BackgroundSync::peek(BSONObj* op) {
-        {
-            boost::unique_lock<boost::mutex> lock(_mutex);
-
-            if (_currentSyncTarget != _oplogMarkerTarget &&
-                _currentSyncTarget != NULL) {
-                _oplogMarkerTarget = NULL;
-            }
-        }
         return _buffer.peek(*op);
     }
 
@@ -527,5 +404,4 @@ namespace mongo {
 
         LOG(1) << "replset bgsync fetch queue set to: " << _lastOpTimeFetched << " " << _lastH << rsLog;
    }
-
 } // namespace mongo
