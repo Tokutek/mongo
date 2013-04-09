@@ -48,15 +48,14 @@ namespace mongo {
         }
 
         Txn::Txn(const Txn *parent, int flags)
-                : _flags(parent == NULL
-                         ? flags
-                         : parent->_flags),
-                  _db_txn(start_txn((parent == NULL
+                : _db_txn(start_txn((parent == NULL
                                      ? NULL
                                      : parent->_db_txn),
-                                    _flags))
+                                    (parent == NULL
+                                     ? flags
+                                     : DB_INHERIT_ISOLATION)))
         {
-            DEV { LOG(3) << "begin txn " << _db_txn << " (" << (parent == NULL ? NULL : parent->_db_txn) << ", " << _flags << ")" << endl; }
+            DEV { LOG(3) << "begin txn " << _db_txn << " (" << (parent == NULL ? NULL : parent->_db_txn) << ", " << (parent == NULL ? flags : DB_INHERIT_ISOLATION) << ")" << endl; }
         }
 
         Txn::~Txn() {
@@ -77,10 +76,6 @@ namespace mongo {
             DEV { LOG(3) << "abort txn " << _db_txn << endl; }
             storage::abort_txn(_db_txn);
             _db_txn = NULL;
-        }
-
-        bool Txn::isReadOnly() const {
-            return _flags & DB_TXN_READ_ONLY;
         }
 
     } // namespace storage

@@ -60,8 +60,6 @@ namespace mongo {
         DB_TXN *db_txn() const { return _txn.db_txn(); }
         /** @return true iff this transaction is live */
         bool isLive() const { return _txn.isLive(); }
-        /** @return true iff this is a read only transaction */
-        bool isReadOnly() const { return _txn.isReadOnly(); };
         // log an operations, represented in op, to _txnOps
         // if and when the root transaction commits, the operation
         // will be added to the opLog

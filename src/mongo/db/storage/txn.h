@@ -33,7 +33,6 @@ namespace mongo {
          * You should really only need to use this to get the DB_TXN out of it.
          */
         class Txn : boost::noncopyable {
-            const int _flags;
             DB_TXN *_db_txn;
             void retire();
           public:
@@ -46,8 +45,6 @@ namespace mongo {
             DB_TXN *db_txn() const { return _db_txn; }
             /** @return true iff this transaction is live */
             bool isLive() const { return _db_txn != NULL; }
-            /** @return true iff this is a read only transaction */
-            bool isReadOnly() const;
         };
 
     } // namespace storage
