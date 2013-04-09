@@ -478,6 +478,7 @@ namespace mongo {
         bool ret = getLastGTIDinOplog(&lastEntry);
         isyncassert("could not get last oplog entry after clone", ret);
 
+        // TODO: query minLive and use that instead
         GTID currEntry = minUnappliedGTID;
         // first, we need to fill in the "gaps" in the oplog
         while (GTID::cmp(currEntry, lastEntry) < 0) {
@@ -506,6 +507,10 @@ namespace mongo {
                 }
             }
         }
+
+        // at this point, we have got the oplog up to date,
+        // now we need to read forward in the oplog
+        // from minUnapplied
 
         // TODO: figure out what to do with these
         //lastOpTimeWritten = OpTime();
