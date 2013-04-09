@@ -1,4 +1,5 @@
 add_subdirectory(auth)
+add_subdirectory(ops)
 
 add_library(mongohasher STATIC
   hasher
