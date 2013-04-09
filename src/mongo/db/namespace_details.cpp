@@ -45,7 +45,7 @@
 
 namespace mongo {
 
-    NamespaceIndex* nsindex(const char *ns) {
+    NamespaceIndex *nsindex(const char *ns) {
         Database *database = cc().database();
         verify( database );
         DEV {
@@ -61,11 +61,11 @@ namespace mongo {
         return &database->namespaceIndex;
     }
 
-    NamespaceDetails* nsdetails(const char *ns) {
+    NamespaceDetails *nsdetails(const char *ns) {
         return nsindex(ns)->details(ns);
     }
 
-    NamespaceDetails* nsdetails_maybe_create(const char *ns, BSONObj options) {
+    NamespaceDetails *nsdetails_maybe_create(const char *ns, BSONObj options) {
         NamespaceIndex *ni = nsindex(ns);
         if (!ni->allocated()) {
             // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
@@ -168,10 +168,10 @@ namespace mongo {
     };
 
     class OplogCollection : public IndexedCollection {
-        public:
+    public:
         OplogCollection(const string &ns, const BSONObj &options) :
             IndexedCollection(ns, options) {
-        }
+        } 
         OplogCollection(const BSONObj &serialized) :
             IndexedCollection(serialized) {
         }
@@ -233,12 +233,12 @@ namespace mongo {
         AtomicWord<long long> _nextPK;
     };
 
-    class SystemCatalog : public NaturalOrderCollection {
+    class SystemCatalogCollection : public NaturalOrderCollection {
     public:
-        SystemCatalog(const string &ns, const BSONObj &options) :
+        SystemCatalogCollection(const string &ns, const BSONObj &options) :
             NaturalOrderCollection(ns, options) {
         }
-        SystemCatalog(const BSONObj &serialized) :
+        SystemCatalogCollection(const BSONObj &serialized) :
             NaturalOrderCollection(serialized) {
         }
 
@@ -512,7 +512,7 @@ namespace mongo {
         if (isOplog(ns)) {
             return shared_ptr<NamespaceDetails>(new OplogCollection(ns, options));
         } else if (isSystemCatalog(ns)) {
-            return shared_ptr<NamespaceDetails>(new SystemCatalog(ns, options));
+            return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(ns, options));
         } else if (options["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(ns, options));
         } else {
@@ -538,7 +538,7 @@ namespace mongo {
         if (isOplog(serialized["ns"])) {
             return shared_ptr<NamespaceDetails>(new OplogCollection(serialized));
         } else if (isSystemCatalog(serialized["ns"])) {
-            return shared_ptr<NamespaceDetails>(new SystemCatalog(serialized));
+            return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(serialized));
         } else if (serialized["options"]["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(serialized));
         } else {
