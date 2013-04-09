@@ -1776,11 +1776,7 @@ namespace mongo {
         
         scoped_ptr<Client::Transaction> transaction;
         if (c->needsTxn()) {
-            // if we are running in a multi statement transaction, then the 
-            // command's flags are irrelevant. We must run with 
-            // DB_INHERIT_ISOLATION.
-            int flags = (cc().hasTxn()) ? DB_INHERIT_ISOLATION : c->txnFlags();
-            transaction.reset(new Client::Transaction(flags));
+            transaction.reset(new Client::Transaction(c->txnFlags()));
         }
         if ( c->locktype() == Command::NONE ) {
             verify( !c->lockGlobally() );
