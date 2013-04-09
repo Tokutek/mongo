@@ -540,8 +540,6 @@ again:      while ( !allInclusive && ok() ) {
         }
         if ( !_endKey.isEmpty() ) {
             dassert( _d != NULL &&_idx != NULL );
-            // TODO: Change _idx->keyPattern() to _ordering, which is cheaper
-            //const int cmp = sgn( _endKey.woCompare( _currKey, _idx->keyPattern() ) );
             const int cmp = sgn( _endKey.woCompare( _currKey, _ordering ) );
             if ( ( cmp != 0 && cmp != _direction ) ||
                     ( cmp == 0 && !_endKeyInclusive ) ) {
