@@ -41,6 +41,7 @@
 #include "mongo/scripting/engine.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/db_flags.h"
+#include "mongo/db/repl/rs_optime.h"
 
 namespace mongo {
 
@@ -164,6 +165,9 @@ namespace mongo {
             BSONObj newObjWithId = inheritIdField(oldObj, newObj);
             NamespaceDetails::updateObject(pk, oldObj, newObjWithId);
         }
+    };
+
+    class OplogCollection : public IndexedCollection {
     };
 
     struct getfExtra {
@@ -475,6 +479,10 @@ namespace mongo {
         return str::contains(ns, ".system.indexes") || str::contains(ns, ".system.namespaces");
     }
 
+    static bool isOplog(const string &ns) {
+        return str::equals(ns.c_str(), rsoplog);
+    }
+
     NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
         _ns(ns),
         _options(options.copy()),
@@ -494,7 +502,9 @@ namespace mongo {
         addNewNamespaceToCatalog(ns, !options.isEmpty() ? &options : NULL);
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
-        if (isSystemCatalog(ns)) {
+        if (isOplog(ns)) {
+            return shared_ptr<NamespaceDetails>(new IndexedCollection(ns, options));
+        } else if (isSystemCatalog(ns)) {
             return shared_ptr<NamespaceDetails>(new SystemCatalog(ns, options));
         } else if (options["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(ns, options));
@@ -518,7 +528,9 @@ namespace mongo {
         }
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
-        if (isSystemCatalog(serialized["ns"])) {
+        if (isOplog(serialized["ns"])) {
+            return shared_ptr<NamespaceDetails>(new IndexedCollection(serialized));
+        } else if (isSystemCatalog(serialized["ns"])) {
             return shared_ptr<NamespaceDetails>(new SystemCatalog(serialized));
         } else if (serialized["options"]["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(serialized));
