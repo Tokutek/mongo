@@ -39,6 +39,7 @@
 #include "mongo/db/repl_block.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/repl.h"
+#include "mongo/db/ops/insert.h"
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/distlock.h"
@@ -521,7 +522,6 @@ namespace mongo {
             while ( 1 ) {
                 bool filledBuffer = false;
                 
-                auto_ptr<LockMongoFilesShared> fileLock;
                 {
                     Client::ReadContext ctx( _ns );
                     NamespaceDetails *d = nsdetails( _ns.c_str() );
@@ -530,6 +530,7 @@ namespace mongo {
                     set<BSONObj>::iterator i = _clonePKs.begin();
                     for ( ; i!=_clonePKs.end(); ++i ) {
                         
+                        BSONObj o;
                         const BSONObj &pk = *i;
                         bool found = d->findByPK( pk, o );
                         verify(found);
@@ -1381,7 +1382,7 @@ namespace mongo {
                     BSONObj entry = conn->findOne( system_namespaces, BSON( "name" << ns ) );
                     if ( entry["options"].isABSONObj() ) {
                         string errmsg;
-                        if ( ! userCreateNS( ns.c_str(), entry["options"].Obj(), errmsg, true, 0 ) )
+                        if ( ! userCreateNS( ns.c_str(), entry["options"].Obj(), errmsg, true ) )
                             warning() << "failed to create collection with options: " << errmsg
                                       << endl;
                     }

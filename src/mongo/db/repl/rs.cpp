@@ -446,7 +446,7 @@ namespace mongo {
         if( Helpers::getLast(rsoplog, o) ) {
             int len;
             GTID lastGTID(o["_id"].binData(len));
-            dassert(len == GTID::GTIDBinarySize());
+            dassert(len == (int) GTID::GTIDBinarySize());
             gtidManager = new GTIDManager(lastGTID);
             setTxnGTIDManager(gtidManager);
             
