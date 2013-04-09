@@ -179,8 +179,11 @@ namespace mongo {
     }
     
     void OplogReader::tailingQueryGTE(const char *ns, GTID gtid, const BSONObj* fields ) {
-        BSONObjBuilder q;
-        q.append("$gte", gtid.getBSON());
+        BSONObjBuilder q;        
+        uint32_t sizeofGTID = GTID::GTIDBinarySize();
+        char idData[sizeofGTID];
+        gtid.serializeBinaryData(idData);
+        q.appendBinData("$gte", sizeofGTID, BinDataGeneral, idData);
         BSONObjBuilder query;
         query.append("ts", q.done());
         tailingQuery(ns, query.done(), fields);

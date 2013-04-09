@@ -23,16 +23,18 @@
 
 namespace mongo {
 
+
     class GTID {
         uint64_t _primarySeqNo;
         uint64_t _GTSeqNo;
         public:
         static int cmp(GTID a, GTID b);
+        static uint32_t GTIDBinarySize();
         GTID();
         GTID(uint64_t primarySeqNo, uint64_t GTSeqNo);
-        GTID(BSONObj b);
+        GTID(const char* binData);
         ~GTID(){};
-        BSONObj getBSON();
+        void serializeBinaryData(char* binData);
         void inc();
         void inc_primary();
     };

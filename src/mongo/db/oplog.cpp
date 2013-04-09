@@ -52,7 +52,7 @@ namespace mongo {
         resetSlaveCache();
     }
 
-    static void _logOpUninitialized(BSONObj id, BSONArray& opInfo) {
+    static void _logOpUninitialized(GTID gtid, BSONArray& opInfo) {
         log() << "WHAT IS GOING ON???????? " << endl;
     }
 
@@ -91,7 +91,7 @@ namespace mongo {
         }
     }
     
-    static void _logTransactionOps(BSONObj id, BSONArray& opInfo) {
+    static void _logTransactionOps(GTID gtid, BSONArray& opInfo) {
         Lock::DBRead lk1("local");
         mutex::scoped_lock lk2(OpTime::m);
 
@@ -109,7 +109,10 @@ namespace mongo {
         }
 
         BSONObjBuilder b;
-        b.append("_id", id);
+        uint32_t sizeofGTID = GTID::GTIDBinarySize();
+        char idData[sizeofGTID];
+        gtid.serializeBinaryData(idData);
+        b.appendBinData("_id", sizeofGTID, BinDataGeneral, idData);
         b.appendTimestamp("ts", ts.asDate());
         b.append("h", hashNew);
         b.append("a", true);
@@ -123,10 +126,17 @@ namespace mongo {
 
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID) {
         Lock::DBRead lk("local");
+        uint32_t sizeofGTID = GTID::GTIDBinarySize();
+        char minLiveData[sizeofGTID];
+        char minUnappliedData[sizeofGTID];
+        
+        minLiveGTID.serializeBinaryData(minLiveData);
+        minUnappliedGTID.serializeBinaryData(minUnappliedData);
+
         BufBuilder bufbuilder(256);
         BSONObjBuilder b(bufbuilder);
         b.append("_id", "minLive");
-        b.append("GTID", minLiveGTID.getBSON());
+        b.appendBinData("GTID", sizeofGTID, BinDataGeneral, minLiveData);
         BSONObj bb = b.done();
         uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
         replInfoDetails->insertObject(bb, flags);
@@ -134,12 +144,12 @@ namespace mongo {
         bufbuilder.reset();
         BSONObjBuilder b2(bufbuilder);
         b2.append("_id", "minUnapplied");
-        b2.append("GTID", minUnappliedGTID.getBSON());
+        b2.appendBinData("GTID", sizeofGTID, BinDataGeneral, minUnappliedData);
         BSONObj bb2 = b2.done();
         replInfoDetails->insertObject(bb2, flags);
     }
     
-    static void (*_logTransactionOp)(BSONObj id, BSONArray& opInfo) = _logOpUninitialized;
+    static void (*_logTransactionOp)(GTID gtid, BSONArray& opInfo) = _logOpUninitialized;
     // TODO: (Zardosht) hopefully remove these two phases
     void newReplUp() {
         _logTransactionOp = _logTransactionOps;
@@ -148,8 +158,8 @@ namespace mongo {
         _logTransactionOp = _logTransactionOps;
     }
 
-    void logTransactionOps(BSONObj id, BSONArray& opInfo) {
-        _logTransactionOp(id, opInfo);
+    void logTransactionOps(GTID gtid, BSONArray& opInfo) {
+        _logTransactionOp(gtid, opInfo);
         // TODO: Figure out for sharding
         //logOpForSharding( opstr , ns , obj , patt );
     }

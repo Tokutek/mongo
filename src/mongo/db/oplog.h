@@ -36,7 +36,7 @@ namespace mongo {
 
     void logOp( const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt = 0, bool fromMigrate = false );
     // Write operations to the log (local.oplog.$main)
-    void logTransactionOps(BSONObj id, BSONArray& opInfo);
+    void logTransactionOps(GTID gtid, BSONArray& opInfo);
     void deleteOplogFiles();
     void openOplogFiles();
 

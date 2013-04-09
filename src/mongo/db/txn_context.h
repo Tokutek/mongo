@@ -28,7 +28,7 @@ namespace mongo {
 
     void setTxnLogOperations(bool val);
     bool logTxnOperations();
-    void setLogTxnToOplog(void (*f)(BSONObj id, BSONArray& opInfo));
+    void setLogTxnToOplog(void (*f)(GTID gtid, BSONArray& opInfo));
     void setTxnGTIDManager(GTIDManager* m);
 
     // class to wrap operations surrounding a storage::Txn.

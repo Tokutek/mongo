@@ -108,7 +108,8 @@ namespace mongo {
         if ( !lastOp.isEmpty() ) {
             OpTime::setLast( lastOp[ "ts" ].date() );
         }
-        GTID lastGTID(lastOp["_id"].Obj());
+        int len;
+        GTID lastGTID(lastOp["_id"].binData(len));
         gtidManager->resetManager(lastGTID);
 
         changeState(MemberState::RS_PRIMARY);
@@ -443,7 +444,9 @@ namespace mongo {
         Lock::DBRead lk(rsoplog);
         BSONObj o;
         if( Helpers::getLast(rsoplog, o) ) {
-            GTID lastGTID(o["_id"].Obj());
+            int len;
+            GTID lastGTID(o["_id"].binData(len));
+            dassert(len == GTID::GTIDBinarySize());
             gtidManager = new GTIDManager(lastGTID);
             setTxnGTIDManager(gtidManager);
             

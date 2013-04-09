@@ -29,6 +29,21 @@ namespace mongo {
         return (a._GTSeqNo < b._GTSeqNo) ? -1 : 1;
     }
 
+    uint32_t GTID::GTIDBinarySize() {
+        // for _primarySeqNo and _GTSeqNo
+        return 2*sizeof(uint64_t);
+    }
+
+#define SWAP64(x) \
+        ((uint64_t)((((uint64_t)(x) & 0xff00000000000000ULL) >> 56) | \
+                    (((uint64_t)(x) & 0x00ff000000000000ULL) >> 40) | \
+                    (((uint64_t)(x) & 0x0000ff0000000000ULL) >> 24) | \
+                    (((uint64_t)(x) & 0x000000ff00000000ULL) >>  8) | \
+                    (((uint64_t)(x) & 0x00000000ff000000ULL) <<  8) | \
+                    (((uint64_t)(x) & 0x0000000000ff0000ULL) << 24) | \
+                    (((uint64_t)(x) & 0x000000000000ff00ULL) << 40) | \
+                    (((uint64_t)(x) & 0x00000000000000ffULL) << 56)))
+
     GTID::GTID() {
         _primarySeqNo = 0;
         _GTSeqNo = 0;
@@ -39,18 +54,22 @@ namespace mongo {
         _GTSeqNo = GTSeqNo;
     }
 
-    GTID::GTID(BSONObj b) {
-        _primarySeqNo = static_cast<uint64_t>(b["p"].Long());
-        _GTSeqNo = static_cast<uint64_t>(b["t"].Long());
+    GTID::GTID(const char* binData) {
+        const char* pos = binData;
+        uint64_t swappedPrim = *(uint64_t *)pos;
+        pos += sizeof(uint64_t);
+        uint64_t swappedSec = *(uint64_t *)pos;
+        _primarySeqNo = SWAP64(swappedPrim);
+        _GTSeqNo = SWAP64(swappedSec);
     }
 
-    // This is doing a malloc. Would be nice to find a way to do
-    // this without a malloc.
-    BSONObj GTID::getBSON() {
-        BSONObjBuilder b;
-        b.append("p", static_cast<long long>(_primarySeqNo));
-        b.append("t", static_cast<long long>(_GTSeqNo));
-        return b.obj();
+    void GTID::serializeBinaryData(char* binData) {
+        char* pos = binData;
+        uint64_t prim =  SWAP64(_primarySeqNo);
+        memcpy(pos, &prim, sizeof(uint64_t));
+        pos += sizeof(uint64_t);
+        uint64_t sec =  SWAP64(_GTSeqNo);
+        memcpy(pos, &sec, sizeof(uint64_t));
     }
 
     void GTID::inc() {

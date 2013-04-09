@@ -32,7 +32,7 @@ namespace mongo {
     // compiled with coredb. So, in startReplication, we will set this
     // to true
     static bool _logTxnOperations = false;
-    static void (*_logTxnToOplog)(BSONObj id, BSONArray& opInfo) = NULL;
+    static void (*_logTxnToOplog)(GTID gtid, BSONArray& opInfo) = NULL;
     static GTIDManager* txnGTIDManager = NULL;
 
     void setTxnLogOperations(bool val) {
@@ -43,7 +43,7 @@ namespace mongo {
         return _logTxnOperations;
     }
 
-    void setLogTxnToOplog(void (*f)(BSONObj id, BSONArray& opInfo)) {
+    void setLogTxnToOplog(void (*f)(GTID gtid, BSONArray& opInfo)) {
         _logTxnToOplog = f;
     }
 
@@ -128,7 +128,7 @@ namespace mongo {
     void TxnContext::writeOpsToOplog(GTID gtid) {
         dassert(_logTxnOperations);
         dassert(_logTxnToOplog);
-        BSONArray array = _txnOps.arr();        
-        _logTxnToOplog(gtid.getBSON(), array);
+        BSONArray array = _txnOps.arr();
+        _logTxnToOplog(gtid, array);
     }
 } // namespace mongo
