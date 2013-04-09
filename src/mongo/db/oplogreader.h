@@ -48,12 +48,12 @@ namespace mongo {
 
         bool haveCursor() { return cursor.get() != 0; }
 
-        void tailingQueryGTE(const char *ns, OpTime t, const BSONObj* fields=0);
+        void tailingQueryGTE(const char *ns, GTID gtid, const BSONObj* fields=0);
 
         /* Do a tailing query, but only send the ts field back. */
-        void ghostQueryGTE(const char *ns, OpTime t) {
+        void ghostQueryGTE(const char *ns, GTID gtid) {
             const BSONObj fields = BSON("ts" << 1 << "_id" << 0);
-            return tailingQueryGTE(ns, t, &fields);
+            return tailingQueryGTE(ns, gtid, &fields);
         }
 
         bool more() {

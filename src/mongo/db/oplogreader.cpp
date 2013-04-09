@@ -178,9 +178,9 @@ namespace mongo {
         cursor.reset( _conn->query( ns, query, 0, 0, fields, _tailingQueryOptions ).release() );
     }
     
-    void OplogReader::tailingQueryGTE(const char *ns, OpTime t, const BSONObj* fields ) {
+    void OplogReader::tailingQueryGTE(const char *ns, GTID gtid, const BSONObj* fields ) {
         BSONObjBuilder q;
-        q.appendDate("$gte", t.asDate());
+        q.append("$gte", gtid.getBSON());
         BSONObjBuilder query;
         query.append("ts", q.done());
         tailingQuery(ns, query.done(), fields);

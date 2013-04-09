@@ -718,7 +718,8 @@ namespace mongo {
                     // error message logged in OplogReader::connect
                     return;
                 }
-                slave->reader.ghostQueryGTE(rsoplog, last);
+                ::abort();
+                //slave->reader.ghostQueryGTE(rsoplog, last);
             }
 
             LOG(1) << "replSet last: " << slave->last.toString() << " to " << last.toString() << rsLog;

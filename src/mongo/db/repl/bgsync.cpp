@@ -184,7 +184,8 @@ namespace mongo {
 
         if (!_oplogMarker.haveCursor()) {
             BSONObj fields = BSON("ts" << 1);
-            _oplogMarker.tailingQueryGTE(rsoplog, theReplSet->lastOpTimeWritten, &fields);
+            ::abort();
+            //_oplogMarker.tailingQueryGTE(rsoplog, theReplSet->lastOpTimeWritten, &fields);
         }
 
         return _oplogMarker.haveCursor();
@@ -266,8 +267,8 @@ namespace mongo {
                 // if there is no one to sync from
                 return;
             }
-
-            r.tailingQueryGTE(rsoplog, _lastOpTimeFetched);
+            ::abort();
+            r.tailingQueryGTE(rsoplog, _lastGTIDFetched);
         }
 
         // if target cut connections between connecting and querying (for

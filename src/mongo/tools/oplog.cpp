@@ -67,7 +67,8 @@ public:
         log() << "starting from " << start.toStringPretty() << endl;
 
         string ns = getParam( "oplogns" );
-        r.tailingQueryGTE( ns.c_str() , start );
+        ::abort();
+        //r.tailingQueryGTE( ns.c_str() , start );
 
         int num = 0;
         while ( r.more() ) {
