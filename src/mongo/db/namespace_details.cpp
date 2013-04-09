@@ -626,25 +626,72 @@ namespace mongo {
             IndexDetails &idx = *_indexes[i];
 
             if (i == 0) {
-                idx.deletePair(pk, NULL, obj);
+                idx.deletePair(pk, NULL);
             } else {
                 BSONObjSet keys;
                 idx.getKeysFromObject(obj, keys);
                 if (keys.size() > 1) {
-                    dassert(isMultikey(i)); // the previous insert should have marked it as multikey
+                    dassert(isMultikey(i)); // some prior insert should have marked it as multikey
                 }
                 for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                    idx.deletePair(*ki, &pk, obj);
+                    idx.deletePair(*ki, &pk);
                 }
             }
         }
     }
 
+    static bool orderedSetContains(const BSONObjSet &set, const BSONObj &obj) {
+        bool contains = false;
+        for (BSONObjSet::iterator i = set.begin(); i != set.end(); i++) {
+            const int c = i->woCompare(obj);
+            if (c >= 0) {
+                contains = c == 0;
+                break;
+            }
+        }
+        return contains;
+    }
+
     void NamespaceDetails::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
         TOKULOG(4) << "NamespaceDetails::updateObject pk "
             << pk << ", old " << oldObj << ", new " << newObj << endl;
-        deleteFromIndexes(pk, oldObj);
-        insertIntoIndexes(pk, newObj, 0);
+
+        dassert(!pk.isEmpty());
+        dassert(!oldObj.isEmpty());
+        dassert(!newObj.isEmpty());
+
+        for (int i = 0; i < nIndexes(); i++) {
+            IndexDetails &idx = *_indexes[i];
+
+            if (i == 0) {
+                // Overwrite oldObj with newObj using the given pk.
+                idx.insertPair(pk, NULL, newObj, ND_UNIQUE_CHECKS_OFF);
+            } else {
+                // Determine what keys need to be removed/added.
+                BSONObjSet oldKeys;
+                BSONObjSet newKeys;
+                idx.getKeysFromObject(oldObj, oldKeys);
+                idx.getKeysFromObject(newObj, newKeys);
+                if (newKeys.size() > 1) {
+                    setIndexIsMultikey(_ns.c_str(), i);
+                }
+
+                // Delete the keys that exist in oldKeys but do not exist in newKeys
+                for (BSONObjSet::iterator o = oldKeys.begin(); o != oldKeys.end(); o++) {
+                    const BSONObj &k = *o;
+                    if (!orderedSetContains(newKeys, k)) {
+                        idx.deletePair(k, &pk);
+                    }
+                }
+                // Insert the keys that exist in newKeys but do not exist in oldKeys
+                for (BSONObjSet::iterator n = newKeys.begin(); n != newKeys.end(); n++) {
+                    const BSONObj &k = *n;
+                    if (!orderedSetContains(oldKeys, k)) {
+                        idx.insertPair(k, &pk, newObj, 0);
+                    }
+                }
+            }
+        }
     }
 
     void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
