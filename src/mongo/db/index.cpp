@@ -181,7 +181,7 @@ namespace mongo {
         TOKULOG(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
     }
 
-    void IndexDetails::deletePair(const BSONObj &key, const BSONObj *pk, const BSONObj &obj) {
+    void IndexDetails::deletePair(const BSONObj &key, const BSONObj *pk) {
         storage::Key skey(key, pk);
         DBT kdbt = skey.dbt();
 
