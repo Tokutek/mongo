@@ -335,102 +335,13 @@ namespace mongo {
 
         if ( *opType == 'i' ) {
             opCounters->gotInsert();
-
-            const char *p = strchr(ns, '.');
-            if ( p && strcmp(p, ".system.indexes") == 0 ) {
-                // updates aren't allowed for indexes -- so we will do a regular insert. if index already
-                // exists, that is ok.
-                //theDataFileMgr.insert(ns, (void*) o.objdata(), o.objsize());
-                ::abort();
-            }
-            else {
-                // do upserts for inserts as we might get replayed more than once
-                OpDebug debug;
-                BSONElement _id;
-                if( !o.getObjectID(_id) ) {
-                    /* No _id.  This will be very slow. */
-                    Timer t;
-                    updateObjects(ns, o, o, true, false, false, debug, false,
-                                  QueryPlanSelectionPolicy::idElseNatural() );
-                    if( t.millis() >= 2 ) {
-                        RARELY OCCASIONALLY log() << "warning, repl doing slow updates (no _id field) for " << ns << endl;
-                    }
-                }
-                else {
-                    // probably don't need this since all replicated colls have _id indexes now
-                    // but keep it just in case
-                    // TODO: Should we care about this period assert? Sounds like no.
-                    //RARELY if ( nsd && !nsd->isCapped() ) { ensureHaveIdIndex(ns); }
-
-                    /* todo : it may be better to do an insert here, and then catch the dup key exception and do update
-                              then.  very few upserts will not be inserts...
-                              */
-                    BSONObjBuilder b;
-                    b.append(_id);
-                    updateObjects(ns, o, b.done(), true, false, false , debug, false,
-                                  QueryPlanSelectionPolicy::idElseNatural() );
-                }
-            }
         }
         else if ( *opType == 'u' ) {
             opCounters->gotUpdate();
-
-            // probably don't need this since all replicated colls have _id indexes now
-            // but keep it just in case
-            // TODO: Should we care about this period assert? Sounds like no.
-            //RARELY if ( nsd && !nsd->isCapped() ) { ensureHaveIdIndex(ns); }
-
-            OpDebug debug;
-            BSONObj updateCriteria = op.getObjectField("o2");
-            bool upsert = fields[3].booleanSafe() || convertUpdateToUpsert;
-            UpdateResult ur = updateObjects(ns, o, updateCriteria, upsert, /*multi*/ false,
-                                            /*logop*/ false , debug, /*fromMigrate*/ false,
-                                            QueryPlanSelectionPolicy::idElseNatural() );
-            if( ur.num == 0 ) { 
-                if( ur.mod ) {
-                    if( updateCriteria.nFields() == 1 ) {
-                        // was a simple { _id : ... } update criteria
-                        failedUpdate = true;
-                        log() << "replication failed to apply update: " << op.toString() << endl;
-                    }
-                    // need to check to see if it isn't present so we can set failedUpdate correctly.
-                    // note that adds some overhead for this extra check in some cases, such as an updateCriteria
-                    // of the form
-                    //   { _id:..., { x : {$size:...} }
-                    // thus this is not ideal.
-                    else {
-#if 0
-                        if (nsd == NULL ||
-                            (nsd->findIdIndex() >= 0 && Helpers::findById(nsd, updateCriteria).isNull()) ||
-                            // capped collections won't have an _id index
-                            (nsd->findIdIndex() < 0 && Helpers::findOne(ns, updateCriteria, false).isNull())) {
-                            failedUpdate = true;
-                            log() << "replication couldn't find doc: " << op.toString() << endl;
-                        }
-#endif
-                        ::abort();
-
-                        // Otherwise, it's present; zero objects were updated because of additional specifiers
-                        // in the query for idempotence
-                    }
-                }
-                else { 
-                    // this could happen benignly on an oplog duplicate replay of an upsert
-                    // (because we are idempotent), 
-                    // if an regular non-mod update fails the item is (presumably) missing.
-                    if( !upsert ) {
-                        failedUpdate = true;
-                        log() << "replication update of non-mod failed: " << op.toString() << endl;
-                    }
-                }
-            }
         }
         else if ( *opType == 'd' ) {
             opCounters->gotDelete();
-            if ( opType[1] == 0 )
-                deleteObjects(ns, o, /*justOne*/ fields[3].booleanSafe());
-            else
-                verify( opType[1] == 'b' ); // "db" advertisement
+            deleteObjects(ns, o, /*justOne*/ fields[3].booleanSafe());
         }
         else if ( *opType == 'c' ) {
             opCounters->gotCommand();
