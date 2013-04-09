@@ -247,6 +247,5 @@ namespace mongo {
     }
 
     void logOpForSharding( const char * opstr , const char * ns , const BSONObj& obj , BSONObj * patt );
-    //void aboutToDeleteForSharding( const Database* db , const DiskLoc& dl );
 
 }
