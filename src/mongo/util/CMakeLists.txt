@@ -74,6 +74,7 @@ target_link_libraries(mongocommon_util LINK_PUBLIC
 add_library(stringutils STATIC
   stringutils
   base64
+  hex
   )
 add_dependencies(stringutils generate_error_codes generate_action_types)
 

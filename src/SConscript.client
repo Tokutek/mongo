@@ -67,11 +67,10 @@ clientSourceBasic = [
     'mongo/util/concurrency/mutexdebugger.cpp',
     'mongo/util/debug_util.cpp',
     'mongo/util/stacktrace.cpp',
-    'mongo/util/file.cpp',
     'mongo/util/fail_point.cpp',
     'mongo/util/fail_point_registry.cpp',
     'mongo/util/fail_point_service.cpp',
-    'mongo/util/file.cpp',
+    'mongo/util/hex.cpp',
     'mongo/util/histogram.cpp',
     'mongo/util/intrusive_counter.cpp',
     'mongo/util/log.cpp',
@@ -119,6 +118,7 @@ exampleSourceMap = [
         ('secondExample', 'mongo/client/examples/second.cpp'),
         ('tutorial', 'mongo/client/examples/tutorial.cpp'),
         ('whereExample', 'mongo/client/examples/whereExample.cpp'),
+        ('bsondemo', 'mongo/bson/bsondemo/bsondemo.cpp'),
         ]
 
 clientHeaderDirectories = [
@@ -156,76 +156,7 @@ mongoClientLibs = []
 mongoClientLibDeps = ['$BUILD_DIR/third_party/shim_boost']
 mongoClientSysLibDeps = []
 
-if usingSasl:
-    mongoClientSysLibDeps += ["sasl2"]
-
-mongoClientInstalls = []
-mongoClientPrefixInstalls = []
-
-staticLibEnv = env.Clone()
-staticLibEnv.AppendUnique(
-    LIBDEPS=mongoClientLibDeps,
-    SYSLIBDEPS=mongoClientSysLibDeps)
-
-if windows:
-    # On Windows, we need to have the static library target and the
-    # import library target have different names, so that they aren't
-    # ambiguous to scons.  Boost names the static library libxxxx.lib and
-    # the import library xxxx.lib, so we shall follow their lead.
-    staticLibName = 'libmongoclient'
-else:
-    staticLibName = 'mongoclient'
-
-mongoClientStaticLib = staticLibEnv.StaticLibrary(
-    staticLibName, clientObjects),
-mongoClientInstalls.append(staticLibEnv.Install('#/', mongoClientStaticLib))
-
-if installSetup.libraries:
-    mongoClientPrefixInstalls.append(env.Install("$INSTALL_DIR/lib", mongoClientStaticLib))
-
-mongoClientSharedLib = None
-
-if buildShared:
-
-    # TODO: When we are ready to set a SONAME for mongoclient, set SHLIBVERSION=x.y.z in this
-    # environment to enable SCons versioned shared library support. This support is only stable
-    # in SCons > 2.3.0, so if you add it here, be sure to add a EnsuredSconsVersion as well.
-    sharedLibEnv = env.Clone()
-    sharedLibEnv.AppendUnique(
-        LIBS=mongoClientLibs + mongoClientSysLibDeps,
-        # TODO: This currently causes the files for the libdep to get dragged into dependents
-        # of this shared library, incorrectly. We need to patch up libdeps to treat shared
-        # libraries as dependency terminals.
-        LIBDEPS=mongoClientLibDeps)
-
-    if linux:
-        sharedLibEnv.AppendUnique(SHLINKFLAGS=["-Wl,--as-needed", "-Wl,-zdefs"])
-
-    if windows:
-        # Ignore warning LNK4102, which complains about exposing deleting destructors.
-        sharedLibEnv.AppendUnique(SHLINKFLAGS=["/IGNORE:4102"])
-        env.Command(['mongoclient.def'],
-                    ['#buildscripts/generate_def.py', mongoClientStaticLib],
-            '$PYTHON ${SOURCES[0]} $TARGETS ${SOURCES[1:]}')
-        # SCons automatically looks for this file in the source list and passes the proper
-        # parameter to MS-LINK automatically.
-        clientObjects.append('mongoclient.def')
-    
-    mongoClientSharedLib = sharedLibEnv.SharedLibrary('mongoclient', clientObjects)
-
-    mongoClientSharedLibInstall = sharedLibEnv.InstallVersionedLib(
-        '#/sharedclient', mongoClientSharedLib)
-
-    if darwin:
-        # Set up the copy of the client library in #/sharedclient so that things that link
-        # against it record the local directory as the install_name.
-        sharedLibEnv.AddPostAction(
-            mongoClientSharedLibInstall,
-            "install_name_tool -id @executable_path/%s %s" % (
-                mongoClientSharedLibInstall[0].name,
-                mongoClientSharedLibInstall[0]
-            ))
-    mongoClientInstalls.append(mongoClientSharedLibInstall)
+clientEnv.Alias('clientTests', clientTests, [])
 
     if installSetup.libraries:
         mongoClientSharedLibPrefixInstall = sharedLibEnv.InstallVersionedLib(

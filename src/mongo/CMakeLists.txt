@@ -151,6 +151,7 @@ set(client_sources
   util/fail_point_registry.cpp
   util/fail_point_service.cpp
   util/file.cpp
+  util/hex.cpp
   util/histogram.cpp
   util/intrusive_counter.cpp
   util/log.cpp
