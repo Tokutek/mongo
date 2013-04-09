@@ -39,7 +39,12 @@ namespace mongo {
     void logTransactionOps(GTID gtid, BSONArray& opInfo);
     void deleteOplogFiles();
     void openOplogFiles();
-
+    
+    GTID getGTIDFromOplogEntry(BSONObj o);
+    bool getLastGTIDinOplog(GTID* gtid);
+    bool gtidExistsInOplog(GTID gtid);
+    void writeEntryToOplog(BSONObj entry);
+    
     /** puts obj in the oplog as a comment (a no-op).  Just for diags.
         convention is
           { msg : "text", ... }

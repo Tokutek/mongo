@@ -118,10 +118,8 @@ namespace mongo {
         b.append("a", true);
         b.append("ops", opInfo);
 
-        verify(rsOplogDetails);
         BSONObj bb = b.done();
-        uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
-        rsOplogDetails->insertObject(bb, flags);
+        writeEntryToOplog(bb);
     }
 
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID) {
@@ -196,6 +194,43 @@ namespace mongo {
         ret = userCreateNS(replInfoNS, o, err, false);
         verify(ret);
         log() << "******" << endl;
+    }
+
+    GTID getGTIDFromOplogEntry(BSONObj o) {
+        int len;
+        GTID lastGTID(o["_id"].binData(len));
+        dassert((uint32_t)len == GTID::GTIDBinarySize());
+        return lastGTID;
+    }
+
+    bool getLastGTIDinOplog(GTID* gtid) {
+        Lock::DBRead lk(rsoplog);
+        BSONObj o;
+        if( Helpers::getLast(rsoplog, o) ) {
+            *gtid = getGTIDFromOplogEntry(o);
+            return true;
+        }
+        return false;
+    }
+
+    bool gtidExistsInOplog(GTID gtid) {
+        Lock::DBRead lk(rsoplog);
+        char gtidBin[GTID::GTIDBinarySize()];
+        gtid.serializeBinaryData(gtidBin);
+        BSONObj result;
+        BSONObj query(BSON("_id" << gtidBin));
+        bool found = Helpers::findOne(
+            rsoplog, 
+            query, 
+            result
+            );
+        return found;
+    }
+
+    void writeEntryToOplog(BSONObj entry) {
+        verify(rsOplogDetails);
+        uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
+        rsOplogDetails->insertObject(entry, flags);
     }
 
     // -------------------------------------
