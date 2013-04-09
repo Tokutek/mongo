@@ -545,7 +545,7 @@ again:      while ( !allInclusive && ok() ) {
             const int cmp = sgn( _endKey.woCompare( _currKey, _ordering ) );
             if ( ( cmp != 0 && cmp != _direction ) ||
                     ( cmp == 0 && !_endKeyInclusive ) ) {
-                exhausted()
+                exhausted();
                 TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
             }
         }
