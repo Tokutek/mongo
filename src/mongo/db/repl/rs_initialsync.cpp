@@ -493,12 +493,11 @@ namespace mongo {
                 }
                 BSONObj op = r.nextSafe().getOwned();
                 currEntry = getGTIDFromOplogEntry(op);
-                BSONElement foo = op["a"];
 
                 // set the applied bool to false, to let the oplog know that
                 // this entry has not been applied to collections
                 BSONElementManipulator(op["a"]).setBool(false);
-                
+
                 // try inserting it into the oplog, if it does not
                 // already exist
                 if (!gtidExistsInOplog(currEntry)) {
