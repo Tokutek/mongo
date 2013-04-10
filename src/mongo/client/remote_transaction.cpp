@@ -26,7 +26,7 @@
 
 namespace mongo {
 
-    RemoteTransaction::RemoteTransaction(shared_ptr<ScopedDbConnection> &conn, const string &isolation) : _conn(conn) {
+    RemoteTransaction::RemoteTransaction(shared_ptr<ScopedDbConnection> conn, const string &isolation) : _conn(conn) {
         bool ok;
         try {
             BSONObj beginResult;
