@@ -260,4 +260,24 @@ namespace mongo {
 
     } logRotateCmd;
 
+    class ApplyOpsCmd : public Command {
+    public:
+        virtual bool slaveOk() const { return false; }
+        virtual LockType locktype() const { return WRITE; }
+        virtual bool lockGlobally() const { return true; } // SERVER-4328 todo : is global ok or does this take a long time? i believe multiple ns used so locking individually requires more analysis
+        ApplyOpsCmd() : Command( "applyOps" ) {}
+        virtual void help( stringstream &help ) const {
+            help << "deprecated";
+        }
+        virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            errmsg = "ApplyOpsCmd is deprecated.";
+            result.append( "errmsg" , errmsg );
+            result.append( "ok", false );
+            return false;
+        }
+
+        DBDirectClient db;
+
+    } applyOpsCmd;
+
 }// namespace mongo
