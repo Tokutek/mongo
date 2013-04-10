@@ -320,8 +320,9 @@ namespace ReplSetTests {
         // returns true on success, false on failure
         bool apply(const BSONObj& op) {
             Client::Context ctx( _cappedNs );
+            ::abort();
             // in an annoying twist of api, returns true on failure
-            return !applyOperation_inlock(op);
+            return true;
         }
 
         void run() {

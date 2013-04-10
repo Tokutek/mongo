@@ -306,49 +306,4 @@ namespace mongo {
             return true;
         }
     }
-
-    /** @param fromRepl false if from ApplyOpsCmd
-        @return true if was and update should have happened and the document DNE.  see replset initial sync code.
-     */
-    bool applyOperation_inlock(const BSONObj& op) {
-        LOG(6) << "applying op: " << op << endl;
-        bool failedUpdate = false;
-
-        OpCounters * opCounters = &replOpCounters;
-
-        const char *names[] = { "o", "ns", "op", "b" };
-        BSONElement fields[4];
-        op.getFields(4, names, fields);
-
-        BSONObj o;
-        if( fields[0].isABSONObj() ) {
-            o = fields[0].embeddedObject();
-        }
-        
-        const char *ns = fields[1].valuestrsafe();
-        const char *opType = fields[2].valuestrsafe();
-        if ( *opType == 'i' ) {
-            opCounters->gotInsert();
-        }
-        else if ( *opType == 'u' ) {
-            opCounters->gotUpdate();
-        }
-        else if ( *opType == 'd' ) {
-            opCounters->gotDelete();
-            deleteObjects(ns, o, /*justOne*/ fields[3].booleanSafe());
-        }
-        else if ( *opType == 'c' ) {
-            opCounters->gotCommand();
-            BufBuilder bb;
-            BSONObjBuilder ob;
-            _runCommands(ns, o, bb, ob, true, 0);
-        }
-        else if ( *opType == 'n' ) {
-            // no op
-        }
-        else {
-            throw MsgAssertionException( 14825 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );
-        }
-        return failedUpdate;
-    }
 }

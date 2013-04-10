@@ -78,10 +78,11 @@ namespace mongo {
         ctx.getClient()->curop()->reset();
         // For non-initial-sync, we convert updates to upserts
         // to suppress errors when replaying oplog entries.
-        bool ok = !applyOperation_inlock(op);
+        ::abort();
+        //bool ok = !applyOperation_inlock(op);
         //getDur().commitIfNeeded(); // TODO: TokuDB - anything to do here?
 
-        return ok;
+        return true;
     }
 
     static AtomicUInt32 replWriterWorkerId;

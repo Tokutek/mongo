@@ -62,19 +62,8 @@ namespace mongo {
         Sync(const string& hostname) : hn(hostname) {}
         virtual ~Sync() {}
         virtual BSONObj getMissingDoc(const BSONObj& o);
-
-        /**
-         * If applyOperation_inlock should be called again after an update fails.
-         */
+        // soon to dissappear
         virtual bool shouldRetry(const BSONObj& o);
         void setHostname(const string& hostname);
     };
-
-    /**
-     * take an op and apply locally
-     * used for applying from an oplog
-     * @param fromRepl really from replication or for testing/internal/command/etc...
-     * Returns if the op was an update that could not be applied (true on failure)
-     */
-    bool applyOperation_inlock(const BSONObj& op);
 }
