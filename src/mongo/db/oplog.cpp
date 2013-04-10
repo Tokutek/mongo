@@ -310,29 +310,23 @@ namespace mongo {
     /** @param fromRepl false if from ApplyOpsCmd
         @return true if was and update should have happened and the document DNE.  see replset initial sync code.
      */
-    bool applyOperation_inlock(const BSONObj& op, bool fromRepl) {
+    bool applyOperation_inlock(const BSONObj& op) {
         LOG(6) << "applying op: " << op << endl;
         bool failedUpdate = false;
 
-        OpCounters * opCounters = fromRepl ? &replOpCounters : &globalOpCounters;
+        OpCounters * opCounters = &replOpCounters;
 
         const char *names[] = { "o", "ns", "op", "b" };
         BSONElement fields[4];
         op.getFields(4, names, fields);
 
         BSONObj o;
-        if( fields[0].isABSONObj() )
+        if( fields[0].isABSONObj() ) {
             o = fields[0].embeddedObject();
-            
+        }
+        
         const char *ns = fields[1].valuestrsafe();
-
-        Lock::assertWriteLocked(ns);
-
-        NamespaceDetails *nsd = nsdetails(ns);
-        (void) nsd; // TODO: Suppress unused warning
-
         const char *opType = fields[2].valuestrsafe();
-
         if ( *opType == 'i' ) {
             opCounters->gotInsert();
         }
