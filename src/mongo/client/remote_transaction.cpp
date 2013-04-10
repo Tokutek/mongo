@@ -27,6 +27,7 @@
 namespace mongo {
 
     RemoteTransaction::RemoteTransaction(shared_ptr<ScopedDbConnection> &conn, const string &isolation) : _conn(conn) {
+        bool ok;
         try {
             BSONObj beginResult;
             ok = _conn->get()->runCommand("", BSON( "beginTransaction" << "" << "isolation" << isolation ), beginResult);
@@ -44,6 +45,7 @@ namespace mongo {
     }
 
     void RemoteTransaction::commit() {
+        bool ok;
         try {
             BSONObj commitResult;
             ok = _conn->get()->runCommand("", BSON( "commitTransaction" << "" ), commitResult);
@@ -56,6 +58,7 @@ namespace mongo {
     }
 
     void RemoteTransaction::rollback() {
+        bool ok;
         try {
             BSONObj rollbackResult;
             ok = _conn->get()->runCommand("", BSON( "rollbackTransaction" << "" ), rollbackResult);
