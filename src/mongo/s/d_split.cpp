@@ -156,12 +156,6 @@ namespace mongo {
                 }
                 cc->advance();
 
-#if 0
-                if ( ! cc->yieldSometimes( ClientCursor::DontNeed ) ) {
-                    cc.release();
-                    break;
-                }
-#endif
             }
 
             return true;
