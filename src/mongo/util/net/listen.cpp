@@ -99,16 +99,7 @@ namespace mongo {
         : _port(port), _name(name), _ip(ip), _setupSocketsSuccessful(false),
           _logConnect(logConnect), _elapsedTime(0) {
 #ifdef MONGO_SSL
-        _ssl = NULL;
-        if (cmdLine.sslOnNormalPorts) {
-            const SSLParams params(cmdLine.sslPEMKeyFile, 
-                                   cmdLine.sslPEMKeyPassword,
-                                   cmdLine.sslCAFile,
-                                   cmdLine.sslCRLFile,
-                                   cmdLine.sslWeakCertificateValidation,
-                                   cmdLine.sslFIPSMode);
-            _ssl = new SSLManager(params);
-        }
+        _ssl = getSSLManager();
 #endif
     }
     
