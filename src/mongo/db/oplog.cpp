@@ -31,6 +31,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/db_flags.h"
+#include "mongo/db/oplog_helpers.h"
 
 namespace mongo {
 
@@ -231,6 +232,18 @@ namespace mongo {
         verify(rsOplogDetails);
         uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
         rsOplogDetails->insertObject(entry, flags);
+    }
+
+    // takes an entry that was written _logTransactionOps
+    // and applies them to collections
+    void applyTransactionFromOplog(BSONObj entry) {
+        std::vector<BSONElement> ops = entry["ops"].Array();
+        const size_t numOps = ops.size();
+
+        for(size_t i = 0; i < numOps; ++i) {
+            BSONElement* curr = &ops[i];
+            OpLogHelpers::applyOperationFromOplog(curr->Obj());
+        }
     }
 
     // -------------------------------------
