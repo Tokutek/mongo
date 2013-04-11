@@ -53,10 +53,20 @@ try {
     // check write lock stats are set
     o = lastOp();
     assert.eq('insert', o.op);
-    assert.eq( 0, o.lockStats.timeLockedMicros.r );
-    assert.lt( 0, o.lockStats.timeLockedMicros.w );
-    assert.eq( 0, o.lockStats.timeAcquiringMicros.r );
+    assert.lt( 0, o.lockStats.timeLockedMicros.r );
+    assert.lt( 0, o.lockStats.timeLockedMicros.w ); // RFP: t created, so expect write lock taken
+    assert.lt( 0, o.lockStats.timeAcquiringMicros.r );
     assert.lt( 0, o.lockStats.timeAcquiringMicros.w );
+    printjson(o.lockStats);
+
+    t.save( {} );
+    o = lastOp();
+    assert.eq('insert', o.op);
+    assert.lt( 0, o.lockStats.timeLockedMicros.r );
+    assert.eq( 0, o.lockStats.timeLockedMicros.w );
+    assert.lt( 0, o.lockStats.timeAcquiringMicros.r );
+    assert.lt( 0, o.lockStats.timeAcquiringMicros.w ); // RFP: t already exists, no write lock taken, so why is this > 0?
+    printjson(o.lockStats);
 
     // check read lock stats are set
     t.find();
@@ -65,9 +75,9 @@ try {
     assert.eq( 0, o.lockStats.timeLockedMicros.w );
     assert.lt( 0, o.lockStats.timeLockedMicros.r );
     assert.lt( 0, o.lockStats.timeAcquiringMicros.r );
-    assert.lt( 0, o.lockStats.timeAcquiringMicros.w );
+    assert.lt( 0, o.lockStats.timeAcquiringMicros.w ); // RFP: why is this > 0?
+    printjson(o.lockStats);
 
-    t.save( {} );
     t.save( {} );
     t.find().skip( 1 ).limit( 4 ).itcount();
     checkLastOp( [ [ "ntoreturn", 4 ],

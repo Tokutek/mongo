@@ -53,6 +53,11 @@ namespace mongo {
             *reinterpret_cast< int * >( value() ) = n;
         }
 
+        void setBool(bool val) {
+            verify( _element.type() == Bool );
+            *reinterpret_cast< bool * >( value() ) = val;
+        }
+
         /** Replace the type and value of the element with the type and value of e,
             preserving the original fieldName */
         void replaceTypeAndValue( const BSONElement &e ) {

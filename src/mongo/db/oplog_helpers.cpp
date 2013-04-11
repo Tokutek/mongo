@@ -18,6 +18,7 @@
 #include "oplog_helpers.h"
 #include "txn_context.h"
 #include "repl_block.h"
+#include "stats/counters.h"
 
 
 #define KEY_STR_OP_NAME "op"
@@ -141,6 +142,53 @@ namespace OpLogHelpers{
             txn->logOp(b.obj());
         }
     }
-    
+
+    static void runInsertFromOplog(const char* ns, BSONObj op) {
+        /*
+        NamespaceDetails* nsd = nsdetails(ns);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+        insertOneObject(nsd, nsdt, newObj, overwrite);
+        */
+    }
+
+    static void runCommandFromOplog(const char* ns, BSONObj op) {
+        BufBuilder bb;
+        BSONObjBuilder ob;
+        BSONObj command = op[KEY_STR_ROW].embeddedObject();
+        _runCommands(ns, command, bb, ob, true, 0);
+    }
+
+    void applyOperationFromOplog(const BSONObj& op) {
+        LOG(6) << "applying op: " << op << endl;
+        OpCounters* opCounters = &replOpCounters;
+        const char *names[] = { 
+            KEY_STR_NS, 
+            KEY_STR_OP_NAME
+            };
+        BSONElement fields[2];
+        op.getFields(2, names, fields);
+        const char* ns = fields[0].valuestrsafe();
+        const char* opType = fields[1].valuestrsafe();
+        if (strcmp(opType, OP_STR_INSERT)) {
+            opCounters->gotInsert();
+            runInsertFromOplog(ns, op);
+        }
+        else if (strcmp(opType, OP_STR_UPDATE)) {
+            opCounters->gotUpdate();
+        }
+        else if (strcmp(opType, OP_STR_DELETE)) {
+            opCounters->gotDelete();
+        }
+        else if (strcmp(opType, OP_STR_COMMAND)) {
+            opCounters->gotCommand();
+            runCommandFromOplog(ns, op);
+        }
+        else if (strcmp(opType, OP_STR_COMMENT)) {
+            // no-op
+        }
+        else {
+            throw MsgAssertionException( 14825 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );
+        }
+    }
 } // namespace OpLogHelpers
 } // namespace mongo

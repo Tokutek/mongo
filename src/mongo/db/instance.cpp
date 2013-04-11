@@ -43,6 +43,7 @@
 #include "mongo/db/commands/fsync.h"
 #include "mongo/db/index.h"
 #include "mongo/db/jsobjmanipulator.h"
+#include "mongo/db/relock.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/query.h"
@@ -554,20 +555,35 @@ namespace mongo {
         TokuCommandSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
-        Client::Transaction transaction(DB_SERIALIZABLE);
-        Client::WriteContext ctx(ns);
 
-        // void ReplSetImpl::relinquish() uses big write lock so 
-        // this is thus synchronized given our lock above.
-        uassert( 10054 ,  "not master", isMasterNs( ns ) );
+        try {
+            Client::ReadContext ctx(ns);
+            Client::Transaction transaction(DB_SERIALIZABLE);
 
-        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-        if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
-            return;
+            // void ReplSetImpl::relinquish() uses big write lock so 
+            // this is thus synchronized given our lock above.
+            uassert( 10054 ,  "not master", isMasterNs( ns ) );
 
-        UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
-        lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
-        transaction.commit();
+            // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+            if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
+                return;
+
+            UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
+            lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
+            transaction.commit();
+        }
+        catch (RetryWithWriteLock &e) {
+            Client::WriteContext ctx(ns);
+            Client::Transaction transaction(DB_SERIALIZABLE);
+
+            // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+            if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
+                return;
+
+            UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
+            lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
+            transaction.commit();
+        }
     }
 
     void receivedDelete(Message& m, CurOp& op) {
@@ -587,7 +603,7 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
         Client::Transaction transaction(DB_SERIALIZABLE);
-        Client::WriteContext ctx(ns);
+        Client::ReadContext ctx(ns);
 
         // writelock is used to synchronize stepdowns w/ writes
         uassert( 10056 ,  "not master", isMasterNs( ns ) );
@@ -743,24 +759,37 @@ namespace mongo {
             objs.push_back( d.nextJsObj() );
         }
 
+        const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
+
         TokuCommandSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
-        Client::Transaction transaction(DB_SERIALIZABLE);
-        Client::WriteContext ctx(ns);
+        try {
+            Client::ReadContext ctx(ns);
+            Client::Transaction transaction(DB_SERIALIZABLE);
 
-        // CONCURRENCY TODO: is being read locked in big log sufficient here?
-        // writelock is used to synchronize stepdowns w/ writes
-        uassert( 10058 , "not master", isMasterNs(ns) );
+            // CONCURRENCY TODO: is being read locked in big log sufficient here?
+            // writelock is used to synchronize stepdowns w/ writes
+            uassert( 10058 , "not master", isMasterNs(ns) );
 
-        if ( handlePossibleShardedMessage( m , 0 ) )
-            return;
+            if ( handlePossibleShardedMessage( m , 0 ) )
+                return;
 
-        const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
-        insertObjects(ns, objs, keepGoing, 0, true);
-        globalOpCounters.incInsertInWriteLock(objs.size());
+            insertObjects(ns, objs, keepGoing, 0, true);
+            globalOpCounters.incInsertInWriteLock(objs.size());
+            transaction.commit();
+        }
+        catch (RetryWithWriteLock &e) {
+            Client::WriteContext ctx(ns);
+            Client::Transaction transaction(DB_SERIALIZABLE);
 
-        transaction.commit();
+            if ( handlePossibleShardedMessage( m , 0 ) )
+                return;
+
+            insertObjects(ns, objs, keepGoing, 0, true);
+            globalOpCounters.incInsertInWriteLock(objs.size());
+            transaction.commit();
+        }
     }
 
     void getDatabaseNames( vector< string > &names , const string& usePath ) {

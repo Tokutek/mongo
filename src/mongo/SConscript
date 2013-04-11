@@ -86,6 +86,7 @@ commonFiles = [ "pch.cpp",
                 "client/dbclient_rs.cpp",
                 "client/dbclientcursor.cpp",
                 "client/model.cpp",
+                "client/remote_transaction.cpp",
                 "client/syncclusterconnection.cpp",
                 "client/distlock.cpp",
                 ]

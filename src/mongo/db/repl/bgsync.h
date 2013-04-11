@@ -82,8 +82,6 @@ namespace mongo {
         boost::condition_variable _lastOpCond;
         boost::mutex _lastOpMutex;
 
-        Member* _oplogMarkerTarget;
-        OplogReader _oplogMarker; // not locked, only used by notifier thread
         OpTime _consumedOpTime; // not locked, only used by notifier thread
 
         struct QueueCounter {
@@ -111,9 +109,6 @@ namespace mongo {
         // restart syncing
         void start();
 
-        // Tracker thread
-        // tells the sync target where this member is synced to
-        void markOplog();
         bool hasCursor();
     public:
         static BackgroundSync* get();
@@ -124,8 +119,6 @@ namespace mongo {
 
         // starts the producer thread
         void producerThread();
-        // starts the sync target notifying thread
-        void notifierThread();
 
         // Interface implementation
 

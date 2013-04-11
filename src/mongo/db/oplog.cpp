@@ -118,10 +118,8 @@ namespace mongo {
         b.append("a", true);
         b.append("ops", opInfo);
 
-        verify(rsOplogDetails);
         BSONObj bb = b.done();
-        uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
-        rsOplogDetails->insertObject(bb, flags);
+        writeEntryToOplog(bb);
     }
 
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID) {
@@ -198,6 +196,43 @@ namespace mongo {
         log() << "******" << endl;
     }
 
+    GTID getGTIDFromOplogEntry(BSONObj o) {
+        int len;
+        GTID lastGTID(o["_id"].binData(len));
+        dassert((uint32_t)len == GTID::GTIDBinarySize());
+        return lastGTID;
+    }
+
+    bool getLastGTIDinOplog(GTID* gtid) {
+        Lock::DBRead lk(rsoplog);
+        BSONObj o;
+        if( Helpers::getLast(rsoplog, o) ) {
+            *gtid = getGTIDFromOplogEntry(o);
+            return true;
+        }
+        return false;
+    }
+
+    bool gtidExistsInOplog(GTID gtid) {
+        Lock::DBRead lk(rsoplog);
+        char gtidBin[GTID::GTIDBinarySize()];
+        gtid.serializeBinaryData(gtidBin);
+        BSONObj result;
+        BSONObj query(BSON("_id" << gtidBin));
+        bool found = Helpers::findOne(
+            rsoplog, 
+            query, 
+            result
+            );
+        return found;
+    }
+
+    void writeEntryToOplog(BSONObj entry) {
+        verify(rsOplogDetails);
+        uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
+        rsOplogDetails->insertObject(entry, flags);
+    }
+
     // -------------------------------------
 
     struct TestOpTime : public StartupTest {
@@ -271,233 +306,4 @@ namespace mongo {
             return true;
         }
     }
-
-    /** @param fromRepl false if from ApplyOpsCmd
-        @return true if was and update should have happened and the document DNE.  see replset initial sync code.
-     */
-    bool applyOperation_inlock(const BSONObj& op, bool fromRepl, bool convertUpdateToUpsert) {
-        LOG(6) << "applying op: " << op << endl;
-        bool failedUpdate = false;
-
-        OpCounters * opCounters = fromRepl ? &replOpCounters : &globalOpCounters;
-
-        const char *names[] = { "o", "ns", "op", "b" };
-        BSONElement fields[4];
-        op.getFields(4, names, fields);
-
-        BSONObj o;
-        if( fields[0].isABSONObj() )
-            o = fields[0].embeddedObject();
-            
-        const char *ns = fields[1].valuestrsafe();
-
-        Lock::assertWriteLocked(ns);
-
-        NamespaceDetails *nsd = nsdetails(ns);
-        (void) nsd; // TODO: Suppress unused warning
-
-        const char *opType = fields[2].valuestrsafe();
-
-        if ( *opType == 'i' ) {
-            opCounters->gotInsert();
-
-            const char *p = strchr(ns, '.');
-            if ( p && strcmp(p, ".system.indexes") == 0 ) {
-                // updates aren't allowed for indexes -- so we will do a regular insert. if index already
-                // exists, that is ok.
-                //theDataFileMgr.insert(ns, (void*) o.objdata(), o.objsize());
-                ::abort();
-            }
-            else {
-                // do upserts for inserts as we might get replayed more than once
-                OpDebug debug;
-                BSONElement _id;
-                if( !o.getObjectID(_id) ) {
-                    /* No _id.  This will be very slow. */
-                    Timer t;
-                    updateObjects(ns, o, o, true, false, false, debug, false,
-                                  QueryPlanSelectionPolicy::idElseNatural() );
-                    if( t.millis() >= 2 ) {
-                        RARELY OCCASIONALLY log() << "warning, repl doing slow updates (no _id field) for " << ns << endl;
-                    }
-                }
-                else {
-                    // probably don't need this since all replicated colls have _id indexes now
-                    // but keep it just in case
-                    // TODO: Should we care about this period assert? Sounds like no.
-                    //RARELY if ( nsd && !nsd->isCapped() ) { ensureHaveIdIndex(ns); }
-
-                    /* todo : it may be better to do an insert here, and then catch the dup key exception and do update
-                              then.  very few upserts will not be inserts...
-                              */
-                    BSONObjBuilder b;
-                    b.append(_id);
-                    updateObjects(ns, o, b.done(), true, false, false , debug, false,
-                                  QueryPlanSelectionPolicy::idElseNatural() );
-                }
-            }
-        }
-        else if ( *opType == 'u' ) {
-            opCounters->gotUpdate();
-
-            // probably don't need this since all replicated colls have _id indexes now
-            // but keep it just in case
-            // TODO: Should we care about this period assert? Sounds like no.
-            //RARELY if ( nsd && !nsd->isCapped() ) { ensureHaveIdIndex(ns); }
-
-            OpDebug debug;
-            BSONObj updateCriteria = op.getObjectField("o2");
-            bool upsert = fields[3].booleanSafe() || convertUpdateToUpsert;
-            UpdateResult ur = updateObjects(ns, o, updateCriteria, upsert, /*multi*/ false,
-                                            /*logop*/ false , debug, /*fromMigrate*/ false,
-                                            QueryPlanSelectionPolicy::idElseNatural() );
-            if( ur.num == 0 ) { 
-                if( ur.mod ) {
-                    if( updateCriteria.nFields() == 1 ) {
-                        // was a simple { _id : ... } update criteria
-                        failedUpdate = true;
-                        log() << "replication failed to apply update: " << op.toString() << endl;
-                    }
-                    // need to check to see if it isn't present so we can set failedUpdate correctly.
-                    // note that adds some overhead for this extra check in some cases, such as an updateCriteria
-                    // of the form
-                    //   { _id:..., { x : {$size:...} }
-                    // thus this is not ideal.
-                    else {
-#if 0
-                        if (nsd == NULL ||
-                            (nsd->findIdIndex() >= 0 && Helpers::findById(nsd, updateCriteria).isNull()) ||
-                            // capped collections won't have an _id index
-                            (nsd->findIdIndex() < 0 && Helpers::findOne(ns, updateCriteria, false).isNull())) {
-                            failedUpdate = true;
-                            log() << "replication couldn't find doc: " << op.toString() << endl;
-                        }
-#endif
-                        ::abort();
-
-                        // Otherwise, it's present; zero objects were updated because of additional specifiers
-                        // in the query for idempotence
-                    }
-                }
-                else { 
-                    // this could happen benignly on an oplog duplicate replay of an upsert
-                    // (because we are idempotent), 
-                    // if an regular non-mod update fails the item is (presumably) missing.
-                    if( !upsert ) {
-                        failedUpdate = true;
-                        log() << "replication update of non-mod failed: " << op.toString() << endl;
-                    }
-                }
-            }
-        }
-        else if ( *opType == 'd' ) {
-            opCounters->gotDelete();
-            if ( opType[1] == 0 )
-                deleteObjects(ns, o, /*justOne*/ fields[3].booleanSafe());
-            else
-                verify( opType[1] == 'b' ); // "db" advertisement
-        }
-        else if ( *opType == 'c' ) {
-            opCounters->gotCommand();
-            BufBuilder bb;
-            BSONObjBuilder ob;
-            _runCommands(ns, o, bb, ob, true, 0);
-        }
-        else if ( *opType == 'n' ) {
-            // no op
-        }
-        else {
-            throw MsgAssertionException( 14825 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );
-        }
-        return failedUpdate;
-    }
-
-    class ApplyOpsCmd : public Command {
-    public:
-        virtual bool slaveOk() const { return false; }
-        virtual LockType locktype() const { return WRITE; }
-        virtual bool lockGlobally() const { return true; } // SERVER-4328 todo : is global ok or does this take a long time? i believe multiple ns used so locking individually requires more analysis
-        ApplyOpsCmd() : Command( "applyOps" ) {}
-        virtual void help( stringstream &help ) const {
-            help << "internal (sharding)\n{ applyOps : [ ] , preCondition : [ { ns : ... , q : ... , res : ... } ] }";
-        }
-        virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-
-            if ( cmdObj.firstElement().type() != Array ) {
-                errmsg = "ops has to be an array";
-                return false;
-            }
-
-            BSONObj ops = cmdObj.firstElement().Obj();
-
-            {
-                // check input
-                BSONObjIterator i( ops );
-                while ( i.more() ) {
-                    BSONElement e = i.next();
-                    if ( e.type() == Object )
-                        continue;
-                    errmsg = "op not an object: ";
-                    errmsg += e.fieldName();
-                    return false;
-                }
-            }
-
-            if ( cmdObj["preCondition"].type() == Array ) {
-                BSONObjIterator i( cmdObj["preCondition"].Obj() );
-                while ( i.more() ) {
-                    BSONObj f = i.next().Obj();
-
-                    BSONObj realres = db.findOne( f["ns"].String() , f["q"].Obj() );
-
-                    Matcher m( f["res"].Obj() );
-                    if ( ! m.matches( realres ) ) {
-                        result.append( "got" , realres );
-                        result.append( "whatFailed" , f );
-                        errmsg = "pre-condition failed";
-                        return false;
-                    }
-                }
-            }
-
-            // apply
-            int num = 0;
-            int errors = 0;
-            
-            BSONObjIterator i( ops );
-            BSONArrayBuilder ab;
-            
-            while ( i.more() ) {
-                BSONElement e = i.next();
-                const BSONObj& temp = e.Obj();
-                
-                Client::Context ctx( temp["ns"].String() ); // this handles security
-                bool failed = applyOperation_inlock( temp , false );
-                ab.append(!failed);
-                if ( failed )
-                    errors++;
-
-                num++;
-            }
-
-            result.append( "applied" , num );
-            result.append( "results" , ab.arr() );
-
-            if ( ! fromRepl ) {
-                // We want this applied atomically on slaves
-                // so we re-wrap without the pre-condition for speed
-
-                string tempNS = str::stream() << dbname << ".$cmd";
-                // TODO: Zardosht, figure out what this does
-                ::abort();
-                //logOp( "c" , tempNS.c_str() , cmdObj.firstElement().wrap() );
-            }
-
-            return errors == 0;
-        }
-
-        DBDirectClient db;
-
-    } applyOpsCmd;
-
 }

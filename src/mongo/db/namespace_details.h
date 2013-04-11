@@ -394,7 +394,6 @@ namespace mongo {
            field is indexed (Note it might be a secondary component of a compound index.)
         */
         set<string>& indexKeys() {
-            DEV Lock::assertWriteLocked(_ns);
             if ( !_keysComputed )
                 computeIndexKeys();
             return _indexKeys;
@@ -440,6 +439,7 @@ namespace mongo {
         }
 
         void clearQueryCache() {
+            SimpleMutex::scoped_lock lk(_qcMutex);
             _qcCache.clear();
             _qcWriteCount = 0;
         }

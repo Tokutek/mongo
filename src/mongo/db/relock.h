@@ -1,5 +1,5 @@
 /**
-*    Copyright (C) 2012 Tokutek Inc.
+*    Copyright (C) 2013 Tokutek Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -17,23 +17,14 @@
 #pragma once
 
 #include "mongo/pch.h"
-#include "mongo/db/jsobj.h"
+
+#include "mongo/util/assert_util.h"
 
 namespace mongo {
 
-    class TxnContext;
-
-// helpers for opLog stuff
-namespace OpLogHelpers{
-
-    void logComment(BSONObj comment, TxnContext* txn);
-    void logInsert(const char* ns, BSONObj row, TxnContext* txn);
-    void logUpdate(const char* ns, BSONObj oldRow, BSONObj newRow, bool fromMigrate, TxnContext* txn);
-    void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn);
-    void logCommand(const char* ns, BSONObj row, TxnContext* txn);
-    void applyOperationFromOplog(const BSONObj& op);
-}
-
+class RetryWithWriteLock : public DBException {
+  public:
+    RetryWithWriteLock() : DBException("Need to be write locked for this operation", 0) {}
+};
 
 } // namespace mongo
-

@@ -18,6 +18,7 @@
 
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/json.h"
+#include "mongo/db/relock.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/db/storage/env.h"
 
@@ -66,7 +67,9 @@ namespace mongo {
     NOINLINE_DECL void NamespaceIndex::_init(bool may_create) {
         int r;
 
-        Lock::assertWriteLocked(database_);
+        if (!Lock::isWriteLocked(database_)) {
+            throw RetryWithWriteLock();
+        }
         verify(namespaces.get() == NULL);
         dassert(nsdb == NULL);
 
@@ -133,7 +136,9 @@ namespace mongo {
     }
 
     void NamespaceIndex::kill_ns(const char *ns) {
-        Lock::assertWriteLocked(ns);
+        if (!Lock::isWriteLocked(ns)) {
+            throw RetryWithWriteLock();
+        }
         if (namespaces.get() == NULL) {
             return;
         }
@@ -162,7 +167,9 @@ namespace mongo {
     }
 
     void NamespaceIndex::open_ns(const char *ns) {
-        Lock::assertWriteLocked(ns);
+        if (!Lock::isWriteLocked(ns)) {
+            throw RetryWithWriteLock();
+        }
 
         init();
         Namespace n(ns);
@@ -181,7 +188,9 @@ namespace mongo {
     }
 
     void NamespaceIndex::close_ns(const char *ns) {
-        Lock::assertWriteLocked(ns);
+        if (!Lock::isWriteLocked(ns)) {
+            throw RetryWithWriteLock();
+        }
 
         init();
         Namespace n(ns);
@@ -198,7 +207,9 @@ namespace mongo {
     }
 
     void NamespaceIndex::add_ns(const char *ns, shared_ptr<NamespaceDetails> details) {
-        Lock::assertWriteLocked(ns);
+        if (!Lock::isWriteLocked(ns)) {
+            throw RetryWithWriteLock();
+        }
 
         init();
         Namespace n(ns);
@@ -209,7 +220,9 @@ namespace mongo {
     }
 
     void NamespaceIndex::update_ns(const char *ns, const BSONObj &serialized, bool overwrite) {
-        Lock::assertWriteLocked(ns);
+        if (!Lock::isWriteLocked(ns)) {
+            throw RetryWithWriteLock();
+        }
         dassert(namespaces.get() != NULL);
 
         BSONObj nsobj = BSON("ns" << ns);

@@ -697,6 +697,9 @@ if nix:
 
     env.Append( CPPDEFINES=["_FILE_OFFSET_BITS=64"] )
     env.Append( CXXFLAGS=["-Wnon-virtual-dtor", "-Woverloaded-virtual"] )
+    if env['CCVERSION'] == '4.8.0':
+        # boost makes this warning super annoying
+        env.Append( CXXFLAGS=['-Wno-unused-local-typedefs'] )
     env.Append( LINKFLAGS=["-fPIC", "-pthread", "-rdynamic"] )
     env.Append( LIBS=[] )
 

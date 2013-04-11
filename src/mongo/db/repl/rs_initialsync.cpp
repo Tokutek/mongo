@@ -28,6 +28,7 @@
 #include "mongo/db/repl/rs_sync.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/db/instance.h"
+#include "mongo/db/jsobjmanipulator.h"
 
 namespace mongo {
 
@@ -350,6 +351,7 @@ namespace mongo {
             return;
         }
 
+        GTID minUnappliedGTID;
         if (replSettings.fastsync) {
             log() << "fastsync: skipping database clone" << rsLog;
 
@@ -435,12 +437,15 @@ namespace mongo {
                     );
                 // just for debugging for now
                 if (foundMinUnapplied) {
+                    int len;
+                    GTID min(result["GTID"].binData(len));
+                    minUnappliedGTID = min;
                     log() << "foundMinUnapplied" << rsLog;
                     // copy the oplog with a query
                     cloneCollectionData(
                         r.conn_shared(),
                         rsoplog,
-                        BSON( "_id" << GTE << result["GTID"].Obj() ),
+                        BSON( "_id" << GTE << result["GTID"].binData(len) ),
                         true, //copyIndexes
                         false //logForRepl
                         );
@@ -467,6 +472,45 @@ namespace mongo {
             }
 
         }
+
+        // now we need to read the oplog forward
+        GTID lastEntry;
+        bool ret = getLastGTIDinOplog(&lastEntry);
+        isyncassert("could not get last oplog entry after clone", ret);
+
+        // TODO: query minLive and use that instead
+        GTID currEntry = minUnappliedGTID;
+        // first, we need to fill in the "gaps" in the oplog
+        while (GTID::cmp(currEntry, lastEntry) < 0) {
+            r.tailingQueryGTE(rsoplog, currEntry);
+            while (GTID::cmp(currEntry, lastEntry) < 0) {
+                bool hasMore = true;
+                if (!r.moreInCurrentBatch()) {
+                    hasMore = r.more();
+                }
+                if (!hasMore) {
+                    break;
+                }
+                BSONObj op = r.nextSafe().getOwned();
+                currEntry = getGTIDFromOplogEntry(op);
+
+                // set the applied bool to false, to let the oplog know that
+                // this entry has not been applied to collections
+                BSONElementManipulator(op["a"]).setBool(false);
+
+                // try inserting it into the oplog, if it does not
+                // already exist
+                if (!gtidExistsInOplog(currEntry)) {
+                    // write it to oplog
+                    writeEntryToOplog(op);
+                }
+            }
+        }
+
+        // at this point, we have got the oplog up to date,
+        // now we need to read forward in the oplog
+        // from minUnapplied
+
         // TODO: figure out what to do with these
         //lastOpTimeWritten = OpTime();
         //lastH = 0;
@@ -484,17 +528,6 @@ namespace mongo {
         sethbmsg("initial sync finishing up",0);
 
         verify( !box.getState().primary() ); // wouldn't make sense if we were.
-
-        {
-            Client::WriteContext cx( "local." );
-            cx.ctx().db()->flushFiles(true);
-            try {
-                log() << "replSet set minValid=" << minValid["ts"]._opTime().toString() << rsLog;
-            }
-            catch(...) { }
-            Helpers::putSingleton("local.replset.minvalid", minValid);
-            cx.ctx().db()->flushFiles(true);
-        }
 
         changeState(MemberState::RS_RECOVERING);
         sethbmsg("initial sync done",0);
