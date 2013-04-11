@@ -30,7 +30,8 @@ namespace mongo {
         bool ok;
         try {
             BSONObj beginResult;
-            ok = _conn->get()->runCommand("", BSON( "beginTransaction" << "" << "isolation" << isolation ), beginResult);
+            // Need something for the ns here, though it's not used, the server checks that it's a valid name, so pass "x".
+            ok = _conn->get()->runCommand("x", BSON( "beginTransaction" << "" << "isolation" << isolation ), beginResult);
         }
         catch (DBException &e) {
             ok = false;
@@ -48,7 +49,7 @@ namespace mongo {
         bool ok;
         try {
             BSONObj commitResult;
-            ok = _conn->get()->runCommand("", BSON( "commitTransaction" << "" ), commitResult);
+            ok = _conn->get()->runCommand("x", BSON( "commitTransaction" << "" ), commitResult);
         }
         catch (DBException &e) {
             ok = false;
@@ -61,7 +62,7 @@ namespace mongo {
         bool ok;
         try {
             BSONObj rollbackResult;
-            ok = _conn->get()->runCommand("", BSON( "rollbackTransaction" << "" ), rollbackResult);
+            ok = _conn->get()->runCommand("x", BSON( "rollbackTransaction" << "" ), rollbackResult);
         }
         catch (DBException &e) {
             ok = false;
