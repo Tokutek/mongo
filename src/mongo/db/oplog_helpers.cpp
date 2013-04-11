@@ -154,11 +154,13 @@ namespace OpLogHelpers{
         // handle add index case
         if (mongoutils::str::endsWith(ns, ".system.indexes")) {
             BSONObj key = row["key"].Obj();
-            int i = nsd->findIndexByKeyPattern(key);
+            const string &coll = row["ns"].String();
+            NamespaceDetails* collNsd = nsdetails(coll.c_str());
+            int i = collNsd->findIndexByKeyPattern(key);
             if (i >= 0) {
                 uasserted(16475, "index exists on secondary");
             } else {
-                nsd->createIndex(row);
+                collNsd->createIndex(row);
             }
         }
         // overwrite set to true because we are running on a secondary
