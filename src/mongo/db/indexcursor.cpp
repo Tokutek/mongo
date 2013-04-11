@@ -181,17 +181,18 @@ namespace mongo {
         return r;
     }
 
-    IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
-            const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction, int numWanted ) :
+    IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+                              const BSONObj &startKey, const BSONObj &endKey,
+                              bool endKeyInclusive, int direction, int numWanted ) :
         _d(d),
         _idx(idx),
-        _ordering(Ordering::make(_idx != NULL ? _idx->keyPattern() : BSONObj())),
-        _startKey(_idx != NULL && _idx->getSpec().getType() ?
-                   _idx->getSpec().getType()->fixKey( startKey ) : startKey),
-        _endKey(_idx != NULL && _idx->getSpec().getType() ?
-                 _idx->getSpec().getType()->fixKey( endKey ) : endKey),
+        _ordering(Ordering::make(_idx.keyPattern())),
+        _startKey(_idx.getSpec().getType() ?
+                _idx.getSpec().getType()->fixKey( startKey ) : startKey),
+        _endKey(_idx.getSpec().getType() ?
+                _idx.getSpec().getType()->fixKey( endKey ) : endKey),
         _endKeyInclusive(endKeyInclusive),
-        _multiKey(_d != NULL && _idx != NULL ? _d->isMultikey(_d->idxNo(*_idx)) : false),
+        _multiKey(_d->isMultikey(_d->idxNo(_idx))),
         _direction(direction),
         _bounds(),
         _nscanned(0),
@@ -201,19 +202,21 @@ namespace mongo {
         _ok(false),
         _getf_iteration(0)
     {
+        verify( _d != NULL );
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
     }
 
-    IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
-            const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction, int numWanted ) :
+    IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+                              const shared_ptr< FieldRangeVector > &bounds,
+                              int singleIntervalLimit, int direction, int numWanted ) :
         _d(d),
         _idx(idx),
-        _ordering(Ordering::make(_idx != NULL ? _idx->keyPattern() : BSONObj())),
+        _ordering(Ordering::make(_idx.keyPattern())),
         _startKey(),
         _endKey(),
         _endKeyInclusive(true),
-        _multiKey(_d != NULL && _idx != NULL ? _d->isMultikey(_d->idxNo(*_idx)) : false),
+        _multiKey(_d->isMultikey(_d->idxNo(_idx))),
         _direction(direction),
         _bounds(bounds),
         _nscanned(0),
@@ -223,11 +226,12 @@ namespace mongo {
         _ok(false),
         _getf_iteration(0)
     {
-        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        verify( _d != NULL );
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
         _boundsIterator->prepDive();
         _startKey = _bounds->startKey();
         _endKey = _bounds->endKey();
+        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
     }
 
@@ -235,7 +239,7 @@ namespace mongo {
     }
 
     void IndexCursor::prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
-        const bool isSecondary = !_d->isPKIndex(*_idx);
+        const bool isSecondary = !_d->isPKIndex(_idx);
 
         storage::Key sKey(startKey, isSecondary ? &minKey : NULL);
         storage::Key eKey(endKey, isSecondary ? &maxKey : NULL);
@@ -250,36 +254,29 @@ namespace mongo {
                 prettyIndexBounds() << ", ydb error " << r << ". Try again.";
             uasserted( 16447, s.str() );
         }
-                
     }
 
     void IndexCursor::initializeDBC() {
-        // _d and _idx are mutually null when the collection doesn't
-        // exist and is therefore treated as empty.
-        if (_d != NULL && _idx != NULL) {
-            // Don't prelock point ranges.
-            if ( _bounds != NULL) {
-                // TODO: Prelock the current interval.
-                const int r = skipToNextKey( _startKey );
-                if ( r == -1 ) {
-                    // The bounds iterator suggests _bounds->startKey() is within
-                    // the current interval, so that's a good place to start. We
-                    // need to prepDive() on the iterator to reset its current
-                    // state so that further calls to skipToNextKey work properly.
-                    _boundsIterator->prepDive();
-                    findKey( _startKey );
-                }
-            } else {
-                // Seek to an initial key described by _startKey 
-                if ( _startKey != _endKey ) {
-                    prelockRange( _startKey, _endKey );
-                }
+        // Don't prelock point ranges.
+        if ( _bounds != NULL) {
+            // TODO: Prelock the current interval.
+            const int r = skipToNextKey( _startKey );
+            if ( r == -1 ) {
+                // The bounds iterator suggests _bounds->startKey() is within
+                // the current interval, so that's a good place to start. We
+                // need to prepDive() on the iterator to reset its current
+                // state so that further calls to skipToNextKey work properly.
+                _boundsIterator->prepDive();
                 findKey( _startKey );
             }
-            checkCurrentAgainstBounds();
         } else {
-            verify( _d == NULL && _idx == NULL );
+            // Seek to an initial key described by _startKey 
+            if ( _startKey != _endKey ) {
+                prelockRange( _startKey, _endKey );
+            }
+            findKey( _startKey );
         }
+        checkCurrentAgainstBounds();
     }
 
     int IndexCursor::getf_flags() {
@@ -325,7 +322,7 @@ namespace mongo {
     }
 
     void IndexCursor::findKey(const BSONObj &key) {
-        const bool isSecondary = !_d->isPKIndex(*_idx);
+        const bool isSecondary = !_d->isPKIndex(_idx);
         const BSONObj &pk = _direction > 0 ? minKey : maxKey;
         setPosition(key, isSecondary ? pk : BSONObj());
     };
@@ -364,11 +361,13 @@ namespace mongo {
         verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
         uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
         uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
+
         _getf_iteration++;
         _ok = extra.rows_fetched > 0 ? true : false;
-        if (ok()) {
+        if ( ok() ) {
             getCurrentFromBuffer();
         }
+
         TOKULOG(3) << "setPosition hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
     }
 
@@ -387,8 +386,7 @@ namespace mongo {
             if ( ok() ) {
                 ++_nscanned;
             }
-        }
-        else {
+        } else {
             long long startNscanned = _nscanned;
             if ( skipOutOfRangeKeysAndCheckEnd() ) {
                 do {
@@ -424,7 +422,7 @@ namespace mongo {
 
         // This differs from findKey in that we set PK to max to move forward and min
         // to move backward, resulting in a "skip" of the key prefix, not a "find".
-        const bool isSecondary = !_d->isPKIndex(*_idx);
+        const bool isSecondary = !_d->isPKIndex(_idx);
         const BSONObj &pk = _direction > 0 ? maxKey : minKey;
         setPosition( b.done(), isSecondary ? pk : BSONObj() );
     }
@@ -523,9 +521,11 @@ again:      while ( !allInclusive && ok() ) {
 
     // Return a value in the set {-1, 0, 1} to represent the sign of parameter i.
     int sgn( int i ) {
-        if ( i == 0 )
+        if ( i == 0 ) {
             return 0;
-        return i > 0 ? 1 : -1;
+        } else {
+            return i > 0 ? 1 : -1;
+        }
     }
 
     // Check if the current key is beyond endKey.
@@ -534,7 +534,6 @@ again:      while ( !allInclusive && ok() ) {
             return;
         }
         if ( !_endKey.isEmpty() ) {
-            dassert( _d != NULL &&_idx != NULL );
             const int c = sgn( _endKey.woCompare( _currKey, _ordering ) );
             if ( (c != 0 && c != _direction) || (c == 0 && !_endKeyInclusive) ) {
                 _ok = false;
@@ -556,51 +555,40 @@ again:      while ( !allInclusive && ok() ) {
         } else {
             r = cursor->c_getf_prev(cursor, getf_flags(), cursor_getf, &extra);
         }
+
         _getf_iteration++;
         verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
         uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
         uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
+
         return extra.rows_fetched > 0 ? true : false;
     }
 
     void IndexCursor::_advance() {
-        // namespace might be null if we're tailing an empty collection.
-            _ok = _buffer.next();
-            if ( !ok() ) {
-                _ok = fetchMoreRows();
-            }
-            if ( ok() ) {
-                getCurrentFromBuffer();
-            }
-            TOKULOG(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
+        _ok = _buffer.next();
+        if ( !ok() ) {
+            _ok = fetchMoreRows();
+        }
+        if ( ok() ) {
+            getCurrentFromBuffer();
+        }
+        TOKULOG(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
     }
 
     // pre/post condition: the current key is not passed the end key
     bool IndexCursor::_advanceTailable() {
         dassert( _currKey <= _endKey );
-        if ( _d != NULL && _idx != NULL ) {
-            if ( !ok() ) {
-                _endKey = _d->maxSafeKey();
-            }
-            if ( _currKey < _endKey ) {
-                _advance();
-                dassert( ok() );
-            } else {
-                // we cannot read passed _endKey. Mark the cursor as
-                // exhausted so on next advance() we read an updated
-                // maxSafeKey value and try to get more rows.
-                _ok = false;
-            }
+        if ( !ok() ) {
+            _endKey = _d->maxSafeKey();
+        }
+        if ( _currKey < _endKey ) {
+            _advance();
+            dassert( ok() );
         } else {
-            // new inserts will not be read by this cursor, because there was no
-            // namespace details or index at the time of creation. we can either
-            // accept this caveat or try to fix it. at least emit a warning.
-            problem() 
-                << "Attempted to advance a tailable cursor on an empty collection! " << endl
-                << "The current implementation cannot read new writes from any cursor " << endl
-                << "created when the collection was empty. Try again with a new cursor " << endl
-                << "when the collection is non-empty." << endl;
-            dassert( !ok() );
+            // we cannot read passed _endKey. Mark the cursor as
+            // exhausted so on next advance() we read an updated
+            // maxSafeKey value and try to get more rows.
+            _ok = false;
         }
         dassert( _currKey <= _endKey );
         return ok();
@@ -612,7 +600,7 @@ again:      while ( !allInclusive && ok() ) {
             // Tailable cursors have their own advance strategy.
             return _advanceTailable();
         } else {
-            if ( ok() && _d != NULL && _idx != NULL ) {
+            if ( ok() ) {
                 // Advance one row further, and then check if we've went out of bounds.
                 _advance();
                 return checkCurrentAgainstBounds();
@@ -628,8 +616,7 @@ again:      while ( !allInclusive && ok() ) {
         // If the index is clustering, the full documenet is always stored in _currObj.
         // If the index is not clustering, _currObj starts as empty and gets filled
         // with the full document on the first call to current().
-        if ( _currObj.isEmpty() && _d != NULL ) {
-            verify( _idx != NULL );
+        if ( _currObj.isEmpty() ) {
             bool found = _d->findByPK( _currPK, _currObj );
             if ( !found ) {
                 // If we didn't find the associated object, we must be either:
@@ -650,17 +637,20 @@ again:      while ( !allInclusive && ok() ) {
     }
 
     string IndexCursor::toString() const {
-        string s = string("IndexCursor ") + (_idx != NULL ? _idx->indexName() : "(null)");
-        if ( _direction < 0 ) s += " reverse";
-        if ( _bounds.get() && _bounds->size() > 1 ) s += " multi";
+        string s = string("IndexCursor ") + _idx.indexName();
+        if ( _direction < 0 ) {
+            s += " reverse";
+        }
+        if ( _bounds.get() && _bounds->size() > 1 ) {
+            s += " multi";
+        }
         return s;
     }
     
     BSONObj IndexCursor::prettyIndexBounds() const {
         if ( _bounds == NULL ) {
             return BSON( "start" << prettyKey( _startKey ) << "end" << prettyKey( _endKey ) );
-        }
-        else {
+        } else {
             return _bounds->obj();
         }
     }    

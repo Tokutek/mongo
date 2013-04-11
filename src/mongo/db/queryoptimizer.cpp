@@ -285,7 +285,7 @@ doneCheckOrder:
 
         if ( _utility == Impossible ) {
             // Dummy table scan cursor returning no results.  Allowed in --notablescan mode.
-            return shared_ptr<Cursor>( new BasicCursor( NULL ) );
+            return shared_ptr<Cursor>( BasicCursor::make( NULL ) );
         }
 
         if ( willScanTable() ) {
@@ -295,13 +295,13 @@ doneCheckOrder:
                 
         if ( _startOrEndSpec ) {
             // we are sure to spec _endKeyInclusive
-            return shared_ptr<Cursor>( new IndexCursor( _d, _index, _startKey, _endKey, _endKeyInclusive, _direction >= 0 ? 1 : -1, numWanted ) );
+            return shared_ptr<Cursor>( new IndexCursor( _d, *_index, _startKey, _endKey, _endKeyInclusive, _direction >= 0 ? 1 : -1, numWanted ) );
         }
         else if ( _index->getSpec().getType() ) {
-            return shared_ptr<Cursor>( new IndexCursor( _d, _index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1, numWanted ) );
+            return shared_ptr<Cursor>( new IndexCursor( _d, *_index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1, numWanted ) );
         }
         else {
-            return shared_ptr<Cursor>( new IndexCursor( _d, _index, _frv, independentRangesSingleIntervalLimit(), _direction >= 0 ? 1 : -1, numWanted) );
+            return shared_ptr<Cursor>( new IndexCursor( _d, *_index, _frv, independentRangesSingleIntervalLimit(), _direction >= 0 ? 1 : -1, numWanted) );
         }
     }
 

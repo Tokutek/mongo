@@ -111,15 +111,9 @@ namespace mongo {
     }
 
     shared_ptr<Cursor> Helpers::findTableScan(const char *ns, const BSONObj &order) {
-        BSONElement el = order.getField("$natural"); // e.g., { $natural : -1 }
-
+        const int direction = order.getField("$natural").number() >= 0 ? 1 : -1;
         NamespaceDetails *d = nsdetails(ns);
-        if ( el.number() >= 0 ) {
-            return shared_ptr<Cursor>( new BasicCursor(d) );
-        } else {
-            // "reverse natural order"
-            return shared_ptr<Cursor>( new ReverseCursor(d) );
-        }
+        return shared_ptr<Cursor>( BasicCursor::make(d, direction) );
     }
 
     vector<BSONObj> Helpers::findAll( const string& ns , const BSONObj& query ) {
@@ -286,7 +280,7 @@ namespace mongo {
                     int minOrMax = maxInclusive ? 1 : -1;
                     BSONObj newMax = Helpers::modifiedRangeBound( max , keyPattern , minOrMax );
                     
-                    c.reset( new IndexCursor( d , &i , newMin , newMax , maxInclusive , 1 ) );
+                    c.reset( new IndexCursor( d , i , newMin , newMax , maxInclusive , 1 ) );
                 }
                 
                 if ( ! c->ok() ) {

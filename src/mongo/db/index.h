@@ -37,7 +37,7 @@ namespace mongo {
        system.namespaces (although this also includes the head pointer, which is not in that
        collection).
      */
-    class IndexDetails {
+    class IndexDetails : boost::noncopyable {
     public:
         explicit IndexDetails(const BSONObj &info, bool may_create=true);
 
@@ -149,8 +149,8 @@ namespace mongo {
 
         class Cursor : public storage::Cursor {
         public:
-            Cursor(const IndexDetails *idx, const int flags = 0) :
-                storage::Cursor(idx != NULL ? idx->_db : NULL, flags) {
+            Cursor(const IndexDetails &idx, const int flags = 0) :
+                storage::Cursor(idx._db, flags) {
             }
         };
 

@@ -1296,7 +1296,7 @@ namespace mongo {
                 min = Helpers::modifiedRangeBound( min , idx->keyPattern() , -1 );
                 max = Helpers::modifiedRangeBound( max , idx->keyPattern() , -1 );
 
-                c.reset( new IndexCursor( d, idx, min, max, false, 1 ) );
+                c.reset( new IndexCursor( d, *idx, min, max, false, 1 ) );
             }
 
             //long long avgObjSize = d->stats.datasize / d->stats.nrecords;
@@ -1561,7 +1561,7 @@ namespace mongo {
                 }
                 else {
                     verify(idNum >= 0);
-                    cursor.reset( new IndexCursor( nsd , &nsd->idx( idNum ) , BSONObj() , BSONObj() , false , 1 ) );
+                    cursor.reset( new IndexCursor( nsd , nsd->idx( idNum ) , BSONObj() , BSONObj() , false , 1 ) );
                 }
 
                 md5_state_t st;

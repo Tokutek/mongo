@@ -144,7 +144,7 @@ namespace mongo {
             }
         }
 
-        IndexDetails::Cursor c(this, DB_SERIALIZABLE);
+        IndexDetails::Cursor c(*this, DB_SERIALIZABLE);
         DBC *cursor = c.dbc();
 
         storage::Key skey(key, pk != NULL ? &minKey : NULL);

@@ -88,7 +88,7 @@ namespace mongo {
     /* NamespaceDetails : this is the "header" for a namespace that has all its details.
        It is stored in the NamespaceIndex (a TokuDB dictionary named foo.ns, for Database foo).
     */
-    class NamespaceDetails {
+    class NamespaceDetails : boost::noncopyable {
     public:
         enum { NIndexesMax = 64 };
 
@@ -115,10 +115,10 @@ namespace mongo {
             return _indexes.size();
         }
 
-        IndexDetails& idx(int idxNo);
+        IndexDetails& idx(int idxNo) const;
 
         /** get the IndexDetails for the index currently being built in the background. (there is at most one) */
-        IndexDetails& inProgIdx() {
+        IndexDetails& inProgIdx() const {
             dassert(_indexBuildInProgress);
             return idx(_nIndexes);
         }
@@ -139,14 +139,16 @@ namespace mongo {
         IndexIterator ii() { return IndexIterator(this); }
 
         /* hackish - find our index # in the indexes array */
-        int idxNo(const IndexDetails& idx);
+        int idxNo(const IndexDetails& idx) const;
 
         /* multikey indexes are indexes where there are more than one key in the index
              for a single document. see multikey in wiki.
            for these, we have to do some dedup work on queries.
         */
-        // TODO: Change the bit smashing to something simpler, eventually.
-        bool isMultikey(int i) const { return (_multiKeyIndexBits & (((unsigned long long) 1) << i)) != 0; }
+        bool isMultikey(int i) const {
+            const unsigned long long mask = 1ULL << i;
+            return (_multiKeyIndexBits & mask) != 0;
+        }
         void setIndexIsMultikey(const char *thisns, int i);
 
         bool dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex);
@@ -159,12 +161,12 @@ namespace mongo {
         void addDefaultIndexesToCatalog();
 
         // @return offset in indexes[]
-        int findIndexByName(const char *name);
+        int findIndexByName(const char *name) const;
 
         // @return offset in indexes[]
-        int findIndexByKeyPattern(const BSONObj& keyPattern);
+        int findIndexByKeyPattern(const BSONObj& keyPattern) const;
 
-        void findIndexByType( const string& name , vector<int>& matches ) {
+        void findIndexByType( const string& name , vector<int> &matches ) const {
             for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
                 const IndexDetails *index = it->get();
                 if (index->getSpec().getTypeName() == name) {
@@ -178,7 +180,7 @@ namespace mongo {
          * array attributes. Otherwise, returns NULL.
          */
         const IndexDetails* findIndexByPrefix( const BSONObj &keyPattern ,
-                                               bool requireSingleKey );
+                                               bool requireSingleKey ) const;
 
 
         /* @return -1 = not found
@@ -195,16 +197,18 @@ namespace mongo {
         }
 
         bool isPKIndex(const IndexDetails &idx) const {
-            return idx.keyPattern() == _pk;
+            const bool isPK = &idx == &getPKIndex();
+            dassert(isPK == (idx.keyPattern() == _pk));
+            return isPK;
         }
 
         IndexDetails &getPKIndex() const {
             IndexDetails &idx = *_indexes[0];
-            dassert(isPKIndex(idx));
+            dassert(idx.keyPattern() == _pk);
             return idx;
         }
 
-        int averageObjectSize() {
+        int averageObjectSize() const {
             return 10; // TODO: Return something meaningful based on in-memory stats
         }
 
@@ -213,17 +217,18 @@ namespace mongo {
         }
 
         // @return a BSON representation of this NamespaceDetail's state
-        static BSONObj serialize(const char *ns, const BSONObj &options, const BSONObj &pk,
-                unsigned long long multiKeyIndexBits, const BSONArray &indexes_array);
+        static BSONObj serialize(const char *ns, const BSONObj &options,
+                                 const BSONObj &pk, unsigned long long multiKeyIndexBits,
+                                 const BSONArray &indexes_array);
         BSONObj serialize() const;
 
-        void fillCollectionStats(struct NamespaceDetailsAccStats* accStats, BSONObjBuilder* result, int scale);
+        void fillCollectionStats(struct NamespaceDetailsAccStats* accStats, BSONObjBuilder* result, int scale) const;
 
         // Run optimize on each index.
         void optimize();
 
         // Find by primary key (single element bson object, no field name).
-        bool findByPK(const BSONObj &pk, BSONObj &result);
+        bool findByPK(const BSONObj &pk, BSONObj &result) const;
 
         // return true if this namespace has an index on the _id field.
         bool hasIdIndex() const {
@@ -231,7 +236,7 @@ namespace mongo {
         }
         
         // optional to implement, populate the obj builder with collection specific stats
-        virtual void fillSpecificStats(BSONObjBuilder *result, int scale) {
+        virtual void fillSpecificStats(BSONObjBuilder *result, int scale) const {
         }
 
         // optional to implement, return true if the namespace is capped
@@ -255,7 +260,7 @@ namespace mongo {
         }
 
         // finds an object by _id field
-        virtual bool findById(const BSONObj &query, BSONObj &result) {
+        virtual bool findById(const BSONObj &query, BSONObj &result) const {
             massert(16461, "findById shouldn't be called unless it is implemented.", false);
         }
 
@@ -280,11 +285,11 @@ namespace mongo {
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
 
         // generate an index info BSON for this namespace, with the same options
-        BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering);
+        BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) const;
 
         // fill the statistics for each index in the NamespaceDetails,
         // indexStats is an array of length nIndexes
-        void fillIndexStats(std::vector<IndexStats> &indexStats);
+        void fillIndexStats(std::vector<IndexStats> &indexStats) const;
 
         const string _ns;
         // The options used to create this namespace details. We serialize
@@ -564,7 +569,7 @@ namespace mongo {
     NamespaceDetails *nsdetails(const char *ns);
     NamespaceDetails *nsdetails_maybe_create(const char *ns, BSONObj options = BSONObj());
 
-    inline IndexDetails& NamespaceDetails::idx(int idxNo) {
+    inline IndexDetails& NamespaceDetails::idx(int idxNo) const {
         if ( idxNo < NIndexesMax ) {
             verify(idxNo >= 0 && idxNo < (int) _indexes.size());
             return *_indexes[idxNo];
@@ -572,7 +577,7 @@ namespace mongo {
         unimplemented("more than NIndexesMax indexes"); // TokuDB: Make sure we handle the case where idxNo >= NindexesMax 
     }
 
-    inline int NamespaceDetails::idxNo(const IndexDetails& idx) {
+    inline int NamespaceDetails::idxNo(const IndexDetails& idx) const {
         for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             const IndexDetails *index = it->get();
             if (index == &idx) {
@@ -583,7 +588,7 @@ namespace mongo {
         return -1;
     }
 
-    inline int NamespaceDetails::findIndexByKeyPattern(const BSONObj& keyPattern) {
+    inline int NamespaceDetails::findIndexByKeyPattern(const BSONObj& keyPattern) const {
         for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             const IndexDetails *index = it->get();
             if (index->keyPattern() == keyPattern) {
@@ -594,7 +599,7 @@ namespace mongo {
     }
 
     inline const IndexDetails* NamespaceDetails::findIndexByPrefix( const BSONObj &keyPattern ,
-                                                                    bool requireSingleKey ) {
+                                                                    bool requireSingleKey ) const {
         const IndexDetails* bestMultiKeyIndex = NULL;
         for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             const IndexDetails *index = it->get();
@@ -610,7 +615,7 @@ namespace mongo {
     }
 
     // @return offset in indexes[]
-    inline int NamespaceDetails::findIndexByName(const char *name) {
+    inline int NamespaceDetails::findIndexByName(const char *name) const {
         for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             const IndexDetails *index = it->get();
             if (mongoutils::str::equals(index->indexName().c_str(), name)) {

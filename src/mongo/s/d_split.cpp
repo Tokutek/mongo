@@ -107,7 +107,7 @@ namespace mongo {
                 max = Helpers::modifiedRangeBound( max , idx->keyPattern() , -1 );
             }
 
-            IndexCursor * idxCursor = new IndexCursor( d , idx , min , max , false , 1 );
+            IndexCursor *idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
             shared_ptr<Cursor> c( idxCursor );
             auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
             if ( ! cc->ok() ) {
@@ -317,7 +317,7 @@ namespace mongo {
                 long long currCount = 0;
                 long long numChunks = 0;
                 
-                IndexCursor * idxCursor = new IndexCursor( d , idx , min , max , false , 1 );
+                IndexCursor *idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
                 shared_ptr<Cursor> c( idxCursor );
                 auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
                 if ( ! cc->ok() ) {
@@ -361,17 +361,6 @@ namespace mongo {
                             break;
                         }
                         
-#if 0
-                        if ( ! cc->yieldSometimes( ClientCursor::DontNeed ) ) {
-                            // we were near and and got pushed to the end
-                            // i think returning the splits we've already found is fine
-                            
-                            // don't use the btree cursor pointer to access keys beyond this point but ok
-                            // to use it for format the keys we've got already
-                            cc.release();
-                            break;
-                        }
-#endif
                     }
                     
                     if ( splitKeys.size() > 1 || ! force )
@@ -382,7 +371,7 @@ namespace mongo {
                     currCount = 0;
                     log() << "splitVector doing another cycle because of force, keyCount now: " << keyCount << endl;
                     
-                    idxCursor = new IndexCursor( d , idx , min , max , false , 1 );
+                    idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
                     c.reset( idxCursor );
                     cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
                 }
