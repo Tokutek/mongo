@@ -40,6 +40,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/db/ops/update.h"
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/distlock.h"
@@ -241,6 +242,7 @@ namespace mongo {
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
 
     };
 
@@ -505,13 +507,14 @@ namespace mongo {
         }
 
         bool clone( string& errmsg , BSONObjBuilder& result ) {
-            return false;
             if ( ! _getActive() ) {
                 errmsg = "not active";
                 return false;
             }
 
-            int allocSize;
+            int allocSize = BSONObjMaxUserSize;
+            // TODO(leif): maybe reimplement this calculation?
+#if 0
             {
                 Client::ReadContext ctx( _ns );
                 NamespaceDetails *d = nsdetails( _ns.c_str() );
@@ -519,40 +522,43 @@ namespace mongo {
                 scoped_spinlock lk( _trackerLocks );
                 allocSize = std::min(BSONObjMaxUserSize, (int)((12 + d->averageObjectSize()) * _clonePKs.size()));
             }
+#endif
             BSONArrayBuilder a (allocSize);
+            Client::ReadContext ctx( _ns );
+            Client::Transaction txn(DB_TXN_SNAPSHOT);
             while ( 1 ) {
                 bool filledBuffer = false;
-                
+
                 {
-                    Client::ReadContext ctx( _ns );
                     NamespaceDetails *d = nsdetails( _ns.c_str() );
                     verify( d );
                     scoped_spinlock lk( _trackerLocks );
                     set<BSONObj>::iterator i = _clonePKs.begin();
                     for ( ; i!=_clonePKs.end(); ++i ) {
-                        
+
                         BSONObj o;
                         const BSONObj &pk = *i;
                         bool found = d->findByPK( pk, o );
                         verify(found);
-                        
+
                         // use the builder size instead of accumulating 'o's size so that we take into consideration
                         // the overhead of BSONArray indices
                         if ( a.len() + o.objsize() + 1024 > BSONObjMaxUserSize ) {
                             filledBuffer = true; // break out of outer while loop
                             break;
                         }
-                        
+
                         a.append( o );
                     }
-                    
+
                     _clonePKs.erase( _clonePKs.begin() , i );
-                    
+
                     if ( _clonePKs.empty() || filledBuffer )
                         break;
                 }
-                
+
             }
+            txn.commit();
 
             result.appendArray( "objects" , a.arr() );
             return true;
@@ -1045,6 +1051,7 @@ namespace mongo {
                 myVersion.incMajor();
 
                 {
+                    // TODO(leif): Why is this lock needed? Try to remove this lock or downgrade to a read lock later.
                     Lock::DBWrite lk( ns );
                     verify( myVersion > shardingState.getVersion( ns ) );
 
@@ -1160,6 +1167,7 @@ namespace mongo {
                         }
                         while( bumpMin == min );
 
+                        nextVersion.incMinor();  // same as used on donateChunk
                         try {
                             BSONObjBuilder n;
                             n.append( "_id" , Chunk::genID( ns , bumpMin ) );
@@ -1351,9 +1359,12 @@ namespace mongo {
             {
                 // 0. copy system.namespaces entry if collection doesn't already exist
                 Client::WriteContext ctx( ns );
+                Client::Transaction txn(DB_SERIALIZABLE);
+                const string &dbname = cc().database()->name;
+
                 // Only copy if ns doesn't already exist
                 if ( ! nsdetails( ns.c_str() ) ) {
-                    string system_namespaces = NamespaceString( ns ).db + ".system.namespaces";
+                    string system_namespaces = dbname + ".system.namespaces";
                     BSONObj entry = conn->findOne( system_namespaces, BSON( "name" << ns ) );
                     if ( entry["options"].isABSONObj() ) {
                         string errmsg;
@@ -1362,32 +1373,25 @@ namespace mongo {
                                       << endl;
                     }
                 }
-            }
 
-            {                
                 // 1. copy indexes
-                
-                vector<BSONObj> all;
+
                 {
                     auto_ptr<DBClientCursor> indexes = conn->getIndexes( ns );
-                    
+                    string system_indexes = dbname + ".system.indexes";
                     while ( indexes->more() ) {
-                        all.push_back( indexes->next().getOwned() );
+                        BSONObj idx = indexes->next();
+                        insertObject( system_indexes.c_str() , idx, 0, true /* flag fromMigrate in oplog */ );
                     }
                 }
 
-                for ( unsigned i=0; i<all.size(); i++ ) {
-                    BSONObj idx = all[i];
-                    Client::WriteContext ct( ns );
-                    string system_indexes = cc().database()->name + ".system.indexes";
-                    insertObject( system_indexes.c_str() , idx, 0, true /* flag fromMigrate in oplog */ );
-                }
-
+                txn.commit();
                 timing.done(1);
             }
 
             {
                 // 2. delete any data already in range
+                // removeRange makes a ReadContext and a Transaction
                 long long num = Helpers::removeRange( ns ,
                                                       min ,
                                                       max ,
@@ -1406,6 +1410,9 @@ namespace mongo {
                 // 3. initial bulk clone
                 state = CLONE;
 
+                Client::ReadContext ctx(ns);
+                Client::Transaction txn(DB_SERIALIZABLE);
+
                 while ( true ) {
                     BSONObj res;
                     if ( ! conn->runCommand( "admin" , BSON( "_migrateClone" << 1 ) , res ) ) {  // gets array of objects to copy, in disk order
@@ -1423,25 +1430,29 @@ namespace mongo {
                     BSONObjIterator i( arr );
                     while( i.more() ) {
                         BSONObj o = i.next().Obj();
-                        {
-                            Lock::DBWrite lk( ns );
-                            Helpers::upsert( ns, o, true );
-                        }
+                        BSONObj id = o["_id"].wrap();
+                        OpDebug debug;
+                        updateObjects(ns.c_str(), o, id, true, false, true, debug, true);
+
                         thisTime++;
                         numCloned++;
                         clonedBytes += o.objsize();
 
+                        // TODO(leif): maybe restore waitForReplication
+#if 0
                         if ( secondaryThrottle ) {
                             if ( ! waitForReplication( cc().getLastOp(), 2, 60 /* seconds to wait */ ) ) {
                                 warning() << "secondaryThrottle on, but doc insert timed out after 60 seconds, continuing" << endl;
                             }
                         }
+#endif
                     }
 
                     if ( thisTime == 0 )
                         break;
                 }
 
+                txn.commit();
                 timing.done(3);
             }
 
@@ -1465,7 +1476,7 @@ namespace mongo {
                         break;
 
                     apply( res , &lastOpApplied );
-                    
+
                     const int maxIterations = 3600*50;
                     int i;
                     for ( i=0;i<maxIterations; i++) {
@@ -1473,10 +1484,10 @@ namespace mongo {
                             timing.note( "aborted" );
                             return;
                         }
-                        
+
                         if ( opReplicatedEnough( lastOpApplied ) )
                             break;
-                        
+
                         if ( i > 100 ) {
                             warning() << "secondaries having hard time keeping up with migrate" << migrateLog;
                         }
@@ -1490,13 +1501,13 @@ namespace mongo {
                         conn.done();
                         state = FAIL;
                         return;
-                    } 
+                    }
                 }
 
                 timing.done(4);
             }
 
-            { 
+            {
                 // pause to wait for replication
                 // this will prevent us from going into critical section until we're ready
                 Timer t;
@@ -1528,12 +1539,12 @@ namespace mongo {
                         timing.note( "aborted" );
                         return;
                     }
-                    
+
                     if ( state == COMMIT_START ) {
                         if ( flushPendingWrites( lastOpApplied ) )
                             break;
                     }
-                    
+
                     sleepmillis( 10 );
                 }
 
@@ -1583,8 +1594,9 @@ namespace mongo {
 
             if ( xfer["deleted"].isABSONObj() ) {
                 BSONObjIterator i( xfer["deleted"].Obj() );
+                Client::ReadContext cx(ns);
+                Client::Transaction txn(DB_SERIALIZABLE);
                 while ( i.more() ) {
-                    Client::WriteContext cx(ns);
 
                     BSONObj id = i.next().Obj();
 
@@ -1610,20 +1622,24 @@ namespace mongo {
                     *lastOpApplied = cx.ctx().getClient()->getLastOp().asDate();
                     didAnything = true;
                 }
+                txn.commit();
             }
 
             if ( xfer["reload"].isABSONObj() ) {
                 BSONObjIterator i( xfer["reload"].Obj() );
+                Client::ReadContext cx(ns);
+                Client::Transaction txn(DB_SERIALIZABLE);
                 while ( i.more() ) {
-                    Client::WriteContext cx(ns);
+                    BSONObj o = i.next().Obj();
 
-                    BSONObj it = i.next().Obj();
-
-                    Helpers::upsert( ns , it , true );
+                    BSONObj id = o["_id"].wrap();
+                    OpDebug debug;
+                    updateObjects(ns.c_str(), o, id, true, false, true, debug, true);
 
                     *lastOpApplied = cx.ctx().getClient()->getLastOp().asDate();
                     didAnything = true;
                 }
+                txn.commit();
             }
 
             return didAnything;

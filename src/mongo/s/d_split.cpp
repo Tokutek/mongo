@@ -31,6 +31,7 @@
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/distlock.h"
+#include "mongo/client/remote_transaction.h"
 #include "mongo/util/timer.h"
 
 #include "mongo/s/chunk.h" // for static genID only
@@ -612,7 +613,7 @@ namespace mongo {
             }
 
             //
-            // 3. create the batch of updates to metadata ( the new chunks ) to be applied via 'applyOps' command
+            // 3. Update the metadata ( the new chunks ) in a transaction
             //
 
             BSONObjBuilder logDetail;
@@ -620,97 +621,72 @@ namespace mongo {
             LOG(1) << "before split on " << origChunk << endl;
             vector<ChunkInfo> newChunks;
 
-            ShardChunkVersion myVersion = maxVersion;
-            BSONObj startKey = min;
-            splitKeys.push_back( max ); // makes it easier to have 'max' in the next loop. remove later.
+            try {
+                shared_ptr<ScopedDbConnection> conn(
+                    ScopedDbConnection::getInternalScopedDbConnection(
+                        shardingState.getConfigServer() ) );
+                RemoteTransaction txn(conn, "serializable");
 
-            BSONObjBuilder cmdBuilder;
-            string err("TODO(leif): implement splitChunk as a transaction, not applyOps");
-            error() << err << endl;
-            msgasserted(16473, err);
-
-            BSONArrayBuilder updates( cmdBuilder.subarrayStart( "applyOps" ) );
-
-            for ( vector<BSONObj>::const_iterator it = splitKeys.begin(); it != splitKeys.end(); ++it ) {
-                BSONObj endKey = *it;
-
-                // splits only update the 'minor' portion of version
-                myVersion.incMinor();
-
-                // build an update operation against the chunks collection of the config database with
-                // upsert true
-                BSONObjBuilder op;
-                op.append( "op" , "u" );
-                op.appendBool( "b" , true );
-                op.append( "ns" , ShardNS::chunk );
-
-                // add the modified (new) chunk information as the update object
-                BSONObjBuilder n( op.subobjStart( "o" ) );
-                n.append( "_id" , Chunk::genID( ns , startKey ) );
-                myVersion.addToBSON( n, "lastmod" );
-                n.append( "ns" , ns );
-                n.append( "min" , startKey );
-                n.append( "max" , endKey );
-                n.append( "shard" , shard );
-                n.done();
-
-                // add the chunk's _id as the query part of the update statement
-                BSONObjBuilder q( op.subobjStart( "o2" ) );
-                q.append( "_id" , Chunk::genID( ns , startKey ) );
-                q.done();
-
-                updates.append( op.obj() );
-
-                // remember this chunk info for logging later
-                newChunks.push_back( ChunkInfo( startKey , endKey, myVersion ) );
-
-                startKey = endKey;
-            }
-
-            updates.done();
-
-            {
-                BSONArrayBuilder preCond( cmdBuilder.subarrayStart( "preCondition" ) );
+                // Check the precondition
                 BSONObjBuilder b;
-                b.append( "ns" , ShardNS::chunk );
-                b.append( "q" , BSON( "query" << BSON( "ns" << ns ) << "orderby" << BSON( "lastmod" << -1 ) ) );
-                {
-                    BSONObjBuilder bb( b.subobjStart( "res" ) );
-                    // TODO: For backwards compatibility, we can't yet require an epoch here
-                    bb.appendTimestamp( "lastmod", maxVersion.toLong() );
-                    bb.done();
+                b.appendTimestamp("lastmod", maxVersion.toLong());
+                BSONObj expect = b.obj();
+                Matcher m(expect);
+
+                BSONObj found = conn->get()->findOne(ShardNS::chunk, QUERY("ns" << ns).sort("lastmod", -1));
+                if (!m.matches(found)) {
+                    // TODO(leif): Make sure that this means the sharding algorithm is broken and we should bounce the server.
+                    error() << "splitChunk commit failed: " << ShardChunkVersion::fromBSON(found["lastmod"])
+                            << " instead of " << maxVersion << endl;
+                    error() << "TERMINATING" << endl;
+                    dbexit(EXIT_SHARDING_ERROR);
                 }
-                preCond.append( b.obj() );
-                preCond.done();
-            }
 
-            //
-            // 4. apply the batch of updates to metadata and to the chunk manager
-            //
+                ShardChunkVersion myVersion = maxVersion;
+                BSONObj startKey = min;
+                splitKeys.push_back( max ); // makes it easier to have 'max' in the next loop. remove later.
 
-            BSONObj cmd = cmdBuilder.obj();
+                for ( vector<BSONObj>::const_iterator it = splitKeys.begin(); it != splitKeys.end(); ++it ) {
+                    BSONObj endKey = *it;
 
-            LOG(1) << "splitChunk update: " << cmd << endl;
+                    // splits only update the 'minor' portion of version
+                    myVersion.incMinor();
 
-            bool ok;
-            BSONObj cmdResult;
-            {
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection(
-                                shardingState.getConfigServer() ) );
-                ok = conn->get()->runCommand( "config" , cmd , cmdResult );
+                    try {
+                        BSONObjBuilder n;
+                        n.append( "_id" , Chunk::genID( ns , startKey ) );
+                        myVersion.addToBSON( n, "lastmod" );
+                        n.append( "ns" , ns );
+                        n.append( "min" , startKey );
+                        n.append( "max" , endKey );
+                        n.append( "shard" , shard );
+                        conn->get()->update(ShardNS::chunk, QUERY("_id" << Chunk::genID(ns, startKey)), n.obj(), true);
+                    }
+                    catch (DBException &e) {
+                        warning() << e << endl;
+                        error() << "splitChunk error updating the chunk ending in " << endKey << endl;
+                        throw e;
+                    }
+
+                    // remember this chunk info for logging later
+                    newChunks.push_back( ChunkInfo( startKey , endKey, myVersion ) );
+
+                    startKey = endKey;
+                }
+
+                splitKeys.pop_back(); // 'max' was used as sentinel
+
+                txn.commit();
                 conn->done();
             }
-
-            if ( ! ok ) {
+            catch (DBException &e) {
                 stringstream ss;
-                ss << "saving chunks failed.  cmd: " << cmd << " result: " << cmdResult;
+                ss << "saving chunks failed.  reason: " << e.what();
                 error() << ss.str() << endl;
                 msgasserted( 13593 , ss.str() );
             }
 
             // install a chunk manager with knowledge about newly split chunks in this shard's state
-            splitKeys.pop_back(); // 'max' was used as sentinel
             maxVersion.incMinor();
             shardingState.splitChunk( ns , min , max , splitKeys , maxVersion );
 

@@ -346,7 +346,7 @@ public:
             string db = obj["ns"].valuestr();
             db = db.substr(0, db.find('.'));
 
-            msgasserted(16474, "TODO(leif): applyOps is deprecated, replace with transactions");
+            msgasserted(16479, "TODO(leif): applyOps is deprecated, replace with transactions");
             BSONObj cmd = BSON( "applyOps" << BSON_ARRAY( obj ) );
             BSONObj out;
             conn().runCommand(db, cmd, out);
