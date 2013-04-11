@@ -92,12 +92,19 @@ namespace mongo {
         // if the txn stack size is greater than 1, we cannot be doing
         // fileops. Fileops must happen in the context of a single
         // transaction.
-        if (cc().txnStackSize() > 1) {
-            details = nsdetails(ns);
-            uassert(16468, "Cannot insert into a non-existent collection when running a multi-statement transaction", details);
-        }
-        else {
-            details = nsdetails_maybe_create(ns);
+        details = nsdetails(ns);
+        if (details == NULL) {
+            if (cc().txnStackSize() > 1) {
+                uasserted(16468, "Cannot insert into a non-existent collection when running a multi-statement transaction");
+            }
+            else {
+                string err;
+                BSONObj options;
+                bool created = userCreateNS(ns, options, err, logop);
+                uassert(16473, "failed to create collection", created);
+                details = nsdetails(ns);
+                uassert(16474, "failed to get collection after creating", details);
+            }
         }
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         for (size_t i = 0; i < objs.size(); i++) {
