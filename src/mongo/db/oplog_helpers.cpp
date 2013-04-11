@@ -19,6 +19,10 @@
 #include "txn_context.h"
 #include "repl_block.h"
 #include "stats/counters.h"
+#include "mongo/db/namespace_details.h"
+#include "mongo/db/ops/update.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/insert.h"
 
 
 #define KEY_STR_OP_NAME "op"
@@ -144,11 +148,48 @@ namespace OpLogHelpers{
     }
 
     static void runInsertFromOplog(const char* ns, BSONObj op) {
-        /*
         NamespaceDetails* nsd = nsdetails(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
-        insertOneObject(nsd, nsdt, newObj, overwrite);
-        */
+        BSONObj row = op[KEY_STR_ROW].Obj();
+        // handle add index case
+        if (mongoutils::str::endsWith(ns, ".system.indexes")) {
+            BSONObj key = row["key"].Obj();
+            int i = nsd->findIndexByKeyPattern(key);
+            if (i >= 0) {
+                uasserted(16475, "index exists on secondary");
+            } else {
+                nsd->createIndex(row);
+            }
+        }
+        // overwrite set to true because we are running on a secondary
+        insertOneObject(nsd, nsdt, row, true);
+    }
+
+    static void runDeleteFromOplog(const char* ns, BSONObj op) {
+        NamespaceDetails* nsd = nsdetails(ns);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+        BSONObj row = op[KEY_STR_ROW].Obj();
+        BSONObj pk = row["_id"].wrap("");
+        deleteOneObject(nsd, nsdt, pk, row);
+    }
+
+    static void runUpdateFromOplog(const char* ns, BSONObj op) {
+        NamespaceDetails* nsd = nsdetails(ns);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+        const char *names[] = { 
+            KEY_STR_OLD_ROW, 
+            KEY_STR_OLD_ROW
+            };
+        BSONElement fields[2];
+        op.getFields(2, names, fields);
+        BSONObj oldRow = fields[0].Obj();
+        BSONObj newRow = fields[1].Obj();
+        BSONObj pk = oldRow["_id"].wrap("");
+        struct LogOpUpdateDetails loud;
+        loud.logop = false;
+        loud.ns = NULL;
+        loud.fromMigrate = false;
+        updateOneObject(nsd, nsdt, pk, oldRow, newRow, &loud);
     }
 
     static void runCommandFromOplog(const char* ns, BSONObj op) {
@@ -175,9 +216,11 @@ namespace OpLogHelpers{
         }
         else if (strcmp(opType, OP_STR_UPDATE)) {
             opCounters->gotUpdate();
+            runUpdateFromOplog(ns, op);
         }
         else if (strcmp(opType, OP_STR_DELETE)) {
             opCounters->gotDelete();
+            runDeleteFromOplog(ns, op);
         }
         else if (strcmp(opType, OP_STR_COMMAND)) {
             opCounters->gotCommand();
