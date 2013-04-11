@@ -44,6 +44,7 @@ namespace mongo {
     bool getLastGTIDinOplog(GTID* gtid);
     bool gtidExistsInOplog(GTID gtid);
     void writeEntryToOplog(BSONObj entry);
+    void applyTransactionFromOplog(BSONObj entry);
     
     /** puts obj in the oplog as a comment (a no-op).  Just for diags.
         convention is
