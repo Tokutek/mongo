@@ -39,7 +39,7 @@ namespace mongo {
             // { _id: ObjectId('511d34f6d3080c48017a14d0'), ns: "test.leif", key: { a: -1.0 }, name: "a_-1", unique: true }
             const string &coll = obj["ns"].String();
             const bool collIsNew = nsdetails(coll.c_str()) == NULL;
-            NamespaceDetails *details = getAndMaybeCreateNS(ns, logop);
+            NamespaceDetails *details = getAndMaybeCreateNS(coll.c_str(), logop);
             BSONObj key = obj["key"].Obj();
             int i = details->findIndexByKeyPattern(key);
             if (i >= 0) {
