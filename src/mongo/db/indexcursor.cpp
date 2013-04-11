@@ -640,7 +640,7 @@ again:      while ( !allInclusive && ok() ) {
                 advance();
                 if ( ok() ) {
                     found = _d->findByPK( _currPK, _currObj );
-                    uassert( 16473, str::stream()
+                    uassert( 16476, str::stream()
                                 << toString() << ": could not find associated document with pk "
                                 << _currPK << ", index key " << _currKey, found );
                 }
