@@ -44,6 +44,7 @@
 #include "mongo/client/connpool.h"
 #include "mongo/client/distlock.h"
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/client/remote_transaction.h"
 
 #include "mongo/util/queue.h"
 #include "mongo/util/startup_test.h"
@@ -1105,121 +1106,94 @@ namespace mongo {
 
                 // we want to go only once to the configDB but perhaps change two chunks, the one being migrated and another
                 // local one (so to bump version for the entire shard)
-                // we use the 'applyOps' mechanism to group the two updates and make them safer
-                // TODO pull config update code to a module
 
-                BSONObjBuilder cmdBuilder;
-
-                BSONArrayBuilder updates( cmdBuilder.subarrayStart( "applyOps" ) );
-                {
-                    // update for the chunk being moved
-                    BSONObjBuilder op;
-                    op.append( "op" , "u" );
-                    op.appendBool( "b" , false /* no upserting */ );
-                    op.append( "ns" , ShardNS::chunk );
-
-                    BSONObjBuilder n( op.subobjStart( "o" ) );
-                    n.append( "_id" , Chunk::genID( ns , min ) );
-                    myVersion.addToBSON( n, "lastmod" );
-                    n.append( "ns" , ns );
-                    n.append( "min" , min );
-                    n.append( "max" , max );
-                    n.append( "shard" , toShard.getName() );
-                    n.done();
-
-                    BSONObjBuilder q( op.subobjStart( "o2" ) );
-                    q.append( "_id" , Chunk::genID( ns , min ) );
-                    q.done();
-
-                    updates.append( op.obj() );
-                }
-
-                nextVersion = myVersion;
-
-                // if we have chunks left on the FROM shard, update the version of one of them as well
-                // we can figure that out by grabbing the chunkManager installed on 5.a
-                // TODO expose that manager when installing it
-
-                ShardChunkManagerPtr chunkManager = shardingState.getShardChunkManager( ns );
-                if( chunkManager->getNumChunks() > 0 ) {
-
-                    // get another chunk on that shard
-                    BSONObj lookupKey;
-                    BSONObj bumpMin, bumpMax;
-                    do {
-                        chunkManager->getNextChunk( lookupKey , &bumpMin , &bumpMax );
-                        lookupKey = bumpMin;
-                    }
-                    while( bumpMin == min );
-
-                    BSONObjBuilder op;
-                    op.append( "op" , "u" );
-                    op.appendBool( "b" , false );
-                    op.append( "ns" , ShardNS::chunk );
-
-                    nextVersion.incMinor();  // same as used on donateChunk
-                    BSONObjBuilder n( op.subobjStart( "o" ) );
-                    n.append( "_id" , Chunk::genID( ns , bumpMin ) );
-                    nextVersion.addToBSON( n, "lastmod" );
-                    n.append( "ns" , ns );
-                    n.append( "min" , bumpMin );
-                    n.append( "max" , bumpMax );
-                    n.append( "shard" , fromShard.getName() );
-                    n.done();
-
-                    BSONObjBuilder q( op.subobjStart( "o2" ) );
-                    q.append( "_id" , Chunk::genID( ns , bumpMin  ) );
-                    q.done();
-
-                    updates.append( op.obj() );
-
-                    log() << "moveChunk updating self version to: " << nextVersion << " through "
-                          << bumpMin << " -> " << bumpMax << " for collection '" << ns << "'" << migrateLog;
-
-                }
-                else {
-
-                    log() << "moveChunk moved last chunk out for collection '" << ns << "'" << migrateLog;
-                }
-
-                updates.done();
-
-                BSONArrayBuilder preCond( cmdBuilder.subarrayStart( "preCondition" ) );
-                {
-                    BSONObjBuilder b;
-                    b.append( "ns" , ShardNS::chunk );
-                    b.append( "q" , BSON( "query" << BSON( "ns" << ns ) << "orderby" << BSON( "lastmod" << -1 ) ) );
-                    {
-                        BSONObjBuilder bb( b.subobjStart( "res" ) );
-                        // TODO: For backwards compatibility, we can't yet require an epoch here
-                        bb.appendTimestamp( "lastmod", maxVersion.toLong() );
-                        bb.done();
-                    }
-                    preCond.append( b.obj() );
-                }
-
-                preCond.done();
-
-                BSONObj cmd = cmdBuilder.obj();
-                LOG(7) << "moveChunk update: " << cmd << migrateLog;
-
-                bool ok = false;
-                BSONObj cmdResult;
                 try {
-                    scoped_ptr<ScopedDbConnection> conn(
-                            ScopedDbConnection::getInternalScopedDbConnection(
-                                    shardingState.getConfigServer() ) );
-                    ok = conn->get()->runCommand( "config" , cmd , cmdResult );
+                    shared_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer()));
+                    RemoteTransaction txn(conn, "serializable");
+
+                    // Check the precondition
+                    BSONObjBuilder b;
+                    b.appendTimestamp("lastmod", maxVersion.toLong());
+                    BSONObj expect = b.obj();
+                    Matcher m(expect);
+
+                    BSONObj found = conn->get()->findOne(ShardNS::chunk, QUERY("ns" << ns).sort("lastmod", -1));
+                    if (!m.matches(found)) {
+                        // TODO(leif): Make sure that this means the sharding algorithm is broken and we should bounce the server.
+                        error() << "moveChunk commit failed: " << ShardChunkVersion::fromBSON(found["lastmod"])
+                                << " instead of " << maxVersion << migrateLog;
+                        error() << "TERMINATING" << migrateLog;
+                        dbexit(EXIT_SHARDING_ERROR);
+                    }
+
+                    try {
+                        // update for the chunk being moved
+                        BSONObjBuilder n;
+                        n.append( "_id" , Chunk::genID( ns , min ) );
+                        myVersion.addToBSON( n, "lastmod" );
+                        n.append( "ns" , ns );
+                        n.append( "min" , min );
+                        n.append( "max" , max );
+                        n.append( "shard" , toShard.getName() );
+                        conn->get()->update(ShardNS::chunk, QUERY("_id" << Chunk::genID(ns, min)), n.obj());
+                    }
+                    catch (DBException &e) {
+                        warning() << e << migrateLog;
+                        error() << "moveChunk error updating the chunk being moved" << migrateLog;
+                        throw e;
+                    }
+
+                    nextVersion = myVersion;
+
+                    // if we have chunks left on the FROM shard, update the version of one of them as well
+                    // we can figure that out by grabbing the chunkManager installed on 5.a
+                    // TODO expose that manager when installing it
+
+                    ShardChunkManagerPtr chunkManager = shardingState.getShardChunkManager(ns);
+                    if (chunkManager->getNumChunks() > 0) {
+                        // get another chunk on that shard
+                        BSONObj lookupKey;
+                        BSONObj bumpMin, bumpMax;
+                        do {
+                            chunkManager->getNextChunk( lookupKey , &bumpMin , &bumpMax );
+                            lookupKey = bumpMin;
+                        }
+                        while( bumpMin == min );
+
+                        try {
+                            BSONObjBuilder n;
+                            n.append( "_id" , Chunk::genID( ns , bumpMin ) );
+                            nextVersion.addToBSON( n, "lastmod" );
+                            n.append( "ns" , ns );
+                            n.append( "min" , bumpMin );
+                            n.append( "max" , bumpMax );
+                            n.append( "shard" , fromShard.getName() );
+                            conn->get()->update(ShardNS::chunk, QUERY("_id" << Chunk::genID(ns, bumpMin)), n.obj());
+                            log() << "moveChunk updating self version to: " << nextVersion << " through "
+                                  << bumpMin << " -> " << bumpMax << " for collection '" << ns << "'" << migrateLog;
+                        }
+                        catch (DBException &e) {
+                            warning() << e << migrateLog;
+                            error() << "moveChunk error updating chunk on the FROM shard" << migrateLog;
+                            throw e;
+                        }
+                    }
+                    else {
+                        log() << "moveChunk moved last chunk out for collection '" << ns << "'" << migrateLog;
+                    }
+
+                    txn.commit();
                     conn->done();
                 }
-                catch ( DBException& e ) {
-                    warning() << e << migrateLog;
-                    ok = false;
-                    BSONObjBuilder b;
-                    e.getInfo().append( b );
-                    cmdResult = b.obj();
+                catch (...) {
+                    // TODO(leif): Vanilla, if it fails, waits 10 seconds and does a query to see if somehow the commit made it through anyway.  Maybe we need such a mechanism too?
+                    error() << "moveChunk failed to get confirmation of commit" << migrateLog;
+                    error() << "TERMINATING" << migrateLog;
+                    dbexit(EXIT_SHARDING_ERROR);
                 }
 
+                // Vanilla does the following at the end.  Keep this code around as notes until we know we don't need it.
+#if 0
                 if ( ! ok ) {
 
                     // this could be a blip in the connectivity
@@ -1264,6 +1238,7 @@ namespace mongo {
                         dbexit( EXIT_SHARDING_ERROR );
                     }
                 }
+#endif
 
                 migrateFromStatus.setInCriticalSection( false );
 

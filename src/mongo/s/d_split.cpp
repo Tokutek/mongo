@@ -625,6 +625,10 @@ namespace mongo {
             splitKeys.push_back( max ); // makes it easier to have 'max' in the next loop. remove later.
 
             BSONObjBuilder cmdBuilder;
+            string err("TODO(leif): implement splitChunk as a transaction, not applyOps");
+            error() << err << endl;
+            msgasserted(16473, err);
+
             BSONArrayBuilder updates( cmdBuilder.subarrayStart( "applyOps" ) );
 
             for ( vector<BSONObj>::const_iterator it = splitKeys.begin(); it != splitKeys.end(); ++it ) {
