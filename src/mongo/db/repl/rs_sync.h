@@ -91,16 +91,6 @@ namespace mongo {
         void handleSlaveDelay(const BSONObj& op);
     };
 
-    /**
-     * Initial clone and sync
-     */
-    class InitialSync : public SyncTail {
-    public:
-        virtual ~InitialSync();
-        InitialSync(BackgroundSyncInterface *q);
-        void oplogApplication(const BSONObj& applyGTEObj, const BSONObj& minValidObj);
-    };
-
     // TODO: move hbmsg into an error-keeping class (SERVER-4444)
     void sethbmsg(const string& s, const int logLevel=0);
 

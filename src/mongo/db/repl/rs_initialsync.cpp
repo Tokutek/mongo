@@ -258,7 +258,6 @@ namespace mongo {
      * Do the initial sync for this member.
      */
     void ReplSetImpl::_syncDoInitialSync() {
-        InitialSync init(BackgroundSync::get());
         sethbmsg("initial sync pending",0);
 
         // if this is the first node, it may have already become primary
@@ -275,7 +274,6 @@ namespace mongo {
         }
 
         string sourceHostname = source->h().toString();
-        init.setHostname(sourceHostname);
         OplogReader r;
         if( !r.connect(sourceHostname) ) {
             sethbmsg( str::stream() << "initial sync couldn't connect to " << source->h().toString() , 0);
@@ -295,7 +293,8 @@ namespace mongo {
             log() << "fastsync: skipping database clone" << rsLog;
 
             // prime oplog
-            init.oplogApplication(lastOp, lastOp);
+            //init.oplogApplication(lastOp, lastOp);
+            ::abort();
             return;
         }
         else {
