@@ -133,6 +133,8 @@ namespace mongo {
                             continue;
 
                         if( n == 0 && (queryOptions & QueryOption_AwaitData) && pass < 1000 ) {
+                            // The cursor is still live, give back the stack.
+                            cc().swapTransactionStack(client_cursor->transactions);
                             return 0;
                         }
 
@@ -189,7 +191,7 @@ namespace mongo {
                 //client_cursor->storeOpForSlave( last );
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
 
-                // The cursor is still live. Give back the transaction.
+                // The cursor is still live, give back the stack.
                 cc().swapTransactionStack(client_cursor->transactions);
             }
         }
@@ -925,11 +927,9 @@ namespace mongo {
             try {
                 const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
 
-                // Tailable cursors need to read newly written entries to the tail
-                // of the collection, so we choose read committed isolation.
-                // Otherwise we default to a snapshot.
-                // XXX: TODO Read committed doesn't do what I want it to, so use an
-                // "incorrect" but mostly working UNCOMMITTED isolation.
+                // Tailable cursors need to read newly written entries from the tail
+                // of the collection. They manually arbitrate with the collection over
+                // what data is readable and when, so we choose read uncommited isolation.
                 TokuCommandSettings settings;
                 settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
                 settings.setBulkFetch(true);
@@ -942,12 +942,13 @@ namespace mongo {
                 
                 if ( pq.hasOption( QueryOption_CursorTailable ) ) {
                     NamespaceDetails *d = nsdetails( ns );
-                    uassert( 13051, "tailable cursor requested on non capped collection", d && d->isCapped() );
+                    if (d != NULL && !(d->isCapped() || str::equals(ns, rsoplog))) {
+                        uasserted( 13051, "tailable cursor requested on non-capped, non-oplog collection" );
+                    }
                     const BSONObj nat1 = BSON( "$natural" << 1 );
                     if ( order.isEmpty() ) {
                         order = nat1;
-                    }
-                    else {
+                    } else {
                         uassert( 13052, "only {$natural:1} order allowed for tailable cursor", order == nat1 );
                     }
                 }

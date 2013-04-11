@@ -208,7 +208,7 @@ namespace mongo {
 
         ~IndexCursor();
 
-        bool ok() { return !_currKey.isEmpty(); }
+        bool ok() { return _ok; }
         bool advance();
         bool supportGetMore() { return true; }
 
@@ -264,16 +264,14 @@ namespace mongo {
         void init( const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
         void init( const shared_ptr< FieldRangeVector > &_bounds, int singleIntervalLimit, int _direction );
 
-        /** Set the current key/pk/obj to empty, marking the cursor has exhausted */
-        void exhausted();
-        /** Get the current key/pk/obj from the row buffer and set _currKey/PK/Obj */
-        void getCurrentFromBuffer();
-
         /** Initialize the internal DBC */
         void initializeDBC();
         void prelockRange(const BSONObj &startKey, const BSONObj &endKey);
+        /** Get the current key/pk/obj from the row buffer and set _currKey/PK/Obj */
+        void getCurrentFromBuffer();
         /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */
         void _advance();
+        bool _advanceTailable();
 
         /** determine how many rows the next getf should bulk fetch */
         int getf_fetch_count();
@@ -311,7 +309,10 @@ namespace mongo {
         int _numWanted;
 
         IndexDetails::Cursor _cursor;
+        // An exhausted cursor has no more rows and is done iterating,
+        // unless it's tailable. If so, it may try to read more rows.
         bool _tailable;
+        bool _ok;
 
         // The current key, pk, and obj for this cursor. Keys are stored
         // in a compacted format and built into bson format, so we reuse

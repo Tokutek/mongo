@@ -42,10 +42,11 @@
 #include "mongo/scripting/engine.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/db_flags.h"
+#include "mongo/db/repl/rs_optime.h"
 
 namespace mongo {
 
-    NamespaceIndex* nsindex(const char *ns) {
+    NamespaceIndex *nsindex(const char *ns) {
         Database *database = cc().database();
         verify( database );
         DEV {
@@ -61,11 +62,11 @@ namespace mongo {
         return &database->namespaceIndex;
     }
 
-    NamespaceDetails* nsdetails(const char *ns) {
+    NamespaceDetails *nsdetails(const char *ns) {
         return nsindex(ns)->details(ns);
     }
 
-    NamespaceDetails* nsdetails_maybe_create(const char *ns, BSONObj options) {
+    NamespaceDetails *nsdetails_maybe_create(const char *ns, BSONObj options) {
         NamespaceIndex *ni = nsindex(ns);
         if (!ni->allocated()) {
             // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
@@ -170,6 +171,16 @@ namespace mongo {
         }
     };
 
+    class OplogCollection : public IndexedCollection {
+    public:
+        OplogCollection(const string &ns, const BSONObj &options) :
+            IndexedCollection(ns, options) {
+        } 
+        OplogCollection(const BSONObj &serialized) :
+            IndexedCollection(serialized) {
+        }
+    };
+
     struct getfExtra {
         getfExtra(BSONObj &k) : key(k) {
         }
@@ -226,12 +237,12 @@ namespace mongo {
         AtomicWord<long long> _nextPK;
     };
 
-    class SystemCatalog : public NaturalOrderCollection {
+    class SystemCatalogCollection : public NaturalOrderCollection {
     public:
-        SystemCatalog(const string &ns, const BSONObj &options) :
+        SystemCatalogCollection(const string &ns, const BSONObj &options) :
             NaturalOrderCollection(ns, options) {
         }
-        SystemCatalog(const BSONObj &serialized) :
+        SystemCatalogCollection(const BSONObj &serialized) :
             NaturalOrderCollection(serialized) {
         }
 
@@ -333,6 +344,21 @@ namespace mongo {
         bool isCapped() const {
             dassert(_options["capped"].trueValue());
             return true;
+        }
+
+        BSONObj maxSafeKey() const {
+            long long nextPK = _nextPK.load();
+            if (nextPK == 0) {
+                // empty collection, no safe keys
+                return minKey;
+            } else {
+                // TODO: This isn't right.
+                // It's good enough for one thread, and no aborts.
+                long long safeKey = nextPK - 1;
+                BSONObjBuilder b;
+                b.append("", safeKey);
+                return b.obj();
+            }
         }
 
         void insertObject(BSONObj &obj, uint64_t flags) {
@@ -479,6 +505,10 @@ namespace mongo {
         return str::contains(ns, ".system.indexes") || str::contains(ns, ".system.namespaces");
     }
 
+    static bool isOplog(const string &ns) {
+        return str::equals(ns.c_str(), rsoplog);
+    }
+
     NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
         _ns(ns),
         _options(options.copy()),
@@ -498,8 +528,10 @@ namespace mongo {
         addNewNamespaceToCatalog(ns, !options.isEmpty() ? &options : NULL);
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
-        if (isSystemCatalog(ns)) {
-            return shared_ptr<NamespaceDetails>(new SystemCatalog(ns, options));
+        if (isOplog(ns)) {
+            return shared_ptr<NamespaceDetails>(new OplogCollection(ns, options));
+        } else if (isSystemCatalog(ns)) {
+            return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(ns, options));
         } else if (options["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(ns, options));
         } else {
@@ -522,8 +554,10 @@ namespace mongo {
         }
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
-        if (isSystemCatalog(serialized["ns"])) {
-            return shared_ptr<NamespaceDetails>(new SystemCatalog(serialized));
+        if (isOplog(serialized["ns"])) {
+            return shared_ptr<NamespaceDetails>(new OplogCollection(serialized));
+        } else if (isSystemCatalog(serialized["ns"])) {
+            return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(serialized));
         } else if (serialized["options"]["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(serialized));
         } else {
