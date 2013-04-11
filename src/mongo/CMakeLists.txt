@@ -694,6 +694,20 @@ if (BUILD_TESTING)
   #target_link_libraries(authorization_session_test authmocks)
 
   foreach (test
+      field_checker_test
+      )
+    add_executable(${test} db/ops/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME simple_ops_unittest_deps
+      unittest_main
+      update
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
       path_support_test
       )
     add_executable(${test} db/ops/${test})
@@ -702,6 +716,7 @@ if (BUILD_TESTING)
       COMBINED_LIBNAME ops_unittest_deps
       unittest_main
       update
+      mutable_bson_test_utils
       unittest_crutch
       ${TOKUMX_SSL_LIBRARIES}
       )
@@ -1067,6 +1082,7 @@ if (BUILD_TESTING)
   endforeach ()
 
   foreach (test
+      field_checker_test
       path_support_test
       )
     add_mongo_test(db/ops ${test} ${test})
