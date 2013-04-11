@@ -346,6 +346,21 @@ namespace mongo {
             return true;
         }
 
+        BSONObj maxSafeKey() const {
+            long long nextPK = _nextPK.load();
+            if (nextPK == 0) {
+                // empty collection, no safe keys
+                return minKey;
+            } else {
+                // TODO: This isn't right.
+                // It's good enough for one thread, and no aborts.
+                long long safeKey = nextPK - 1;
+                BSONObjBuilder b;
+                b.append("", safeKey);
+                return b.obj();
+            }
+        }
+
         void insertObject(BSONObj &obj, uint64_t flags) {
             obj = addIdField(obj);
             CappedInsertIntent intent(this, obj);

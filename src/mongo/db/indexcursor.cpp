@@ -198,6 +198,7 @@ namespace mongo {
         _numWanted(numWanted),
         _cursor(_idx),
         _tailable(false),
+        _ok(false),
         _getf_iteration(0)
     {
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
@@ -219,11 +220,14 @@ namespace mongo {
         _numWanted(numWanted),
         _cursor(_idx),
         _tailable(false),
+        _ok(false),
         _getf_iteration(0)
     {
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
         _boundsIterator->prepDive();
+        _startKey = _bounds->startKey();
+        _endKey = _bounds->endKey();
         initializeDBC();
     }
 
@@ -255,24 +259,15 @@ namespace mongo {
         if (_d != NULL && _idx != NULL) {
             // Don't prelock point ranges.
             if ( _bounds != NULL) {
-                // Try skipping forward in the key space using the bounds iterator
-                // and the proposed startKey. If skipping wasn't necessary, then
-                // use that start key to set our position and reset the iterator.
-                const BSONObj startKey = _bounds->startKey();
-                const BSONObj endKey = _bounds->endKey();
-                // Don't prelock ranges when there's a field range vector until we
-                // know how to isolate the start/end keys for the current interval.
-                if ( false && startKey != endKey ) {
-                    prelockRange( startKey, endKey );
-                }
-                const int r = skipToNextKey( startKey );
+                // TODO: Prelock the current interval.
+                const int r = skipToNextKey( _startKey );
                 if ( r == -1 ) {
                     // The bounds iterator suggests _bounds->startKey() is within
                     // the current interval, so that's a good place to start. We
                     // need to prepDive() on the iterator to reset its current
                     // state so that further calls to skipToNextKey work properly.
                     _boundsIterator->prepDive();
-                    findKey( startKey );
+                    findKey( _startKey );
                 }
             } else {
                 // Seek to an initial key described by _startKey 
@@ -335,12 +330,6 @@ namespace mongo {
         setPosition(key, isSecondary ? pk : BSONObj());
     };
 
-    void IndexCursor::exhausted() {
-        _currKey = BSONObj();
-        _currPK = BSONObj();
-        _currObj = BSONObj();
-    }
-
     void IndexCursor::getCurrentFromBuffer() {
         storage::Key sKey;
         _buffer.current(sKey, _currObj);
@@ -376,10 +365,9 @@ namespace mongo {
         uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
         uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
         _getf_iteration++;
-        if (extra.rows_fetched > 0) {
+        _ok = extra.rows_fetched > 0 ? true : false;
+        if (ok()) {
             getCurrentFromBuffer();
-        } else {
-            exhausted();
         }
         TOKULOG(3) << "setPosition hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
     }
@@ -387,6 +375,13 @@ namespace mongo {
     // Check the current key with respect to our key bounds, whether
     // it be provided by independent field ranges or by start/end keys.
     bool IndexCursor::checkCurrentAgainstBounds() {
+
+        // This is not the right place to check index bounds for a tailable cursor.
+        // We need to ensure that tailable cursors respect _endKey and never
+        // iterate passed it, as opposed to regular cursors which may read
+        // passed _endKey but not return it via currKey()/current() etc.
+        dassert(!tailable());
+
         if ( _bounds == NULL ) {
             checkEnd();
             if ( ok() ) {
@@ -438,7 +433,7 @@ namespace mongo {
         int skipPrefixIndex = _boundsIterator->advance( currentKey );
         if ( skipPrefixIndex == -2 ) { 
             // We are done iterating completely.
-            exhausted();
+            _ok = false;
             return -2;
         }
         else if ( skipPrefixIndex == -1 ) { 
@@ -535,15 +530,14 @@ again:      while ( !allInclusive && ok() ) {
 
     // Check if the current key is beyond endKey.
     void IndexCursor::checkEnd() {
-        if ( _currKey.isEmpty() ) {
+        if ( !ok() ) {
             return;
         }
         if ( !_endKey.isEmpty() ) {
             dassert( _d != NULL &&_idx != NULL );
-            const int cmp = sgn( _endKey.woCompare( _currKey, _ordering ) );
-            if ( ( cmp != 0 && cmp != _direction ) ||
-                    ( cmp == 0 && !_endKeyInclusive ) ) {
-                exhausted();
+            const int c = sgn( _endKey.woCompare( _currKey, _ordering ) );
+            if ( (c != 0 && c != _direction) || (c == 0 && !_endKeyInclusive) ) {
+                _ok = false;
                 TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
             }
         }
@@ -571,38 +565,62 @@ again:      while ( !allInclusive && ok() ) {
 
     void IndexCursor::_advance() {
         // namespace might be null if we're tailing an empty collection.
-        if ( _d != NULL && _idx != NULL ) {
-            bool ok = _buffer.next();
-            if ( !ok ) {
-                ok = fetchMoreRows();
+            _ok = _buffer.next();
+            if ( !ok() ) {
+                _ok = fetchMoreRows();
             }
-            if ( ok ) {
+            if ( ok() ) {
                 getCurrentFromBuffer();
-            } else {
-                exhausted();
             }
             TOKULOG(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
+    }
+
+    // pre/post condition: the current key is not passed the end key
+    bool IndexCursor::_advanceTailable() {
+        dassert( _currKey <= _endKey );
+        if ( _d != NULL && _idx != NULL ) {
+            if ( !ok() ) {
+                _endKey = _d->maxSafeKey();
+            }
+            if ( _currKey < _endKey ) {
+                _advance();
+                dassert( ok() );
+            } else {
+                // we cannot read passed _endKey. Mark the cursor as
+                // exhausted so on next advance() we read an updated
+                // maxSafeKey value and try to get more rows.
+                _ok = false;
+            }
         } else {
             // new inserts will not be read by this cursor, because there was no
             // namespace details or index at the time of creation. we can either
             // accept this caveat or try to fix it. at least emit a warning.
-            if ( tailable() ) {
-                problem() 
-                    << "Attempted to advance a tailable cursor on an empty collection! " << endl
-                    << "The current implementation cannot read new writes from any cursor " << endl
-                    << "created when the collection was empty. Try again with a new cursor " << endl
-                    << "when the collection is non-empty." << endl;
-            }
+            problem() 
+                << "Attempted to advance a tailable cursor on an empty collection! " << endl
+                << "The current implementation cannot read new writes from any cursor " << endl
+                << "created when the collection was empty. Try again with a new cursor " << endl
+                << "when the collection is non-empty." << endl;
+            dassert( !ok() );
         }
+        dassert( _currKey <= _endKey );
+        return ok();
     }
 
     bool IndexCursor::advance() {
         killCurrentOp.checkForInterrupt();
-        if ( _currKey.isEmpty() && !tailable() ) {
-            return false;
+        if ( tailable() ) {
+            // Tailable cursors have their own advance strategy.
+            return _advanceTailable();
         } else {
-            _advance();
-            return checkCurrentAgainstBounds();
+            if ( ok() && _d != NULL && _idx != NULL ) {
+                // Advance one row further, and then check if we've went out of bounds.
+                _advance();
+                return checkCurrentAgainstBounds();
+            } else {
+                // Exhausted cursors (or "empty" cursors (ie: _idx == NULL)) that
+                // are not tailable never advance.
+                return false;
+            }
         }
     }
 
@@ -614,17 +632,17 @@ again:      while ( !allInclusive && ok() ) {
             verify( _idx != NULL );
             bool found = _d->findByPK( _currPK, _currObj );
             if ( !found ) {
-                // If we didn't find the associated object, we must be a non read-only
-                // cursor whose context deleted the current pk. In this case, we are
-                // allowed to advance and try again exactly once. If we still can't
-                // find the object, we're in trouble.
-                //verify( !_readOnly );
-                // TODO: (John), find a better invariant than above
+                // If we didn't find the associated object, we must be either:
+                // - a snapshot transaction whose context deleted the current pk
+                // - a read uncommitted cursor with stale data
+                // In either case, we may advance and try again exactly once.
                 TOKULOG(4) << "current() did not find associated object for pk " << _currPK << endl;
                 advance();
                 if ( ok() ) {
                     found = _d->findByPK( _currPK, _currObj );
-                    verify( found );
+                    uassert( 16473, str::stream()
+                                << toString() << ": could not find associated document with pk "
+                                << _currPK << ", index key " << _currKey, found );
                 }
             }
         }
