@@ -604,7 +604,7 @@ namespace mongo {
         if ( _planPolicy.permitOptimalNaturalPlan() && _query.isEmpty() && _order.isEmpty() ) {
             // Table-scan
             NamespaceDetails *d = nsdetails(_ns);
-            return shared_ptr<Cursor>(new BasicCursor(d));
+            return shared_ptr<Cursor>( BasicCursor::make(d) );
         }
         if ( _planPolicy.permitOptimalIdPlan() && isSimpleIdQuery( _query ) ) {
             Database *database = cc().database();
@@ -615,7 +615,7 @@ namespace mongo {
                 if ( idxNo >= 0 ) {
                     IndexDetails& i = d->idx( idxNo );
                     BSONObj key = i.getKeyFromQuery( _query );
-                    return shared_ptr<Cursor>( new IndexCursor( d, &i, key, key, true, 1, numWanted ) );
+                    return shared_ptr<Cursor>( new IndexCursor( d, i, key, key, true, 1, numWanted ) );
                 }
             }
         }

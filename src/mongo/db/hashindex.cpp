@@ -116,7 +116,7 @@ namespace mongo {
             if ( ! i->equality() ){
                 const shared_ptr< IndexCursor > exhaustiveCursor(
                         new IndexCursor( d,
-                                         idx,
+                                         *idx,
                                          BSON( "" << MINKEY ) ,
                                          BSON( "" << MAXKEY ) ,
                                          true ,
@@ -138,7 +138,7 @@ namespace mongo {
 
         const shared_ptr< IndexCursor > cursor(
                 new IndexCursor( d,
-                                 idx,
+                                 *idx,
                                  newVector,
                                  false,
                                  1,

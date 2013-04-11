@@ -108,7 +108,7 @@ namespace mongo {
                 max = Helpers::modifiedRangeBound( max , idx->keyPattern() , -1 );
             }
 
-            IndexCursor * idxCursor = new IndexCursor( d , idx , min , max , false , 1 );
+            IndexCursor *idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
             shared_ptr<Cursor> c( idxCursor );
             auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
             if ( ! cc->ok() ) {
@@ -315,7 +315,7 @@ namespace mongo {
                 long long currCount = 0;
                 long long numChunks = 0;
                 
-                IndexCursor *idxCursor = new IndexCursor( d , idx , min , max , false , 1 );
+                IndexCursor *idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
                 shared_ptr<Cursor> c( idxCursor );
                 auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
                 if ( ! cc->ok() ) {
@@ -368,7 +368,7 @@ namespace mongo {
                     currCount = 0;
                     log() << "splitVector doing another cycle because of force, keyCount now: " << keyCount << endl;
                     
-                    idxCursor = new IndexCursor( d , idx , min , max , false , 1 );
+                    idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
                     c.reset( idxCursor );
                     cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
                 }

@@ -147,7 +147,7 @@ namespace mongo {
 
         // finds an objectl by _id field, which in the case of indexed collections
         // is the primary key.
-        bool findById(const BSONObj &query, BSONObj &result) {
+        bool findById(const BSONObj &query, BSONObj &result) const {
             dassert(query["_id"].ok());
             return findByPK(query["_id"].wrap(""), result);
         }
@@ -209,7 +209,7 @@ namespace mongo {
             // the next PK, if it exists, is the last key + 1
             int r;
             IndexDetails &pkIdx = getPKIndex();
-            IndexDetails::Cursor c(&pkIdx);
+            IndexDetails::Cursor c(pkIdx);
             DBC *cursor = c.dbc();
 
             BSONObj key = BSONObj();
@@ -321,7 +321,7 @@ namespace mongo {
             //   so bringing it all into memory now helps warmup.
             long long n = 0;
             long long size = 0;
-            shared_ptr<Cursor> c( new BasicCursor(this) );
+            scoped_ptr<Cursor> c( BasicCursor::make(this) );
             for ( ; c->ok(); n++, c->advance()) {
                 size += c->current().objsize();
             }
@@ -331,7 +331,7 @@ namespace mongo {
             verify((_currentSize.load() > 0) == (_currentObjects.load() > 0));
         }
 
-        void fillSpecificStats(BSONObjBuilder *result, int scale) {
+        void fillSpecificStats(BSONObjBuilder *result, int scale) const {
             result->appendBool("capped", true);
             if (_maxObjects) {
                 result->appendNumber("max", _maxObjects);
@@ -373,7 +373,7 @@ namespace mongo {
                 long long n = _currentObjects.load();
                 long long size = _currentSize.load();
                 if (isGorged(n, size)) {
-                    scoped_ptr<Cursor> c( new BasicCursor(this) );
+                    scoped_ptr<Cursor> c( BasicCursor::make(this) );
                     // Delete older objects until we've made enough room for
                     // the new one.
                     // If other threads are trying to insert concurrently, we will do some work on their behalf (until !isGorged).
@@ -469,7 +469,7 @@ namespace mongo {
         SimpleMutex _deleteMutex;
     };
 
-    BSONObj NamespaceDetails::indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) {
+    BSONObj NamespaceDetails::indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) const {
         // Can only create the _id and $_ indexes internally.
         dassert(keyPattern.nFields() == 1);
         dassert(keyPattern["_id"].ok() || keyPattern["$_"].ok());
@@ -598,12 +598,12 @@ namespace mongo {
         return 0;
     }
 
-    bool NamespaceDetails::findByPK(const BSONObj &key, BSONObj &result) {
+    bool NamespaceDetails::findByPK(const BSONObj &key, BSONObj &result) const {
         int r;
 
         // get a cursor over the primary key index
         IndexDetails &pkIdx = getPKIndex();
-        IndexDetails::Cursor c(&pkIdx);
+        IndexDetails::Cursor c(pkIdx);
         DBC *cursor = c.dbc();
 
         // create an index key
@@ -872,8 +872,8 @@ namespace mongo {
         return true;
     }
 
-    void NamespaceDetails::fillIndexStats(std::vector<IndexStats> &indexStats) {
-        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+    void NamespaceDetails::fillIndexStats(std::vector<IndexStats> &indexStats) const {
+        for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             IndexDetails *index = it->get();
             IndexStats stats(*index);
             indexStats.push_back(stats);
@@ -881,7 +881,7 @@ namespace mongo {
     }
 
     void NamespaceDetails::optimize() {
-        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+        for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             IndexDetails *index = it->get();
             index->optimize();
         }
@@ -890,7 +890,7 @@ namespace mongo {
     void NamespaceDetails::fillCollectionStats(
         struct NamespaceDetailsAccStats* accStats, 
         BSONObjBuilder* result, 
-        int scale) 
+        int scale) const  
     {
         uint32_t numIndexes = nIndexes();
         accStats->nIndexes = numIndexes;

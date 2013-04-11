@@ -199,12 +199,14 @@ namespace mongo {
         // If numWanted is > 0, there exists a limit clause, so don't prefetch.
 
         // Create a cursor over a specific start, end key range.
-        IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
-                const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction, int numWanted = 0);
+        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+                     const BSONObj &startKey, const BSONObj &endKey,
+                     bool endKeyInclusive, int direction, int numWanted = 0);
 
         // Create a cursor over a set of one or more field ranges.
-        IndexCursor( NamespaceDetails *d, const IndexDetails *idx,
-                const shared_ptr< FieldRangeVector > &bounds, int singleIntervalLimit, int direction, int numWanted = 0);
+        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+                     const shared_ptr< FieldRangeVector > &bounds,
+                     int singleIntervalLimit, int direction, int numWanted = 0);
 
         ~IndexCursor();
 
@@ -235,7 +237,7 @@ namespace mongo {
 
         BSONObj currPK() const { return _currPK; }
         BSONObj currKey() const { return _currKey; }
-        BSONObj indexKeyPattern() const { return _idx != NULL ? _idx->keyPattern() : BSONObj(); }
+        BSONObj indexKeyPattern() const { return _idx.keyPattern(); }
 
         BSONObj current();
         string toString() const;
@@ -289,10 +291,8 @@ namespace mongo {
         bool skipOutOfRangeKeysAndCheckEnd();
         void checkEnd();
 
-        // If the namespace is does not exist and needs to be treated as empty,
-        // then both _d and _idx will be null.
-        NamespaceDetails * const _d;
-        const IndexDetails *_idx;
+        NamespaceDetails *const _d;
+        const IndexDetails &_idx;
         const Ordering _ordering;
 
         set<BSONObj> _dups;
@@ -336,13 +336,15 @@ namespace mongo {
      */
     class BasicCursor : public Cursor {
     public:
-        BasicCursor(NamespaceDetails *d, int direction = 1);
-        ~BasicCursor() { }
+        static Cursor *make( NamespaceDetails *d, int direction = 1 );
+
         bool ok() { return _c.ok(); }
         BSONObj current() { return _c.current(); }
         BSONObj currPK() const { return _c.currPK(); }
         bool advance() { return _c.advance(); }
-        virtual string toString() const { return "BasicCursor"; }
+        virtual string toString() const {
+            return _direction > 0 ? "BasicCursor" : "ReverseCursor";
+        }
         virtual void setTailable() { _c.setTailable(); }
         virtual bool tailable() { return _c.tailable(); }
         virtual bool getsetdup(const BSONObj &pk) { return false; }
@@ -360,17 +362,33 @@ namespace mongo {
         }
         virtual long long nscanned() const { return _c.nscanned(); }
 
+    protected:
+        BasicCursor( NamespaceDetails *d, int direction = 1 );
+
+        class DummyCursor : public Cursor {
+        public:
+            DummyCursor( int direction = 1 ) : _direction(direction) { }
+            bool ok() { return false; }
+            BSONObj current() { return BSONObj(); }
+            bool advance() { return false; }
+            virtual string toString() const {
+                return _direction > 0 ? "BasicCursor" : "ReverseCursor";
+            }
+            virtual bool getsetdup(const BSONObj &pk) { return false; }
+            virtual bool isMultiKey() const { return false; }
+            virtual bool modifiedKeys() const { return false; }
+            virtual bool supportGetMore() { return true; }
+            virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { }
+            virtual void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) { }
+            virtual long long nscanned() const { return 0; }
+
+        private:
+            int _direction;
+        };
+
     private:
         IndexCursor _c;
-    };
-
-    /* used for order { $natural: -1 } */
-    class ReverseCursor : public BasicCursor {
-    public:
-        ReverseCursor(NamespaceDetails *nsd)
-            : BasicCursor(nsd, -1) {
-        }
-        virtual string toString() const { return "ReverseCursor"; }
+        int _direction;
     };
 
 } // namespace mongo
