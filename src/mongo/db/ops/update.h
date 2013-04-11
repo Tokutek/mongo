@@ -42,6 +42,21 @@ namespace mongo {
         }
     };
 
+    
+    struct LogOpUpdateDetails {
+        bool logop;
+        const char* ns;
+        bool fromMigrate;
+    };
+    void updateOneObject(
+        NamespaceDetails *d, 
+        NamespaceDetailsTransient *nsdt, 
+        const BSONObj &pk, 
+        const BSONObj &oldObj, 
+        const BSONObj &newObj, 
+        struct LogOpUpdateDetails* loud
+        );
+
     /* returns true if an existing object was updated, false if no existing object was found.
        multi - update multiple objects - mostly useful with things like $set
        su - allow access to system namespaces (super user)
