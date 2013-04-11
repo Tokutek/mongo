@@ -52,6 +52,10 @@ namespace mongo {
 
     bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication);
 
+    // used for operations that are supposed to create the namespace if it does not exist,
+    // such as insert, some updates, and create index
+    NamespaceDetails* getAndMaybeCreateNS(const char *ns, bool logop);
+
     void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system = false);
 
     void dropDatabase(const string &db);

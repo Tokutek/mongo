@@ -31,7 +31,7 @@
 
 namespace mongo {
 
-    static int handle_system_collection_insert(const char *ns, const BSONObj &obj) {
+    static int handle_system_collection_insert(const char *ns, const BSONObj &obj, bool logop) {
         // Trying to insert into a system collection.  Fancy side-effects go here:
         // TODO: see insert_checkSys
         if (mongoutils::str::endsWith(ns, ".system.indexes")) {
@@ -39,7 +39,7 @@ namespace mongo {
             // { _id: ObjectId('511d34f6d3080c48017a14d0'), ns: "test.leif", key: { a: -1.0 }, name: "a_-1", unique: true }
             const string &coll = obj["ns"].String();
             const bool collIsNew = nsdetails(coll.c_str()) == NULL;
-            NamespaceDetails *details = nsdetails_maybe_create(coll.c_str());
+            NamespaceDetails *details = getAndMaybeCreateNS(ns, logop);
             BSONObj key = obj["key"].Obj();
             int i = details->findIndexByKeyPattern(key);
             if (i >= 0) {
@@ -83,29 +83,12 @@ namespace mongo {
             uassert(16467, "cannot insert into system in a multi statement transaction", (cc().txnStackSize() == 1));
             uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
             massert(16462, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
-            if (handle_system_collection_insert(ns, objs[0]) != 0) {
+            if (handle_system_collection_insert(ns, objs[0], logop) != 0) {
                 return;
             }
         }
         
-        NamespaceDetails *details = NULL;
-        // if the txn stack size is greater than 1, we cannot be doing
-        // fileops. Fileops must happen in the context of a single
-        // transaction.
-        details = nsdetails(ns);
-        if (details == NULL) {
-            if (cc().txnStackSize() > 1) {
-                uasserted(16468, "Cannot insert into a non-existent collection when running a multi-statement transaction");
-            }
-            else {
-                string err;
-                BSONObj options;
-                bool created = userCreateNS(ns, options, err, logop);
-                uassert(16473, "failed to create collection", created);
-                details = nsdetails(ns);
-                uassert(16474, "failed to get collection after creating", details);
-            }
-        }
+        NamespaceDetails *details = getAndMaybeCreateNS(ns, logop);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         for (size_t i = 0; i < objs.size(); i++) {
             const BSONObj &obj = objs[i];

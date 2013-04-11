@@ -194,24 +194,7 @@ namespace mongo {
 
         debug.updateobj = updateobj;
 
-        NamespaceDetails *d = NULL;
-        // if the txn stack size is greater than 1, we cannot be doing
-        // fileops. Fileops must happen in the context of a single
-        // transaction.
-        d = nsdetails(ns);
-        if (d == NULL) {
-            if (cc().txnStackSize() > 1) {
-                uasserted(16475, "Cannot insert into a non-existent collection when running a multi-statement transaction");
-            }
-            else {
-                string err;
-                BSONObj options;
-                bool created = userCreateNS(ns, options, err, logop);
-                uassert(16476, "failed to create collection during update", created);
-                d = nsdetails(ns);
-                uassert(16477, "failed to get collection after creating during update", d);
-            }
-        }
+        NamespaceDetails *d = getAndMaybeCreateNS(ns, logop);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
 
         auto_ptr<ModSet> mods;
