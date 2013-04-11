@@ -237,12 +237,15 @@ namespace mongo {
     // takes an entry that was written _logTransactionOps
     // and applies them to collections
     void applyTransactionFromOplog(BSONObj entry) {
-        std::vector<BSONElement> ops = entry["ops"].Array();
-        const size_t numOps = ops.size();
+        bool transactionAlreadyApplied = entry["a"].Bool();
+        if (!transactionAlreadyApplied) {
+            std::vector<BSONElement> ops = entry["ops"].Array();
+            const size_t numOps = ops.size();
 
-        for(size_t i = 0; i < numOps; ++i) {
-            BSONElement* curr = &ops[i];
-            OpLogHelpers::applyOperationFromOplog(curr->Obj());
+            for(size_t i = 0; i < numOps; ++i) {
+                BSONElement* curr = &ops[i];
+                OpLogHelpers::applyOperationFromOplog(curr->Obj());
+            }
         }
     }
 
