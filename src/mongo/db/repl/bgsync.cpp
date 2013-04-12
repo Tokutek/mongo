@@ -33,7 +33,6 @@ namespace mongo {
 
     BackgroundSync::BackgroundSync() : _buffer(256*1024*1024, &getSize),
                                        _lastOpTimeFetched(0, 0),
-                                       _lastH(0),
                                        _pause(true),
                                        _currentSyncTarget(NULL),
                                        _consumedOpTime(0, 0) {
@@ -206,7 +205,6 @@ namespace mongo {
                     // update counters
                     _queueCounter.waitTime += timer.millis();
                     _queueCounter.numElems++;
-                    _lastH = o["h"].numberLong();
                     _lastOpTimeFetched = o["ts"]._opTime();
                 }
             } // end while
@@ -355,6 +353,9 @@ namespace mongo {
 
         BSONObj o = r.nextSafe();
         OpTime ts = o["ts"]._opTime();
+        ::abort();
+        // aborting because we used to have a reference to _lastH here
+        /*
         long long h = o["h"].numberLong();
         if( ts != _lastOpTimeFetched || h != _lastH ) {
             log() << "replSet our last op time fetched: " << _lastOpTimeFetched.toStringPretty() << rsLog;
@@ -363,6 +364,7 @@ namespace mongo {
             //theReplSet->syncRollback(r);
             return true;
         }
+        */
 
         return false;
     }
@@ -379,7 +381,6 @@ namespace mongo {
             _pause = true;
             _currentSyncTarget = NULL;
             _lastOpTimeFetched = OpTime(0,0);
-            _lastH = 0;
             _queueCounter.numElems = 0;
         }
 
@@ -400,8 +401,7 @@ namespace mongo {
 
         // reset _last fields with current data
         _lastOpTimeFetched = theReplSet->lastOpTimeWritten;
-        _lastH = theReplSet->lastH;
 
-        LOG(1) << "replset bgsync fetch queue set to: " << _lastOpTimeFetched << " " << _lastH << rsLog;
+        LOG(1) << "replset bgsync fetch queue set to: " << _lastOpTimeFetched << " " << rsLog;
    }
 } // namespace mongo

@@ -381,7 +381,6 @@ namespace mongo {
         _cfg = 0;
         memset(_hbmsg, 0, sizeof(_hbmsg));
         strcpy( _hbmsg , "initial startup" );
-        lastH = 0;
         changeState(MemberState::RS_STARTUP);
 
         _seeds = &replSetCmdline.seeds;
@@ -450,7 +449,6 @@ namespace mongo {
             gtidManager = new GTIDManager(lastGTID);
             setTxnGTIDManager(gtidManager);
             
-            lastH = o["h"].numberLong();
             lastOpTimeWritten = o["ts"]._opTime();
             uassert(13290, "bad replSet oplog entry?", quiet || !lastOpTimeWritten.isNull());
         }

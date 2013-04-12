@@ -101,13 +101,7 @@ namespace mongo {
         long long hashNew;
         if( theReplSet ) {
             //massert(13312, "replSet error : logOp() but not primary?", theReplSet->box.getState().primary());
-            hashNew = (theReplSet->lastH * 131 + ts.asLL()) * 17 + theReplSet->selfId();
             theReplSet->lastOpTimeWritten = ts;
-            theReplSet->lastH = hashNew;
-        }
-        else {
-            // must be initiation
-            hashNew = 0;
         }
 
         BSONObjBuilder b;

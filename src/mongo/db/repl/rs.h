@@ -329,7 +329,6 @@ namespace mongo {
 
         OpTime lastOpTimeWritten;
         GTIDManager* gtidManager;
-        long long lastH; // hash we use to make sure we are reading the right flow of ops and aren't on an out-of-date "fork"
         bool forceSyncFrom(const string& host, string& errmsg, BSONObjBuilder& result);
 
         /**
