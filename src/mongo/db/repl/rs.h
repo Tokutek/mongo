@@ -470,7 +470,6 @@ namespace mongo {
 
         int _maintenanceMode; // if we should stay in recovering state
     public:
-        // this is called from within a writelock in logOpRS
         unsigned selfId() const { return _id; }
         Manager *mgr;
         GhostSync *ghost;
