@@ -1775,11 +1775,12 @@ namespace mongo {
         cc().setTokuCommandSettings(settings);
         
         scoped_ptr<Client::Transaction> transaction;
-        if (c->needsTxn()) {
-            transaction.reset(new Client::Transaction(c->txnFlags()));
-        }
         if ( c->locktype() == Command::NONE ) {
             verify( !c->lockGlobally() );
+
+            if (c->needsTxn()) {
+                transaction.reset(new Client::Transaction(c->txnFlags()));
+            }
 
             // we also trust that this won't crash
             retval = true;
@@ -1808,6 +1809,10 @@ namespace mongo {
             // Read contexts use a snapshot transaction and are marked as read only.
             Client::ReadContext ctx( ns , dbpath, c->requiresAuth() ); // read locks
 
+            if (c->needsTxn()) {
+                transaction.reset(new Client::Transaction(c->txnFlags()));
+            }
+
             client.curop()->ensureStarted();
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
         }
@@ -1826,6 +1831,11 @@ namespace mongo {
             scoped_ptr<Lock::ScopedLock> lk( global ? 
                                              static_cast<Lock::ScopedLock*>( new Lock::GlobalWrite() ) :
                                              static_cast<Lock::ScopedLock*>( new Lock::DBWrite( dbname ) ) );
+
+            if (c->needsTxn()) {
+                transaction.reset(new Client::Transaction(c->txnFlags()));
+            }
+
             client.curop()->ensureStarted();
             Client::Context tc(dbname, dbpath, c->requiresAuth());
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
