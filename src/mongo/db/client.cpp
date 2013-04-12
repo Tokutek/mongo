@@ -174,7 +174,7 @@ namespace mongo {
                 c.reset( new Context(path, ns, db, doauth) );
                 try {
                     nsdetails(ns.c_str());
-                } catch (NamespaceIndex::ReadLockedDuringFileOps &e) {
+                } catch (RetryWithWriteLock &e) {
                     lk.reset(0);
                     {
                         Lock::GlobalWrite w;

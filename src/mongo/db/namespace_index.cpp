@@ -178,7 +178,7 @@ namespace mongo {
         BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
-        int r = nsdb->getf_set(nsdb, cc().txn().db_txn(), 0, &ndbt, getf_serialized, &serialized);
+        int r = nsdb->getf_set(nsdb, NULL, 0, &ndbt, getf_serialized, &serialized);
         verify(r == 0);
 
         shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized );
