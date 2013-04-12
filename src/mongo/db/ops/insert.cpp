@@ -87,31 +87,42 @@ namespace mongo {
                 return;
             }
         }
-        
-        NamespaceDetails *details = getAndMaybeCreateNS(ns, logop);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
-        for (size_t i = 0; i < objs.size(); i++) {
-            const BSONObj &obj = objs[i];
-            try {
-                uassert( 10059 , "object to insert too large", obj.objsize() <= BSONObjMaxUserSize);
-                BSONObjIterator i( obj );
-                while ( i.more() ) {
-                    BSONElement e = i.next();
-                    uassert( 13511 , "document to insert can't have $ fields" , e.fieldName()[0] != '$' );
-                }
-                uassert( 16440 ,  "_id cannot be an array", obj["_id"].type() != Array );
 
-                BSONObj objModified = obj;
-                BSONElementManipulator::lookForTimestamps(objModified);
-                insertOneObject(details, nsdt, objModified, flags); // may add _id field
-                if (logop) {
-                    OpLogHelpers::logInsert(ns, objModified, &cc().txn());
-                }
-            } catch (const UserException &) {
-                if (!keepGoing || i == objs.size() - 1) {
-                    throw;
+        const bool collIsNew = nsdetails(ns) == NULL;
+        NamespaceDetails *details = getAndMaybeCreateNS(ns, logop);
+        try {
+            NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+            for (size_t i = 0; i < objs.size(); i++) {
+                const BSONObj &obj = objs[i];
+                try {
+                    uassert( 10059 , "object to insert too large", obj.objsize() <= BSONObjMaxUserSize);
+                    BSONObjIterator i( obj );
+                    while ( i.more() ) {
+                        BSONElement e = i.next();
+                        uassert( 13511 , "document to insert can't have $ fields" , e.fieldName()[0] != '$' );
+                    }
+                    uassert( 16440 ,  "_id cannot be an array", obj["_id"].type() != Array );
+
+                    BSONObj objModified = obj;
+                    BSONElementManipulator::lookForTimestamps(objModified);
+                    insertOneObject(details, nsdt, objModified, flags); // may add _id field
+                    if (logop) {
+                        OpLogHelpers::logInsert(ns, objModified, &cc().txn());
+                    }
+                } catch (const UserException &) {
+                    if (!keepGoing || i == objs.size() - 1) {
+                        throw;
+                    }
                 }
             }
+        }
+        catch (DBException &e) {
+            if (collIsNew) {
+                // We created the collection above just for this insert, but the insert failed, so we should also roll back the collection creation.
+                // This has some transaction-ignorant pieces in the NamespaceIndex so we have to manually undo them here.
+                nsindex(ns)->kill_ns(ns);
+            }
+            throw;
         }
     }
 
@@ -120,5 +131,5 @@ namespace mongo {
         objs[0] = obj;
         insertObjects(ns, objs, false, flags, logop);
     }
-    
+
 } // namespace mongo
