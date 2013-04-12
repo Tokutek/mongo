@@ -500,9 +500,6 @@ namespace mongo {
 
     private:
         bool _syncDoInitialSync_clone( const char *master, const list<string>& dbs, shared_ptr<DBClientConnection> conn);
-        bool _syncDoInitialSync_applyToHead( InitialSync& init, OplogReader* r , 
-                                             const Member* source, const BSONObj& lastOp, 
-                                             BSONObj& minValidOut);
         void _syncDoInitialSync();
         void syncDoInitialSync();
         void _syncThread();

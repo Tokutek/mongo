@@ -254,72 +254,10 @@ namespace mongo {
         _veto[host] = time(0)+secs;
     }
 
-    bool ReplSetImpl::_syncDoInitialSync_applyToHead( InitialSync& init, OplogReader* r, 
-                                                      const Member* source, const BSONObj& lastOp , 
-                                                      BSONObj& minValid ) {
-        /* our cloned copy will be strange until we apply oplog events that occurred
-           through the process.  we note that time point here. */
-
-        try {
-            // It may have been a long time since we last used this connection to
-            // query the oplog, depending on the size of the databases we needed to clone.
-            // A common problem is that TCP keepalives are set too infrequent, and thus
-            // our connection here is terminated by a firewall due to inactivity.
-            // Solution is to increase the TCP keepalive frequency.
-            minValid = r->getLastOp(rsoplog);
-        } catch ( SocketException & ) {
-            log() << "connection lost to " << source->h().toString() << "; is your tcp keepalive interval set appropriately?";
-            if( !r->connect(source->h().toString()) ) {
-                sethbmsg( str::stream() << "initial sync couldn't connect to " << source->h().toString() , 0);
-                throw;
-            }
-            // retry
-            minValid = r->getLastOp(rsoplog);
-        }
-
-        isyncassert( "getLastOp is empty ", !minValid.isEmpty() );
-
-        OpTime mvoptime = minValid["ts"]._opTime();
-        verify( !mvoptime.isNull() );
-
-        OpTime startingTS = lastOp["ts"]._opTime();
-        verify( mvoptime >= startingTS );
-
-        // apply startingTS..mvoptime portion of the oplog
-        {
-            try {
-                init.oplogApplication(lastOp, minValid);
-            }
-            catch (const DBException&) {
-                log() << "replSet initial sync failed during oplog application phase" << rsLog;
-
-                //emptyOplog(); // otherwise we'll be up!
-
-                lastOpTimeWritten = OpTime();
-                lastH = 0;
-
-                log() << "replSet cleaning up [1]" << rsLog;
-                {
-                    Client::WriteContext cx( "local." );
-                    cx.ctx().db()->flushFiles(true);
-                }
-                log() << "replSet cleaning up [2]" << rsLog;
-
-                log() << "replSet initial sync failed will try again" << endl;
-
-                sleepsecs(5);
-                return false;
-            }
-        }
-        
-        return true;
-    }
-
     /**
      * Do the initial sync for this member.
      */
     void ReplSetImpl::_syncDoInitialSync() {
-        InitialSync init(BackgroundSync::get());
         sethbmsg("initial sync pending",0);
 
         // if this is the first node, it may have already become primary
@@ -336,7 +274,6 @@ namespace mongo {
         }
 
         string sourceHostname = source->h().toString();
-        init.setHostname(sourceHostname);
         OplogReader r;
         if( !r.connect(sourceHostname) ) {
             sethbmsg( str::stream() << "initial sync couldn't connect to " << source->h().toString() , 0);
@@ -356,7 +293,8 @@ namespace mongo {
             log() << "fastsync: skipping database clone" << rsLog;
 
             // prime oplog
-            init.oplogApplication(lastOp, lastOp);
+            //init.oplogApplication(lastOp, lastOp);
+            ::abort();
             return;
         }
         else {
@@ -510,27 +448,28 @@ namespace mongo {
         // at this point, we have got the oplog up to date,
         // now we need to read forward in the oplog
         // from minUnapplied
+        uint32_t sizeofGTID = GTID::GTIDBinarySize();
+        char idData[sizeofGTID];
+        minUnappliedGTID.serializeBinaryData(idData);
+        BSONObjBuilder query;
+        query.appendBinData("$gte", sizeofGTID, BinDataGeneral, idData);
+        // TODO: make this a read uncommitted cursor
+        // especially when this code moves to a background thread
+        // for running replication
+        shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor( rsoplog, query.done() );
+        while( c->ok() ) {
+            if ( c->currentMatches()) {
+                applyTransactionFromOplog(c->current());
+            }
+            c->advance();
+        }
 
         // TODO: figure out what to do with these
         //lastOpTimeWritten = OpTime();
         //lastH = 0;
-
-        sethbmsg("initial sync query minValid",0);
-
-        BSONObj minValid;
-        if ( ! _syncDoInitialSync_applyToHead( init, &r, source, lastOp, minValid ) ) {
-            return;
-        }
-        
-        // ---------
-
-
-        sethbmsg("initial sync finishing up",0);
-
         verify( !box.getState().primary() ); // wouldn't make sense if we were.
 
         changeState(MemberState::RS_RECOVERING);
         sethbmsg("initial sync done",0);
     }
-
 }
