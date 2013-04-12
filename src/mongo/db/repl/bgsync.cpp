@@ -351,11 +351,11 @@ namespace mongo {
             return true;
         }
 
-        BSONObj o = r.nextSafe();
-        OpTime ts = o["ts"]._opTime();
         ::abort();
         // aborting because we used to have a reference to _lastH here
         /*
+        BSONObj o = r.nextSafe();
+        OpTime ts = o["ts"]._opTime();
         long long h = o["h"].numberLong();
         if( ts != _lastOpTimeFetched || h != _lastH ) {
             log() << "replSet our last op time fetched: " << _lastOpTimeFetched.toStringPretty() << rsLog;
