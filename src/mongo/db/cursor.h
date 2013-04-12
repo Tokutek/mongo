@@ -65,11 +65,6 @@ namespace mongo {
             return false;
         }
 
-        /* optional to implement.  if implemented, means 'this' is a prototype */
-        virtual Cursor* clone() {
-            return 0;
-        }
-
         virtual BSONObj indexKeyPattern() const {
             return BSONObj();
         }
