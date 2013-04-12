@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "cursor.h"
+#include "mongo/db/cursor.h"
 
 namespace mongo {
     

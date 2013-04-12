@@ -54,12 +54,16 @@ namespace mongo {
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
             : _txn((parent == NULL) ? NULL : &parent->_txn, txnFlags), 
               _parent(parent),
+              _retired(false),
               _numOperations(0),
               _initiatingRS(false)
     {
     }
 
     TxnContext::~TxnContext() {
+        if (!_retired) {
+            abort();
+        }
     }
 
     void TxnContext::commit(int flags) {
@@ -95,10 +99,19 @@ namespace mongo {
             dassert(txnGTIDManager);
             txnGTIDManager->noteLiveGTIDDone(gtid);
         }
+
+        if (hasParent()) {
+            _cappedRollback.transfer(_parent->_cappedRollback);
+        } else {
+            _cappedRollback.commit();
+        }
+        _retired = true;
     }
 
     void TxnContext::abort() {
         _txn.abort();
+        _cappedRollback.abort();
+        _retired = true;
     }
 
     void TxnContext::logOp(BSONObj op) {
@@ -131,4 +144,52 @@ namespace mongo {
         BSONArray array = _txnOps.arr();
         _logTxnToOplog(gtid, array);
     }
+
+    void CappedCollectionRollback::commit() {
+        for (ContextMap::const_iterator it = _map.begin(); it != _map.end(); it++) {
+            const string &ns = it->first;
+            const Context &c = it->second;
+            NamespaceDetails *d = nsdetails(ns.c_str());
+            if (d != NULL) {
+                d->noteCommit(c.insertedPKs, c.nDelta, c.sizeDelta);
+            }
+        }
+    }
+
+    void CappedCollectionRollback::abort() {
+        for (ContextMap::const_iterator it = _map.begin(); it != _map.end(); it++) {
+            const string &ns = it->first;
+            const Context &c = it->second;
+            NamespaceDetails *d = nsdetails(ns.c_str());
+            if (d != NULL) {
+                d->noteAbort(c.insertedPKs, c.nDelta, c.sizeDelta);
+            }
+        }
+    }
+
+    void CappedCollectionRollback::transfer(CappedCollectionRollback &parent) {
+        for (ContextMap::const_iterator it = _map.begin(); it != _map.end(); it++) {
+            const string &ns = it->first;
+            const Context &c = it->second;
+            Context &parentContext = parent._map[ns];
+            vector<BSONObj> &pks = parentContext.insertedPKs;
+            pks.insert(pks.end(), c.insertedPKs.begin(), c.insertedPKs.end());
+            parentContext.nDelta += c.nDelta;
+            parentContext.sizeDelta += c.sizeDelta;
+        }
+    }
+
+    void CappedCollectionRollback::noteInsert(const string &ns, const BSONObj &pk, long long size) {
+        Context &c = _map[ns];
+        c.insertedPKs.push_back(pk.getOwned());
+        c.nDelta++;
+        c.sizeDelta += size;
+    }
+
+    void CappedCollectionRollback::noteDelete(const string &ns, const BSONObj &pk, long long size) {
+        Context &c = _map[ns];
+        c.nDelta--;
+        c.sizeDelta -= size;
+    }
+
 } // namespace mongo

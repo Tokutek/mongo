@@ -150,6 +150,7 @@ env.StaticLibrary("coredb", [
         "db/security_commands.cpp",
         "db/security_common.cpp",
         "db/stats/top.cpp",
+        "db/storage/cursor.cpp",
         "db/storage/txn.cpp",
         "db/storage/env.cpp",
         "db/storage/key.cpp",

@@ -31,12 +31,38 @@ namespace mongo {
     void setLogTxnToOplog(void (*f)(GTID gtid, BSONArray& opInfo));
     void setTxnGTIDManager(GTIDManager* m);
 
+    class CappedCollection;
+
+    class CappedCollectionRollback {
+        public:
+            void commit();
+
+            void abort();
+
+            void transfer(CappedCollectionRollback &parent);
+
+            void noteInsert(const string &ns, const BSONObj &pk, long long size);
+
+            void noteDelete(const string &ns, const BSONObj &pk, long long size);
+
+        private:
+            struct Context {
+                Context() : nDelta(0), sizeDelta(0) { }
+                vector<BSONObj> insertedPKs;
+                long long nDelta;
+                long long sizeDelta;
+            };
+            typedef map<string, Context> ContextMap;
+            ContextMap _map;
+    };
+
     // class to wrap operations surrounding a storage::Txn.
     // as of now, includes writing of operations to opLog
     // and the committing/aborting of storage::Txn
     class TxnContext: boost::noncopyable {
         storage::Txn _txn;
         TxnContext* _parent;
+        bool _retired;
         //
         // a BSON Array that will hold all of the operations done by
         // this transaction. If the array gets too large, its contents
@@ -51,7 +77,9 @@ namespace mongo {
         // and to just write to the opLog with a GTID of (0,0)
         bool _initiatingRS;
 
-        public:
+        CappedCollectionRollback _cappedRollback;
+
+    public:
         TxnContext(TxnContext *parent, int txnFlags);
         ~TxnContext();
         void commit(int flags);
@@ -67,12 +95,15 @@ namespace mongo {
         bool hasParent();
         void txnIntiatingRs();
 
-        private:
+        CappedCollectionRollback &cappedRollback() {
+            return _cappedRollback;
+        }
+
+    private:
         // transfer operations in _txnOps to _parent->_txnOps
         void transferOpsToParent();
         void writeOpsToOplog(GTID gtid);
     };
-
 
 } // namespace mongo
 

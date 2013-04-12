@@ -33,12 +33,11 @@
 #include "mongo/db/namespace.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/querypattern.h"
-
 #include "mongo/db/storage/env.h"
 
 namespace mongo {
 
-
+    class NamespaceDetails;
     class Database;
 
     // TODO: Put this in the cmdline abstraction, not extern global.
@@ -248,7 +247,7 @@ namespace mongo {
         // may read (at the time of this call) to guaruntee that only committed
         // values exist less than or equal to that key. returning maxKey
         // effectively means the implementation makes no guaruntees.
-        virtual BSONObj maxSafeKey() const {
+        virtual BSONObj maxSafeKey() {
             return maxKey;
         }
 
@@ -284,6 +283,17 @@ namespace mongo {
         void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
 
+        // note the commit/abort of a transaction, given:
+        // pk: the set of primary keys inserted into this ns
+        // nDelta: the number of inserts minus the number of deletes
+        // sizeDelta: the size of inserts minus the size of deletes
+        virtual void noteCommit(const vector<BSONObj> &pks, long long nDelta, long long sizeDelta) {
+            massert( 16480, "bug: noted a commit, but it wasn't implemented", false );
+        }
+        virtual void noteAbort(const vector<BSONObj> &pks, long long nDelta, long long sizeDelta) {
+            massert( 16481, "bug: noted an abort, but it wasn't implemented", false );
+        }
+
         // generate an index info BSON for this namespace, with the same options
         BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) const;
 
@@ -307,6 +317,7 @@ namespace mongo {
         unsigned long long _multiKeyIndexBits;
 
         friend class NamespaceIndex;
+        friend class CappedCollectionRollback;
     }; // NamespaceDetails
 
     class ParsedQuery;

@@ -32,6 +32,7 @@
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/relock.h"
+#include "mongo/db/txn_context.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
@@ -288,6 +289,20 @@ namespace mongo {
         }
     };
 
+    // Capped collections have natural order insert semantics but borrow (ie: copy)
+    // its document modification strategy from IndexedCollections. The size
+    // and count of a capped collection is maintained in memory and kept valid
+    // on txn abort through a CappedCollectionRollback class in the TxnContext. 
+    //
+    // Tailable cursors over capped collections may only read up to one less
+    // than the minimum uncommitted primary key to ensure that they never miss
+    // any data. This information is communicated through minSafeKey(). On
+    // commit/abort, the any primary keys inserted into a capped collection are
+    // noted so we can properly maintain the min uncommitted key.
+    //
+    // In the implementation, NaturalOrderCollection::_nextPK and the set of
+    // uncommitted primary keys are protected together by _mutex. Trimming
+    // work is done under the _deleteMutex.
     class CappedCollection : public NaturalOrderCollection {
     public:
         CappedCollection(const string &ns, const BSONObj &options) :
@@ -296,6 +311,7 @@ namespace mongo {
             _maxObjects(options["max"].numberLong()),
             _currentObjects(0),
             _currentSize(0),
+            _mutex("cappedMutex"),
             _deleteMutex("cappedDeleteMutex") {
 
             // Create an _id index if "autoIndexId" is missing or it exists as true.
@@ -311,6 +327,7 @@ namespace mongo {
             _maxObjects(serialized["options"]["max"].numberLong()),
             _currentObjects(0),
             _currentSize(0),
+            _mutex("cappedMutex"),
             _deleteMutex("cappedDeleteMutex") {
             
             // Determine the number of objects and the total size.
@@ -346,55 +363,48 @@ namespace mongo {
             return true;
         }
 
-        BSONObj maxSafeKey() const {
-            long long nextPK = _nextPK.load();
-            if (nextPK == 0) {
-                // empty collection, no safe keys
-                return minKey;
-            } else {
-                // TODO: This isn't right.
-                // It's good enough for one thread, and no aborts.
-                long long safeKey = nextPK - 1;
-                BSONObjBuilder b;
-                b.append("", safeKey);
-                return b.obj();
-            }
+        // @return the maximum safe key to read for a tailable cursor.
+        // if uncommitted pks exist, the safe key is one minus the minimum.
+        // otherwise, the safe key is one minus the next primary key.
+        BSONObj maxSafeKey() {
+            SimpleMutex::scoped_lock lk(_mutex);
+            long long minUncommitted = _uncommittedPKs.size() > 0 ?
+                                      _uncommittedPKs.begin()->firstElement().Long() :
+                                      _nextPK.load();
+            long long safeKey = minUncommitted > 0 ? minUncommitted - 1 : 0;
+            BSONObjBuilder b;
+            b.append("", safeKey);
+            return b.obj();
         }
 
         void insertObject(BSONObj &obj, uint64_t flags) {
             obj = addIdField(obj);
-            CappedInsertIntent intent(this, obj);
+            uassert( 16328 , str::stream() << "document is larger than capped size "
+                     << obj.objsize() << " > " << _maxSize, obj.objsize() <= _maxSize );
 
-            // If the insert is non-trivial, then we need to do some
-            // trimming work to make room for the object. Grab the 
-            // mutex and do any necessary work.
-            if (!intent.trivial()) {
-                SimpleMutex::scoped_lock lk(_deleteMutex);
-                long long n = _currentObjects.load();
-                long long size = _currentSize.load();
-                if (isGorged(n, size)) {
-                    scoped_ptr<Cursor> c( BasicCursor::make(this) );
-                    // Delete older objects until we've made enough room for
-                    // the new one.
-                    // If other threads are trying to insert concurrently, we will do some work on their behalf (until !isGorged).
-                    // But we stop if we've deleted 8 objects and done enough to satisfy our own intent, to limit latency.
-                    long long bytesTrimmed = 0;
-                    for ( long long i = 0;
-                          c->ok() && isGorged(n, size) && (bytesTrimmed < obj.objsize() || (i < 8));
-                          i++, c->advance()) {
-                        BSONObj oldestObj = c->current();
-                        NaturalOrderCollection::deleteObject(c->currPK(), oldestObj);
-
-                        size_t objsize = oldestObj.objsize();
-                        n = _currentObjects.subtractAndFetch(1);
-                        size = _currentSize.subtractAndFetch(objsize);
-                        bytesTrimmed += objsize;
-                    }
-                }
+            // Generate the next pk and insert it into the set, under the lock
+            BSONObj pk;
+            {
+                SimpleMutex::scoped_lock lk(_mutex);
+                BSONObjBuilder b(32);
+                b.append("", _nextPK.fetchAndAdd(1));
+                pk = b.obj();
+                _uncommittedPKs.insert(pk);
             }
 
-            NaturalOrderCollection::insertObject(obj, flags);
-            intent.success();
+            // Note the insert we're about to do.
+            CappedCollectionRollback &rollback = cc().txn().cappedRollback();
+            rollback.noteInsert(_ns, pk, obj.objsize());
+            long long n = _currentObjects.addAndFetch(1);
+            long long size = _currentSize.addAndFetch(obj.objsize());
+
+            // If the collection is gorged, we need to do some trimming work.
+            if (isGorged(n, size)) {
+                trim(obj.objsize());
+            }
+
+            // The actual insert should not hold any locks.
+            insertIntoIndexes(pk, obj, flags);
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
@@ -414,59 +424,79 @@ namespace mongo {
             }
         }
 
+    protected:
+        void noteCommit(const vector <BSONObj> &pks, long long nDelta, long long sizeDelta) {
+            SimpleMutex::scoped_lock lk(_mutex);
+            noteComplete(pks);
+        }
+
+        void noteAbort(const vector<BSONObj> &pks, long long nDelta, long long sizeDelta) {
+            SimpleMutex::scoped_lock lk(_mutex);
+            noteComplete(pks);
+
+            // These deltas are signed values that represent changes to the collection
+            // by this transaction. We need to roll back those changes. Therefore, we
+            // subtract the signed value from the current value.
+            _currentObjects.fetchAndSubtract(nDelta);
+            _currentSize.fetchAndSubtract(sizeDelta);
+        }
+
     private:
-        // Declares a thread's intent to insert into a capped collection.
-        // On creation, notes the objects size into the collection's 
-        // current size and rolls back the modification on error.
-        //
-        // By proactively increasing the collection size before inserting,
-        // we enable a single thread to perform trimming on behalf of many
-        // waiting threads (at that thread's discretion, that is. Do not
-        // do so much work that the calling client thread stalls noticably).
-        class CappedInsertIntent : boost::noncopyable {
-        public:
-            CappedInsertIntent(CappedCollection *collection, const BSONObj &obj) :
-                _collection(collection),
-                _obj(obj),
-                _succeeded(false),
-                _trivial(false) {
-                uassert( 16328 , str::stream() << "document is larger than capped size "
-                         << _obj.objsize() << " > " << _collection->_maxSize,
-                         obj.objsize() <= _collection->_maxSize );
-                long long n = _collection->_currentObjects.addAndFetch(1);
-                long long size = _collection->_currentSize.addAndFetch(obj.objsize());
-                _trivial = !_collection->isGorged(n, size);
+        // note the completion of a transaction that inserted the given set of pks.
+        // must be holding _mutex
+        void noteComplete(const vector<BSONObj> &pks) {
+            for (vector<BSONObj>::const_iterator it = pks.begin(); it != pks.end(); it++) {
+                const int n = _uncommittedPKs.erase(*it);
+                dassert(n == 1);
             }
-            ~CappedInsertIntent() {
-                if (!_succeeded) {
-                    // rollback size/count increments on failure
-                    _collection->_currentObjects.subtractAndFetch(1);
-                    _collection->_currentSize.subtractAndFetch(_obj.objsize());
-                }
-            }
-            bool trivial() const {
-                return _trivial;
-            }
-            void success() {
-                _succeeded = true;
-            }
-        private:
-            CappedCollection *_collection;
-            const BSONObj &_obj;
-            bool _succeeded;
-            bool _trivial;
-        };
+        }
 
         bool isGorged(long long n, long long size) const {
             return (_maxObjects > 0 && n > _maxObjects)
                 || (_maxSize > 0 && size > _maxSize);
         }
 
+        void trim(int objsize) {
+            SimpleMutex::scoped_lock lk(_deleteMutex);
+            long long n = _currentObjects.load();
+            long long size = _currentSize.load();
+            if (isGorged(n, size)) {
+                scoped_ptr<Cursor> c( BasicCursor::make(this) );
+                // Delete older objects until we've made enough room for the new one.
+                // If other threads are trying to insert concurrently, we will do some
+                // work on their behalf (until !isGorged). But we stop if we've deleted
+                // 8 objects and done enough to satisfy our own intent, to limit latency.
+                int bytesTrimmed = 0;
+                for ( int i = 0;
+                      c->ok() && isGorged(n, size) && (bytesTrimmed < objsize || (i < 8));
+                      i++, c->advance()) {
+                    BSONObj oldestPK = c->currPK();
+                    BSONObj oldestObj = c->current();
+
+                    // Note the delete we're about to do.
+                    size_t oldestSize = oldestObj.objsize();
+                    CappedCollectionRollback &rollback = cc().txn().cappedRollback();
+                    rollback.noteDelete(_ns, oldestPK, oldestSize);
+                    n = _currentObjects.subtractAndFetch(1);
+                    size = _currentSize.subtractAndFetch(oldestSize);
+                    bytesTrimmed += oldestSize;
+
+                    NaturalOrderCollection::deleteObject(oldestPK, oldestObj);
+                }
+            }
+        }
+
         const long long _maxSize;
         const long long _maxObjects;
         AtomicWord<long long> _currentObjects;
         AtomicWord<long long> _currentSize;
+        // The set of uncommited primary keys for this capped collection.
+        // Tailable cursors must not read passed the minimum of this set.
+        BSONObjSet _uncommittedPKs;
+        SimpleMutex _mutex;
         SimpleMutex _deleteMutex;
+
+        friend class CappedCollectionRollback;
     };
 
     BSONObj NamespaceDetails::indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) const {
