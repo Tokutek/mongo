@@ -225,8 +225,7 @@ namespace mongo {
                     // we have to check this before calling mgr, as we must be a secondary to
                     // become primary
                     if (!theReplSet->isSecondary()) {
-                        OpTime minvalid;
-                        theReplSet->tryToGoLiveAsASecondary(minvalid);
+                        theReplSet->tryToGoLiveAsASecondary();
                     }
 
                     // normally msgCheckNewState gets called periodically, but in a single node repl set
@@ -245,13 +244,6 @@ namespace mongo {
             const BSONObj& lastOp = ops.getDeque().back();
             handleSlaveDelay(lastOp);
 
-            // Set minValid to the last op to be applied in this next batch.
-            // This will cause this node to go into RECOVERING state
-            // if we should crash and restart before updating the oplog
-            { 
-                Client::WriteContext cx( "local" );
-                Helpers::putSingleton("local.replset.minvalid", lastOp);
-            }
             multiApply(ops.getDeque(), multiSyncApply);
 
             applyOpsToOplog(&ops.getDeque());
@@ -357,9 +349,7 @@ namespace mongo {
        readlocks
        @return true if transitioned to SECONDARY
     */
-    bool ReplSetImpl::tryToGoLiveAsASecondary(OpTime& /*out*/ minvalid) {
-        bool golive = false;
-
+    bool ReplSetImpl::tryToGoLiveAsASecondary() {
         // make sure we're not primary or secondary already
         if (box.getState().primary() || box.getState().secondary()) {
             return false;
@@ -379,26 +369,9 @@ namespace mongo {
             }
         }
 
-        {
-            Lock::DBRead lk("local.replset.minvalid");
-            BSONObj mv;
-            if( Helpers::getSingleton("local.replset.minvalid", mv) ) {
-                minvalid = mv["ts"]._opTime();
-                if( minvalid <= lastOpTimeWritten ) {
-                    golive=true;
-                }
-                else {
-                    sethbmsg(str::stream() << "still syncing, not yet to minValid optime " << minvalid.toString());
-                }
-            }
-            else
-                golive = true; /* must have been the original member */
-        }
-        if( golive ) {
-            sethbmsg("");
-            changeState(MemberState::RS_SECONDARY);
-        }
-        return golive;
+        sethbmsg("");
+        changeState(MemberState::RS_SECONDARY);
+        return true;
     }
 
 
@@ -410,14 +383,14 @@ namespace mongo {
             errmsg = "arbiters don't sync";
             return false;
         }
-	if (box.getState().primary()) {
-	    errmsg = "primaries don't sync";
-	    return false;
-	}
-	if (_self != NULL && host == _self->fullName()) {
-	    errmsg = "I cannot sync from myself";
-	    return false;
-	}
+        if (box.getState().primary()) {
+            errmsg = "primaries don't sync";
+            return false;
+        }
+        if (_self != NULL && host == _self->fullName()) {
+            errmsg = "I cannot sync from myself";
+            return false;
+        }
 
         // find the member we want to sync from
         Member *newTarget = 0;

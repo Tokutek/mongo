@@ -58,7 +58,7 @@ namespace ReplSetTests {
         virtual bool isPrimary() {
             return false;
         }
-        virtual bool tryToGoLiveAsASecondary(OpTime& minvalid) {
+        virtual bool tryToGoLiveAsASecondary() {
             return false;
         }
         virtual const ReplSetConfig& config() {

@@ -85,12 +85,6 @@ namespace mongo {
         log() << "replSet oldest at " << stale->fullName() << " : " << oldest["ts"]._opTime().toStringLong() << rsLog;
         log() << "replSet See http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember" << rsLog;
 
-        // reset minvalid so that we can't become primary prematurely
-        {
-            Lock::DBWrite lk("local.replset.minvalid");
-            Helpers::putSingleton("local.replset.minvalid", oldest);
-        }
-
         sethbmsg("error RS102 too stale to catch up");
         changeState(MemberState::RS_RECOVERING);
     }

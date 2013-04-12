@@ -530,7 +530,7 @@ namespace mongo {
 
 
         const ReplSetConfig::MemberCfg& myConfig() const { return _config; }
-        bool tryToGoLiveAsASecondary(OpTime&); // readlocks
+        bool tryToGoLiveAsASecondary(); // readlocks
         void syncThread();
         const OpTime lastOtherOpTime() const;
 

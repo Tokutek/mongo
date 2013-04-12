@@ -285,21 +285,6 @@ namespace mongo {
            order on all the different web ui's; that is less confusing for the operator. */
         map<int,string> mp;
 
-        string myMinValid;
-        try {
-            readlocktry lk(/*"local.replset.minvalid", */300);
-            if( lk.got() ) {
-                BSONObj mv;
-                if( Helpers::getSingleton("local.replset.minvalid", mv) ) {
-                    myMinValid = "minvalid:" + mv["ts"]._opTime().toString();
-                }
-            }
-            else myMinValid = ".";
-        }
-        catch(...) {
-            myMinValid = "exception fetching minvalid";
-        }
-
         const Member *_self = this->_self;
         verify(_self);
         {
@@ -314,9 +299,6 @@ namespace mongo {
               td(ToString(_self->config().priority)) <<
               td( stateAsHtml(box.getState()) + (_self->config().hidden?" (hidden)":"") );
             s << td( _hbmsg );
-            stringstream q;
-            q << "/_replSetOplog?_id=" << _self->id();
-            s << td( a(q.str(), myMinValid, theReplSet->lastOpTimeWritten.toString()) );
             s << td(""); // skew
             s << _tr();
             mp[_self->hbinfo().id()] = s.str();
