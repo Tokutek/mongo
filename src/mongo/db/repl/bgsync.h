@@ -70,7 +70,6 @@ namespace mongo {
 
         OpTime _lastOpTimeFetched;
         GTID _lastGTIDFetched;
-        long long _lastH;
         // if produce thread should be running
         bool _pause;
 

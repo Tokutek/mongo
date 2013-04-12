@@ -329,7 +329,6 @@ namespace mongo {
 
         OpTime lastOpTimeWritten;
         GTIDManager* gtidManager;
-        long long lastH; // hash we use to make sure we are reading the right flow of ops and aren't on an out-of-date "fork"
         bool forceSyncFrom(const string& host, string& errmsg, BSONObjBuilder& result);
 
         /**
@@ -470,7 +469,6 @@ namespace mongo {
 
         int _maintenanceMode; // if we should stay in recovering state
     public:
-        // this is called from within a writelock in logOpRS
         unsigned selfId() const { return _id; }
         Manager *mgr;
         GhostSync *ghost;
@@ -532,7 +530,7 @@ namespace mongo {
 
 
         const ReplSetConfig::MemberCfg& myConfig() const { return _config; }
-        bool tryToGoLiveAsASecondary(OpTime&); // readlocks
+        bool tryToGoLiveAsASecondary(); // readlocks
         void syncThread();
         const OpTime lastOtherOpTime() const;
 

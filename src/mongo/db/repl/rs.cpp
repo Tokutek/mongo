@@ -85,12 +85,6 @@ namespace mongo {
         log() << "replSet oldest at " << stale->fullName() << " : " << oldest["ts"]._opTime().toStringLong() << rsLog;
         log() << "replSet See http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember" << rsLog;
 
-        // reset minvalid so that we can't become primary prematurely
-        {
-            Lock::DBWrite lk("local.replset.minvalid");
-            Helpers::putSingleton("local.replset.minvalid", oldest);
-        }
-
         sethbmsg("error RS102 too stale to catch up");
         changeState(MemberState::RS_RECOVERING);
     }
@@ -381,7 +375,6 @@ namespace mongo {
         _cfg = 0;
         memset(_hbmsg, 0, sizeof(_hbmsg));
         strcpy( _hbmsg , "initial startup" );
-        lastH = 0;
         changeState(MemberState::RS_STARTUP);
 
         _seeds = &replSetCmdline.seeds;
@@ -450,7 +443,6 @@ namespace mongo {
             gtidManager = new GTIDManager(lastGTID);
             setTxnGTIDManager(gtidManager);
             
-            lastH = o["h"].numberLong();
             lastOpTimeWritten = o["ts"]._opTime();
             uassert(13290, "bad replSet oplog entry?", quiet || !lastOpTimeWritten.isNull());
         }

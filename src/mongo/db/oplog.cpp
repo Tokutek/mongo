@@ -32,6 +32,7 @@
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/db_flags.h"
 #include "mongo/db/oplog_helpers.h"
+#include "mongo/db/jsobjmanipulator.h"
 
 namespace mongo {
 
@@ -97,16 +98,10 @@ namespace mongo {
         mutex::scoped_lock lk2(OpTime::m);
 
         const OpTime ts = OpTime::now(lk2);
-        long long hashNew;
+        long long hashNew = 0;
         if( theReplSet ) {
             //massert(13312, "replSet error : logOp() but not primary?", theReplSet->box.getState().primary());
-            hashNew = (theReplSet->lastH * 131 + ts.asLL()) * 17 + theReplSet->selfId();
             theReplSet->lastOpTimeWritten = ts;
-            theReplSet->lastH = hashNew;
-        }
-        else {
-            // must be initiation
-            hashNew = 0;
         }
 
         BSONObjBuilder b;
@@ -246,6 +241,10 @@ namespace mongo {
                 BSONElement* curr = &ops[i];
                 OpLogHelpers::applyOperationFromOplog(curr->Obj());
             }
+            // set the applied bool to false, to let the oplog know that
+            // this entry has not been applied to collections
+            BSONElementManipulator(entry["a"]).setBool(true);
+            writeEntryToOplog(entry);
         }
     }
 
