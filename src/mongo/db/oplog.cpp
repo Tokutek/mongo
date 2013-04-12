@@ -98,7 +98,7 @@ namespace mongo {
         mutex::scoped_lock lk2(OpTime::m);
 
         const OpTime ts = OpTime::now(lk2);
-        long long hashNew;
+        long long hashNew = 0;
         if( theReplSet ) {
             //massert(13312, "replSet error : logOp() but not primary?", theReplSet->box.getState().primary());
             theReplSet->lastOpTimeWritten = ts;
