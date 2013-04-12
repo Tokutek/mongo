@@ -32,6 +32,7 @@
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/db_flags.h"
 #include "mongo/db/oplog_helpers.h"
+#include "mongo/db/jsobjmanipulator.h"
 
 namespace mongo {
 
@@ -246,6 +247,10 @@ namespace mongo {
                 BSONElement* curr = &ops[i];
                 OpLogHelpers::applyOperationFromOplog(curr->Obj());
             }
+            // set the applied bool to false, to let the oplog know that
+            // this entry has not been applied to collections
+            BSONElementManipulator(entry["a"]).setBool(true);
+            writeEntryToOplog(entry);
         }
     }
 
