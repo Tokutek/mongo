@@ -341,6 +341,13 @@ elif has_option("clang"):
     env["CC"] = 'clang'
     env["CXX"] = 'clang++'
 
+# determine compiler version
+if env['CC']:
+    line = os.popen(env['CC'] + ' --version').readline()
+    match = re.search(r'[0-9]+(\.[0-9]+)+', line)
+    if match:
+        env['CCVERSION'] = match.group(0)
+
 if has_option( "cc" ):
     env["CC"] = get_option( "cc" )
 
@@ -697,7 +704,7 @@ if nix:
 
     env.Append( CPPDEFINES=["_FILE_OFFSET_BITS=64"] )
     env.Append( CXXFLAGS=["-Wnon-virtual-dtor", "-Woverloaded-virtual"] )
-    if env['CCVERSION'] == '4.8.0':
+    if env['CCVERSION'] in ['4.7.3', '4.8.0']:
         # boost makes this warning super annoying
         env.Append( CXXFLAGS=['-Wno-unused-local-typedefs'] )
     env.Append( LINKFLAGS=["-fPIC", "-pthread", "-rdynamic"] )

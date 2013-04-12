@@ -150,7 +150,8 @@ namespace mongo {
         dassert(GTID::cmp(_nextLiveGTID, _minLiveGTID) == 0);
         dassert(GTID::cmp(_nextLiveGTID, gtid) <= 0);
         _nextLiveGTID = gtid;
-        _minLiveGTID = gtid;
+        _nextLiveGTID.inc();
+        _minLiveGTID = _nextLiveGTID;
         _lock.unlock();
     }
 
@@ -158,7 +159,7 @@ namespace mongo {
     // and starts to apply it
     void GTIDManager::noteApplyingGTID(GTID gtid) {
         _lock.lock();
-        dassert(GTID::cmp(gtid, _minUnappliedGTID) > 0);
+        dassert(GTID::cmp(gtid, _minUnappliedGTID) >= 0);
         dassert(GTID::cmp(gtid, _nextUnappliedGTID) >= 0);
         if (_unappliedGTIDs.size() == 0) {
             _minUnappliedGTID = gtid;
@@ -182,7 +183,7 @@ namespace mongo {
         // we need to update the minimum live GTID
         if (GTID::cmp(_minUnappliedGTID, gtid) == 0) {
             if (_unappliedGTIDs.size() == 0) {
-                _minUnappliedGTID= _nextUnappliedGTID;
+                _minUnappliedGTID = _nextUnappliedGTID;
             }
             else {
                 // get the minumum from _liveGTIDs and set it to _minLiveGTIDs

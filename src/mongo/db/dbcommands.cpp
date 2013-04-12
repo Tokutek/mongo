@@ -1772,13 +1772,11 @@ namespace mongo {
         bool retval = false;
         TokuCommandSettings settings = c->getTokuCommandSettings();
         cc().setTokuCommandSettings(settings);
-        
-        scoped_ptr<Client::Transaction> transaction;
-        if (c->needsTxn()) {
-            transaction.reset(new Client::Transaction(c->txnFlags()));
-        }
+
         if ( c->locktype() == Command::NONE ) {
             verify( !c->lockGlobally() );
+
+            scoped_ptr<Client::Transaction> transaction(c->needsTxn() ? new Client::Transaction(c->txnFlags()) : NULL);
 
             // we also trust that this won't crash
             retval = true;
@@ -1795,6 +1793,10 @@ namespace mongo {
                 client.curop()->ensureStarted();
                 retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
             }
+
+            if (retval && transaction) {
+                transaction->commit();
+            }
         }
         else if( c->locktype() != Command::WRITE ) { 
             // read lock
@@ -1807,8 +1809,14 @@ namespace mongo {
             // Read contexts use a snapshot transaction and are marked as read only.
             Client::ReadContext ctx( ns , dbpath, c->requiresAuth() ); // read locks
 
+            scoped_ptr<Client::Transaction> transaction(c->needsTxn() ? new Client::Transaction(c->txnFlags()) : NULL);
+
             client.curop()->ensureStarted();
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
+
+            if (retval && transaction) {
+                transaction->commit();
+            }
         }
         else {
             dassert( c->locktype() == Command::WRITE );
@@ -1825,20 +1833,23 @@ namespace mongo {
             scoped_ptr<Lock::ScopedLock> lk( global ? 
                                              static_cast<Lock::ScopedLock*>( new Lock::GlobalWrite() ) :
                                              static_cast<Lock::ScopedLock*>( new Lock::DBWrite( dbname ) ) );
+
+            scoped_ptr<Client::Transaction> transaction(c->needsTxn() ? new Client::Transaction(c->txnFlags()) : NULL);
+
             client.curop()->ensureStarted();
             Client::Context tc(dbname, dbpath, c->requiresAuth());
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
             if ( retval && c->logTheOp() && ! fromRepl ) {
                 OpLogHelpers::logCommand(cmdns, cmdObj, &cc().txn());
             }
+
+            if (retval && transaction) {
+                transaction->commit();
+            }
         }
 
         if (c->maintenanceMode() && theReplSet) {
             theReplSet->setMaintenanceMode(false);
-        }
-
-        if (retval && transaction) {
-            transaction->commit();
         }
 
         return retval;
