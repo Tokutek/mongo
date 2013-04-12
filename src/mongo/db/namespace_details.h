@@ -283,6 +283,9 @@ namespace mongo {
         void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
 
+        // uassert on duplicate key
+        void checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj);
+
         // note the commit/abort of a transaction, given:
         // pk: the set of primary keys inserted into this ns
         // nDelta: the number of inserts minus the number of deletes
@@ -292,6 +295,11 @@ namespace mongo {
         }
         virtual void noteAbort(const vector<BSONObj> &pks, long long nDelta, long long sizeDelta) {
             massert( 16481, "bug: noted an abort, but it wasn't implemented", false );
+        }
+
+        // remove everything from a collection
+        virtual void empty() {
+            massert( 16482, "bug: tried to empty a collection, but it wasn't implemented", false );
         }
 
         // generate an index info BSON for this namespace, with the same options
@@ -317,7 +325,8 @@ namespace mongo {
         unsigned long long _multiKeyIndexBits;
 
         friend class NamespaceIndex;
-        friend class CappedCollectionRollback;
+        friend class CappedCollectionRollback; // for noteCommit/Abort() only
+        friend class EmptyCapped; // for empty() only
     }; // NamespaceDetails
 
     class ParsedQuery;

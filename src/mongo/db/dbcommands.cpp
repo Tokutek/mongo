@@ -1624,7 +1624,6 @@ namespace mongo {
         }
     } cmdSleep;
 
-    // just for testing
     class EmptyCapped : public Command {
     public:
         EmptyCapped() : Command( "emptycapped" ) {}
@@ -1638,8 +1637,8 @@ namespace mongo {
             string ns = dbname + "." + coll;
             NamespaceDetails *nsd = nsdetails( ns.c_str() );
             massert( 13429, "emptycapped no such collection", nsd );
-            // TODO: Implement me in tokudb
-            //nsd->emptyCappedCollection( ns.c_str() );
+            massert( 13424, "collection must be capped", nsd->isCapped() );
+            nsd->empty();
             return true;
         }
     } emptyCappedCmd;

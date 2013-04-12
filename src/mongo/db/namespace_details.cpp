@@ -392,6 +392,11 @@ namespace mongo {
                 _uncommittedPKs.insert(pk);
             }
 
+            // Do unique checks first. If we don't do this now, we may trim off
+            // some objects that have the same unique keys as the new object.
+            // This call uasserts on duplicate key.
+            checkUniqueIndexes(pk, obj);
+
             // Note the insert we're about to do.
             CappedCollectionRollback &rollback = cc().txn().cappedRollback();
             rollback.noteInsert(_ns, pk, obj.objsize());
@@ -403,8 +408,9 @@ namespace mongo {
                 trim(obj.objsize());
             }
 
-            // The actual insert should not hold any locks.
-            insertIntoIndexes(pk, obj, flags);
+            // The actual insert should not hold any locks and do no unique
+            // checking, since we already did it above.
+            insertIntoIndexes(pk, obj, flags | ND_UNIQUE_CHECKS_OFF);
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
@@ -425,26 +431,27 @@ namespace mongo {
         }
 
     protected:
+        // Note the commit of a transaction, which simple notes completion under the lock.
+        // We don't need to do anything with nDelta and sizeDelta because those changes
+        // are already applied to in-memory stats, and this transaction has committed.
         void noteCommit(const vector <BSONObj> &pks, long long nDelta, long long sizeDelta) {
-            SimpleMutex::scoped_lock lk(_mutex);
             noteComplete(pks);
         }
 
+        // Note the abort of a transaction, noting completion and updating in-memory stats.
+        //
+        // The given deltas are signed values that represent changes to the collection.
+        // We need to roll back those changes. Therefore, we subtract from the current value.
         void noteAbort(const vector<BSONObj> &pks, long long nDelta, long long sizeDelta) {
-            SimpleMutex::scoped_lock lk(_mutex);
             noteComplete(pks);
-
-            // These deltas are signed values that represent changes to the collection
-            // by this transaction. We need to roll back those changes. Therefore, we
-            // subtract the signed value from the current value.
             _currentObjects.fetchAndSubtract(nDelta);
             _currentSize.fetchAndSubtract(sizeDelta);
         }
 
     private:
-        // note the completion of a transaction that inserted the given set of pks.
-        // must be holding _mutex
+        // Note the completion of a transaction by removing its inserted PKs from the set.
         void noteComplete(const vector<BSONObj> &pks) {
+            SimpleMutex::scoped_lock lk(_mutex);
             for (vector<BSONObj>::const_iterator it = pks.begin(); it != pks.end(); it++) {
                 const int n = _uncommittedPKs.erase(*it);
                 dassert(n == 1);
@@ -452,8 +459,18 @@ namespace mongo {
         }
 
         bool isGorged(long long n, long long size) const {
-            return (_maxObjects > 0 && n > _maxObjects)
-                || (_maxSize > 0 && size > _maxSize);
+            return (_maxObjects > 0 && n > _maxObjects) || (_maxSize > 0 && size > _maxSize);
+        }
+
+        void _deleteObject(const BSONObj &pk, const BSONObj &obj) {
+            // Note the delete we're about to do.
+            size_t size = obj.objsize();
+            CappedCollectionRollback &rollback = cc().txn().cappedRollback();
+            rollback.noteDelete(_ns, pk, size);
+            _currentObjects.subtractAndFetch(1);
+            _currentSize.subtractAndFetch(size);
+
+            NaturalOrderCollection::deleteObject(pk, obj);
         }
 
         void trim(int objsize) {
@@ -472,17 +489,22 @@ namespace mongo {
                       i++, c->advance()) {
                     BSONObj oldestPK = c->currPK();
                     BSONObj oldestObj = c->current();
-
-                    // Note the delete we're about to do.
-                    size_t oldestSize = oldestObj.objsize();
-                    CappedCollectionRollback &rollback = cc().txn().cappedRollback();
-                    rollback.noteDelete(_ns, oldestPK, oldestSize);
-                    n = _currentObjects.subtractAndFetch(1);
-                    size = _currentSize.subtractAndFetch(oldestSize);
-                    bytesTrimmed += oldestSize;
-
-                    NaturalOrderCollection::deleteObject(oldestPK, oldestObj);
+                    bytesTrimmed += oldestPK.objsize();
+                    
+                    // Delete the object, reload the current objects/size
+                    _deleteObject(oldestPK, oldestObj);
+                    n = _currentObjects.load();
+                    size = _currentSize.load();
                 }
+            }
+        }
+
+        // Remove everything from this capped collection
+        virtual void empty() {
+            SimpleMutex::scoped_lock lk(_deleteMutex);
+            scoped_ptr<Cursor> c( BasicCursor::make(this) );
+            for ( ; c->ok() ; c->advance() ) {
+                _deleteObject(c->currPK(), c->current());
             }
         }
 
@@ -498,7 +520,6 @@ namespace mongo {
 
         friend class CappedCollectionRollback;
     };
-
     BSONObj NamespaceDetails::indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) const {
         // Can only create the _id and $_ indexes internally.
         dassert(keyPattern.nFields() == 1);
@@ -539,6 +560,7 @@ namespace mongo {
         return str::equals(ns.c_str(), rsoplog);
     }
 
+    // Construct a brand new NamespaceDetails with a certain primary key and set of options.
     NamespaceDetails::NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
         _ns(ns),
         _options(options.copy()),
@@ -569,6 +591,7 @@ namespace mongo {
         }
     }
 
+    // Construct an existing NamespaceDetails given its serialized from (generated via serialize()).
     NamespaceDetails::NamespaceDetails(const BSONObj &serialized) :
         _ns(serialized["ns"].String()),
         _options(serialized["options"].embeddedObject().copy()),
@@ -595,6 +618,7 @@ namespace mongo {
         }
     }
 
+    // Serialize the information necessary to re-open this NamespaceDetails later.
     BSONObj NamespaceDetails::serialize(const char *ns, const BSONObj &options, const BSONObj &pk,
             unsigned long long multiKeyIndexBits, const BSONArray &indexes_array) {
         return BSON("ns" << ns <<
@@ -603,7 +627,6 @@ namespace mongo {
                     "multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
                     "indexes" << indexes_array);
     }
-
     BSONObj NamespaceDetails::serialize() const {
         BSONArrayBuilder indexes_array;
         for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); it++) {
@@ -703,6 +726,26 @@ namespace mongo {
                 }
                 for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
                     idx.deletePair(*ki, &pk);
+                }
+            }
+        }
+    }
+
+    // uasserts on duplicate key
+    void NamespaceDetails::checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj) {
+        dassert(!pk.isEmpty());
+        dassert(!obj.isEmpty());
+
+        for (int i = 0; i < nIndexes(); i++) {
+            IndexDetails &idx = *_indexes[i];
+            if (i == 0) {
+                dassert(isPKIndex(idx));
+                idx.uniqueCheck(pk, NULL);
+            } else {
+                BSONObjSet keys;
+                idx.getKeysFromObject(obj, keys);
+                for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
+                    idx.uniqueCheck(*ki, &pk);
                 }
             }
         }
