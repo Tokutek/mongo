@@ -242,11 +242,9 @@ namespace mongo {
     inline bool handlePossibleShardedMessage( Message &m, DbResponse * dbresponse ) {
         if( !shardingState.enabled() ) 
             return false;
-        unimplemented("sharding");
         return _handlePossibleShardedMessage(m, dbresponse);
     }
 
     void logOpForSharding( const char * opstr , const char * ns , const BSONObj& obj , BSONObj * patt );
-    //void aboutToDeleteForSharding( const Database* db , const DiskLoc& dl );
 
 }

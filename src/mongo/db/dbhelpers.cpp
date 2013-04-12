@@ -174,6 +174,7 @@ namespace mongo {
     }
 
     void Helpers::upsert( const string& ns , const BSONObj& o, bool fromMigrate ) {
+        msgasserted(16478, "Helpers::upsert is deprecated, it should only be used by mapreduce now anyway");
         BSONElement e = o["_id"];
         verify( e.type() );
         BSONObj id = e.wrap();
@@ -252,53 +253,30 @@ namespace mongo {
                                     bool maxInclusive ,
                                     bool secondaryThrottle ,
                                     bool fromMigrate ) {
-        
-        Client& c = cc();
-
         long long numDeleted = 0;
         long long millisWaitingForReplication = 0;
 
-        while ( 1 ) {
-            {
-                Client::WriteContext ctx(ns);
-                scoped_ptr<Cursor> c;
-                NamespaceDetails *d = nsdetails( ns.c_str() );
-                NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get( ns.c_str() );
-                if ( ! d )
-                    break;
-                    
-                {
-                    int ii = d->findIndexByKeyPattern( keyPattern );
-                    verify( ii >= 0 );
-                    
-                    IndexDetails& i = d->idx( ii );
+        Client::ReadContext ctx(ns);
+        Client::Transaction txn(DB_SERIALIZABLE);
 
-                    // Extend min to get (min, MinKey, MinKey, ....)
-                    BSONObj newMin = Helpers::modifiedRangeBound( min , keyPattern , -1 );
-                    // If upper bound is included, extend max to get (max, MaxKey, MaxKey, ...)
-                    // If not included, extend max to get (max, MinKey, MinKey, ....)
-                    int minOrMax = maxInclusive ? 1 : -1;
-                    BSONObj newMax = Helpers::modifiedRangeBound( max , keyPattern , minOrMax );
-                    
-                    c.reset( new IndexCursor( d , i , newMin , newMax , maxInclusive , 1 ) );
-                }
-                
-                if ( ! c->ok() ) {
-                    // we're done
-                    break;
-                }
-                
-                BSONObj pk = c->currPK();
-                BSONObj obj = c->current();
-                
-                // this is so that we don't have to handle this cursor in the delete code
-                c.reset(0);
-                
-                OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate, &cc().txn());
-                deleteOneObject( d, nsdt, pk, obj);
-                numDeleted++;
-            }
+        NamespaceDetails *d = nsdetails( ns.c_str() );
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get( ns.c_str() );
+        IndexDetails &i = d->idx(d->findIndexByKeyPattern(keyPattern));
+        // Extend min to get (min, MinKey, MinKey, ....)
+        BSONObj newMin = Helpers::modifiedRangeBound( min , keyPattern , -1 );
+        // If upper bound is included, extend max to get (max, MaxKey, MaxKey, ...)
+        // If not included, extend max to get (max, MinKey, MinKey, ....)
+        int minOrMax = maxInclusive ? 1 : -1;
+        BSONObj newMax = Helpers::modifiedRangeBound( max , keyPattern , minOrMax );
 
+        for (scoped_ptr<Cursor> c(new IndexCursor(d, i, newMin, newMax, maxInclusive, 1)); c->ok(); c->advance()) {
+            BSONObj pk = c->currPK();
+            BSONObj obj = c->current();
+            OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate, &cc().txn());
+            deleteOneObject(d, nsdt, pk, obj);
+            numDeleted++;
+            // Let's not wait for replication for now.  TODO(leif): maybe put this back.
+#if 0
             Timer secondaryThrottleTime;
 
             if ( secondaryThrottle ) {
@@ -307,21 +285,14 @@ namespace mongo {
                 }
                 millisWaitingForReplication += secondaryThrottleTime.millis();
             }
-            
-            if ( ! Lock::isLocked() ) {
-                int micros = ( 2 * Client::recommendedYieldMicros() ) - secondaryThrottleTime.micros();
-                if ( micros > 0 ) {
-                    LOG(1) << "Helpers::removeRangeUnlocked going to sleep for " << micros << " micros" << endl;
-                    sleepmicros( micros );
-                }
-            }
-                
+#endif
         }
-        
+
         if ( secondaryThrottle )
             log() << "Helpers::removeRangeUnlocked time spent waiting for replication: "  
                   << millisWaitingForReplication << "ms" << endl;
-        
+
+        txn.commit();
         return numDeleted;
     }
 

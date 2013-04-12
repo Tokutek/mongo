@@ -39,10 +39,13 @@
 #include "mongo/db/repl_block.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/repl.h"
+#include "mongo/db/ops/insert.h"
+#include "mongo/db/ops/update.h"
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/distlock.h"
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/client/remote_transaction.h"
 
 #include "mongo/util/queue.h"
 #include "mongo/util/startup_test.h"
@@ -239,6 +242,7 @@ namespace mongo {
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
 
     };
 
@@ -276,7 +280,7 @@ namespace mongo {
             _max = max;
             _shardKeyPattern = shardKeyPattern;
 
-            //verify( _cloneLocs.size() == 0 );
+            verify( _clonePKs.size() == 0 );
             verify( _deleted.size() == 0 );
             verify( _reload.size() == 0 );
             verify( _memoryUsed == 0 );
@@ -291,7 +295,7 @@ namespace mongo {
                 scoped_spinlock lk( _trackerLocks );
                 _deleted.clear();
                 _reload.clear();
-                //_cloneLocs.clear();
+                _clonePKs.clear();
             }
             _memoryUsed = 0;
 
@@ -349,13 +353,10 @@ namespace mongo {
                 break;
 
             case 'u':
-#if 0
-                if ( ! Helpers::findById( cc() , _ns.c_str() , ide.wrap() , it ) ) {
+                if ( ! Helpers::findById( _ns.c_str() , ide.wrap() , it ) ) {
                     warning() << "logOpForSharding couldn't find: " << ide << " even though should have" << migrateLog;
                     return;
                 }
-#endif
-                ::abort();
                 break;
 
             }
@@ -381,13 +382,10 @@ namespace mongo {
                 BSONObj t = *i;
                 if ( explode ) {
                     BSONObj it;
-#if 0
-                    if ( Helpers::findById( cc() , _ns.c_str() , t, it ) ) {
+                    if ( Helpers::findById( _ns.c_str() , t, it ) ) {
                         arr.append( it );
                         size += it.objsize();
                     }
-#endif
-                    ::abort();
                 }
                 else {
                     arr.append( t );
@@ -424,7 +422,7 @@ namespace mongo {
         }
 
         /**
-         * Get the disklocs that belong to the chunk migrated and sort them in _cloneLocs (to avoid seeking disk later)
+         * Get the primary keys that belong to the chunk migrated and sort them in _clonePKs (to avoid seeking disk later)
          *
          * @param maxChunkSize number of bytes beyond which a chunk's base data (no indices) is considered too large to move
          * @param errmsg filled with textual description of error if this call return false
@@ -457,11 +455,14 @@ namespace mongo {
             // use the average object size to estimate how many objects a full chunk would carry
             // do that while traversing the chunk's range using the sharding index, below
             // there's a fair amount of slack before we determine a chunk is too large because object sizes will vary
+            NamespaceDetailsAccStats stats;
+            BSONObjBuilder statsResult;
+            d->fillCollectionStats(&stats, &statsResult, 1);
             unsigned long long maxRecsWhenFull;
             long long avgRecSize;
-            const long long totalRecs = 10; ::abort(); //d->stats.nrecords;
+            const long long totalRecs = stats.count;
             if ( totalRecs > 0 ) {
-                avgRecSize = 10; ::abort(); //d->stats.datasize / totalRecs;
+                avgRecSize = stats.size / totalRecs;
                 maxRecsWhenFull = maxChunkSize / avgRecSize;
                 maxRecsWhenFull = std::min( (unsigned long long)(Chunk::MaxObjectPerChunk + 1) , 130 * maxRecsWhenFull / 100 /* slack */ );
             }
@@ -475,23 +476,13 @@ namespace mongo {
             bool isLargeChunk = false;
             unsigned long long recCount = 0;;
             while ( cc->ok() ) {
-                ::abort();
-                // TODO: Kill the disklocs
-#if 0
-                DiskLoc dl = cc->currLoc();
+                BSONObj pk = cc->currPK();
                 if ( ! isLargeChunk ) {
                     scoped_spinlock lk( _trackerLocks );
-                    _cloneLocs.insert( dl );
+                    _clonePKs.insert( pk.getOwned() );
                 }
                 cc->advance();
 
-                // we can afford to yield here because any change to the base data that we might miss is already being
-                // queued and will be migrated in the 'transferMods' stage
-                if ( ! cc->yieldSometimes( ClientCursor::DontNeed ) ) {
-                    cc.release();
-                    break;
-                }
-#endif
                 if ( ++recCount > maxRecsWhenFull ) {
                     isLargeChunk = true;
                 }
@@ -510,105 +501,68 @@ namespace mongo {
 
             {
                 scoped_spinlock lk( _trackerLocks );
-                //log() << "moveChunk number of documents: " << _cloneLocs.size() << migrateLog;
+                log() << "moveChunk number of documents: " << _clonePKs.size() << migrateLog;
             }
             return true;
         }
 
         bool clone( string& errmsg , BSONObjBuilder& result ) {
-            ::abort();
-            return false;
-#if 0 
             if ( ! _getActive() ) {
                 errmsg = "not active";
                 return false;
             }
 
-            ElapsedTracker tracker (128, 10); // same as ClientCursor::_yieldSometimesTracker
-
-            int allocSize;
+            int allocSize = BSONObjMaxUserSize;
+            // TODO(leif): maybe reimplement this calculation?
+#if 0
             {
                 Client::ReadContext ctx( _ns );
                 NamespaceDetails *d = nsdetails( _ns.c_str() );
                 verify( d );
                 scoped_spinlock lk( _trackerLocks );
-                allocSize = std::min(BSONObjMaxUserSize, (int)((12 + d->averageObjectSize()) * _cloneLocs.size()));
+                allocSize = std::min(BSONObjMaxUserSize, (int)((12 + d->averageObjectSize()) * _clonePKs.size()));
             }
+#endif
             BSONArrayBuilder a (allocSize);
+            Client::ReadContext ctx( _ns );
+            Client::Transaction txn(DB_TXN_SNAPSHOT);
             while ( 1 ) {
                 bool filledBuffer = false;
-                
-                auto_ptr<LockMongoFilesShared> fileLock;
-                Record* recordToTouch = 0;
 
                 {
-                    Client::ReadContext ctx( _ns );
+                    NamespaceDetails *d = nsdetails( _ns.c_str() );
+                    verify( d );
                     scoped_spinlock lk( _trackerLocks );
-                    set<DiskLoc>::iterator i = _cloneLocs.begin();
-                    for ( ; i!=_cloneLocs.end(); ++i ) {
-                        if (tracker.intervalHasElapsed()) // should I yield?
-                            break;
-                        
-                        DiskLoc dl = *i;
-                        
-                        Record* r = dl.rec();
-                        if ( ! r->likelyInPhysicalMemory() ) {
-                            fileLock.reset( new LockMongoFilesShared() );
-                            recordToTouch = r;
-                            break;
-                        }
-                        
-                        BSONObj o = dl.obj();
-                        
+                    set<BSONObj>::iterator i = _clonePKs.begin();
+                    for ( ; i!=_clonePKs.end(); ++i ) {
+
+                        BSONObj o;
+                        const BSONObj &pk = *i;
+                        bool found = d->findByPK( pk, o );
+                        verify(found);
+
                         // use the builder size instead of accumulating 'o's size so that we take into consideration
                         // the overhead of BSONArray indices
                         if ( a.len() + o.objsize() + 1024 > BSONObjMaxUserSize ) {
                             filledBuffer = true; // break out of outer while loop
                             break;
                         }
-                        
+
                         a.append( o );
                     }
-                    
-                    _cloneLocs.erase( _cloneLocs.begin() , i );
-                    
-                    if ( _cloneLocs.empty() || filledBuffer )
+
+                    _clonePKs.erase( _clonePKs.begin() , i );
+
+                    if ( _clonePKs.empty() || filledBuffer )
                         break;
                 }
-                
-                if ( recordToTouch ) {
-                    // its safe to touch here bceause we have a LockMongoFilesShared
-                    // we can't do where we get the lock because we would have to unlock the main readlock and tne _trackerLocks
-                    // simpler to handle this out there
-                    recordToTouch->touch();
-                    recordToTouch = 0;
-                }
+
             }
+            txn.commit();
 
             result.appendArray( "objects" , a.arr() );
             return true;
-#endif
         }
-
-#if 0
-        void aboutToDelete( const Database* db , const DiskLoc& dl ) {
-            verify(db);
-            Lock::assertWriteLocked(db->name);
-
-            if ( ! _getActive() )
-                return;
-
-            if ( ! db->ownsNS( _ns ) )
-                return;
-
-            
-            // not needed right now
-            // but trying to prevent a future bug
-            scoped_spinlock lk( _trackerLocks ); 
-
-            _cloneLocs.erase( dl );
-        }
-#endif
 
         long long mbUsed() const { return _memoryUsed / ( 1024 * 1024 ); }
 
@@ -646,11 +600,11 @@ namespace mongo {
         // even though it shouldn't be needed under normal operation
         SpinLock _trackerLocks;
 
-        // disk locs yet to be transferred from here to the other side
+        // primary keys yet to be transferred from here to the other side
         // no locking needed because built initially by 1 thread in a read lock
         // emptied by 1 thread in a read lock
         // updates applied by 1 thread in a write lock
-        //set<DiskLoc> _cloneLocs;
+        set<BSONObj> _clonePKs;
 
         list<BSONObj> _reload; // objects that were modified that must be recloned
         list<BSONObj> _deleted; // objects deleted during clone that should be deleted later
@@ -736,12 +690,6 @@ namespace mongo {
         migrateFromStatus.logOp( opstr , ns , obj , patt );
     }
 
-#if 0
-    void aboutToDeleteForSharding( const Database* db , const DiskLoc& dl ) {
-        migrateFromStatus.aboutToDelete( db , dl );
-    }
-#endif
-
     class TransferModsCommand : public ChunkCommandHelper {
     public:
         TransferModsCommand() : ChunkCommandHelper( "_transferMods" ) {}
@@ -784,7 +732,7 @@ namespace mongo {
             // 1. parse options
             // 2. make sure my view is complete and lock
             // 3. start migrate
-            //    in a read lock, get all DiskLoc and sort so we can do as little seeking as possible
+            //    in a read lock, get all primary keys and sort so we can do as little seeking as possible
             //    tell to start transferring
             // 4. pause till migrate caught up
             // 5. LOCK
@@ -1103,6 +1051,7 @@ namespace mongo {
                 myVersion.incMajor();
 
                 {
+                    // TODO(leif): Why is this lock needed? Try to remove this lock or downgrade to a read lock later.
                     Lock::DBWrite lk( ns );
                     verify( myVersion > shardingState.getVersion( ns ) );
 
@@ -1164,121 +1113,95 @@ namespace mongo {
 
                 // we want to go only once to the configDB but perhaps change two chunks, the one being migrated and another
                 // local one (so to bump version for the entire shard)
-                // we use the 'applyOps' mechanism to group the two updates and make them safer
-                // TODO pull config update code to a module
 
-                BSONObjBuilder cmdBuilder;
-
-                BSONArrayBuilder updates( cmdBuilder.subarrayStart( "applyOps" ) );
-                {
-                    // update for the chunk being moved
-                    BSONObjBuilder op;
-                    op.append( "op" , "u" );
-                    op.appendBool( "b" , false /* no upserting */ );
-                    op.append( "ns" , ShardNS::chunk );
-
-                    BSONObjBuilder n( op.subobjStart( "o" ) );
-                    n.append( "_id" , Chunk::genID( ns , min ) );
-                    myVersion.addToBSON( n, "lastmod" );
-                    n.append( "ns" , ns );
-                    n.append( "min" , min );
-                    n.append( "max" , max );
-                    n.append( "shard" , toShard.getName() );
-                    n.done();
-
-                    BSONObjBuilder q( op.subobjStart( "o2" ) );
-                    q.append( "_id" , Chunk::genID( ns , min ) );
-                    q.done();
-
-                    updates.append( op.obj() );
-                }
-
-                nextVersion = myVersion;
-
-                // if we have chunks left on the FROM shard, update the version of one of them as well
-                // we can figure that out by grabbing the chunkManager installed on 5.a
-                // TODO expose that manager when installing it
-
-                ShardChunkManagerPtr chunkManager = shardingState.getShardChunkManager( ns );
-                if( chunkManager->getNumChunks() > 0 ) {
-
-                    // get another chunk on that shard
-                    BSONObj lookupKey;
-                    BSONObj bumpMin, bumpMax;
-                    do {
-                        chunkManager->getNextChunk( lookupKey , &bumpMin , &bumpMax );
-                        lookupKey = bumpMin;
-                    }
-                    while( bumpMin == min );
-
-                    BSONObjBuilder op;
-                    op.append( "op" , "u" );
-                    op.appendBool( "b" , false );
-                    op.append( "ns" , ShardNS::chunk );
-
-                    nextVersion.incMinor();  // same as used on donateChunk
-                    BSONObjBuilder n( op.subobjStart( "o" ) );
-                    n.append( "_id" , Chunk::genID( ns , bumpMin ) );
-                    nextVersion.addToBSON( n, "lastmod" );
-                    n.append( "ns" , ns );
-                    n.append( "min" , bumpMin );
-                    n.append( "max" , bumpMax );
-                    n.append( "shard" , fromShard.getName() );
-                    n.done();
-
-                    BSONObjBuilder q( op.subobjStart( "o2" ) );
-                    q.append( "_id" , Chunk::genID( ns , bumpMin  ) );
-                    q.done();
-
-                    updates.append( op.obj() );
-
-                    log() << "moveChunk updating self version to: " << nextVersion << " through "
-                          << bumpMin << " -> " << bumpMax << " for collection '" << ns << "'" << migrateLog;
-
-                }
-                else {
-
-                    log() << "moveChunk moved last chunk out for collection '" << ns << "'" << migrateLog;
-                }
-
-                updates.done();
-
-                BSONArrayBuilder preCond( cmdBuilder.subarrayStart( "preCondition" ) );
-                {
-                    BSONObjBuilder b;
-                    b.append( "ns" , ShardNS::chunk );
-                    b.append( "q" , BSON( "query" << BSON( "ns" << ns ) << "orderby" << BSON( "lastmod" << -1 ) ) );
-                    {
-                        BSONObjBuilder bb( b.subobjStart( "res" ) );
-                        // TODO: For backwards compatibility, we can't yet require an epoch here
-                        bb.appendTimestamp( "lastmod", maxVersion.toLong() );
-                        bb.done();
-                    }
-                    preCond.append( b.obj() );
-                }
-
-                preCond.done();
-
-                BSONObj cmd = cmdBuilder.obj();
-                LOG(7) << "moveChunk update: " << cmd << migrateLog;
-
-                bool ok = false;
-                BSONObj cmdResult;
                 try {
-                    scoped_ptr<ScopedDbConnection> conn(
-                            ScopedDbConnection::getInternalScopedDbConnection(
-                                    shardingState.getConfigServer() ) );
-                    ok = conn->get()->runCommand( "config" , cmd , cmdResult );
+                    shared_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer()));
+                    RemoteTransaction txn(conn, "serializable");
+
+                    // Check the precondition
+                    BSONObjBuilder b;
+                    b.appendTimestamp("lastmod", maxVersion.toLong());
+                    BSONObj expect = b.obj();
+                    Matcher m(expect);
+
+                    BSONObj found = conn->get()->findOne(ShardNS::chunk, QUERY("ns" << ns).sort("lastmod", -1));
+                    if (!m.matches(found)) {
+                        // TODO(leif): Make sure that this means the sharding algorithm is broken and we should bounce the server.
+                        error() << "moveChunk commit failed: " << ShardChunkVersion::fromBSON(found["lastmod"])
+                                << " instead of " << maxVersion << migrateLog;
+                        error() << "TERMINATING" << migrateLog;
+                        dbexit(EXIT_SHARDING_ERROR);
+                    }
+
+                    try {
+                        // update for the chunk being moved
+                        BSONObjBuilder n;
+                        n.append( "_id" , Chunk::genID( ns , min ) );
+                        myVersion.addToBSON( n, "lastmod" );
+                        n.append( "ns" , ns );
+                        n.append( "min" , min );
+                        n.append( "max" , max );
+                        n.append( "shard" , toShard.getName() );
+                        conn->get()->update(ShardNS::chunk, QUERY("_id" << Chunk::genID(ns, min)), n.obj());
+                    }
+                    catch (DBException &e) {
+                        warning() << e << migrateLog;
+                        error() << "moveChunk error updating the chunk being moved" << migrateLog;
+                        throw e;
+                    }
+
+                    nextVersion = myVersion;
+
+                    // if we have chunks left on the FROM shard, update the version of one of them as well
+                    // we can figure that out by grabbing the chunkManager installed on 5.a
+                    // TODO expose that manager when installing it
+
+                    ShardChunkManagerPtr chunkManager = shardingState.getShardChunkManager(ns);
+                    if (chunkManager->getNumChunks() > 0) {
+                        // get another chunk on that shard
+                        BSONObj lookupKey;
+                        BSONObj bumpMin, bumpMax;
+                        do {
+                            chunkManager->getNextChunk( lookupKey , &bumpMin , &bumpMax );
+                            lookupKey = bumpMin;
+                        }
+                        while( bumpMin == min );
+
+                        nextVersion.incMinor();  // same as used on donateChunk
+                        try {
+                            BSONObjBuilder n;
+                            n.append( "_id" , Chunk::genID( ns , bumpMin ) );
+                            nextVersion.addToBSON( n, "lastmod" );
+                            n.append( "ns" , ns );
+                            n.append( "min" , bumpMin );
+                            n.append( "max" , bumpMax );
+                            n.append( "shard" , fromShard.getName() );
+                            conn->get()->update(ShardNS::chunk, QUERY("_id" << Chunk::genID(ns, bumpMin)), n.obj());
+                            log() << "moveChunk updating self version to: " << nextVersion << " through "
+                                  << bumpMin << " -> " << bumpMax << " for collection '" << ns << "'" << migrateLog;
+                        }
+                        catch (DBException &e) {
+                            warning() << e << migrateLog;
+                            error() << "moveChunk error updating chunk on the FROM shard" << migrateLog;
+                            throw e;
+                        }
+                    }
+                    else {
+                        log() << "moveChunk moved last chunk out for collection '" << ns << "'" << migrateLog;
+                    }
+
+                    txn.commit();
                     conn->done();
                 }
-                catch ( DBException& e ) {
-                    warning() << e << migrateLog;
-                    ok = false;
-                    BSONObjBuilder b;
-                    e.getInfo().append( b );
-                    cmdResult = b.obj();
+                catch (...) {
+                    // TODO(leif): Vanilla, if it fails, waits 10 seconds and does a query to see if somehow the commit made it through anyway.  Maybe we need such a mechanism too?
+                    error() << "moveChunk failed to get confirmation of commit" << migrateLog;
+                    error() << "TERMINATING" << migrateLog;
+                    dbexit(EXIT_SHARDING_ERROR);
                 }
 
+                // Vanilla does the following at the end.  Keep this code around as notes until we know we don't need it.
+#if 0
                 if ( ! ok ) {
 
                     // this could be a blip in the connectivity
@@ -1323,6 +1246,7 @@ namespace mongo {
                         dbexit( EXIT_SHARDING_ERROR );
                     }
                 }
+#endif
 
                 migrateFromStatus.setInCriticalSection( false );
 
@@ -1435,57 +1359,45 @@ namespace mongo {
             {
                 // 0. copy system.namespaces entry if collection doesn't already exist
                 Client::WriteContext ctx( ns );
+                Client::Transaction txn(DB_SERIALIZABLE);
+                const string &dbname = cc().database()->name;
+
                 // Only copy if ns doesn't already exist
                 if ( ! nsdetails( ns.c_str() ) ) {
-                    string system_namespaces = NamespaceString( ns ).db + ".system.namespaces";
+                    string system_namespaces = dbname + ".system.namespaces";
                     BSONObj entry = conn->findOne( system_namespaces, BSON( "name" << ns ) );
                     if ( entry["options"].isABSONObj() ) {
-                        ::abort();
-#if 0
                         string errmsg;
-                        if ( ! userCreateNS( ns.c_str(), entry["options"].Obj(), errmsg, true, 0 ) )
+                        if ( ! userCreateNS( ns.c_str(), entry["options"].Obj(), errmsg, true ) )
                             warning() << "failed to create collection with options: " << errmsg
                                       << endl;
-#endif
                     }
                 }
-            }
 
-            {                
                 // 1. copy indexes
-                
-                vector<BSONObj> all;
+
                 {
                     auto_ptr<DBClientCursor> indexes = conn->getIndexes( ns );
-                    
+                    string system_indexes = dbname + ".system.indexes";
                     while ( indexes->more() ) {
-                        all.push_back( indexes->next().getOwned() );
+                        BSONObj idx = indexes->next();
+                        insertObject( system_indexes.c_str() , idx, 0, true /* flag fromMigrate in oplog */ );
                     }
                 }
 
-                for ( unsigned i=0; i<all.size(); i++ ) {
-                    BSONObj idx = all[i];
-                    Client::WriteContext ct( ns );
-                    string system_indexes = cc().database()->name + ".system.indexes";
-                    ::abort(); //theDataFileMgr.insertAndLog( system_indexes.c_str() , idx, true /* flag fromMigrate in oplog */ );
-                }
-
+                txn.commit();
                 timing.done(1);
             }
 
             {
                 // 2. delete any data already in range
-                // TODO: TokuDB: No need for a removesaver, we have transactions.
-#if 0
-                RemoveSaver rs( "moveChunk" , ns , "preCleanup" );
-#endif
+                // removeRange makes a ReadContext and a Transaction
                 long long num = Helpers::removeRange( ns ,
                                                       min ,
                                                       max ,
                                                       findShardKeyIndexPattern_unlocked( ns , shardKeyPattern ) , 
                                                       false , /*maxInclusive*/
                                                       secondaryThrottle , /* secondaryThrottle */
-                                                      /* cmdLine.moveParanoia ? &rs : 0 , */ /*callback*/
                                                       true ); /* flag fromMigrate in oplog */
                 if ( num )
                     warning() << "moveChunkCmd deleted data already in chunk # objects: " << num << migrateLog;
@@ -1497,6 +1409,9 @@ namespace mongo {
             {
                 // 3. initial bulk clone
                 state = CLONE;
+
+                Client::ReadContext ctx(ns);
+                Client::Transaction txn(DB_SERIALIZABLE);
 
                 while ( true ) {
                     BSONObj res;
@@ -1515,36 +1430,29 @@ namespace mongo {
                     BSONObjIterator i( arr );
                     while( i.more() ) {
                         BSONObj o = i.next().Obj();
-                        {
-                            //PageFaultRetryableSection pgrs;
-                            while ( 1 ) {
-                                try {
-                                    Lock::DBWrite lk( ns );
-                                    Helpers::upsert( ns, o, true );
-                                    break;
-                                }
-                                //catch ( PageFaultException& e ) {
-                                catch ( ... ) {
-                                    //e.touch();
-                                    ::abort();
-                                }
-                            }
-                        }
+                        BSONObj id = o["_id"].wrap();
+                        OpDebug debug;
+                        updateObjects(ns.c_str(), o, id, true, false, true, debug, true);
+
                         thisTime++;
                         numCloned++;
                         clonedBytes += o.objsize();
 
+                        // TODO(leif): maybe restore waitForReplication
+#if 0
                         if ( secondaryThrottle ) {
                             if ( ! waitForReplication( cc().getLastOp(), 2, 60 /* seconds to wait */ ) ) {
                                 warning() << "secondaryThrottle on, but doc insert timed out after 60 seconds, continuing" << endl;
                             }
                         }
+#endif
                     }
 
                     if ( thisTime == 0 )
                         break;
                 }
 
+                txn.commit();
                 timing.done(3);
             }
 
@@ -1568,7 +1476,7 @@ namespace mongo {
                         break;
 
                     apply( res , &lastOpApplied );
-                    
+
                     const int maxIterations = 3600*50;
                     int i;
                     for ( i=0;i<maxIterations; i++) {
@@ -1576,10 +1484,10 @@ namespace mongo {
                             timing.note( "aborted" );
                             return;
                         }
-                        
+
                         if ( opReplicatedEnough( lastOpApplied ) )
                             break;
-                        
+
                         if ( i > 100 ) {
                             warning() << "secondaries having hard time keeping up with migrate" << migrateLog;
                         }
@@ -1593,13 +1501,13 @@ namespace mongo {
                         conn.done();
                         state = FAIL;
                         return;
-                    } 
+                    }
                 }
 
                 timing.done(4);
             }
 
-            { 
+            {
                 // pause to wait for replication
                 // this will prevent us from going into critical section until we're ready
                 Timer t;
@@ -1631,12 +1539,12 @@ namespace mongo {
                         timing.note( "aborted" );
                         return;
                     }
-                    
+
                     if ( state == COMMIT_START ) {
                         if ( flushPendingWrites( lastOpApplied ) )
                             break;
                     }
-                    
+
                     sleepmillis( 10 );
                 }
 
@@ -1685,28 +1593,22 @@ namespace mongo {
             bool didAnything = false;
 
             if ( xfer["deleted"].isABSONObj() ) {
-#if 0
-                RemoveSaver rs( "moveChunk" , ns , "removedDuring" );
-#endif
-
                 BSONObjIterator i( xfer["deleted"].Obj() );
+                Client::ReadContext cx(ns);
+                Client::Transaction txn(DB_SERIALIZABLE);
                 while ( i.more() ) {
-                    Client::WriteContext cx(ns);
 
                     BSONObj id = i.next().Obj();
 
                     // do not apply deletes if they do not belong to the chunk being migrated
                     BSONObj fullObj;
-#if 0
-                    if ( Helpers::findById( cc() , ns.c_str() , id, fullObj ) ) {
+                    if ( Helpers::findById( ns.c_str() , id, fullObj ) ) {
                         if ( ! isInRange( fullObj , min , max ) ) {
                             log() << "not applying out of range deletion: " << fullObj << migrateLog;
 
                             continue;
                         }
                     }
-#endif
-                    ::abort();
 
                     Helpers::removeRange( ns ,
                                           id ,
@@ -1720,20 +1622,24 @@ namespace mongo {
                     *lastOpApplied = cx.ctx().getClient()->getLastOp().asDate();
                     didAnything = true;
                 }
+                txn.commit();
             }
 
             if ( xfer["reload"].isABSONObj() ) {
                 BSONObjIterator i( xfer["reload"].Obj() );
+                Client::ReadContext cx(ns);
+                Client::Transaction txn(DB_SERIALIZABLE);
                 while ( i.more() ) {
-                    Client::WriteContext cx(ns);
+                    BSONObj o = i.next().Obj();
 
-                    BSONObj it = i.next().Obj();
-
-                    Helpers::upsert( ns , it , true );
+                    BSONObj id = o["_id"].wrap();
+                    OpDebug debug;
+                    updateObjects(ns.c_str(), o, id, true, false, true, debug, true);
 
                     *lastOpApplied = cx.ctx().getClient()->getLastOp().asDate();
                     didAnything = true;
                 }
+                txn.commit();
             }
 
             return didAnything;
