@@ -33,6 +33,8 @@
 #include "mongo/db/namespace.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/querypattern.h"
+#include "mongo/db/relock.h"
+
 #include "mongo/db/storage/env.h"
 
 namespace mongo {
@@ -541,7 +543,7 @@ namespace mongo {
             }
             if (it->second.get() == NULL) {
                 if (!Lock::isWriteLocked(ns)) {
-                    throw ReadLockedDuringFileOps();
+                    throw RetryWithWriteLock();
                 }
                 namespaces->erase(it);
                 open_ns(ns);
@@ -551,13 +553,6 @@ namespace mongo {
             }
             return it->second.get();
         }
-
-        class ReadLockedDuringFileOps : public DBException {
-        public:
-            ReadLockedDuringFileOps() :
-                DBException("Need to be write locked when opening a namespace", 0) {
-            }
-        };
 
         bool allocated() const { return namespaces.get() != NULL; }
 
