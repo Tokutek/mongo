@@ -18,6 +18,7 @@
 #define MONGO_DB_STORAGE_CURSOR_H
 
 #include "mongo/pch.h"
+#include "mongo/db/client.h"
 
 #include <db.h>
 
@@ -28,20 +29,8 @@ namespace mongo {
         // RAII wrapper for a TokuDB DBC
         class Cursor {
         public:
-            Cursor(DB *db, const int flags = 0) : _dbc(NULL) {
-                if (db != NULL) {
-                    int r = db->cursor(db, cc().txn().db_txn(), &_dbc, flags);
-                    // until #6424 is fixed, this may cause really bad behavior by sending an exception through ydb code
-                    uassert(16742, "Dictionary trying to be read was created after the transaction began. Try restarting tranasaction.", r != TOKUDB_MVCC_DICTIONARY_TOO_NEW);
-                    verify(r == 0 && _dbc != NULL);
-                }
-            }
-            ~Cursor() {
-                if (_dbc != NULL) {
-                    int r = _dbc->c_close(_dbc);
-                    verify(r == 0);
-                }
-            }
+            Cursor(DB *db, const int flags = 0);
+            ~Cursor();
             DBC *dbc() const {
                 return _dbc;
             }

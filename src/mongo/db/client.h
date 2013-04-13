@@ -54,7 +54,6 @@ namespace mongo {
     class AbstractMessagingPort;
     class LockCollectionForReading;
     class DBClientConnection;
-    //class PageFaultRetryableSection;
 
     TSP_DECLARE(Client, currentClient)
 
@@ -124,17 +123,10 @@ namespace mongo {
         AbstractMessagingPort * port() const { return _mp; }
         ConnectionId getConnectionId() const { return _connectionId; }
 
-#if 0
-        bool inPageFaultRetryableSection() const { return _pageFaultRetryableSection != 0; }
-        PageFaultRetryableSection* getPageFaultRetryableSection() const { return _pageFaultRetryableSection; }
-#endif
-        
         bool hasWrittenThisPass() const { return _hasWrittenThisPass; }
         void writeHappened() { _hasWrittenThisPass = true; }
         void newTopLevelRequest() { _hasWrittenThisPass = false; }
         
-        //bool allowedToThrowPageFaultException() const;
-
         LockState& lockState() { return _ls; }
 
         /**
@@ -279,12 +271,9 @@ namespace mongo {
         shared_ptr< DBClientConnection > _authConn;
 
         bool _hasWrittenThisPass;
-        //PageFaultRetryableSection *_pageFaultRetryableSection;
 
         LockState _ls;
         
-        //friend class PageFaultRetryableSection; // TEMP
-        //friend class NoPageFaultsAllowed; // TEMP
     public:
 
         /* set _god=true temporarily, safely */
@@ -381,7 +370,6 @@ namespace mongo {
 
     }; // class Client
 
-
     /** get the Client object for this thread. */
     inline Client& cc() {
         Client * c = currentClient.get();
@@ -393,8 +381,8 @@ namespace mongo {
         _prev = cc()._god;
         cc()._god = true;
     }
-    inline Client::GodScope::~GodScope() { cc()._god = _prev; }
 
+    inline Client::GodScope::~GodScope() { cc()._god = _prev; }
 
     inline bool haveClient() { return currentClient.get() > 0; }
 

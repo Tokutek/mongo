@@ -14,16 +14,16 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "txn_context.h"
 
 #include "mongo/pch.h"
 
-#include <db.h>
-#include "mongo/db/storage/env.h"
 #include "mongo/bson/bsonobjiterator.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/gtid.h"
+#include "mongo/db/txn_context.h"
+#include "mongo/db/namespace_details.h"
+#include "mongo/db/storage/env.h"
 
 namespace mongo {
 
@@ -54,12 +54,16 @@ namespace mongo {
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
             : _txn((parent == NULL) ? NULL : &parent->_txn, txnFlags), 
               _parent(parent),
+              _retired(false),
               _numOperations(0),
               _initiatingRS(false)
     {
     }
 
     TxnContext::~TxnContext() {
+        if (!_retired) {
+            abort();
+        }
     }
 
     void TxnContext::commit(int flags) {
@@ -95,10 +99,19 @@ namespace mongo {
             dassert(txnGTIDManager);
             txnGTIDManager->noteLiveGTIDDone(gtid);
         }
+
+        if (hasParent()) {
+            _cappedRollback.transfer(_parent->_cappedRollback);
+        } else {
+            _cappedRollback.commit();
+        }
+        _retired = true;
     }
 
     void TxnContext::abort() {
         _txn.abort();
+        _cappedRollback.abort();
+        _retired = true;
     }
 
     void TxnContext::logOp(BSONObj op) {
@@ -131,4 +144,5 @@ namespace mongo {
         BSONArray array = _txnOps.arr();
         _logTxnToOplog(gtid, array);
     }
+
 } // namespace mongo
