@@ -209,17 +209,21 @@ namespace mongo {
             // the next PK, if it exists, is the last key + 1
             int r;
             IndexDetails &pkIdx = getPKIndex();
-            IndexDetails::Cursor c(pkIdx);
-            DBC *cursor = c.dbc();
+            Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+            {
+                IndexDetails::Cursor c(pkIdx);
+                DBC *cursor = c.dbc();
 
-            BSONObj key = BSONObj();
-            struct getfExtra extra(key);
-            r = cursor->c_getf_last(cursor, 0, getfCallback, &extra);
-            verify(r == 0 || r == DB_NOTFOUND);
-            if (!key.isEmpty()) {
-                dassert(key.nFields() == 1);
-                _nextPK = AtomicWord<long long>(key.firstElement().Long() + 1);
+                BSONObj key = BSONObj();
+                struct getfExtra extra(key);
+                r = cursor->c_getf_last(cursor, 0, getfCallback, &extra);
+                verify(r == 0 || r == DB_NOTFOUND);
+                if (!key.isEmpty()) {
+                    dassert(key.nFields() == 1);
+                    _nextPK = AtomicWord<long long>(key.firstElement().Long() + 1);
+                }
             }
+            txn.commit();
         }
 
         // insert an object, using a fresh auto-increment primary key
@@ -321,10 +325,11 @@ namespace mongo {
             //   so bringing it all into memory now helps warmup.
             long long n = 0;
             long long size = 0;
-            scoped_ptr<Cursor> c( BasicCursor::make(this) );
-            for ( ; c->ok(); n++, c->advance()) {
+            Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+            for (scoped_ptr<Cursor> c( BasicCursor::make(this) ); c->ok(); n++, c->advance()) {
                 size += c->current().objsize();
             }
+            txn.commit();
 
             _currentObjects = AtomicWord<long long>(n);
             _currentSize = AtomicWord<long long>(size);
