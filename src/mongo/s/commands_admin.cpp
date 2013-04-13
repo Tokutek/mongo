@@ -714,13 +714,13 @@ namespace mongo {
                 if ( ! okForConfigChanges( errmsg ) )
                     return false;
 
-                ShardConnection::sync();
-
                 string ns = cmdObj.firstElement().valuestrsafe();
                 if ( ns.size() == 0 ) {
                     errmsg = "no ns";
                     return false;
                 }
+
+                ShardConnection::sync( NamespaceString(ns).db );
 
                 DBConfigPtr config = grid.getDBConfig( ns );
                 if ( ! config->isSharded( ns ) ) {
@@ -796,14 +796,15 @@ namespace mongo {
                 if ( ! okForConfigChanges( errmsg ) )
                     return false;
 
-                ShardConnection::sync();
-
-                Timer t;
                 string ns = cmdObj.firstElement().valuestrsafe();
                 if ( ns.size() == 0 ) {
                     errmsg = "no ns";
                     return false;
                 }
+
+                ShardConnection::sync( NamespaceString(ns).db );
+
+                Timer t;
 
                 DBConfigPtr config = grid.getDBConfig( ns );
                 if ( ! config->isSharded( ns ) ) {
@@ -1283,6 +1284,11 @@ namespace mongo {
                     continue;
                 }
 
+                if ( name == "config" || name == "admin" ) {
+                    //always get this from the config servers
+                    continue;
+                }
+
                 long long size = i->second;
                 totalSize += size;
 
@@ -1295,7 +1301,7 @@ namespace mongo {
                 bb.append( temp.obj() );
             }
             
-            if ( sizes.find( "config" ) == sizes.end() ){
+            { // get config db from the config servers (first one)
                 scoped_ptr<ScopedDbConnection> conn(
                         ScopedDbConnection::getInternalScopedDbConnection( configServer.getPrimary()
                                                                            .getConnString() ) );
@@ -1312,6 +1318,27 @@ namespace mongo {
                 }
                 else {
                     bb.append( BSON( "name" << "config" ) );
+                }
+                conn->done();
+            }
+
+            { // get admin db from the config servers (first one)
+                scoped_ptr<ScopedDbConnection> conn(
+                        ScopedDbConnection::getInternalScopedDbConnection(
+                                configServer.getPrimary().getConnString(), 30));
+                BSONObj x;
+                if ( conn->get()->simpleCommand( "admin" , &x , "dbstats" ) ){
+                    BSONObjBuilder b;
+                    b.append( "name" , "admin" );
+                    b.appendBool( "empty" , false );
+                    if ( x["fileSize"].type() )
+                        b.appendAs( x["fileSize"] , "sizeOnDisk" );
+                    else
+                        b.append( "sizeOnDisk" , 1 );
+                    bb.append( b.obj() );
+                }
+                else {
+                    bb.append( BSON( "name" << "admin" ) );
                 }
                 conn->done();
             }

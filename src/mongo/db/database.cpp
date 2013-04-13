@@ -469,7 +469,7 @@ namespace mongo {
         int nNotClosed = 0;
         for (set<string>::const_iterator it = dbs.begin(); it != dbs.end(); ++it) {
             string name = *it;
-            log(2) << "DatabaseHolder::closeAll path:" << path << " name:" << name << endl;
+            LOG(2) << "DatabaseHolder::closeAll path:" << path << " name:" << name << endl;
             Client::Context ctx(name, path);
             // Don't know how to implement this check anymore.
             /*

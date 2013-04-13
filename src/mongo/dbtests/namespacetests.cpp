@@ -1056,10 +1056,12 @@ namespace NamespaceTests {
         class SetIndexIsMultikey : public CachedPlanBase {
         public:
             void run() {
+                getAndMaybeCreateNS( ns(), false );
+                ASSERT( nsd() != NULL );
                 DBDirectClient client;
                 client.ensureIndex( ns(), BSON( "a" << 1 ) );
                 registerIndexKey( BSON( "a" << 1 ) );
-                
+
                 ASSERT( !nsd()->isMultikey( 1 ) );
                 
                 nsd()->setIndexIsMultikey( ns(), 1 );

@@ -513,8 +513,7 @@ namespace mongo {
                     return false;
                 }
                 string configdb = cmdObj["configdb"].String();
-                shardingState.enable( configdb );
-                configServer.init( configdb );
+                ShardingState::initialize(configdb);
             }
 
             Shard myShard( from );
@@ -574,7 +573,7 @@ namespace mongo {
                     result.append( "requestedMin" , min );
                     result.append( "requestedMax" , max );
 
-                    log( LL_WARNING ) << "aborted split because " << errmsg << ": " << min << "->" << max
+                    LOG( LL_WARNING ) << "aborted split because " << errmsg << ": " << min << "->" << max
                                       << " is now " << currMin << "->" << currMax << endl;
                     return false;
                 }
@@ -584,7 +583,7 @@ namespace mongo {
                     result.append( "from" , myShard.getName() );
                     result.append( "official" , shard );
 
-                    log( LL_WARNING ) << "aborted split because " << errmsg << ": chunk is at " << shard
+                    LOG( LL_WARNING ) << "aborted split because " << errmsg << ": chunk is at " << shard
                                       << " and not at " << myShard.getName() << endl;
                     return false;
                 }
@@ -594,7 +593,7 @@ namespace mongo {
                     maxVersion.addToBSON( result, "officialVersion" );
                     shardingState.getVersion( ns ).addToBSON( result, "myVersion" );
 
-                    log( LL_WARNING ) << "aborted split because " << errmsg << ": official " << maxVersion
+                    LOG( LL_WARNING ) << "aborted split because " << errmsg << ": official " << maxVersion
                                       << " mine: " << shardingState.getVersion(ns) << endl;
                     return false;
                 }
@@ -718,15 +717,36 @@ namespace mongo {
 
             if (newChunks.size() == 2){
                 // If one of the chunks has only one object in it we should move it
-                static const BSONObj fields = BSON("_id" << 1 );
-                DBDirectClient conn;
                 for (int i=1; i >= 0 ; i--){ // high chunk more likely to have only one obj
-                    ChunkInfo chunk = newChunks[i];
-                    Query q = Query().minKey(chunk.min).maxKey(chunk.max);
-                    scoped_ptr<DBClientCursor> c (conn.query(ns, q, /*limit*/-2, 0, &fields));
-                    if (c && c->itcount() == 1) {
-                        result.append("shouldMigrate", BSON("min" << chunk.min << "max" << chunk.max));
+
+                    Client::ReadContext ctx( ns );
+                    NamespaceDetails *d = nsdetails( ns.c_str() );
+
+                    const IndexDetails *idx = d->findIndexByPrefix( keyPattern ,
+                                                                    true ); /* exclude multikeys */
+                    if ( idx == NULL ) {
                         break;
+                    }
+
+                    ChunkInfo chunk = newChunks[i];
+                    BSONObj newmin = Helpers::modifiedRangeBound(chunk.min, idx->keyPattern(), -1);
+                    BSONObj newmax = Helpers::modifiedRangeBound(chunk.max , idx->keyPattern(), -1);
+
+                    scoped_ptr<Cursor> bc( new IndexCursor( d ,
+                                                            *idx ,
+                                                            newmin , /* lower */
+                                                            newmax , /* upper */
+                                                            false , /* upper noninclusive */
+                                                            1 ) ); /* direction */
+
+                    // check if exactly one document found
+                    if ( bc->ok() ) {
+                        bc->advance();
+                        if ( bc->eof() ) {
+                            result.append( "shouldMigrate",
+                                           BSON("min" << chunk.min << "max" << chunk.max) );
+                            break;
+                        }
                     }
                 }
             }

@@ -158,7 +158,7 @@ namespace OpLogHelpers{
             NamespaceDetails* collNsd = nsdetails(coll.c_str());
             int i = collNsd->findIndexByKeyPattern(key);
             if (i >= 0) {
-                uasserted(16475, "index exists on secondary");
+                uasserted(16737, "index exists on secondary");
             } else {
                 collNsd->createIndex(row);
             }

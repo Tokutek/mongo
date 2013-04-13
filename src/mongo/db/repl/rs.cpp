@@ -75,7 +75,7 @@ namespace mongo {
         }
         if( !s.empty() ) {
             lastLogged = _hbmsgTime;
-            log(logLevel) << "replSet " << s << rsLog;
+            LOG(logLevel) << "replSet " << s << rsLog;
         }
     }
 
@@ -111,8 +111,14 @@ namespace mongo {
 
     void ReplSetImpl::changeState(MemberState s) { box.change(s, _self); }
 
-    void ReplSetImpl::setMaintenanceMode(const bool inc) {
-        lock lk(this);
+    bool ReplSetImpl::setMaintenanceMode(const bool inc) {
+        lock replLock(this);
+        // Lock here to prevent state from changing between checking the state and changing it
+        Lock::GlobalWrite writeLock;
+
+        if (box.getState().primary()) {
+            return false;
+        }
 
         if (inc) {
             log() << "replSet going into maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
@@ -126,6 +132,8 @@ namespace mongo {
 
             log() << "leaving maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
         }
+
+        return true;
     }
 
     Member* ReplSetImpl::getMostElectable() {
@@ -152,31 +160,31 @@ namespace mongo {
     }
 
     void ReplSetImpl::relinquish() {
-        LOG(2) << "replSet attempting to relinquish" << endl;
-        if( box.getState().primary() ) {
-            {
-                Lock::DBWrite lk("admin."); // so we are synchronized with _logOp()
-            
+        {
+            Lock::GlobalWrite lk; // so we are synchronized with _logOp()
+
+            LOG(2) << "replSet attempting to relinquish" << endl;
+            if( box.getState().primary() ) {
                 log() << "replSet relinquishing primary state" << rsLog;
                 changeState(MemberState::RS_SECONDARY);
 
-                /* close sockets that were talking to us so they don't blithly send many writes that will fail
-                   with "not master" (of course client could check result code, but in case they are not)
-                */
+                // close sockets that were talking to us so they don't blithly send many writes that
+                // will fail with "not master" (of course client could check result code, but in
+                // case they are not)
                 log() << "replSet closing client sockets after relinquishing primary" << rsLog;
                 MessagingPort::closeAllSockets(1);
             }
-
-            // now that all connections were closed, strip this mongod from all sharding details
-            // if and when it gets promoted to a primary again, only then it should reload the sharding state
-            // the rationale here is that this mongod won't bring stale state when it regains primaryhood
-            shardingState.resetShardingState();
-
+            else if( box.getState().startup2() ) {
+                // This block probably isn't necessary
+                changeState(MemberState::RS_RECOVERING);
+                return;
+            }
         }
-        else if( box.getState().startup2() ) {
-            // ? add comment
-            changeState(MemberState::RS_RECOVERING);
-        }
+
+        // now that all connections were closed, strip this mongod from all sharding details
+        // if and when it gets promoted to a primary again, only then it should reload the sharding state
+        // the rationale here is that this mongod won't bring stale state when it regains primaryhood
+        shardingState.resetShardingState();
     }
 
     /* look freshly for who is primary - includes relinquishing ourself. */
@@ -347,7 +355,7 @@ namespace mongo {
                 seedSet.insert(m);
                 //uassert(13101, "can't use localhost in replset host list", !m.isLocalHost());
                 if( m.isSelf() ) {
-                    log(1) << "replSet ignoring seed " << m.toString() << " (=self)" << rsLog;
+                    LOG(1) << "replSet ignoring seed " << m.toString() << " (=self)" << rsLog;
                 }
                 else
                     seeds.push_back(m);
@@ -425,6 +433,7 @@ namespace mongo {
         ghost(0),
         _writerPool(replWriterThreadCount),
         _prefetcherPool(replPrefetcherThreadCount),
+        oplogVersion(0),
         _indexPrefetchConfig(PREFETCH_ALL) {
     }
 
@@ -567,6 +576,13 @@ namespace mongo {
                 additive = false;
         }
 
+        // If we are changing chaining rules, we don't want this to be an additive reconfig so that
+        // the primary can step down and the sync targets change.
+        // TODO: This can be removed once SERVER-5208 is fixed.
+        if (reconf && config().chainingAllowed() != c.chainingAllowed()) {
+            additive = false;
+        }
+
         _cfg = new ReplSetConfig(c);
         dassert( &config() == _cfg ); // config() is same thing but const, so we use that when we can for clarity below
         verify( config().ok() );
@@ -661,7 +677,7 @@ namespace mongo {
         int n = 0;
         for( vector<ReplSetConfig>::iterator i = cfgs.begin(); i != cfgs.end(); i++ ) {
             ReplSetConfig& cfg = *i;
-            DEV log(1) << n+1 << " config shows version " << cfg.version << rsLog; 
+            DEV LOG(1) << n+1 << " config shows version " << cfg.version << rsLog; 
             if( ++n == 1 ) myVersion = cfg.version;
             if( cfg.ok() && cfg.version > v ) {
                 highest = &cfg;
@@ -689,7 +705,16 @@ namespace mongo {
             try {
                 vector<ReplSetConfig> configs;
                 try {
-                    configs.push_back( ReplSetConfig(HostAndPort::me()) );
+                    DBDirectClient cli;
+                    BSONObj config = cli.findOne(rsConfigNs, Query()).getOwned();
+
+                    // Add local config
+                    if (config.isEmpty()) {
+                        configs.push_back(ReplSetConfig());
+                    }
+                    else {
+                        configs.push_back(ReplSetConfig(config, false));
+                    }
                 }
                 catch(DBException& e) {
                     log() << "replSet exception loading our local replset configuration object : " << e.toString() << rsLog;
@@ -712,7 +737,7 @@ namespace mongo {
                                 configs.push_back( ReplSetConfig(HostAndPort(*i)) );
                             }
                             catch( DBException& ) {
-                                log(1) << "replSet exception trying to load config from discovered seed " << *i << rsLog;
+                                LOG(1) << "replSet exception trying to load config from discovered seed " << *i << rsLog;
                                 replSettings.discoveredSeeds.erase(*i);
                             }
                         }

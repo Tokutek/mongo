@@ -253,7 +253,7 @@ namespace mongo {
         ss << "elemMatchKey: " << ( _elemMatchKeyFound ? _elemMatchKey : "NONE" ) << " ";
         return ss.str();
     }
-    
+
     void Matcher::addRegex(const char *fieldName, const char *regex, const char *flags, bool isNot) {
 
         RegexMatcher rm;
@@ -360,8 +360,52 @@ namespace mongo {
             flags = fe.valuestrsafe();
             break;
         }
+        case BSONObj::opWITHIN: {
+            BSONObj shapeObj = fe.embeddedObject();
+            BSONObjIterator argIt(shapeObj);
+            uassert(16481, "Empty obj for $within: " + shapeObj.toString(), argIt.more());
+
+            BSONElement elt = argIt.next();
+            uassert(16466, "Within must be provided a BSONObj: " + elt.toString(),
+                    elt.isABSONObj());
+            BSONObj obj = elt.Obj();
+            BSONObjIterator coordIt(elt.Obj());
+            uassert(16482, "Malformed $within: ", coordIt.more());
+
+            if (str::equals(elt.fieldName(), "$box")) {
+                BSONElement minE = coordIt.next();
+                uassert(16467, "Malformed $box: " + obj.toString(), minE.isABSONObj());
+                uassert(16468, "Malformed $box: " + obj.toString(), coordIt.more());
+                BSONElement maxE = coordIt.next();
+                uassert(16469, "Malformed $box: " + obj.toString(), minE.isABSONObj());
+                _geo.push_back(GeoMatcher::makeBox(e.fieldName(), minE.Obj(), maxE.Obj()));
+            } else if (str::equals(elt.fieldName(), "$center")) {
+                BSONElement center = coordIt.next();
+                uassert(16473, "Malformed $center: " + obj.toString(), center.isABSONObj());
+                uassert(16474, "Malformed $center: " + obj.toString(), coordIt.more());
+                BSONElement radius = coordIt.next();
+                uassert(16475, "Malformed $center: " + obj.toString(), radius.isNumber());
+                _geo.push_back(
+                        GeoMatcher::makeCircle(e.fieldName(), center.Obj(), radius.number()));
+            } else if (str::equals(elt.fieldName(), "$polygon")) {
+                while (coordIt.more()) {
+                    BSONElement coord = coordIt.next();
+                    uassert(16476, "Malformed $polygon: " + obj.toString(), coord.isABSONObj());
+                    BSONObjIterator numIt(coord.Obj());
+                    uassert(16477, "Malformed $polygon: " + obj.toString(), numIt.more());
+                    BSONElement x = numIt.next();
+                    uassert(16478, "Malformed $polygon: " + obj.toString(), x.isNumber());
+                    uassert(16484, "Malformed $polygon: " + obj.toString(), numIt.more());
+                    BSONElement y = numIt.next();
+                    uassert(16479, "Malformed $polygon: " + obj.toString(), y.isNumber());
+                }
+                _geo.push_back(GeoMatcher::makePolygon(e.fieldName(), elt.Obj()));
+            } else {
+                uasserted(16483, "Couldn't pull any geometry out of $within query: " + obj.toString());
+            }
+            break;
+        }
         case BSONObj::opNEAR:
-        case BSONObj::opWITHIN:
         case BSONObj::opMAX_DISTANCE:
             break;
         default:
@@ -933,6 +977,20 @@ namespace mongo {
             }
         }
 
+        for (vector<GeoMatcher>::const_iterator it = _geo.begin(); it != _geo.end(); ++it) {
+            verify(_constrainIndexKey.isEmpty());
+            BSONElementSet s;
+            jsobj.getFieldsDotted(it->getFieldName().c_str(), s, false);
+            int matches = 0;
+            for (BSONElementSet::const_iterator i = s.begin(); i != s.end(); ++i) {
+                if (!i->isABSONObj()) { continue; }
+                Point p;
+                if (!GeoMatcher::pointFrom(i->Obj(), &p)) { continue; }
+                if (it->containsPoint(p)) { ++matches; break; }
+            }
+            if (0 == matches) { return false; }
+        }
+
         for (vector<RegexMatcher>::const_iterator it = _regexs.begin();
              it != _regexs.end();
              ++it) {
@@ -1172,6 +1230,9 @@ namespace mongo {
         
         // Check that all match components are available in the index matcher.
         if ( !( _basics.size() == docMatcher._basics.size() && _regexs.size() == docMatcher._regexs.size() && !docMatcher._where ) ) {
+            return false;
+        }
+        if (_geo.size() != docMatcher._geo.size()) {
             return false;
         }
         if ( _andMatchers.size() != docMatcher._andMatchers.size() ) {

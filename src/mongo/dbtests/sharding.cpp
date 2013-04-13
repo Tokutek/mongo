@@ -686,7 +686,7 @@ namespace ShardingTests {
         }
 
         void setupTests() {
-            log(0) << "sharding tests disabled" << endl;
+            LOG(0) << "sharding tests disabled" << endl;
 #if 0
             add< serverandquerytests::test1 >();
             add< ShardVersionParsingTest >();

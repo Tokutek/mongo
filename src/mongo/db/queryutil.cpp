@@ -165,7 +165,7 @@ namespace mongo {
 
 
     FieldRange::FieldRange( const BSONElement &e, bool isNot, bool optimize ) :
-    _exactMatchRepresentation() {
+        _specialNeedsIndex(true), _exactMatchRepresentation() {
         int op = e.getGtLtOp();
 
         // NOTE with $not, we could potentially form a complementary set of intervals.
@@ -430,8 +430,12 @@ namespace mongo {
             log() << "warning: shouldn't get here?" << endl;
             break;
         }
-        case BSONObj::opNEAR:
         case BSONObj::opWITHIN:
+            _specialNeedsIndex = false;
+            _special = "2d";
+            break;
+        case BSONObj::opNEAR:
+            _specialNeedsIndex = true;
             _special = "2d";
             break;
         case BSONObj::opEXISTS: {
@@ -467,8 +471,10 @@ namespace mongo {
         _intervals = newIntervals;
         for( vector<BSONObj>::const_iterator i = other._objData.begin(); i != other._objData.end(); ++i )
             _objData.push_back( *i );
-        if ( _special.size() == 0 && other._special.size() )
+        if ( _special.size() == 0 && other._special.size() ) {
             _special = other._special;
+            _specialNeedsIndex = other._specialNeedsIndex;
+        }
         _exactMatchRepresentation = exactMatchRepresentation;
     }
 
@@ -768,6 +774,17 @@ namespace mongo {
         }
         return s;
     }
+
+    bool FieldRangeSet::hasSpecialThatNeedsIndex() const {
+        for ( map<string,FieldRange>::const_iterator i=_ranges.begin(); i!=_ranges.end(); i++ ) {
+            if ( i->second.getSpecial().size() == 0 )
+                continue;
+            if ( i->second.hasSpecialThatNeedsIndex() )
+                return true;
+        }
+        return false;
+    }
+
 
     /**
      * Btree scanning for a multidimentional key range will yield a

@@ -38,7 +38,8 @@ namespace mongo {
 
     enum ExitCode;
 
-    enum LogLevel {  LL_DEBUG , LL_INFO , LL_NOTICE , LL_WARNING , LL_ERROR , LL_SEVERE };
+    // using negative numbers so these are always less than ::mongo::loglevel (see MONGO_LOG)
+    enum LogLevel {  LL_DEBUG=-1000 , LL_INFO , LL_NOTICE , LL_WARNING , LL_ERROR , LL_SEVERE };
 
     inline const char * logLevelToString( LogLevel l ) {
         switch ( l ) {
@@ -109,6 +110,17 @@ namespace mongo {
         string _label;
         int _level;
     };
+
+    inline bool operator<( const LabeledLevel& ll, const int i ) { return ll.getLevel() < i; }
+    inline bool operator<( const int i, const LabeledLevel& ll ) { return i < ll.getLevel(); }
+    inline bool operator>( const LabeledLevel& ll, const int i ) { return ll.getLevel() > i; }
+    inline bool operator>( const int i, const LabeledLevel& ll ) { return i > ll.getLevel(); }
+    inline bool operator<=( const LabeledLevel& ll, const int i ) { return ll.getLevel() <= i; }
+    inline bool operator<=( const int i, const LabeledLevel& ll ) { return i <= ll.getLevel(); }
+    inline bool operator>=( const LabeledLevel& ll, const int i ) { return ll.getLevel() >= i; }
+    inline bool operator>=( const int i, const LabeledLevel& ll ) { return i >= ll.getLevel(); }
+    inline bool operator==( const LabeledLevel& ll, const int i ) { return ll.getLevel() == i; }
+    inline bool operator==( const int i, const LabeledLevel& ll ) { return i == ll.getLevel(); }
 
     class LazyString {
     public:
@@ -329,7 +341,6 @@ namespace mongo {
         int getIndent() const { return indent; }
 
     private:
-        static boost::thread_specific_ptr<Logstream> tsp;
         Logstream() {
             indent = 0;
             _init();
@@ -382,23 +393,32 @@ namespace mongo {
         return nullstream;
     }
 
-    inline Nullstream& log( int level ) {
+#define MONGO_LOG(level) \
+    ( MONGO_likely( ::mongo::logLevel < (level) ) ) \
+    ? ::mongo::nullstream : ::mongo::logWithLevel(level)
+#define LOG MONGO_LOG
+#define MONGO_TOKULOG(level) \
+    ( MONGO_likely( ::mongo::logLevel < (level) ) ) \
+    ? ::mongo::nullstream : ::mongo::tokulog(level)
+#define TOKULOG MONGO_TOKULOG
+
+    inline Nullstream& log() {
+        return Logstream::get().prolog();
+    }
+
+    // Use MONGO_LOG() instead of this
+    inline Nullstream& logWithLevel( int level ) {
         if ( level > logLevel )
             return nullstream;
         return Logstream::get().prolog();
     }
 
-#define MONGO_LOG(level) if ( MONGO_likely(logLevel < (level)) ) { } else log( level )
-#define LOG MONGO_LOG
-#define MONGO_TOKULOG(level) if ( MONGO_likely(logLevel < (level)) ) { } else tokulog( level )
-#define TOKULOG MONGO_TOKULOG
-
-    inline Nullstream& log( LogLevel l ) {
+    inline Nullstream& logWithLevel( LogLevel l ) {
         return Logstream::get().prolog().setLogLevel( l );
     }
 
-    inline Nullstream& log( const LabeledLevel& ll ) {
-        Nullstream& stream = log( ll.getLevel() );
+    inline Nullstream& logWithLevel( const LabeledLevel& ll ) {
+        Nullstream& stream = logWithLevel( ll.getLevel() );
         if( ll.getLabel() != "" )
             stream << "[" << ll.getLabel() << "] ";
         return stream;
@@ -408,16 +428,12 @@ namespace mongo {
         return tlog(LabeledLevel("tokudb", level));
     }
 
-    inline Nullstream& log() {
-        return Logstream::get().prolog();
-    }
-
     inline Nullstream& error() {
-        return log( LL_ERROR );
+        return logWithLevel( LL_ERROR );
     }
 
     inline Nullstream& warning() {
-        return log( LL_WARNING );
+        return logWithLevel( LL_WARNING );
     }
 
     /* default impl returns "" -- mongod overrides */

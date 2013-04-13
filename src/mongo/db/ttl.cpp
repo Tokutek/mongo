@@ -120,6 +120,10 @@ namespace mongo {
                     continue;
                 }
 
+                // if part of replSet but not in a readable state (e.g. during initial sync), skip.
+                if ( theReplSet && !theReplSet->state().readable() )
+                    continue;
+
                 set<string> dbs;
                 {
                     Lock::DBRead lk( "local" );

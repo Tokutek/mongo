@@ -102,9 +102,15 @@ namespace mongo {
             try {
                 r.init();
                 r.process();
+
+                // Release connections after non-write op 
+                if ( ShardConnection::releaseConnectionsAfterResponse && r.expectResponse() ) {
+                    LOG(2) << "release thread local connections back to pool" << endl;
+                    ShardConnection::releaseMyConnections();
+                }
             }
             catch ( AssertionException & e ) {
-                log( e.isUserAssertion() ? 1 : 0 ) << "AssertionException while processing op type : " << m.operation() << " to : " << r.getns() << causedBy(e) << endl;
+                LOG( e.isUserAssertion() ? 1 : 0 ) << "AssertionException while processing op type : " << m.operation() << " to : " << r.getns() << causedBy(e) << endl;
 
                 le->raiseError( e.getCode() , e.what() );
 
@@ -304,6 +310,7 @@ int _main(int argc, char* argv[]) {
     ("nohttpinterface", "disable http interface");
 
     hidden_options.add_options()
+    ("releaseConnectionsAfterResponse", "" )
     ("noAutoSplit", "do not send split commands with writes");
 
 #if defined(_WIN32)
@@ -391,6 +398,11 @@ int _main(int argc, char* argv[]) {
     if (params.count("noAutoSplit")) {
         warning() << "running with auto-splitting disabled" << endl;
         Chunk::ShouldAutoSplit = false;
+    }
+
+    if (params.count("releaseConnectionsAfterResponse")) {
+        warning() << "releaseConnectionsAfterResponse set to true" << endl;
+        ShardConnection::releaseConnectionsAfterResponse = true;
     }
 
     if ( ! params.count( "configdb" ) ) {

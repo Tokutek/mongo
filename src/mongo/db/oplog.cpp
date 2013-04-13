@@ -89,7 +89,7 @@ namespace mongo {
         if (replInfoDetails == NULL) {
             Client::Context ctx( rsReplInfo , dbpath, false);
             replInfoDetails = nsdetails(rsReplInfo);
-            massert(16472, "local.replInfo missing. did you drop it? if so restart server", replInfoDetails);
+            massert(16747, "local.replInfo missing. did you drop it? if so restart server", replInfoDetails);
         }
     }
     

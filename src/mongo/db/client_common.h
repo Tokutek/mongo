@@ -41,5 +41,7 @@ namespace mongo {
         virtual HostAndPort getRemote() const = 0;
 
         static ClientBasic* getCurrent();
+        static bool hasCurrent();
+
     };
 }

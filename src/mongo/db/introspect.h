@@ -31,7 +31,7 @@ namespace mongo {
        do when database->profile is set
     */
 
-    void profile( const Client& c , CurOp& currentOp );
+    void profile(const Client& c, int op, CurOp& currentOp);
 
     /**
      * Get (or create) the profile collection

@@ -23,6 +23,7 @@
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/index.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/s/client_info.h"
 #include "mongo/s/chunk.h"
 #include "mongo/s/cursors.h"
@@ -50,7 +51,9 @@ namespace mongo {
 
             QueryMessage q( r.d() );
 
-            r.checkAuth( Auth::READ );
+            Auth::Level authRequired = NamespaceString(q.ns).coll == "system.users" ?
+                    Auth::WRITE : Auth::READ;
+            r.checkAuth(authRequired);
 
             LOG(3) << "shard query: " << q.ns << "  " << q.query << endl;
 
@@ -287,7 +290,7 @@ namespace mongo {
             // targeting we've done earlier
             //
 
-            log( retries == 0 ) << op << " will be retried b/c sharding config info is stale, "
+            LOG( retries == 0 ? 1 : 0 ) << op << " will be retried b/c sharding config info is stale, "
                                 << " retries: " << retries
                                 << " ns: " << ns
                                 << " data: " << query << endl;

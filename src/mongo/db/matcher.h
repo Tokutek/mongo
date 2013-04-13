@@ -22,6 +22,7 @@
 
 #include "jsobj.h"
 #include "pcrecpp.h"
+#include "geo/shapes.h"
 
 namespace mongo {
 
@@ -40,6 +41,94 @@ namespace mongo {
         shared_ptr< pcrecpp::RE > _re;
         bool _isNot;
         RegexMatcher() : _isNot() {}
+    };
+
+    class GeoMatcher {
+    private:
+        GeoMatcher(const string& field) : _isBox(false), _isCircle(false), _isPolygon(false),
+                                          _fieldName(field) {}
+        bool _isBox;
+        Box _box;
+
+        bool _isCircle;
+        Point _center;
+        double _radius;
+
+        bool _isPolygon;
+        Polygon _polygon;
+
+        string _fieldName;
+    public:
+        const string& getFieldName() const { return _fieldName; }
+
+        static GeoMatcher makeBox(const string& field, const BSONObj &min, const BSONObj &max) {
+            GeoMatcher m(field);
+            m._isBox = true;
+            uassert(16470, "Malformed coord: " + min.toString(), pointFrom(min, &m._box._min));
+            uassert(16471, "Malformed coord: " + max.toString(), pointFrom(max, &m._box._max));
+            return m;
+        }
+
+        static GeoMatcher makeCircle(const string& field, const BSONObj &center, double rad) {
+            GeoMatcher m(field);
+            m._isCircle = true;
+            uassert(16472, "Malformed coord: " + center.toString(), pointFrom(center, &m._center));
+            m._radius = rad;
+            return m;
+        }
+
+        static GeoMatcher makePolygon(const string& field, const BSONObj &poly) {
+            GeoMatcher m(field);
+            vector<Point> points;
+
+            m._isPolygon = true;
+            BSONObjIterator coordIt(poly);
+            while (coordIt.more()) {
+                BSONElement coord = coordIt.next();
+                const BSONObj& obj = coord.Obj();
+                Point p;
+                uassert(16480, "Malformed coord: " + obj.toString(), pointFrom(obj, &p));
+                points.push_back(p);
+            }
+            m._polygon = Polygon(points);
+            return m;
+        }
+
+        bool containsPoint(Point p) const {
+            if (_isBox) {
+                return _box.inside(p, 0);
+            } else if (_isCircle) {
+                return _center.distance(p) <= _radius;
+            } else if (_isPolygon) {
+                return _polygon.contains(p);
+            } else {
+                return false;
+            }
+        }
+
+        string toString() const {
+            stringstream ss;
+            if (_isBox) {
+                ss << "GeoMatcher Box: " << _box.toString();
+            } else if (_isCircle) {
+                ss << "GeoMatcher Circle @ " << _center.toString() << " r = " << _radius;
+            } else {
+                ss << "GeoMatcher UNKNOWN";
+            }
+            return ss.str();
+        }
+
+        static bool pointFrom(const BSONObj o, Point *p) {
+            BSONObjIterator i(o);
+            if (!i.more()) { return false; }
+            BSONElement xe = i.next();
+            if (!i.more()) { return false; }
+            BSONElement ye = i.next();
+            if (!xe.isNumber() || !ye.isNumber()) { return false; }
+            p->_x = xe.number();
+            p->_y = ye.number();
+            return true;
+        }
     };
 
     struct element_lt {
@@ -265,6 +354,7 @@ namespace mongo {
         bool _atomic;
 
         vector<RegexMatcher> _regexs;
+        vector<GeoMatcher> _geo;
 
         // so we delete the mem when we're done:
         vector< shared_ptr< BSONObjBuilder > > _builders;

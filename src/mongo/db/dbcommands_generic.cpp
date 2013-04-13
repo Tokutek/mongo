@@ -35,6 +35,7 @@
 #include "mongo/db/background.h"
 #include "mongo/db/repl/multicmd.h"
 #include "mongo/db/stats/counters.h"
+#include "mongo/s/shard.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/lruishmap.h"
 #include "mongo/util/md5.hpp"
@@ -172,6 +173,10 @@ namespace mongo {
             if (all || cmdObj.hasElement("replIndexPrefetch")) {
                 result.append("replIndexPrefetch", fetchReplIndexPrefetchParam());
             }
+            if (all || cmdObj.hasElement("releaseConnectionsAfterResponse")) {
+                result.append("releaseConnectionsAfterResponse", 
+                              ShardConnection::releaseConnectionsAfterResponse);
+            }
             if ( before == result.len() ) {
                 errmsg = "no option found to get";
                 return false;
@@ -281,6 +286,15 @@ namespace mongo {
                 if( s == 0 ) result.append( "was", ReplicaSetMonitor::getMaxFailedChecks() );
                 ReplicaSetMonitor::setMaxFailedChecks(
                         cmdObj["replMonitorMaxFailedChecks"].numberInt() );
+                s++;
+            }
+            if( cmdObj.hasElement( "releaseConnectionsAfterResponse" ) ) {
+                if ( s == 0 ) {
+                    result.append( "was", 
+                                   ShardConnection::releaseConnectionsAfterResponse );
+                }
+                ShardConnection::releaseConnectionsAfterResponse = 
+                    cmdObj["releaseConnectionsAfterResponse"].trueValue();
                 s++;
             }
 

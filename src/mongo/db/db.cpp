@@ -68,7 +68,8 @@ namespace mongo {
     extern int diagLogging;
     extern int lockFile;
 
-    void setupSignals( bool inFork );
+    void setupQuittingSignals();
+    void setupSignals( bool ignored );
     void startReplication();
     void exitCleanly( ExitCode code );
 
@@ -281,7 +282,7 @@ namespace mongo {
 #if 0
         //        LastError * le = lastError.get( true );
         Client::GodScope gs;
-        log(1) << "enter repairDatabases (to check pdfile version #)" << endl;
+        LOG(1) << "enter repairDatabases (to check pdfile version #)" << endl;
 
         //verify(checkNsFilesOnLoad);
         checkNsFilesOnLoad = false; // we are mainly just checking the header - don't scan the whole .ns file for every db here.
@@ -291,7 +292,7 @@ namespace mongo {
         getDatabaseNames( dbNames );
         for ( vector< string >::iterator i = dbNames.begin(); i != dbNames.end(); ++i ) {
             string dbName = *i;
-            log(1) << "\t" << dbName << endl;
+            LOG(1) << "\t" << dbName << endl;
             Client::Context ctx( dbName );
             MongoDataFile *p = cc().database()->getFile( 0 );
             DataFileHeader *h = p->getHeader();
@@ -327,7 +328,7 @@ namespace mongo {
             }
         }
 
-        log(1) << "done repairDatabases" << endl;
+        LOG(1) << "done repairDatabases" << endl;
 
         if ( shouldRepairDatabases ) {
             log() << "finished checking dbs" << endl;
@@ -403,7 +404,7 @@ namespace mongo {
             else if( cmdLine.syncdelay == 1 )
                 log() << "--syncdelay 1" << endl;
             else if( cmdLine.syncdelay != 60 )
-                log(1) << "--syncdelay " << cmdLine.syncdelay << endl;
+                LOG(1) << "--syncdelay " << cmdLine.syncdelay << endl;
             int time_flushing = 0;
             while ( ! inShutdown() ) {
                 _diaglog.flush();
@@ -738,6 +739,10 @@ static int mongoDbMain(int argc, char* argv[]) {
     visible_options.add(ssl_options);
 #endif
     Module::addOptions( visible_options );
+
+
+    setupCoreSignals();
+    setupQuittingSignals();
 
     dbExecCommand = argv[0];
 
@@ -1130,7 +1135,6 @@ static int mongoDbMain(int argc, char* argv[]) {
 
     }
 
-    setupCoreSignals();
     setupSignals( false );
 
     StartupTest::runTests();
@@ -1217,7 +1221,7 @@ namespace mongo {
 
     void setupSignals_ignoreHelper( int signal ) {}
 
-    void setupSignals( bool inFork ) {
+    void setupQuittingSignals() {
         struct sigaction addrSignals;
         memset( &addrSignals, 0, sizeof( struct sigaction ) );
         addrSignals.sa_sigaction = abruptQuitWithAddrSignal;
@@ -1235,22 +1239,18 @@ namespace mongo {
 
         setupSIGTRAPforGDB();
 
+        set_terminate( myterminate );
+        set_new_handler( my_new_handler );
+    }
+
+    void setupSignals( bool ignored ) {
         sigemptyset( &asyncSignals );
-
-        if ( inFork )
-            verify( signal( SIGHUP , setupSignals_ignoreHelper ) != SIG_ERR );
-        else
-            sigaddset( &asyncSignals, SIGHUP );
-
         if ( !cmdLine.gdb ) {
             sigaddset( &asyncSignals, SIGINT );
             sigaddset( &asyncSignals, SIGTERM );
             verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
         }
         boost::thread it( interruptThread );
-
-        set_terminate( myterminate );
-        set_new_handler( my_new_handler );
     }
 
 #else   // WIN32
@@ -1280,9 +1280,8 @@ namespace mongo {
             return TRUE;
 
         case CTRL_LOGOFF_EVENT:
-            rawOut( "CTRL_LOGOFF_EVENT signal" );
-            consoleTerminate( "CTRL_LOGOFF_EVENT" );
-            return TRUE;
+            // only sent to services, and only in pre-Vista Windows; FALSE means ignore
+            return FALSE;
 
         case CTRL_SHUTDOWN_EVENT:
             rawOut( "CTRL_SHUTDOWN_EVENT signal" );
@@ -1374,14 +1373,11 @@ namespace mongo {
         printWindowsStackTrace( *excPointers->ContextRecord );
         doMinidump(excPointers);
 
-        // In release builds, let dbexit() try to shut down cleanly
-#if !defined(_DEBUG)
-        dbexit( EXIT_UNCAUGHT, "unhandled exception" );
-#endif
+        // Don't go through normal shutdown procedure. It may make things worse.
+        log() << "*** immediate exit due to unhandled exception" << endl;
+        ::_exit(EXIT_ABRUPT);
 
-        // In debug builds, give debugger a chance to run
-        if( filtLast )
-            return filtLast( excPointers );
+        // We won't reach here
         return EXCEPTION_EXECUTE_HANDLER;
     }
 
@@ -1408,7 +1404,9 @@ namespace mongo {
         mongoAbort("pure virtual");
     }
 
-    void setupSignals( bool inFork ) {
+    void setupSignals( bool inFork ) { }
+
+    void setupQuittingSignals() {
         reportEventToSystem = reportEventToSystemImpl;
         filtLast = SetUnhandledExceptionFilter(exceptionFilter);
         massert(10297 , "Couldn't register Windows Ctrl-C handler", SetConsoleCtrlHandler((PHANDLER_ROUTINE) CtrlHandler, TRUE));

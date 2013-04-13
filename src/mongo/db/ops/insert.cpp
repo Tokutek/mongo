@@ -79,10 +79,10 @@ namespace mongo {
 
     void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
         if (mongoutils::str::contains(ns, "system.")) {
-            massert(16466, "need transaction to run insertObjects", cc().txnStackSize() > 0);
-            uassert(16467, "cannot insert into system in a multi statement transaction", (cc().txnStackSize() == 1));
+            massert(16748, "need transaction to run insertObjects", cc().txnStackSize() > 0);
+            uassert(16749, "cannot insert into system in a multi statement transaction", (cc().txnStackSize() == 1));
             uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
-            massert(16462, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
+            massert(16750, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
             if (handle_system_collection_insert(ns, objs[0], logop) != 0) {
                 return;
             }

@@ -295,6 +295,7 @@ env = Environment( BUILD_DIR=variantDir,
                    CLIENT_SCONSTRUCT='#distsrc/client/SConstruct',
                    DIST_ARCHIVE_SUFFIX='.tgz',
                    EXTRAPATH=get_option("extrapath"),
+                   MODULE_BANNERS=[],
                    MODULETEST_LIST='#build/moduletests.txt',
                    MSVS_ARCH=msarch ,
                    PYTHON=utils.find_python(),
@@ -873,7 +874,7 @@ def doConfigure(myenv):
 
     # discover modules (subdirectories of db/modules/), and
     # load the (python) module for each module's build.py
-    modules = moduleconfig.discover_modules('.')
+    modules = moduleconfig.discover_modules('src/mongo/')
 
     # ask each module to configure itself, and return a
     # dictionary of name => list_of_sources for each module.
@@ -950,6 +951,9 @@ def getSystemInstallName():
         n += "-debugsymbols"
     if nix and os.uname()[2].startswith( "8." ):
         n += "-tiger"
+
+    if len(env.get("MONGO_MODULES", None)):
+            n += "-" + "-".join(env["MONGO_MODULES"].keys())
 
     try:
         findSettingsSetup()

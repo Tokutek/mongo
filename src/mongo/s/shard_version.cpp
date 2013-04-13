@@ -43,24 +43,24 @@ namespace mongo {
 
         S getSequence( DBClientBase * conn , const string& ns ) {
             scoped_lock lk( _mutex );
-            return _map[conn][ns];
+            return _map[conn->getConnectionId()][ns];
         }
 
         void setSequence( DBClientBase * conn , const string& ns , const S& s ) {
             scoped_lock lk( _mutex );
-            _map[conn][ns] = s;
+            _map[conn->getConnectionId()][ns] = s;
         }
 
         void reset( DBClientBase * conn ) {
             scoped_lock lk( _mutex );
-            _map.erase( conn );
+            _map.erase( conn->getConnectionId() );
         }
 
         // protects _map
         mongo::mutex _mutex;
 
         // a map from a connection into ChunkManager's sequence number for each namespace
-        map<DBClientBase*, map<string,unsigned long long> > _map;
+        map<unsigned long long, map<string,unsigned long long> > _map;
 
     } connectionShardStatus;
 
@@ -232,6 +232,8 @@ namespace mongo {
                << " version: " << version << " manager: " << manager.get()
                << endl;
 
+        const string versionableServerAddress(conn->getServerAddress());
+
         BSONObj result;
         if ( setShardVersion( *conn , ns , version , authoritative , result ) ) {
             // success!
@@ -246,7 +248,9 @@ namespace mongo {
             massert( 10428 ,  "need_authoritative set but in authoritative mode already" , ! authoritative );
 
         if ( ! authoritative ) {
-            checkShardVersion( conn , ns , refManager, 1 , tryNumber + 1 );
+            // use the original connection and get a fresh versionable connection
+            // since conn can be invalidated (or worse, freed) after the failure
+            checkShardVersion(conn_in, ns, refManager, 1, tryNumber + 1);
             return true;
         }
         
@@ -268,13 +272,15 @@ namespace mongo {
         const int maxNumTries = 7;
         if ( tryNumber < maxNumTries ) {
             LOG( tryNumber < ( maxNumTries / 2 ) ? 1 : 0 ) 
-                << "going to retry checkShardVersion host: " << conn->getServerAddress() << " " << result << endl;
+                << "going to retry checkShardVersion host: " << versionableServerAddress << " " << result << endl;
             sleepmillis( 10 * tryNumber );
-            checkShardVersion( conn , ns , refManager, true , tryNumber + 1 );
+            // use the original connection and get a fresh versionable connection
+            // since conn can be invalidated (or worse, freed) after the failure
+            checkShardVersion(conn_in, ns, refManager, true, tryNumber + 1);
             return true;
         }
         
-        string errmsg = str::stream() << "setShardVersion failed host: " << conn->getServerAddress() << " " << result;
+        string errmsg = str::stream() << "setShardVersion failed host: " << versionableServerAddress << " " << result;
         log() << "     " << errmsg << endl;
         massert( 10429 , errmsg , 0 );
         return true;

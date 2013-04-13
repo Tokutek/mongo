@@ -23,6 +23,7 @@
 #include "../util/startup_test.h"
 #include "../util/timer.h"
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/db/namespacestring.h"
 
 #include "chunk.h"
 #include "chunk_diff.h"
@@ -330,7 +331,7 @@ namespace mongo {
                                                    );
         fromconn->done();
 
-        log( worked ) << "moveChunk result: " << res << endl;
+        LOG( worked ? 1 : 0 ) << "moveChunk result: " << res << endl;
 
         // if succeeded, needs to reload to pick up the new location
         // if failed, mongos may be stale
@@ -364,7 +365,7 @@ namespace mongo {
             // this does mean mongos has more back pressure than mongod alone
             // since it nots 100% tcp queue bound
             // this was implicit before since we did a splitVector on the same socket
-            ShardConnection::sync();
+            ShardConnection::sync( NamespaceString(getManager()->getns()).db );
 
             LOG(1) << "about to initiate autosplit: " << *this << " dataWritten: " << _dataWritten << " splitThreshold: " << splitThreshold << endl;
 
@@ -748,6 +749,8 @@ namespace mongo {
                                              oldC->getMax(),
                                              oldC->getShard(),
                                              oldC->getLastmod() ) );
+
+                c->setBytesWritten( oldC->getBytesWritten() );
 
                 chunkMap.insert( make_pair( oldC->getMax(), c ) );
             }
@@ -1326,7 +1329,7 @@ namespace mongo {
 
         }
         catch (...) {
-            log( LL_ERROR ) << "\t invalid ChunkRangeMap! printing ranges:" << endl;
+            LOG( LL_ERROR ) << "\t invalid ChunkRangeMap! printing ranges:" << endl;
 
             for (ChunkRangeMap::const_iterator it=_ranges.begin(), end=_ranges.end(); it != end; ++it)
                 cout << it->first << ": " << *it->second << endl;

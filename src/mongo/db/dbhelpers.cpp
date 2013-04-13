@@ -174,7 +174,7 @@ namespace mongo {
     }
 
     void Helpers::upsert( const string& ns , const BSONObj& o, bool fromMigrate ) {
-        msgasserted(16478, "Helpers::upsert is deprecated, it should only be used by mapreduce now anyway");
+        msgasserted(16740, "Helpers::upsert is deprecated, it should only be used by mapreduce now anyway");
         BSONElement e = o["_id"];
         verify( e.type() );
         BSONObj id = e.wrap();

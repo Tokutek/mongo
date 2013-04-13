@@ -266,7 +266,7 @@ namespace BasicTests {
 
             int maxSleepTimeMillis = 1000;
             int lastSleepTimeMillis = -1;
-            int epsMillis = 50; // Allowable inprecision for timing
+            int epsMillis = 100; // Allowable inprecision for timing
 
             Backoff backoff( maxSleepTimeMillis, maxSleepTimeMillis * 2 );
 

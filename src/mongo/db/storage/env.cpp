@@ -221,7 +221,7 @@ namespace mongo {
             e = info["readPageSize"];
             if (e.ok() && !e.isNull()) {
                 readPageSize = e.numberInt();
-                uassert(16441, "readPageSize must be a number > 0.", e.isNumber () && readPageSize > 0);
+                uassert(16743, "readPageSize must be a number > 0.", e.isNumber () && readPageSize > 0);
                 TOKULOG(1) << "db " << name << ", using read page size " << readPageSize << endl;
             }
             e = info["pageSize"];

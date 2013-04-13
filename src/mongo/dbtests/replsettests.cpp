@@ -303,7 +303,8 @@ namespace ReplSetTests {
 
     class TestRSSync : public Base {
 
-        void addOp(const string& op, BSONObj o, BSONObj* o2 = 0, const char* coll = 0) {
+        void addOp(const string& op, BSONObj o, BSONObj* o2 = NULL, const char* coll = NULL, 
+                   int version = 0) {
             OpTime ts;
             {
                 Lock::GlobalWrite lk;
@@ -312,6 +313,9 @@ namespace ReplSetTests {
 
             BSONObjBuilder b;
             b.appendTimestamp("ts", ts.asLL());
+            if (version != 0) {
+                b.append("v", version);
+            }
             b.append("op", op);
             b.append("o", o);
 
@@ -335,6 +339,12 @@ namespace ReplSetTests {
             }
         }
 
+        void addVersionedInserts(int expected) {
+            for (int i=0; i < expected; i++) {
+                addOp("i", BSON("_id" << i << "x" << 789), NULL, NULL, i);
+            }
+        }
+            
         void addUpdates() {
             BSONObj id = BSON("_id" << "123456something");
             addOp("i", id);
@@ -350,6 +360,18 @@ namespace ReplSetTests {
             addOp("u", BSON("$set" << BSON("requests.100002_1" << BSON(
                     "id" << "100002_1" <<
                     "timestamp" << 1334810820))), &id);
+        }
+
+        void addConflictingUpdates() {
+            BSONObj first = BSON("_id" << "asdfasdfasdf");
+            addOp("i", first);
+
+            BSONObj filter = BSON("_id" << "asdfasdfasdf" << "sp" << BSON("$size" << 2));
+            // Test an op with no version, op is ignored and replication continues (code assumes 
+            // version 1)
+            addOp("u", BSON("$push" << BSON("sp" << 42)), &filter, NULL, 0);
+            // The following line generates an fassert because it's version 2
+            //addOp("u", BSON("$push" << BSON("sp" << 42)), &filter, NULL, 2);
         }
 
         void addUniqueIndex() {
@@ -371,6 +393,12 @@ namespace ReplSetTests {
             ASSERT_EQUALS(expected, static_cast<int>(client()->count(ns())));
 
             drop();
+            addVersionedInserts(100);
+            applyOplog();
+
+            ASSERT_EQUALS(expected, static_cast<int>(client()->count(ns())));
+
+            drop();
             addUpdates();
             applyOplog();
 
@@ -381,6 +409,14 @@ namespace ReplSetTests {
             ASSERT_EQUALS(1334810820, obj["requests"]["100002_1"]["timestamp"].number());
 
             drop();
+            
+            // test converting updates to upserts but only for version 2.2.1 and greater,
+            // which means oplog version 2 and greater.
+            addConflictingUpdates();
+            applyOplog();
+
+            drop();
+
         }
     };
 
@@ -390,7 +426,7 @@ namespace ReplSetTests {
         }
 
         void setupTests() {
-            log(0) << "replication tests disabled" << endl;
+            LOG(0) << "replication tests disabled" << endl;
 #if 0
             add< TestInitApplyOp >();
             add< TestInitApplyOp2 >();

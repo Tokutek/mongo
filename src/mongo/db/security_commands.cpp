@@ -87,15 +87,15 @@ namespace mongo {
 
         {
             bool reject = false;
-            nonce64 *ln = lastNonce.release();
-            if ( ln == 0 ) {
+            scoped_ptr<nonce64> ln(lastNonce.release());
+            if ( !ln ) {
                 reject = true;
-                log(1) << "auth: no lastNonce" << endl;
+                LOG(1) << "auth: no lastNonce" << endl;
             }
             else {
                 digestBuilder << hex << *ln;
                 reject = digestBuilder.str() != received_nonce;
-                if ( reject ) log(1) << "auth: different lastNonce" << endl;
+                if ( reject ) LOG(1) << "auth: different lastNonce" << endl;
             }
 
             if ( reject ) {

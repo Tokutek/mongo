@@ -761,12 +761,24 @@ namespace mongo {
         uassert(12588, "cannot add index with a background operation in progress", !_indexBuildInProgress);
         uassert(12523, "no index name specified", idx_info["name"].ok());
 
+        const string &name = idx_info["name"].String();
+        if (findIndexByName(name.c_str()) >= 0) {
+            // index already exists.
+            uasserted(16753, mongoutils::str::stream() << "index with name " << name << " already exists");
+        }
+        const BSONObj &keyPattern = idx_info["key"].Obj();
+        if (findIndexByKeyPattern(keyPattern) >= 0) {
+            string s = (mongoutils::str::stream() << "index already exists with diff name " << name << ' ' << keyPattern.toString());
+            LOG(2) << s << endl;
+            uasserted(16754, s);
+        }
+
         if (nIndexes() >= NIndexesMax ) {
             // calling BSONObj::str() (with NOINLINE) ensures the symbol exists in gdb.
             // don't modify that line without putting a call to str() elsewhere.
             string s = (mongoutils::str::stream() <<
-                        "add index fails, too many indexes for " << idx_info["ns"].String() <<
-                        " key:" << idx_info["key"].Obj().str());
+                        "add index fails, too many indexes for " << name <<
+                        " key:" << keyPattern.toString());
             log() << s << endl;
             uasserted(12505,s);
         }
@@ -1071,15 +1083,15 @@ namespace mongo {
             // fileops. Fileops must happen in the context of a single
             // transaction.
             if (cc().txnStackSize() > 1) {
-                uasserted(16468, "Cannot insert into a non-existent collection when running a multi-statement transaction");
+                uasserted(16744, "Cannot insert into a non-existent collection when running a multi-statement transaction");
             }
             else {
                 string err;
                 BSONObj options;
                 bool created = userCreateNS(ns, options, err, logop);
-                uassert(16473, "failed to create collection", created);
+                uassert(16745, "failed to create collection", created);
                 details = nsdetails(ns);
-                uassert(16474, "failed to get collection after creating", details);
+                uassert(16746, "failed to get collection after creating", details);
             }
         }
         return details;
@@ -1128,7 +1140,7 @@ namespace mongo {
         ClientCursor::invalidate(ns);
         NamespaceDetailsTransient::eraseForPrefix(ns);
 
-        log(1) << "\t dropIndexes done" << endl;
+        LOG(1) << "\t dropIndexes done" << endl;
         d->dropIndexes(ns, "*", errmsg, result, true);
         verify(d->nIndexes() == 0);
         removeNamespaceFromCatalog(name);

@@ -55,7 +55,7 @@ namespace mongo {
                 iso_flags = DB_TXN_SNAPSHOT;
             }
             else if (isoBSON.type() != String) {
-                uasserted(16470, "invalid isolation passed in");
+                uasserted(16738, "invalid isolation passed in");
             }
             else {
                 string iso = isoBSON.String();
@@ -69,7 +69,7 @@ namespace mongo {
                     iso_flags = DB_READ_UNCOMMITTED;
                 }
                 else {
-                    uasserted(16465, "invalid isolation passed in");
+                    uasserted(16739, "invalid isolation passed in");
                 }
             }
             // we already have a multi-stmt transaction, do nothing

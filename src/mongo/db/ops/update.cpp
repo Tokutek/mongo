@@ -163,6 +163,7 @@ namespace mongo {
             // mod set update, ie: $inc: 10 increments by 10.
             updateUsingMods( d, nsdt, pk, obj, *mss, &loud );
             return UpdateResult( 1 , 1 , 1 , BSONObj() );
+
         } // end $operator update
 
         // replace-style update
@@ -380,6 +381,18 @@ namespace mongo {
         }
     }
 
+    void validateUpdate( const char* ns , const BSONObj& updateobj, const BSONObj& patternOrig ) {
+        uassert( 10155 , "cannot update reserved $ collection", strchr(ns, '$') == 0 );
+        if ( strstr(ns, ".system.") ) {
+            /* dm: it's very important that system.indexes is never updated as IndexDetails
+               has pointers into it */
+            uassert( 10156,
+                     str::stream() << "cannot update system collection: "
+                                   << ns << " q: " << patternOrig << " u: " << updateobj,
+                     legalClientSystemNS( ns , true ) );
+        }
+    }
+
     UpdateResult updateObjects( const char* ns,
                                 const BSONObj& updateobj,
                                 const BSONObj& patternOrig,
@@ -390,13 +403,7 @@ namespace mongo {
                                 bool fromMigrate,
                                 const QueryPlanSelectionPolicy& planPolicy ) {
 
-        uassert( 10155 , "cannot update reserved $ collection", strchr(ns, '$') == 0 );
-        if ( strstr(ns, ".system.") ) {
-            /* dm: it's very important that system.indexes is never updated as IndexDetails has pointers into it */
-            uassert( 10156,
-                     str::stream() << "cannot update system collection: " << ns << " q: " << patternOrig << " u: " << updateobj,
-                     legalClientSystemNS( ns , true ) );
-        }
+        validateUpdate( ns , updateobj , patternOrig );
 
         UpdateResult ur = _updateObjects(false, ns, updateobj, patternOrig,
                                          upsert, multi, logop,

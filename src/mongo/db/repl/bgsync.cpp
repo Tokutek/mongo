@@ -288,7 +288,7 @@ namespace mongo {
             string current = target->fullName();
 
             if (!r.connect(current)) {
-                log(2) << "replSet can't connect to " << current << " to read operations" << rsLog;
+                LOG(2) << "replSet can't connect to " << current << " to read operations" << rsLog;
                 r.resetConnection();
                 theReplSet->veto(current);
                 continue;

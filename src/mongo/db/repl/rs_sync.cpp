@@ -36,7 +36,7 @@ namespace mongo {
     extern unsigned replSetForceInitialSyncFailure;
 
     SyncTail::SyncTail(BackgroundSyncInterface *q) :
-        Sync(""), _networkQueue(q)
+        Sync(""), oplogVersion(0), _networkQueue(q)
     {}
 
     SyncTail::~SyncTail() {}
@@ -100,11 +100,16 @@ namespace mongo {
     // This free function is used by the writer threads to apply each op
     void multiSyncApply(const std::vector<BSONObj>& ops, SyncTail* st) {
         initializeWriterThread();
+
+        // convert update operations only for 2.2.1 or greater, because we need guaranteed
+        // idempotent operations for this to work.  See SERVER-6825
+        bool convertUpdatesToUpserts = theReplSet->oplogVersion > 1 ? true : false;
+
         for (std::vector<BSONObj>::const_iterator it = ops.begin();
              it != ops.end();
              ++it) {
             try {
-                fassert(16359, st->syncApply(*it, true));
+                fassert(16359, st->syncApply(*it, convertUpdatesToUpserts));
             } catch (DBException& e) {
                 error() << "writer worker caught exception: " << e.what() 
                         << " on: " << it->toString() << endl;
@@ -136,13 +141,6 @@ namespace mongo {
                 }
             }
             catch (DBException& e) {
-                // Skip duplicate key exceptions.
-                // These are relatively common on initial sync: if a document is inserted
-                // early in the clone step, the insert will be replayed but the document
-                // will probably already have been cloned over.
-                if( e.getCode() == 11000 || e.getCode() == 11001 || e.getCode() == 12582) {
-                    return; // ignore
-                }
                 error() << "exception: " << e.what() << " on: " << it->toString() << endl;
                 fassertFailed(16361);
             }
@@ -200,16 +198,37 @@ namespace mongo {
         }
     }
 
+#if 0
+    // TODO(zardosht): Leif can't figure out why this exists in 2.2.4, please take a look at it.
+    BSONObj SyncTail::oplogApplication(const BSONObj& applyGTEObj, const BSONObj& minValidObj) {
+        return oplogApplySegment(applyGTEObj, minValidObj, multiSyncApply);
+    }
+#endif
+
+    void SyncTail::setOplogVersion(const BSONObj& op) {
+        BSONElement version = op["v"];
+        // old primaries do not get the unique index ignoring feature
+        // because some of their ops are not imdepotent, see
+        // SERVER-7186
+        if (version.eoo()) {
+            theReplSet->oplogVersion = 1;
+            RARELY log() << "warning replset primary is an older version than we are; upgrade recommended" << endl;
+        } else {
+            theReplSet->oplogVersion = version.Int();
+        }
+    }
+
     /* tail an oplog.  ok to return, will be re-called. */
     void SyncTail::oplogApplication() {
         while( 1 ) {
             OpQueue ops;
-            time_t lastTimeChecked = time(0);
 
             verify( !Lock::isLocked() );
 
+            Timer batchTimer;
+            int lastTimeChecked = 0;
+
             // always fetch a few ops first
-            
             // tryPopAndWaitForMore returns true when we need to end a batch early
             while (!tryPopAndWaitForMore(&ops) && 
                    (ops.getSize() < replBatchSizeBytes)) {
@@ -217,7 +236,16 @@ namespace mongo {
                 if (theReplSet->isPrimary()) {
                     return;
                 }
-                time_t now = time(0);
+
+                int now = batchTimer.seconds();
+
+                // apply replication batch limits
+                if (!ops.empty()) {
+                    if (now > replBatchLimitSeconds)
+                        break;
+                    if (ops.getDeque().size() > replBatchLimitOperations)
+                        break;
+                }
                 // occasionally check some things
                 if (ops.empty() || now > lastTimeChecked) {
                     lastTimeChecked = now;
@@ -240,8 +268,24 @@ namespace mongo {
                         return;
                     }
                 }
+
+                const int slaveDelaySecs = theReplSet->myConfig().slaveDelay;
+                if (!ops.empty() && slaveDelaySecs > 0) {
+                    const BSONObj& lastOp = ops.getDeque().back();
+                    const unsigned int opTimestampSecs = lastOp["ts"]._opTime().getSecs();
+
+                    // Stop the batch as the lastOp is too new to be applied. If we continue
+                    // on, we can get ops that are way ahead of the delay and this will
+                    // make this thread sleep longer when handleSlaveDelay is called
+                    // and apply ops much sooner than we like.
+                    if (opTimestampSecs > static_cast<unsigned int>(time(0) - slaveDelaySecs)) {
+                        break;
+                    }
+                }
             }
+
             const BSONObj& lastOp = ops.getDeque().back();
+            setOplogVersion(lastOp);
             handleSlaveDelay(lastOp);
 
             multiApply(ops.getDeque(), multiSyncApply);
@@ -265,7 +309,7 @@ namespace mongo {
         if (!peek_success) {
             // if we don't have anything in the queue, wait a bit for something to appear
             if (ops->empty()) {
-                // block 1 second
+                // block up to 1 second
                 _networkQueue->waitForMore();
                 return false;
             }
@@ -273,6 +317,7 @@ namespace mongo {
             // otherwise, apply what we have
             return true;
         }
+
         // check for commands
         if ((op["op"].valuestrsafe()[0] == 'c') ||
             // Index builds are acheived through the use of an insert op, not a command op.
@@ -288,6 +333,28 @@ namespace mongo {
             return true;
         }
 
+        // check for oplog version change
+        BSONElement elemVersion = op["v"];
+        int curVersion = 0;
+        if (elemVersion.eoo())
+            // missing version means version 1
+            curVersion = 1;
+        else
+            curVersion = elemVersion.Int();
+
+        if (curVersion != oplogVersion) {
+            // Version changes cause us to end a batch.
+            // If we are starting a new batch, reset version number
+            // and continue.
+            if (ops->empty()) {
+                oplogVersion = curVersion;
+            } 
+            else {
+                // End batch early
+                return true;
+            }
+        }
+    
         // Copy the op to the deque and remove it from the bgsync queue.
         ops->push_back(op);
         _networkQueue->consume();
@@ -350,23 +417,19 @@ namespace mongo {
        @return true if transitioned to SECONDARY
     */
     bool ReplSetImpl::tryToGoLiveAsASecondary() {
-        // make sure we're not primary or secondary already
-        if (box.getState().primary() || box.getState().secondary()) {
+        // make sure we're not primary, secondary, or fatal already
+        if (box.getState().primary() || box.getState().secondary() || box.getState().fatal()) {
             return false;
         }
 
-        {
-            lock lk( this );
+        if (_maintenanceMode > 0) {
+            // we're not actually going live
+            return true;
+        }
 
-            if (_maintenanceMode > 0) {
-                // we're not actually going live
-                return true;
-            }
-
-            // if we're blocking sync, don't change state
-            if (_blockSync) {
-                return false;
-            }
+        // if we're blocking sync, don't change state
+        if (_blockSync) {
+            return false;
         }
 
         sethbmsg("");
@@ -538,6 +601,7 @@ namespace mongo {
     }
 
     void ReplSetImpl::blockSync(bool block) {
+        // RS lock is already taken in Manager::checkAuth
         _blockSync = block;
         if (_blockSync) {
             // syncing is how we get into SECONDARY state, so we'll be stuck in

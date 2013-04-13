@@ -87,7 +87,7 @@ namespace mongo {
                 removeNamespaceFromCatalog(ns);
             }
             catch(DBException& ) {
-                log(2) << "IndexDetails::kill(): couldn't drop ns " << ns << endl;
+                LOG(2) << "IndexDetails::kill(): couldn't drop ns " << ns << endl;
             }
 
             if (!mongoutils::str::endsWith(pns.c_str(), ".system.indexes")) {

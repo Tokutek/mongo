@@ -82,12 +82,12 @@ namespace mongo {
         for ( ShardInfoMap::const_iterator i = _shardInfo.begin(); i != _shardInfo.end(); ++i ) {
             
             if ( i->second.isSizeMaxed() || i->second.isDraining() || i->second.hasOpsQueued() ) {
-                log() << i->first << " is unavailable" << endl;
+                LOG(1) << i->first << " is unavailable" << endl;
                 continue;
             }
             
             if ( ! i->second.hasTag( tag ) ) {
-                log() << i->first << " doesn't have right tag" << endl;
+                LOG(1) << i->first << " doesn't have right tag" << endl;
                 continue;
             }
 
@@ -212,8 +212,8 @@ namespace mongo {
                                           int balancedLastTime ) {
 
 
-        // 1) check for shards that policy require to us to move off of
-        //    draining, maxSize
+        // 1) check for shards that policy require to us to move off of:
+        //    draining only
         // 2) check tag policy violations
         // 3) then we make sure chunks are balanced for each tag
         
@@ -226,7 +226,7 @@ namespace mongo {
                 string shard = *z;
                 const ShardInfo& info = distribution.shardInfo( shard );
                 
-                if ( ! info.isSizeMaxed() && ! info.isDraining() )
+                if ( ! info.isDraining() )
                     continue;
                 
                 if ( distribution.numberOfChunksInShard( shard ) == 0 )

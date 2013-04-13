@@ -640,7 +640,7 @@ namespace mongo {
 
         const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
         
-        log(1) << "query beginning read-only transaction. tailable: " << tailable << endl;
+        LOG(1) << "query beginning read-only transaction. tailable: " << tailable << endl;
         
         BSONObj oldPlan;
         if (getCachedExplainPlan) {
@@ -860,13 +860,13 @@ namespace mongo {
         // Run a command.
         
         if ( pq.couldBeCommand() ) {
+            curop.markCommand();
             BufBuilder bb;
             bb.skip(sizeof(QueryResult));
             BSONObjBuilder cmdResBuf;
             if ( runCommands(ns, jsobj, curop, bb, cmdResBuf, false, queryOptions) ) {
                 curop.debug().iscommand = true;
                 curop.debug().query = jsobj;
-                curop.markCommand();
 
                 auto_ptr< QueryResult > qr;
                 qr.reset( (QueryResult *) bb.buf() );

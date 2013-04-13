@@ -17,10 +17,10 @@ sh._adminCommand = function( cmd , skipCheck ) {
 }
 
 sh._dataFormat = function( bytes ){
-   if( bytes < 1024 ) return Math.floor( bytes ) + "b"
-   if( bytes < 1024 * 1024 ) return Math.floor( bytes / 1024 ) + "kb"
-   if( bytes < 1024 * 1024 * 1024 ) return Math.floor( ( Math.floor( bytes / 1024 ) / 1024 ) * 100 ) / 100 + "Mb"
-   return Math.floor( ( Math.floor( bytes / ( 1024 * 1024 ) ) / 1024 ) * 100 ) / 100 + "Gb"
+   if( bytes < 1024 ) return Math.floor( bytes ) + "B"
+   if( bytes < 1024 * 1024 ) return Math.floor( bytes / 1024 ) + "KiB"
+   if( bytes < 1024 * 1024 * 1024 ) return Math.floor( ( Math.floor( bytes / 1024 ) / 1024 ) * 100 ) / 100 + "MiB"
+   return Math.floor( ( Math.floor( bytes / ( 1024 * 1024 ) ) / 1024 ) * 100 ) / 100 + "GiB"
 }
 
 sh._collRE = function( coll ){
@@ -341,8 +341,8 @@ sh.removeShardTag = function( shard, tag ) {
 
 sh.addTagRange = function( ns, min, max, tag ) {
     var config = db.getSisterDB( "config" );
-    config.tags.update( { ns : ns , min : min } , 
-                        { ns : ns , min : min , max : max , tag : tag } , 
-                        true );
+    config.tags.update( {_id: { ns : ns , min : min } } , 
+            {_id: { ns : ns , min : min }, ns : ns , min : min , max : max , tag : tag } , 
+            true );
     sh._checkLastError( config );    
 }

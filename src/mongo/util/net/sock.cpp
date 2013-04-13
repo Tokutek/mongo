@@ -38,6 +38,8 @@
 #endif
 
 #ifdef MONGO_SSL
+#include <boost/thread/recursive_mutex.hpp>
+
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #endif
@@ -391,7 +393,7 @@ namespace mongo {
         
         static void init() {
             while ( (int)_mutex.size() < CRYPTO_num_locks() )
-                _mutex.push_back( new SimpleMutex("SSLThreadInfo") );
+                _mutex.push_back( new boost::recursive_mutex );
         }
 
         static SSLThreadInfo* get() {
@@ -407,7 +409,10 @@ namespace mongo {
         unsigned _id;
         
         static AtomicUInt _next;
-        static vector<SimpleMutex*> _mutex;
+        // Note: see SERVER-8734 for why we are using a recursive mutex here.
+        // Once the deadlock fix in OpenSSL is incorporated into most distros of
+        // Linux, this can be changed back to a nonrecursive mutex.
+        static std::vector<boost::recursive_mutex*> _mutex;
         static boost::thread_specific_ptr<SSLThreadInfo> _thread;
     };
 
@@ -419,7 +424,7 @@ namespace mongo {
     }
 
     AtomicUInt SSLThreadInfo::_next;
-    vector<SimpleMutex*> SSLThreadInfo::_mutex;
+    vector<boost::recursive_mutex*> SSLThreadInfo::_mutex;
     boost::thread_specific_ptr<SSLThreadInfo> SSLThreadInfo::_thread;
     
 
@@ -502,6 +507,17 @@ namespace mongo {
         _timeout = timeout;
         _init();
     }
+
+    Socket::~Socket() {
+        close();
+#ifdef MONGO_SSL
+        if ( _ssl ) {
+            SSL_shutdown( _ssl );
+            SSL_free( _ssl );
+            _ssl = 0;
+        }
+#endif
+    }
     
     void Socket::_init() {
         _bytesOut = 0;
@@ -513,13 +529,6 @@ namespace mongo {
     }
 
     void Socket::close() {
-#ifdef MONGO_SSL
-        if ( _ssl ) {
-            SSL_shutdown( _ssl );
-            SSL_free( _ssl );
-            _ssl = 0;
-        }
-#endif
         if ( _fd >= 0 ) {
             closesocket( _fd );
             _fd = -1;
@@ -570,7 +579,7 @@ namespace mongo {
 
         _fd = socket(remote.getType(), SOCK_STREAM, 0);
         if ( _fd == INVALID_SOCKET ) {
-            log(_logLevel) << "ERROR: connect invalid socket " << errnoWithDescription() << endl;
+            LOG(_logLevel) << "ERROR: connect invalid socket " << errnoWithDescription() << endl;
             return false;
         }
 
@@ -635,12 +644,12 @@ namespace mongo {
                 const int mongo_errno = errno;
                 if ( ( mongo_errno == EAGAIN || mongo_errno == EWOULDBLOCK ) && _timeout != 0 ) {
 #endif
-                    log(_logLevel) << "Socket " << context << " send() timed out " << _remote.toString() << endl;
+                    LOG(_logLevel) << "Socket " << context << " send() timed out " << _remote.toString() << endl;
                     throw SocketException( SocketException::SEND_TIMEOUT , remoteString() );
                 }
                 else {
                     SocketException::Type t = SocketException::SEND_ERROR;
-                    log(_logLevel) << "Socket " << context << " send() " 
+                    LOG(_logLevel) << "Socket " << context << " send() "
                                    << errnoWithDescription(mongo_errno) << ' ' << remoteString() << endl;
                     throw SocketException( t , remoteString() );
                 }
@@ -698,11 +707,11 @@ namespace mongo {
             int ret = ::sendmsg( _fd , &meta , portSendFlags );
             if ( ret == -1 ) {
                 if ( errno != EAGAIN || _timeout == 0 ) {
-                    log(_logLevel) << "Socket " << context << " send() " << errnoWithDescription() << ' ' << remoteString() << endl;
+                    LOG(_logLevel) << "Socket " << context << " send() " << errnoWithDescription() << ' ' << remoteString() << endl;
                     throw SocketException( SocketException::SEND_ERROR , remoteString() );
                 }
                 else {
-                    log(_logLevel) << "Socket " << context << " send() remote timeout " << remoteString() << endl;
+                    LOG(_logLevel) << "Socket " << context << " send() remote timeout " << remoteString() << endl;
                     throw SocketException( SocketException::SEND_TIMEOUT , remoteString() );
                 }
             }
@@ -731,13 +740,13 @@ namespace mongo {
             int ret = unsafe_recv( buf , len );
             if ( ret > 0 ) {
                 if ( len <= 4 && ret != len )
-                    log(_logLevel) << "Socket recv() got " << ret << " bytes wanted len=" << len << endl;
+                    LOG(_logLevel) << "Socket recv() got " << ret << " bytes wanted len=" << len << endl;
                 verify( ret <= len );
                 len -= ret;
                 buf += ret;
             }
             else if ( ret == 0 ) {
-                log(3) << "Socket recv() conn closed? " << remoteString() << endl;
+                LOG(3) << "Socket recv() conn closed? " << remoteString() << endl;
                 throw SocketException( SocketException::CLOSED , remoteString() );
             }
             else { /* ret < 0  */                
@@ -759,11 +768,11 @@ namespace mongo {
                        ) && _timeout > 0 ) 
                 {
                     // this is a timeout
-                    log(_logLevel) << "Socket recv() timeout  " << remoteString() <<endl;
+                    LOG(_logLevel) << "Socket recv() timeout  " << remoteString() <<endl;
                     throw SocketException( SocketException::RECV_TIMEOUT, remoteString() );                    
                 }
 
-                log(_logLevel) << "Socket recv() " << errnoWithDescription(e) << " " << remoteString() <<endl;
+                LOG(_logLevel) << "Socket recv() " << errnoWithDescription(e) << " " << remoteString() <<endl;
                 throw SocketException( SocketException::RECV_ERROR , remoteString() );
             }
         }

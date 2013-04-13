@@ -406,6 +406,10 @@ namespace mongo {
         }
     }
 
+    bool ClientBasic::hasCurrent() {
+        return currentClient.get();
+    }
+
     ClientBasic* ClientBasic::getCurrent() {
         return currentClient.get();
     }

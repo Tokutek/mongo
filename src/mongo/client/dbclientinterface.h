@@ -25,6 +25,7 @@
 #include "mongo/client/authlevel.h"
 #include "mongo/client/authentication_table.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/platform/atomic_word.h"
 #include "mongo/util/net/message.h"
 #include "mongo/util/net/message_port.h"
 
@@ -246,6 +247,14 @@ namespace mongo {
         vector<HostAndPort> getServers() const { return _servers; }
         
         ConnectionType type() const { return _type; }
+
+        /**
+         * This returns true if this and other point to the same logical entity.
+         * For single nodes, thats the same address.
+         * For replica sets, thats just the same replica set name.
+         * For pair (deprecated) or sync cluster connections, that's the same hosts in any ordering.
+         */
+        bool sameLogicalEndpoint( const ConnectionString& other ) const;
 
         static ConnectionString parse( const string& url , string& errmsg );
 
@@ -631,16 +640,30 @@ namespace mongo {
         bool createCollection(const string &ns, long long size = 0, bool capped = false, int max = 0, BSONObj *info = 0);
 
         /** Get error result from the last write operation (insert/update/delete) on this connection.
+            db doesn't change the command's behavior - it is just for auth checks.
             @return error message text, or empty string if no error.
         */
+        string getLastError(const std::string& db,
+                            bool fsync = false,
+                            bool j = false,
+                            int w = 0,
+                            int wtimeout = 0);
+        // Same as above but defaults to using admin DB
         string getLastError(bool fsync = false, bool j = false, int w = 0, int wtimeout = 0);
 
         /** Get error result from the last write operation (insert/update/delete) on this connection.
+            db doesn't change the command's behavior - it is just for auth checks.
             @return full error object.
 
             If "w" is -1, wait for propagation to majority of nodes.
             If "wtimeout" is 0, the operation will block indefinitely if needed.
         */
+        virtual BSONObj getLastErrorDetailed(const std::string& db,
+                                             bool fsync = false,
+                                             bool j = false,
+                                             int w = 0,
+                                             int wtimeout = 0);
+        // Same as above but defaults to using admin DB
         virtual BSONObj getLastErrorDetailed(bool fsync = false, bool j = false, int w = 0, int wtimeout = 0);
 
         /** Can be called with the returned value from getLastErrorDetailed to extract an error string. 
@@ -907,12 +930,16 @@ namespace mongo {
      */
     class DBClientBase : public DBClientWithCommands, public DBConnector {
     protected:
+        static AtomicInt64 ConnectionIdSequence;
+        long long _connectionId; // unique connection id for this connection
         WriteConcern _writeConcern;
-
     public:
         DBClientBase() {
             _writeConcern = W_NORMAL;
+            _connectionId = ConnectionIdSequence.fetchAndAdd(1);
         }
+
+        long long getConnectionId() const { return _connectionId; }
 
         WriteConcern getWriteConcern() const { return _writeConcern; }
         void setWriteConcern( WriteConcern w ) { _writeConcern = w; }

@@ -19,6 +19,7 @@
 #include "pch.h"
 #include "assert_util.h"
 #include "time_support.h"
+#include "mongo/util/concurrency/threadlocal.h"
 #include "mongo/util/stacktrace.h"
 
 using namespace std;
@@ -52,7 +53,8 @@ namespace mongo {
     Nullstream nullstream;
     vector<Tee*>* Logstream::globalTees = 0;
 
-    thread_specific_ptr<Logstream> Logstream::tsp;
+    TSP_DECLARE(Logstream, Logstream_tsp);
+    TSP_DEFINE(Logstream, Logstream_tsp);
 
     Nullstream& tlog( int level ) {
         if ( !debug && level > tlogLevel )
@@ -90,10 +92,13 @@ namespace mongo {
                         string s = ss.str();
 
                         if ( ! rename( lp.c_str() , s.c_str() ) ) {
-                            cout << "log file [" << lp << "] exists; copied to temporary file [" << s << "]" << endl;
+                            cout << "log file [" << lp
+                                 << "] exists; copied to temporary file [" << s << "]" << endl;
                         } else {
-                            cout << "log file [" << lp << "] exists and couldn't make backup; run with --logappend or manually remove file (" << strerror(errno) << ")" << endl;
-                            
+                            cout << "log file [" << lp
+                                 << "] exists and couldn't make backup [" << s
+                                 << "]; run with --logappend or manually remove file: "
+                                 << errnoWithDescription() << endl;
                             return false;
                         }
                     }
@@ -137,7 +142,9 @@ namespace mongo {
                 ss << _path << "." << terseCurrentTime( false );
                 string s = ss.str();
                 if (0 != rename(_path.c_str(), s.c_str())) {
-                    error() << "Failed to rename " << _path << " to " << s;
+                    error() << "Failed to rename '" << _path
+                            << "' to '" << s
+                            << "': " << errnoWithDescription() << endl;
                     return false;
                 }
             }
@@ -336,10 +343,10 @@ namespace mongo {
                 stringstream sss;
                 sss << "warning: log line attempted (" << msg.size() / 1024 << "k) over max size(" << MAX_LOG_LINE / 1024 << "k)";
                 sss << ", printing beginning and end ... ";
-                b.appendStr( sss.str() );
+                b.appendStr( sss.str(), false );
                 const char * xx = msg.c_str();
                 b.appendBuf( xx , MAX_LOG_LINE / 3 );
-                b.appendStr( " .......... " );
+                b.appendStr( " .......... ", false );
                 b.appendStr( xx + msg.size() - ( MAX_LOG_LINE / 3 ) );
             }
             else {
@@ -403,9 +410,9 @@ namespace mongo {
         if ( StaticObserver::_destroyingStatics ) {
             cout << "Logstream::get called in uninitialized state" << endl;
         }
-        Logstream *p = tsp.get();
+        Logstream *p = Logstream_tsp.get();
         if( p == 0 )
-            tsp.reset( p = new Logstream() );
+            Logstream_tsp.reset( p = new Logstream() );
         return *p;
     }
 

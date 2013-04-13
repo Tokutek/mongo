@@ -89,7 +89,7 @@ public:
             if ( o["op"].String() == "n" )
                 continue;
 
-            msgasserted(16477, "TODO(leif): applyOps is deprecated, replace with transactions");
+            msgasserted(16751, "TODO(leif): applyOps is deprecated, replace with transactions");
             BSONObjBuilder b( o.objsize() + 32 );
             BSONArrayBuilder updates( b.subarrayStart( "applyOps" ) );
             updates.append( o );

@@ -42,7 +42,7 @@ namespace mongo {
      *      1.2.3-rc4-pre-
      * If you really need to do something else you'll need to fix _versionArray()
      */
-    const char versionString[] = "2.2.0";
+    const char versionString[] = "2.2.4";
     const char tokutekPatchVersionString[] = "0.2.0-pre-";
 
     std::string fullVersionString() {
@@ -307,7 +307,7 @@ namespace mongo {
             verify( versionCmp("1.2.3-", "1.2.3") < 0 );
             verify( versionCmp("1.2.3-pre", "1.2.3") < 0 );
 
-            log(1) << "versionCmpTest passed" << endl;
+            LOG(1) << "versionCmpTest passed" << endl;
         }
     } versionCmpTest;
 
@@ -331,7 +331,7 @@ namespace mongo {
             verify( _versionArray("1.2.0-rc4-pre-") == BSON_ARRAY(1 << 2 << 0 << -6) );
             verify( _versionArray("2.0.0-rc5-pre-") == BSON_ARRAY(2 << 0 << 0 << -5) );
 
-            log(1) << "versionArrayTest passed" << endl;
+            LOG(1) << "versionArrayTest passed" << endl;
         }
     } versionArrayTest;
 }

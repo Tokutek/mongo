@@ -100,21 +100,24 @@ namespace mongo {
             dbresponse->responseTo = m.header()->id;
             return true;
         }
-        
-        uassert( 9517 , "writeback" , ( d.reservedField() & Reserved_FromWriteback ) == 0 );
 
-        OID writebackID;
-        writebackID.initSequential();
+        uassert( 9517 , "writeback" , ( d.reservedField() & Reserved_FromWriteback ) == 0 );
 
         const OID& clientID = ShardedConnectionInfo::get(false)->getID();
         massert( 10422 ,  "write with bad shard config and no server id!" , clientID.isSet() );
+
+        // We need to check this here, since otherwise we'll get errors wrapping the writeback -
+        // not just here, but also when returning as a command result.
+        // We choose 1/2 the overhead of the internal maximum so that we can still handle ops of
+        // 16MB exactly.
+        massert( 16437, "data size of operation is too large to queue for writeback",
+                 m.dataSize() < BSONObjMaxInternalSize - (8 * 1024));
 
         LOG(1) << "writeback queued for " << m.toString() << endl;
 
         BSONObjBuilder b;
         b.appendBool( "writeBack" , true );
         b.append( "ns" , ns );
-        b.append( "id" , writebackID );
         b.append( "connectionId" , cc().getConnectionId() );
         b.append( "instanceIdent" , prettyHostName() );
         wanted.addToBSON( b );
@@ -123,11 +126,9 @@ namespace mongo {
         b.appendBinData( "msg" , m.header()->len , bdtCustom , (char*)(m.singleData()) );
         LOG(2) << "writing back msg with len: " << m.header()->len << " op: " << m.operation() << endl;
 
-        // Don't register the writeback until immediately before we queue it -
-        // after this line, mongos will wait for an hour if we don't queue correctly
-        lastError.getSafe()->writeback( writebackID );
+        OID writebackID = writeBackManager.queueWriteBack( clientID.str() , b );
 
-        writeBackManager.queueWriteBack( clientID.str() , b.obj() );
+        lastError.getSafe()->writeback( writebackID );
 
         return true;
     }
