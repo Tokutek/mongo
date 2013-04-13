@@ -1,0 +1,65 @@
+tokumon news
+============
+
+tokumon 0.1.0
+-------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    - This release highlights single-threaded and multi-threaded
+      performance improvements.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Concurrency: inserts, updates, and deletes into existing collections
+      are now concurrent operations, with each other and with read
+      operations. (trac #6019)
+
+    - Multi-statement transactions: clients may now issue
+      `beginTransaction`, `commitTransaction`, and `rollbackTransaction`
+      commands using the `runCommand` interface, to bundle multiple
+      individual statements together in the same system transaction.
+
+    - The key format used in vanilla MongoDB's `{v:1}` indexes is now used
+      in the Fractal Tree storage system.  This yields significant
+      performance gains, particularly for in-memory workloads.
+
+    - Capped collections and tailable cursors are now supported.
+
+    - The `renameCollection` command is now supported.
+
+    - The system allocator has been changed fully to jemalloc.
+
+
+tokumon 0.0.4
+-------------
+Release date: 2013-04-08
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Server crashes now produce a core file. (trac #6458)
+
+    - Debug info is available in a separate package. (trac #6453)
+
+
+Bug Fixes
+~~~~~~~~~
+
+    - The gcc and stdc++ runtime libraries are now packaged with the
+      binaries to fix runtime issues on older Centos 5 machines. (trac
+      #6456)
+
+
+tokumon 0.0.2
+-------------
+Release date: 2013-03-14
+
+General
+~~~~~~~
+
+    - First evaluation release.

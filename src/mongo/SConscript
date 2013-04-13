@@ -582,6 +582,7 @@ env.Command(
     ['#buildscripts/make_archive.py',
      '#distsrc/GNU-AGPL-3.0',
      '#distsrc/README',
+     '#distsrc/NEWS',
      '#distsrc/THIRD-PARTY-NOTICES',
      '/lib64/libgcc_s.so.1',
      '/usr/lib64/libstdc++.so.6',
