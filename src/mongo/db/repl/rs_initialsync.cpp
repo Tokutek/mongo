@@ -397,11 +397,10 @@ namespace mongo {
                     );
                 // just for debugging for now
                 if (foundMinUnapplied) {
-                    int len;
-                    GTID min(result["GTID"].binData(len));
-                    minUnappliedGTID = min;
+                    minUnappliedGTID = getGTIDFromBSON("GTID", result);
                     log() << "foundMinUnapplied" << rsLog;
                     // copy the oplog with a query
+                    int len;
                     cloneCollectionData(
                         r.conn_shared(),
                         rsoplog,

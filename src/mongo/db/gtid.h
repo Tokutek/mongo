@@ -113,5 +113,6 @@ namespace mongo {
         
     };
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result);
+    GTID getGTIDFromBSON(const char* keyName, const BSONObj& obj);
 
 } // namespace mongo

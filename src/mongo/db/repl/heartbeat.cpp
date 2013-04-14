@@ -330,10 +330,7 @@ namespace mongo {
                 mem.opTime = info["opTime"].Date();
             }
             if ( info.hasElement("GTID")) {
-                int len;
-                GTID gtid(info["GTID"].binData(len));
-                dassert((uint32_t)len == GTID::GTIDBinarySize());
-                mem.gtid = gtid;
+                mem.gtid = getGTIDFromBSON("GTID", info);
             }
             // see if this member is in the electable set
             if( info["e"].eoo() ) {

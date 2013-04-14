@@ -224,4 +224,11 @@ namespace mongo {
         result.appendBinData(keyName, sizeofGTID, BinDataGeneral, idData);
     }
 
+    GTID getGTIDFromBSON(const char* keyName, const BSONObj& obj) {
+        int len;
+        GTID ret(obj[keyName].binData(len));
+        dassert((uint32_t)len == GTID::GTIDBinarySize());
+        return ret;
+    }
+
 } // namespace mongo

@@ -49,9 +49,6 @@ namespace mongo {
 
 
     /**
-     * notifierThread() uses lastOpTimeWritten to inform the sync target where this member is
-     * currently synced to.
-     *
      * Lock order:
      * 1. rslock
      * 2. rwlock
@@ -101,7 +98,7 @@ namespace mongo {
         // Check if rollback is necessary
         bool isRollbackRequired(OplogReader& r);
         void getOplogReader(OplogReader& r);
-        // check lastOpTimeWritten against the remote's earliest op, filling in remoteOldestOp.
+        // check latest GTID against the remote's earliest GTID, filling in remoteOldestOp.
         bool isStale(OplogReader& r, BSONObj& remoteOldestOp);
         // stop syncing when this becomes a primary
         void stop();

@@ -183,10 +183,7 @@ namespace mongo {
     }
 
     GTID getGTIDFromOplogEntry(BSONObj o) {
-        int len;
-        GTID lastGTID(o["_id"].binData(len));
-        dassert((uint32_t)len == GTID::GTIDBinarySize());
-        return lastGTID;
+        return getGTIDFromBSON("_id", o);
     }
 
     bool getLastGTIDinOplog(GTID* gtid) {
