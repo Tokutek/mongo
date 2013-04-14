@@ -418,6 +418,9 @@ namespace mongo {
     */
     bool ReplSetImpl::tryToGoLiveAsASecondary() {
         // make sure we're not primary, secondary, or fatal already
+        lock rsLock( this );
+        Lock::GlobalWrite writeLock;
+
         if (box.getState().primary() || box.getState().secondary() || box.getState().fatal()) {
             return false;
         }

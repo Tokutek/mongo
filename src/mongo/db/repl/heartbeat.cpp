@@ -35,6 +35,7 @@
 #include "../repl.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/security.h"
+#include "mongo/db/gtid.h"
 
 namespace mongo {
 
@@ -122,6 +123,9 @@ namespace mongo {
             result.append("hbmsg", theReplSet->hbmsg());
             result.append("time", (long long) time(0));
             result.appendDate("opTime", theReplSet->lastOpTimeWritten.asDate());
+            GTID nextLiveGTID;
+            theReplSet->gtidManager->getLiveState(&nextLiveGTID);
+            addGTIDToBSON("GTID", nextLiveGTID, result);
             int v = theReplSet->config().version;
             result.append("v", v);
             if( v > cmdObj["v"].Int() )
@@ -320,9 +324,15 @@ namespace mongo {
             }
             mem.health = 1.0;
             mem.lastHeartbeatMsg = info["hbmsg"].String();
-            if( info.hasElement("opTime") )
+            if( info.hasElement("opTime") ) {
                 mem.opTime = info["opTime"].Date();
-
+            }
+            if ( info.hasElement("GTID")) {
+                int len;
+                GTID gtid(info["GTID"].binData(len));
+                dassert((uint32_t)len == GTID::GTIDBinarySize());
+                mem.gtid = gtid;
+            }
             // see if this member is in the electable set
             if( info["e"].eoo() ) {
                 // for backwards compatibility

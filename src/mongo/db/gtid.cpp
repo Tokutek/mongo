@@ -210,5 +210,17 @@ namespace mongo {
         _minLiveGTID = _nextLiveGTID;
         _lock.unlock();
     }
+    void GTIDManager::getLiveState(GTID* nextLive) {
+        _lock.lock();
+        *nextLive = _nextLiveGTID;
+        _lock.unlock();
+    }
+
+    void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result) {
+        uint32_t sizeofGTID = GTID::GTIDBinarySize();
+        char idData[sizeofGTID];
+        gtid.serializeBinaryData(idData);
+        result.appendBinData(keyName, sizeofGTID, BinDataGeneral, idData);
+    }
 
 } // namespace mongo
