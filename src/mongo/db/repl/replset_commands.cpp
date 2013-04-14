@@ -272,12 +272,14 @@ namespace mongo {
             if (!force) {
                 long long int lastOp = (long long int)theReplSet->lastOpTimeWritten.getSecs();
                 long long int closest = (long long int)theReplSet->lastOtherOpTime().getSecs();
+                GTID lastGTID = theReplSet->gtidManager->getLiveState();
+                GTID otherLastGTID = theReplSet->lastOtherGTID();
 
                 long long int diff = lastOp - closest;
                 result.append("closest", closest);
                 result.append("difference", diff);
 
-                if (diff < 0) {
+                if (GTID::cmp(lastGTID, otherLastGTID) < 0) {
                     // not our problem, but we'll wait until thing settle down
                     errmsg = "someone is ahead of the primary?";
                     return false;

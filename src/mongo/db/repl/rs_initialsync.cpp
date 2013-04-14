@@ -132,6 +132,7 @@ namespace mongo {
 
     Member* ReplSetImpl::getMemberToSyncTo() {
         lock lk(this);
+        GTID lastGTID = gtidManager->getLiveState();
 
         bool buildIndexes = true;
 
@@ -170,8 +171,9 @@ namespace mongo {
         // MAX_SLACK_TIME seconds behind.
         OpTime primaryOpTime;
         static const unsigned maxSlackDurationSeconds = 10 * 60; // 10 minutes
-        if (primary)
+        if (primary) {
             primaryOpTime = primary->hbinfo().opTime;
+        }
         else
             // choose a time that will exclude no candidates, since we don't see a primary
             primaryOpTime = OpTime(maxSlackDurationSeconds, 0);
@@ -204,12 +206,15 @@ namespace mongo {
 
                 if (m->state() == MemberState::RS_SECONDARY) {
                     // only consider secondaries that are ahead of where we are
-                    if (m->hbinfo().opTime <= lastOpTimeWritten)
+                    if (GTID::cmp(m->hbinfo().gtid, lastGTID) <= 0) {
                         continue;
+                    }
                     // omit secondaries that are excessively behind, on the first attempt at least.
                     if (attempts == 0 && 
-                        m->hbinfo().opTime < oldestSyncOpTime)
+                        m->hbinfo().opTime < oldestSyncOpTime) 
+                    {
                         continue;
+                    }
                 }
 
                 // omit nodes that are more latent than anything we've already considered
