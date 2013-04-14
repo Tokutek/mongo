@@ -489,7 +489,6 @@ namespace mongo {
         }
 
         // TODO: figure out what to do with these
-        //lastOpTimeWritten = OpTime();
         verify( !box.getState().primary() ); // wouldn't make sense if we were.
 
         changeState(MemberState::RS_RECOVERING);

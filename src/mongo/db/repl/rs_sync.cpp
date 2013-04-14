@@ -368,7 +368,6 @@ namespace mongo {
             Lock::DBWrite lk("local");
             while (!ops->empty()) {
                 //const BSONObj& op = ops->front();
-                // this updates theReplSet->lastOpTimeWritten
                 ::abort();
                 //_logOpObjRS(op);
                 ops->pop_front();
