@@ -109,8 +109,7 @@ namespace mongo {
         void getMins(GTID* minLiveGTID, GTID* minUnappliedGTID);
         void resetManager(GTID lastGTID);
 
-        void getLiveState(GTID* nextLive);
-
+        GTID getLiveState();
         
     };
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result);

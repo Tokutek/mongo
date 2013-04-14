@@ -123,9 +123,11 @@ namespace mongo {
             result.append("hbmsg", theReplSet->hbmsg());
             result.append("time", (long long) time(0));
             result.appendDate("opTime", theReplSet->lastOpTimeWritten.asDate());
-            GTID nextLiveGTID;
-            theReplSet->gtidManager->getLiveState(&nextLiveGTID);
-            addGTIDToBSON("GTID", nextLiveGTID, result);
+            addGTIDToBSON(
+                "GTID", 
+                theReplSet->gtidManager->getLiveState(), 
+                result
+                );
             int v = theReplSet->config().version;
             result.append("v", v);
             if( v > cmdObj["v"].Int() )

@@ -210,10 +210,11 @@ namespace mongo {
         _minLiveGTID = _nextLiveGTID;
         _lock.unlock();
     }
-    void GTIDManager::getLiveState(GTID* nextLive) {
+    GTID GTIDManager::getLiveState() {
         _lock.lock();
-        *nextLive = _nextLiveGTID;
+        GTID ret = _nextLiveGTID;
         _lock.unlock();
+        return ret;
     }
 
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result) {
