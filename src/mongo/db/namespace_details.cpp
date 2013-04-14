@@ -459,7 +459,7 @@ namespace mongo {
             SimpleMutex::scoped_lock lk(_mutex);
             for (vector<BSONObj>::const_iterator it = pks.begin(); it != pks.end(); it++) {
                 const int n = _uncommittedPKs.erase(*it);
-                dassert(n == 1);
+                verify(n == 1);
             }
         }
 
