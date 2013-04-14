@@ -251,22 +251,15 @@ namespace mongo {
 
     bool BackgroundSync::isStale(OplogReader& r, BSONObj& remoteOldestOp) {
         remoteOldestOp = r.findOne(rsoplog, Query());
-        OpTime remoteTs = remoteOldestOp["ts"]._opTime();
-        DEV {
-            log() << "replSet remoteOldestOp:    " << remoteTs.toStringLong() << rsLog;
-            log() << "replSet lastOpTimeFetched: " << _lastOpTimeFetched.toStringLong() << rsLog;
-        }
-        LOG(3) << "replSet remoteOldestOp: " << remoteTs.toStringLong() << rsLog;
-
+        GTID remoteOldestGTID = getGTIDFromBSON("_id", remoteOldestOp);
         {
             boost::unique_lock<boost::mutex> lock(_mutex);
-
-            if (_lastOpTimeFetched >= remoteTs) {
-                return false;
+            GTID currLiveState = theReplSet->gtidManager->getLiveState();
+            if (GTID::cmp(currLiveState, remoteOldestGTID) <= 0) {
+                return true;
             }
         }
-
-        return true;
+        return false;
     }
 
     void BackgroundSync::getOplogReader(OplogReader& r) {

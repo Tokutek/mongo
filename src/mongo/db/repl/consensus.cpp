@@ -30,6 +30,7 @@ namespace mongo {
     private:
 
         bool shouldVeto(const BSONObj& cmdObj, string& errmsg) {
+            GTIDManager* gtidMgr = theReplSet->gtidManager;
             // don't veto older versions
             if (cmdObj["id"].eoo()) {
                 // they won't be looking for the veto field
@@ -45,13 +46,17 @@ namespace mongo {
                 errmsg = str::stream() << "replSet couldn't find member with id " << id;
                 return true;
             }
-            else if( theReplSet->isPrimary() && theReplSet->lastOpTimeWritten >= hopeful->hbinfo().opTime ) {
-                // hbinfo is not updated, so we have to check the primary's last optime separately
+            else if( theReplSet->isPrimary() && 
+                GTID::cmp(gtidMgr->getLiveState(), hopeful->hbinfo().gtid) >= 0)
+            {
+                // hbinfo is not updated, so we have to check the primary's last GTID separately
                 errmsg = str::stream() << "I am already primary, " << hopeful->fullName() <<
                     " can try again once I've stepped down";
                 return true;
             }
-            else if( primary && primary->hbinfo().opTime >= hopeful->hbinfo().opTime ) {
+            else if( primary && 
+                GTID::cmp(primary->hbinfo().gtid, hopeful->hbinfo().gtid) >= 0) 
+            {
                 // other members might be aware of more up-to-date nodes
                 errmsg = str::stream() << hopeful->fullName() << " is trying to elect itself but " <<
                     primary->fullName() << " is already primary and more up-to-date";
@@ -71,6 +76,7 @@ namespace mongo {
         }
 
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            GTIDManager* gtidMgr = theReplSet->gtidManager;
             if( !check(errmsg, result) )
                 return false;
 
@@ -80,7 +86,8 @@ namespace mongo {
             }
             string who = cmdObj["who"].String();
             int cfgver = cmdObj["cfgver"].Int();
-            OpTime opTime(cmdObj["opTime"].Date());
+            GTID remoteGTID = getGTIDFromBSON("GTID", cmdObj);
+            GTID ourGTID = gtidMgr->getLiveState();
 
             bool weAreFresher = false;
             if( theReplSet->config().version > cfgver ) {
@@ -88,12 +95,12 @@ namespace mongo {
                 result.append("info", "config version stale");
                 weAreFresher = true;
             }
-            // check not only our own optime, but any other member we can reach
-            else if( opTime < theReplSet->lastOpTimeWritten ||
-                     opTime < theReplSet->lastOtherOpTime())  {
+            // check not only our own GTID, but any other member we can reach
+            else if (GTID::cmp(remoteGTID, ourGTID) < 0 ||
+                     GTID::cmp(remoteGTID, theReplSet->lastOtherGTID())) {
                 weAreFresher = true;
             }
-            result.appendDate("opTime", theReplSet->lastOpTimeWritten.asDate());
+            addGTIDToBSON("GTID", ourGTID, result);
             result.append("fresher", weAreFresher);
             result.append("veto", shouldVeto(cmdObj, errmsg));
 
@@ -207,13 +214,17 @@ namespace mongo {
             log() << "replSet electCmdReceived couldn't find member with id " << whoid << rsLog;
             vote = -10000;
         }
-        else if( primary && primary == rs._self && rs.lastOpTimeWritten >= hopeful->hbinfo().opTime ) {
-            // hbinfo is not updated, so we have to check the primary's last optime separately
+        else if( primary && 
+            primary == rs._self && 
+            GTID::cmp(rs.gtidManager->getLiveState(), hopeful->hbinfo().gtid) >= 0 
+            )
+        {
+            // hbinfo is not updated, so we have to check the primary's last GTID separately
             log() << "I am already primary, " << hopeful->fullName()
                   << " can try again once I've stepped down" << rsLog;
             vote = -10000;
         }
-        else if( primary && primary->hbinfo().opTime >= hopeful->hbinfo().opTime ) {
+        else if( primary && GTID::cmp(primary->hbinfo().gtid, hopeful->hbinfo().gtid) >= 0) {
             // other members might be aware of more up-to-date nodes
             log() << hopeful->fullName() << " is trying to elect itself but " <<
                   primary->fullName() << " is already primary and more up-to-date" << rsLog;
@@ -262,16 +273,17 @@ namespace mongo {
        @return true if we are freshest.  Note we may tie.
     */
     bool Consensus::weAreFreshest(bool& allUp, int& nTies) {
-        const OpTime ord = theReplSet->lastOpTimeWritten;
         nTies = 0;
-        verify( !ord.isNull() );
-        BSONObj cmd = BSON(
-                          "replSetFresh" << 1 <<
-                          "set" << rs.name() <<
-                          "opTime" << Date_t(ord.asDate()) <<
-                          "who" << rs._self->fullName() <<
-                          "cfgver" << rs._cfg->version <<
-                          "id" << rs._self->id());
+        GTID ourGTID = rs.gtidManager->getLiveState();
+        BSONObjBuilder cmdBuilder;
+        cmdBuilder.append("replSetFresh", 1);
+        cmdBuilder.append("set", rs.name());
+        addGTIDToBSON("GTID", ourGTID, cmdBuilder);
+        cmdBuilder.append("who", rs._self->fullName());
+        cmdBuilder.append("cfgver", rs._cfg->version);
+        cmdBuilder.append("id", rs._self->id());
+        BSONObj cmd = cmdBuilder.done();
+
         list<Target> L;
         int ver;
         /* the following queries arbiters, even though they are never fresh.  wonder if that makes sense.
@@ -291,10 +303,11 @@ namespace mongo {
                     log() << "not electing self, we are not freshest" << rsLog;
                     return false;
                 }
-                OpTime remoteOrd( i->result["opTime"].Date() );
-                if( remoteOrd == ord )
+                GTID remoteGTID = getGTIDFromBSON("GTID", i->result);
+                if( GTID::cmp(remoteGTID, ourGTID) == 0 ) {
                     nTies++;
-                verify( remoteOrd <= ord );
+                }
+                verify( GTID::cmp(remoteGTID, ourGTID) <= 0 );
 
                 if( i->result["veto"].trueValue() ) {
                     BSONElement msg = i->result["errmsg"];
@@ -314,7 +327,8 @@ namespace mongo {
             }
         }
         LOG(1) << "replSet dev we are freshest of up nodes, nok:" << nok << " nTies:" << nTies << rsLog;
-        verify( ord <= theReplSet->lastOpTimeWritten ); // <= as this may change while we are working...
+        // <= as this may change while we are working...
+        verify( GTID::cmp(ourGTID, rs.gtidManager->getLiveState()) <= 0 );
         return true;
     }
 
@@ -326,17 +340,10 @@ namespace mongo {
     }
 
     void Consensus::_electSelf() {
-        if( time(0) < steppedDown )
+        if( time(0) < steppedDown ) {
             return;
-
-        {
-            const OpTime ord = theReplSet->lastOpTimeWritten;
-            if( ord == 0 ) {
-                log() << "replSet info not trying to elect self, do not yet have a complete set of data from any point in time" << rsLog;
-                return;
-            }
         }
-
+        
         bool allUp;
         int nTies;
         if( !weAreFreshest(allUp, nTies) ) {

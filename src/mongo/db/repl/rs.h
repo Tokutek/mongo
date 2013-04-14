@@ -534,6 +534,7 @@ namespace mongo {
         bool tryToGoLiveAsASecondary(); // readlocks
         void syncThread();
         const OpTime lastOtherOpTime() const;
+        const GTID lastOtherGTID() const;
         
         int oplogVersion;
     private:

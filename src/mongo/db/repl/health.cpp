@@ -330,6 +330,20 @@ namespace mongo {
         return 0;
     }
 
+    const GTID ReplSetImpl::lastOtherGTID() const {
+        GTID closest;
+        for( Member *m = _members.head(); m; m=m->next() ) {
+            if (!m->hbinfo().up()) {
+                continue;
+            }
+            if (GTID::cmp(m->hbinfo().gtid, closest) > 0) {
+                closest = m->hbinfo().gtid;
+            }
+        }
+
+        return closest;
+    }
+
     const OpTime ReplSetImpl::lastOtherOpTime() const {
         OpTime closest(0,0);
 
