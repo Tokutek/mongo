@@ -471,15 +471,12 @@ namespace mongo {
         // at this point, we have got the oplog up to date,
         // now we need to read forward in the oplog
         // from minUnapplied
-        uint32_t sizeofGTID = GTID::GTIDBinarySize();
-        char idData[sizeofGTID];
-        minUnappliedGTID.serializeBinaryData(idData);
         BSONObjBuilder query;
-        query.appendBinData("$gte", sizeofGTID, BinDataGeneral, idData);
+        addGTIDToBSON("$gte", minUnappliedGTID, query);
         // TODO: make this a read uncommitted cursor
         // especially when this code moves to a background thread
         // for running replication
-        shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor( rsoplog, query.done() );
+        shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(rsoplog, query.done());
         while( c->ok() ) {
             if ( c->currentMatches()) {
                 applyTransactionFromOplog(c->current());

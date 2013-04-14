@@ -105,10 +105,7 @@ namespace mongo {
         }
 
         BSONObjBuilder b;
-        uint32_t sizeofGTID = GTID::GTIDBinarySize();
-        char idData[sizeofGTID];
-        gtid.serializeBinaryData(idData);
-        b.appendBinData("_id", sizeofGTID, BinDataGeneral, idData);
+        addGTIDToBSON("_id", gtid, b);
         b.appendTimestamp("ts", ts.asDate());
         b.append("h", hashNew);
         b.append("a", true);
@@ -120,17 +117,10 @@ namespace mongo {
 
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID) {
         Lock::DBRead lk("local");
-        uint32_t sizeofGTID = GTID::GTIDBinarySize();
-        char minLiveData[sizeofGTID];
-        char minUnappliedData[sizeofGTID];
-        
-        minLiveGTID.serializeBinaryData(minLiveData);
-        minUnappliedGTID.serializeBinaryData(minUnappliedData);
-
         BufBuilder bufbuilder(256);
         BSONObjBuilder b(bufbuilder);
         b.append("_id", "minLive");
-        b.appendBinData("GTID", sizeofGTID, BinDataGeneral, minLiveData);
+        addGTIDToBSON("GTID", minLiveGTID, b);
         BSONObj bb = b.done();
         uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
         replInfoDetails->insertObject(bb, flags);
@@ -138,7 +128,7 @@ namespace mongo {
         bufbuilder.reset();
         BSONObjBuilder b2(bufbuilder);
         b2.append("_id", "minUnapplied");
-        b2.appendBinData("GTID", sizeofGTID, BinDataGeneral, minUnappliedData);
+        addGTIDToBSON("GTID", minUnappliedGTID, b2);
         BSONObj bb2 = b2.done();
         replInfoDetails->insertObject(bb2, flags);
     }
