@@ -17,6 +17,7 @@
 #include "gtid.h"
 
 #include "mongo/pch.h"
+#include "mongo/util/time_support.h"
 
 namespace mongo {
 
@@ -81,18 +82,31 @@ namespace mongo {
         _GTSeqNo = 0;
     }
 
+    string GTID::toString() const {
+        stringstream ss;
+        ss << "primary: " << _primarySeqNo<< "secondary: " << _GTSeqNo;
+        return ss.str();
+    }
+
+    bool GTID::isInitial() const {
+        return (_primarySeqNo == 0);
+    }
 
 
 
     
-    GTIDManager::GTIDManager( GTID lastGTID ) {
+    GTIDManager::GTIDManager( GTID lastGTID, uint64_t lastTime ) {
         _nextLiveGTID = lastGTID;
         _nextLiveGTID.inc();
         _minLiveGTID = _nextLiveGTID;
+
         // note that _minUnappliedGTID is not set
+
+        _lastTimestamp = lastTime;
     }
 
     GTIDManager::~GTIDManager() {
+        _lastTimestamp = 0;
     }
 
     // This function is meant to only be called on a primary,
@@ -102,14 +116,16 @@ namespace mongo {
     //
     // returns a GTID that is an increment of _lastGTID
     // also notes that GTID has been handed out
-    GTID GTIDManager::getGTIDForPrimary() {
-        GTID ret;
+    void GTIDManager::getGTIDForPrimary(GTID* gtid, uint64_t* timestamp) {
+        // it is ok for this to be racy. It is used for heuristic purposes
+        *timestamp = curTimeMillis64();
+
         _lock.lock();
-        ret = _nextLiveGTID;
-        _liveGTIDs.insert(ret);
+        *gtid = _nextLiveGTID;
+        _liveGTIDs.insert(*gtid);
         _nextLiveGTID.inc();
+        _lastTimestamp = *timestamp;
         _lock.unlock();
-        return ret;
     }
     
     // notification that user of GTID has completed work

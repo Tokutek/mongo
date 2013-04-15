@@ -378,7 +378,6 @@ namespace mongo {
             bb.append("stateStr", myState.toString());
             bb.append("uptime", (unsigned)(time(0) - cmdLine.started));
             if (!_self->config().arbiterOnly) {
-                bb.appendTimestamp("optime", lastOpTimeWritten.asDate());
                 bb.appendDate("optimeDate", lastOpTimeWritten.getSecs() * 1000LL);
             }
 

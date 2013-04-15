@@ -36,7 +36,9 @@ namespace mongo {
         ~GTID(){};
         void serializeBinaryData(char* binData);
         void inc();
-        void inc_primary();
+        void inc_primary();        
+        string toString() const;
+        bool isInitial() const;
     };
 
     struct GTIDCmp {
@@ -81,9 +83,12 @@ namespace mongo {
         // on a secondary, this is the set of GTIDs that are in process
         // of being applied
         GTIDSet _unappliedGTIDs;
+
+        // in milliseconds, derived from curTimeMillis64
+        uint64_t _lastTimestamp;
         
         public:            
-        GTIDManager( GTID lastGTID );
+        GTIDManager( GTID lastGTID, uint64_t lastTime );
         ~GTIDManager();
 
         // methods for running on a primary
@@ -91,7 +96,7 @@ namespace mongo {
         // returns a GTID equal to _nextGTID on a primary
         // this should not be called on a secondary
         // also notes that GTID has been handed out
-        GTID getGTIDForPrimary();
+        void getGTIDForPrimary(GTID* gtid, uint64_t* timestamp);
 
         // notification that user of GTID has completed work
         // and either committed or aborted transaction associated with

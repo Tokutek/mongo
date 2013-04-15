@@ -23,6 +23,7 @@
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/util/time_support.h"
 
 namespace mongo {
 
@@ -31,7 +32,7 @@ namespace mongo {
     // compiled with coredb. So, in startReplication, we will set this
     // to true
     static bool _logTxnOperations = false;
-    static void (*_logTxnToOplog)(GTID gtid, BSONArray& opInfo) = NULL;
+    static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, BSONArray& opInfo) = NULL;
     static GTIDManager* txnGTIDManager = NULL;
     // TODO: Remove this function pointer, replace it with more sane linking.
     //
@@ -51,7 +52,7 @@ namespace mongo {
         return _logTxnOperations;
     }
 
-    void setLogTxnToOplog(void (*f)(GTID gtid, BSONArray& opInfo)) {
+    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, BSONArray& opInfo)) {
         _logTxnToOplog = f;
     }
 
@@ -85,6 +86,11 @@ namespace mongo {
     void TxnContext::commit(int flags) {
         bool gotGTID = false;
         GTID gtid;
+        uint64_t timestamp = 0;
+        // do this in case we are writing the first entry
+        // we put something in that can be distinguished from
+        // an initialized GTID that has never been touched
+        gtid.inc_primary(); 
         // handle work related to logging of transaction for replication
         if (_numOperations > 0) {
             if (hasParent()) {
@@ -96,16 +102,17 @@ namespace mongo {
             else {
                 if (!_initiatingRS) {
                     dassert(txnGTIDManager);
-                    gtid = txnGTIDManager->getGTIDForPrimary();
+                    txnGTIDManager->getGTIDForPrimary(&gtid, &timestamp);
                 }
                 else {
                     dassert(!txnGTIDManager);
+                    timestamp = curTimeMillis64();
                 }
                 gotGTID = true;
                 // In this case, the transaction we are committing has
                 // no parent, so we must write the transaction's 
                 // logged operations to the opLog, as part of this transaction
-                writeOpsToOplog(gtid);
+                writeOpsToOplog(gtid, timestamp);
             }
         }
         _txn.commit(flags);
@@ -154,11 +161,11 @@ namespace mongo {
         }
     }
 
-    void TxnContext::writeOpsToOplog(GTID gtid) {
+    void TxnContext::writeOpsToOplog(GTID gtid, uint64_t timestamp) {
         dassert(_logTxnOperations);
         dassert(_logTxnToOplog);
         BSONArray array = _txnOps.arr();
-        _logTxnToOplog(gtid, array);
+        _logTxnToOplog(gtid, timestamp, array);
     }
 
     void CappedCollectionRollback::_complete(const bool committed) {

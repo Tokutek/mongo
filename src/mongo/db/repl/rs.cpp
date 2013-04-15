@@ -28,6 +28,7 @@
 #include "mongo/platform/bits.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
+#include "mongo/util/time_support.h"
 
 using namespace std;
 
@@ -79,10 +80,10 @@ namespace mongo {
         }
     }
 
-    void ReplSetImpl::goStale(const Member* stale, const BSONObj& oldest) {
+    void ReplSetImpl::goStale(const Member* stale, GTID remoteGTID) {
         log() << "replSet error RS102 too stale to catch up, at least from " << stale->fullName() << rsLog;
-        log() << "replSet our last optime : " << lastOpTimeWritten.toStringLong() << rsLog;
-        log() << "replSet oldest at " << stale->fullName() << " : " << oldest["ts"]._opTime().toStringLong() << rsLog;
+        log() << "replSet our last GTID : " << gtidManager->getLiveState().toString() << rsLog;
+        log() << "replSet oldest at " << stale->fullName() << " : " << remoteGTID.toString() << rsLog;
         log() << "replSet See http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember" << rsLog;
 
         sethbmsg("error RS102 too stale to catch up");
@@ -379,7 +380,7 @@ namespace mongo {
         _prefetcherPool(replPrefetcherThreadCount),
         _indexPrefetchConfig(PREFETCH_ALL) {
 
-        gtidManager = NULL; // will be initialized in loadLastOpTimeWritten
+        gtidManager = NULL; // will be initialized in loadGTIDManager
         _cfg = 0;
         memset(_hbmsg, 0, sizeof(_hbmsg));
         strcpy( _hbmsg , "initial startup" );
@@ -442,21 +443,20 @@ namespace mongo {
 
     void newReplUp();
 
-    void ReplSetImpl::loadLastOpTimeWritten(bool quiet) {
+    void ReplSetImpl::loadGTIDManager(bool quiet) {
         Lock::DBRead lk(rsoplog);
         BSONObj o;
         if( Helpers::getLast(rsoplog, o) ) {
             GTID lastGTID = getGTIDFromBSON("_id", o);
-            gtidManager = new GTIDManager(lastGTID);
+            uint64_t lastTime = o["ts"]._numberLong();
+            gtidManager = new GTIDManager(lastGTID, lastTime);
             setTxnGTIDManager(gtidManager);
             
-            lastOpTimeWritten = o["ts"]._opTime();
-            uassert(13290, "bad replSet oplog entry?", quiet || !lastOpTimeWritten.isNull());
         }
         else {
             // make a GTIDManager that starts from scratch
             GTID lastGTID;
-            gtidManager = new GTIDManager(lastGTID);
+            gtidManager = new GTIDManager(lastGTID, curTimeMillis64());
             setTxnGTIDManager(gtidManager);
         }
     }
@@ -469,7 +469,7 @@ namespace mongo {
             // the oplog, but we will see
             openOplogFiles();
             Client::Transaction txn(DB_SERIALIZABLE);
-            loadLastOpTimeWritten();
+            loadGTIDManager();
             txn.commit();
         }
         catch(std::exception& e) {

@@ -54,7 +54,7 @@ namespace mongo {
         resetSlaveCache();
     }
 
-    static void _logOpUninitialized(GTID gtid, BSONArray& opInfo) {
+    static void _logOpUninitialized(GTID gtid, uint64_t timestamp, BSONArray& opInfo) {
         log() << "WHAT IS GOING ON???????? " << endl;
     }
 
@@ -93,20 +93,14 @@ namespace mongo {
         }
     }
     
-    static void _logTransactionOps(GTID gtid, BSONArray& opInfo) {
+    static void _logTransactionOps(GTID gtid, uint64_t timestamp, BSONArray& opInfo) {
         Lock::DBRead lk1("local");
         mutex::scoped_lock lk2(OpTime::m);
 
-        const OpTime ts = OpTime::now(lk2);
         long long hashNew = 0;
-        if( theReplSet ) {
-            //massert(13312, "replSet error : logOp() but not primary?", theReplSet->box.getState().primary());
-            theReplSet->lastOpTimeWritten = ts;
-        }
-
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
-        b.appendTimestamp("ts", ts.asDate());
+        b.appendTimestamp("ts", timestamp);
         b.append("h", hashNew);
         b.append("a", true);
         b.append("ops", opInfo);
@@ -133,7 +127,7 @@ namespace mongo {
         replInfoDetails->insertObject(bb2, flags);
     }
     
-    static void (*_logTransactionOp)(GTID gtid, BSONArray& opInfo) = _logOpUninitialized;
+    static void (*_logTransactionOp)(GTID gtid, uint64_t timestamp, BSONArray& opInfo) = _logOpUninitialized;
     // TODO: (Zardosht) hopefully remove these two phases
     void newReplUp() {
         _logTransactionOp = _logTransactionOps;
@@ -142,8 +136,8 @@ namespace mongo {
         _logTransactionOp = _logTransactionOps;
     }
 
-    void logTransactionOps(GTID gtid, BSONArray& opInfo) {
-        _logTransactionOp(gtid, opInfo);
+    void logTransactionOps(GTID gtid, uint64_t timestamp, BSONArray& opInfo) {
+        _logTransactionOp(gtid, timestamp, opInfo);
         // TODO: Figure out for sharding
         //logOpForSharding( opstr , ns , obj , patt );
     }

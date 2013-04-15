@@ -267,6 +267,8 @@ namespace mongo {
 
             OpTime lastOp = theReplSet->lastOpTimeWritten;
             OpTime closest = theReplSet->lastOtherOpTime();
+            GTID lastGTID = theReplSet->gtidManager->getLiveState();
+            GTID closestGTID = theReplSet->lastOtherGTID();
             long long int diff = lastOp.getSecs() - closest.getSecs();
             while (now <= timeout && (diff < 0 || diff > 10)) {
                 sleepsecs(1);
@@ -289,9 +291,9 @@ namespace mongo {
 
             log() << "waiting for secondaries to catch up" << endl;
 
-            lastOp = theReplSet->lastOpTimeWritten;
-            while (lastOp != closest && now - start < 60) {
-                closest = theReplSet->lastOtherOpTime();
+            lastGTID = theReplSet->gtidManager->getLiveState();
+            while (GTID::cmp(lastGTID, closestGTID) > 0 && now - start < 60) {
+                closestGTID = theReplSet->lastOtherGTID();
 
                 now++;
                 sleepsecs(1);
