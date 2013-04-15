@@ -28,7 +28,7 @@ namespace mongo {
 
     void setTxnLogOperations(bool val);
     bool logTxnOperations();
-    void setLogTxnToOplog(void (*f)(GTID gtid, BSONArray& opInfo));
+    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, BSONArray& opInfo));
     void setTxnGTIDManager(GTIDManager* m);
 
     // Class to handle rollback of in-memory stats for capped collections.
@@ -101,7 +101,7 @@ namespace mongo {
     private:
         // transfer operations in _txnOps to _parent->_txnOps
         void transferOpsToParent();
-        void writeOpsToOplog(GTID gtid);
+        void writeOpsToOplog(GTID gtid, uint64_t timestamp);
     };
 
 } // namespace mongo

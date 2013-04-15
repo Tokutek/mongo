@@ -28,6 +28,7 @@
 #include "mongo/platform/bits.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
+#include "mongo/util/time_support.h"
 
 using namespace std;
 
@@ -447,14 +448,15 @@ namespace mongo {
         BSONObj o;
         if( Helpers::getLast(rsoplog, o) ) {
             GTID lastGTID = getGTIDFromBSON("_id", o);
-            gtidManager = new GTIDManager(lastGTID);
+            uint64_t lastTime = o["ts"]._numberLong();
+            gtidManager = new GTIDManager(lastGTID, lastTime);
             setTxnGTIDManager(gtidManager);
             
         }
         else {
             // make a GTIDManager that starts from scratch
             GTID lastGTID;
-            gtidManager = new GTIDManager(lastGTID);
+            gtidManager = new GTIDManager(lastGTID, curTimeMillis64());
             setTxnGTIDManager(gtidManager);
         }
     }
