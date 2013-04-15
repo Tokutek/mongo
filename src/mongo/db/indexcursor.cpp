@@ -257,7 +257,9 @@ namespace mongo {
     }
 
     void IndexCursor::initializeDBC() {
-        // Don't prelock point ranges.
+        // Don't read passed the max safe key, as told by the NamespaceDetails.
+        const BSONObj safeKey = _d->maxSafeKey();
+        _endKey = _endKey <= safeKey ? _endKey : safeKey;
         if ( _bounds != NULL) {
             // TODO: Prelock the current interval.
             const int r = skipToNextKey( _startKey );
@@ -270,10 +272,11 @@ namespace mongo {
                 findKey( _startKey );
             }
         } else {
-            // Seek to an initial key described by _startKey 
+            // Don't prelock point ranges.
             if ( _startKey != _endKey ) {
                 prelockRange( _startKey, _endKey );
             }
+            // Seek to an initial key described by _startKey 
             findKey( _startKey );
         }
         checkCurrentAgainstBounds();
@@ -299,7 +302,7 @@ namespace mongo {
     }
 
     int IndexCursor::getf_fetch_count() {
-        bool shouldBulkFetch = cc().tokuCommandSettings().shouldBulkFetch();
+        bool shouldBulkFetch = cc().tokuCommandSettings().shouldBulkFetch() && !tailable();
         if ( shouldBulkFetch ) {
             // Read-only cursor may bulk fetch rows into a buffer, for speed.
             // The number of rows fetched is proportional to the number of
@@ -583,7 +586,6 @@ again:      while ( !allInclusive && ok() ) {
         }
         if ( _currKey < _endKey ) {
             _advance();
-            dassert( ok() );
         } else {
             // we cannot read passed _endKey. Mark the cursor as
             // exhausted so on next advance() we read an updated

@@ -653,6 +653,10 @@ namespace mongo {
                                                   0, pq_shared, false, &queryPlan );
         verify( cursor );
 
+        if ( tailable ) {
+            cursor->setTailable();
+        }
+
         scoped_ptr<QueryResponseBuilder> queryResponseBuilder
                 ( QueryResponseBuilder::make( pq, cursor, queryPlan, oldPlan ) );
         bool saveClientCursor = false;
@@ -693,10 +697,6 @@ namespace mongo {
                 }
                 break;
             }
-        }
-
-        if ( tailable ) {
-            cursor->setTailable();
         }
 
         // If the tailing request succeeded

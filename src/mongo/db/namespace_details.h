@@ -277,17 +277,6 @@ namespace mongo {
         // create a new index with the given info for this namespace.
         virtual void createIndex(const BSONObj &info);
 
-    protected:
-        NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
-        explicit NamespaceDetails(const BSONObj &serialized);
-
-        void insertIntoOneIndex(const int i, const BSONObj &pk, const BSONObj &obj, uint64_t flags);
-        void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
-        void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
-
-        // uassert on duplicate key
-        void checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj);
-
         // note the commit/abort of a transaction, given:
         // pk: the set of primary keys inserted into this ns
         // nDelta: the number of inserts minus the number of deletes
@@ -298,6 +287,17 @@ namespace mongo {
         virtual void noteAbort(const vector<BSONObj> &pks, long long nDelta, long long sizeDelta) {
             massert( 16757, "bug: noted an abort, but it wasn't implemented", false );
         }
+
+    protected:
+        NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
+        explicit NamespaceDetails(const BSONObj &serialized);
+
+        void insertIntoOneIndex(const int i, const BSONObj &pk, const BSONObj &obj, uint64_t flags);
+        void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
+        void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
+
+        // uassert on duplicate key
+        void checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj);
 
         // remove everything from a collection
         virtual void empty() {
@@ -327,7 +327,6 @@ namespace mongo {
         unsigned long long _multiKeyIndexBits;
 
         friend class NamespaceIndex;
-        friend class CappedCollectionRollback; // for noteCommit/Abort() only
         friend class EmptyCapped; // for empty() only
     }; // NamespaceDetails
 

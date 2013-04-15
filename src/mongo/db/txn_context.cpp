@@ -22,7 +22,6 @@
 #include "mongo/db/repl.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
-#include "mongo/db/namespace_details.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/time_support.h"
 
@@ -35,6 +34,15 @@ namespace mongo {
     static bool _logTxnOperations = false;
     static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, BSONArray& opInfo) = NULL;
     static GTIDManager* txnGTIDManager = NULL;
+    // TODO: Remove this function pointer, replace it with more sane linking.
+    //
+    // It's a big mess linking txn_context.o and namespace_details.o in all
+    // the right places (coredb? serveronly? mongos? something always breaks)
+    static void (*_noteTxnCompleted)(const string &ns,
+                                     const vector<BSONObj> &insertedPKs,
+                                     long long nDelta,
+                                     long long sizeDelta,
+                                     bool committed);
 
     void setTxnLogOperations(bool val) {
         _logTxnOperations = val;
@@ -46,6 +54,14 @@ namespace mongo {
 
     void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, BSONArray& opInfo)) {
         _logTxnToOplog = f;
+    }
+
+    void setNoteTxnCompleted(void (*f)(const string &ns,
+                                       const vector<BSONObj> &insertedPKs,
+                                       long long nDelta,
+                                       long long sizeDelta,
+                                       bool committed)) {
+        _noteTxnCompleted = f;
     }
 
     void setTxnGTIDManager(GTIDManager* m) {
@@ -150,6 +166,47 @@ namespace mongo {
         dassert(_logTxnToOplog);
         BSONArray array = _txnOps.arr();
         _logTxnToOplog(gtid, timestamp, array);
+    }
+
+    void CappedCollectionRollback::_complete(const bool committed) {
+        for (ContextMap::const_iterator it = _map.begin(); it != _map.end(); it++) {
+            const string &ns = it->first;
+            const Context &c = it->second;
+            _noteTxnCompleted(ns, c.insertedPKs, c.nDelta, c.sizeDelta, committed);
+        }
+    }
+
+    void CappedCollectionRollback::commit() {
+        _complete(true);
+    }
+
+    void CappedCollectionRollback::abort() {
+        _complete(false);
+    }
+
+    void CappedCollectionRollback::transfer(CappedCollectionRollback &parent) {
+        for (ContextMap::const_iterator it = _map.begin(); it != _map.end(); it++) {
+            const string &ns = it->first;
+            const Context &c = it->second;
+            Context &parentContext = parent._map[ns];
+            vector<BSONObj> &pks = parentContext.insertedPKs;
+            pks.insert(pks.end(), c.insertedPKs.begin(), c.insertedPKs.end());
+            parentContext.nDelta += c.nDelta;
+            parentContext.sizeDelta += c.sizeDelta;
+        }
+    }
+
+    void CappedCollectionRollback::noteInsert(const string &ns, const BSONObj &pk, long long size) {
+        Context &c = _map[ns];
+        c.insertedPKs.push_back(pk.getOwned());
+        c.nDelta++;
+        c.sizeDelta += size;
+    }
+
+    void CappedCollectionRollback::noteDelete(const string &ns, const BSONObj &pk, long long size) {
+        Context &c = _map[ns];
+        c.nDelta--;
+        c.sizeDelta -= size;
     }
 
 } // namespace mongo

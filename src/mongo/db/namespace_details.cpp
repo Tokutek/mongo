@@ -86,6 +86,9 @@ namespace mongo {
 
             details = ni->details(ns);
             details->addDefaultIndexesToCatalog();
+
+            // Keep the call to 'str()', it allows us to call it in gdb.
+            TOKULOG(2) << "Created nsdetails " << options.str() << endl;
         }
         return details;
     }
@@ -369,17 +372,22 @@ namespace mongo {
         }
 
         // @return the maximum safe key to read for a tailable cursor.
-        // if uncommitted pks exist, the safe key is one minus the minimum.
-        // otherwise, the safe key is one minus the next primary key.
         BSONObj maxSafeKey() {
             SimpleMutex::scoped_lock lk(_mutex);
-            long long minUncommitted = _uncommittedPKs.size() > 0 ?
-                                      _uncommittedPKs.begin()->firstElement().Long() :
-                                      _nextPK.load();
-            long long safeKey = minUncommitted > 0 ? minUncommitted - 1 : 0;
-            BSONObjBuilder b;
-            b.append("", safeKey);
-            return b.obj();
+
+            const long long minUncommitted = _uncommittedPKs.size() > 0 ?
+                                             _uncommittedPKs.begin()->firstElement().Long() :
+                                             _nextPK.load();
+            TOKULOG(2) << "maxSafeKey: minUncommitted " << minUncommitted << endl;
+            if (minUncommitted == 0) {
+                // there are no committed inserts at all. for clarity, return minKey.
+                return minKey;
+            } else {
+                const long long safeKey = minUncommitted - 1;
+                BSONObjBuilder b;
+                b.append("", safeKey);
+                return b.obj();
+            }
         }
 
         void insertObject(BSONObj &obj, uint64_t flags) {
@@ -526,51 +534,19 @@ namespace mongo {
         friend class CappedCollectionRollback;
     };
 
-    void CappedCollectionRollback::commit() {
-        for (ContextMap::const_iterator it = _map.begin(); it != _map.end(); it++) {
-            const string &ns = it->first;
-            const Context &c = it->second;
-            NamespaceDetails *d = nsdetails(ns.c_str());
-            if (d != NULL) {
-                d->noteCommit(c.insertedPKs, c.nDelta, c.sizeDelta);
+    // On startup, we install this hook for txn completion. In a perfect world
+    // we don't need a functoin pointer and we have a better idea of what
+    // object files get linked where, but for now we do this.
+    void noteTxnCompleted(const string &ns, const vector<BSONObj> &insertedPKs,
+                          long long nDelta, long long sizeDelta, bool committed) {
+        NamespaceDetails *d = nsdetails(ns.c_str());
+        if (d != NULL) {
+            if (committed) {
+                d->noteCommit(insertedPKs, nDelta, sizeDelta);
+            } else {
+                d->noteAbort(insertedPKs, nDelta, sizeDelta);
             }
         }
-    }
-
-    void CappedCollectionRollback::abort() {
-        for (ContextMap::const_iterator it = _map.begin(); it != _map.end(); it++) {
-            const string &ns = it->first;
-            const Context &c = it->second;
-            NamespaceDetails *d = nsdetails(ns.c_str());
-            if (d != NULL) {
-                d->noteAbort(c.insertedPKs, c.nDelta, c.sizeDelta);
-            }
-        }
-    }
-
-    void CappedCollectionRollback::transfer(CappedCollectionRollback &parent) {
-        for (ContextMap::const_iterator it = _map.begin(); it != _map.end(); it++) {
-            const string &ns = it->first;
-            const Context &c = it->second;
-            Context &parentContext = parent._map[ns];
-            vector<BSONObj> &pks = parentContext.insertedPKs;
-            pks.insert(pks.end(), c.insertedPKs.begin(), c.insertedPKs.end());
-            parentContext.nDelta += c.nDelta;
-            parentContext.sizeDelta += c.sizeDelta;
-        }
-    }
-
-    void CappedCollectionRollback::noteInsert(const string &ns, const BSONObj &pk, long long size) {
-        Context &c = _map[ns];
-        c.insertedPKs.push_back(pk.getOwned());
-        c.nDelta++;
-        c.sizeDelta += size;
-    }
-
-    void CappedCollectionRollback::noteDelete(const string &ns, const BSONObj &pk, long long size) {
-        Context &c = _map[ns];
-        c.nDelta--;
-        c.sizeDelta -= size;
     }
 
     /* ------------------------------------------------------------------------- */
