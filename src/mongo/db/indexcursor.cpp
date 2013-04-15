@@ -586,7 +586,6 @@ again:      while ( !allInclusive && ok() ) {
         }
         if ( _currKey < _endKey ) {
             _advance();
-            dassert( ok() );
         } else {
             // we cannot read passed _endKey. Mark the cursor as
             // exhausted so on next advance() we read an updated
