@@ -233,6 +233,13 @@ namespace mongo {
         return ret;
     }
 
+    uint64_t GTIDManager::getCurrTimestamp() {
+        _lock.lock();
+        uint64_t ret = _lastTimestamp;
+        _lock.unlock();
+        return ret;        
+    }
+
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result) {
         uint32_t sizeofGTID = GTID::GTIDBinarySize();
         char idData[sizeofGTID];

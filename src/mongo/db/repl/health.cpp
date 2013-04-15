@@ -103,12 +103,15 @@ namespace mongo {
         s << td( grey(hbinfo().lastHeartbeatMsg,!ok) );
         stringstream q;
         q << "/_replSetOplog?_id=" << id();
-        s << td( a(q.str(), "", never ? "?" : hbinfo().opTime.toString()) );
+        stringstream optimestream;
+        optimestream << hbinfo().opTime;
+        s << td( a(q.str(), "", never ? "?" : optimestream.str()) );
         if( hbinfo().skew > INT_MIN ) {
             s << td( grey(str::stream() << hbinfo().skew,!ok) );
         }
-        else
+        else {
             s << td("");
+        }
         s << _tr();
     }
 
@@ -262,8 +265,10 @@ namespace mongo {
 
         // lag
         const Member *primary = box.getPrimary();
-        if (primary != 0 && primary != _self && !iAmArbiterOnly() && !lastOpTimeWritten.isNull()) {
-            int lag = primary->hbinfo().opTime.getSecs() - lastOpTimeWritten.getSecs();
+        if (primary != 0 && primary != _self && !iAmArbiterOnly() && !gtidManager->getLiveState().isInitial()) {
+            uint64_t primaryOptime = primary->hbinfo().opTime;
+            uint64_t ourOptime = gtidManager->getCurrTimestamp();
+            uint64_t lag = (primaryOptime > ourOptime) ? (primaryOptime - ourOptime)/1000 : 0;
             s << tr("Lag: ", str::stream() << lag << " secs");
         }
 
@@ -344,8 +349,8 @@ namespace mongo {
         return closest;
     }
 
-    const OpTime ReplSetImpl::lastOtherOpTime() const {
-        OpTime closest(0,0);
+    const uint64_t ReplSetImpl::lastOtherOpTime() const {
+        uint64_t closest = 0;
 
         for( Member *m = _members.head(); m; m=m->next() ) {
             if (!m->hbinfo().up()) {
@@ -378,7 +383,7 @@ namespace mongo {
             bb.append("stateStr", myState.toString());
             bb.append("uptime", (unsigned)(time(0) - cmdLine.started));
             if (!_self->config().arbiterOnly) {
-                bb.appendDate("optimeDate", lastOpTimeWritten.getSecs() * 1000LL);
+                bb.appendDate("optimeDate", gtidManager->getCurrTimestamp());
             }
 
             int maintenance = _maintenanceMode;
@@ -412,8 +417,7 @@ namespace mongo {
             }
             bb.append("uptime", (unsigned) (m->hbinfo().upSince ? (time(0)-m->hbinfo().upSince) : 0));
             if (!m->config().arbiterOnly) {
-                bb.appendTimestamp("optime", m->hbinfo().opTime.asDate());
-                bb.appendDate("optimeDate", m->hbinfo().opTime.getSecs() * 1000LL);
+                bb.appendDate("optimeDate", m->hbinfo().opTime);
             }
             bb.appendTimeT("lastHeartbeat", m->hbinfo().lastHeartbeat);
             bb.append("pingMs", m->hbinfo().ping);

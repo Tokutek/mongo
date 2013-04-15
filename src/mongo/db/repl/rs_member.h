@@ -82,7 +82,7 @@ namespace mongo {
         long long downSince;
         time_t lastHeartbeat;
         DiagStr lastHeartbeatMsg;
-        OpTime opTime;
+        uint64_t opTime;
         GTID gtid;
         int skew;
         bool authIssue;

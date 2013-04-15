@@ -115,6 +115,7 @@ namespace mongo {
         void resetManager(GTID lastGTID);
 
         GTID getLiveState();
+        uint64_t getCurrTimestamp();
         
     };
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result);

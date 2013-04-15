@@ -265,24 +265,24 @@ namespace mongo {
                 timeout += cmdObj["timeoutSecs"].numberLong();
             }
 
-            OpTime lastOp = theReplSet->lastOpTimeWritten;
-            OpTime closest = theReplSet->lastOtherOpTime();
+            uint64_t lastOp = theReplSet->gtidManager->getCurrTimestamp();
+            uint64_t closest = theReplSet->lastOtherOpTime();
             GTID lastGTID = theReplSet->gtidManager->getLiveState();
             GTID closestGTID = theReplSet->lastOtherGTID();
-            long long int diff = lastOp.getSecs() - closest.getSecs();
-            while (now <= timeout && (diff < 0 || diff > 10)) {
+            uint64_t diff = (lastOp > closest) ? lastOp - closest : 0;
+            while (now <= timeout && (diff < 0 || diff > 10000)) {
                 sleepsecs(1);
                 now++;
 
-                lastOp = theReplSet->lastOpTimeWritten;
+                lastOp = theReplSet->gtidManager->getCurrTimestamp();
                 closest = theReplSet->lastOtherOpTime();
-                diff = lastOp.getSecs() - closest.getSecs();
+                diff = (lastOp > closest) ? lastOp - closest : 0;
             }
 
-            if (diff < 0 || diff > 10) {
+            if (diff < 0 || diff > 10000) {
                 errmsg = "no secondaries within 10 seconds of my optime";
-                result.append("closest", closest.getSecs());
-                result.append("difference", diff);
+                result.appendNumber("closest", closest/1000);
+                result.appendNumber("difference", diff/1000);
                 return false;
             }
 

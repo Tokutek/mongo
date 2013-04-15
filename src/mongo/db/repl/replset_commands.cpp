@@ -270,14 +270,14 @@ namespace mongo {
             // only step down if there is another node synced to within 10
             // seconds of this node
             if (!force) {
-                long long int lastOp = (long long int)theReplSet->lastOpTimeWritten.getSecs();
-                long long int closest = (long long int)theReplSet->lastOtherOpTime().getSecs();
+                uint64_t lastOp = theReplSet->gtidManager->getCurrTimestamp()/1000;
+                uint64_t closest = theReplSet->lastOtherOpTime()/1000;
                 GTID lastGTID = theReplSet->gtidManager->getLiveState();
                 GTID otherLastGTID = theReplSet->lastOtherGTID();
 
-                long long int diff = lastOp - closest;
-                result.append("closest", closest);
-                result.append("difference", diff);
+                uint64_t diff = (lastOp > closest) ? lastOp - closest : 0;
+                result.appendNumber("closest", closest);
+                result.appendNumber("difference", diff);
 
                 if (GTID::cmp(lastGTID, otherLastGTID) < 0) {
                     // not our problem, but we'll wait until thing settle down
