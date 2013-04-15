@@ -3,7 +3,7 @@ tokumon news
 
 tokumon 0.1.0
 -------------
-Release date: TBD
+Release date: 2013-04-15
 
 General
 ~~~~~~~
@@ -28,7 +28,8 @@ New features and improvements
       in the Fractal Tree storage system.  This yields significant
       performance gains, particularly for in-memory workloads.
 
-    - Capped collections and tailable cursors are now supported.
+    - Capped collections and tailable cursors are now supported for
+      experimental use only.
 
     - The `renameCollection` command is now supported.
 
