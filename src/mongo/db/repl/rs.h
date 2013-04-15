@@ -338,7 +338,7 @@ namespace mongo {
         Member* getMemberToSyncTo();
         void veto(const string& host, unsigned secs=10);
         bool gotForceSync();
-        void goStale(const Member* m, const BSONObj& o);
+        void goStale(const Member* stale, GTID remoteGTID);
     private:
         set<ReplSetHealthPollTask*> healthTasks;
         void endOldHealthTasks();

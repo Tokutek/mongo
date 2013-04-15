@@ -120,7 +120,7 @@ namespace mongo {
         }
 
         // if this member has an empty oplog, we cannot start syncing
-        if (theReplSet->lastOpTimeWritten.isNull()) {
+        if (true /*theReplSet->lastOpTimeWritten.isNull()*/) {
             sleepsecs(1);
             return;
         }
@@ -305,7 +305,8 @@ namespace mongo {
 
         // the only viable sync target was stale
         if (stale) {
-            theReplSet->goStale(stale, oldest);
+            GTID remoteOldestGTID = getGTIDFromBSON("_id", oldest);
+            theReplSet->goStale(stale, remoteOldestGTID);
             sleepsecs(120);
         }
 
@@ -393,7 +394,7 @@ namespace mongo {
         _pause = false;
 
         // reset _last fields with current data
-        _lastOpTimeFetched = theReplSet->lastOpTimeWritten;
+        //_lastOpTimeFetched = theReplSet->lastOpTimeWritten;
 
         LOG(1) << "replset bgsync fetch queue set to: " << _lastOpTimeFetched << " " << rsLog;
    }

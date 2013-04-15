@@ -79,10 +79,10 @@ namespace mongo {
         }
     }
 
-    void ReplSetImpl::goStale(const Member* stale, const BSONObj& oldest) {
+    void ReplSetImpl::goStale(const Member* stale, GTID remoteGTID) {
         log() << "replSet error RS102 too stale to catch up, at least from " << stale->fullName() << rsLog;
-        log() << "replSet our last optime : " << lastOpTimeWritten.toStringLong() << rsLog;
-        log() << "replSet oldest at " << stale->fullName() << " : " << oldest["ts"]._opTime().toStringLong() << rsLog;
+        log() << "replSet our last GTID : " << gtidManager->getLiveState().toString() << rsLog;
+        log() << "replSet oldest at " << stale->fullName() << " : " << remoteGTID.toString() << rsLog;
         log() << "replSet See http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember" << rsLog;
 
         sethbmsg("error RS102 too stale to catch up");

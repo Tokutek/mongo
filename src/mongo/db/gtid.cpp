@@ -81,6 +81,11 @@ namespace mongo {
         _GTSeqNo = 0;
     }
 
+    string GTID::toString() const {
+        stringstream ss;
+        ss << "primary: " << _primarySeqNo<< "secondary: " << _GTSeqNo;
+        return ss.str();
+    }
 
 
 

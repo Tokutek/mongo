@@ -36,7 +36,8 @@ namespace mongo {
         ~GTID(){};
         void serializeBinaryData(char* binData);
         void inc();
-        void inc_primary();
+        void inc_primary();        
+        string toString() const;
     };
 
     struct GTIDCmp {
