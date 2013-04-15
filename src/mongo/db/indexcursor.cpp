@@ -257,9 +257,11 @@ namespace mongo {
     }
 
     void IndexCursor::initializeDBC() {
-        // Don't read passed the max safe key, as told by the NamespaceDetails.
-        const BSONObj safeKey = _d->maxSafeKey();
-        _endKey = _endKey <= safeKey ? _endKey : safeKey;
+        // If this is the primary key, don't read passed the max safe key.
+        if (_d->isPKIndex(_idx)) {
+            const BSONObj safeKey = _d->maxSafeKey();
+            _endKey = _endKey <= safeKey ? _endKey : safeKey;
+        }
         if ( _bounds != NULL) {
             // TODO: Prelock the current interval.
             const int r = skipToNextKey( _startKey );
