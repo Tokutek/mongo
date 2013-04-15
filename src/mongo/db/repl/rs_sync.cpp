@@ -526,7 +526,7 @@ namespace mongo {
         }
 
         /* do we have anything at all? */
-        if( lastOpTimeWritten.isNull() ) {
+        if( gtidManager->getLiveState().isInitial() ) {
             syncDoInitialSync();
             return; // _syncThread will be recalled, starts from top again in case sync failed.
         }

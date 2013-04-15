@@ -62,8 +62,6 @@ namespace mongo {
             Lock::GlobalWrite lk;
             Client::Context cx( rsConfigNs );
 
-            //theReplSet->lastOpTimeWritten = ??;
-            //rather than above, do a logOp()? probably
             BSONObj o = asBson();
             Helpers::putSingletonGod(rsConfigNs.c_str(), o, false/*logop=false; local db so would work regardless...*/);
             if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {

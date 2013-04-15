@@ -352,7 +352,7 @@ namespace mongo {
         bool _freeze(int secs);
     private:
         void assumePrimary();
-        void loadLastOpTimeWritten(bool quiet=false);
+        void loadGTIDManager(bool quiet=false);
         void changeState(MemberState s);
 
         Member* _forceSyncTarget;

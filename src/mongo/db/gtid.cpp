@@ -87,6 +87,10 @@ namespace mongo {
         return ss.str();
     }
 
+    bool GTID::isInitial() const {
+        return (_primarySeqNo == 0);
+    }
+
 
 
     
