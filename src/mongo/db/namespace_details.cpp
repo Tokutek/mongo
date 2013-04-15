@@ -405,16 +405,16 @@ namespace mongo {
                 _uncommittedPKs.insert(pk);
             }
 
-            // Do unique checks first. If we don't do this now, we may trim off
-            // some objects that have the same unique keys as the new object.
-            // This call uasserts on duplicate key.
-            checkUniqueIndexes(pk, obj);
-
             // Note the insert we're about to do.
             CappedCollectionRollback &rollback = cc().txn().cappedRollback();
             rollback.noteInsert(_ns, pk, obj.objsize());
             long long n = _currentObjects.addAndFetch(1);
             long long size = _currentSize.addAndFetch(obj.objsize());
+
+            // Do unique checks before trimming. If we don't do it first, we may
+            // trim off some objects that had the same unique keys as the new object.
+            // This call uasserts on duplicate key.
+            checkUniqueIndexes(pk, obj);
 
             // If the collection is gorged, we need to do some trimming work.
             if (isGorged(n, size)) {
