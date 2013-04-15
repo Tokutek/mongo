@@ -169,22 +169,23 @@ namespace mongo {
 
         // Find primary's oplog time. Reject sync candidates that are more than
         // MAX_SLACK_TIME seconds behind.
-        OpTime primaryOpTime;
-        static const unsigned maxSlackDurationSeconds = 10 * 60; // 10 minutes
+        uint64_t primaryOpTime;
+        static const unsigned maxSlackDurationMillis = 10 * 60 * 1000; // 10 minutes
         if (primary) {
             primaryOpTime = primary->hbinfo().opTime;
         }
-        else
+        else {
             // choose a time that will exclude no candidates, since we don't see a primary
-            primaryOpTime = OpTime(maxSlackDurationSeconds, 0);
-
-        if ( primaryOpTime.getSecs() < maxSlackDurationSeconds ) {
+            primaryOpTime = maxSlackDurationMillis;
+        }
+        
+        if ( primaryOpTime < maxSlackDurationMillis ) {
             // erh - I think this means there was just a new election
             // and we don't yet know the new primary's optime
-            primaryOpTime = OpTime(maxSlackDurationSeconds, 0);
+            primaryOpTime = maxSlackDurationMillis;
         }
 
-        OpTime oldestSyncOpTime(primaryOpTime.getSecs() - maxSlackDurationSeconds, 0);
+        uint64_t oldestSyncOpTime = primaryOpTime - maxSlackDurationMillis;
 
         Member *closest = 0;
         time_t now = 0;

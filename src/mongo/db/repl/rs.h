@@ -328,7 +328,6 @@ namespace mongo {
 
         StateBox box;
 
-        OpTime lastOpTimeWritten;
         GTIDManager* gtidManager;
         bool forceSyncFrom(const string& host, string& errmsg, BSONObjBuilder& result);
 
@@ -533,7 +532,7 @@ namespace mongo {
         const ReplSetConfig::MemberCfg& myConfig() const { return _config; }
         bool tryToGoLiveAsASecondary(); // readlocks
         void syncThread();
-        const OpTime lastOtherOpTime() const;
+        const uint64_t lastOtherOpTime() const;
         const GTID lastOtherGTID() const;
         
         int oplogVersion;

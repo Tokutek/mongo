@@ -93,12 +93,12 @@ namespace mongo {
     }
 
     void Manager::checkElectableSet() {
-        unsigned otherOp = rs->lastOtherOpTime().getSecs();
+        unsigned otherOp = rs->lastOtherOpTime();
         
         // make sure the electable set is up-to-date
         if (rs->elect.aMajoritySeemsToBeUp() &&
             rs->iAmPotentiallyHot() &&
-            (otherOp == 0 || rs->lastOpTimeWritten.getSecs() >= otherOp - 10)) {
+            (otherOp == 0 || rs->gtidManager->getCurrTimestamp()>= otherOp - 10000)) {
             theReplSet->addToElectable(rs->selfId());
         }
         else {
@@ -113,11 +113,11 @@ namespace mongo {
             highestPriority->config().priority > primary->config().priority &&
             // if we're stepping down to allow another member to become primary, we
             // better have another member (otherOp), and it should be up-to-date
-            otherOp != 0 && highestPriority->hbinfo().opTime.getSecs() >= otherOp - 10) {
+            otherOp != 0 && highestPriority->hbinfo().opTime >= otherOp - 10000) {
             log() << "stepping down " << primary->fullName() << " (priority " <<
                 primary->config().priority << "), " << highestPriority->fullName() <<
                 " is priority " << highestPriority->config().priority << " and " <<
-                (otherOp - highestPriority->hbinfo().opTime.getSecs()) << " seconds behind" << endl;
+                ((otherOp - highestPriority->hbinfo().opTime)/1000) << " seconds behind" << endl;
 
             if (primary->h().isSelf()) {
                 // replSetStepDown tries to acquire the same lock

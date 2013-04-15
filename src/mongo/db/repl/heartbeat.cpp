@@ -122,7 +122,7 @@ namespace mongo {
             result.append("e", theReplSet->iAmElectable());
             result.append("hbmsg", theReplSet->hbmsg());
             result.append("time", (long long) time(0));
-            result.appendDate("opTime", theReplSet->lastOpTimeWritten.asDate());
+            result.appendDate("opTime", theReplSet->gtidManager->getCurrTimestamp());
             addGTIDToBSON(
                 "GTID", 
                 theReplSet->gtidManager->getLiveState(), 
@@ -346,9 +346,10 @@ namespace mongo {
             // add this server to the electable set if it is within 10
             // seconds of the latest optime we know of
             else if( info["e"].trueValue() &&
-                     mem.opTime >= theReplSet->lastOpTimeWritten.getSecs() - 10) {
-                unsigned lastOp = theReplSet->lastOtherOpTime().getSecs();
-                if (lastOp > 0 && mem.opTime >= lastOp - 10) {
+                     mem.opTime >= theReplSet->gtidManager->getCurrTimestamp()- 10000) 
+            {
+                unsigned lastOp = theReplSet->lastOtherOpTime();
+                if (lastOp > 0 && mem.opTime >= lastOp - 10000) {
                     theReplSet->addToElectable(mem.id());
                 }
             }

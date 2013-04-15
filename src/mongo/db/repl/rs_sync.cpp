@@ -489,10 +489,10 @@ namespace mongo {
             errmsg = "I cannot reach the requested member";
             return false;
         }
-        if (newTarget->hbinfo().opTime.getSecs()+10 < lastOpTimeWritten.getSecs()) {
+        if (newTarget->hbinfo().opTime + 10000 < gtidManager->getCurrTimestamp()) {
             log() << "attempting to sync from " << newTarget->fullName()
-                  << ", but its latest opTime is " << newTarget->hbinfo().opTime.getSecs()
-                  << " and ours is " << lastOpTimeWritten.getSecs() << " so this may not work"
+                  << ", but its latest opTime is " << newTarget->hbinfo().opTime / 1000
+                  << " and ours is " << gtidManager->getCurrTimestamp() / 1000 << " so this may not work"
                   << rsLog;
             result.append("warning", "requested member is more than 10 seconds behind us");
             // not returning false, just warning
