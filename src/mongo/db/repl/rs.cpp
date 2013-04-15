@@ -379,7 +379,7 @@ namespace mongo {
         _prefetcherPool(replPrefetcherThreadCount),
         _indexPrefetchConfig(PREFETCH_ALL) {
 
-        gtidManager = NULL; // will be initialized in loadLastOpTimeWritten
+        gtidManager = NULL; // will be initialized in loadGTIDManager
         _cfg = 0;
         memset(_hbmsg, 0, sizeof(_hbmsg));
         strcpy( _hbmsg , "initial startup" );
@@ -442,7 +442,7 @@ namespace mongo {
 
     void newReplUp();
 
-    void ReplSetImpl::loadLastOpTimeWritten(bool quiet) {
+    void ReplSetImpl::loadGTIDManager(bool quiet) {
         Lock::DBRead lk(rsoplog);
         BSONObj o;
         if( Helpers::getLast(rsoplog, o) ) {
@@ -450,8 +450,6 @@ namespace mongo {
             gtidManager = new GTIDManager(lastGTID);
             setTxnGTIDManager(gtidManager);
             
-            lastOpTimeWritten = o["ts"]._opTime();
-            uassert(13290, "bad replSet oplog entry?", quiet || !lastOpTimeWritten.isNull());
         }
         else {
             // make a GTIDManager that starts from scratch
@@ -469,7 +467,7 @@ namespace mongo {
             // the oplog, but we will see
             openOplogFiles();
             Client::Transaction txn(DB_SERIALIZABLE);
-            loadLastOpTimeWritten();
+            loadGTIDManager();
             txn.commit();
         }
         catch(std::exception& e) {

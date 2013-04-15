@@ -69,6 +69,10 @@ namespace mongo {
     void TxnContext::commit(int flags) {
         bool gotGTID = false;
         GTID gtid;
+        // do this in case we are writing the first entry
+        // we put something in that can be distinguished from
+        // an initialized GTID that has never been touched
+        gtid.inc_primary(); 
         // handle work related to logging of transaction for replication
         if (_numOperations > 0) {
             if (hasParent()) {

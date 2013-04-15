@@ -38,6 +38,7 @@ namespace mongo {
         void inc();
         void inc_primary();        
         string toString() const;
+        bool isInitial() const;
     };
 
     struct GTIDCmp {
