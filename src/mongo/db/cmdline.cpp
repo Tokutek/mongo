@@ -433,6 +433,11 @@ namespace mongo {
                 ::_exit(-1);
             }
         }
+
+        if (params.count("gdb")) {
+            cmdLine.gdb = true;
+        }
+
         setupSignals( true );
 
         if (params.count("syslog")) {

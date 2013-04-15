@@ -30,6 +30,11 @@ namespace mongo {
     bool logTxnOperations();
     void setLogTxnToOplog(void (*f)(GTID gtid, BSONArray& opInfo));
     void setTxnGTIDManager(GTIDManager* m);
+    void setNoteTxnCompleted(void (*f)(const string &ns,
+                                       const vector<BSONObj> &insertedPKs,
+                                       long long nDelta,
+                                       long long sizeDelta,
+                                       bool committed));
 
     // Class to handle rollback of in-memory stats for capped collections.
     class CappedCollectionRollback {
@@ -45,6 +50,8 @@ namespace mongo {
         void noteDelete(const string &ns, const BSONObj &pk, long long size);
 
     private:
+        void _complete(const bool committed);
+
         struct Context {
             Context() : nDelta(0), sizeDelta(0) { }
             vector<BSONObj> insertedPKs;

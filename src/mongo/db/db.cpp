@@ -499,7 +499,11 @@ namespace mongo {
 
         MONGO_ASSERT_ON_EXCEPTION_WITH_MSG( clearTmpFiles(), "clear tmp files" );
 
-        // TODO: What does TokuDB need to do here?
+        // the last thing we do before initializing storage is to
+        // install the txn commit/abort hook
+        void noteTxnCompleted(const string &ns, const vector<BSONObj> &insertedPKs,
+                              long long nDelta, long long sizeDelta, bool committed);
+        setNoteTxnCompleted(noteTxnCompleted);
         storage::startup();
 
         // comes after storage::startup() because this reads from the database
@@ -860,9 +864,6 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
         if (params.count("directio")) {
             cmdLine.directio = true;
-        }
-        if (params.count("gdb")) {
-            cmdLine.gdb = true;
         }
         if (params.count("checkpointPeriod")) {
             cmdLine.checkpointPeriod = params["checkpointPeriod"].as<uint32_t>();
