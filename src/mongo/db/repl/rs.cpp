@@ -100,12 +100,11 @@ namespace mongo {
         // Make sure that new OpTimes are higher than existing ones even with clock skew
         DBDirectClient c;
         BSONObj lastOp = c.findOne( "local.oplog.rs", Query().sort(reverseNaturalObj), NULL, QueryOption_SlaveOk );
-        if ( !lastOp.isEmpty() ) {
-            OpTime::setLast( lastOp[ "ts" ].date() );
-        }
+        uint64_t lastTimestamp = lastOp["ts"]._numberLong();
+        uint64_t lastHash = lastOp["h"].Long();
         int len;
         GTID lastGTID(lastOp["_id"].binData(len));
-        gtidManager->resetManager(lastGTID);
+        gtidManager->resetManager(lastGTID, lastTimestamp, lastHash);
 
         changeState(MemberState::RS_PRIMARY);
     }

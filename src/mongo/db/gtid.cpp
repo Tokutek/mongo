@@ -219,7 +219,7 @@ namespace mongo {
         _lock.unlock();
     }
 
-    void GTIDManager::resetManager(GTID lastGTID) {
+    void GTIDManager::resetManager(GTID lastGTID, uint64_t lastTimestamp, uint64_t lastHash) {
         // TODO: figure out what to do with unapplied GTID info here
         _lock.lock();
         dassert(_liveGTIDs.size() == 0);
