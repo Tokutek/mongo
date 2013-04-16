@@ -490,6 +490,9 @@ namespace mongo {
         {
             assumePrimary(false);
         }
+        else {
+            // here, check if we need to do an initial sync
+        }
         startThreads();
     }
 
