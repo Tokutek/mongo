@@ -71,8 +71,8 @@ namespace mongo {
     extern int lockFile;
 
     static void setupSignalHandlers();
-    static void startInterruptThread();
     void startReplication();
+    static void startSignalProcessingThread();
     void exitCleanly( ExitCode code );
 
 #ifdef _WIN32
@@ -993,9 +993,9 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     if (!initializeServerGlobalState())
         ::_exit(EXIT_FAILURE);
 
-    // Per SERVER-7434, startInterruptThread() must run after any forks
+    // Per SERVER-7434, startSignalProcessingThread() must run after any forks
     // (initializeServerGlobalState()) and before creation of any other threads.
-    startInterruptThread();
+    startSignalProcessingThread();
 
 #if defined(_WIN32)
     if (ntservice::shouldStartService()) {
@@ -1059,17 +1059,17 @@ namespace mongo {
     }
 
     sigset_t asyncSignals;
-    // The above signals will be processed by this thread only, in order to
+    // The signals in asyncSignals will be processed by this thread only, in order to
     // ensure the db and log mutexes aren't held.
-    void interruptThread() {
+    void signalProcessingThread() {
         while (true) {
             int actualSignal = 0;
             int status = sigwait( &asyncSignals, &actualSignal );
-            fassert(16854, status == 0);
+            fassert(16781, status == 0);
             switch (actualSignal) {
             case SIGUSR1:
                 // log rotate signal
-                fassert(16855, rotateLogs());
+                fassert(16782, rotateLogs());
                 break;
             default:
                 // interrupt/terminate signal
@@ -1120,21 +1120,22 @@ namespace mongo {
         setupSIGTRAPforGDB();
 
         // asyncSignals is a global variable listing the signals that should be handled by the
-        // interrupt thread, once it is started via startInterruptThread().
+        // interrupt thread, once it is started via startSignalProcessingThread().
         sigemptyset( &asyncSignals );
         if (!cmdLine.debug) {
             sigaddset( &asyncSignals, SIGHUP );
             sigaddset( &asyncSignals, SIGINT );
             sigaddset( &asyncSignals, SIGTERM );
         }
+        sigaddset( &asyncSignals, SIGUSR1 );
 
         set_terminate( myterminate );
         set_new_handler( my_new_handler );
     }
 
-    void startInterruptThread() {
+    void startSignalProcessingThread() {
         verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
-        boost::thread it( interruptThread );
+        boost::thread it( signalProcessingThread );
     }
 
 #else   // WIN32
@@ -1209,7 +1210,7 @@ namespace mongo {
         _set_purecall_handler( myPurecallHandler );
     }
 
-    void startInterruptThread() {}
+    void startSignalProcessingThread() {}
 
 #endif  // if !defined(_WIN32)
 
