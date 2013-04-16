@@ -512,8 +512,7 @@ namespace mongo {
                 //       on row locks we can't get immediately.
                 for ( scoped_ptr<Cursor> c( new IndexCursor(this, getPKIndex(),
                                                             BSON("" << startKey), maxKey, true, 1) );
-                      c->ok() && isGorged(n, size) && (trimmedBytes < objsize || trimmedObjects < K);
-                      c->advance(), trimmedObjects++ ) {
+                      c->ok(); c->advance() ) {
                     BSONObj oldestPK = c->currPK();
                     BSONObj oldestObj = c->current();
                     trimmedBytes += oldestPK.objsize();
@@ -522,6 +521,11 @@ namespace mongo {
                     _deleteObject(oldestPK, oldestObj);
                     n = _currentObjects.load();
                     size = _currentSize.load();
+                    trimmedObjects++;
+
+                    if (!isGorged(n, size) || (trimmedBytes >= objsize && trimmedObjects >= K)) {
+                        break;
+                    }
                 }
             }
         }
