@@ -95,7 +95,7 @@ namespace mongo {
 
 
     
-    GTIDManager::GTIDManager( GTID lastGTID, uint64_t lastTime ) {
+    GTIDManager::GTIDManager( GTID lastGTID, uint64_t lastTime, uint64_t lastHash ) {
         _nextLiveGTID = lastGTID;
         _nextLiveGTID.inc();
         _minLiveGTID = _nextLiveGTID;
@@ -103,10 +103,10 @@ namespace mongo {
         // note that _minUnappliedGTID is not set
 
         _lastTimestamp = lastTime;
+        _lastHash = lastHash;
     }
 
     GTIDManager::~GTIDManager() {
-        _lastTimestamp = 0;
     }
 
     // This function is meant to only be called on a primary,
@@ -116,7 +116,7 @@ namespace mongo {
     //
     // returns a GTID that is an increment of _lastGTID
     // also notes that GTID has been handed out
-    void GTIDManager::getGTIDForPrimary(GTID* gtid, uint64_t* timestamp) {
+    void GTIDManager::getGTIDForPrimary(GTID* gtid, uint64_t* timestamp, uint64_t* hash) {
         // it is ok for this to be racy. It is used for heuristic purposes
         *timestamp = curTimeMillis64();
 
@@ -125,6 +125,8 @@ namespace mongo {
         _liveGTIDs.insert(*gtid);
         _nextLiveGTID.inc();
         _lastTimestamp = *timestamp;
+        *hash = _lastHash + 1; // temporary
+        _lastHash = *hash;
         _lock.unlock();
     }
     

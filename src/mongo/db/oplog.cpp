@@ -54,7 +54,7 @@ namespace mongo {
         resetSlaveCache();
     }
 
-    static void _logOpUninitialized(GTID gtid, uint64_t timestamp, BSONArray& opInfo) {
+    static void _logOpUninitialized(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
         log() << "WHAT IS GOING ON???????? " << endl;
     }
 
@@ -93,15 +93,14 @@ namespace mongo {
         }
     }
     
-    static void _logTransactionOps(GTID gtid, uint64_t timestamp, BSONArray& opInfo) {
+    static void _logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
         Lock::DBRead lk1("local");
         mutex::scoped_lock lk2(OpTime::m);
 
-        long long hashNew = 0;
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
         b.appendTimestamp("ts", timestamp);
-        b.append("h", hashNew);
+        b.append("h", (long long)hash);
         b.append("a", true);
         b.append("ops", opInfo);
 
@@ -127,7 +126,7 @@ namespace mongo {
         replInfoDetails->insertObject(bb2, flags);
     }
     
-    static void (*_logTransactionOp)(GTID gtid, uint64_t timestamp, BSONArray& opInfo) = _logOpUninitialized;
+    static void (*_logTransactionOp)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) = _logOpUninitialized;
     // TODO: (Zardosht) hopefully remove these two phases
     void newReplUp() {
         _logTransactionOp = _logTransactionOps;
@@ -136,8 +135,8 @@ namespace mongo {
         _logTransactionOp = _logTransactionOps;
     }
 
-    void logTransactionOps(GTID gtid, uint64_t timestamp, BSONArray& opInfo) {
-        _logTransactionOp(gtid, timestamp, opInfo);
+    void logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
+        _logTransactionOp(gtid, timestamp, hash, opInfo);
         // TODO: Figure out for sharding
         //logOpForSharding( opstr , ns , obj , patt );
     }

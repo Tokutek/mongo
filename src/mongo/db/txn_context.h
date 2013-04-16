@@ -28,7 +28,7 @@ namespace mongo {
 
     void setTxnLogOperations(bool val);
     bool logTxnOperations();
-    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, BSONArray& opInfo));
+    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo));
     void setTxnGTIDManager(GTIDManager* m);
     void setNoteTxnCompleted(void (*f)(const string &ns,
                                        const vector<BSONObj> &insertedPKs,
@@ -108,7 +108,7 @@ namespace mongo {
     private:
         // transfer operations in _txnOps to _parent->_txnOps
         void transferOpsToParent();
-        void writeOpsToOplog(GTID gtid, uint64_t timestamp);
+        void writeOpsToOplog(GTID gtid, uint64_t timestamp, uint64_t hash);
     };
 
 } // namespace mongo

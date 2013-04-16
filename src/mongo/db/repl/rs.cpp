@@ -449,14 +449,15 @@ namespace mongo {
         if( Helpers::getLast(rsoplog, o) ) {
             GTID lastGTID = getGTIDFromBSON("_id", o);
             uint64_t lastTime = o["ts"]._numberLong();
-            gtidManager = new GTIDManager(lastGTID, lastTime);
+            uint64_t lastHash = o["h"].numberLong();
+            gtidManager = new GTIDManager(lastGTID, lastTime, lastHash);
             setTxnGTIDManager(gtidManager);
             
         }
         else {
             // make a GTIDManager that starts from scratch
             GTID lastGTID;
-            gtidManager = new GTIDManager(lastGTID, curTimeMillis64());
+            gtidManager = new GTIDManager(lastGTID, curTimeMillis64(), 0);
             setTxnGTIDManager(gtidManager);
         }
     }

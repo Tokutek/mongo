@@ -86,9 +86,10 @@ namespace mongo {
 
         // in milliseconds, derived from curTimeMillis64
         uint64_t _lastTimestamp;
+        uint64_t _lastHash;
         
         public:            
-        GTIDManager( GTID lastGTID, uint64_t lastTime );
+        GTIDManager( GTID lastGTID, uint64_t lastTime, uint64_t lastHash );
         ~GTIDManager();
 
         // methods for running on a primary
@@ -96,7 +97,7 @@ namespace mongo {
         // returns a GTID equal to _nextGTID on a primary
         // this should not be called on a secondary
         // also notes that GTID has been handed out
-        void getGTIDForPrimary(GTID* gtid, uint64_t* timestamp);
+        void getGTIDForPrimary(GTID* gtid, uint64_t* timestamp, uint64_t* hash);
 
         // notification that user of GTID has completed work
         // and either committed or aborted transaction associated with
