@@ -461,7 +461,7 @@ namespace mongo {
         }
     }
 
-    /* call after constructing to start - returns fairly quickly after launching its threads */
+    /* call after constructing to start */
     void ReplSetImpl::_go() {
         try {
             // this might now work on secondaries
@@ -490,6 +490,18 @@ namespace mongo {
         {
             assumePrimary(false);
         }
+        else {
+            // here, check if we need to do an initial sync
+            // This if-clause will be true if loadGTIDManager finds
+            // nothing in the oplog and initalizes the GTIDManager
+            // with an empty GTID
+            if( gtidManager->getLiveState().isInitial() ) {
+                syncDoInitialSync();
+            }
+        }
+        // When we get here,
+        // we know either the server is the sole primary in a single node
+        // replica set, or it does not require an initial sync
         startThreads();
     }
 
