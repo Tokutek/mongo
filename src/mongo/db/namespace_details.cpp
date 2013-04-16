@@ -459,6 +459,12 @@ namespace mongo {
             noteComplete(pks);
             _currentObjects.fetchAndSubtract(nDelta);
             _currentSize.fetchAndSubtract(sizeDelta);
+
+            // If this transaction did inserts, it probably did deletes to make room
+            // for the new objects. Invalidate the last key deleted so that new
+            // trimming work properly recognizes that our deletes have been aborted.
+            SimpleMutex::scoped_lock lk(_deleteMutex);
+            _lastDeletedPK = BSONObj();
         }
 
     private:
@@ -484,13 +490,6 @@ namespace mongo {
             _currentSize.subtractAndFetch(size);
 
             NaturalOrderCollection::deleteObject(pk, obj);
-            if (!_lastDeletedPK.isEmpty()) {
-                // This invariant isn't obvious from the API. We want to make sure we're
-                // always deleting keys greater than the last deleted key. This ensures
-                // the first-in-first-out behavior of capped collections and allows us to
-                // use _lastDeletedPK as a marker for the next key to trim.
-                //dassert(_lastDeletedPK < pk); TODO: Aborts mess this up. Fix it soon.
-            }
             _lastDeletedPK = pk.getOwned();
         }
 
