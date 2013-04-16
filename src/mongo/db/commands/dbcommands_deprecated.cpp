@@ -116,11 +116,6 @@ namespace mongo {
         }
     } validateCmd;
 
-    class LogRotateCmd : public DeprecatedCommand {
-      public:
-        LogRotateCmd() : DeprecatedCommand("logRotate") {}
-    } logRotateCmd;
-
     class ApplyOpsCmd : public DeprecatedCommand {
       public:
         ApplyOpsCmd() : DeprecatedCommand("applyOps") {}
