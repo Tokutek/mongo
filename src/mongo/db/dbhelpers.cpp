@@ -269,9 +269,9 @@ namespace mongo {
         int minOrMax = maxInclusive ? 1 : -1;
         BSONObj newMax = Helpers::modifiedRangeBound( max , keyPattern , minOrMax );
 
-        for (scoped_ptr<Cursor> c(new IndexCursor(d, i, newMin, newMax, maxInclusive, 1)); c->ok(); c->advance()) {
-            BSONObj pk = c->currPK();
-            BSONObj obj = c->current();
+        for (IndexCursor c(d, i, newMin, newMax, maxInclusive, 1); c.ok(); c.advance()) {
+            BSONObj pk = c.currPK();
+            BSONObj obj = c.current();
             OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate, &cc().txn());
             deleteOneObject(d, nsdt, pk, obj);
             numDeleted++;
@@ -288,9 +288,10 @@ namespace mongo {
 #endif
         }
 
-        if ( secondaryThrottle )
+        if ( secondaryThrottle ) {
             log() << "Helpers::removeRangeUnlocked time spent waiting for replication: "  
                   << millisWaitingForReplication << "ms" << endl;
+        }
 
         txn.commit();
         return numDeleted;

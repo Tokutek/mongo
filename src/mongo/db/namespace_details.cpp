@@ -510,11 +510,10 @@ namespace mongo {
                                            _lastDeletedPK.firstElement().Long() : 0;
                 // TODO: Disable prelocking on this cursor, or somehow prevent waiting 
                 //       on row locks we can't get immediately.
-                for ( scoped_ptr<Cursor> c( new IndexCursor(this, getPKIndex(),
-                                                            BSON("" << startKey), maxKey, true, 1) );
-                      c->ok(); c->advance() ) {
-                    BSONObj oldestPK = c->currPK();
-                    BSONObj oldestObj = c->current();
+                for ( IndexCursor c(this, getPKIndex(), BSON("" << startKey), maxKey, true, 1);
+                      c.ok(); c.advance() ) {
+                    BSONObj oldestPK = c.currPK();
+                    BSONObj oldestObj = c.current();
                     trimmedBytes += oldestPK.objsize();
                     
                     // Delete the object, reload the current objects/size
