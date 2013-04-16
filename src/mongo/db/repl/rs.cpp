@@ -440,8 +440,6 @@ namespace mongo {
     ReplSet::ReplSet(ReplSetCmdline& replSetCmdline) : ReplSetImpl(replSetCmdline) {}
     ReplSet::ReplSet() : ReplSetImpl() {}
 
-    void newReplUp();
-
     void ReplSetImpl::loadGTIDManager(bool quiet) {
         Lock::DBRead lk(rsoplog);
         BSONObj o;
@@ -482,7 +480,6 @@ namespace mongo {
 
         changeState(MemberState::RS_STARTUP2);
         startThreads();
-        newReplUp(); // oplog.cpp
     }
 
     ReplSetImpl::StartupStatus ReplSetImpl::startupStatus = PRESTART;

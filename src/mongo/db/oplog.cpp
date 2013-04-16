@@ -54,10 +54,6 @@ namespace mongo {
         resetSlaveCache();
     }
 
-    static void _logOpUninitialized(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
-        log() << "WHAT IS GOING ON???????? " << endl;
-    }
-
     void deleteOplogFiles() {
         Lock::DBWrite lk1("local");
         localDB = NULL;
@@ -126,17 +122,8 @@ namespace mongo {
         replInfoDetails->insertObject(bb2, flags);
     }
     
-    static void (*_logTransactionOp)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) = _logOpUninitialized;
-    // TODO: (Zardosht) hopefully remove these two phases
-    void newReplUp() {
-        _logTransactionOp = _logTransactionOps;
-    }
-    void newRepl() {
-        _logTransactionOp = _logTransactionOps;
-    }
-
     void logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
-        _logTransactionOp(gtid, timestamp, hash, opInfo);
+        _logTransactionOps(gtid, timestamp, hash, opInfo);
         // TODO: Figure out for sharding
         //logOpForSharding( opstr , ns , obj , patt );
     }
@@ -227,5 +214,4 @@ namespace mongo {
             writeEntryToOplog(entry);
         }
     }
-
 }
