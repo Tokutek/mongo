@@ -32,7 +32,6 @@ namespace mongo {
     }
 
     BackgroundSync::BackgroundSync() : _buffer(256*1024*1024, &getSize),
-                                       _lastOpTimeFetched(0, 0),
                                        _pause(true),
                                        _currentSyncTarget(NULL),
                                        _consumedOpTime(0, 0) {
@@ -114,7 +113,6 @@ namespace mongo {
             return;
         }
         // we want to unpause when we're no longer primary
-        // start() also loads _lastOpTimeFetched, which we know is set from the "if"
         else if (_pause) {
             start();
         }
@@ -176,9 +174,12 @@ namespace mongo {
                     r.more();
                 }
 
-                if (!r.more())
+                if (!r.more()) {
                     break;
+                }
 
+                // This is the operation we have received from the target
+                // that we must put in our oplog with an applied field of false
                 BSONObj o = r.nextSafe().getOwned();
 
                 Timer timer;
@@ -194,7 +195,6 @@ namespace mongo {
                     // update counters
                     _queueCounter.waitTime += timer.millis();
                     _queueCounter.numElems++;
-                    _lastOpTimeFetched = o["ts"]._opTime();
                 }
             } // end while
 
@@ -255,7 +255,8 @@ namespace mongo {
         Member *target = NULL, *stale = NULL;
         BSONObj oldest;
 
-        // then we're initial syncing and we're still waiting for this to be set
+        // TODO: What if we're initial syncing and we're still waiting for this to be set
+        /*
         {
             boost::unique_lock<boost::mutex> lock(_mutex);
             if (_lastOpTimeFetched.isNull()) {
@@ -263,6 +264,7 @@ namespace mongo {
                 return;
             }
         }
+        */
 
         verify(r.conn() == NULL);
 
@@ -306,49 +308,8 @@ namespace mongo {
     }
 
     bool BackgroundSync::isRollbackRequired(OplogReader& r) {
-        string hn = r.conn()->getServerAddress();
-
-        if (!r.more()) {
-            try {
-                BSONObj theirLastOp = r.getLastOp(rsoplog);
-                if (theirLastOp.isEmpty()) {
-                    log() << "replSet error empty query result from " << hn << " oplog" << rsLog;
-                    sleepsecs(2);
-                    return true;
-                }
-                OpTime theirTS = theirLastOp["ts"]._opTime();
-                if (theirTS < _lastOpTimeFetched) {
-                    log() << "replSet we are ahead of the primary, will try to roll back" << rsLog;
-                    ::abort();
-                    //theReplSet->syncRollback(r);
-                    return true;
-                }
-                /* we're not ahead?  maybe our new query got fresher data.  best to come back and try again */
-                log() << "replSet syncTail condition 1" << rsLog;
-                sleepsecs(1);
-            }
-            catch(DBException& e) {
-                log() << "replSet error querying " << hn << ' ' << e.toString() << rsLog;
-                sleepsecs(2);
-            }
-            return true;
-        }
-
+        // TODO: reimplement this
         ::abort();
-        // aborting because we used to have a reference to _lastH here
-        /*
-        BSONObj o = r.nextSafe();
-        OpTime ts = o["ts"]._opTime();
-        long long h = o["h"].numberLong();
-        if( ts != _lastOpTimeFetched || h != _lastH ) {
-            log() << "replSet our last op time fetched: " << _lastOpTimeFetched.toStringPretty() << rsLog;
-            log() << "replset source's GTE: " << ts.toStringPretty() << rsLog;
-            ::abort();
-            //theReplSet->syncRollback(r);
-            return true;
-        }
-        */
-
         return false;
     }
 
@@ -363,7 +324,6 @@ namespace mongo {
 
             _pause = true;
             _currentSyncTarget = NULL;
-            _lastOpTimeFetched = OpTime(0,0);
             _queueCounter.numElems = 0;
         }
 
@@ -378,13 +338,7 @@ namespace mongo {
 
     void BackgroundSync::start() {
         massert(16235, "going to start syncing, but buffer is not empty", _buffer.empty());
-
         boost::unique_lock<boost::mutex> lock(_mutex);
         _pause = false;
-
-        // reset _last fields with current data
-        //_lastOpTimeFetched = theReplSet->lastOpTimeWritten;
-
-        LOG(1) << "replset bgsync fetch queue set to: " << _lastOpTimeFetched << " " << rsLog;
    }
 } // namespace mongo

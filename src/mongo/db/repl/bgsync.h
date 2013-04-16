@@ -65,7 +65,6 @@ namespace mongo {
         // Production thread
         BlockingQueue<BSONObj> _buffer;
 
-        OpTime _lastOpTimeFetched;
         GTID _lastGTIDFetched;
         // if produce thread should be running
         bool _pause;
