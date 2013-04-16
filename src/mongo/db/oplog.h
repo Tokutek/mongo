@@ -62,9 +62,5 @@ namespace mongo {
     public:
         Sync(const string& hostname) : hn(hostname) {}
         virtual ~Sync() {}
-        virtual BSONObj getMissingDoc(const BSONObj& o);
-        // soon to dissappear
-        virtual bool shouldRetry(const BSONObj& o);
-        void setHostname(const string& hostname);
     };
 }

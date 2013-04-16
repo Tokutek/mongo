@@ -424,7 +424,7 @@ namespace mongo {
                     /* succeeded. */
                     LOG(1) << "replSet election succeeded, assuming primary role" << rsLog;
                     success = true;
-                    rs.assumePrimary();
+                    rs.assumePrimary(true);
                 }
             }
         }

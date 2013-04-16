@@ -190,13 +190,10 @@ namespace mongo {
 
     extern unsigned replApplyBatchSize;
 
-    void newRepl();
     void startReplSets(ReplSetCmdline*);
     void startReplication() {
         /* if we are going to be a replica set, we aren't doing other forms of replication. */
         if( !cmdLine._replSet.empty() ) {
-            newRepl();
-
             replSet = true;
             setTxnLogOperations(true);
             setLogTxnToOplog(logTransactionOps);

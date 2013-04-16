@@ -5,8 +5,8 @@ set -u
 
 function usage() {
     echo 1>&2 "build.sh"
-    echo 1>&2 "[--git_branch=$git_branch] [--git_tag=$git_tag]"
-    echo 1>&2 "[--tokudb=$tokudb] [--svn_revision=$svn_revision]"
+    echo 1>&2 "[--mongo=$mongo] [--ft_index=$ft_index] [--jemalloc=$jemalloc]"
+    echo 1>&2 "[--github_user=$github_user] [--github_token=$github_token]"
     echo 1>&2 "[--cc=$cc --cxx=$cxx] [--ftcc=$ftcc --ftcxx=$ftcxx]"
     echo 1>&2 "[--debugbuild=$debugbuild]"
     return 1
@@ -40,23 +40,62 @@ function get_ncpus() {
     fi
 }
 
+function github_download() {
+    repo=$1; shift
+    rev=$1; shift
+    dest=$1; shift
+    mkdir $dest
+
+    if [ ! -z $github_token ] ; then
+        retry curl \
+            --header "Authorization:\\ token\\ $github_token" \
+            --location https://api.github.com/repos/$repo/tarball/$rev \
+            --output $dest.tar.gz
+        tar --extract \
+            --gzip \
+            --directory=$dest \
+            --strip-components=1 \
+            --file $dest.tar.gz
+        rm -f $dest.tar.gz
+    elif [ ! -z $github_user ] ; then
+        retry curl \
+            --user $github_user \
+            --location https://api.github.com/repos/$repo/tarball/$rev \
+            --output $dest.tar.gz
+        tar --extract \
+            --gzip \
+            --directory=$dest \
+            --strip-components=1 \
+            --file $dest.tar.gz
+        rm -f $dest.tar.gz
+    else
+        tempdir=$(mktemp -d -p $PWD)
+        retry git clone git@github.com:${repo}.git $tempdir
+
+        # export the right branch or tag
+        (cd $tempdir ;
+            git archive \
+                --format=tar \
+                $rev) | \
+            tar --extract \
+                --directory $dest
+
+        rm -rf $tempdir
+    fi
+}
+
 # check out the fractal tree source from subversion, build it, and make the fractal tree tarballs
 function build_fractal_tree() {
     if [ ! -d $tokufractaltreedir ] ; then
         mkdir $tokufractaltreedir
 
-        if [ ! -d $tokudb ] ; then
-            retry svn export -q -r $svn_revision $svnserver/toku/$tokudb
-        fi
-        if [ ! -d $jemalloc ] ; then
-            retry svn export -q -r $svn_revision $svnserver/$jemalloc
-        fi
-        if [ ! -d $xz ] ; then
-            retry svn export -q -r $svn_revision $svnserver/$xz
+        if [ ! -d ft-index ] ; then
+            github_download Tokutek/ft-index $ft_index ft-index
+            github_download Tokutek/jemalloc $jemalloc ft-index/third_party/jemalloc
         fi
 
-        pushd $tokudb
-            echo `date` make $tokudb $ftcc $($ftcc --version)
+        pushd ft-index
+            echo `date` make ft-index $ftcc $($ftcc --version)
             cmake_env="CC=$ftcc CXX=$ftcxx"
             local build_type=""
             local use_valgrind=""
@@ -75,10 +114,10 @@ function build_fractal_tree() {
             eval $cmake_env cmake \
                 -D LIBTOKUDB=$tokufractaltree \
                 -D LIBTOKUPORTABILITY=$tokuportability \
-                -D CMAKE_TOKUDB_REVISION=$svn_revision \
+                -D CMAKE_TOKUDB_REVISION=0 \
                 -D CMAKE_BUILD_TYPE=$build_type \
-                -D TOKU_SVNROOT=$rootdir \
                 -D CMAKE_INSTALL_PREFIX=$rootdir/$tokufractaltreedir \
+                -D JEMALLOC_SOURCE_DIR=../third_party/jemalloc \
                 -D BUILD_TESTING=OFF \
                 -D USE_GTAGS=OFF \
                 -D USE_CTAGS=OFF \
@@ -119,30 +158,9 @@ function build_fractal_tree() {
 
 # checkout the mongodb source from git, generate a build script, and make the mongodb source tarball
 function build_mongodb_src() {
-    mongodbsrc=mongodb-$mongodb_version-tokutek-$git_commit-src
+    mongodbsrc=mongodb-$mongodb_version-tokutek-$mongo_rev-src
     if [ ! -d $mongodbsrc ] ; then
-        # clone mongo
-        if [ -d mongo-git ] ; then
-            pushd mongo-git
-                retry git fetch
-            popd
-        else
-            retry git clone $gitserver mongo-git
-        fi
-
-        # export the right branch or tag
-        pushd mongo-git
-            git archive \
-                --format=tar \
-                --prefix=$mongodbsrc/ \
-                --output=$mongodbsrc.tar \
-                $git_commit
-            force_git_version=$(git get-tar-commit-id < $mongodbsrc.tar)
-            tar --extract \
-                --directory .. \
-                --file $mongodbsrc.tar
-            rm $mongodbsrc.tar
-        popd
+        github_download Tokutek/mongo $mongo $mongodbsrc
 
         # set defaults for build script
         sed <$mongodbsrc/buildscripts/build.tokudb.sh.in \
@@ -150,7 +168,7 @@ function build_mongodb_src() {
             -e "s^@cc@^$cc^" \
             -e "s^@cxx@^$cxx^" \
             -e "s^@debugbuild@^$debugbuild^" \
-            -e "s^@force_git_version@^$force_git_version^" \
+            -e "s^@force_git_version@^$mongo_rev^" \
             -e "s^@mongodbsrc@^$mongodbsrc^" \
             -e "s^@tokufractaltreesrc@^$tokufractaltreedir^" \
             -e "s^@LIBTOKUDB_NAME@^${tokufractaltree}_static^" \
@@ -169,7 +187,7 @@ function build_mongodb_src() {
         # run the build script
         $mongodbsrc/buildscripts/build.tokudb.sh
 
-        mongodbdir=mongodb-$mongodb_version-tokutek-$git_commit-$tokudb-${svn_revision}${suffix}-$system-$arch
+        mongodbdir=mongodb-$mongodb_version-tokutek-$mongo_rev-tokudb-${ft_index_rev}${suffix}-$system-$arch
 
         if [ -f $mongodbsrc/mongodb*-debuginfo.tgz ]; then
             # copy the debuginfo tarball to a name of our choosing
@@ -209,21 +227,18 @@ function build_mongodb_src() {
 PATH=$HOME/bin:$PATH
 
 suffix=''
-mongodb_version=2.2.0
-git_branch=master
-git_tag=''
-svn_revision=0
-tokudb=tokudb
+mongodb_version=2.2.4
+mongo=master
+ft_index=master
+jemalloc=3.3.1
 cc=gcc44
 cxx=g++44
 ftcc=gcc47
 ftcxx=g++47
 system=`uname -s | tr '[:upper:]' '[:lower:]'`
 arch=`uname -m | tr '[:upper:]' '[:lower:]'`
-gitserver=git@github.com:Tokutek/mongo.git
-svnserver=https://svn.tokutek.com/tokudb
-jemalloc=jemalloc-3.3.0
-xz=xz-4.999.9beta
+github_user=''
+github_token=''
 makejobs=$(get_ncpus)
 debugbuild=0
 staticft=1
@@ -264,24 +279,29 @@ if [ $? != 0 ] ; then
 fi
 set -e
 
-if [ "$git_tag"x = ""x ] ; then
-    git_commit=$(git ls-remote $gitserver $git_branch | cut -c-7)
-else
-    test $git_branch = master
-    git_commit=$git_tag
-fi
-
 if [[ $debugbuild != 0 && ( -z $suffix ) ]] ; then suffix=-debug; fi
 
-builddir=build-mongodb-$tokudb-${svn_revision}${suffix}
+if [ ! -z $github_user ] ; then
+    ft_index_rev=$(git ls-remote --exit-code https://$github_user@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
+    mongo_rev=$(git ls-remote --exit-code https://$github_user@github.com/Tokutek/mongo.git $mongo | cut -c-7)
+elif [ ! -z $github_token ] ; then
+    ft_index_rev=$(git ls-remote --exit-code https://$github_token@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
+    mongo_rev=$(git ls-remote --exit-code https://$github_token@github.com/Tokutek/mongo.git $mongo | cut -c-7)
+else
+    ft_index_rev=$(git ls-remote --exit-code git@github.com:Tokutek/ft-index.git $ft_index | cut -c-7)
+    mongo_rev=$(git ls-remote --exit-code git@github.com:Tokutek/mongo.git $mongo | cut -c-7)
+fi
+echo "Using fractal tree at $ft_index_rev and mongo at $mongo_rev"
+
+builddir=build-mongodb-tokudb-${ft_index_rev}${suffix}
 if [ ! -d $builddir ] ; then mkdir $builddir; fi
 pushd $builddir
 
 rootdir=$PWD
 
 # build the fractal tree tarball
-tokufractaltree=tokufractaltreeindex-${svn_revision}${suffix}
-tokuportability=tokuportability-${svn_revision}${suffix}
+tokufractaltree=tokufractaltreeindex-${ft_index_rev}${suffix}
+tokuportability=tokuportability-${ft_index_rev}${suffix}
 tokufractaltreedir=$tokufractaltree-$system-$arch
 build_fractal_tree
 

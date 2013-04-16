@@ -54,9 +54,9 @@ namespace mongo {
         
         // GTID to give out should a primary ask for one to use
         // On a secondary, this is the last GTID seen incremented
-        GTID _nextLiveGTID;
+        GTID _lastLiveGTID;
 
-        GTID _nextUnappliedGTID;
+        GTID _lastUnappliedGTID;
 
         // the minimum live GTID
         // on a primary, this is the minimum value in _liveGTIDs

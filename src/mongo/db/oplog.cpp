@@ -54,10 +54,6 @@ namespace mongo {
         resetSlaveCache();
     }
 
-    static void _logOpUninitialized(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
-        log() << "WHAT IS GOING ON???????? " << endl;
-    }
-
     void deleteOplogFiles() {
         Lock::DBWrite lk1("local");
         localDB = NULL;
@@ -126,17 +122,8 @@ namespace mongo {
         replInfoDetails->insertObject(bb2, flags);
     }
     
-    static void (*_logTransactionOp)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) = _logOpUninitialized;
-    // TODO: (Zardosht) hopefully remove these two phases
-    void newReplUp() {
-        _logTransactionOp = _logTransactionOps;
-    }
-    void newRepl() {
-        _logTransactionOp = _logTransactionOps;
-    }
-
     void logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
-        _logTransactionOp(gtid, timestamp, hash, opInfo);
+        _logTransactionOps(gtid, timestamp, hash, opInfo);
         // TODO: Figure out for sharding
         //logOpForSharding( opstr , ns , obj , patt );
     }
@@ -225,63 +212,6 @@ namespace mongo {
             // this entry has not been applied to collections
             BSONElementManipulator(entry["a"]).setBool(true);
             writeEntryToOplog(entry);
-        }
-    }
-
-    // -------------------------------------
-    void Sync::setHostname(const string& hostname) {
-        hn = hostname;
-    }
-
-    BSONObj Sync::getMissingDoc(const BSONObj& o) {
-        OplogReader missingObjReader;
-        const char *ns = o.getStringField("ns");
-
-        // capped collections
-        NamespaceDetails *nsd = nsdetails(ns);
-        if ( nsd && nsd->isCapped() ) {
-            log() << "replication missing doc, but this is okay for a capped collection (" << ns << ")" << endl;
-            return BSONObj();
-        }
-
-        uassert(15916, str::stream() << "Can no longer connect to initial sync source: " << hn, missingObjReader.connect(hn));
-
-        // might be more than just _id in the update criteria
-        BSONObj query = BSONObjBuilder().append(o.getObjectField("o2")["_id"]).obj();
-        BSONObj missingObj;
-        try {
-            missingObj = missingObjReader.findOne(ns, query);
-        } catch(DBException& e) {
-            log() << "replication assertion fetching missing object: " << e.what() << endl;
-            throw;
-        }
-
-        return missingObj;
-    }
-
-    bool Sync::shouldRetry(const BSONObj& o) {
-        // should already have write lock
-        const char *ns = o.getStringField("ns");
-        Client::Context ctx(ns);
-
-        // we don't have the object yet, which is possible on initial sync.  get it.
-        log() << "replication info adding missing object" << endl; // rare enough we can log
-
-        BSONObj missingObj = getMissingDoc(o);
-
-        if( missingObj.isEmpty() ) {
-            log() << "replication missing object not found on source. presumably deleted later in oplog" << endl;
-            log() << "replication o2: " << o.getObjectField("o2").toString() << endl;
-            log() << "replication o firstfield: " << o.getObjectField("o").firstElementFieldName() << endl;
-
-            return false;
-        }
-        else {
-            ::abort(); //DiskLoc d = //theDataFileMgr.insert(ns, (void*) missingObj.objdata(), missingObj.objsize());
-            //uassert(15917, "Got bad disk location when attempting to insert", !d.isNull());
-
-            LOG(1) << "replication inserted missing doc: " << missingObj.toString() << endl;
-            return true;
         }
     }
 }

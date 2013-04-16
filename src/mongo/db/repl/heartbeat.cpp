@@ -402,7 +402,7 @@ namespace mongo {
 
         // reads from primary oplog and writes to a memory buffer,
         // 
-        boost::thread t(startSyncThread);
+        //boost::thread t(startSyncThread);
 
         BackgroundSync* sync = BackgroundSync::get();
         boost::thread producer(boost::bind(&BackgroundSync::producerThread, sync));

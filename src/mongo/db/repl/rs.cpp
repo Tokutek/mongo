@@ -90,9 +90,11 @@ namespace mongo {
         changeState(MemberState::RS_RECOVERING);
     }
 
-    void ReplSetImpl::assumePrimary() {
+    void ReplSetImpl::assumePrimary(bool verifyHotness) {
         LOG(2) << "replSet assuming primary" << endl;
-        verify( iAmPotentiallyHot() );
+        if (verifyHotness) {
+            verify( iAmPotentiallyHot() );
+        }
         // so we are synchronized with _logOp().  perhaps locking local db only would suffice, but until proven 
         // will take this route, and this is very rare so it doesn't matter anyway
         Lock::GlobalWrite lk; 
@@ -440,8 +442,6 @@ namespace mongo {
     ReplSet::ReplSet(ReplSetCmdline& replSetCmdline) : ReplSetImpl(replSetCmdline) {}
     ReplSet::ReplSet() : ReplSetImpl() {}
 
-    void newReplUp();
-
     void ReplSetImpl::loadGTIDManager(bool quiet) {
         Lock::DBRead lk(rsoplog);
         BSONObj o;
@@ -461,7 +461,7 @@ namespace mongo {
         }
     }
 
-    /* call after constructing to start - returns fairly quickly after launching its threads */
+    /* call after constructing to start */
     void ReplSetImpl::_go() {
         try {
             // this might now work on secondaries
@@ -481,8 +481,28 @@ namespace mongo {
         }
 
         changeState(MemberState::RS_STARTUP2);
+
+        // if we are the only member of the config, start us up as the primary.
+        // don't depend on threads to startup first.
+        if (theReplSet->config().members.size() == 1 &&
+            theReplSet->myConfig().potentiallyHot() &&
+            !theReplSet->myConfig().arbiterOnly) 
+        {
+            assumePrimary(false);
+        }
+        else {
+            // here, check if we need to do an initial sync
+            // This if-clause will be true if loadGTIDManager finds
+            // nothing in the oplog and initalizes the GTIDManager
+            // with an empty GTID
+            if( gtidManager->getLiveState().isInitial() ) {
+                syncDoInitialSync();
+            }
+        }
+        // When we get here,
+        // we know either the server is the sole primary in a single node
+        // replica set, or it does not require an initial sync
         startThreads();
-        newReplUp(); // oplog.cpp
     }
 
     ReplSetImpl::StartupStatus ReplSetImpl::startupStatus = PRESTART;
