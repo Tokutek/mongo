@@ -489,7 +489,7 @@ namespace mongo {
                 // always deleting keys greater than the last deleted key. This ensures
                 // the first-in-first-out behavior of capped collections and allows us to
                 // use _lastDeletedPK as a marker for the next key to trim.
-                dassert(_lastDeletedPK < pk);
+                dassert(_lastDeletedPK <= pk);
             }
             _lastDeletedPK = pk.getOwned();
         }
