@@ -375,7 +375,7 @@ namespace mongo {
         }
 
         // Update write concern on primary
-        BackgroundSync::notify();
+        //BackgroundSync::notify();
     }
 
     void SyncTail::handleSlaveDelay(const BSONObj& lastOp) {

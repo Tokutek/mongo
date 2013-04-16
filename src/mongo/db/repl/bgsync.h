@@ -109,8 +109,6 @@ namespace mongo {
     public:
         static BackgroundSync* get();
         static void shutdown();
-        static void notify();
-
         virtual ~BackgroundSync() {}
 
         // starts the producer thread

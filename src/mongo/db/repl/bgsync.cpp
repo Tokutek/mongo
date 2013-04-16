@@ -62,17 +62,6 @@ namespace mongo {
     }
 
     void BackgroundSync::shutdown() {
-        notify();
-    }
-
-    void BackgroundSync::notify() {
-        boost::unique_lock<boost::mutex> lock(s_mutex);
-        if (s_instance == NULL) {
-            return;
-        }
-
-        boost::unique_lock<boost::mutex> opLock(s_instance->_lastOpMutex);
-        s_instance->_lastOpCond.notify_all();
     }
 
     void BackgroundSync::producerThread() {
