@@ -118,35 +118,6 @@ namespace mongo {
         }
     }
 
-    // This free function is used by the initial sync writer threads to apply each op
-    void multiInitialSyncApply(const std::vector<BSONObj>& ops, SyncTail* st) {
-        initializeWriterThread();
-        for (std::vector<BSONObj>::const_iterator it = ops.begin();
-             it != ops.end();
-             ++it) {
-            try {
-                if (!st->syncApply(*it)) {
-                    bool status;
-                    {
-                        Lock::GlobalWrite lk;
-                        status = st->shouldRetry(*it);
-                    }
-                    if (status) {
-                        // retry
-                        fassert(15915, st->syncApply(*it));
-                    }
-                    // If shouldRetry() returns false, fall through.
-                    // This can happen if the document that was moved and missed by Cloner
-                    // subsequently got deleted and no longer exists on the Sync Target at all
-                }
-            }
-            catch (DBException& e) {
-                error() << "exception: " << e.what() << " on: " << it->toString() << endl;
-                fassertFailed(16361);
-            }
-        }
-    }
-
     // Doles out all the work to the writer pool threads and waits for them to complete
     void SyncTail::applyOps(const std::vector< std::vector<BSONObj> >& writerVectors, 
                                      MultiSyncApplyFunc applyFunc) {
