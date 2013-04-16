@@ -643,23 +643,6 @@ namespace mongo {
         }
     } cmdEngineStatus;
 
-    class CmdGetOpTime : public Command {
-    public:
-        virtual bool slaveOk() const {
-            return true;
-        }
-        virtual void help( stringstream& help ) const { help << "internal"; }
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual LockType locktype() const { return NONE; }
-        CmdGetOpTime() : Command("getoptime") { }
-        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            mutex::scoped_lock lk(OpTime::m);
-            result.appendDate("optime", OpTime::now(lk).asDate());
-            return true;
-        }
-    } cmdgetoptime;
-
     /*
     class Cmd : public Command {
     public:

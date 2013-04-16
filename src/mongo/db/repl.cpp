@@ -188,7 +188,6 @@ namespace mongo {
         }
     } cmdismaster;
 
-    BSONObj opTimeQuery = fromjson("{\"getoptime\":1}");
     extern unsigned replApplyBatchSize;
 
     void newRepl();
