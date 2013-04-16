@@ -268,22 +268,7 @@ namespace mongo {
     }
 
     /**
-     * Do the initial sync for this member.  There are several steps to this process:
-     *
-     *     1. Record start time.
-     *     2. Clone.
-     *     3. Set minValid1 to sync target's latest op time.
-     *     4. Apply ops from start to minValid1, fetching missing docs as needed.
-     *     5. Set minValid2 to sync target's latest op time.
-     *     6. Apply ops from minValid1 to minValid2.
-     *     7. Build indexes.
-     *     8. Set minValid3 to sync target's latest op time.
-     *     9. Apply ops from minValid2 to minValid3.
-     *
-     * At that point, initial sync is finished.  Note that the oplog from the sync target is applied
-     * three times: step 4, 6, and 8.  4 may involve refetching, 6 should not.  By the end of 6,
-     * this member should have consistent data.  8 is "cosmetic," it is only to get this member
-     * closer to the latest op time before it can transition to secondary state.
+     * Do the initial sync for this member.
      */
     void ReplSetImpl::_syncDoInitialSync() {
         sethbmsg("initial sync pending",0);

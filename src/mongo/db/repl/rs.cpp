@@ -90,9 +90,11 @@ namespace mongo {
         changeState(MemberState::RS_RECOVERING);
     }
 
-    void ReplSetImpl::assumePrimary() {
+    void ReplSetImpl::assumePrimary(bool verifyHotness) {
         LOG(2) << "replSet assuming primary" << endl;
-        verify( iAmPotentiallyHot() );
+        if (verifyHotness) {
+            verify( iAmPotentiallyHot() );
+        }
         // so we are synchronized with _logOp().  perhaps locking local db only would suffice, but until proven 
         // will take this route, and this is very rare so it doesn't matter anyway
         Lock::GlobalWrite lk; 
@@ -479,6 +481,15 @@ namespace mongo {
         }
 
         changeState(MemberState::RS_STARTUP2);
+
+        // if we are the only member of the config, start us up as the primary.
+        // don't depend on threads to startup first.
+        if (theReplSet->config().members.size() == 1 &&
+            theReplSet->myConfig().potentiallyHot() &&
+            !theReplSet->myConfig().arbiterOnly) 
+        {
+            assumePrimary(false);
+        }
         startThreads();
     }
 
