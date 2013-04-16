@@ -484,6 +484,14 @@ namespace mongo {
             _currentSize.subtractAndFetch(size);
 
             NaturalOrderCollection::deleteObject(pk, obj);
+            if (!_lastDeletedPK.isEmpty()) {
+                // This invariant isn't obvious from the API. We want to make sure we're
+                // always deleting keys greater than the last deleted key. This ensures
+                // the first-in-first-out behavior of capped collections and allows us to
+                // use _lastDeletedPK as a marker for the next key to trim.
+                dassert(_lastDeletedPK < pk);
+            }
+            _lastDeletedPK = pk.getOwned();
         }
 
         void trim(int objsize) {
@@ -491,18 +499,24 @@ namespace mongo {
             long long n = _currentObjects.load();
             long long size = _currentSize.load();
             if (isGorged(n, size)) {
-                scoped_ptr<Cursor> c( BasicCursor::make(this) );
                 // Delete older objects until we've made enough room for the new one.
                 // If other threads are trying to insert concurrently, we will do some
                 // work on their behalf (until !isGorged). But we stop if we've deleted
-                // 8 objects and done enough to satisfy our own intent, to limit latency.
-                int bytesTrimmed = 0;
-                for ( int i = 0;
-                      c->ok() && isGorged(n, size) && (bytesTrimmed < objsize || (i < 8));
-                      i++, c->advance()) {
+                // K objects and done enough to satisfy our own intent, to limit latency.
+                const int K = 8;
+                int trimmedBytes = 0;
+                int trimmedObjects = 0;
+                const long long startKey = !_lastDeletedPK.isEmpty() ?
+                                           _lastDeletedPK.firstElement().Long() : 0;
+                // TODO: Disable prelocking on this cursor, or somehow prevent waiting 
+                //       on row locks we can't get immediately.
+                for ( scoped_ptr<Cursor> c( new IndexCursor(this, getPKIndex(),
+                                                            BSON("" << startKey), maxKey, true, 1) );
+                      c->ok() && isGorged(n, size) && (trimmedBytes < objsize || trimmedObjects < K);
+                      c->advance(), trimmedObjects++ ) {
                     BSONObj oldestPK = c->currPK();
                     BSONObj oldestObj = c->current();
-                    bytesTrimmed += oldestPK.objsize();
+                    trimmedBytes += oldestPK.objsize();
                     
                     // Delete the object, reload the current objects/size
                     _deleteObject(oldestPK, oldestObj);
@@ -525,6 +539,7 @@ namespace mongo {
         const long long _maxObjects;
         AtomicWord<long long> _currentObjects;
         AtomicWord<long long> _currentSize;
+        BSONObj _lastDeletedPK;
         // The set of uncommited primary keys for this capped collection.
         // Tailable cursors must not read passed the minimum of this set.
         BSONObjSet _uncommittedPKs;
@@ -733,7 +748,7 @@ namespace mongo {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
         if ((flags & ND_UNIQUE_CHECKS_OFF) && _indexes.size() > 1) {
-            wunimplemented("overwrite inserts on secondary keys right now don't work");
+            //wunimplemented("overwrite inserts on secondary keys right now don't work");
             //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
         }
         for (int i = 0; i < nIndexes(); i++) {
