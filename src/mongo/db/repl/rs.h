@@ -350,7 +350,7 @@ namespace mongo {
         bool _stepDown(int secs);
         bool _freeze(int secs);
     private:
-        void assumePrimary();
+        void assumePrimary(bool verifyHotness);
         void loadGTIDManager(bool quiet=false);
         void changeState(MemberState s);
 
