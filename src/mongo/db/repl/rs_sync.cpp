@@ -555,18 +555,6 @@ namespace mongo {
             fassert(16113, !Lock::isLocked());
 
             try {
-                //
-                //
-                //
-                //
-                //
-                // Figure out exactly what this does
-                //
-                //
-                //
-                //
-                //
-                //
                 _syncThread();
             }
             catch(DBException& e) {

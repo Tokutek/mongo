@@ -67,6 +67,9 @@ namespace mongo {
             if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
                 cc().txn().txnIntiatingRs();
                 OpLogHelpers::logComment(comment, &cc().txn());
+                GTID minLiveGTID;
+                GTID minUnappliedGTID;
+                logToReplInfo(minLiveGTID, minUnappliedGTID);
             }
         }
         log() << "replSet saveConfigLocally done" << rsLog;

@@ -229,23 +229,6 @@ namespace mongo {
     }
 
     // -------------------------------------
-
-    struct TestOpTime : public StartupTest {
-        void run() {
-            OpTime t;
-            for ( int i = 0; i < 10; i++ ) {
-                OpTime s = OpTime::_now();
-                verify( s != t );
-                t = s;
-            }
-            OpTime q = t;
-            verify( q == t );
-            verify( !(q != t) );
-        }
-    } testoptime;
-
-    int _dummy_z;
-
     void Sync::setHostname(const string& hostname) {
         hn = hostname;
     }
