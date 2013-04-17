@@ -500,8 +500,6 @@ namespace mongo {
         bool _syncDoInitialSync_clone( const char *master, const list<string>& dbs, shared_ptr<DBClientConnection> conn);
         void _syncDoInitialSync();
         void syncDoInitialSync();
-        void _syncThread();
-        void syncTail();
 
         // keep a list of hosts that we've tried recently that didn't work
         map<string,time_t> _veto;
@@ -531,7 +529,6 @@ namespace mongo {
 
         const ReplSetConfig::MemberCfg& myConfig() const { return _config; }
         bool tryToGoLiveAsASecondary(); // readlocks
-        void syncThread();
         const uint64_t lastOtherOpTime() const;
         const GTID lastOtherGTID() const;
         

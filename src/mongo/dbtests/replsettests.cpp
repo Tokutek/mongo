@@ -107,7 +107,7 @@ namespace ReplSetTests {
         static DBDirectClient client_;
     protected:
         BackgroundSyncTest* _bgsync;
-        SyncTail* _tailer;
+        //SyncTail* _tailer;
     public:
         Base() {
             cmdLine._replSet = "foo";
@@ -117,7 +117,7 @@ namespace ReplSetTests {
         }
         ~Base() {
             delete _bgsync;
-            delete _tailer;
+            //delete _tailer;
         }
 
         static const char *ns() {
@@ -152,7 +152,7 @@ namespace ReplSetTests {
             _bgsync = new BackgroundSyncTest();
 
             // setup tail
-            _tailer = new SyncTail(_bgsync);
+            //_tailer = new SyncTail(_bgsync);
 
             // setup theReplSet
             ReplSetTest *rst = new ReplSetTest();
@@ -381,7 +381,7 @@ namespace ReplSetTests {
         }
 
         void applyOplog() {
-            _tailer->oplogApplication();
+            //_tailer->oplogApplication();
         }
     public:
         void run() {

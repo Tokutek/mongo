@@ -61,7 +61,6 @@ namespace mongo {
 
     /** the database's concept of an outside "client" */
     class Client : public ClientBasic {
-        static Client *syncThread;
     public:
         // always be in clientsMutex when manipulating this. killop stuff uses these.
         static set<Client*>& clients;

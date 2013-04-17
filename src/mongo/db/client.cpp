@@ -38,7 +38,6 @@
 
 namespace mongo {
   
-    Client* Client::syncThread;
     mongo::mutex& Client::clientsMutex = *(new mutex("clientsMutex"));
     set<Client*>& Client::clients = *(new set<Client*>); // always be in clientsMutex when manipulating this
 
