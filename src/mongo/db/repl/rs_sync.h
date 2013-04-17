@@ -25,9 +25,7 @@
 #include "mongo/util/concurrency/thread_pool.h"
 
 namespace mongo {
-
-    class BackgroundSyncInterface;
-
+ 
     /**
      * "Normal" replica set syncing
      */

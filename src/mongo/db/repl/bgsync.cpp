@@ -25,8 +25,6 @@ namespace mongo {
     BackgroundSync* BackgroundSync::s_instance = 0;
     boost::mutex BackgroundSync::s_mutex;
 
-    BackgroundSyncInterface::~BackgroundSyncInterface() {}
-
     size_t getSize(const BSONObj& o) {
         return o.objsize();
     }

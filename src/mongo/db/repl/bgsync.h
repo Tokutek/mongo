@@ -25,28 +25,6 @@
 
 namespace mongo {
 
-    // This interface exists to facilitate easier testing;
-    // the test infrastructure implements these functions with stubs.
-    class BackgroundSyncInterface {
-    public:
-        virtual ~BackgroundSyncInterface();
-
-        // Gets the head of the buffer, but does not remove it. 
-        // Returns true if an element was present at the head;
-        // false if the queue was empty.
-        virtual bool peek(BSONObj* op) = 0;
-
-        // Deletes objects in the queue;
-        // called by sync thread after it has applied an op
-        virtual void consume() = 0;
-
-        // Returns the member we're currently syncing from (or NULL)
-        virtual Member* getSyncTarget() = 0;
-
-        // wait up to 1 second for more ops to appear
-        virtual void waitForMore() = 0;
-    };
-
 
     /**
      * Lock order:
@@ -54,7 +32,7 @@ namespace mongo {
      * 2. rwlock
      * 3. BackgroundSync::_mutex
      */
-    class BackgroundSync : public BackgroundSyncInterface {
+    class BackgroundSync {
         static BackgroundSync *s_instance;
         // protects creation of s_instance
         static boost::mutex s_mutex;
