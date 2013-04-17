@@ -541,21 +541,6 @@ namespace mongo {
         }
     }
 
-    void startSyncThread() {
-        static int n;
-        if( n != 0 ) {
-            log() << "replSet ERROR : more than one sync thread?" << rsLog;
-            verify( n == 0 );
-        }
-        n++;
-
-        Client::initThread("rsSync");
-        cc().iAmSyncThread(); // for isSyncThread() (which is used not used much, is used in secondary create index code
-        replLocalAuth();
-        theReplSet->syncThread();
-        cc().shutdown();
-    }
-
     void GhostSync::starting() {
         Client::initThread("rsGhostSync");
         replLocalAuth();
