@@ -191,7 +191,7 @@ namespace mongo {
         verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
         boost::thread it( signalProcessingThread );
     }
-#endif
+#endif  // not _WIN32
 
     void setupSignals( bool inFork ) {
         if ( !cmdLine.gdb ) {
@@ -217,6 +217,7 @@ namespace mongo {
         sigaddset( &asyncSignals, SIGUSR1 );
         startSignalProcessingThread();
 #endif
+
         setWindowsUnhandledExceptionFilter();
         set_new_handler( my_new_handler );
     }
