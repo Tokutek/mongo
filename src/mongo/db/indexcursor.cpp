@@ -293,7 +293,7 @@ namespace mongo {
 
         const vector<FieldRange> &ranges = _bounds->ranges();
         const int n = ranges.size();
-        //dassert( n == _idx.indexKeyPattern().nFields() );
+        dassert( n == _idx.keyPattern().nFields() );
         if ( n == 1 ) {
             // When there's only one field range, we can just prelock each interval.
             // Single field indexes are common so we handle this case manually for
