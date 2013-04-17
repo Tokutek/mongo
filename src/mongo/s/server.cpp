@@ -173,6 +173,7 @@ namespace mongo {
         ::_exit(EXIT_ABRUPT);
     }
 
+#ifndef _WIN32
     sigset_t asyncSignals;
 
     void signalProcessingThread() {
@@ -195,11 +196,10 @@ namespace mongo {
     }
 
     void startSignalProcessingThread() {
-#ifndef _WIN32
         verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
         boost::thread it( signalProcessingThread );
-#endif
     }
+#endif  // not _WIN32
 
     void setupSignalHandlers() {
         setupSIGTRAPforGDB();
