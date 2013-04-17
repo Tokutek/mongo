@@ -285,8 +285,8 @@ if [ ! -z $github_user ] ; then
     ft_index_rev=$(git ls-remote --exit-code https://$github_user@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
     mongo_rev=$(git ls-remote --exit-code https://$github_user@github.com/Tokutek/mongo.git $mongo | cut -c-7)
 elif [ ! -z $github_token ] ; then
-    ft_index_rev=$(git ls-remote --exit-code https://$github_token@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
-    mongo_rev=$(git ls-remote --exit-code https://$github_token@github.com/Tokutek/mongo.git $mongo | cut -c-7)
+    ft_index_rev=$(git ls-remote --exit-code https://${github_token}:x-oauth-basic@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
+    mongo_rev=$(git ls-remote --exit-code https://${github_token}:x-oauth-basic@github.com/Tokutek/mongo.git $mongo | cut -c-7)
 else
     ft_index_rev=$(git ls-remote --exit-code git@github.com:Tokutek/ft-index.git $ft_index | cut -c-7)
     mongo_rev=$(git ls-remote --exit-code git@github.com:Tokutek/mongo.git $mongo | cut -c-7)
