@@ -121,14 +121,12 @@ namespace mongo {
 
     bool Client::shutdown() {
         _shutdown = true;
-        if ( inShutdown() )
+        if ( inShutdown() ) {
             return false;
+        }
         {
             scoped_lock bl(clientsMutex);
             clients.erase(this);
-            if ( isSyncThread() ) {
-                syncThread = 0;
-            }
         }
 
         return false;
