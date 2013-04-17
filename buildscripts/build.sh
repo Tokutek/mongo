@@ -282,16 +282,19 @@ set -e
 if [[ $debugbuild != 0 && ( -z $suffix ) ]] ; then suffix=-debug; fi
 
 if [ ! -z $github_user ] ; then
-    ft_index_rev=$(git ls-remote --exit-code https://$github_user@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
-    mongo_rev=$(git ls-remote --exit-code https://$github_user@github.com/Tokutek/mongo.git $mongo | cut -c-7)
+    ft_index_rev=$(git ls-remote https://$github_user@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
+    mongo_rev=$(git ls-remote https://$github_user@github.com/Tokutek/mongo.git $mongo | cut -c-7)
 elif [ ! -z $github_token ] ; then
-    ft_index_rev=$(git ls-remote --exit-code https://${github_token}:x-oauth-basic@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
-    mongo_rev=$(git ls-remote --exit-code https://${github_token}:x-oauth-basic@github.com/Tokutek/mongo.git $mongo | cut -c-7)
+    ft_index_rev=$(git ls-remote https://${github_token}:x-oauth-basic@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
+    mongo_rev=$(git ls-remote https://${github_token}:x-oauth-basic@github.com/Tokutek/mongo.git $mongo | cut -c-7)
 else
-    ft_index_rev=$(git ls-remote --exit-code git@github.com:Tokutek/ft-index.git $ft_index | cut -c-7)
-    mongo_rev=$(git ls-remote --exit-code git@github.com:Tokutek/mongo.git $mongo | cut -c-7)
+    ft_index_rev=$(git ls-remote git@github.com:Tokutek/ft-index.git $ft_index | cut -c-7)
+    mongo_rev=$(git ls-remote git@github.com:Tokutek/mongo.git $mongo | cut -c-7)
 fi
-echo "Using fractal tree at $ft_index_rev and mongo at $mongo_rev"
+
+# must have these defined to proceed, ls-remote may return success even if it fails
+test ! -z $ft_index_rev
+test ! -z $mongo_rev
 
 builddir=build-mongodb-tokudb-${ft_index_rev}${suffix}
 if [ ! -d $builddir ] ; then mkdir $builddir; fi
