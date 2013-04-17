@@ -25,28 +25,6 @@
 
 namespace mongo {
 
-    // This interface exists to facilitate easier testing;
-    // the test infrastructure implements these functions with stubs.
-    class BackgroundSyncInterface {
-    public:
-        virtual ~BackgroundSyncInterface();
-
-        // Gets the head of the buffer, but does not remove it. 
-        // Returns true if an element was present at the head;
-        // false if the queue was empty.
-        virtual bool peek(BSONObj* op) = 0;
-
-        // Deletes objects in the queue;
-        // called by sync thread after it has applied an op
-        virtual void consume() = 0;
-
-        // Returns the member we're currently syncing from (or NULL)
-        virtual Member* getSyncTarget() = 0;
-
-        // wait up to 1 second for more ops to appear
-        virtual void waitForMore() = 0;
-    };
-
 
     /**
      * Lock order:
@@ -54,7 +32,7 @@ namespace mongo {
      * 2. rwlock
      * 3. BackgroundSync::_mutex
      */
-    class BackgroundSync : public BackgroundSyncInterface {
+    class BackgroundSync {
         static BackgroundSync *s_instance;
         // protects creation of s_instance
         static boost::mutex s_mutex;
@@ -62,22 +40,12 @@ namespace mongo {
         // _mutex protects all of the class variables
         boost::mutex _mutex;
 
-        // Production thread
-        BlockingQueue<BSONObj> _buffer;
-
         GTID _lastGTIDFetched;
         // if produce thread should be running
         bool _pause;
 
         Member* _currentSyncTarget;
 
-        // Notifier thread
-
-        // used to wait until another op has been replicated
-        boost::condition_variable _lastOpCond;
-        boost::mutex _lastOpMutex;
-
-        OpTime _consumedOpTime; // not locked, only used by notifier thread
 
         struct QueueCounter {
             QueueCounter();
@@ -92,7 +60,6 @@ namespace mongo {
 
         // Production thread
         void _producerThread();
-        // Adds elements to the list, up to maxSize.
         void produce();
         // Check if rollback is necessary
         bool isRollbackRequired(OplogReader& r);
@@ -113,12 +80,7 @@ namespace mongo {
         // starts the producer thread
         void producerThread();
 
-        // Interface implementation
-
-        virtual bool peek(BSONObj* op);
-        virtual void consume();
         virtual Member* getSyncTarget();
-        virtual void waitForMore();
 
         // For monitoring
         BSONObj getCounters();

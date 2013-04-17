@@ -38,7 +38,6 @@
 
 namespace mongo {
   
-    Client* Client::syncThread;
     mongo::mutex& Client::clientsMutex = *(new mutex("clientsMutex"));
     set<Client*>& Client::clients = *(new set<Client*>); // always be in clientsMutex when manipulating this
 
@@ -121,14 +120,12 @@ namespace mongo {
 
     bool Client::shutdown() {
         _shutdown = true;
-        if ( inShutdown() )
+        if ( inShutdown() ) {
             return false;
+        }
         {
             scoped_lock bl(clientsMutex);
             clients.erase(this);
-            if ( isSyncThread() ) {
-                syncThread = 0;
-            }
         }
 
         return false;

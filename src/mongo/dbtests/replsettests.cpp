@@ -38,7 +38,7 @@ namespace ReplSetTests {
     class ReplSetTest : public ReplSet {
         ReplSetConfig *_config;
         ReplSetConfig::MemberCfg *_myConfig;
-        BackgroundSyncInterface *_syncTail;
+        //ckgroundSyncInterface *_syncTail;
     public:
         static const int replWriterThreadCount;
         static const int replPrefetcherThreadCount;
@@ -46,7 +46,7 @@ namespace ReplSetTests {
             delete _myConfig;
             delete _config;
         }
-        ReplSetTest() : _syncTail(0) {
+        ReplSetTest() /*: SyncTail(0)*/ {
             BSONArrayBuilder members;
             members.append(BSON("_id" << 0 << "host" << "host1"));
             _config = new ReplSetConfig(BSON("_id" << "foo" << "members" << members.arr()));
@@ -70,11 +70,14 @@ namespace ReplSetTests {
         virtual bool buildIndexes() const {
             return true;
         }
+        /*
         void setSyncTail(BackgroundSyncInterface *syncTail) {
             _syncTail = syncTail;
         }
+        */
     };
 
+    /*
     class BackgroundSyncTest : public BackgroundSyncInterface {
         std::queue<BSONObj> _queue;
     public:
@@ -100,14 +103,14 @@ namespace ReplSetTests {
             return;
         }
     };
-
+*/
 
     class Base {
     private:
         static DBDirectClient client_;
     protected:
-        BackgroundSyncTest* _bgsync;
-        SyncTail* _tailer;
+        //BackgroundSyncTest* _bgsync;
+        //SyncTail* _tailer;
     public:
         Base() {
             cmdLine._replSet = "foo";
@@ -116,8 +119,8 @@ namespace ReplSetTests {
             setup();
         }
         ~Base() {
-            delete _bgsync;
-            delete _tailer;
+            //delete _bgsync;
+            //delete _tailer;
         }
 
         static const char *ns() {
@@ -149,14 +152,14 @@ namespace ReplSetTests {
         }
         void setup() {
             // setup background sync instance
-            _bgsync = new BackgroundSyncTest();
+            //_bgsync = new BackgroundSyncTest();
 
             // setup tail
-            _tailer = new SyncTail(_bgsync);
+            //_tailer = new SyncTail(_bgsync);
 
             // setup theReplSet
             ReplSetTest *rst = new ReplSetTest();
-            rst->setSyncTail(_bgsync);
+            //t->setSyncTail(_bgsync);
             delete theReplSet;
             theReplSet = rst;
         }
@@ -331,7 +334,7 @@ namespace ReplSetTests {
                 b.append("ns", ns());
             }
 
-            _bgsync->addDoc(b.done());
+            //_bgsync->addDoc(b.done());
         }
 
         void addInserts(int expected) {
@@ -381,7 +384,7 @@ namespace ReplSetTests {
         }
 
         void applyOplog() {
-            _tailer->oplogApplication();
+            //_tailer->oplogApplication();
         }
     public:
         void run() {

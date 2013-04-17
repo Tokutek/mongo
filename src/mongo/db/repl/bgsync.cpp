@@ -25,16 +25,10 @@ namespace mongo {
     BackgroundSync* BackgroundSync::s_instance = 0;
     boost::mutex BackgroundSync::s_mutex;
 
-    BackgroundSyncInterface::~BackgroundSyncInterface() {}
 
-    size_t getSize(const BSONObj& o) {
-        return o.objsize();
-    }
-
-    BackgroundSync::BackgroundSync() : _buffer(256*1024*1024, &getSize),
-                                       _pause(true),
-                                       _currentSyncTarget(NULL),
-                                       _consumedOpTime(0, 0) {
+    BackgroundSync::BackgroundSync() : _pause(true),
+                                       _currentSyncTarget(NULL)
+    {
     }
 
     BackgroundSync::QueueCounter::QueueCounter() : waitTime(0), numElems(0) {
@@ -55,8 +49,6 @@ namespace mongo {
             counters.appendIntOrLL("waitTimeMs", _queueCounter.waitTime);
             counters.append("numElems", _queueCounter.numElems);
         }
-        // _buffer is protected by its own mutex
-        counters.appendNumber("numBytes", _buffer.size());
         return counters.obj();
     }
 
@@ -107,13 +99,7 @@ namespace mongo {
             return;
         }
 
-        // if this member has an empty oplog, we cannot start syncing
-        if (true /*theReplSet->lastOpTimeWritten.isNull()*/) {
-            sleepsecs(1);
-            return;
-        }
-        // we want to unpause when we're no longer primary
-        else if (_pause) {
+        if (_pause) {
             start();
         }
 
@@ -183,11 +169,6 @@ namespace mongo {
                 BSONObj o = r.nextSafe().getOwned();
 
                 Timer timer;
-                // the blocking queue will wait (forever) until there's room for us to push
-                OCCASIONALLY {
-                    LOG(2) << "bgsync buffer has " << _buffer.size() << " bytes" << rsLog;
-                }
-                _buffer.push(o);
 
                 {
                     boost::unique_lock<boost::mutex> lock(_mutex);
@@ -213,28 +194,6 @@ namespace mongo {
             }
 
             // looping back is ok because this is a tailable cursor
-        }
-    }
-
-    bool BackgroundSync::peek(BSONObj* op) {
-        return _buffer.peek(*op);
-    }
-
-    void BackgroundSync::waitForMore() {
-        BSONObj op;
-        // Block for one second before timing out.
-        // Ignore the value of the op we peeked at.
-        _buffer.blockingPeek(op, 1);
-    }
-
-    void BackgroundSync::consume() {
-        // this is just to get the op off the queue, it's been peeked at 
-        // and queued for application already
-        _buffer.blockingPop();
-
-        {
-            boost::unique_lock<boost::mutex> lock(_mutex);
-            _queueCounter.numElems--;
         }
     }
 
@@ -326,18 +285,9 @@ namespace mongo {
             _currentSyncTarget = NULL;
             _queueCounter.numElems = 0;
         }
-
-        if (!_buffer.empty()) {
-            log() << "replset " << _buffer.size() << " ops were not applied from buffer, this should "
-                  << "cause a rollback on the former primary" << rsLog;
-        }
-
-        // get rid of pending ops
-        _buffer.clear();
     }
 
     void BackgroundSync::start() {
-        massert(16235, "going to start syncing, but buffer is not empty", _buffer.empty());
         boost::unique_lock<boost::mutex> lock(_mutex);
         _pause = false;
    }

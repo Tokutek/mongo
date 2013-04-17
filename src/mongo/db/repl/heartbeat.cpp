@@ -385,7 +385,6 @@ namespace mongo {
         task::repeat(task, 2000);
     }
 
-    void startSyncThread();
 
     /** called during repl set startup.  caller expects it to return fairly quickly.
         note ReplSet object is only created once we get a config - so this won't run
@@ -399,10 +398,6 @@ namespace mongo {
         if (myConfig().arbiterOnly) {
             return;
         }
-
-        // reads from primary oplog and writes to a memory buffer,
-        // 
-        //boost::thread t(startSyncThread);
 
         BackgroundSync* sync = BackgroundSync::get();
         boost::thread producer(boost::bind(&BackgroundSync::producerThread, sync));

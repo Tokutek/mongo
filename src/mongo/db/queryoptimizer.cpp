@@ -772,8 +772,7 @@ doneCheckOrder:
             ( _qps.firstPlan()->utility() != QueryPlan::Impossible ) &&
             !_qps.firstPlan()->indexed() &&
             !_qps.firstPlan()->multikeyFrs().range( "_id" ).universal() ) {
-            if ( cc().isSyncThread() ||
-                str::contains( ns , ".system." ) ||
+            if (str::contains( ns , ".system." ) ||
                 str::startsWith( ns , "local." ) ) {
                 // ok
             }
