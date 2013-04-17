@@ -107,13 +107,7 @@ namespace mongo {
             return;
         }
 
-        // if this member has an empty oplog, we cannot start syncing
-        if (true /*theReplSet->lastOpTimeWritten.isNull()*/) {
-            sleepsecs(1);
-            return;
-        }
-        // we want to unpause when we're no longer primary
-        else if (_pause) {
+        if (_pause) {
             start();
         }
 
@@ -326,18 +320,9 @@ namespace mongo {
             _currentSyncTarget = NULL;
             _queueCounter.numElems = 0;
         }
-
-        if (!_buffer.empty()) {
-            log() << "replset " << _buffer.size() << " ops were not applied from buffer, this should "
-                  << "cause a rollback on the former primary" << rsLog;
-        }
-
-        // get rid of pending ops
-        _buffer.clear();
     }
 
     void BackgroundSync::start() {
-        massert(16235, "going to start syncing, but buffer is not empty", _buffer.empty());
         boost::unique_lock<boost::mutex> lock(_mutex);
         _pause = false;
    }
