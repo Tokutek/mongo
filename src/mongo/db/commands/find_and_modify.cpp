@@ -23,6 +23,7 @@
 #include "../ops/delete.h"
 #include "../ops/update.h"
 #include "../queryutil.h"
+#include "mongo/db/relock.h"
 
 namespace mongo {
 
@@ -41,7 +42,8 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool logTheOp() { return false; } // the modifications will be logged directly
         virtual bool slaveOk() const { return false; }
-        virtual LockType locktype() const { return WRITE; }
+        virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
         
         /* this will eventually replace run,  once sort is handled */
         bool runNoDirectClient( const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
@@ -52,7 +54,7 @@ namespace mongo {
             BSONObj query = cmdObj.getObjectField("query");
             BSONObj fields = cmdObj.getObjectField("fields");
             BSONObj update = cmdObj.getObjectField("update");
-            
+
             bool upsert = cmdObj["upsert"].trueValue();
             bool returnNew = cmdObj["new"].trueValue();
             bool remove = cmdObj["remove"].trueValue();
@@ -71,11 +73,33 @@ namespace mongo {
                 errmsg = "need remove or update";
                 return false;
             }
-            
-            return runNoDirectClient( ns , 
-                                      query , fields , update , 
-                                      upsert , returnNew , remove , 
-                                      result , errmsg );
+
+            try {
+                Client::ReadContext ctx(ns);
+                Client::Transaction txn(DB_SERIALIZABLE);
+
+                bool ok = runNoDirectClient( ns ,
+                                             query , fields , update ,
+                                             upsert , returnNew , remove ,
+                                             result , errmsg );
+                if (ok) {
+                    txn.commit();
+                }
+                return ok;
+            }
+            catch (RetryWithWriteLock &e) {
+                Client::WriteContext ctx(ns);
+                Client::Transaction txn(DB_SERIALIZABLE);
+
+                bool ok = runNoDirectClient( ns ,
+                                             query , fields , update ,
+                                             upsert , returnNew , remove ,
+                                             result , errmsg );
+                if (ok) {
+                    txn.commit();
+                }
+                return ok;
+            }
         }
 
         void _appendHelper( BSONObjBuilder& result , const BSONObj& doc , bool found , const BSONObj& fields ) {
@@ -92,18 +116,12 @@ namespace mongo {
             Projection p;
             p.init( fields );
             result.append( "value" , p.transform( doc ) );
-                
         }
 
-        bool runNoDirectClient( const string& ns , 
-                                const BSONObj& queryOriginal , const BSONObj& fields , const BSONObj& update , 
+        bool runNoDirectClient( const string& ns ,
+                                const BSONObj& queryOriginal , const BSONObj& fields , const BSONObj& update ,
                                 bool upsert , bool returnNew , bool remove ,
                                 BSONObjBuilder& result , string& errmsg ) {
-            
-            
-            Lock::DBWrite lk( ns );
-            Client::Context cx( ns );
-
             BSONObj doc;
             bool found = Helpers::findOne( ns.c_str() , queryOriginal , doc );
 
@@ -112,7 +130,7 @@ namespace mongo {
                 // we're going to re-write the query to be more efficient
                 // we have to be a little careful because of positional operators
                 // maybe we can pass this all through eventually, but right now isn't an easy way
-                
+
                 bool hasPositionalUpdate = false;
                 {
                     // if the update has a positional piece ($)
@@ -122,7 +140,7 @@ namespace mongo {
                     BSONObjIterator i( update );
                     while ( i.more() ) {
                         const BSONElement& elem = i.next();
-                        
+
                         if ( elem.fieldName()[0] != '$' || elem.type() != Object )
                             continue;
 
@@ -138,7 +156,7 @@ namespace mongo {
 
                 BSONObjBuilder b( queryOriginal.objsize() + 10 );
                 b.append( doc["_id"] );
-                
+
                 bool addedAtomic = false;
 
                 BSONObjIterator i( queryOriginal );
@@ -149,12 +167,12 @@ namespace mongo {
                         // we already do _id
                         continue;
                     }
-                    
+
                     if ( ! hasPositionalUpdate ) {
                         // if there is a dotted field, accept we may need more query parts
                         continue;
                     }
-                    
+
                     if ( ! addedAtomic ) {
                         b.appendBool( "$atomic" , true );
                         addedAtomic = true;
@@ -182,13 +200,13 @@ namespace mongo {
                 }
                 else {
                     // we found it or we're updating
-                    
+
                     if ( ! returnNew ) {
                         _appendHelper( result , doc , found , fields );
                     }
-                    
+
                     UpdateResult res = updateObjects( ns.c_str() , update , queryModified , upsert , false , true , cc().curop()->debug() );
-                    
+
                     if ( returnNew ) {
                         if ( res.upserted.isSet() ) {
                             queryModified = BSON( "_id" << res.upserted );
@@ -207,27 +225,103 @@ namespace mongo {
                         }
                         _appendHelper( result , doc , true , fields );
                     }
-                    
+
                     BSONObjBuilder le( result.subobjStart( "lastErrorObject" ) );
                     le.appendBool( "updatedExisting" , res.existing );
                     le.appendNumber( "n" , res.num );
                     if ( res.upserted.isSet() )
                         le.append( "upserted" , res.upserted );
                     le.done();
-                    
                 }
             }
-            
+
             return true;
         }
-        
-        virtual bool run(const string& dbname, BSONObj& cmdObj, int x, string& errmsg, BSONObjBuilder& result, bool y) {
-            static DBDirectClient db;
 
+        virtual bool run(const string& dbname, BSONObj& cmdObj, int x, string& errmsg, BSONObjBuilder& result, bool y) {
             if ( cmdObj["sort"].eoo() )
                 return runNoDirectClient( dbname , cmdObj , x, errmsg , result, y );
 
+            const bool upsert = cmdObj["upsert"].trueValue();
             string ns = dbname + '.' + cmdObj.firstElement().valuestr();
+
+            // If we're going to do it with a DBDirectClient, we'll need a lock and a transaction to tie everything together.
+            // TODO(leif): if we can't do something below in a multi-statement transaction, that'll be bad.  Maybe reimplement if that's a problem.
+            try {
+                Lock::DBRead lk(ns.c_str());
+                Client::Transaction txn(DB_SERIALIZABLE);
+                if (upsert) {
+                    // First, check if the collection exists.
+                    Client::Context ctx(ns);
+                    NamespaceDetails *d = nsdetails(ns.c_str());
+                    if (d == NULL) {
+                        // We know we need to do fileops.  We'd normally fail below because we can't
+                        // do fileops in a multi-statement transaction, and with a DBDirectClient it
+                        // seems like that's what we're doing.  Throw immediately to get to the
+                        // catch block, and we'll create the collection down there first.
+                        throw RetryWithWriteLock();
+                    }
+                }
+                bool ok = runWithDirectClient(dbname, cmdObj, x, errmsg, result, y);
+                if (ok) {
+                    txn.commit();
+                }
+                return ok;
+            }
+            catch (RetryWithWriteLock &e) {
+                Lock::DBWrite lk(ns.c_str());
+                Client::Transaction txn(DB_SERIALIZABLE);
+                bool didCreateNS = false;
+                bool ok = false;
+                if (upsert) {
+                    Client::Context ctx(ns);
+                    NamespaceDetails *d = nsdetails(ns.c_str());
+                    if (d == NULL) {
+                        // If the collection doesn't exist, we need to create it here.  The
+                        // DBDirectClient can't create it as a side effect because it looks like a
+                        // multi-statement transaction, and those can't do fileops.  We also need to
+                        // undo it in the case of an abort or other failure.
+                        NamespaceDetails *d = getAndMaybeCreateNS(ns.c_str(), true);
+                        verify(d != NULL);
+                        didCreateNS = true;
+                    }
+                }
+                try {
+                    ok = runWithDirectClient(dbname, cmdObj, x, errmsg, result, y);
+                }
+                catch (DBException &e) {
+                    if (didCreateNS) {
+                        string err;
+                        BSONObjBuilder b;
+                        dropCollection(ns, err, b, false);
+                        if (err.size()) {
+                            LOG(0) << "error dropping collection on error path for findAndModify: " << err
+                                   << ": " << b.obj() << endl;
+                        }
+                    }
+                    throw e;
+                }
+                if (ok) {
+                    txn.commit();
+                } else {
+                    if (didCreateNS) {
+                        string err;
+                        BSONObjBuilder b;
+                        dropCollection(ns, err, b, false);
+                        if (err.size()) {
+                            LOG(0) << "error dropping collection on error path for findAndModify: " << err
+                                   << ": " << b.obj() << endl;
+                        }
+                    }
+                }
+                return ok;
+            }
+        }
+
+        bool runWithDirectClient(const string &dbname, BSONObj &cmdObj, int x, string &errmsg, BSONObjBuilder &result, bool y) {
+            string ns = dbname + '.' + cmdObj.firstElement().valuestr();
+
+            static DBDirectClient db;
 
             BSONObj origQuery = cmdObj.getObjectField("query"); // defaults to {}
             Query q (origQuery);
@@ -251,6 +345,7 @@ namespace mongo {
             if (out.isEmpty()) {
                 if (!upsert) {
                     result.appendNull("value");
+                    // Nothing to do but that's ok, don't want extra aborts in stats.
                     return true;
                 }
 
