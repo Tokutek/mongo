@@ -40,9 +40,6 @@ namespace mongo {
         // _mutex protects all of the class variables
         boost::mutex _mutex;
 
-        // Production thread
-        BlockingQueue<BSONObj> _buffer;
-
         GTID _lastGTIDFetched;
         // if produce thread should be running
         bool _pause;
@@ -83,12 +80,7 @@ namespace mongo {
         // starts the producer thread
         void producerThread();
 
-        // Interface implementation
-
-        virtual bool peek(BSONObj* op);
-        virtual void consume();
         virtual Member* getSyncTarget();
-        virtual void waitForMore();
 
         // For monitoring
         BSONObj getCounters();

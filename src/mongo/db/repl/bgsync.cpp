@@ -25,12 +25,8 @@ namespace mongo {
     BackgroundSync* BackgroundSync::s_instance = 0;
     boost::mutex BackgroundSync::s_mutex;
 
-    size_t getSize(const BSONObj& o) {
-        return o.objsize();
-    }
 
-    BackgroundSync::BackgroundSync() : _buffer(256*1024*1024, &getSize),
-                                       _pause(true),
+    BackgroundSync::BackgroundSync() : _pause(true),
                                        _currentSyncTarget(NULL)
     {
     }
@@ -53,8 +49,6 @@ namespace mongo {
             counters.appendIntOrLL("waitTimeMs", _queueCounter.waitTime);
             counters.append("numElems", _queueCounter.numElems);
         }
-        // _buffer is protected by its own mutex
-        counters.appendNumber("numBytes", _buffer.size());
         return counters.obj();
     }
 
@@ -175,11 +169,6 @@ namespace mongo {
                 BSONObj o = r.nextSafe().getOwned();
 
                 Timer timer;
-                // the blocking queue will wait (forever) until there's room for us to push
-                OCCASIONALLY {
-                    LOG(2) << "bgsync buffer has " << _buffer.size() << " bytes" << rsLog;
-                }
-                _buffer.push(o);
 
                 {
                     boost::unique_lock<boost::mutex> lock(_mutex);
@@ -205,28 +194,6 @@ namespace mongo {
             }
 
             // looping back is ok because this is a tailable cursor
-        }
-    }
-
-    bool BackgroundSync::peek(BSONObj* op) {
-        return _buffer.peek(*op);
-    }
-
-    void BackgroundSync::waitForMore() {
-        BSONObj op;
-        // Block for one second before timing out.
-        // Ignore the value of the op we peeked at.
-        _buffer.blockingPeek(op, 1);
-    }
-
-    void BackgroundSync::consume() {
-        // this is just to get the op off the queue, it's been peeked at 
-        // and queued for application already
-        _buffer.blockingPop();
-
-        {
-            boost::unique_lock<boost::mutex> lock(_mutex);
-            _queueCounter.numElems--;
         }
     }
 
