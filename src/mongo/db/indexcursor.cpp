@@ -253,17 +253,78 @@ namespace mongo {
             s << toString() << ": failed to acquire prelocked range on " <<
                 prettyIndexBounds() << ", ydb error " << r << ". Try again.";
             uasserted( 16447, s.str() );
+        } else {
+            TOKULOG(3) << "prelocked " << startKey << ", " << endKey << endl;
+        }
+    }
+
+    void IndexCursor::_prelockCompoundBounds(const int currentRange,
+                                             vector<const FieldInterval *> &combo,
+                                             BufBuilder &startKeyBuilder,
+                                             BufBuilder &endKeyBuilder) {
+        const vector<FieldRange> &ranges = _bounds->ranges();
+        if ( currentRange == (int) ranges.size() ) {
+            startKeyBuilder.reset(512);
+            endKeyBuilder.reset(512);
+            BSONObjBuilder startKey(startKeyBuilder);
+            BSONObjBuilder endKey(endKeyBuilder);
+
+            for ( vector<const FieldInterval *>::const_iterator i = combo.begin();
+                  i != combo.end(); i++ ) {
+                startKey.appendAs( (*i)->_lower._bound, "" );
+                endKey.appendAs( (*i)->_upper._bound, "" );
+            }
+            prelockRange( startKey.done(), endKey.done() );
+        } else {
+            const vector<FieldInterval> &intervals = ranges[currentRange].intervals();
+            for ( vector<FieldInterval>::const_iterator i = intervals.begin();
+                  i != intervals.end(); i++ ) {
+                const FieldInterval &interval = *i;
+                combo.push_back( &interval );
+                _prelockCompoundBounds( currentRange + 1, combo, startKeyBuilder, endKeyBuilder );
+                combo.pop_back();
+            }
+        }
+    }
+
+    void IndexCursor::prelockBounds() {
+        BufBuilder startKeyBuilder(512);
+        BufBuilder endKeyBuilder(512);
+
+        const vector<FieldRange> &ranges = _bounds->ranges();
+        const int n = ranges.size();
+        dassert( n == _idx.indexKeyPattern().nFields() );
+        if ( n == 1 ) {
+            // When there's only one field range, we can just prelock each interval.
+            // Single field indexes are common so we handle this case manually for
+            // performance (instead of using the recursive _prelockCompoundBounds())
+            BSONObjBuilder startKey(startKeyBuilder);
+            BSONObjBuilder endKey(endKeyBuilder);
+            const vector<FieldInterval> &intervals = ranges[0].intervals();
+            for ( vector<FieldInterval>::const_iterator i = intervals.begin();
+                  i != intervals.end(); i++ ) {
+                startKey.appendAs( i->_lower._bound, "" );
+                endKey.appendAs( i->_upper._bound, "" );
+                prelockRange( startKey.done(), endKey.done() );
+            }
+        } else {
+            // When there's more than one field range, we need to prelock combinations
+            // of intervals in the compound key space.
+            verify( n > 1 );
+            vector<const FieldInterval *> combo;
+            combo.reserve( n );
+            _prelockCompoundBounds( 0, combo, startKeyBuilder, endKeyBuilder );
         }
     }
 
     void IndexCursor::initializeDBC() {
         // If this is the primary key, don't read passed the max safe key.
-        if (_d->isPKIndex(_idx)) {
+        if ( _d->isPKIndex(_idx) ) {
             const BSONObj safeKey = _d->maxSafeKey();
             _endKey = _endKey <= safeKey ? _endKey : safeKey;
         }
-        if ( _bounds != NULL) {
-            // TODO: Prelock the current interval.
+        if ( _bounds != NULL ) {
+            prelockBounds();
             const int r = skipToNextKey( _startKey );
             if ( r == -1 ) {
                 // The bounds iterator suggests _bounds->startKey() is within
