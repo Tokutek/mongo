@@ -16,11 +16,13 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
-#include "miniwebserver.h"
-#include "../hex.h"
+#include "mongo/pch.h"
 
-#include "pcrecpp.h"
+#include "mongo/util/net/miniwebserver.h"
+
+#include <pcrecpp.h>
+
+#include "mongo/util/hex.h"
 
 namespace mongo {
 

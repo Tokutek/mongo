@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "../../util/concurrency/value.h"
 #include "mongo/db/gtid.h"
+#include "mongo/util/concurrency/value.h"
 
 namespace mongo {
 

@@ -18,7 +18,8 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
+#include "mongo/pch.h"
+
 #include "mongo/db/jsobj.h"
 
 #include <limits>
@@ -40,7 +41,6 @@
 #include "mongo/util/optime.h"
 #include "mongo/util/startup_test.h"
 #include "mongo/util/stringutils.h"
-
 
 // make sure our assumptions are valid
 BOOST_STATIC_ASSERT( sizeof(short) == 2 );

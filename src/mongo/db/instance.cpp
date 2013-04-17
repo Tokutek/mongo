@@ -19,18 +19,18 @@
 
 #include "mongo/pch.h"
 
+#include <boost/filesystem/operations.hpp>
+#include <boost/function.hpp>
+#include <boost/thread/thread.hpp>
 #include <fstream>
-#if !defined(_WIN32)
+#if defined(_WIN32)
+#include <io.h>
+#else
 #include <sys/file.h>
 #endif
 
-#include <boost/function.hpp>
-#include <boost/thread/thread.hpp>
-#include <boost/filesystem/operations.hpp>
-
 #include <db.h>
 
-#include "mongo/util/time_support.h"
 #include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
 

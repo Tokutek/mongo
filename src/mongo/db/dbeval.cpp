@@ -16,17 +16,16 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mongo/pch.h"
+
 #include <time.h>
 
-#include "mongo/pch.h"
 #include "mongo/bson/util/builder.h"
-#include "mongo/db/jsobj.h"
-#include "mongo/db/introspect.h"
-#include "mongo/db/cursor.h"
-#include "mongo/db/json.h"
-#include "mongo/db/repl.h"
-#include "mongo/db/commands.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/introspect.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/json.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/lruishmap.h"
 

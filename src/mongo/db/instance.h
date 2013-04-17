@@ -20,8 +20,6 @@
 
 #pragma once
 
-#include "mongo/pch.h"
-
 #include <boost/function.hpp>
 
 #include "mongo/base/status.h"

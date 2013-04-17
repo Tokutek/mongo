@@ -22,8 +22,8 @@
 #pragma once
 
 #include "mongo/db/jsobj.h"
-#include "mongo/db/queryutil.h"
 #include "mongo/db/projection.h"
+#include "mongo/db/queryutil.h"
 
 namespace mongo {
 
