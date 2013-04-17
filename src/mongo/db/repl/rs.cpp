@@ -482,23 +482,29 @@ namespace mongo {
 
         changeState(MemberState::RS_STARTUP2);
 
-        // if we are the only member of the config, start us up as the primary.
-        // don't depend on threads to startup first.
-        if (theReplSet->config().members.size() == 1 &&
-            theReplSet->myConfig().potentiallyHot() &&
-            !theReplSet->myConfig().arbiterOnly) 
-        {
-            assumePrimary(false);
-        }
-        else {
-            // here, check if we need to do an initial sync
-            // This if-clause will be true if loadGTIDManager finds
-            // nothing in the oplog and initalizes the GTIDManager
-            // with an empty GTID
-            if( gtidManager->getLiveState().isInitial() ) {
-                syncDoInitialSync();
+        if (!theReplSet->myConfig().arbiterOnly) {
+            // if we are the only member of the config, start us up as the primary.
+            // don't depend on threads to startup first.
+            if (theReplSet->config().members.size() == 1 &&
+                theReplSet->myConfig().potentiallyHot()
+                )
+            {
+                assumePrimary(false);
+            }
+            else {
+                // here, check if we need to do an initial sync
+                // This if-clause will be true if loadGTIDManager finds
+                // nothing in the oplog and initalizes the GTIDManager
+                // with an empty GTID
+                if( gtidManager->getLiveState().isInitial() ) {
+                    syncDoInitialSync();
+                }
             }
         }
+
+        // we may need to call tryToGoLiveAsASecondary here
+        // not sure yet
+
         // When we get here,
         // we know either the server is the sole primary in a single node
         // replica set, or it does not require an initial sync

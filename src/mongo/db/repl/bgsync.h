@@ -71,13 +71,6 @@ namespace mongo {
 
         Member* _currentSyncTarget;
 
-        // Notifier thread
-
-        // used to wait until another op has been replicated
-        boost::condition_variable _lastOpCond;
-        boost::mutex _lastOpMutex;
-
-        OpTime _consumedOpTime; // not locked, only used by notifier thread
 
         struct QueueCounter {
             QueueCounter();
@@ -92,7 +85,6 @@ namespace mongo {
 
         // Production thread
         void _producerThread();
-        // Adds elements to the list, up to maxSize.
         void produce();
         // Check if rollback is necessary
         bool isRollbackRequired(OplogReader& r);

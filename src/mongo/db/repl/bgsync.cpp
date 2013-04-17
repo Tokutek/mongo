@@ -33,8 +33,8 @@ namespace mongo {
 
     BackgroundSync::BackgroundSync() : _buffer(256*1024*1024, &getSize),
                                        _pause(true),
-                                       _currentSyncTarget(NULL),
-                                       _consumedOpTime(0, 0) {
+                                       _currentSyncTarget(NULL)
+    {
     }
 
     BackgroundSync::QueueCounter::QueueCounter() : waitTime(0), numElems(0) {
