@@ -307,9 +307,13 @@ else
     mongo_rev=$(git ls-remote http://github.com/Tokutek/mongo.git $mongo | cut -c-7)
 fi
 
-# must have these defined to proceed, ls-remote may return success even if it fails
-test ! -z $ft_index_rev
-test ! -z $mongo_rev
+# maybe they just passed a rev, not a branch or tag
+if [ ! -z $ft_index_rev ] ; then
+    ft_index_rev=$ft_index
+fi
+if [ ! -z $mongo_rev ] ; then
+    mongo_rev=$mongo
+fi
 
 builddir=build-mongodb-${mongo_rev}-tokudb-${ft_index_rev}${suffix}
 if [ ! -d $builddir ] ; then mkdir $builddir; fi
