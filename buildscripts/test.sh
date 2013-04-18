@@ -91,7 +91,7 @@ function test_mongodb() {
         --directory $extracted \
         --file $origdir/$binary_tarball \
         $wildcardopt '*/bin/'
-    for suite in js aggregation #dur parallel perf tool
+    for suite in js #aggregation dur parallel perf tool
     do
         runsuite $extracted $suite
     done
