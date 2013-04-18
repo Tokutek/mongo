@@ -39,6 +39,23 @@ namespace mongo {
 
         // _mutex protects all of the class variables
         boost::mutex _mutex;
+        // condition variable to signal changes in whether
+        // opsync thread  is running. Signals when 
+        // state changes from true -> false
+        boost::condition _opSyncRunningCondVar;
+        // condition variable to signal changes in permission
+        // of opsync thread running. Signals when 
+        // permission changes from false -> true
+        boost::condition _opSyncCanRunCondVar;
+
+        // boolean that states whether we should actively be 
+        // trying to read data from another machine and apply it
+        // to our opLog. When we are a secondary, this should be true.
+        // When we are a primary, this should be false.
+        bool _opSyncShouldRun;
+        // boolean that states if we are in the process of running the opSync
+        // thread.
+        bool _opSyncRunning;
 
         GTID _lastGTIDFetched;
 
@@ -57,8 +74,7 @@ namespace mongo {
 
 
         // Production thread
-        void _producerThread();
-        void produce();
+        uint32_t produce();
         // Check if rollback is necessary
         bool isRollbackRequired(OplogReader& r);
         void getOplogReader(OplogReader& r);
@@ -78,6 +94,13 @@ namespace mongo {
 
         // For monitoring
         BSONObj getCounters();
+
+        // for when we are assuming a primary
+        void stopOpSyncThread();
+
+        // for when we become a secondary
+        void startOpSyncThread();
+
     };
 
 

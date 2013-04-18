@@ -26,7 +26,9 @@ namespace mongo {
     boost::mutex BackgroundSync::s_mutex;
 
 
-    BackgroundSync::BackgroundSync() : _currentSyncTarget(NULL)
+    BackgroundSync::BackgroundSync() : _opSyncShouldRun(false),
+                                            _opSyncRunning(false),
+                                            _currentSyncTarget(NULL)
     {
     }
 
@@ -57,47 +59,66 @@ namespace mongo {
     void BackgroundSync::producerThread() {
         Client::initThread("rsBackgroundSync");
         replLocalAuth();
+        uint32_t timeToSleep = 0;
 
         while (!inShutdown()) {
+            if (timeToSleep) {
+                {
+                    boost::unique_lock<boost::mutex> lck(_mutex);
+                    _opSyncRunning = false;
+                    // notify other threads that we are not running
+                    _opSyncRunningCondVar.notify_all();
+                }
+                sleepsecs(timeToSleep);
+                timeToSleep = 0;
+            }
+            {
+                boost::unique_lock<boost::mutex> lck(_mutex);
+                _opSyncRunning = false;
+
+                while (!_opSyncShouldRun) {
+                    // notify other threads that we are not running
+                    _opSyncRunningCondVar.notify_all();
+                    // wait for permission that we can run
+                    _opSyncCanRunCondVar.wait(lck);
+                    // notify other threads that we are running
+                    _opSyncRunningCondVar.notify_all();
+                }
+
+                _opSyncRunning = true;
+            }
+
+
             if (!theReplSet) {
                 log() << "replSet warning did not receive a valid config yet, sleeping 20 seconds " << rsLog;
-                sleepsecs(20);
+                timeToSleep = 20;
                 continue;
             }
 
             try {
-                _producerThread();
+                MemberState state = theReplSet->state();
+                if (state.fatal() || state.startup()) {
+                    timeToSleep = 5;
+                    continue;
+                }
+
+                produce();
             }
             catch (DBException& e) {
                 sethbmsg(str::stream() << "db exception in producer: " << e.toString());
-                sleepsecs(10);
+                timeToSleep = 10;
             }
             catch (std::exception& e2) {
                 sethbmsg(str::stream() << "exception in producer: " << e2.what());
-                sleepsecs(60);
+                timeToSleep = 60;
             }
         }
 
         cc().shutdown();
     }
 
-    void BackgroundSync::_producerThread() {
-        MemberState state = theReplSet->state();
-
-        if (state.primary()) {
-            sleepsecs(1);
-            return;
-        }
-
-        if (state.fatal() || state.startup()) {
-            sleepsecs(5);
-            return;
-        }
-
-        produce();
-    }
-
-    void BackgroundSync::produce() {
+    // returns number of seconds to sleep, if any
+    uint32_t BackgroundSync::produce() {
         // this oplog reader does not do a handshake because we don't want the server it's syncing
         // from to track how far it has synced
         OplogReader r(false /* doHandshake */);
@@ -111,9 +132,8 @@ namespace mongo {
 
             if (_currentSyncTarget == NULL) {
                 lock.unlock();
-                sleepsecs(1);
                 // if there is no one to sync from
-                return;
+                return 1; //sleep one second
             }
             r.tailingQueryGTE(rsoplog, _lastGTIDFetched);
         }
@@ -121,11 +141,11 @@ namespace mongo {
         // if target cut connections between connecting and querying (for
         // example, because it stepped down) we might not have a cursor
         if (!r.haveCursor()) {
-            return;
+            return 0;
         }
 
         if (isRollbackRequired(r)) {
-            return;
+            return 0;
         }
 
         while (!inShutdown()) {
@@ -136,20 +156,20 @@ namespace mongo {
                     // we can restart the act of syncing and
                     // do so from the correct target
                     if (theReplSet->gotForceSync()) {
-                        return;
+                        return 0;
                     }
 
                     // if we are the primary, get out
                     // TODO: this should not be checked here
                     // if we get here and are the primary, something went wrong
                     if (theReplSet->isPrimary()) {
-                        return;
+                        return 0;
                     }
 
                     {
                         boost::unique_lock<boost::mutex> lock(_mutex);
                         if (!_currentSyncTarget || !_currentSyncTarget->hbinfo().hbstate.readable()) {
-                            return;
+                            return 0;
                         }
                     }
 
@@ -178,7 +198,7 @@ namespace mongo {
             {
                 boost::unique_lock<boost::mutex> lock(_mutex);
                 if (!_currentSyncTarget || !_currentSyncTarget->hbinfo().hbstate.readable()) {
-                    return;
+                    return 0;
                 }
             }
 
@@ -186,11 +206,12 @@ namespace mongo {
             r.tailCheck();
             if( !r.haveCursor() ) {
                 LOG(1) << "replSet end syncTail pass" << rsLog;
-                return;
+                return 0;
             }
 
             // looping back is ok because this is a tailable cursor
         }
+        return 0;
     }
 
     bool BackgroundSync::isStale(OplogReader& r, BSONObj& remoteOldestOp) {
@@ -259,6 +280,22 @@ namespace mongo {
     Member* BackgroundSync::getSyncTarget() {
         boost::unique_lock<boost::mutex> lock(_mutex);
         return _currentSyncTarget;
+    }
+
+    void BackgroundSync::stopOpSyncThread() {
+        boost::unique_lock<boost::mutex> lock(_mutex);
+        _opSyncShouldRun = false;
+        while (_opSyncRunning) {
+            _opSyncRunningCondVar.wait(lock);
+        }
+        // sanity check that no one has changed this variable
+        verify(!_opSyncShouldRun);
+    }
+
+    void BackgroundSync::startOpSyncThread() {
+        boost::unique_lock<boost::mutex> lock(_mutex);
+        _opSyncShouldRun = true;
+        _opSyncCanRunCondVar.notify_all();
     }
 
 } // namespace mongo
