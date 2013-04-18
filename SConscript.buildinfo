@@ -38,7 +38,10 @@ def generate_buildinfo(env, target, source, **kw):
         git_version = buildscripts.utils.getGitVersion()
     if env["MONGO_MODULES"]:
         git_version += " modules: %s" % (", ".join(env["MONGO_MODULES"].keys()))
-    tokudb_version = buildscripts.utils.getTokudbVersion(env['TOKUDB_PATH'])
+    if 'FORCETOKUVERSION' in env:
+        tokudb_version = env['FORCETOKUVERSION']
+    else:
+        tokudb_version = buildscripts.utils.getTokudbVersion(env['TOKUDB_PATH'])
 
     contents = str(source[0]) % dict(git_version=git_version,
                                      tokudb_version=tokudb_version,

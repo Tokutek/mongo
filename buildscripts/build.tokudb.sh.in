@@ -5,6 +5,7 @@ cc=@cc@
 cxx=@cxx@
 debugbuild=@debugbuild@
 force_git_version=@force_git_version@
+force_toku_version=@force_toku_version@
 
 mongodbsrc=@mongodbsrc@
 tokufractaltreesrc=@tokufractaltreesrc@
@@ -58,6 +59,7 @@ pushd $mongodbsrc
         $build_type_options \
         $allocator_option \
         --force-git-version=$force_git_version \
+        --force-toku-version=$force_toku_version \
         -j$makejobs --mute \
         --cc=$cc --cxx=$cxx \
         dist
