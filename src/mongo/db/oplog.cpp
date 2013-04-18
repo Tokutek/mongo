@@ -196,6 +196,21 @@ namespace mongo {
         rsOplogDetails->insertObject(entry, flags);
     }
 
+    void replicateTransactionToOplog(BSONObj& op) {
+        GTID currEntry = getGTIDFromOplogEntry(op);        
+        Lock::DBRead lk(rsoplog);
+
+        // try inserting it into the oplog, if it does not
+        // already exist
+        if (!gtidExistsInOplog(currEntry)) {
+            // set the applied bool to false, to let the oplog know that
+            // this entry has not been applied to collections
+            BSONElementManipulator(op["a"]).setBool(false);
+            // write it to oplog
+            writeEntryToOplog(op);
+        }
+    }
+
     // takes an entry that was written _logTransactionOps
     // and applies them to collections
     void applyTransactionFromOplog(BSONObj entry) {
