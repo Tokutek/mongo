@@ -237,6 +237,13 @@ namespace mongo {
         return ret;
     }
 
+    void GTIDManager::getLiveGTIDs(GTID* lastLiveGTID, GTID* lastUnappliedGTID) {
+        _lock.lock();
+        *lastLiveGTID = _lastLiveGTID;
+        *lastUnappliedGTID = _lastUnappliedGTID;
+        _lock.unlock();
+    }
+
     uint64_t GTIDManager::getCurrTimestamp() {
         _lock.lock();
         uint64_t ret = _lastTimestamp;

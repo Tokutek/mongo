@@ -85,6 +85,9 @@ namespace mongo {
         static void shutdown();
         virtual ~BackgroundSync() {}
 
+        void applierThread();
+        void applyOpsFromOplog();
+
         // starts the producer thread
         void producerThread();
 

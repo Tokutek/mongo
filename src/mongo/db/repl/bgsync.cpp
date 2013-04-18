@@ -56,6 +56,41 @@ namespace mongo {
     void BackgroundSync::shutdown() {
     }
 
+    void BackgroundSync::applierThread() {
+        Client::initThread("applier");
+        replLocalAuth();
+
+        cc().shutdown();
+    }
+
+    void BackgroundSync::applyOpsFromOplog() {
+        GTID lastLiveGTID;
+        GTID lastUnappliedGTID;
+        while (1) {
+            theReplSet->gtidManager->getLiveGTIDs(
+                &lastLiveGTID, 
+                &lastUnappliedGTID
+                );
+            BSONObjBuilder query;
+            addGTIDToBSON("$gt", lastUnappliedGTID, query);
+            shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(
+                rsoplog, 
+                query.done()
+                );
+
+            while( c->ok() ) {
+                if (c->currentMatches()) {
+                    BSONObj curr = c->current();
+                    GTID currEntry = getGTIDFromOplogEntry(curr);
+                    theReplSet->gtidManager->noteApplyingGTID(currEntry);
+                    applyTransactionFromOplog(curr);
+                    theReplSet->gtidManager->noteGTIDApplied(currEntry);
+                }
+                c->advance();
+            }
+        }
+    }
+    
     void BackgroundSync::producerThread() {
         Client::initThread("rsBackgroundSync");
         replLocalAuth();
@@ -184,6 +219,8 @@ namespace mongo {
                 BSONObj o = r.nextSafe().getOwned();
                 Timer timer;
                 replicateTransactionToOplog(o);
+                GTID currEntry = getGTIDFromOplogEntry(o);
+                theReplSet->gtidManager->noteGTIDAdded(currEntry);
                 {
                     boost::unique_lock<boost::mutex> lock(_mutex);
                     // update counters
@@ -202,7 +239,7 @@ namespace mongo {
 
             r.tailCheck();
             if( !r.haveCursor() ) {
-                LOG(1) << "replSet end syncTail pass" << rsLog;
+                LOG(1) << "replSet end opSync pass" << rsLog;
                 return 0;
             }
 

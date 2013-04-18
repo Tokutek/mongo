@@ -197,7 +197,7 @@ namespace mongo {
     }
 
     void replicateTransactionToOplog(BSONObj& op) {
-        GTID currEntry = getGTIDFromOplogEntry(op);        
+        GTID currEntry = getGTIDFromOplogEntry(op);
         Lock::DBRead lk(rsoplog);
 
         // try inserting it into the oplog, if it does not
