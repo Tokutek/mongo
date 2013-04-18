@@ -133,7 +133,9 @@ namespace mongo {
             if (r == TOKUDB_HUGE_PAGES_ENABLED) {
                 LOG(LL_ERROR) << "Huge pages are enabled, please disable them to continue (echo never > /sys/kernel/mm/transparent_hugepages/enabled)" << endl;
             }
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
 
             env->set_errcall(env, tokudb_print_error);
             env->set_errpfx(env, "TokuDB");
@@ -144,43 +146,58 @@ namespace mongo {
             const uint32_t bytes = cachesize % (1024L * 1024L * 1024L);
             const uint32_t gigabytes = cachesize >> 30;
             r = env->set_cachesize(env, gigabytes, bytes, 1);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
             TOKULOG(1) << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
 
             // Use 10% the size of the cachetable for lock tree memory
             const int32_t lock_memory = cachesize / 10;
             r = env->set_lk_max_memory(env, lock_memory);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
             tokulog() << "locktree max memory set to " << lock_memory << " bytes." << endl;
 
             const uint64_t lock_timeout = cmdLine.lockTimeout;
             r = env->set_lock_timeout(env, lock_timeout);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
             TOKULOG(1) << "lock timeout set to " << lock_timeout << " milliseconds." << endl;
 
             r = env->set_default_bt_compare(env, dbt_key_compare);
-            verify(r == 0);
-
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
             env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
 
             const int env_flags = DB_INIT_LOCK|DB_INIT_MPOOL|DB_INIT_TXN|DB_CREATE|DB_PRIVATE|DB_INIT_LOG|DB_RECOVER;
             const int env_mode = S_IRWXU|S_IRGRP|S_IROTH|S_IXGRP|S_IXOTH;
             r = env->open(env, dbpath.c_str(), env_flags, env_mode);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
 
             const int checkpoint_period = cmdLine.checkpointPeriod;
             r = env->checkpointing_set_period(env, checkpoint_period);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
             TOKULOG(1) << "checkpoint period set to " << checkpoint_period << " seconds." << endl;
 
             const int cleaner_period = cmdLine.cleanerPeriod;
             r = env->cleaner_set_period(env, cleaner_period);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
             TOKULOG(1) << "cleaner period set to " << cleaner_period << " seconds." << endl;
 
             const int cleaner_iterations = cmdLine.cleanerIterations;
             r = env->cleaner_set_iterations(env, cleaner_iterations);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
             TOKULOG(1) << "cleaner iterations set to " << cleaner_iterations << "." << endl;
         }
 
@@ -190,9 +207,8 @@ namespace mongo {
             if (env != NULL) {
                 int r = env->close(env, 0);
                 if (r != 0) {
-                    tokulog() << "error closing env: " << r << endl;
+                    handle_ydb_error_fatal(r);
                 }
-                verify(r == 0);
             }
         }
 
@@ -203,7 +219,9 @@ namespace mongo {
             DBT dbt = make_dbt((const char *) &ordering, sizeof(Ordering));
             const int flags = DB_UPDATE_CMP_DESCRIPTOR;
             int r = db->change_descriptor(db, txn, &dbt, flags);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
             TOKULOG(1) << "set db " << db << " descriptor to key pattern: " << key_pattern << endl;
         }
 
@@ -249,14 +267,24 @@ namespace mongo {
 
             DB *db;
             int r = db_create(&db, env, 0);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
 
             r = db->set_readpagesize(db, readPageSize);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
+
             r = db->set_pagesize(db, pageSize);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
+
             r = db->set_compression_method(db, compression);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
 
             const int db_flags = may_create ? DB_CREATE : 0;
             DB_TXN *txn = NULL;
@@ -268,7 +296,9 @@ namespace mongo {
                 verify(!may_create);
                 goto exit;
             }
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
 
             set_db_descriptor(db, txn, key_pattern);
             *dbp = db;
@@ -278,7 +308,9 @@ namespace mongo {
 
         void db_close(DB *db) {
             int r = db->close(db, 0);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
         }
 
         void db_remove(const string &name) {
@@ -286,7 +318,9 @@ namespace mongo {
             if (r == ENOENT) {
                 uasserted(16444, "TODO: dbremove bug, should crash but won't right now");
             }
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
         }
 
         void db_rename(const string &oldIdxNS, const string &newIdxNS) {
@@ -305,10 +339,14 @@ namespace mongo {
             fs_redzone_state redzone_state;
 
             int r = storage::env->get_engine_status_num_rows(storage::env, &max_rows);
-            verify( r == 0 );
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
             TOKU_ENGINE_STATUS_ROW_S mystat[max_rows];
             r = env->get_engine_status(env, mystat, max_rows, &num_rows, &redzone_state, &panic, panic_string, panic_string_len, TOKU_ENGINE_STATUS);
-            verify( r == 0 );
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
             status.append( "panic code", (long long) panic );
             status.append( "panic string", panic_string );
             switch (redzone_state) {
@@ -370,7 +408,9 @@ namespace mongo {
         void log_flush() {
             int r = 0;
             r = env->log_flush(env, NULL);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
         }
 
         void set_log_flush_interval(uint32_t period_ms) {
@@ -378,23 +418,100 @@ namespace mongo {
             env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
             TOKULOG(1) << "fsync log period set to " << period_ms << " milliseconds." << endl;
         }
+
         void set_checkpoint_period(uint32_t period_seconds) {
             cmdLine.checkpointPeriod = period_seconds;
             int r = env->checkpointing_set_period(env, period_seconds);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
             TOKULOG(1) << "checkpoint period set to " << period_seconds << " seconds." << endl;
         }
+
         void set_cleaner_period(uint32_t period_seconds) {
             cmdLine.cleanerPeriod = period_seconds;
             int r = env->cleaner_set_period(env, period_seconds);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
             TOKULOG(1) << "cleaner period set to " << period_seconds << " seconds." << endl;
         }
+
         void set_cleaner_iterations(uint32_t num_iterations) {
             cmdLine.cleanerPeriod = num_iterations;
             int r = env->cleaner_set_iterations(env, num_iterations);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
             TOKULOG(1) << "cleaner iterations set to " << num_iterations << "." << endl;
+        }
+
+        static void _handle_ydb_error(int error, bool fatal) {
+#define _do_assert(_how, _code, _message)          \
+            do {                                   \
+               if (!fatal) {                       \
+                   _how(_code, _message);          \
+               } else {                            \
+                   problem() << "fatal error "     \
+                             << _code << ": "      \
+                             << _message << endl;  \
+                   verify(error == 0);             \
+               }                                   \
+            } while (0)
+
+            if (error > 0) {
+                msgasserted(16770, str::stream() << "Got generic error "
+                                   << error << " (" << strerror(error) << ")"
+                                   << " from the ydb layer. You may have hit a bug."
+                                   << " Check the error log for more details.");
+            }
+            switch (error) {
+                case DB_LOCK_NOTGRANTED:
+                    //uasserted(16759, "Lock not granted. Try restarting the transaction.");
+                    _do_assert(uasserted, 16759,
+                               "Lock not granted. Try restarting the transaction.");
+                case DB_LOCK_DEADLOCK:
+                    _do_assert(uasserted, 16760,
+                               "Deadlock detected during lock acquisition. Try restarting the transaction.");
+                case DB_KEYEXIST:
+                    _do_assert(uasserted, 16769,
+                               "Duplicate key error.");
+                case DB_NOTFOUND:
+                    _do_assert(uasserted, 16761,
+                               "Index key not found.");
+                case DB_RUNRECOVERY:
+                    _do_assert(msgasserted, 16762,
+                               "Automatic environment recovery failed. There may be data corruption.");
+                case DB_BADFORMAT:
+                    _do_assert(msgasserted, 16763,
+                               "File-format error when reading dictionary from disk. There may be data corruption.");
+                case TOKUDB_BAD_CHECKSUM:
+                    _do_assert(msgasserted, 16764,
+                               "Checksum mismatch when reading dictionary from disk. There may be data corruption.");
+                case TOKUDB_NEEDS_REPAIR:
+                    _do_assert(msgasserted, 16765,
+                               "Repair requested when reading dictionary from disk. There may be data corruption.");
+                case TOKUDB_DICTIONARY_NO_HEADER:
+                    _do_assert(msgasserted, 16766,
+                               "No header found when reading dictionary from disk. There may be data corruption.");
+                case TOKUDB_MVCC_DICTIONARY_TOO_NEW:
+                    _do_assert(msgasserted, 16768,
+                               "Accessed dictionary created after this transaction began. Try restarting the transaction.");
+                default: 
+                {
+                    string s = str::stream() << "Unhandled ydb error: " << error;
+                    _do_assert(msgasserted, 16767, s);
+                }
+            }
+#undef _do_assert
+        }
+
+        void handle_ydb_error(int error) {
+            _handle_ydb_error(error, false);
+        }
+
+        void handle_ydb_error_fatal(int error) {
+            _handle_ydb_error(error, true);
         }
     
     } // namespace storage
