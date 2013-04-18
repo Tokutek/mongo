@@ -15,6 +15,8 @@
 */
 
 #include "mongo/pch.h"
+
+#include "mongo/db/storage/env.h"
 #include "mongo/db/storage/cursor.h"
 
 namespace mongo {
@@ -24,19 +26,18 @@ namespace mongo {
         Cursor::Cursor(DB *db, const int flags) : _dbc(NULL) {
             if (db != NULL) {
                 int r = db->cursor(db, cc().txn().db_txn(), &_dbc, flags);
-                // until #6424 is fixed, this may cause really bad behavior by sending an exception through ydb code
-                uassert(16755,
-                        "Dictionary trying to be read was created after the transaction began. "
-                        "Try restarting tranasaction.",
-                        r != TOKUDB_MVCC_DICTIONARY_TOO_NEW);
-                verify(r == 0 && _dbc != NULL);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                }
             }
         }
 
         Cursor::~Cursor() {
             if (_dbc != NULL) {
                 int r = _dbc->c_close(_dbc);
-                verify(r == 0);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                }
             }
         }
 

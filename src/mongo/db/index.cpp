@@ -44,7 +44,9 @@ namespace mongo {
         TOKULOG(1) << "Opening IndexDetails " << dbname << endl;
         // Open the dictionary. Creates it if necessary.
         int r = storage::db_open(&_db, dbname, info, may_create);
-        verify(r == 0);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
         if (may_create) {
             addNewNamespaceToCatalog(dbname);
         }
@@ -153,10 +155,9 @@ namespace mongo {
         bool isUnique = true;
         UniqueCheckExtra extra(*this, key, isUnique);
         int r = cursor->c_getf_set_range(cursor, 0, &kdbt, mongo::uniqueCheckCallback, &extra);
-        verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
-        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
-        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
-
+        if (r != 0 && r != DB_NOTFOUND) {
+            storage::handle_ydb_error(r);
+        }
         uassert(ASSERT_ID_DUPKEY, mongoutils::str::stream() << "E11000 duplicate key error, " << key << " already exists in unique index", isUnique);
     }
 
@@ -175,9 +176,9 @@ namespace mongo {
         // We already did the unique check above. We can just pass flags of zero.
         const int put_flags = (flags & ND_LOCK_TREE_OFF) ? DB_PRELOCKED_WRITE : 0;
         int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, put_flags);
-        verify(r == 0 || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
-        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
-        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
         TOKULOG(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
     }
 
@@ -187,30 +188,43 @@ namespace mongo {
 
         const int flags = DB_DELETE_ANY;
         int r = _db->del(_db, cc().txn().db_txn(), &kdbt, flags);
-        verify(r == 0); // TODO: Lock not granted, deadlock?
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
     }
 
     enum toku_compression_method IndexDetails::getCompressionMethod() const {
         enum toku_compression_method ret;
         int r = _db->get_compression_method(_db, &ret);
-        verify(r == 0);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
         return ret;
     }
+
     uint32_t IndexDetails::getPageSize() const {
         uint32_t ret;
         int r = _db->get_pagesize(_db, &ret);
-        verify(r == 0);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
         return ret;
     }
+
     uint32_t IndexDetails::getReadPageSize() const {
         uint32_t ret;
         int r = _db->get_readpagesize(_db, &ret);
-        verify(r == 0);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
         return ret;
     }
+
     void IndexDetails::getStat64(DB_BTREE_STAT64* stats) const {
         int r = _db->stat64(_db, NULL, stats);
-        verify(r == 0);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
     }
 
     static int hot_opt_callback(void *extra, float progress) {
@@ -228,11 +242,13 @@ namespace mongo {
     }
 
     void IndexDetails::optimize() {        
-        int error = _db->optimize(_db);
-        verify(error == 0);
+        int r = _db->optimize(_db);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
         uint64_t iter = 0;
-        error = _db->hot_optimize(_db, hot_opt_callback, &iter);
-        if (error) {
+        r = _db->hot_optimize(_db, hot_opt_callback, &iter);
+        if (r != 0) {
             uassert(16450, mongoutils::str::stream() << "reIndex query killed ", false);
         }
     }
@@ -245,10 +261,7 @@ namespace mongo {
     void IndexSpec::reset( const BSONObj& _info ) {
         info = _info;
         keyPattern = info["key"].Obj();
-        if ( keyPattern.objsize() == 0 ) {
-            out() << info.toString() << endl;
-            verify(false);
-        }
+        verify( keyPattern.objsize() != 0 );
         _init();
     }
 

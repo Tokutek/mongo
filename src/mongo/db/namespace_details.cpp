@@ -221,7 +221,9 @@ namespace mongo {
                 BSONObj key = BSONObj();
                 struct getfExtra extra(key);
                 r = cursor->c_getf_last(cursor, 0, getfCallback, &extra);
-                verify(r == 0 || r == DB_NOTFOUND);
+                if (r != 0 && r != DB_NOTFOUND) {
+                    storage::handle_ydb_error(r);
+                }
                 if (!key.isEmpty()) {
                     dassert(key.nFields() == 1);
                     _nextPK = AtomicWord<long long>(key.firstElement().Long() + 1);
@@ -730,12 +732,14 @@ namespace mongo {
 
         TOKULOG(3) << "NamespaceDetails::findByPK looking for " << key << endl;
 
+        // TODO: Use db->getf_set which does less malloc and free.
         // Try to find it.
         BSONObj obj = BSONObj();
         struct findByPKCallbackExtra extra(obj);
-        // TODO: Use db->getf_set which does less malloc and free.
         r = cursor->c_getf_set(cursor, 0, &key_dbt, findByPKCallback, &extra);
-        verify(r == 0 || r == DB_NOTFOUND);
+        if (r != 0 && r != DB_NOTFOUND) {
+            storage::handle_ydb_error(r);
+        }
 
         if (!obj.isEmpty()) {
             result = obj;

@@ -76,11 +76,13 @@ def getTokudbVersion(tokudb_path):
 
     f = open(config_h, 'r')
     try:
-        pattern = re.compile('#define\s+TOKUDB_REVISION\s+([0-9]+)$')
+        pattern = re.compile('#define\s+TOKUDB_REVISION\s+0x([a-f0-9]+)$')
         for line in f:
             m = pattern.match(line.strip())
             if m is not None:
                 return m.group(1)
+        else:
+            return "notokudbversion"
     finally:
         f.close()
 
