@@ -124,7 +124,7 @@ function build_fractal_tree() {
             eval $cmake_env cmake \
                 -D LIBTOKUDB=$tokufractaltree \
                 -D LIBTOKUPORTABILITY=$tokuportability \
-                -D CMAKE_TOKUDB_REVISION=0 \
+                -D CMAKE_TOKUDB_REVISION=0x$ft_index_rev \
                 -D CMAKE_BUILD_TYPE=$build_type \
                 -D CMAKE_INSTALL_PREFIX=$rootdir/$tokufractaltreedir \
                 -D JEMALLOC_SOURCE_DIR=../third_party/jemalloc \
@@ -308,10 +308,10 @@ else
 fi
 
 # maybe they just passed a rev, not a branch or tag
-if [ ! -z $ft_index_rev ] ; then
+if [ -z $ft_index_rev ] ; then
     ft_index_rev=$ft_index
 fi
-if [ ! -z $mongo_rev ] ; then
+if [ -z $mongo_rev ] ; then
     mongo_rev=$mongo
 fi
 
