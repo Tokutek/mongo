@@ -249,12 +249,7 @@ namespace mongo {
         DBC *cursor = _cursor.dbc();
         const int r = cursor->c_pre_acquire_range_lock( cursor, &start, &end );
         if ( r != 0 ) {
-            StringBuilder s;
-            s << toString() << ": failed to acquire prelocked range on " <<
-                prettyIndexBounds() << ", ydb error " << r << ". Try again.";
-            uasserted( 16447, s.str() );
-        } else {
-            TOKULOG(3) << "prelocked " << startKey << ", " << endKey << endl;
+            storage::handle_ydb_error(r);
         }
     }
 
@@ -419,14 +414,14 @@ namespace mongo {
         const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
         DBC *cursor = _cursor.dbc();
-        if (_direction > 0) {
+        if ( _direction > 0 ) {
             r = cursor->c_getf_set_range(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         } else {
             r = cursor->c_getf_set_range_reverse(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         }
-        verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
-        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
-        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
+        if ( r != 0 && r != DB_NOTFOUND ) {
+            storage::handle_ydb_error(r);
+        }
 
         _getf_iteration++;
         _ok = extra.rows_fetched > 0 ? true : false;
@@ -616,17 +611,16 @@ again:      while ( !allInclusive && ok() ) {
         const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
         DBC *cursor = _cursor.dbc();
-        if (_direction > 0) {
+        if ( _direction > 0 ) {
             r = cursor->c_getf_next(cursor, getf_flags(), cursor_getf, &extra);
         } else {
             r = cursor->c_getf_prev(cursor, getf_flags(), cursor_getf, &extra);
         }
+        if ( r != 0 && r != DB_NOTFOUND ) {
+            storage::handle_ydb_error(r);
+        }
 
         _getf_iteration++;
-        verify(r == 0 || r == DB_NOTFOUND || r == DB_LOCK_NOTGRANTED || r == DB_LOCK_DEADLOCK);
-        uassert(ASSERT_ID_LOCK_NOTGRANTED, "tokudb lock not granted", r != DB_LOCK_NOTGRANTED);
-        uassert(ASSERT_ID_LOCK_DEADLOCK, "tokudb deadlock", r != DB_LOCK_DEADLOCK);
-
         return extra.rows_fetched > 0 ? true : false;
     }
 
