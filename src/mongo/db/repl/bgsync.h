@@ -40,12 +40,10 @@ namespace mongo {
         // _mutex protects all of the class variables
         boost::mutex _mutex;
         // condition variable to signal changes in whether
-        // opsync thread  is running. Signals when 
-        // state changes from true -> false
+        // opsync thread  is running.
         boost::condition _opSyncRunningCondVar;
         // condition variable to signal changes in permission
-        // of opsync thread running. Signals when 
-        // permission changes from false -> true
+        // of opsync thread running.
         boost::condition _opSyncCanRunCondVar;
 
         // boolean that states whether we should actively be 

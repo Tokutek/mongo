@@ -88,7 +88,6 @@ namespace mongo {
                 _opSyncRunning = true;
             }
 
-
             if (!theReplSet) {
                 log() << "replSet warning did not receive a valid config yet, sleeping 20 seconds " << rsLog;
                 timeToSleep = 20;
@@ -296,6 +295,11 @@ namespace mongo {
         boost::unique_lock<boost::mutex> lock(_mutex);
         _opSyncShouldRun = true;
         _opSyncCanRunCondVar.notify_all();
+        while (!_opSyncRunning) {
+            _opSyncRunningCondVar.wait(lock);
+        }
+        // sanity check that no one has changed this variable
+        verify(_opSyncShouldRun);
     }
 
 } // namespace mongo
