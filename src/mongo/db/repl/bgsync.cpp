@@ -26,8 +26,7 @@ namespace mongo {
     boost::mutex BackgroundSync::s_mutex;
 
 
-    BackgroundSync::BackgroundSync() : _pause(true),
-                                       _currentSyncTarget(NULL)
+    BackgroundSync::BackgroundSync() : _currentSyncTarget(NULL)
     {
     }
 
@@ -85,11 +84,7 @@ namespace mongo {
     void BackgroundSync::_producerThread() {
         MemberState state = theReplSet->state();
 
-        // we want to pause when the state changes to primary
         if (state.primary()) {
-            if (!_pause) {
-                stop();
-            }
             sleepsecs(1);
             return;
         }
@@ -97,10 +92,6 @@ namespace mongo {
         if (state.fatal() || state.startup()) {
             sleepsecs(5);
             return;
-        }
-
-        if (_pause) {
-            start();
         }
 
         produce();
@@ -124,7 +115,6 @@ namespace mongo {
                 // if there is no one to sync from
                 return;
             }
-            ::abort();
             r.tailingQueryGTE(rsoplog, _lastGTIDFetched);
         }
 
@@ -135,17 +125,23 @@ namespace mongo {
         }
 
         if (isRollbackRequired(r)) {
-            stop();
             return;
         }
 
         while (!inShutdown()) {
             while (!inShutdown()) {
                 if (!r.moreInCurrentBatch()) {
+                    // check to see if we have a request to sync
+                    // from a specific target. If so, get out so that
+                    // we can restart the act of syncing and
+                    // do so from the correct target
                     if (theReplSet->gotForceSync()) {
                         return;
                     }
 
+                    // if we are the primary, get out
+                    // TODO: this should not be checked here
+                    // if we get here and are the primary, something went wrong
                     if (theReplSet->isPrimary()) {
                         return;
                     }
@@ -181,7 +177,7 @@ namespace mongo {
 
             {
                 boost::unique_lock<boost::mutex> lock(_mutex);
-                if (_pause || !_currentSyncTarget || !_currentSyncTarget->hbinfo().hbstate.readable()) {
+                if (!_currentSyncTarget || !_currentSyncTarget->hbinfo().hbstate.readable()) {
                     return;
                 }
             }
@@ -214,19 +210,7 @@ namespace mongo {
         Member *target = NULL, *stale = NULL;
         BSONObj oldest;
 
-        // TODO: What if we're initial syncing and we're still waiting for this to be set
-        /*
-        {
-            boost::unique_lock<boost::mutex> lock(_mutex);
-            if (_lastOpTimeFetched.isNull()) {
-                _currentSyncTarget = NULL;
-                return;
-            }
-        }
-        */
-
         verify(r.conn() == NULL);
-
         while ((target = theReplSet->getMemberToSyncTo()) != NULL) {
             string current = target->fullName();
 
@@ -277,18 +261,4 @@ namespace mongo {
         return _currentSyncTarget;
     }
 
-    void BackgroundSync::stop() {
-        {
-            boost::unique_lock<boost::mutex> lock(_mutex);
-
-            _pause = true;
-            _currentSyncTarget = NULL;
-            _queueCounter.numElems = 0;
-        }
-    }
-
-    void BackgroundSync::start() {
-        boost::unique_lock<boost::mutex> lock(_mutex);
-        _pause = false;
-   }
 } // namespace mongo

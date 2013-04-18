@@ -41,8 +41,6 @@ namespace mongo {
         boost::mutex _mutex;
 
         GTID _lastGTIDFetched;
-        // if produce thread should be running
-        bool _pause;
 
         Member* _currentSyncTarget;
 
@@ -66,10 +64,6 @@ namespace mongo {
         void getOplogReader(OplogReader& r);
         // check latest GTID against the remote's earliest GTID, filling in remoteOldestOp.
         bool isStale(OplogReader& r, BSONObj& remoteOldestOp);
-        // stop syncing when this becomes a primary
-        void stop();
-        // restart syncing
-        void start();
 
         bool hasCursor();
     public:
