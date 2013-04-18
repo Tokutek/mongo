@@ -600,7 +600,7 @@ distsrc = env.Dir('#distsrc')
 tokusrc = env.Dir(env['TOKUDB_PATH'])
 env.Append(MODULE_BANNERS = [distsrc.File('README'),
                              distsrc.File('THIRD-PARTY-NOTICES'),
-                             distsrc.File('NEWS')
+                             distsrc.File('NEWS'),
                              tokusrc.File('README-TOKUDB')])
 
 # If no module has introduced a file named LICENSE.txt, then inject the AGPL.
