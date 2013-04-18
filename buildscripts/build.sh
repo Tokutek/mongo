@@ -6,7 +6,7 @@ set -u
 function usage() {
     echo 1>&2 "build.sh"
     echo 1>&2 "[--mongo=$mongo] [--ft_index=$ft_index] [--jemalloc=$jemalloc]"
-    echo 1>&2 "[--github_user=$github_user] [--github_token=$github_token]"
+    echo 1>&2 "[--github_user=$github_user] [--github_token=$github_token] [--github_use_ssh=$github_use_ssh]"
     echo 1>&2 "[--cc=$cc --cxx=$cxx] [--ftcc=$ftcc --ftcxx=$ftcxx]"
     echo 1>&2 "[--debugbuild=$debugbuild]"
     return 1
@@ -68,7 +68,7 @@ function github_download() {
             --strip-components=1 \
             --file $dest.tar.gz
         rm -f $dest.tar.gz
-    else
+    elif [ $github_use_ssh != 0 ] ; then
         tempdir=$(mktemp -d -p $PWD)
         retry git clone git@github.com:${repo}.git $tempdir
 
@@ -81,6 +81,16 @@ function github_download() {
                 --directory $dest
 
         rm -rf $tempdir
+    else
+        retry curl \
+            --location https://api.github.com/repos/$repo/tarball/$rev \
+            --output $dest.tar.gz
+        tar --extract \
+            --gzip \
+            --directory=$dest \
+            --strip-components=1 \
+            --file $dest.tar.gz
+        rm -f $dest.tar.gz
     fi
 }
 
@@ -239,6 +249,7 @@ system=`uname -s | tr '[:upper:]' '[:lower:]'`
 arch=`uname -m | tr '[:upper:]' '[:lower:]'`
 github_user=''
 github_token=''
+github_use_ssh=0
 makejobs=$(get_ncpus)
 debugbuild=0
 staticft=1
@@ -287,9 +298,12 @@ if [ ! -z $github_user ] ; then
 elif [ ! -z $github_token ] ; then
     ft_index_rev=$(git ls-remote https://${github_token}:x-oauth-basic@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
     mongo_rev=$(git ls-remote https://${github_token}:x-oauth-basic@github.com/Tokutek/mongo.git $mongo | cut -c-7)
-else
+elif [ $github_use_ssh != 0 ] ; then
     ft_index_rev=$(git ls-remote git@github.com:Tokutek/ft-index.git $ft_index | cut -c-7)
     mongo_rev=$(git ls-remote git@github.com:Tokutek/mongo.git $mongo | cut -c-7)
+else
+    ft_index_rev=$(git ls-remote http://github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
+    mongo_rev=$(git ls-remote http://github.com/Tokutek/mongo.git $mongo | cut -c-7)
 fi
 
 # must have these defined to proceed, ls-remote may return success even if it fails
