@@ -137,8 +137,10 @@ namespace mongo {
         virtual void explainDetails( BSONObjBuilder& b ) const { return; }
     };
 
+    class FieldRange;
     class FieldRangeVector;
     class FieldRangeVectorIterator;
+    class FieldInterval;
     
     // Class for storing rows bulk fetched from TokuDB
     class RowBuffer {
@@ -263,6 +265,9 @@ namespace mongo {
 
         /** Initialize the internal DBC */
         void initializeDBC();
+        void _prelockCompoundBounds(const int currentRange, vector<const FieldInterval *> &combo,
+                                    BufBuilder &startKeyBuilder, BufBuilder &endKeyBuilder);
+        void prelockBounds();
         void prelockRange(const BSONObj &startKey, const BSONObj &endKey);
         /** Get the current key/pk/obj from the row buffer and set _currKey/PK/Obj */
         void getCurrentFromBuffer();

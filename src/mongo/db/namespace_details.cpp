@@ -390,6 +390,22 @@ namespace mongo {
             }
         }
 
+        void checkUniqueSecondaryIndexes(const BSONObj &pk, const BSONObj &obj) {
+            dassert(!pk.isEmpty());
+            dassert(!obj.isEmpty());
+
+            // Start at 1 to skip the primary key index. We don't need to perform
+            // a unique check because we always generate a unique auto-increment pk.
+            for (int i = 1; i < nIndexes(); i++) {
+                IndexDetails &idx = *_indexes[i];
+                BSONObjSet keys;
+                idx.getKeysFromObject(obj, keys);
+                for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
+                    idx.uniqueCheck(*ki, &pk);
+                }
+            }
+        }
+
         void insertObject(BSONObj &obj, uint64_t flags) {
             obj = addIdField(obj);
             uassert( 16328 , str::stream() << "document is larger than capped size "
@@ -414,16 +430,17 @@ namespace mongo {
             // Do unique checks before trimming. If we don't do it first, we may
             // trim off some objects that had the same unique keys as the new object.
             // This call uasserts on duplicate key.
-            checkUniqueIndexes(pk, obj);
+            checkUniqueSecondaryIndexes(pk, obj);
 
             // If the collection is gorged, we need to do some trimming work.
             if (isGorged(n, size)) {
                 trim(obj.objsize());
             }
 
-            // The actual insert should not hold any locks and do no unique
-            // checking, since we already did it above.
-            insertIntoIndexes(pk, obj, flags | ND_UNIQUE_CHECKS_OFF);
+            // The actual insert should not hold take any locks and does
+            // not need unique checks, since we generated a unique primary
+            // key and checked for uniquness constraints on secondaries above.
+            insertIntoIndexes(pk, obj, flags | ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
@@ -780,25 +797,6 @@ namespace mongo {
     }
 
     // uasserts on duplicate key
-    void NamespaceDetails::checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj) {
-        dassert(!pk.isEmpty());
-        dassert(!obj.isEmpty());
-
-        for (int i = 0; i < nIndexes(); i++) {
-            IndexDetails &idx = *_indexes[i];
-            if (i == 0) {
-                dassert(isPKIndex(idx));
-                idx.uniqueCheck(pk, NULL);
-            } else {
-                BSONObjSet keys;
-                idx.getKeysFromObject(obj, keys);
-                for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                    idx.uniqueCheck(*ki, &pk);
-                }
-            }
-        }
-    }
-
     static bool orderedSetContains(const BSONObjSet &set, const BSONObj &obj) {
         bool contains = false;
         for (BSONObjSet::iterator i = set.begin(); i != set.end(); i++) {

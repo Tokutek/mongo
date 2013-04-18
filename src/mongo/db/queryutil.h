@@ -653,6 +653,8 @@ namespace mongo {
         BSONObj firstMatch( const BSONObj &obj ) const;
         
         string toString() const;
+
+        const vector<FieldRange> &ranges() const { return _ranges; }
         
     private:
         int matchingLowElement( const BSONElement &e, int i, bool direction, bool &lowEquality ) const;
