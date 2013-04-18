@@ -597,7 +597,7 @@ if installSetup.libraries:
 
 # Stage the top-level mongodb banners
 distsrc = env.Dir('#distsrc')
-tokusrc = env.Dir(env['TOKUDB_PATH'])
+tokusrc = env.Dir('#%s' % env['TOKUDB_PATH'])
 env.Append(MODULE_BANNERS = [distsrc.File('README'),
                              distsrc.File('THIRD-PARTY-NOTICES'),
                              distsrc.File('NEWS'),
