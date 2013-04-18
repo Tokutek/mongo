@@ -310,7 +310,7 @@ fi
 test ! -z $ft_index_rev
 test ! -z $mongo_rev
 
-builddir=build-mongodb-tokudb-${ft_index_rev}${suffix}
+builddir=build-mongodb-${mongo_rev}-tokudb-${ft_index_rev}${suffix}
 if [ ! -d $builddir ] ; then mkdir $builddir; fi
 pushd $builddir
 
