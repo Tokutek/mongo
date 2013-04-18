@@ -182,12 +182,10 @@ namespace mongo {
                 // This is the operation we have received from the target
                 // that we must put in our oplog with an applied field of false
                 BSONObj o = r.nextSafe().getOwned();
-
                 Timer timer;
-
+                replicateTransactionToOplog(o);
                 {
                     boost::unique_lock<boost::mutex> lock(_mutex);
-
                     // update counters
                     _queueCounter.waitTime += timer.millis();
                     _queueCounter.numElems++;
