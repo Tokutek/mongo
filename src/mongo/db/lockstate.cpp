@@ -218,7 +218,8 @@ namespace mongo {
     }
 
     void LockState::unlockedOther() {
-        _otherName = "";
+        // we leave _otherName and _otherLock set as
+        // _otherLock exists to cache a pointer
         _otherCount = 0;
         _otherLock = 0;
         _context = NULL;
@@ -236,7 +237,7 @@ namespace mongo {
         if (_adminLockCount) {
             return Lock::nestableLockStat(Lock::admin);
         }
-        if ( _otherLock )
+        if (  _otherCount && _otherLock  )
             return &_otherLock->stats;
         
         if ( isRW() ) 
