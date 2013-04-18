@@ -535,7 +535,7 @@ namespace mongo {
 
         bool allocated() const { return namespaces.get() != NULL; }
 
-        void getNamespaces( list<string>& tofill , bool onlyCollections = true ) const;
+        void getNamespaces( list<string>& tofill ) const;
 
         // drop all collections and the nsindex, we're removing this database
         void drop();

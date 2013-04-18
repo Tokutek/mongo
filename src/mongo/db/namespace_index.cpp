@@ -79,21 +79,19 @@ namespace mongo {
             // didn't find on disk
             dassert(!may_create);
             return;
+        } else if (r != 0) {
+            storage::handle_ydb_error_fatal(r);
         }
-        verify(r == 0);
 
         namespaces.reset(new NamespaceDetailsMap());
 
         TOKULOG(1) << "Initializing NamespaceIndex " << database_ << endl;
+        scoped_ptr<Client::Transaction> txnp(cc().hasTxn()
+                                             ? NULL
+                                             : new Client::Transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY));
         {
-            scoped_ptr<Client::Transaction> txnp(cc().hasTxn()
-                                                 ? NULL
-                                                 : new Client::Transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY));
-            // TODO: Cursor creation is not exception safe.
-            DBC *cursor;
-            r = nsdb->cursor(nsdb, cc().txn().db_txn(), &cursor, 0);
-            verify(r == 0);
-
+            storage::Cursor c(nsdb, 0);
+            DBC *cursor = c.dbc();
             while (r != DB_NOTFOUND) {
                 PopulateExtra e(*namespaces);
                 r = cursor->c_getf_next(cursor, 0, populateNamespaceIndex, &e);
@@ -101,32 +99,18 @@ namespace mongo {
                     dassert(e.exc != NULL);
                     throw *e.exc;
                 }
-                verify(r == 0 || r == DB_NOTFOUND);
-            }
-
-            r = cursor->c_close(cursor);
-            verify(r == 0);
-            if (txnp.get()) {
-                txnp->commit(0);
+                if (r != 0 && r != DB_NOTFOUND) {
+                    storage::handle_ydb_error_fatal(r);
+                }
             }
         }
 
-        /* if someone manually deleted the datafiles for a database,
-           we need to be sure to clear any cached info for the database in
-           local.*.
-        */
-        /*
-        if ( "local" != database_ ) {
-            DBInfo i(database_.c_str());
-            i.dbDropped();
+        if (txnp.get()) {
+            txnp->commit(0);
         }
-        */
     }
 
-    void NamespaceIndex::getNamespaces( list<string>& tofill , bool onlyCollections ) const {
-        verify( onlyCollections ); // TODO: need to implement this
-        //                                  need boost::bind or something to make this less ugly
-
+    void NamespaceIndex::getNamespaces( list<string>& tofill ) const {
         if (namespaces.get() != NULL) {
             for (NamespaceDetailsMap::const_iterator it = namespaces->begin(); it != namespaces->end(); it++) {
                 const Namespace &n = it->first;
@@ -150,7 +134,9 @@ namespace mongo {
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
         int r = nsdb->del(nsdb, cc().txn().db_txn(), &ndbt, DB_DELETE_ANY);
-        verify(r == 0);
+        if (r != 0) {
+            storage::handle_ydb_error_fatal(r);
+        }
 
         // Should really only do this after the commit of the del.
         namespaces->erase(it);
@@ -179,7 +165,9 @@ namespace mongo {
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
         int r = nsdb->getf_set(nsdb, NULL, 0, &ndbt, getf_serialized, &serialized);
-        verify(r == 0);
+        if (r != 0) {
+            storage::handle_ydb_error_fatal(r);
+        }
 
         shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized );
         std::pair<NamespaceDetailsMap::iterator, bool> ret;
@@ -231,7 +219,9 @@ namespace mongo {
         DBT ddbt = storage::make_dbt(serialized.objdata(), serialized.objsize());
         const int flags = overwrite ? 0 : DB_NOOVERWRITE;
         int r = nsdb->put(nsdb, cc().txn().db_txn(), &ndbt, &ddbt, flags);
-        verify(r == 0);
+        if (r != 0) {
+            storage::handle_ydb_error_fatal(r);
+        }
     }
 
     void NamespaceIndex::drop() {

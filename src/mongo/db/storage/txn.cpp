@@ -31,7 +31,9 @@ namespace mongo {
         static DB_TXN *start_txn(DB_TXN *parent, int flags) {
             DB_TXN *db_txn;
             int r = env->txn_begin(env, parent, &db_txn, flags);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
             return db_txn;
         }
 
@@ -39,12 +41,16 @@ namespace mongo {
             // TODO: move to only where we need it
             const int extra_flags = (cmdLine.logFlushPeriod == 0) ? 0 : DB_TXN_NOSYNC;
             int r = db_txn->commit(db_txn, flags | extra_flags);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
         }
 
         static void abort_txn(DB_TXN *db_txn) {
             int r = db_txn->abort(db_txn);
-            verify(r == 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
         }
 
         Txn::Txn(const Txn *parent, int flags)
@@ -55,7 +61,10 @@ namespace mongo {
                                      ? flags
                                      : DB_INHERIT_ISOLATION)))
         {
-            DEV { LOG(3) << "begin txn " << _db_txn << " (" << (parent == NULL ? NULL : parent->_db_txn) << ", " << (parent == NULL ? flags : DB_INHERIT_ISOLATION) << ")" << endl; }
+            DEV {
+                LOG(3) << "begin txn " << _db_txn << " (" << (parent == NULL ? NULL : parent->_db_txn)
+                       << ", " << (parent == NULL ? flags : DB_INHERIT_ISOLATION) << ")" << endl;
+            }
         }
 
         Txn::~Txn() {
