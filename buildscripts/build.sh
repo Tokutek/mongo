@@ -179,7 +179,7 @@ function build_mongodb_src() {
             -e "s^@cxx@^$cxx^" \
             -e "s^@debugbuild@^$debugbuild^" \
             -e "s^@force_git_version@^$mongo_rev^" \
-            -e 's^@force_toku_version@^$ft_index_rev^" \
+            -e "s^@force_toku_version@^$ft_index_rev^" \
             -e "s^@mongodbsrc@^$mongodbsrc^" \
             -e "s^@tokufractaltreesrc@^$tokufractaltreedir^" \
             -e "s^@LIBTOKUDB_NAME@^${tokufractaltree}_static^" \
