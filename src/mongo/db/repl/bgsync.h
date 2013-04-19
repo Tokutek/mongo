@@ -49,6 +49,9 @@ namespace mongo {
         // signals events related to the elements in the queue
         boost::condition _queueCond;
 
+        // signals when the applier has nothing to do
+        boost::condition _queueDone;
+
         // boolean that states whether we should actively be 
         // trying to read data from another machine and apply it
         // to our opLog. When we are a secondary, this should be true.

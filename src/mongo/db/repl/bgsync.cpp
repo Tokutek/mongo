@@ -59,7 +59,7 @@ namespace mongo {
     void BackgroundSync::applierThread() {
         Client::initThread("applier");
         replLocalAuth();
-
+        applyOpsFromOplog();
         cc().shutdown();
     }
 
@@ -70,6 +70,7 @@ namespace mongo {
             _mutex.lock();
             // wait until we know an item has been produced
             while (_queueCounter.numElems == 0) {
+                _queueDone.notify_all();
                 _queueCond.wait(_mutex);
             }
 
@@ -83,6 +84,7 @@ namespace mongo {
             // at this point, we know we have data that has not been caught up
             // with the producer, because queueCounter.numElems > 0
             // we apply it
+            Client::Transaction transaction(DB_READ_UNCOMMITTED);
             BSONObjBuilder query;
             addGTIDToBSON("$gt", lastUnappliedGTID, query);
             shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(
@@ -101,10 +103,21 @@ namespace mongo {
                     theReplSet->gtidManager->noteGTIDApplied(currEntry);
                     dassert(_queueCounter.numElems > 0);
                     _queueCounter.numElems--;
+                    // this is a flow control mechanism, with bad numbers
+                    // hard coded for now just to get something going.
+                    // If the opSync thread notices that we have over 20000
+                    // transactions in the queue, it waits until we get below
+                    // 10000. This is where we signal that we have gotten there
+                    // Once we have spilling of transactions working, this
+                    // logic will need to be redone
+                    if (_queueCounter.numElems == 10000) {
+                        _queueCond.notify_all();
+                    }
                     _mutex.unlock();
                 }
                 c->advance();
             }
+            transaction.commit(0);
         }
     }
     
@@ -247,6 +260,16 @@ namespace mongo {
                         _queueCond.notify_all();
                     }
                     _queueCounter.numElems++;
+                    // this is a flow control mechanism, with bad numbers
+                    // hard coded for now just to get something going.
+                    // If the opSync thread notices that we have over 20000
+                    // transactions in the queue, it waits until we get below
+                    // 10000. This is where we wait if we get too high
+                    // Once we have spilling of transactions working, this
+                    // logic will need to be redone
+                    if (_queueCounter.numElems > 20000) {
+                        _queueCond.wait(lock);
+                    }
                 }
             } // end while
 
@@ -344,12 +367,35 @@ namespace mongo {
             _opSyncRunningCondVar.wait(lock);
         }
         // sanity checks
-        verify(_queueCounter.numElems == 0);
         verify(!_opSyncShouldRun);
+
+        // wait for all things to be applied
+        while (_queueCounter.numElems > 0) {
+            _queueDone.wait(lock);
+        }
+
+        // do a sanity check on the GTID Manager
+        GTID lastLiveGTID;
+        GTID lastUnappliedGTID;
+        theReplSet->gtidManager->getLiveGTIDs(
+            &lastLiveGTID, 
+            &lastUnappliedGTID
+            );
+        dassert(GTID::cmp(lastUnappliedGTID, lastLiveGTID) == 0);
     }
 
     void BackgroundSync::startOpSyncThread() {
         boost::unique_lock<boost::mutex> lock(_mutex);
+
+        // do a sanity check on the GTID Manager
+        GTID lastLiveGTID;
+        GTID lastUnappliedGTID;
+        theReplSet->gtidManager->getLiveGTIDs(
+            &lastLiveGTID, 
+            &lastUnappliedGTID
+            );
+        dassert(GTID::cmp(lastUnappliedGTID, lastLiveGTID) == 0);
+
         verify(_queueCounter.numElems == 0);
         _opSyncShouldRun = true;
         _opSyncCanRunCondVar.notify_all();
