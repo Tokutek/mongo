@@ -67,10 +67,22 @@ namespace mongo {
         GTID lastLiveGTID;
         GTID lastUnappliedGTID;
         while (1) {
+            _mutex.lock();
+            // wait until we know an item has been produced
+            while (_queueCounter.numElems == 0) {
+                _queueCond.wait(_mutex);
+            }
+
             theReplSet->gtidManager->getLiveGTIDs(
                 &lastLiveGTID, 
                 &lastUnappliedGTID
                 );
+            dassert(GTID::cmp(lastUnappliedGTID, lastLiveGTID) < 0);
+            _mutex.unlock();
+
+            // at this point, we know we have data that has not been caught up
+            // with the producer, because queueCounter.numElems > 0
+            // we apply it
             BSONObjBuilder query;
             addGTIDToBSON("$gt", lastUnappliedGTID, query);
             shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(
@@ -84,7 +96,12 @@ namespace mongo {
                     GTID currEntry = getGTIDFromOplogEntry(curr);
                     theReplSet->gtidManager->noteApplyingGTID(currEntry);
                     applyTransactionFromOplog(curr);
+                    
+                    _mutex.lock();
                     theReplSet->gtidManager->noteGTIDApplied(currEntry);
+                    dassert(_queueCounter.numElems > 0);
+                    _queueCounter.numElems--;
+                    _mutex.unlock();
                 }
                 c->advance();
             }
@@ -116,10 +133,10 @@ namespace mongo {
                     _opSyncRunningCondVar.notify_all();
                     // wait for permission that we can run
                     _opSyncCanRunCondVar.wait(lck);
-                    // notify other threads that we are running
-                    _opSyncRunningCondVar.notify_all();
                 }
 
+                // notify other threads that we are running
+                _opSyncRunningCondVar.notify_all();
                 _opSyncRunning = true;
             }
 
@@ -220,11 +237,15 @@ namespace mongo {
                 Timer timer;
                 replicateTransactionToOplog(o);
                 GTID currEntry = getGTIDFromOplogEntry(o);
-                theReplSet->gtidManager->noteGTIDAdded(currEntry);
                 {
                     boost::unique_lock<boost::mutex> lock(_mutex);
                     // update counters
+                    theReplSet->gtidManager->noteGTIDAdded(currEntry);
                     _queueCounter.waitTime += timer.millis();
+                    // notify applier thread that data exists
+                    if (_queueCounter.numElems == 0) {
+                        _queueCond.notify_all();
+                    }
                     _queueCounter.numElems++;
                 }
             } // end while
@@ -322,12 +343,14 @@ namespace mongo {
         while (_opSyncRunning) {
             _opSyncRunningCondVar.wait(lock);
         }
-        // sanity check that no one has changed this variable
+        // sanity checks
+        verify(_queueCounter.numElems == 0);
         verify(!_opSyncShouldRun);
     }
 
     void BackgroundSync::startOpSyncThread() {
         boost::unique_lock<boost::mutex> lock(_mutex);
+        verify(_queueCounter.numElems == 0);
         _opSyncShouldRun = true;
         _opSyncCanRunCondVar.notify_all();
         while (!_opSyncRunning) {

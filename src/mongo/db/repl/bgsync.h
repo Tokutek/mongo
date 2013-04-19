@@ -46,6 +46,9 @@ namespace mongo {
         // of opsync thread running.
         boost::condition _opSyncCanRunCondVar;
 
+        // signals events related to the elements in the queue
+        boost::condition _queueCond;
+
         // boolean that states whether we should actively be 
         // trying to read data from another machine and apply it
         // to our opLog. When we are a secondary, this should be true.
