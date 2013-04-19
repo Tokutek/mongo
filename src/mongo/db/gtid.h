@@ -113,12 +113,13 @@ namespace mongo {
         void noteGTIDApplied(GTID gtid);
 
         void getMins(GTID* minLiveGTID, GTID* minUnappliedGTID);
-        void resetManager(GTID lastGTID, uint64_t lastTimestamp, uint64_t lastHash);
+        void resetManager();
 
         GTID getLiveState();
         uint64_t getCurrTimestamp();
 
         void getLiveGTIDs(GTID* lastLiveGTID, GTID* lastUnappliedGTID);
+        void verifyReadyToBecomePrimary();
         
     };
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result);

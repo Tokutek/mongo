@@ -220,14 +220,16 @@ namespace mongo {
         _lock.unlock();
     }
 
-    void GTIDManager::resetManager(GTID lastGTID, uint64_t lastTimestamp, uint64_t lastHash) {
-        // TODO: figure out what to do with unapplied GTID info here
+    void GTIDManager::resetManager() {
         _lock.lock();
         dassert(_liveGTIDs.size() == 0);
-        _lastLiveGTID = lastGTID;
         _lastLiveGTID.inc_primary();
         _minLiveGTID = _lastLiveGTID;
         _minLiveGTID.inc();
+
+        _lastUnappliedGTID = _lastLiveGTID;
+        _minUnappliedGTID = _minLiveGTID;
+
         _lock.unlock();
     }
     GTID GTIDManager::getLiveState() {
@@ -241,6 +243,16 @@ namespace mongo {
         _lock.lock();
         *lastLiveGTID = _lastLiveGTID;
         *lastUnappliedGTID = _lastUnappliedGTID;
+        _lock.unlock();
+    }
+
+    // does some sanity checks to make sure the GTIDManager
+    // is in a state where it can become primary
+    void GTIDManager::verifyReadyToBecomePrimary() {
+        _lock.lock();
+        verify(GTID::cmp(_lastLiveGTID, _lastUnappliedGTID) == 0);
+        verify(GTID::cmp(_minLiveGTID, _minUnappliedGTID) == 0);
+        verify(GTID::cmp(_minLiveGTID, _lastLiveGTID) > 0);
         _lock.unlock();
     }
 

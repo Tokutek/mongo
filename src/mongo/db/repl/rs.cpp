@@ -95,19 +95,14 @@ namespace mongo {
         if (verifyHotness) {
             verify( iAmPotentiallyHot() );
         }
-        // so we are synchronized with _logOp().  perhaps locking local db only would suffice, but until proven 
-        // will take this route, and this is very rare so it doesn't matter anyway
-        Lock::GlobalWrite lk; 
 
-        // Make sure that new OpTimes are higher than existing ones even with clock skew
-        DBDirectClient c;
-        BSONObj lastOp = c.findOne( "local.oplog.rs", Query().sort(reverseNaturalObj), NULL, QueryOption_SlaveOk );
-        uint64_t lastTimestamp = lastOp["ts"]._numberLong();
-        uint64_t lastHash = lastOp["h"].Long();
-        int len;
-        GTID lastGTID(lastOp["_id"].binData(len));
-        gtidManager->resetManager(lastGTID, lastTimestamp, lastHash);
+        Lock::GlobalWrite lk;
 
+        // Make sure replication has stopped        
+        BackgroundSync::get()->stopOpSyncThread();
+        gtidManager->verifyReadyToBecomePrimary();
+
+        gtidManager->resetManager();
         changeState(MemberState::RS_PRIMARY);
     }
 
@@ -489,7 +484,8 @@ namespace mongo {
                 theReplSet->myConfig().potentiallyHot()
                 )
             {
-                assumePrimary(false);
+                Lock::GlobalWrite lk;
+                changeState(MemberState::RS_PRIMARY);
             }
             else {
                 // here, check if we need to do an initial sync
@@ -499,11 +495,10 @@ namespace mongo {
                 if( gtidManager->getLiveState().isInitial() ) {
                     syncDoInitialSync();
                 }
+
+                tryToGoLiveAsASecondary();
             }
         }
-
-        // we may need to call tryToGoLiveAsASecondary here
-        // not sure yet
 
         // When we get here,
         // we know either the server is the sole primary in a single node

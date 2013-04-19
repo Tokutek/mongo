@@ -137,11 +137,6 @@ namespace mongo {
         return _forceSyncTarget != 0;
     }
 
-    void GhostSync::starting() {
-        Client::initThread("rsGhostSync");
-        replLocalAuth();
-    }
-
     void ReplSetImpl::blockSync(bool block) {
         // RS lock is already taken in Manager::checkAuth
         _blockSync = block;
@@ -150,6 +145,11 @@ namespace mongo {
             // RECOVERING until we unblock
             changeState(MemberState::RS_RECOVERING);
         }
+    }
+
+    void GhostSync::starting() {
+        Client::initThread("rsGhostSync");
+        replLocalAuth();
     }
 
     void GhostSync::associateSlave(const BSONObj& id, const int memberId) {
