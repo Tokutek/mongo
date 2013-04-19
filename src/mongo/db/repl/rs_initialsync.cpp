@@ -301,16 +301,7 @@ namespace mongo {
             return;
         }
 
-        GTID minUnappliedGTID;
-        if (replSettings.fastsync) {
-            log() << "fastsync: skipping database clone" << rsLog;
-
-            // prime oplog
-            //init.oplogApplication(lastOp, lastOp);
-            ::abort();
-            return;
-        }
-        else {
+        if( gtidManager->getLiveState().isInitial() ) {
             sethbmsg("initial sync drop all databases", 0);
             dropAllDatabasesExceptLocal();
 
@@ -377,40 +368,14 @@ namespace mongo {
                     false //logForRepl
                     );
 
-                // now we should have replInfo on this machine,
-                // let's query the minUnappliedGTID to figure out from where
-                // we should copy the opLog
-                BSONObj result;
-                bool foundMinUnapplied = Helpers::findOne(
-                    rsReplInfo, 
-                    BSON( "_id" << "minUnapplied" ), 
-                    result
+                // copy entire oplog (probably overkill)
+                cloneCollectionData(
+                    r.conn_shared(),
+                    rsoplog,
+                    q,
+                    true, //copyIndexes
+                    false //logForRepl
                     );
-                // just for debugging for now
-                if (foundMinUnapplied) {
-                    minUnappliedGTID = getGTIDFromBSON("GTID", result);
-                    log() << "foundMinUnapplied" << rsLog;
-                    // copy the oplog with a query
-                    int len;
-                    cloneCollectionData(
-                        r.conn_shared(),
-                        rsoplog,
-                        BSON( "_id" << GTE << result["GTID"].binData(len) ),
-                        true, //copyIndexes
-                        false //logForRepl
-                        );
-                }
-                else {
-                    log() << "did not find min unapplied" << rsLog;
-                    // copy entire oplog
-                    cloneCollectionData(
-                        r.conn_shared(),
-                        rsoplog,
-                        q,
-                        true, //copyIndexes
-                        false //logForRepl
-                        );
-                }
             }
             cloneTransaction.commit(0);
 
@@ -424,6 +389,18 @@ namespace mongo {
 
         }
 
+        // now we should have replInfo on this machine,
+        // let's query the minUnappliedGTID to figure out from where
+        // we should copy the opLog
+        BSONObj result;
+        bool foundMinUnapplied = Helpers::findOne(
+            rsReplInfo, 
+            BSON( "_id" << "minUnapplied" ), 
+            result
+            );
+        verify(foundMinUnapplied);
+        GTID minUnappliedGTID;
+        minUnappliedGTID = getGTIDFromBSON("GTID", result);
         // now we need to read the oplog forward
         GTID lastEntry;
         bool ret = getLastGTIDinOplog(&lastEntry);
