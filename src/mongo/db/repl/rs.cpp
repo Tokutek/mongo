@@ -488,14 +488,11 @@ namespace mongo {
                 changeState(MemberState::RS_PRIMARY);
             }
             else {
-                // here, check if we need to do an initial sync
-                // This if-clause will be true if loadGTIDManager finds
-                // nothing in the oplog and initalizes the GTIDManager
-                // with an empty GTID
-                if( gtidManager->getLiveState().isInitial() ) {
-                    syncDoInitialSync();
-                }
-
+                // always do an initial sync on startup
+                // if an oplog exists, it will catch up whatever data it needs,
+                // acting like a fast sync. If the oplog is not there, it will do
+                // a full clone from someone
+                syncDoInitialSync();
                 tryToGoLiveAsASecondary();
             }
         }
