@@ -643,16 +643,27 @@ namespace mongo {
         }
     } cmdEngineStatus;
 
-    /*
-    class Cmd : public Command {
+    class CmdCheckpoint : public Command {
     public:
-        Cmd() : Command("") { }
-        bool adminOnly() const { return true; }
-        bool run(const char *ns, BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result) {
+        virtual bool slaveOk() const {
             return true;
         }
-    } cmd;
-    */
+        CmdCheckpoint() : Command("checkpoint") {
+        }
+
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual LockType locktype() const { return NONE; }
+
+        virtual void help( stringstream& help ) const {
+            help << "performs a checkpoint of all TokuDB dictionaries." << endl;
+        }
+
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            storage::checkpoint();
+            return true;
+        }
+    } cmdCheckpoint;
 
     class CmdDiagLogging : public Command {
     public:

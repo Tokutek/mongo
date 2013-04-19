@@ -38,6 +38,7 @@ namespace mongo {
 
         void get_status(BSONObjBuilder &status);
         void log_flush();
+        void checkpoint();
 
         void set_log_flush_interval(uint32_t period_ms);
         void set_checkpoint_period(uint32_t period_seconds);

@@ -122,6 +122,7 @@ namespace mongo {
         uint32_t cleanerPeriod;
         uint32_t cleanerIterations;
         uint64_t lockTimeout;
+        int fsRedzone;
 
         static void launchOk();
 
@@ -156,7 +157,7 @@ namespace mongo {
         slowMS(100), defaultLocalThresholdMillis(15), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
         directio(false), cacheSize(0), checkpointPeriod(60), cleanerPeriod(2),
-        cleanerIterations(5), lockTimeout(4000)
+        cleanerIterations(5), lockTimeout(4000), fsRedzone(5)
     {
         started = time(0);
 

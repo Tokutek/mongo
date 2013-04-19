@@ -656,6 +656,7 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("dbpath", po::value<string>() , dbpathBuilder.str().c_str())
     ("diaglog", po::value<int>(), "0=off 1=W 2=R 3=both 7=W+some reads")
     ("directio", "use direct I/O in tokudb")
+    ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
     ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
@@ -808,11 +809,6 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
 #endif
 
-#if 0
-        if ( params.count("directoryperdb")) {
-            directoryperdb = true;
-        }
-#endif
         if (params.count("cpu")) {
             cmdLine.cpu = true;
         }
@@ -877,15 +873,13 @@ static int mongoDbMain(int argc, char* argv[]) {
         if (params.count("cacheSize")) {
             cmdLine.cacheSize = params["cacheSize"].as<uint64_t>();
         }
-#if 0
-        if (params.count("repairpath")) {
-            repairpath = params["repairpath"].as<string>();
-            if (!repairpath.size()) {
-                out() << "repairpath is empty" << endl;
+        if (params.count("fsRedzone")) {
+            cmdLine.fsRedzone = params["fsRedzone"].as<int>();
+            if (cmdLine.fsRedzone < 1 || cmdLine.fsRedzone > 99) {
+                out() << "--fsRedzone must be between 1 and 99." << endl;
                 dbexit( EXIT_BADOPTIONS );
             }
         }
-#endif
         if (params.count("nohints")) {
             useHints = false;
         }

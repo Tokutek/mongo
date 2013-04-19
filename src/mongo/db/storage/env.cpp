@@ -172,6 +172,13 @@ namespace mongo {
             }
             env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
 
+            const int redzone_threshold = cmdLine.fsRedzone;
+            r = env->set_redzone(env, redzone_threshold);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
+            TOKULOG(1) << "filesystem redzone set to " << redzone_threshold << " percent." << endl;
+
             const int env_flags = DB_INIT_LOCK|DB_INIT_MPOOL|DB_INIT_TXN|DB_CREATE|DB_PRIVATE|DB_INIT_LOG|DB_RECOVER;
             const int env_mode = S_IRWXU|S_IRGRP|S_IROTH|S_IXGRP|S_IXOTH;
             r = env->open(env, dbpath.c_str(), env_flags, env_mode);
@@ -406,8 +413,17 @@ namespace mongo {
         }
 
         void log_flush() {
-            int r = 0;
-            r = env->log_flush(env, NULL);
+            // Flush the recovery log to disk, ensuring crash safety up until
+            // the most recently committed transaction's LSN.
+            int r = env->log_flush(env, NULL);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
+        }
+
+        void checkpoint() {
+            // Run a checkpoint. The zeros mean nothing (bdb-API artifacts).
+            int r = env->txn_checkpoint(env, 0, 0, 0);
             if (r != 0) {
                 handle_ydb_error(r);
             }
