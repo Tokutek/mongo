@@ -44,6 +44,7 @@
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/db_flags.h"
 #include "mongo/db/repl/rs_optime.h"
+#include "mongo/db/repl/rs.h"
 
 namespace mongo {
 
@@ -182,6 +183,20 @@ namespace mongo {
         } 
         OplogCollection(const BSONObj &serialized) :
             IndexedCollection(serialized) {
+        }
+        // @return the maximum safe key to read for a tailable cursor.
+        BSONObj maxSafeKey() {
+            if (theReplSet) {
+                BSONObjBuilder b;
+                GTID minUncommitted;
+                GTID minUnapplied;
+                theReplSet->gtidManager->getMins(&minUncommitted, &minUnapplied);
+                addGTIDToBSON("", minUncommitted, b);
+                return b.obj();
+            }
+            else {
+                return minKey;
+            }
         }
     };
 
