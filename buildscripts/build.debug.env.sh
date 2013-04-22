@@ -35,8 +35,8 @@ pushd ft-index
     git clone git@github.com:Tokutek/jemalloc.git third_party/jemalloc
 popd
 
-mkdir tokudb/dbg
-pushd tokudb/dbg
+mkdir ft-index/dbg
+pushd ft-index/dbg
   CC=gcc47 CXX=g++47 cmake \
       -D CMAKE_INSTALL_PREFIX=$BUILD_DIR/mongo/src/third_party/tokudb \
       -D CMAKE_BUILD_TYPE=Debug \
