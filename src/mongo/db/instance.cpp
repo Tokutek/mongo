@@ -650,19 +650,43 @@ namespace mongo {
         int pass = 0;
         bool exhaust = false;
         QueryResult* msgdata = 0;
-        OpTime last;
+        GTID last;
+        bool isOplog = false;
         while( 1 ) {
             try {
                 const NamespaceString nsString( ns );
                 uassert( 16258, str::stream() << "Invalid ns [" << ns << "]", nsString.isValid() );
 
-                if (str::startsWith(ns, "local.oplog.")){
+                // I (Zardosht), am not crazy about this, but I cannot think of
+                // better alternatives at the moment. The high level goal is to find
+                // a way to do a wait without having a read lock held 
+                // via Client::ReadContext. Unfortunately, we can't get the exact position
+                // of the cursor without accessing it, which required a read lock.
+                // So, we do this, which is a good estimate.
+                //
+                // Note this is similar to what vanilla MongoDB does.
+                //
+                // in the first pass, we extract the minimum live GTID. This must be
+                // greater than or equal to the existing cursor's position. 
+                // In the second pass, we wait for the GTID manager to have a 
+                // minumum live GTID greater than what we saw in the first pass.
+                // This new GTID will be greater than the cursor's starting position,
+                // and therefore the cursor should have more data to look at.
+                // It is theoretically possible that one day, the cursor will still
+                // return no new data because all new GTIDs in between these
+                // two values aborted, but that is not possible right now. Any GTID
+                // assigned is done so with the intent to commit, and tokudb
+                // aborts if a coommit is not successful.
+                if (str::startsWith(ns, "local.oplog.") && theReplSet){
+                    isOplog = true;
                     if (pass == 0) {
-                        mutex::scoped_lock lk(OpTime::m);
-                        last = OpTime::getLast(lk);
+                        last = theReplSet->gtidManager->getMinLiveGTID();
                     }
                     else {
-                        last.waitForDifferent(1000/*ms*/);
+                        theReplSet->gtidManager->waitForDifferentMinLive(
+                            last, 
+                            4000 // ms
+                            );
                     }
                 }
 
@@ -678,25 +702,40 @@ namespace mongo {
                 break;
             }
             
+            pass++;
             if (msgdata == 0) {
                 // this should only happen with QueryOption_AwaitData
                 exhaust = false;
                 massert(13073, "shutting down", !inShutdown() );
-                if ( ! timer ) {
-                    timer.reset( new Timer() );
+                if (!isOplog) {
+                    if ( ! timer ) {
+                        timer.reset( new Timer() );
+                    }
+                    else {
+                        if ( timer->seconds() >= 4 ) {
+                            // after about 4 seconds, return. pass stops at 1000 normally.
+                            // we want to return occasionally so slave can checkpoint.
+                            pass = 10000;
+                        }
+                    }
+                    if (debug) {
+                        sleepmillis(20);
+                    }
+                    else {
+                        sleepmillis(2);
+                    }
                 }
                 else {
-                    if ( timer->seconds() >= 4 ) {
-                        // after about 4 seconds, return. pass stops at 1000 normally.
-                        // we want to return occasionally so slave can checkpoint.
+                    // in the case where we are the oplog, using 
+                    // waitForDifferentMinLive is sufficient. That 
+                    // waits for 4 seconds, as the timer above does.
+                    // So, we we don't need more than 2 passes.
+                    if (pass > 1) {
                         pass = 10000;
                     }
                 }
-                pass++;
-                if (debug)
-                    sleepmillis(20);
-                else
-                    sleepmillis(2);
+
+                // TODO: (Zardosht), figure out what this is meant to do
                 
                 // note: the 1100 is beacuse of the waitForDifferent above
                 // should eventually clean this up a bit

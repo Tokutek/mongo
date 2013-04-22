@@ -51,6 +51,9 @@ namespace mongo {
 
     class GTIDManager {
         boost::mutex _lock;
+
+        // notified when the min live GTID changes
+        boost::condition _minLiveCond;
         
         // GTID to give out should a primary ask for one to use
         // On a secondary, this is the last GTID seen incremented
@@ -113,6 +116,7 @@ namespace mongo {
         void noteGTIDApplied(GTID gtid);
 
         void getMins(GTID* minLiveGTID, GTID* minUnappliedGTID);
+        GTID getMinLiveGTID();
         void resetManager();
 
         GTID getLiveState();
@@ -120,6 +124,8 @@ namespace mongo {
 
         void getLiveGTIDs(GTID* lastLiveGTID, GTID* lastUnappliedGTID);
         void verifyReadyToBecomePrimary();
+
+        void waitForDifferentMinLive(GTID last, uint32_t millis);
         
     };
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result);

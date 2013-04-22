@@ -188,9 +188,7 @@ namespace mongo {
         BSONObj maxSafeKey() {
             if (theReplSet) {
                 BSONObjBuilder b;
-                GTID minUncommitted;
-                GTID minUnapplied;
-                theReplSet->gtidManager->getMins(&minUncommitted, &minUnapplied);
+                GTID minUncommitted = theReplSet->gtidManager->getMinLiveGTID();
                 addGTIDToBSON("", minUncommitted, b);
                 return b.obj();
             }

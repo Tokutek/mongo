@@ -155,6 +155,8 @@ namespace mongo {
             }
             // note that on a primary, which we must be, these are equivalent
             _minUnappliedGTID = _minLiveGTID;
+            // notify that _minLiveGTID has changed
+            _minLiveCond.notify_all();
         }
         _lock.unlock();
     }
@@ -171,6 +173,8 @@ namespace mongo {
         _lastLiveGTID = gtid;
         _minLiveGTID = _lastLiveGTID;
         _minLiveGTID.inc();
+
+        _minLiveCond.notify_all();
         _lock.unlock();
     }
 
@@ -220,6 +224,13 @@ namespace mongo {
         _lock.unlock();
     }
 
+    GTID GTIDManager::getMinLiveGTID() {
+        GTID minLive;
+        GTID minUnapplied;
+        getMins(&minLive, &minUnapplied);
+        return minLive;
+    }
+
     void GTIDManager::resetManager() {
         _lock.lock();
         dassert(_liveGTIDs.size() == 0);
@@ -253,6 +264,16 @@ namespace mongo {
         verify(GTID::cmp(_lastLiveGTID, _lastUnappliedGTID) == 0);
         verify(GTID::cmp(_minLiveGTID, _minUnappliedGTID) == 0);
         verify(GTID::cmp(_minLiveGTID, _lastLiveGTID) > 0);
+        _lock.unlock();
+    }
+
+    void GTIDManager::waitForDifferentMinLive(GTID last, uint32_t millis) {
+        _lock.lock();
+        dassert(GTID::cmp(last, _minLiveGTID) <= 0);
+        if (GTID::cmp(last, _minLiveGTID) == 0) {
+            // wait on cond
+            _minLiveCond.timed_wait(_lock, boost::posix_time::milliseconds(millis));
+        }
         _lock.unlock();
     }
 
