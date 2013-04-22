@@ -286,8 +286,6 @@ namespace mongo {
             return false;
         }
 
-        Client::Transaction transaction(0);
-
         string sourceHostname = source->h().toString();
         OplogReader r;
         if( !r.connect(sourceHostname) ) {
@@ -390,56 +388,62 @@ namespace mongo {
 
         }
 
-        // now we should have replInfo on this machine,
-        // let's query the minUnappliedGTID to figure out from where
-        // we should copy the opLog
-        BSONObj result;
-        bool foundMinUnapplied = Helpers::findOne(
-            rsReplInfo, 
-            BSON( "_id" << "minUnapplied" ), 
-            result
-            );
-        verify(foundMinUnapplied);
-        GTID minUnappliedGTID;
-        minUnappliedGTID = getGTIDFromBSON("GTID", result);
-        // now we need to read the oplog forward
-        GTID lastEntry;
-        bool ret = getLastGTIDinOplog(&lastEntry);
-        isyncassert("could not get last oplog entry after clone", ret);
+        {            
+            Client::WriteContext ctx(rsoplog);
+            Client::Transaction catchupTransaction(0);
 
-        // TODO: query minLive and use that instead
-        GTID currEntry = minUnappliedGTID;
-        // first, we need to fill in the "gaps" in the oplog
-        while (GTID::cmp(currEntry, lastEntry) < 0) {
-            r.tailingQueryGTE(rsoplog, currEntry);
+            // now we should have replInfo on this machine,
+            // let's query the minUnappliedGTID to figure out from where
+            // we should copy the opLog
+            BSONObj result;
+            bool foundMinUnapplied = Helpers::findOne(
+                rsReplInfo, 
+                BSON( "_id" << "minUnapplied" ), 
+                result
+                );
+            verify(foundMinUnapplied);
+            GTID minUnappliedGTID;
+            minUnappliedGTID = getGTIDFromBSON("GTID", result);
+            // now we need to read the oplog forward
+            GTID lastEntry;
+            bool ret = getLastGTIDinOplog(&lastEntry);
+            isyncassert("could not get last oplog entry after clone", ret);
+
+            // TODO: query minLive and use that instead
+            GTID currEntry = minUnappliedGTID;
+            // first, we need to fill in the "gaps" in the oplog
             while (GTID::cmp(currEntry, lastEntry) < 0) {
-                bool hasMore = true;
-                if (!r.moreInCurrentBatch()) {
-                    hasMore = r.more();
+                r.tailingQueryGTE(rsoplog, currEntry);
+                while (GTID::cmp(currEntry, lastEntry) < 0) {
+                    bool hasMore = true;
+                    if (!r.moreInCurrentBatch()) {
+                        hasMore = r.more();
+                    }
+                    if (!hasMore) {
+                        break;
+                    }
+                    BSONObj op = r.nextSafe().getOwned();
+                    currEntry = getGTIDFromOplogEntry(op);
+                    replicateTransactionToOplog(op);
                 }
-                if (!hasMore) {
-                    break;
-                }
-                BSONObj op = r.nextSafe().getOwned();
-                currEntry = getGTIDFromOplogEntry(op);
-                replicateTransactionToOplog(op);
             }
-        }
 
-        // at this point, we have got the oplog up to date,
-        // now we need to read forward in the oplog
-        // from minUnapplied
-        BSONObjBuilder query;
-        addGTIDToBSON("$gte", minUnappliedGTID, query);
-        // TODO: make this a read uncommitted cursor
-        // especially when this code moves to a background thread
-        // for running replication
-        shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(rsoplog, query.done());
-        while( c->ok() ) {
-            if ( c->currentMatches()) {
-                applyTransactionFromOplog(c->current());
+            // at this point, we have got the oplog up to date,
+            // now we need to read forward in the oplog
+            // from minUnapplied
+            BSONObjBuilder query;
+            addGTIDToBSON("$gte", minUnappliedGTID, query);
+            // TODO: make this a read uncommitted cursor
+            // especially when this code moves to a background thread
+            // for running replication
+            shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(rsoplog, query.done());
+            while( c->ok() ) {
+                if ( c->currentMatches()) {
+                    applyTransactionFromOplog(c->current());
+                }
+                c->advance();
             }
-            c->advance();
+            catchupTransaction.commit(0);
         }
 
         // TODO: figure out what to do with these
@@ -447,8 +451,6 @@ namespace mongo {
 
         changeState(MemberState::RS_RECOVERING);
         sethbmsg("initial sync done",0);
-
-        transaction.commit();
 
         return true;
     }

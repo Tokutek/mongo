@@ -78,8 +78,10 @@ namespace mongo {
         string myname = getHostName();
 
         BSONObj me;
+
         {
-            
+            // TODO: (Zardosht) figure out if this local.me stuff is needed
+            Client::Transaction transaction(0);            
             Lock::DBWrite l("local");
             // local.me is an identifier for a server for getLastError w:2+
             if ( ! Helpers::getSingleton( "local.me" , me ) ||
@@ -96,6 +98,7 @@ namespace mongo {
                 me = b.obj();
                 Helpers::putSingleton( "local.me" , me );
             }
+            transaction.commit(0);
         }
 
         BSONObjBuilder cmd;
