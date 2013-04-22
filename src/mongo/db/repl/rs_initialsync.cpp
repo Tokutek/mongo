@@ -63,10 +63,10 @@ namespace mongo {
     void ReplSetImpl::syncDoInitialSync() {
         const static int maxFailedAttempts = 10;
         int failedAttempts = 0;
-        while ( failedAttempts < maxFailedAttempts ) {
+        bool syncSucceeded = false;
+        while ( !syncSucceeded && failedAttempts < maxFailedAttempts ) {
             try {
-                _syncDoInitialSync();
-                break;
+                syncSucceeded = _syncDoInitialSync();
             }
             catch(DBException& e) {
                 failedAttempts++;
@@ -270,20 +270,20 @@ namespace mongo {
     /**
      * Do the initial sync for this member.
      */
-    void ReplSetImpl::_syncDoInitialSync() {
+    bool ReplSetImpl::_syncDoInitialSync() {
         sethbmsg("initial sync pending",0);
 
         // if this is the first node, it may have already become primary
         if ( box.getState().primary() ) {
             sethbmsg("I'm already primary, no need for initial sync",0);
-            return;
+            return true;
         }
 
         const Member *source = getMemberToSyncTo();
         if (!source) {
             sethbmsg("initial sync need a member to be primary or secondary to do our initial sync", 0);
             sleepsecs(15);
-            return;
+            return false;
         }
 
         string sourceHostname = source->h().toString();
@@ -291,14 +291,14 @@ namespace mongo {
         if( !r.connect(sourceHostname) ) {
             sethbmsg( str::stream() << "initial sync couldn't connect to " << source->h().toString() , 0);
             sleepsecs(15);
-            return;
+            return false;
         }
 
         BSONObj lastOp = r.getLastOp(rsoplog);
         if( lastOp.isEmpty() ) {
             sethbmsg("initial sync couldn't read remote oplog", 0);
             sleepsecs(15);
-            return;
+            return false;
         }
 
         if( gtidManager->getLiveState().isInitial() ) {
@@ -326,7 +326,7 @@ namespace mongo {
             if( !r.conn()->runCommand("local", beginCommand, commandRet)) {
                 sethbmsg("failed to begin transaction for copying data", 0);
                 sleepsecs(1);
-                return;
+                return false;
             }
 
             list<string> dbs = r.conn()->getDatabaseNames();
@@ -347,7 +347,7 @@ namespace mongo {
             if (!ret) {
                 veto(source->fullName(), 600);
                 sleepsecs(300);
-                return;
+                return false;
             }
 
             // at this point, we have copied all of the data from the 
@@ -383,7 +383,7 @@ namespace mongo {
             if (!r.conn()->runCommand("local", commitCommand, commandRet)) {
                 sethbmsg("failed to commit transaction for copying data", 0);
                 sleepsecs(1);
-                return;
+                return false;
             }
             // data should now be consistent
 
@@ -446,5 +446,7 @@ namespace mongo {
 
         changeState(MemberState::RS_RECOVERING);
         sethbmsg("initial sync done",0);
+
+        return true;
     }
 }

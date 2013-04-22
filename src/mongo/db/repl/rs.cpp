@@ -462,7 +462,6 @@ namespace mongo {
             // this might now work on secondaries
             // on secondaries, at this point in the code, we may not have yet created
             // the oplog, but we will see
-            openOplogFiles();
             Client::Transaction txn(DB_SERIALIZABLE);
             loadGTIDManager();
             txn.commit();
@@ -485,6 +484,7 @@ namespace mongo {
                 )
             {
                 Lock::GlobalWrite lk;
+                openOplogFiles();
                 changeState(MemberState::RS_PRIMARY);
             }
             else {
