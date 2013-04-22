@@ -131,6 +131,18 @@ namespace mongo {
         return false;
     }
 
+    void Client::abortLiveTransactions() {
+        verify(Lock::isW());
+        scoped_lock lk(clientsMutex);
+        for (set<Client*>::const_iterator i = clients.begin(); i != clients.end(); ++i) {
+            Client *c = *i;
+            while (c->hasTxn()) {
+                DEV { LOG(0) << "Aborting a txn for shutdown" << endl; }
+                c->abortTopTxn();
+            }
+        }
+    }
+
     BSONObj CachedBSONObj::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");
     Client::Context::Context( string ns , Database * db, bool doauth ) :
         _client( currentClient.get() ), 
