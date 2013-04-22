@@ -436,12 +436,14 @@ namespace mongo {
             // TODO: make this a read uncommitted cursor
             // especially when this code moves to a background thread
             // for running replication
-            shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(rsoplog, query.done());
-            while( c->ok() ) {
-                if ( c->currentMatches()) {
-                    applyTransactionFromOplog(c->current());
+            {
+                shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(rsoplog, query.done());
+                while( c->ok() ) {
+                    if ( c->currentMatches()) {
+                        applyTransactionFromOplog(c->current());
+                    }
+                    c->advance();
                 }
-                c->advance();
             }
             catchupTransaction.commit(0);
         }
