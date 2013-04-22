@@ -186,7 +186,7 @@ namespace mongo {
         }
         // @return the maximum safe key to read for a tailable cursor.
         BSONObj maxSafeKey() {
-            if (theReplSet) {
+            if (theReplSet && theReplSet->gtidManager) {
                 BSONObjBuilder b;
                 GTID minUncommitted = theReplSet->gtidManager->getMinLiveGTID();
                 addGTIDToBSON("", minUncommitted, b);
