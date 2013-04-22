@@ -398,7 +398,8 @@ namespace mongo {
         }
 
         BackgroundSync* sync = BackgroundSync::get();
-        boost::thread producer(boost::bind(&BackgroundSync::producerThread, sync));
+        boost::thread producer(boost::bind(&BackgroundSync::applierThread, sync));
+        boost::thread applier(boost::bind(&BackgroundSync::producerThread, sync));
         boost::thread replInfoUpdater(boost::bind(&ReplSetImpl::updateReplInfoThread, this));
 
         task::fork(ghost);
