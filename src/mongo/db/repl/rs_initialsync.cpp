@@ -286,6 +286,8 @@ namespace mongo {
             return false;
         }
 
+        Client::Transaction transaction(0);
+
         string sourceHostname = source->h().toString();
         OplogReader r;
         if( !r.connect(sourceHostname) ) {
@@ -314,7 +316,6 @@ namespace mongo {
             openOplogFiles();
             fileOpsTransaction.commit(0);
 
-            ::abort();
             sethbmsg("initial sync clone all databases", 0);
 
             
@@ -446,6 +447,8 @@ namespace mongo {
 
         changeState(MemberState::RS_RECOVERING);
         sethbmsg("initial sync done",0);
+
+        transaction.commit();
 
         return true;
     }

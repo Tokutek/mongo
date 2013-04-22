@@ -475,6 +475,7 @@ namespace mongo {
         }
 
         changeState(MemberState::RS_STARTUP2);
+        task::fork(mgr);
 
         if (!theReplSet->myConfig().arbiterOnly) {
             // if we are the only member of the config, start us up as the primary.
