@@ -39,4 +39,34 @@ namespace mongo {
         _direction(direction) {
     }
 
+    Cursor *TailableCursor::make( NamespaceDetails *d ) {
+        if ( d != NULL ) {
+            return new TailableCursor(d);
+        } else {
+            return BasicCursor::make( d, 1 ); // this will make a dummy cursor
+        }
+    }
+
+    TailableCursor::TailableCursor( NamespaceDetails *d ) :
+        IndexCursor( d, d->getPKIndex(),
+                     // iterate forward over the interval [ minKey, safeKey )
+                     minKey, d->maxSafeKey(), false, 1 ) {
+    }
+
+    // pre/post condition: the current key is not passed the end key
+    bool TailableCursor::advance() {
+        killCurrentOp.checkForInterrupt();
+        if ( ok() ) {
+            // the last row we read was valid, move forward blindly.
+            _advance();
+        } else {
+            _endKey = _d->maxSafeKey();
+            findKey( !_currKey.isEmpty() ? _currKey : minKey );
+        }
+        // the key we are now positioned over may or may not be ok to read.
+        // checkCurrentAgainstBounds() will decide based on the _endKey
+        // (initialized to d->maxSafeKey), non-inclusive.
+        return checkCurrentAgainstBounds();
+    }
+
 } // namespace mongo

@@ -394,15 +394,9 @@ namespace mongo {
                                              _uncommittedPKs.begin()->firstElement().Long() :
                                              _nextPK.load();
             TOKULOG(2) << "maxSafeKey: minUncommitted " << minUncommitted << endl;
-            if (minUncommitted == 0) {
-                // there are no committed inserts at all. for clarity, return minKey.
-                return minKey;
-            } else {
-                const long long safeKey = minUncommitted - 1;
-                BSONObjBuilder b;
-                b.append("", safeKey);
-                return b.obj();
-            }
+            BSONObjBuilder b;
+            b.append("", minUncommitted);
+            return b.obj();
         }
 
         void checkUniqueSecondaryIndexes(const BSONObj &pk, const BSONObj &obj) {

@@ -213,6 +213,10 @@ namespace mongo {
 
     // takes an entry that was written _logTransactionOps
     // and applies them to collections
+    //
+    // TODO: possibly improve performance of this. We create and destroy a
+    // context for each operation. Find a way to amortize it out if necessary
+    //
     void applyTransactionFromOplog(BSONObj entry) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         if (!transactionAlreadyApplied) {

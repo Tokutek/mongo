@@ -382,15 +382,13 @@ namespace mongo {
             if (!r.conn()->runCommand("local", commitCommand, commandRet)) {
                 sethbmsg("failed to commit transaction for copying data", 0);
                 sleepsecs(1);
-                cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! transaction commit failed !!!!!!!!!!!\n" << endl;
                 return false;
             }
             // data should now be consistent
 
         }
-#if 0
         {            
-            Client::WriteContext ctx(rsoplog);
+            Client::ReadContext ctx(rsoplog);
             Client::Transaction catchupTransaction(0);
 
             // now we should have replInfo on this machine,
@@ -450,7 +448,7 @@ namespace mongo {
         }
         // TODO: figure out what to do with these
         verify( !box.getState().primary() ); // wouldn't make sense if we were.
-#endif
+
         changeState(MemberState::RS_RECOVERING);
         sethbmsg("initial sync done",0);
 
