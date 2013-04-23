@@ -485,6 +485,7 @@ namespace mongo {
                 )
             {
                 Lock::GlobalWrite lk;
+                theReplSet->gtidManager->catchUnappliedToLive();
                 openOplogFiles();
                 changeState(MemberState::RS_PRIMARY);
             }
@@ -494,6 +495,15 @@ namespace mongo {
                 // acting like a fast sync. If the oplog is not there, it will do
                 // a full clone from someone
                 syncDoInitialSync();
+                {
+                    Client::Transaction transaction(0);
+                    Client::ReadContext ctx(rsoplog);
+                    BSONObj o;
+                    bool ret= Helpers::getLast(rsoplog, o);
+                    verify(ret);
+                    GTID lastGTID = getGTIDFromBSON("_id", o);
+                    theReplSet->gtidManager->resetAfterInitialSync(lastGTID);
+                }
                 tryToGoLiveAsASecondary();
             }
         }
