@@ -450,6 +450,7 @@ namespace mongo {
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
 
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
 
@@ -716,10 +717,11 @@ namespace mongo {
             }
 
             if (newChunks.size() == 2){
+                Client::ReadContext ctx( ns );
+                Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
                 // If one of the chunks has only one object in it we should move it
                 for (int i=1; i >= 0 ; i--){ // high chunk more likely to have only one obj
 
-                    Client::ReadContext ctx( ns );
                     NamespaceDetails *d = nsdetails( ns.c_str() );
 
                     const IndexDetails *idx = d->findIndexByPrefix( keyPattern ,
@@ -749,6 +751,7 @@ namespace mongo {
                         }
                     }
                 }
+                txn.commit();
             }
 
             return true;
