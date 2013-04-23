@@ -460,7 +460,7 @@ def runTest(test):
     vlog.write("         Date : %s\n" % datetime.now().ctime())
     vlog.flush()
 
-    tempfile = SpooledTemporaryFile(max_size=16*1024)
+    tempfile = SpooledTemporaryFile(max_size=16*1024*1024)
 
     try:
         os.environ['MONGO_TEST_FILENAME'] = os.path.basename(path)
