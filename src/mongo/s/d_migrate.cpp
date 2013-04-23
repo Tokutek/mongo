@@ -444,6 +444,7 @@ namespace mongo {
          */
         bool storeCurrentLocs( long long maxChunkSize , string& errmsg , BSONObjBuilder& result ) {
             Client::ReadContext ctx( _ns );
+            Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             NamespaceDetails *d = nsdetails( _ns.c_str() );
             if ( ! d ) {
                 errmsg = "ns not found, should be impossible";
@@ -462,61 +463,64 @@ namespace mongo {
             BSONObj max = Helpers::modifiedRangeBound( _max , idx->keyPattern() , -1 );
 
             IndexCursor *idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
-            auto_ptr<ClientCursor> cc(
+            {
+                auto_ptr<ClientCursor> cc(
                     new ClientCursor( QueryOption_NoCursorTimeout ,
-                            shared_ptr<Cursor>( idxCursor ) ,  _ns ) );
+                                      shared_ptr<Cursor>( idxCursor ) ,  _ns ) );
 
-            // use the average object size to estimate how many objects a full chunk would carry
-            // do that while traversing the chunk's range using the sharding index, below
-            // there's a fair amount of slack before we determine a chunk is too large because object sizes will vary
-            NamespaceDetailsAccStats stats;
-            BSONObjBuilder statsResult;
-            d->fillCollectionStats(&stats, &statsResult, 1);
-            unsigned long long maxRecsWhenFull;
-            long long avgRecSize;
-            const long long totalRecs = stats.count;
-            if ( totalRecs > 0 ) {
-                avgRecSize = stats.size / totalRecs;
-                maxRecsWhenFull = maxChunkSize / avgRecSize;
-                maxRecsWhenFull = std::min( (unsigned long long)(Chunk::MaxObjectPerChunk + 1) , 130 * maxRecsWhenFull / 100 /* slack */ );
-            }
-            else {
-                avgRecSize = 0;
-                maxRecsWhenFull = Chunk::MaxObjectPerChunk + 1;
-            }
+                // use the average object size to estimate how many objects a full chunk would carry
+                // do that while traversing the chunk's range using the sharding index, below
+                // there's a fair amount of slack before we determine a chunk is too large because object sizes will vary
+                NamespaceDetailsAccStats stats;
+                BSONObjBuilder statsResult;
+                d->fillCollectionStats(&stats, &statsResult, 1);
+                unsigned long long maxRecsWhenFull;
+                long long avgRecSize;
+                const long long totalRecs = stats.count;
+                if ( totalRecs > 0 ) {
+                    avgRecSize = stats.size / totalRecs;
+                    maxRecsWhenFull = maxChunkSize / avgRecSize;
+                    maxRecsWhenFull = std::min( (unsigned long long)(Chunk::MaxObjectPerChunk + 1) , 130 * maxRecsWhenFull / 100 /* slack */ );
+                }
+                else {
+                    avgRecSize = 0;
+                    maxRecsWhenFull = Chunk::MaxObjectPerChunk + 1;
+                }
             
-            // do a full traversal of the chunk and don't stop even if we think it is a large chunk
-            // we want the number of records to better report, in that case
-            bool isLargeChunk = false;
-            unsigned long long recCount = 0;;
-            while ( cc->ok() ) {
-                BSONObj pk = cc->currPK();
-                if ( ! isLargeChunk ) {
-                    scoped_spinlock lk( _trackerLocks );
-                    _clonePKs.insert( pk.getOwned() );
-                }
-                cc->advance();
+                // do a full traversal of the chunk and don't stop even if we think it is a large chunk
+                // we want the number of records to better report, in that case
+                bool isLargeChunk = false;
+                unsigned long long recCount = 0;;
+                while ( cc->ok() ) {
+                    BSONObj pk = cc->currPK();
+                    if ( ! isLargeChunk ) {
+                        scoped_spinlock lk( _trackerLocks );
+                        _clonePKs.insert( pk.getOwned() );
+                    }
+                    cc->advance();
 
-                if ( ++recCount > maxRecsWhenFull ) {
-                    isLargeChunk = true;
+                    if ( ++recCount > maxRecsWhenFull ) {
+                        isLargeChunk = true;
+                    }
                 }
-            }
 
-            if ( isLargeChunk ) {
-                warning() << "can't move chunk of size (approximately) " << recCount * avgRecSize
-                          << " because maximum size allowed to move is " << maxChunkSize
-                          << " ns: " << _ns << " " << _min << " -> " << _max
-                          << migrateLog;
-                result.appendBool( "chunkTooBig" , true );
-                result.appendNumber( "estimatedChunkSize" , (long long)(recCount * avgRecSize) );
-                errmsg = "chunk too big to move";
-                return false;
+                if ( isLargeChunk ) {
+                    warning() << "can't move chunk of size (approximately) " << recCount * avgRecSize
+                              << " because maximum size allowed to move is " << maxChunkSize
+                              << " ns: " << _ns << " " << _min << " -> " << _max
+                              << migrateLog;
+                    result.appendBool( "chunkTooBig" , true );
+                    result.appendNumber( "estimatedChunkSize" , (long long)(recCount * avgRecSize) );
+                    errmsg = "chunk too big to move";
+                    return false;
+                }
             }
 
             {
                 scoped_spinlock lk( _trackerLocks );
                 log() << "moveChunk number of documents: " << _clonePKs.size() << migrateLog;
             }
+            txn.commit();
             return true;
         }
 
@@ -688,7 +692,12 @@ namespace mongo {
             }
         }
 
-        migrateFromStatus.doRemove( cleanup );
+        {
+            Client::ReadContext ctx(cleanup.ns);
+            Client::Transaction txn(DB_SERIALIZABLE);
+            migrateFromStatus.doRemove( cleanup );
+            txn.commit();
+        }
 
         cc().shutdown();
     }
@@ -745,6 +754,7 @@ namespace mongo {
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
 
 
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
@@ -1116,6 +1126,7 @@ namespace mongo {
                         log() << "moveChunk migrate commit not accepted by TO-shard: " << res
                               << " resetting shard version to: " << startingVersion << migrateLog;
                         {
+                            // TODO(leif): Why is this a global lock while the lock above at donateChunk is a db-level lock?
                             Lock::GlobalWrite lk;
                             log() << "moveChunk global lock acquired to reset shard version from "
                                     "failed migration" << endl;
