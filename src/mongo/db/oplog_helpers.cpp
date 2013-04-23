@@ -148,11 +148,12 @@ namespace OpLogHelpers{
     }
 
     static void runInsertFromOplog(const char* ns, BSONObj op) {
-        NamespaceDetails* nsd = nsdetails(ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         BSONObj row = op[KEY_STR_ROW].Obj();
         // handle add index case
         if (mongoutils::str::endsWith(ns, ".system.indexes")) {
+            Client::WriteContext ctx(ns);
+            NamespaceDetails* nsd = nsdetails(ns);
+            NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
             BSONObj key = row["key"].Obj();
             const string &coll = row["ns"].String();
             NamespaceDetails* collNsd = nsdetails(coll.c_str());
@@ -162,12 +163,20 @@ namespace OpLogHelpers{
             } else {
                 collNsd->createIndex(row);
             }
+            // overwrite set to true because we are running on a secondary
+            insertOneObject(nsd, nsdt, row, true);
         }
-        // overwrite set to true because we are running on a secondary
-        insertOneObject(nsd, nsdt, row, true);
+        else {
+            Client::ReadContext ctx(ns);
+            NamespaceDetails* nsd = nsdetails(ns);
+            NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+            // overwrite set to true because we are running on a secondary
+            insertOneObject(nsd, nsdt, row, true);
+        }
     }
 
     static void runDeleteFromOplog(const char* ns, BSONObj op) {
+        Client::ReadContext ctx(ns);
         NamespaceDetails* nsd = nsdetails(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         BSONObj row = op[KEY_STR_ROW].Obj();
@@ -176,6 +185,7 @@ namespace OpLogHelpers{
     }
 
     static void runUpdateFromOplog(const char* ns, BSONObj op) {
+        Client::ReadContext ctx(ns);
         NamespaceDetails* nsd = nsdetails(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         const char *names[] = { 
@@ -195,6 +205,7 @@ namespace OpLogHelpers{
     }
 
     static void runCommandFromOplog(const char* ns, BSONObj op) {
+        Client::WriteContext ctx(ns);
         BufBuilder bb;
         BSONObjBuilder ob;
         BSONObj command = op[KEY_STR_ROW].embeddedObject();
