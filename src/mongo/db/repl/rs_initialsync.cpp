@@ -355,7 +355,7 @@ namespace mongo {
             // the entire (small) replInfo dictionary, and the necessary portion
             // of the oplog
             {                
-                Client::WriteContext ctx(rsReplInfo);
+                Client::WriteContext ctx(rsoplog);
                 // first copy the replInfo, as we will use its information
                 // to determine  how much of the opLog to copy
                 BSONObj q;
@@ -382,12 +382,13 @@ namespace mongo {
             if (!r.conn()->runCommand("local", commitCommand, commandRet)) {
                 sethbmsg("failed to commit transaction for copying data", 0);
                 sleepsecs(1);
+                cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! transaction commit failed !!!!!!!!!!!\n" << endl;
                 return false;
             }
             // data should now be consistent
 
         }
-
+#if 0
         {            
             Client::WriteContext ctx(rsoplog);
             Client::Transaction catchupTransaction(0);
@@ -447,10 +448,9 @@ namespace mongo {
             }
             catchupTransaction.commit(0);
         }
-
         // TODO: figure out what to do with these
         verify( !box.getState().primary() ); // wouldn't make sense if we were.
-
+#endif
         changeState(MemberState::RS_RECOVERING);
         sethbmsg("initial sync done",0);
 

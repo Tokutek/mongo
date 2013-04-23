@@ -244,6 +244,7 @@ namespace mongo {
                 }
 
                 try {
+                    cout << "inserting " << js << " into " << to_collection << " \n";
                     insertObject(to_collection, js, 0, logForRepl);
                 }
                 catch( UserException& e ) {
@@ -335,6 +336,7 @@ namespace mongo {
         bool logForRepl
         ) 
     {
+        cout << "Running copy of " << ns << "with query " << query <<" \n";
         // main data
         copy(
             ns.c_str(), 
