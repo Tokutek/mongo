@@ -618,9 +618,8 @@ namespace mongo {
                     cmd.append( "checkShardingIndex" , ns );
                     cmd.append( "keyPattern" , proposedKey );
                     BSONObj cmdObj = cmd.obj();
-                    // TODO(leif): checkShardingIndex tries to open ns, but cc().database() will be for "admin", not ns, so we'll fail in nsdetails.
-                    // Need to fix here or (more likely) in CheckShardingIndex::run().
-                    if ( ! conn->get()->runCommand( "admin" , cmdObj , res ) ) {
+                    NamespaceString nss(ns);
+                    if ( ! conn->get()->runCommand( nss.db , cmdObj , res ) ) {
                         errmsg = res["errmsg"].str();
                         conn->done();
                         return false;
