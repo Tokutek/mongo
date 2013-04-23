@@ -285,8 +285,8 @@ namespace mongo {
         RowBuffer _buffer;
         int _getf_iteration;
 
-        /** find by key and a given PK */
-        void setPosition(const BSONObj &key, const BSONObj &pk, int direction);
+        /** find by key where the PK used for search is determined by _direction */
+        void findKey(const BSONObj &key);
         /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */
         void _advance();
         /** check if the current key is out of bounds, invalidate the current key if so */
@@ -306,8 +306,8 @@ namespace mongo {
         /** determine how many rows the next getf should bulk fetch */
         int getf_fetch_count();
         int getf_flags();
-        /** find by key where the PK used for search is determined by _direction */
-        void findKey(const BSONObj &key);
+        /** find by key and a given PK */
+        void setPosition(const BSONObj &key, const BSONObj &pk);
         /** pull more rows from the DBC into the RowBuffer */
         bool fetchMoreRows();
         void skipPrefix(const BSONObj &key, const int k);
