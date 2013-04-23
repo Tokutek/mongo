@@ -290,7 +290,7 @@ namespace mongo {
     // and these operations have been applied, we set the values
     // of the GTIDManager to reflect the state of the oplog so that
     // we can proceed with replication.
-    void GTIDManager::resetAfterInitialSync(GTID last) {
+    void GTIDManager::resetAfterInitialSync(GTID last, uint64_t lastTime, uint64_t lastHash) {
         _lock.lock();
         verify(_liveGTIDs.size() == 0);
         verify(_unappliedGTIDs.size() == 0);
@@ -300,6 +300,10 @@ namespace mongo {
 
         _lastUnappliedGTID = _lastLiveGTID;
         _minUnappliedGTID = _minLiveGTID;
+
+        _lastTimestamp = lastTime;
+        _lastHash = lastHash;
+
         _lock.unlock();
     }
 

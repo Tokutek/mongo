@@ -507,7 +507,13 @@ namespace mongo {
                     bool ret= Helpers::getLast(rsoplog, o);
                     verify(ret);
                     GTID lastGTID = getGTIDFromBSON("_id", o);
-                    theReplSet->gtidManager->resetAfterInitialSync(lastGTID);
+                    uint64_t lastTime = o["ts"]._numberLong();
+                    uint64_t lastHash = o["h"].numberLong();
+                    theReplSet->gtidManager->resetAfterInitialSync(
+                        lastGTID,
+                        lastTime,
+                        lastHash
+                        );
                 }
                 tryToGoLiveAsASecondary();
             }

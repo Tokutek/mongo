@@ -126,7 +126,7 @@ namespace mongo {
         void verifyReadyToBecomePrimary();
 
         void waitForDifferentMinLive(GTID last, uint32_t millis);
-        void resetAfterInitialSync(GTID last);
+        void resetAfterInitialSync(GTID last, uint64_t lastTime, uint64_t lastHash);
         void catchUnappliedToLive();
         
     };
