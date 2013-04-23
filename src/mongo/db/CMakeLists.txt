@@ -1,4 +1,5 @@
 add_subdirectory(auth)
+add_subdirectory(matcher)
 add_subdirectory(ops)
 
 add_library(mongohasher STATIC
@@ -97,7 +98,7 @@ add_library(coredb STATIC
   dbwebserver
   keypattern
   keygenerator
-  matcher
+  matcher.cpp
   spillable_vector
   txn_context
   gtid

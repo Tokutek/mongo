@@ -695,6 +695,26 @@ if (BUILD_TESTING)
   #target_link_libraries(authorization_manager_test authmocks)
   #target_link_libraries(authorization_session_test authmocks)
 
+  foreach (prefix
+      expression
+      expression_parser
+      )
+    add_executable(${prefix}_test
+      db/matcher/${prefix}_test
+      db/matcher/${prefix}_leaf_test
+      db/matcher/${prefix}_tree_test
+      db/matcher/${prefix}_array_test
+      )
+    add_dependencies(${prefix}_test generate_error_codes generate_action_types)
+    link_recursive_deps(${prefix}_test
+      COMBINED_LIBNAME expressions_unittest_deps
+      expressions
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
   foreach (test
       field_checker_test
       )
@@ -1082,6 +1102,13 @@ if (BUILD_TESTING)
       authorization_session_test
       )
     add_mongo_test(db/auth ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      expression_test
+      expression_parser_test
+      )
+    add_mongo_test(db/matcher ${test} ${test})
   endforeach ()
 
   foreach (test
