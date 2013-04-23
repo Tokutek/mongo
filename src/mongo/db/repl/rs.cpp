@@ -170,6 +170,7 @@ namespace mongo {
                 // case they are not)
                 log() << "replSet closing client sockets after relinquishing primary" << rsLog;
                 MessagingPort::closeAllSockets(1);
+                BackgroundSync::get()->startOpSyncThread();
             }
             else if( box.getState().startup2() ) {
                 // This block probably isn't necessary

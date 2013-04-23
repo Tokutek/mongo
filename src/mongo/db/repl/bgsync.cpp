@@ -354,7 +354,7 @@ namespace mongo {
 
     bool BackgroundSync::isRollbackRequired(OplogReader& r) {
         // TODO: reimplement this
-        ::abort();
+        //::abort();
         return false;
     }
 

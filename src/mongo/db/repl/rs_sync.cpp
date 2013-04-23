@@ -59,6 +59,7 @@ namespace mongo {
 
         sethbmsg("");
         changeState(MemberState::RS_SECONDARY);
+        BackgroundSync::get()->startOpSyncThread();
         return true;
     }
 
