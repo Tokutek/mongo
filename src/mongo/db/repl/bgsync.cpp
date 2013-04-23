@@ -84,6 +84,7 @@ namespace mongo {
             // at this point, we know we have data that has not been caught up
             // with the producer, because queueCounter.numElems > 0
             // we apply it
+            Client::ReadContext ctx(rsoplog);
             Client::Transaction transaction(DB_READ_UNCOMMITTED);
             BSONObjBuilder query;
             addGTIDToBSON("$gt", lastUnappliedGTID, query);
@@ -248,7 +249,9 @@ namespace mongo {
                 // that we must put in our oplog with an applied field of false
                 BSONObj o = r.nextSafe().getOwned();
                 Timer timer;
+                Client::Transaction transaction(DB_SERIALIZABLE);
                 replicateTransactionToOplog(o);
+                transaction.commit(0);
                 GTID currEntry = getGTIDFromOplogEntry(o);
                 {
                     boost::unique_lock<boost::mutex> lock(_mutex);
