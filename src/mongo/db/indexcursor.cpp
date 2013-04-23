@@ -198,7 +198,6 @@ namespace mongo {
         _nscanned(0),
         _numWanted(numWanted),
         _cursor(_idx),
-        _tailable(false),
         _ok(false),
         _getf_iteration(0)
     {
@@ -222,7 +221,6 @@ namespace mongo {
         _nscanned(0),
         _numWanted(numWanted),
         _cursor(_idx),
-        _tailable(false),
         _ok(false),
         _getf_iteration(0)
     {
@@ -313,11 +311,6 @@ namespace mongo {
     }
 
     void IndexCursor::initializeDBC() {
-        // If this is the primary key, don't read passed the max safe key.
-        if ( _d->isPKIndex(_idx) ) {
-            const BSONObj safeKey = _d->maxSafeKey();
-            _endKey = _endKey <= safeKey ? _endKey : safeKey;
-        }
         if ( _bounds != NULL ) {
             prelockBounds();
             const int r = skipToNextKey( _startKey );
@@ -360,7 +353,7 @@ namespace mongo {
     }
 
     int IndexCursor::getf_fetch_count() {
-        bool shouldBulkFetch = cc().tokuCommandSettings().shouldBulkFetch() && !tailable();
+        bool shouldBulkFetch = cc().tokuCommandSettings().shouldBulkFetch();
         if ( shouldBulkFetch ) {
             // Read-only cursor may bulk fetch rows into a buffer, for speed.
             // The number of rows fetched is proportional to the number of
@@ -385,7 +378,7 @@ namespace mongo {
     void IndexCursor::findKey(const BSONObj &key) {
         const bool isSecondary = !_d->isPKIndex(_idx);
         const BSONObj &pk = _direction > 0 ? minKey : maxKey;
-        setPosition(key, isSecondary ? pk : BSONObj());
+        setPosition(key, isSecondary ? pk : BSONObj(), _direction);
     };
 
     void IndexCursor::getCurrentFromBuffer() {
@@ -400,8 +393,8 @@ namespace mongo {
         }
     }
 
-    void IndexCursor::setPosition(const BSONObj &key, const BSONObj &pk) {
-        TOKULOG(3) << toString() << ": setPosition(): getf " << key << ", pk " << pk << ", direction " << _direction << endl;
+    void IndexCursor::setPosition(const BSONObj &key, const BSONObj &pk, int direction) {
+        TOKULOG(3) << toString() << ": setPosition(): getf " << key << ", pk " << pk << ", direction " << direction << endl;
 
         // Empty row buffer, reset fetch iteration, go get more rows.
         _buffer.empty();
@@ -414,7 +407,7 @@ namespace mongo {
         const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
         DBC *cursor = _cursor.dbc();
-        if ( _direction > 0 ) {
+        if ( direction > 0 ) {
             r = cursor->c_getf_set_range(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         } else {
             r = cursor->c_getf_set_range_reverse(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
@@ -435,13 +428,6 @@ namespace mongo {
     // Check the current key with respect to our key bounds, whether
     // it be provided by independent field ranges or by start/end keys.
     bool IndexCursor::checkCurrentAgainstBounds() {
-
-        // This is not the right place to check index bounds for a tailable cursor.
-        // We need to ensure that tailable cursors respect _endKey and never
-        // iterate passed it, as opposed to regular cursors which may read
-        // passed _endKey but not return it via currKey()/current() etc.
-        dassert(!tailable());
-
         if ( _bounds == NULL ) {
             checkEnd();
             if ( ok() ) {
@@ -485,7 +471,7 @@ namespace mongo {
         // to move backward, resulting in a "skip" of the key prefix, not a "find".
         const bool isSecondary = !_d->isPKIndex(_idx);
         const BSONObj &pk = _direction > 0 ? maxKey : minKey;
-        setPosition( b.done(), isSecondary ? pk : BSONObj() );
+        setPosition( b.done(), isSecondary ? pk : BSONObj(), _direction );
     }
 
     int IndexCursor::skipToNextKey( const BSONObj &currentKey ) {
@@ -635,39 +621,15 @@ again:      while ( !allInclusive && ok() ) {
         TOKULOG(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
     }
 
-    // pre/post condition: the current key is not passed the end key
-    bool IndexCursor::_advanceTailable() {
-        dassert( _currKey <= _endKey );
-        if ( !ok() ) {
-            _endKey = _d->maxSafeKey();
-        }
-        if ( _currKey < _endKey ) {
-            _advance();
-        } else {
-            // we cannot read passed _endKey. Mark the cursor as
-            // exhausted so on next advance() we read an updated
-            // maxSafeKey value and try to get more rows.
-            _ok = false;
-        }
-        dassert( _currKey <= _endKey );
-        return ok();
-    }
-
     bool IndexCursor::advance() {
         killCurrentOp.checkForInterrupt();
-        if ( tailable() ) {
-            // Tailable cursors have their own advance strategy.
-            return _advanceTailable();
+        if ( ok() ) {
+            // Advance one row further, and then check if we've went out of bounds.
+            _advance();
+            return checkCurrentAgainstBounds();
         } else {
-            if ( ok() ) {
-                // Advance one row further, and then check if we've went out of bounds.
-                _advance();
-                return checkCurrentAgainstBounds();
-            } else {
-                // Exhausted cursors (or "empty" cursors (ie: _idx == NULL)) that
-                // are not tailable never advance.
-                return false;
-            }
+            // Exhausted cursors never advance.
+            return false;
         }
     }
 
