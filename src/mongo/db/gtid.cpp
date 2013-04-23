@@ -121,7 +121,9 @@ namespace mongo {
         *timestamp = curTimeMillis64();
 
         _lock.lock();
+        dassert(GTID::cmp(_lastLiveGTID, _lastUnappliedGTID) == 0)
         _lastLiveGTID.inc();
+        _lastUnappliedGTID = _lastLiveGTID;
         *gtid = _lastLiveGTID;
         _liveGTIDs.insert(*gtid);
         _lastTimestamp = *timestamp;
