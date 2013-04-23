@@ -6,8 +6,9 @@ s.adminCommand( { enablesharding : "test" } );
 s.adminCommand( { shardcollection : "test.foo" , key : { num : 1 } } );
 
 bigString = "";
-while ( bigString.length < 1024 * 50 )
+while ( bigString.length < (1024 * 50) ) {
     bigString += "asocsancdnsjfnsdnfsjdhfasdfasdfasdfnsadofnsadlkfnsaldknfsad";
+}
 
 db = s.getDB( "test" )
 coll = db.foo;
@@ -31,6 +32,11 @@ s.adminCommand( "connpoolsync" );
 db.getLastError();
 
 print( "done inserting data" );
+
+// make sure the balancer runs at least 3 times
+for (x=0; x<3; ++x) {
+    s.startBalancer();
+}
 
 print( "datasize: " + tojson( s.getServer( "test" ).getDB( "admin" ).runCommand( { datasize : "test.foo" } ) ) );
 s.printChunks();
