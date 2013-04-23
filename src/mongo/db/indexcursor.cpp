@@ -378,7 +378,7 @@ namespace mongo {
     void IndexCursor::findKey(const BSONObj &key) {
         const bool isSecondary = !_d->isPKIndex(_idx);
         const BSONObj &pk = _direction > 0 ? minKey : maxKey;
-        setPosition(key, isSecondary ? pk : BSONObj(), _direction);
+        setPosition(key, isSecondary ? pk : BSONObj() );
     };
 
     void IndexCursor::getCurrentFromBuffer() {
@@ -393,8 +393,8 @@ namespace mongo {
         }
     }
 
-    void IndexCursor::setPosition(const BSONObj &key, const BSONObj &pk, int direction) {
-        TOKULOG(3) << toString() << ": setPosition(): getf " << key << ", pk " << pk << ", direction " << direction << endl;
+    void IndexCursor::setPosition(const BSONObj &key, const BSONObj &pk) {
+        TOKULOG(3) << toString() << ": setPosition(): getf " << key << ", pk " << pk << ", direction " << _direction << endl;
 
         // Empty row buffer, reset fetch iteration, go get more rows.
         _buffer.empty();
@@ -407,7 +407,7 @@ namespace mongo {
         const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
         DBC *cursor = _cursor.dbc();
-        if ( direction > 0 ) {
+        if ( _direction > 0 ) {
             r = cursor->c_getf_set_range(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         } else {
             r = cursor->c_getf_set_range_reverse(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
@@ -471,7 +471,7 @@ namespace mongo {
         // to move backward, resulting in a "skip" of the key prefix, not a "find".
         const bool isSecondary = !_d->isPKIndex(_idx);
         const BSONObj &pk = _direction > 0 ? maxKey : minKey;
-        setPosition( b.done(), isSecondary ? pk : BSONObj(), _direction );
+        setPosition( b.done(), isSecondary ? pk : BSONObj() );
     }
 
     int IndexCursor::skipToNextKey( const BSONObj &currentKey ) {
