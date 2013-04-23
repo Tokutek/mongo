@@ -475,6 +475,11 @@ namespace mongo {
         }
 
         changeState(MemberState::RS_STARTUP2);
+
+        // initial sync depends on the manager's threads having started
+        // so that heartbeats can be registered. Therefore, we must run this
+        // before starting the initial sync below. The rest of the replication
+        // threads are started in startThreads below.
         task::fork(mgr);
 
         if (!theReplSet->myConfig().arbiterOnly) {

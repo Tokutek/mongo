@@ -269,6 +269,12 @@ namespace mongo {
         _lock.unlock();
     }
 
+    // used for Tailable cursors on the oplog. The input GTID states the last
+    // GTID that was used as the min live GTID. This function returns when
+    // either millis milliseconds has passed, or when it notices that the min
+    // live GTID is something greater than the last min live GTID. This
+    // allows tailable cursors to know when there is some new data
+    // to be read
     void GTIDManager::waitForDifferentMinLive(GTID last, uint32_t millis) {
         _lock.lock();
         dassert(GTID::cmp(last, _minLiveGTID) <= 0);
@@ -279,6 +285,11 @@ namespace mongo {
         _lock.unlock();
     }
 
+    // after an intial sync has happened and the oplog has been updated
+    // with operations up to a certain point in the oplog stream,
+    // and these operations have been applied, we set the values
+    // of the GTIDManager to reflect the state of the oplog so that
+    // we can proceed with replication.
     void GTIDManager::resetAfterInitialSync(GTID last) {
         _lock.lock();
         verify(_liveGTIDs.size() == 0);
