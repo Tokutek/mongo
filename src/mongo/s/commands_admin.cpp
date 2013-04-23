@@ -26,20 +26,22 @@
 */
 
 #include "pch.h"
-#include "../util/net/message.h"
-#include "../util/net/listen.h"
-#include "../util/processinfo.h"
-#include "../util/stringutils.h"
-#include "../util/version.h"
-#include "../util/timer.h"
 
-#include "../client/connpool.h"
+#include "mongo/client/connpool.h"
 #include "mongo/client/dbclientcursor.h"
-#include "mongo/db/namespacestring.h"
 
-#include "../db/dbmessage.h"
-#include "../db/commands.h"
-#include "../db/stats/counters.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/dbmessage.h"
+#include "mongo/db/namespacestring.h"
+#include "mongo/db/stats/counters.h"
+
+#include "mongo/util/net/listen.h"
+#include "mongo/util/net/message.h"
+#include "mongo/util/processinfo.h"
+#include "mongo/util/ramlog.h"
+#include "mongo/util/stringutils.h"
+#include "mongo/util/timer.h"
+#include "mongo/util/version.h"
 
 #include "config.h"
 #include "chunk.h"
@@ -48,7 +50,6 @@
 #include "stats.h"
 #include "writeback_listener.h"
 #include "client_info.h"
-#include "../util/ramlog.h"
 
 namespace mongo {
 
