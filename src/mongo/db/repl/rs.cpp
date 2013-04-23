@@ -462,7 +462,6 @@ namespace mongo {
             // this might now work on secondaries
             // on secondaries, at this point in the code, we may not have yet created
             // the oplog, but we will see
-            openOplogFiles();
             Client::Transaction txn(DB_SERIALIZABLE);
             loadGTIDManager();
             txn.commit();
@@ -476,6 +475,7 @@ namespace mongo {
         }
 
         changeState(MemberState::RS_STARTUP2);
+        task::fork(mgr);
 
         if (!theReplSet->myConfig().arbiterOnly) {
             // if we are the only member of the config, start us up as the primary.
@@ -485,6 +485,8 @@ namespace mongo {
                 )
             {
                 Lock::GlobalWrite lk;
+                theReplSet->gtidManager->catchUnappliedToLive();
+                openOplogFiles();
                 changeState(MemberState::RS_PRIMARY);
             }
             else {
@@ -493,6 +495,15 @@ namespace mongo {
                 // acting like a fast sync. If the oplog is not there, it will do
                 // a full clone from someone
                 syncDoInitialSync();
+                {
+                    Client::Transaction transaction(0);
+                    Client::ReadContext ctx(rsoplog);
+                    BSONObj o;
+                    bool ret= Helpers::getLast(rsoplog, o);
+                    verify(ret);
+                    GTID lastGTID = getGTIDFromBSON("_id", o);
+                    theReplSet->gtidManager->resetAfterInitialSync(lastGTID);
+                }
                 tryToGoLiveAsASecondary();
             }
         }
@@ -719,6 +730,7 @@ namespace mongo {
 
         while( 1 ) {
             try {
+                Client::Transaction transaction(DB_SERIALIZABLE);
                 vector<ReplSetConfig> configs;
                 try {
                     DBDirectClient cli;
@@ -807,6 +819,7 @@ namespace mongo {
                     sleepsecs(20);
                     continue;
                 }
+                transaction.commit(0);
             }
             catch(DBException& e) {
                 startupStatus = BADCONFIG;

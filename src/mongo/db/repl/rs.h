@@ -498,7 +498,7 @@ namespace mongo {
 
     private:
         bool _syncDoInitialSync_clone( const char *master, const list<string>& dbs, shared_ptr<DBClientConnection> conn);
-        void _syncDoInitialSync();
+        bool _syncDoInitialSync();
         void syncDoInitialSync();
 
         // keep a list of hosts that we've tried recently that didn't work

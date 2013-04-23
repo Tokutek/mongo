@@ -242,7 +242,11 @@ namespace mongo {
 
                 Lock::GlobalWrite lk;
                 bo comment = BSON( "msg" << "initiating set");
+                cc().txn().txnIntiatingRs();
                 newConfig.saveConfigLocally(comment);
+                GTID minLiveGTID;
+                GTID minUnappliedGTID;
+                logToReplInfo(minLiveGTID, minUnappliedGTID);
                 log() << "replSet replSetInitiate config now saved locally.  Should come online in about a minute." << rsLog;
                 result.append("info", "Config now saved locally.  Should come online in about a minute.");
                 ReplSet::startupStatus = ReplSet::SOON;

@@ -121,7 +121,9 @@ namespace mongo {
         *timestamp = curTimeMillis64();
 
         _lock.lock();
+        dassert(GTID::cmp(_lastLiveGTID, _lastUnappliedGTID) == 0);
         _lastLiveGTID.inc();
+        _lastUnappliedGTID = _lastLiveGTID;
         *gtid = _lastLiveGTID;
         _liveGTIDs.insert(*gtid);
         _lastTimestamp = *timestamp;
@@ -277,11 +279,33 @@ namespace mongo {
         _lock.unlock();
     }
 
+    void GTIDManager::resetAfterInitialSync(GTID last) {
+        _lock.lock();
+        verify(_liveGTIDs.size() == 0);
+        verify(_unappliedGTIDs.size() == 0);
+        _lastLiveGTID = last;
+        _minLiveGTID = _lastLiveGTID;
+        _minLiveGTID.inc(); // comment this
+
+        _lastUnappliedGTID = _lastLiveGTID;
+        _minUnappliedGTID = _minLiveGTID;
+        _lock.unlock();
+    }
+
     uint64_t GTIDManager::getCurrTimestamp() {
         _lock.lock();
         uint64_t ret = _lastTimestamp;
         _lock.unlock();
         return ret;        
+    }
+
+    void GTIDManager::catchUnappliedToLive() {
+        _lock.lock();
+        verify(_liveGTIDs.size() == 0);
+        verify(_unappliedGTIDs.size() == 0);
+        _lastUnappliedGTID = _lastLiveGTID;
+        _minUnappliedGTID = _minLiveGTID;
+        _lock.unlock();
     }
 
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result) {

@@ -63,10 +63,10 @@ namespace mongo {
     void ReplSetImpl::syncDoInitialSync() {
         const static int maxFailedAttempts = 10;
         int failedAttempts = 0;
-        while ( failedAttempts < maxFailedAttempts ) {
+        bool syncSucceeded = false;
+        while ( !syncSucceeded && failedAttempts < maxFailedAttempts ) {
             try {
-                _syncDoInitialSync();
-                break;
+                syncSucceeded = _syncDoInitialSync();
             }
             catch(DBException& e) {
                 failedAttempts++;
@@ -270,20 +270,20 @@ namespace mongo {
     /**
      * Do the initial sync for this member.
      */
-    void ReplSetImpl::_syncDoInitialSync() {
+    bool ReplSetImpl::_syncDoInitialSync() {
         sethbmsg("initial sync pending",0);
 
         // if this is the first node, it may have already become primary
         if ( box.getState().primary() ) {
             sethbmsg("I'm already primary, no need for initial sync",0);
-            return;
+            return true;
         }
 
         const Member *source = getMemberToSyncTo();
         if (!source) {
             sethbmsg("initial sync need a member to be primary or secondary to do our initial sync", 0);
             sleepsecs(15);
-            return;
+            return false;
         }
 
         string sourceHostname = source->h().toString();
@@ -291,14 +291,14 @@ namespace mongo {
         if( !r.connect(sourceHostname) ) {
             sethbmsg( str::stream() << "initial sync couldn't connect to " << source->h().toString() , 0);
             sleepsecs(15);
-            return;
+            return false;
         }
 
         BSONObj lastOp = r.getLastOp(rsoplog);
         if( lastOp.isEmpty() ) {
             sethbmsg("initial sync couldn't read remote oplog", 0);
             sleepsecs(15);
-            return;
+            return false;
         }
 
         if( gtidManager->getLiveState().isInitial() ) {
@@ -314,7 +314,6 @@ namespace mongo {
             openOplogFiles();
             fileOpsTransaction.commit(0);
 
-            ::abort();
             sethbmsg("initial sync clone all databases", 0);
 
             
@@ -326,7 +325,7 @@ namespace mongo {
             if( !r.conn()->runCommand("local", beginCommand, commandRet)) {
                 sethbmsg("failed to begin transaction for copying data", 0);
                 sleepsecs(1);
-                return;
+                return false;
             }
 
             list<string> dbs = r.conn()->getDatabaseNames();
@@ -347,7 +346,7 @@ namespace mongo {
             if (!ret) {
                 veto(source->fullName(), 600);
                 sleepsecs(300);
-                return;
+                return false;
             }
 
             // at this point, we have copied all of the data from the 
@@ -356,7 +355,7 @@ namespace mongo {
             // the entire (small) replInfo dictionary, and the necessary portion
             // of the oplog
             {                
-                Client::WriteContext ctx(rsReplInfo);
+                Client::WriteContext ctx(rsoplog);
                 // first copy the replInfo, as we will use its information
                 // to determine  how much of the opLog to copy
                 BSONObj q;
@@ -383,68 +382,78 @@ namespace mongo {
             if (!r.conn()->runCommand("local", commitCommand, commandRet)) {
                 sethbmsg("failed to commit transaction for copying data", 0);
                 sleepsecs(1);
-                return;
+                cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! transaction commit failed !!!!!!!!!!!\n" << endl;
+                return false;
             }
             // data should now be consistent
 
         }
+#if 0
+        {            
+            Client::WriteContext ctx(rsoplog);
+            Client::Transaction catchupTransaction(0);
 
-        // now we should have replInfo on this machine,
-        // let's query the minUnappliedGTID to figure out from where
-        // we should copy the opLog
-        BSONObj result;
-        bool foundMinUnapplied = Helpers::findOne(
-            rsReplInfo, 
-            BSON( "_id" << "minUnapplied" ), 
-            result
-            );
-        verify(foundMinUnapplied);
-        GTID minUnappliedGTID;
-        minUnappliedGTID = getGTIDFromBSON("GTID", result);
-        // now we need to read the oplog forward
-        GTID lastEntry;
-        bool ret = getLastGTIDinOplog(&lastEntry);
-        isyncassert("could not get last oplog entry after clone", ret);
+            // now we should have replInfo on this machine,
+            // let's query the minUnappliedGTID to figure out from where
+            // we should copy the opLog
+            BSONObj result;
+            bool foundMinUnapplied = Helpers::findOne(
+                rsReplInfo, 
+                BSON( "_id" << "minUnapplied" ), 
+                result
+                );
+            verify(foundMinUnapplied);
+            GTID minUnappliedGTID;
+            minUnappliedGTID = getGTIDFromBSON("GTID", result);
+            // now we need to read the oplog forward
+            GTID lastEntry;
+            bool ret = getLastGTIDinOplog(&lastEntry);
+            isyncassert("could not get last oplog entry after clone", ret);
 
-        // TODO: query minLive and use that instead
-        GTID currEntry = minUnappliedGTID;
-        // first, we need to fill in the "gaps" in the oplog
-        while (GTID::cmp(currEntry, lastEntry) < 0) {
-            r.tailingQueryGTE(rsoplog, currEntry);
+            // TODO: query minLive and use that instead
+            GTID currEntry = minUnappliedGTID;
+            // first, we need to fill in the "gaps" in the oplog
             while (GTID::cmp(currEntry, lastEntry) < 0) {
-                bool hasMore = true;
-                if (!r.moreInCurrentBatch()) {
-                    hasMore = r.more();
+                r.tailingQueryGTE(rsoplog, currEntry);
+                while (GTID::cmp(currEntry, lastEntry) < 0) {
+                    bool hasMore = true;
+                    if (!r.moreInCurrentBatch()) {
+                        hasMore = r.more();
+                    }
+                    if (!hasMore) {
+                        break;
+                    }
+                    BSONObj op = r.nextSafe().getOwned();
+                    currEntry = getGTIDFromOplogEntry(op);
+                    replicateTransactionToOplog(op);
                 }
-                if (!hasMore) {
-                    break;
+            }
+
+            // at this point, we have got the oplog up to date,
+            // now we need to read forward in the oplog
+            // from minUnapplied
+            BSONObjBuilder query;
+            addGTIDToBSON("$gte", minUnappliedGTID, query);
+            // TODO: make this a read uncommitted cursor
+            // especially when this code moves to a background thread
+            // for running replication
+            {
+                shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(rsoplog, query.done());
+                while( c->ok() ) {
+                    if ( c->currentMatches()) {
+                        applyTransactionFromOplog(c->current());
+                    }
+                    c->advance();
                 }
-                BSONObj op = r.nextSafe().getOwned();
-                currEntry = getGTIDFromOplogEntry(op);
-                replicateTransactionToOplog(op);
             }
+            catchupTransaction.commit(0);
         }
-
-        // at this point, we have got the oplog up to date,
-        // now we need to read forward in the oplog
-        // from minUnapplied
-        BSONObjBuilder query;
-        addGTIDToBSON("$gte", minUnappliedGTID, query);
-        // TODO: make this a read uncommitted cursor
-        // especially when this code moves to a background thread
-        // for running replication
-        shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(rsoplog, query.done());
-        while( c->ok() ) {
-            if ( c->currentMatches()) {
-                applyTransactionFromOplog(c->current());
-            }
-            c->advance();
-        }
-
         // TODO: figure out what to do with these
         verify( !box.getState().primary() ); // wouldn't make sense if we were.
-
+#endif
         changeState(MemberState::RS_RECOVERING);
         sethbmsg("initial sync done",0);
+
+        return true;
     }
 }

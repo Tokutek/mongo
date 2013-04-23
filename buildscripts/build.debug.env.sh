@@ -30,20 +30,18 @@ pushd mongo
 popd
 
 echo "Checking out TokuDB"
-svn co -q https://svn.tokutek.com/tokudb/toku/tokudb
-echo "Checking out jemalloc"
-svn co -q https://svn.tokutek.com/tokudb/jemalloc-3.3.0
-echo "Checking out lzma"
-svn co -q https://svn.tokutek.com/tokudb/xz-4.999.9beta
+git clone git@github.com:Tokutek/ft-index.git
+pushd ft-index
+    git clone git@github.com:Tokutek/jemalloc.git third_party/jemalloc
+popd
 
-mkdir tokudb/dbg
-pushd tokudb/dbg
+mkdir ft-index/dbg
+pushd ft-index/dbg
   CC=gcc47 CXX=g++47 cmake \
       -D CMAKE_INSTALL_PREFIX=$BUILD_DIR/mongo/src/third_party/tokudb \
       -D CMAKE_BUILD_TYPE=Debug \
       -D BUILD_TESTING=OFF \
       -D USE_BDB=OFF \
-      -D TOKU_SVNROOT=$BUILD_DIR \
       ..
   cmake --build . --target install
 popd

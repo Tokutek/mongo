@@ -391,8 +391,6 @@ namespace mongo {
         until the initiation.
     */
     void ReplSetImpl::startThreads() {
-        task::fork(mgr);
-
         mgr->send( boost::bind(&Manager::msgCheckNewState, theReplSet->mgr) );
 
         if (myConfig().arbiterOnly) {
@@ -400,7 +398,8 @@ namespace mongo {
         }
 
         BackgroundSync* sync = BackgroundSync::get();
-        boost::thread producer(boost::bind(&BackgroundSync::producerThread, sync));
+        boost::thread producer(boost::bind(&BackgroundSync::applierThread, sync));
+        boost::thread applier(boost::bind(&BackgroundSync::producerThread, sync));
         boost::thread replInfoUpdater(boost::bind(&ReplSetImpl::updateReplInfoThread, this));
 
         task::fork(ghost);

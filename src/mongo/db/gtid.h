@@ -126,6 +126,8 @@ namespace mongo {
         void verifyReadyToBecomePrimary();
 
         void waitForDifferentMinLive(GTID last, uint32_t millis);
+        void resetAfterInitialSync(GTID last);
+        void catchUnappliedToLive();
         
     };
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result);
