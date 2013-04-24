@@ -627,7 +627,7 @@ namespace mongo {
      */
     bool queryWithQueryOptimizer( int queryOptions, const string& ns,
                                   const BSONObj &jsobj, CurOp& curop,
-                                  const BSONObj &query, BSONObj order,
+                                  const BSONObj &query, const BSONObj &order,
                                   const shared_ptr<ParsedQuery> &pq_shared,
                                   const ConfigVersion &shardingVersionAtStart,
                                   const bool getCachedExplainPlan,
@@ -638,35 +638,26 @@ namespace mongo {
         shared_ptr<Cursor> cursor;
         QueryPlanSummary queryPlan;
 
-        const bool tailable = pq.hasOption( QueryOption_CursorTailable );
-
-        NamespaceDetails *d = nsdetails( ns.c_str() );
-        if ( tailable ) {
-            if (d != NULL && !(d->isCapped() || str::equals(ns.c_str(), rsoplog))) {
-                uasserted( 13051, "tailable cursor requested on non-capped, non-oplog collection" );
-            }
-            const BSONObj nat1 = BSON( "$natural" << 1 );
-            if ( order.isEmpty() ) {
-                order = nat1;
-            } else {
-                uassert( 13052, "only {$natural:1} order allowed for tailable cursor", order == nat1 );
-            }
-        }
+        const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
+        
+        LOG(1) << "query beginning read-only transaction. tailable: " << tailable << endl;
         
         BSONObj oldPlan;
         if (getCachedExplainPlan) {
             scoped_ptr<MultiPlanScanner> mps( MultiPlanScanner::make( ns.c_str(), query, order ) );
             oldPlan = mps->cachedPlanExplainSummary();
         }
-
-        if ( tailable && pq.getNumToReturn() != 1 ) {
-            cursor.reset( TailableCursor::make(d) );
-        } else {
-            cursor = NamespaceDetailsTransient::getCursor( ns.c_str(), query, order,
-                                                           QueryPlanSelectionPolicy::any(),
-                                                           0, pq_shared, false, &queryPlan );
-        }
+        
+        cursor =
+            NamespaceDetailsTransient::getCursor( ns.c_str(), query, order, QueryPlanSelectionPolicy::any(),
+                                                  0, pq_shared, false, &queryPlan );
         verify( cursor );
+
+        // Tailable cursors must be marked as such before any use. This is so that
+        // the implementation knows that uncommitted data cannot be returned.
+        if ( tailable ) {
+            cursor->setTailable();
+        }
 
         scoped_ptr<QueryResponseBuilder> queryResponseBuilder
                 ( QueryResponseBuilder::make( pq, cursor, queryPlan, oldPlan ) );
@@ -674,7 +665,7 @@ namespace mongo {
         OpTime slaveReadTill;
         ClientCursor::Holder ccPointer( new ClientCursor( QueryOption_NoCursorTimeout, cursor, ns ) );
         
-        for( ; cursor->ok(); cursor->advance() ) {
+        for ( ; cursor->ok(); cursor->advance() ) {
 
             if ( pq.getMaxScan() && cursor->nscanned() > pq.getMaxScan() ) {
                 break;
@@ -950,6 +941,19 @@ namespace mongo {
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
                 
                 replVerifyReadsOk(&pq);
+                
+                if ( pq.hasOption( QueryOption_CursorTailable ) ) {
+                    NamespaceDetails *d = nsdetails( ns );
+                    if (d != NULL && !(d->isCapped() || str::equals(ns, rsoplog))) {
+                        uasserted( 13051, "tailable cursor requested on non-capped, non-oplog collection" );
+                    }
+                    const BSONObj nat1 = BSON( "$natural" << 1 );
+                    if ( order.isEmpty() ) {
+                        order = nat1;
+                    } else {
+                        uassert( 13052, "only {$natural:1} order allowed for tailable cursor", order == nat1 );
+                    }
+                }
                 
                 // Run a regular query.
 

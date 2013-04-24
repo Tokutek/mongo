@@ -245,11 +245,10 @@ namespace mongo {
             return false;
         }
 
-        // optional to implement, return the maximum key a tailable cursor
-        // may read (at the time of this call) to guaruntee that only committed
-        // values exist less than or equal to that key. returning maxKey
-        // effectively means the implementation makes no guaruntees.
-        virtual BSONObj maxSafeKey() {
+        // optional to implement, return the minimum key a tailable cursor
+        // may not read (at the time of this call) to guaruntee that all keys
+        // strictly less than the minUnsafeKey is either committed or aborted.
+        virtual BSONObj minUnsafeKey() {
             return maxKey;
         }
 

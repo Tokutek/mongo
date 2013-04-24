@@ -198,6 +198,7 @@ namespace mongo {
         _nscanned(0),
         _numWanted(numWanted),
         _cursor(_idx),
+        _tailable(false),
         _ok(false),
         _getf_iteration(0)
     {
@@ -221,6 +222,7 @@ namespace mongo {
         _nscanned(0),
         _numWanted(numWanted),
         _cursor(_idx),
+        _tailable(false),
         _ok(false),
         _getf_iteration(0)
     {
@@ -234,6 +236,14 @@ namespace mongo {
     }
 
     IndexCursor::~IndexCursor() {
+    }
+
+    void IndexCursor::setTailable() {
+        _tailable = true;
+        _minUnsafeKey = _d->minUnsafeKey();
+        if ( _currKey >= _minUnsafeKey ) {
+            _ok = false;
+        }
     }
 
     void IndexCursor::prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
@@ -353,7 +363,7 @@ namespace mongo {
     }
 
     int IndexCursor::getf_fetch_count() {
-        bool shouldBulkFetch = cc().tokuCommandSettings().shouldBulkFetch();
+        bool shouldBulkFetch = cc().tokuCommandSettings().shouldBulkFetch() && !tailable();
         if ( shouldBulkFetch ) {
             // Read-only cursor may bulk fetch rows into a buffer, for speed.
             // The number of rows fetched is proportional to the number of
@@ -378,7 +388,7 @@ namespace mongo {
     void IndexCursor::findKey(const BSONObj &key) {
         const bool isSecondary = !_d->isPKIndex(_idx);
         const BSONObj &pk = _direction > 0 ? minKey : maxKey;
-        setPosition(key, isSecondary ? pk : BSONObj() );
+        setPosition(key, isSecondary ? pk : BSONObj());
     };
 
     void IndexCursor::getCurrentFromBuffer() {
@@ -442,6 +452,10 @@ namespace mongo {
                     }
                 } while ( skipOutOfRangeKeysAndCheckEnd() );
             }
+        }
+        // Tailable cursors may not read the min unsafe key of the namespace.
+        if ( tailable() && _currKey >= _minUnsafeKey ) {
+            _ok = false;
         }
         return ok();
     }
@@ -624,13 +638,21 @@ again:      while ( !allInclusive && ok() ) {
     bool IndexCursor::advance() {
         killCurrentOp.checkForInterrupt();
         if ( ok() ) {
-            // Advance one row further, and then check if we've went out of bounds.
             _advance();
-            return checkCurrentAgainstBounds();
         } else {
-            // Exhausted cursors never advance.
-            return false;
+            if ( tailable() ) {
+                // Read a new value for the min unsafe key, then reposition the
+                // cursor to where we left off.
+                _minUnsafeKey = _d->minUnsafeKey();
+                findKey( !_currKey.isEmpty() ? _currKey : minKey );
+            } else {
+                // Exhausted cursors that are not tailable never advance
+                return false;
+            }
         }
+        // the key we are now positioned over may or may not be ok to read.
+        // checkCurrentAgainstBounds() will decide.
+        return checkCurrentAgainstBounds();
     }
 
     BSONObj IndexCursor::current() {

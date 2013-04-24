@@ -55,6 +55,11 @@ namespace mongo {
         /* current associated primary key (_id key) for the document */
         virtual BSONObj currPK() const { return BSONObj(); }
 
+        /* Implement these if you want the cursor to be "tailable" */
+
+        /* Request that the cursor starts tailing after advancing past last record. */
+        /* The implementation may or may not honor this request. */
+        virtual void setTailable() {}
         /* indicates if tailing is enabled. */
         virtual bool tailable() const {
             return false;
@@ -221,6 +226,9 @@ namespace mongo {
             return false;
         }
 
+        virtual bool tailable() const { return _tailable; }
+        virtual void setTailable();
+
         bool modifiedKeys() const { return _multiKey; }
         bool isMultiKey() const { return _multiKey; }
 
@@ -250,7 +258,38 @@ namespace mongo {
         
         long long nscanned() const { return _nscanned; }
 
-    protected:
+    private:
+
+        void init( const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
+        void init( const shared_ptr< FieldRangeVector > &_bounds, int singleIntervalLimit, int _direction );
+
+        /** Initialize the internal DBC */
+        void initializeDBC();
+        void _prelockCompoundBounds(const int currentRange, vector<const FieldInterval *> &combo,
+                                    BufBuilder &startKeyBuilder, BufBuilder &endKeyBuilder);
+        void prelockBounds();
+        void prelockRange(const BSONObj &startKey, const BSONObj &endKey);
+        /** Get the current key/pk/obj from the row buffer and set _currKey/PK/Obj */
+        void getCurrentFromBuffer();
+        /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */
+        void _advance();
+
+        /** determine how many rows the next getf should bulk fetch */
+        int getf_fetch_count();
+        int getf_flags();
+        /** pull more rows from the DBC into the RowBuffer */
+        bool fetchMoreRows();
+        /** find by key where the PK used for search is determined by _direction */
+        void findKey(const BSONObj &key);
+        /** find by key and a given PK */
+        void setPosition(const BSONObj &key, const BSONObj &pk);
+        /** check if the current key is out of bounds, invalidate the current key if so */
+        bool checkCurrentAgainstBounds();
+        void skipPrefix(const BSONObj &key, const int k);
+        int skipToNextKey(const BSONObj &currentKey);
+        bool skipOutOfRangeKeysAndCheckEnd();
+        void checkEnd();
+
         NamespaceDetails *const _d;
         const IndexDetails &_idx;
         const Ordering _ordering;
@@ -258,6 +297,7 @@ namespace mongo {
         set<BSONObj> _dups;
         BSONObj _startKey;
         BSONObj _endKey;
+        BSONObj _minUnsafeKey;
         bool _endKeyInclusive;
         bool _multiKey; // this must be updated every getmore batch in case someone added a multikey
         int _direction;
@@ -269,7 +309,9 @@ namespace mongo {
         int _numWanted;
 
         IndexDetails::Cursor _cursor;
-        // When true, the cursor is operational. Otherwise, it is invalid to use.
+        // An exhausted cursor has no more rows and is done iterating,
+        // unless it's tailable. If so, it may try to read more rows.
+        bool _tailable;
         bool _ok;
 
         // The current key, pk, and obj for this cursor. Keys are stored
@@ -284,36 +326,6 @@ namespace mongo {
         // of bulk fetch so we know an appropriate amount of rows to fetch.
         RowBuffer _buffer;
         int _getf_iteration;
-
-        /** find by key where the PK used for search is determined by _direction */
-        void findKey(const BSONObj &key);
-        /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */
-        void _advance();
-        /** check if the current key is out of bounds, invalidate the current key if so */
-        bool checkCurrentAgainstBounds();
-
-    private:
-        /** Initialize the internal DBC */
-        void initializeDBC();
-
-        void _prelockCompoundBounds(const int currentRange, vector<const FieldInterval *> &combo,
-                                    BufBuilder &startKeyBuilder, BufBuilder &endKeyBuilder);
-        void prelockBounds();
-        void prelockRange(const BSONObj &startKey, const BSONObj &endKey);
-        /** Get the current key/pk/obj from the row buffer and set _currKey/PK/Obj */
-        void getCurrentFromBuffer();
-
-        /** determine how many rows the next getf should bulk fetch */
-        int getf_fetch_count();
-        int getf_flags();
-        /** find by key and a given PK */
-        void setPosition(const BSONObj &key, const BSONObj &pk);
-        /** pull more rows from the DBC into the RowBuffer */
-        bool fetchMoreRows();
-        void skipPrefix(const BSONObj &key, const int k);
-        int skipToNextKey(const BSONObj &currentKey);
-        bool skipOutOfRangeKeysAndCheckEnd();
-        void checkEnd();
     };
 
     /**
@@ -333,6 +345,8 @@ namespace mongo {
         virtual string toString() const {
             return _direction > 0 ? "BasicCursor" : "ReverseCursor";
         }
+        virtual void setTailable() { _c.setTailable(); }
+        virtual bool tailable() const { return _c.tailable(); }
         virtual bool getsetdup(const BSONObj &pk) { return false; }
         virtual bool isMultiKey() const { return false; }
         virtual bool modifiedKeys() const { return false; }
@@ -372,27 +386,9 @@ namespace mongo {
             int _direction;
         };
 
+    private:
         IndexCursor _c;
         int _direction;
-    };
-
-    // Tailable cursors are implemented as an IndexCursor over the PK
-    // index with a special advance strategy.
-    class TailableCursor : public IndexCursor {
-    public:
-        static Cursor *make( NamespaceDetails *d  );
-
-        virtual bool tailable() const {
-            return true;
-        }
-        virtual bool advance();
-        // For legacy reasons, a tailable cursor is identified as a BasicCursor
-        virtual string toString() const {
-            return "BasicCursor";
-        }
-
-    private:
-        TailableCursor( NamespaceDetails *d );
     };
 
 } // namespace mongo

@@ -185,7 +185,7 @@ namespace mongo {
             IndexedCollection(serialized) {
         }
         // @return the maximum safe key to read for a tailable cursor.
-        BSONObj maxSafeKey() {
+        BSONObj minUnsafeKey() {
             if (theReplSet && theReplSet->gtidManager) {
                 BSONObjBuilder b;
                 GTID minUncommitted = theReplSet->gtidManager->getMinLiveGTID();
@@ -318,7 +318,7 @@ namespace mongo {
     //
     // Tailable cursors over capped collections may only read up to one less
     // than the minimum uncommitted primary key to ensure that they never miss
-    // any data. This information is communicated through minSafeKey(). On
+    // any data. This information is communicated through minUnsafeKey(). On
     // commit/abort, the any primary keys inserted into a capped collection are
     // noted so we can properly maintain the min uncommitted key.
     //
@@ -387,13 +387,13 @@ namespace mongo {
         }
 
         // @return the maximum safe key to read for a tailable cursor.
-        BSONObj maxSafeKey() {
+        BSONObj minUnsafeKey() {
             SimpleMutex::scoped_lock lk(_mutex);
 
             const long long minUncommitted = _uncommittedPKs.size() > 0 ?
                                              _uncommittedPKs.begin()->firstElement().Long() :
                                              _nextPK.load();
-            TOKULOG(2) << "maxSafeKey: minUncommitted " << minUncommitted << endl;
+            TOKULOG(2) << "minUnsafeKey: minUncommitted " << minUncommitted << endl;
             BSONObjBuilder b;
             b.append("", minUncommitted);
             return b.obj();
