@@ -144,6 +144,7 @@ namespace mongo {
     class CmdReplSetInitiate : public ReplSetCommand {
     public:
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
         CmdReplSetInitiate() : ReplSetCommand("replSetInitiate") { }
         virtual void help(stringstream& h) const {
             h << "Initiate/christen a replica set.";
@@ -237,10 +238,10 @@ namespace mongo {
 
                 log() << "replSet replSetInitiate all members seem up" << rsLog;
 
+                Lock::GlobalWrite lk;
+                Client::Transaction transaction(DB_SERIALIZABLE);
                 createOplog();
                 openOplogFiles();
-
-                Lock::GlobalWrite lk;
                 bo comment = BSON( "msg" << "initiating set");
                 cc().txn().txnIntiatingRs();
                 newConfig.saveConfigLocally(comment);
@@ -251,6 +252,7 @@ namespace mongo {
                 result.append("info", "Config now saved locally.  Should come online in about a minute.");
                 ReplSet::startupStatus = ReplSet::SOON;
                 ReplSet::startupStatusMsg.set("Received replSetInitiate - should come online shortly.");
+                transaction.commit();
             }
             catch( DBException& e ) {
                 log() << "replSet replSetInitiate exception: " << e.what() << rsLog;

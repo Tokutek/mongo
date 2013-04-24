@@ -142,6 +142,7 @@ namespace mongo {
             help << "\nhttp://dochub.mongodb.org/core/replicasetcommands";
         }
         CmdReplSetReconfig() : ReplSetCommand("replSetReconfig"), mutex("rsreconfig") { }
+        virtual bool needsTxn() const { return false; }
         virtual bool run(const string& a, BSONObj& b, int e, string& errmsg, BSONObjBuilder& c, bool d) {
             try {
                 rwlock_try_write lk(mutex);

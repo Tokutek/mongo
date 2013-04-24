@@ -75,6 +75,7 @@ namespace mongo {
             return false;
         }
 
+        virtual bool needsTxn() const { return false; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             GTIDManager* gtidMgr = theReplSet->gtidManager;
             if( !check(errmsg, result) )
@@ -112,6 +113,7 @@ namespace mongo {
     public:
         CmdReplSetElect() : ReplSetCommand("replSetElect") { }
     private:
+        virtual bool needsTxn() const { return false; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if( !check(errmsg, result) )
                 return false;

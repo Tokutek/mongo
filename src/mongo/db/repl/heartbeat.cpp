@@ -57,6 +57,7 @@ namespace mongo {
     class CmdReplSetHeartbeat : public ReplSetCommand {
     public:
         CmdReplSetHeartbeat() : ReplSetCommand("replSetHeartbeat") { }
+        virtual bool needsTxn() const { return false; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if( replSetBlind ) {
                 if (theReplSet) {

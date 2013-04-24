@@ -185,7 +185,7 @@ namespace mongo {
         BSONObjBuilder q;        
         addGTIDToBSON("$gte", gtid, q);
         BSONObjBuilder query;
-        query.append("ts", q.done());
+        query.append("_id", q.done());
         tailingQuery(ns, query.done(), fields);
     }
 }
