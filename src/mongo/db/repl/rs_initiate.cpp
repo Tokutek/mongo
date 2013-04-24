@@ -239,20 +239,21 @@ namespace mongo {
                 log() << "replSet replSetInitiate all members seem up" << rsLog;
 
                 Lock::GlobalWrite lk;
-                Client::Transaction transaction(DB_SERIALIZABLE);
-                createOplog();
-                openOplogFiles();
+                {
+                    Client::Transaction transaction(DB_SERIALIZABLE);
+                    createOplog();
+                    openOplogFiles();
+                    GTID minLiveGTID;
+                    GTID minUnappliedGTID;
+                    logToReplInfo(minLiveGTID, minUnappliedGTID);
+                    transaction.commit();
+                }
                 bo comment = BSON( "msg" << "initiating set");
-                cc().txn().txnIntiatingRs();
-                newConfig.saveConfigLocally(comment);
-                GTID minLiveGTID;
-                GTID minUnappliedGTID;
-                logToReplInfo(minLiveGTID, minUnappliedGTID);
+                newConfig.saveConfigLocally(comment, true);
                 log() << "replSet replSetInitiate config now saved locally.  Should come online in about a minute." << rsLog;
                 result.append("info", "Config now saved locally.  Should come online in about a minute.");
                 ReplSet::startupStatus = ReplSet::SOON;
                 ReplSet::startupStatusMsg.set("Received replSetInitiate - should come online shortly.");
-                transaction.commit();
             }
             catch( DBException& e ) {
                 log() << "replSet replSetInitiate exception: " << e.what() << rsLog;

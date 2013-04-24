@@ -746,7 +746,6 @@ namespace mongo {
 
         while( 1 ) {
             try {
-                Client::Transaction transaction(DB_SERIALIZABLE);
                 vector<ReplSetConfig> configs;
                 try {
                     DBDirectClient cli;
@@ -835,7 +834,6 @@ namespace mongo {
                     sleepsecs(20);
                     continue;
                 }
-                transaction.commit(0);
             }
             catch(DBException& e) {
                 startupStatus = BADCONFIG;
