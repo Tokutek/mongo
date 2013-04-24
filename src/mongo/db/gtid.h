@@ -105,15 +105,15 @@ namespace mongo {
         // notification that user of GTID has completed work
         // and either committed or aborted transaction associated with
         // GTID
-        void noteLiveGTIDDone(GTID gtid);
+        void noteLiveGTIDDone(const GTID& gtid);
 
         // methods for running on a secondary
 
         // This function is called on a secondary when a GTID 
         // from the primary is added and committed to the opLog
-        void noteGTIDAdded(GTID gtid);
-        void noteApplyingGTID(GTID gtid);
-        void noteGTIDApplied(GTID gtid);
+        void noteGTIDAdded(const GTID& gtid);
+        void noteApplyingGTID(const GTID& gtid);
+        void noteGTIDApplied(const GTID& gtid);
 
         void getMins(GTID* minLiveGTID, GTID* minUnappliedGTID);
         GTID getMinLiveGTID();
@@ -128,6 +128,8 @@ namespace mongo {
         void waitForDifferentMinLive(GTID last, uint32_t millis);
         void resetAfterInitialSync(GTID last, uint64_t lastTime, uint64_t lastHash);
         void catchUnappliedToLive();
+
+        bool rollbackNeeded(const GTID& last, uint64_t lastTime, uint64_t lastHash);
         
     };
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result);

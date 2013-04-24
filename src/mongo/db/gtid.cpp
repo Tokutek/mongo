@@ -138,7 +138,7 @@ namespace mongo {
     //
     // THIS MUST BE DONE ON A PRIMARY
     //
-    void GTIDManager::noteLiveGTIDDone(GTID gtid) {
+    void GTIDManager::noteLiveGTIDDone(const GTID& gtid) {
         _lock.lock();
         dassert(GTID::cmp(gtid, _minLiveGTID) >= 0);
         dassert(_liveGTIDs.size() > 0);
@@ -166,7 +166,7 @@ namespace mongo {
 
     // This function is called on a secondary when a GTID 
     // from the primary is added and committed to the opLog
-    void GTIDManager::noteGTIDAdded(GTID gtid) {
+    void GTIDManager::noteGTIDAdded(const GTID& gtid) {
         _lock.lock();
         // if we are adding a GTID on a secondary, then 
         // these values must be equal
@@ -182,7 +182,7 @@ namespace mongo {
 
     // called when a secondary takes an unapplied GTID it has read in the oplog
     // and starts to apply it
-    void GTIDManager::noteApplyingGTID(GTID gtid) {
+    void GTIDManager::noteApplyingGTID(const GTID& gtid) {
         _lock.lock();
         dassert(GTID::cmp(gtid, _minUnappliedGTID) >= 0);
         dassert(GTID::cmp(gtid, _lastUnappliedGTID) > 0);
@@ -197,7 +197,7 @@ namespace mongo {
 
     // called when a GTID has finished being applied, which means
     // we can remove it from the unappliedGTIDs set
-    void GTIDManager::noteGTIDApplied(GTID gtid) {
+    void GTIDManager::noteGTIDApplied(const GTID& gtid) {
         _lock.lock();
         dassert(GTID::cmp(gtid, _minUnappliedGTID) >= 0);
         dassert(_unappliedGTIDs.size() > 0);
@@ -321,6 +321,17 @@ namespace mongo {
         _lastUnappliedGTID = _lastLiveGTID;
         _minUnappliedGTID = _minLiveGTID;
         _lock.unlock();
+    }
+    
+    bool GTIDManager::rollbackNeeded(
+        const GTID& last, 
+        uint64_t lastTime, 
+        uint64_t lastHash
+        ) 
+    {
+        return !(GTID::cmp(last, _lastLiveGTID) && 
+                 lastTime == _lastTimestamp && 
+                 lastHash == _lastHash);
     }
 
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result) {

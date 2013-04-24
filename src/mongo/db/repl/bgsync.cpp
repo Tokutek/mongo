@@ -225,12 +225,7 @@ namespace mongo {
                         return 0;
                     }
 
-                    // if we are the primary, get out
-                    // TODO: this should not be checked here
-                    // if we get here and are the primary, something went wrong
-                    if (theReplSet->isPrimary()) {
-                        return 0;
-                    }
+                    verify(!theReplSet->isPrimary());
 
                     {
                         boost::unique_lock<boost::mutex> lock(_mutex);
@@ -357,8 +352,23 @@ namespace mongo {
     }
 
     bool BackgroundSync::isRollbackRequired(OplogReader& r) {
-        // TODO: reimplement this
-        //::abort();
+        string hn = r.conn()->getServerAddress();
+        if (!r.more()) {
+            ::abort();
+            return true;
+        }
+
+        BSONObj o = r.nextSafe();
+        uint64_t ts = o["ts"]._numberLong();
+        uint64_t lastHash = o["h"].numberLong();
+        GTID gtid = getGTIDFromBSON("_id", o);
+        
+        if( theReplSet->gtidManager->rollbackNeeded(gtid, ts, lastHash)) {
+            log() << "rollback needed!" << rsLog;
+            ::abort();
+            return true;
+        }
+
         return false;
     }
 
