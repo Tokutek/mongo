@@ -1,5 +1,3 @@
-assert(false, "this probably fails because the fsync command isn't implemented");
-
 /* SERVER-4385
  * SyncClusterConnection should refresh sub-connections on recieving exceptions
  *

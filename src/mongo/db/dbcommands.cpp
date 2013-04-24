@@ -205,6 +205,9 @@ namespace mongo {
                     if (!cmdLine.logFlushPeriod != 0) {
                         storage::log_flush();
                     }
+                    // This is part of the protocol used by SyncClusterConnection.
+                    // We just fake it and say we synced one.
+                    result.append( "fsyncFiles" , 1 );
                 }
 
                 BSONElement e = cmdObj["w"];
