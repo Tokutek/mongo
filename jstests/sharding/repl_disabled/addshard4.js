@@ -1,4 +1,3 @@
-assert(false, "useHostname doesn't work yet");
 // a replica set's passive nodes should be okay to add as part of a shard config
 
 s = new ShardingTest( "addshard4", 2 , 0 , 1 , {useHostname : true});
