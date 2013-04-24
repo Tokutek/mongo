@@ -168,6 +168,7 @@ namespace mongo {
         SplitVector() : Command( "splitVector" , false ) {}
         virtual bool slaveOk() const { return false; }
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
         virtual void help( stringstream &help ) const {
             help <<
                  "Internal command.\n"
@@ -221,6 +222,7 @@ namespace mongo {
             {
                 // Get the size estimate for this namespace
                 Client::ReadContext ctx( ns );
+                Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
                 NamespaceDetails *d = nsdetails( ns );
                 if ( ! d ) {
                     errmsg = "ns not found";
@@ -290,6 +292,7 @@ namespace mongo {
                 if ( dataSize < maxChunkSize || recCount == 0 ) {
                     vector<BSONObj> emptyVector;
                     result.append( "splitKeys" , emptyVector );
+                    txn.commit();
                     return true;
                 }
                 
@@ -315,89 +318,91 @@ namespace mongo {
                 long long currCount = 0;
                 long long numChunks = 0;
                 
-                IndexCursor *idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
-                shared_ptr<Cursor> c( idxCursor );
-                auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
-                if ( ! cc->ok() ) {
-                    errmsg = "can't open a cursor for splitting (desired range is possibly empty)";
-                    return false;
-                }
-                
-                // Use every 'keyCount'-th key as a split point. We add the initial key as a sentinel, to be removed
-                // at the end. If a key appears more times than entries allowed on a chunk, we issue a warning and
-                // split on the following key.
-                set<BSONObj> tooFrequentKeys;
-                splitKeys.push_back( idxCursor->prettyKey( c->currKey().getOwned() ).extractFields( keyPattern ) );
-                while ( 1 ) {
-                    while ( cc->ok() ) {
-                        currCount++;
-                        
-                        if ( currCount > keyCount ) {
-                            BSONObj currKey = idxCursor->prettyKey( c->currKey() ).extractFields(keyPattern);
-                            // Do not use this split key if it is the same used in the previous split point.
-                            if ( currKey.woCompare( splitKeys.back() ) == 0 ) {
-                                tooFrequentKeys.insert( currKey.getOwned() );
-                            }
-                            else {
-                                splitKeys.push_back( currKey.getOwned() );
-                                currCount = 0;
-                                numChunks++;
-                                
-                                LOG(4) << "picked a split key: " << currKey << endl;
-                            }
-                            
-                        }
-                        
-                        cc->advance();
-                        
-                        // Stop if we have enough split points.
-                        if ( maxSplitPoints && ( numChunks >= maxSplitPoints ) ) {
-                            log() << "max number of requested split points reached (" << numChunks
-                                  << ") before the end of chunk " << ns << " " << min << " -->> " << max
-                                  << endl;
-                            break;
-                        }
-                        
+                {
+                    IndexCursor *idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
+                    shared_ptr<Cursor> c( idxCursor );
+                    auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
+                    if ( ! cc->ok() ) {
+                        errmsg = "can't open a cursor for splitting (desired range is possibly empty)";
+                        return false;
                     }
+                
+                    // Use every 'keyCount'-th key as a split point. We add the initial key as a sentinel, to be removed
+                    // at the end. If a key appears more times than entries allowed on a chunk, we issue a warning and
+                    // split on the following key.
+                    set<BSONObj> tooFrequentKeys;
+                    splitKeys.push_back( idxCursor->prettyKey( c->currKey().getOwned() ).extractFields( keyPattern ) );
+                    while ( 1 ) {
+                        while ( cc->ok() ) {
+                            currCount++;
+                        
+                            if ( currCount > keyCount ) {
+                                BSONObj currKey = idxCursor->prettyKey( c->currKey() ).extractFields(keyPattern);
+                                // Do not use this split key if it is the same used in the previous split point.
+                                if ( currKey.woCompare( splitKeys.back() ) == 0 ) {
+                                    tooFrequentKeys.insert( currKey.getOwned() );
+                                }
+                                else {
+                                    splitKeys.push_back( currKey.getOwned() );
+                                    currCount = 0;
+                                    numChunks++;
+                                
+                                    LOG(4) << "picked a split key: " << currKey << endl;
+                                }
+                            
+                            }
+                        
+                            cc->advance();
+                        
+                            // Stop if we have enough split points.
+                            if ( maxSplitPoints && ( numChunks >= maxSplitPoints ) ) {
+                                log() << "max number of requested split points reached (" << numChunks
+                                      << ") before the end of chunk " << ns << " " << min << " -->> " << max
+                                      << endl;
+                                break;
+                            }
+                        
+                        }
                     
-                    if ( splitKeys.size() > 1 || ! force )
-                        break;
+                        if ( splitKeys.size() > 1 || ! force )
+                            break;
                     
-                    force = false;
-                    keyCount = currCount / 2;
-                    currCount = 0;
-                    log() << "splitVector doing another cycle because of force, keyCount now: " << keyCount << endl;
+                        force = false;
+                        keyCount = currCount / 2;
+                        currCount = 0;
+                        log() << "splitVector doing another cycle because of force, keyCount now: " << keyCount << endl;
                     
-                    idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
-                    c.reset( idxCursor );
-                    cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
+                        idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
+                        c.reset( idxCursor );
+                        cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
+                    }
+
+                    //
+                    // 3. Format the result and issue any warnings about the data we gathered while traversing the
+                    //    index
+                    //
+                
+                    // Warn for keys that are more numerous than maxChunkSize allows.
+                    for ( set<BSONObj>::const_iterator it = tooFrequentKeys.begin(); it != tooFrequentKeys.end(); ++it ) {
+                        warning() << "chunk is larger than " << maxChunkSize
+                                  << " bytes because of key " << idxCursor->prettyKey( *it ) << endl;
+                    }
+                
+                    // Remove the sentinel at the beginning before returning
+                    splitKeys.erase( splitKeys.begin() );
+                    verify( c.get() );
+                
+                    if ( timer.millis() > cmdLine.slowMS ) {
+                        warning() << "Finding the split vector for " <<  ns << " over "<< keyPattern
+                                  << " keyCount: " << keyCount << " numSplits: " << splitKeys.size() 
+                                  << " lookedAt: " << currCount << " took " << timer.millis() << "ms"
+                                  << endl;
+                    }
                 }
-                
-                //
-                // 3. Format the result and issue any warnings about the data we gathered while traversing the
-                //    index
-                //
-                
-                // Warn for keys that are more numerous than maxChunkSize allows.
-                for ( set<BSONObj>::const_iterator it = tooFrequentKeys.begin(); it != tooFrequentKeys.end(); ++it ) {
-                    warning() << "chunk is larger than " << maxChunkSize
-                              << " bytes because of key " << idxCursor->prettyKey( *it ) << endl;
-                }
-                
-                // Remove the sentinel at the beginning before returning
-                splitKeys.erase( splitKeys.begin() );
-                verify( c.get() );
-                
-                if ( timer.millis() > cmdLine.slowMS ) {
-                    warning() << "Finding the split vector for " <<  ns << " over "<< keyPattern
-                              << " keyCount: " << keyCount << " numSplits: " << splitKeys.size() 
-                              << " lookedAt: " << currCount << " took " << timer.millis() << "ms"
-                              << endl;
-                }
-                
+                txn.commit();
+
                 // Warning: we are sending back an array of keys but are currently limited to
                 // 4MB work of 'result' size. This should be okay for now.
-                
             }
 
             result.append( "splitKeys" , splitKeys );

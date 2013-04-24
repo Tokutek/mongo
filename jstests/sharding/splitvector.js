@@ -1,4 +1,3 @@
-assert(false, "splitvector test disabled");
 // -------------------------
 //  SPLITVECTOR TEST UTILS
 // -------------------------
