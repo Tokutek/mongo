@@ -81,8 +81,8 @@ namespace mongo {
 
         {
             // TODO: (Zardosht) figure out if this local.me stuff is needed
-            Client::Transaction transaction(0);            
             Lock::DBWrite l("local");
+            Client::Transaction transaction(0);            
             // local.me is an identifier for a server for getLastError w:2+
             if ( ! Helpers::getSingleton( "local.me" , me ) ||
                  ! me.hasField("host") ||

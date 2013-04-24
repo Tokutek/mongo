@@ -789,8 +789,8 @@ namespace mongo {
             TokuCommandSettings settings;
             settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
             cc().setTokuCommandSettings(settings);
-            Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             Client::ReadContext ctx(ns);
+            Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             replVerifyReadsOk(&pq);
 
             NamespaceDetails *d = nsdetails(ns);
@@ -945,8 +945,8 @@ namespace mongo {
                 settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
                 settings.setBulkFetch(true);
                 cc().setTokuCommandSettings(settings);
-                Client::Transaction transaction((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY);
                 Client::ReadContext ctx(ns);
+                Client::Transaction transaction((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY);
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
                 
                 replVerifyReadsOk(&pq);
