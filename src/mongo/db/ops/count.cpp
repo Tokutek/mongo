@@ -58,26 +58,28 @@ namespace mongo {
         Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         try {
             bool simpleEqualityMatch = false;
-            shared_ptr<Cursor> cursor =
-            NamespaceDetailsTransient::getCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
-                                                  &simpleEqualityMatch );
-            for ( ; cursor->ok() ; cursor->advance() ) {
-                // With simple equality matching there is no need to use the matcher because the bounds
-                // are enforced by the FieldRangeVectorIterator and only key fields have constraints.  There
-                // is no need to do key deduping because an exact value is specified in the query for all key
-                // fields and duplicate keys are not allowed per document.
-                // NOTE In the distant past we used a min/max bounded IndexCursor with a shallow
-                // equality comparison to check for matches in the simple match case.  That may be
-                // more performant, but I don't think we've measured the performance.
-                if ( simpleEqualityMatch ||
-                    ( cursor->currentMatches() && !cursor->getsetdup( cursor->currPK() ) ) ) {
-                    if ( skip > 0 ) {
-                        --skip;
-                    }
-                    else {
-                        ++count;
-                        if ( limit > 0 && count >= limit ) {
-                            break;
+            {
+                shared_ptr<Cursor> cursor =
+                        NamespaceDetailsTransient::getCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
+                                                              &simpleEqualityMatch );
+                for ( ; cursor->ok() ; cursor->advance() ) {
+                    // With simple equality matching there is no need to use the matcher because the bounds
+                    // are enforced by the FieldRangeVectorIterator and only key fields have constraints.  There
+                    // is no need to do key deduping because an exact value is specified in the query for all key
+                    // fields and duplicate keys are not allowed per document.
+                    // NOTE In the distant past we used a min/max bounded IndexCursor with a shallow
+                    // equality comparison to check for matches in the simple match case.  That may be
+                    // more performant, but I don't think we've measured the performance.
+                    if ( simpleEqualityMatch ||
+                         ( cursor->currentMatches() && !cursor->getsetdup( cursor->currPK() ) ) ) {
+                        if ( skip > 0 ) {
+                            --skip;
+                        }
+                        else {
+                            ++count;
+                            if ( limit > 0 && count >= limit ) {
+                                break;
+                            }
                         }
                     }
                 }
