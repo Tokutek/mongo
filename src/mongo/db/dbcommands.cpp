@@ -1771,7 +1771,10 @@ namespace mongo {
         if ( c->locktype() == Command::NONE ) {
             verify( !c->lockGlobally() );
 
-            scoped_ptr<Client::Transaction> transaction(c->needsTxn() ? new Client::Transaction(c->txnFlags()) : NULL);
+            // This assert means your command has LockType NONE but thinks it needs a transaction.
+            // You shouldn't be making a transaction without a lock to protect metadata, so your
+            // command is probably broken.
+            dassert(!c->needsTxn());
 
             // we also trust that this won't crash
             retval = true;
@@ -1787,10 +1790,6 @@ namespace mongo {
             if (retval) {
                 client.curop()->ensureStarted();
                 retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
-            }
-
-            if (retval && transaction) {
-                transaction->commit();
             }
         }
         else if( c->locktype() != Command::WRITE ) { 
