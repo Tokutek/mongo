@@ -483,6 +483,7 @@ namespace mongo {
         // threads are started in startThreads below.
         task::fork(mgr);
 
+        bool goLiveAsSecondary = false;
         if (!theReplSet->myConfig().arbiterOnly) {
             // if we are the only member of the config, start us up as the primary.
             // don't depend on threads to startup first.
@@ -516,7 +517,7 @@ namespace mongo {
                         lastHash
                         );
                 }
-                tryToGoLiveAsASecondary();
+                goLiveAsSecondary = true;
             }
         }
 
@@ -524,6 +525,9 @@ namespace mongo {
         // we know either the server is the sole primary in a single node
         // replica set, or it does not require an initial sync
         startThreads();
+        if (goLiveAsSecondary) {
+            tryToGoLiveAsASecondary();
+        }
     }
 
     ReplSetImpl::StartupStatus ReplSetImpl::startupStatus = PRESTART;

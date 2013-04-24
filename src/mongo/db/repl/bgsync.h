@@ -61,8 +61,6 @@ namespace mongo {
         // thread.
         bool _opSyncRunning;
 
-        GTID _lastGTIDFetched;
-
         Member* _currentSyncTarget;
 
 

@@ -200,7 +200,8 @@ namespace mongo {
                 // if there is no one to sync from
                 return 1; //sleep one second
             }
-            r.tailingQueryGTE(rsoplog, _lastGTIDFetched);
+            GTID lastGTIDFetched = theReplSet->gtidManager->getLiveState();
+            r.tailingQueryGTE(rsoplog, lastGTIDFetched);
         }
 
         // if target cut connections between connecting and querying (for
@@ -249,11 +250,14 @@ namespace mongo {
                 // that we must put in our oplog with an applied field of false
                 BSONObj o = r.nextSafe().getOwned();
                 Timer timer;
-                Client::Transaction transaction(DB_SERIALIZABLE);
-                replicateTransactionToOplog(o);
-                transaction.commit(0);
-                GTID currEntry = getGTIDFromOplogEntry(o);
                 {
+                    Client::Transaction transaction(DB_SERIALIZABLE);
+                    Client::ReadContext ctx(rsoplog);
+                    replicateTransactionToOplog(o);
+                    transaction.commit(0);
+                }
+                {
+                    GTID currEntry = getGTIDFromOplogEntry(o);
                     boost::unique_lock<boost::mutex> lock(_mutex);
                     // update counters
                     theReplSet->gtidManager->noteGTIDAdded(currEntry);

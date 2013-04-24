@@ -387,6 +387,9 @@ namespace mongo {
             // data should now be consistent
 
         }
+        else {
+            openOplogFiles();
+        }
         {            
             Client::ReadContext ctx(rsoplog);
             Client::Transaction catchupTransaction(0);
