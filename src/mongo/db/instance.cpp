@@ -602,8 +602,8 @@ namespace mongo {
         TokuCommandSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
-        Client::Transaction transaction(DB_SERIALIZABLE);
         Client::ReadContext ctx(ns);
+        Client::Transaction transaction(DB_SERIALIZABLE);
 
         // writelock is used to synchronize stepdowns w/ writes
         uassert( 10056 ,  "not master", isMasterNs( ns ) );
