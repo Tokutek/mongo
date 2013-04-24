@@ -722,7 +722,7 @@ namespace mongo {
     public:
         virtual LockType locktype() const { return READ; }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual int txnFlags() const { return DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY; }
+        virtual bool needsTxn() const { return false; }
         CmdCount() : Command("count") { }
         virtual bool logTheOp() { return false; }
         virtual bool slaveOk() const {

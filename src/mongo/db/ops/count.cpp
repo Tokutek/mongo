@@ -54,6 +54,7 @@ namespace mongo {
         settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
 
+        Lock::assertAtLeastReadLocked(ns);
         Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         try {
             bool simpleEqualityMatch = false;
@@ -81,6 +82,7 @@ namespace mongo {
                     }
                 }
             }
+            transaction.commit();
             return count;
         }
         catch ( const DBException &e ) {
