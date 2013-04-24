@@ -60,23 +60,8 @@ namespace mongo {
             // the last row we read was valid, move forward blindly.
             _advance();
         } else {
-            if ( _currKey.isEmpty() ) {
-                // we didn't read any keys on initialization.
-                // try reading forward from minKey, again.
-                _endKey = _d->maxSafeKey();
-                setPosition( minKey, BSONObj(), 1 );
-            } else {
-                // we read a key at some point and the cursor is not ok.
-                // that must mean we up to the max safe key but were not
-                // allowed to return it.
-                dassert( _currKey <= _endKey );
-                _endKey = _d->maxSafeKey();
-                // to get back on track, we need to move to the first key
-                // just before the last key we read, and then advance forward
-                // by one.
-                setPosition( _currKey, BSONObj(), -1 );
-                _advance();
-            }
+            _endKey = _d->maxSafeKey();
+            findKey( !_currKey.isEmpty() ? _currKey : minKey );
         }
         // the key we are now positioned over may or may not be ok to read.
         // checkCurrentAgainstBounds() will decide based on the _endKey
