@@ -65,8 +65,7 @@ try{
     jsTest.log( "Calling GLE! " ) 
     coll.getDB().getLastErrorObj()
     assert( false )
-}
-catch( e ){
+}catch( e ){
     jsTest.log( "GLE : " + e )
     
     // Stupid string exceptions
@@ -94,8 +93,7 @@ try{
     jsTest.log( "Calling GLE! " ) 
     coll.getDB().getLastErrorObj()
     assert( false )
-}
-catch( e ){
+}catch( e ){
     jsTest.log( "GLE : " + e )
     
     // Stupid string exceptions
