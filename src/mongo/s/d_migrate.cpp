@@ -455,7 +455,7 @@ namespace mongo {
                                                             true );  /* require single key */
 
             if ( idx == NULL ) {
-                errmsg = (string)"can't find index in storeCurrentLocs" + causedBy( errmsg );
+                errmsg = mongoutils::str::stream() << "can't find index for " << _shardKeyPattern << " in storeCurrentLocs" << causedBy( errmsg );
                 return false;
             }
             // Assume both min and max non-empty, append MinKey's to make them fit chosen index

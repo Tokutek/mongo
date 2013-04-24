@@ -46,8 +46,9 @@ assert( !db.getLastError() );
 assert.eq( 2, c.count() );
 assert.eq( 0, c.count( {c:1} ) );
 
-c.ensureIndex( {loc:'2d'} );
-c.save( {a:2,b:2,loc:[0,0]} );
-near = db.runCommand( {geoNear:'foo', near:[0,0], query:unsatisfiable} );
-assert.commandWorked( near );
-assert.eq( 0, near.results.length );
+// disabled geo stuff
+//c.ensureIndex( {loc:'2d'} );
+//c.save( {a:2,b:2,loc:[0,0]} );
+//near = db.runCommand( {geoNear:'foo', near:[0,0], query:unsatisfiable} );
+//assert.commandWorked( near );
+//assert.eq( 0, near.results.length );

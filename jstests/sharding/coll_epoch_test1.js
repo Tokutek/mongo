@@ -30,8 +30,9 @@ jsTest.log( "Enabling sharding for the first time..." )
 admin.runCommand({ enableSharding : coll.getDB() + "" })
 admin.runCommand({ shardCollection : coll  + "", key : { _id : 1 } })
 
-for( var i = 0; i < 100; i++ )
+for( var i = 0; i < 100; i++ ) {
     insertMongos.getCollection( coll + "" ).insert({ _id : i, test : "a" })
+}
 assert.eq( null, insertMongos.getDB( coll.getDB() + "" ).getLastError() )    
 assert.eq( 100, staleMongos.getCollection( coll + "" ).find({ test : "a" }).itcount() )
 
@@ -48,8 +49,9 @@ admin.runCommand({ enableSharding : coll.getDB() + "" })
 coll.ensureIndex({ notId : 1 })
 admin.runCommand({ shardCollection : coll  + "", key : { notId : 1 } })
 
-for( var i = 0; i < 100; i++ )
+for( var i = 0; i < 100; i++ ) {
     insertMongos.getCollection( coll + "" ).insert({ notId : i, test : "b" })
+}
 assert.eq( null, insertMongos.getDB( coll.getDB() + "" ).getLastError() )
 assert.eq( 100, staleMongos.getCollection( coll + "" ).find({ test : "b" }).itcount() )
 assert.eq( 0, staleMongos.getCollection( coll + "" ).find({ test : { $in : [ "a" ] } }).itcount() )
@@ -74,8 +76,9 @@ admin.runCommand({ movePrimary : coll.getDB() + "",
 
 jsTest.log( "moved primary..." )
                    
-for( var i = 0; i < 100; i++ )
+for( var i = 0; i < 100; i++ ) {
     insertMongos.getCollection( coll + "" ).insert({ test : "c" })
+}
 assert.eq( null, insertMongos.getDB( coll.getDB() + "" ).getLastError() )
 
 jsTest.log( "waited for gle..." )
@@ -97,8 +100,9 @@ admin.runCommand({ movePrimary : coll.getDB() + "",
                    to : getOtherShard( config.databases.findOne({ _id : coll.getDB() + "" }).primary ) })
 admin.runCommand({ shardCollection : coll  + "", key : { _id : 1 } })
 
-for( var i = 0; i < 100; i++ )
+for( var i = 0; i < 100; i++ ) {
     insertMongos.getCollection( coll + "" ).insert({ test : "d" })
+}
 assert.eq( null, insertMongos.getDB( coll.getDB() + "" ).getLastError() )
 assert.eq( 100, staleMongos.getCollection( coll + "" ).find({ test : "d" }).itcount() )
 assert.eq( 0, staleMongos.getCollection( coll + "" ).find({ test : { $in : [ "a", "b", "c" ] } }).itcount() )
