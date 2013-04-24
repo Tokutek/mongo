@@ -192,6 +192,7 @@ namespace mongo {
         getOplogReader(r);
 
         // no server found
+        GTID lastGTIDFetched = theReplSet->gtidManager->getLiveState();
         {
             boost::unique_lock<boost::mutex> lock(_mutex);
 
@@ -200,7 +201,6 @@ namespace mongo {
                 // if there is no one to sync from
                 return 1; //sleep one second
             }
-            GTID lastGTIDFetched = theReplSet->gtidManager->getLiveState();
             r.tailingQueryGTE(rsoplog, lastGTIDFetched);
         }
 
