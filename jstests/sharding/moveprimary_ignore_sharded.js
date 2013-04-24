@@ -77,8 +77,8 @@ assert.neq( null, collsFooB[1].findOne() )
 assert.neq( null, collsFooB[2].findOne() )
 
 // All indexes sane
-assert.eq( 2, new Mongo( fooPrimaryShard.host ).getCollection( collsFooA[0].getDB() + ".system.indexes" ).find().count() )
-assert.eq( 1, new Mongo( fooOtherShard.host ).getCollection( collsFooA[0].getDB() + ".system.indexes" ).find().count() )
+assert.eq( 3, new Mongo( fooPrimaryShard.host ).getCollection( collsFooA[0].getDB() + ".system.indexes" ).find().count() )
+assert.eq( 2, new Mongo( fooOtherShard.host ).getCollection( collsFooA[0].getDB() + ".system.indexes" ).find().count() )
 
 jsTest.log( "Running movePrimary for bar through mongosB ..." )
 
@@ -101,8 +101,8 @@ assert.neq( null, collsBarB[1].findOne() )
 assert.neq( null, collsBarB[2].findOne() )
 
 // All indexes sane
-assert.eq( 2, new Mongo( barPrimaryShard.host ).getCollection( collsBarA[0].getDB() + ".system.indexes" ).find().count() )
-assert.eq( 1, new Mongo( barOtherShard.host ).getCollection( collsBarA[0].getDB() + ".system.indexes" ).find().count() )
+assert.eq( 3, new Mongo( barPrimaryShard.host ).getCollection( collsBarA[0].getDB() + ".system.indexes" ).find().count() )
+assert.eq( 2, new Mongo( barOtherShard.host ).getCollection( collsBarA[0].getDB() + ".system.indexes" ).find().count() )
 
 st.stop()
 

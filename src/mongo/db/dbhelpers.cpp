@@ -303,9 +303,8 @@ namespace mongo {
     }
 
     long long Helpers::runCount(const char *ns, const BSONObj& cmd, string& err, int& errCode ) {
-        Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+        Lock::DBRead lk(ns);
         long long r = mongo::runCount(ns, cmd, err, errCode);
-        transaction.commit();
         return r;
     }
 

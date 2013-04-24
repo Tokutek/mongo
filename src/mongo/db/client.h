@@ -65,6 +65,7 @@ namespace mongo {
         // always be in clientsMutex when manipulating this. killop stuff uses these.
         static set<Client*>& clients;
         static mongo::mutex& clientsMutex;
+        static void abortLiveTransactions();
         static int getActiveClientCount( int& writers , int& readers );
         class Context;
         ~Client();
@@ -181,7 +182,7 @@ namespace mongo {
         };
 
         bool hasTxn() const {
-            if (_transactions.get() == NULL) {
+            if (!_transactions) {
                 return false;
             }
             return _transactions->hasLiveTxn();
@@ -197,9 +198,7 @@ namespace mongo {
 
         void beginClientTxn(int flags) {
             if (!_transactions) {
-                shared_ptr<TransactionStack> stack (new TransactionStack());
-                dassert(stack != NULL);
-                _transactions = stack;
+                _transactions.reset(new TransactionStack());
             }
             _transactions->beginTxn(flags);
         }

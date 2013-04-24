@@ -79,8 +79,8 @@ namespace mongo {
                     TokuCommandSettings settings;
                     settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
                     cc().setTokuCommandSettings(settings);
+                    Client::ReadContext ctx(ns);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    Client::WriteContext ctx(ns);
                     NamespaceDetails* nsd = nsdetails( ns.c_str() );
                     if ( ! nsd ) {
                         // collection was dropped

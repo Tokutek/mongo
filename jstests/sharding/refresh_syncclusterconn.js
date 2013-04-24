@@ -1,3 +1,5 @@
+assert(false, "this probably fails because the fsync command isn't implemented");
+
 /* SERVER-4385
  * SyncClusterConnection should refresh sub-connections on recieving exceptions
  *
@@ -17,11 +19,17 @@ MongoRunner.stopMongod(mongoA);
 MongoRunner.runMongod({ restart: mongoA.runId });
 
 try {
+    jsTest.log("this insert should fail");
     mongoSCC.getCollection("foo.bar").insert({ x : 1});
+    jsTest.log("first insert didn't fail as it should have");
     assert(false , "must throw an insert exception");
 } catch (e) {
+    jsTest.log("first insert failed");
     printjson(e);
 }
 
+jsTest.log("this insert should succeed");
 mongoSCC.getCollection("foo.bar").insert({ blah : "blah" });
+jsTest.log("running GLE");
 assert.eq(null, mongoSCC.getDB("foo").getLastError());
+jsTest.log("second insert succeeded as it should have");

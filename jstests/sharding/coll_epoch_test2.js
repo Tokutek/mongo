@@ -74,7 +74,9 @@ coll.drop()
 admin.runCommand({ enableSharding : coll.getDB() + "" })
 admin.runCommand({ shardCollection : coll  + "", key : { _id : 1 } })
 
-for( var i = 0; i < 100; i++ ) coll.insert({ _id : i })
+for( var i = 0; i < 100; i++ ) {
+    coll.insert({ _id : i })
+}
 assert.eq( null, coll.getDB().getLastError() )
 
 printjson( admin.runCommand({ split : coll + "", middle : { _id : 200 } }) )

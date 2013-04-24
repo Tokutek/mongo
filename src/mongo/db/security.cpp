@@ -87,6 +87,7 @@ namespace mongo {
         if ( ! noauth ) {
             Client::GodScope gs;
             Client::ReadContext ctx("admin.system.users");
+            Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             BSONObj result;
             if( Helpers::getSingleton("admin.system.users", result) ) {
                 _isLocalHostAndLocalHostIsAuthorizedForAll = false;
@@ -96,6 +97,7 @@ namespace mongo {
                 _warned = true;
                 log() << "note: no users configured in admin.system.users, allowing localhost access" << endl;
             }
+            txn.commit();
         }
         
         
@@ -128,6 +130,7 @@ namespace mongo {
             string systemUsers = dbname + ".system.users";
             {
                 Client::ReadContext tc(systemUsers, dbpath, false);
+                Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
 
                 BSONObjBuilder b;
                 b << "user" << user;
@@ -136,6 +139,7 @@ namespace mongo {
                     log() << "auth: couldn't find user " << user << ", " << systemUsers << endl;
                     return false;
                 }
+                txn.commit();
             }
 
             pwd = userObj.getStringField("pwd");
