@@ -241,9 +241,9 @@ namespace mongo {
     void IndexCursor::setTailable() {
         // tailable cursors may not be created over secondary indexes, which means
         // this is a table scan cursor with trivial bounds.
-        verify( _d->isPKIndex() );
-        verify( _startKey.isEmpty() || _startKey == _minKey );
-        verify( _endKey.isEmpty() || _endKey == _maxKey );
+        verify( _d->isPKIndex(_idx) );
+        verify( _startKey.isEmpty() || _startKey == minKey );
+        verify( _endKey.isEmpty() || _endKey == maxKey );
         // mark the cursor as tailable and set the end key bound tothe minimum unsafe
         // key to read from the namespace, non-inclusive.
         _tailable = true;
@@ -640,19 +640,30 @@ again:      while ( !allInclusive && ok() ) {
     bool IndexCursor::advance() {
         killCurrentOp.checkForInterrupt();
         if ( ok() ) {
-            return _advance();
+            // Advance one row further, and then check if we've went out of bounds.
+            _advance();
         } else {
             if ( tailable() ) {
-                // Read a new value for the minimum unsafe key, and then
-                // reposition the cursor over the current key. Leave
-                // deciding whether that key is ok() to checkCurrent().
-                _endKey = _d->minUnsafeKey();
-                findKey( _currKey.isEmpty() ? minKey : currKey );
+                // There may be keys between the current key and the end key.
+                dassert( _currKey <= _endKey );
+                if ( _currKey < _endKey ) {
+                    _advance();
+                } else {
+                    // The cursor advanced reached the minimum safe bound.
+                    // Read a new safe bound from the namespace and reposition 
+                    // to the current key. checkCurrent() will mark the cursor as ok()
+                    // if the new current key is within bounds, and !ok() otherwise.
+                    _endKey = _d->minUnsafeKey();
+                    findKey( _currKey.isEmpty() ? minKey : _currKey );
+                }
+                dassert( _currKey <= _endKey );
             } else {
                 // Exhausted cursors that are not tailable never advance
                 return false;
             }
         }
+        // the key we are now positioned over may or may not be ok to read.
+        // checkCurrentAgainstBounds() will decide.
         return checkCurrentAgainstBounds();
     }
 
