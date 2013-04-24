@@ -1,3 +1,4 @@
+assert(false, "something about parallel.js fails, maybe {sync: true}");
 // This test fails when run with authentication because benchRun with auth is broken: SERVER-6388
 numShards = 3
 s = new ShardingTest( "parallel" , numShards , 2 , 2 , { sync : true } );

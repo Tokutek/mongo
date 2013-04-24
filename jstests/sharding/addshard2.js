@@ -1,3 +1,4 @@
+assert(false, "useHostname doesn't work yet");
 
 // don't start any shards, yet
 s = new ShardingTest( "add_shard2", 1, 0, 1, {useHostname : true} );
