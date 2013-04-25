@@ -1502,6 +1502,7 @@ namespace mongo {
         virtual bool slaveOk() const {
             return true;
         }
+        virtual bool needsTxn() const { return false; }
         virtual LockType locktype() const { return NONE; }
         virtual void help( stringstream &help ) const {
             help << "{whatsmyuri:1}";
