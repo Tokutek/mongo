@@ -732,6 +732,7 @@ namespace mongo {
             return false;
         }
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
         CmdCloneCollection() : Command("cloneCollection") { }
         virtual void help( stringstream &help ) const {
             help << "{ cloneCollection: <collection>, from: <host> [,query: <query_filter>] [,copyIndexes:<bool>] }"
@@ -782,6 +783,7 @@ namespace mongo {
                 endl;
 
             Cloner c;
+            // TODO(leif): used ScopedDbConnection and RemoteTransaction
             shared_ptr<DBClientConnection> myconn;
             myconn.reset( new DBClientConnection() );
             if ( ! myconn->connect( fromhost , errmsg ) ) {
@@ -789,6 +791,7 @@ namespace mongo {
             }
             
             Client::WriteContext ctx(collection);
+            Client::Transaction txn(DB_SERIALIZABLE);
             
             BSONObj beginCommand = BSON( 
                 "beginTransaction" << 1 << 
@@ -808,11 +811,14 @@ namespace mongo {
                 copyIndexes
                 );
 
-            BSONObj commitCommand = BSON("commitTransaction" << 1);
-            // does not matter if we can't commit,
-            // when we leave, killing connection will abort
-            // the transaction on the connection
-            myconn->runCommand(ctx.ctx().db()->name, commitCommand, ret);
+            if (retval) {
+                BSONObj commitCommand = BSON("commitTransaction" << 1);
+                // does not matter if we can't commit,
+                // when we leave, killing connection will abort
+                // the transaction on the connection
+                myconn->runCommand(ctx.ctx().db()->name, commitCommand, ret);
+                txn.commit();
+            }
             return retval;
         }
     } cmdclonecollection;
@@ -884,6 +890,7 @@ namespace mongo {
             return false;
         }
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
         virtual void help( stringstream &help ) const {
             help << "copy a database from another host to this host\n";
             help << "usage: {copydb: 1, fromhost: <hostname>, fromdb: <db>, todb: <db>[, slaveOk: <bool>, username: <username>, nonce: <nonce>, key: <key>]}";
@@ -925,6 +932,7 @@ namespace mongo {
                 );
 
             Client::Context tc(todb);
+            Client::Transaction txn(DB_SERIALIZABLE);
             Cloner c;
             string username = cmdObj.getStringField( "username" );
             string nonce = cmdObj.getStringField( "nonce" );
@@ -996,13 +1004,16 @@ namespace mongo {
                 true, /*mayYield*/
                 false /*mayBeInterrupted*/
                 );
-            if (clientConn.get()) {
-                BSONObj commitCommand = BSON("commitTransaction" << 1);
-                // does not matter if we can't commit,
-                // when we leave, killing connection will abort
-                // the transaction on the connection
-                BSONObj ret;
-                clientConn->runCommand(cc().getContext()->db()->name, commitCommand, ret);
+            if (res) {
+                if (clientConn.get()) {
+                    BSONObj commitCommand = BSON("commitTransaction" << 1);
+                    // does not matter if we can't commit,
+                    // when we leave, killing connection will abort
+                    // the transaction on the connection
+                    BSONObj ret;
+                    clientConn->runCommand(cc().getContext()->db()->name, commitCommand, ret);
+                }
+                txn.commit();
             }
             shared_ptr<DBClientConnection> emptyConn;
             cc().setAuthConn(emptyConn);
