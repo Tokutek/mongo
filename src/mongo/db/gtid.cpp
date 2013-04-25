@@ -329,7 +329,7 @@ namespace mongo {
         uint64_t lastHash
         ) 
     {
-        return !(GTID::cmp(last, _lastLiveGTID) && 
+        return !((GTID::cmp(last, _lastLiveGTID) == 0) && 
                  lastTime == _lastTimestamp && 
                  lastHash == _lastHash);
     }

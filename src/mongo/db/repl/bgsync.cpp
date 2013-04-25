@@ -88,35 +88,37 @@ namespace mongo {
             Client::Transaction transaction(DB_READ_UNCOMMITTED);
             BSONObjBuilder query;
             addGTIDToBSON("$gt", lastUnappliedGTID, query);
-            shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(
-                rsoplog, 
-                query.done()
-                );
+            {
+                shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(
+                    rsoplog, 
+                    query.done()
+                    );
 
-            while( c->ok() ) {
-                if (c->currentMatches()) {
-                    BSONObj curr = c->current();
-                    GTID currEntry = getGTIDFromOplogEntry(curr);
-                    theReplSet->gtidManager->noteApplyingGTID(currEntry);
-                    applyTransactionFromOplog(curr);
-                    
-                    _mutex.lock();
-                    theReplSet->gtidManager->noteGTIDApplied(currEntry);
-                    dassert(_queueCounter.numElems > 0);
-                    _queueCounter.numElems--;
-                    // this is a flow control mechanism, with bad numbers
-                    // hard coded for now just to get something going.
-                    // If the opSync thread notices that we have over 20000
-                    // transactions in the queue, it waits until we get below
-                    // 10000. This is where we signal that we have gotten there
-                    // Once we have spilling of transactions working, this
-                    // logic will need to be redone
-                    if (_queueCounter.numElems == 10000) {
-                        _queueCond.notify_all();
+                while( c->ok() ) {
+                    if (c->currentMatches()) {
+                        BSONObj curr = c->current();
+                        GTID currEntry = getGTIDFromOplogEntry(curr);
+                        theReplSet->gtidManager->noteApplyingGTID(currEntry);
+                        applyTransactionFromOplog(curr);
+                        
+                        _mutex.lock();
+                        theReplSet->gtidManager->noteGTIDApplied(currEntry);
+                        dassert(_queueCounter.numElems > 0);
+                        _queueCounter.numElems--;
+                        // this is a flow control mechanism, with bad numbers
+                        // hard coded for now just to get something going.
+                        // If the opSync thread notices that we have over 20000
+                        // transactions in the queue, it waits until we get below
+                        // 10000. This is where we signal that we have gotten there
+                        // Once we have spilling of transactions working, this
+                        // logic will need to be redone
+                        if (_queueCounter.numElems == 10000) {
+                            _queueCond.notify_all();
+                        }
+                        _mutex.unlock();
                     }
-                    _mutex.unlock();
+                    c->advance();
                 }
-                c->advance();
             }
             transaction.commit(0);
         }
