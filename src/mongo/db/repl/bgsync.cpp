@@ -255,9 +255,11 @@ namespace mongo {
                 }
                 {
                     GTID currEntry = getGTIDFromOplogEntry(o);
+                    uint64_t ts = o["ts"]._numberLong();
+                    uint64_t lastHash = o["h"].numberLong();
                     boost::unique_lock<boost::mutex> lock(_mutex);
                     // update counters
-                    theReplSet->gtidManager->noteGTIDAdded(currEntry);
+                    theReplSet->gtidManager->noteGTIDAdded(currEntry, ts, lastHash);
                     _queueCounter.waitTime += timer.millis();
                     // notify applier thread that data exists
                     if (_queueCounter.numElems == 0) {

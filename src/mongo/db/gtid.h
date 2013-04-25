@@ -111,7 +111,7 @@ namespace mongo {
 
         // This function is called on a secondary when a GTID 
         // from the primary is added and committed to the opLog
-        void noteGTIDAdded(const GTID& gtid);
+        void noteGTIDAdded(const GTID& gtid, uint64_t ts, uint64_t lastHash);
         void noteApplyingGTID(const GTID& gtid);
         void noteGTIDApplied(const GTID& gtid);
 
