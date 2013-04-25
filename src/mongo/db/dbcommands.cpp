@@ -1758,7 +1758,7 @@ namespace mongo {
         // If we cannot and are in a multi statement transaction, 
         // then we must automatically commit the multi statement transaction
         // before proceeding
-        if (!c->canRunInMultiStmtTxn() && cc().hasTxn()) {
+        if (!fromRepl && !c->canRunInMultiStmtTxn() && cc().hasTxn()) {
             cc().commitTopTxn();
             // after commiting the top transaction
             // assert that there is no other transaction
@@ -1805,7 +1805,7 @@ namespace mongo {
             // Read contexts use a snapshot transaction and are marked as read only.
             Client::ReadContext ctx( ns , dbpath, c->requiresAuth() ); // read locks
 
-            scoped_ptr<Client::Transaction> transaction(c->needsTxn() ? new Client::Transaction(c->txnFlags()) : NULL);
+            scoped_ptr<Client::Transaction> transaction((!fromRepl && c->needsTxn()) ? new Client::Transaction(c->txnFlags()) : NULL);
 
             client.curop()->ensureStarted();
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
@@ -1830,7 +1830,7 @@ namespace mongo {
                                              static_cast<Lock::ScopedLock*>( new Lock::GlobalWrite() ) :
                                              static_cast<Lock::ScopedLock*>( new Lock::DBWrite( dbname ) ) );
 
-            scoped_ptr<Client::Transaction> transaction(c->needsTxn() ? new Client::Transaction(c->txnFlags()) : NULL);
+            scoped_ptr<Client::Transaction> transaction((!fromRepl && c->needsTxn()) ? new Client::Transaction(c->txnFlags()) : NULL);
 
             client.curop()->ensureStarted();
             Client::Context tc(dbname, dbpath, c->requiresAuth());
