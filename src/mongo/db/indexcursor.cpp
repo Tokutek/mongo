@@ -181,6 +181,22 @@ namespace mongo {
         return r;
     }
 
+    static int idx_cursor_flags() {
+        QueryCursorMode mode = cc().tokuCommandSettings().getQueryCursorMode();
+        switch ( mode ) {
+            // All locks are grabbed up front, during initializeDBC().
+            // These flags determine the type of lock. Serializable
+            // gets you a read lock. Both serializable and rmw gets
+            // you a write lock.
+            case WRITE_LOCK_CURSOR:
+                return DB_SERIALIZABLE | DB_RMW;
+            case READ_LOCK_CURSOR:
+                return DB_SERIALIZABLE;
+            default:
+                return 0;
+        }
+    }
+
     IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
                               const BSONObj &startKey, const BSONObj &endKey,
                               bool endKeyInclusive, int direction, int numWanted ) :
@@ -197,7 +213,7 @@ namespace mongo {
         _bounds(),
         _nscanned(0),
         _numWanted(numWanted),
-        _cursor(_idx),
+        _cursor(_idx, idx_cursor_flags()),
         _tailable(false),
         _ok(false),
         _getf_iteration(0)
@@ -221,7 +237,7 @@ namespace mongo {
         _bounds(bounds),
         _nscanned(0),
         _numWanted(numWanted),
-        _cursor(_idx),
+        _cursor(_idx, idx_cursor_flags()),
         _tailable(false),
         _ok(false),
         _getf_iteration(0)
@@ -350,22 +366,10 @@ namespace mongo {
     }
 
     int IndexCursor::getf_flags() {
-        // Read-only cursors pass no special flags, non read-only cursors pass
-        // DB_RMW in order to obtain write locks in the ydb-layer.
-        int lockFlags = 0;
-        QueryCursorMode lockMode = cc().tokuCommandSettings().getQueryCursorMode();
-        switch (lockMode) {
-            case READ_LOCK_CURSOR:
-                lockFlags |= DB_SERIALIZABLE;
-                break;
-            case WRITE_LOCK_CURSOR:
-                lockFlags |= (DB_RMW | DB_SERIALIZABLE);
-                break;
-            case DEFAULT_LOCK_CURSOR:
-                break;
-        }
-        const int prefetchFlags = _numWanted > 0 ? DBC_DISABLE_PREFETCHING : 0;
-        return lockFlags | prefetchFlags;
+        // Disable prefetching when a limit exists, to prevent unnecessary
+        // IO and deserialization work. This will cause out-of-memory queries
+        // with non-trivial limits to slow down, however. Not sure if that's bad.
+        return _numWanted > 0 ? DBC_DISABLE_PREFETCHING : 0;
     }
 
     int IndexCursor::getf_fetch_count() {
