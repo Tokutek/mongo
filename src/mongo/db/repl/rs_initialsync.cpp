@@ -390,8 +390,9 @@ namespace mongo {
         else {
             openOplogFiles();
         }
-        {            
-            Client::ReadContext ctx(rsoplog);
+        {
+            Lock::DBRead lk( "local" );
+            Client::Context ctx(rsoplog);
             Client::Transaction catchupTransaction(0);
 
             // now we should have replInfo on this machine,
@@ -433,8 +434,11 @@ namespace mongo {
             // at this point, we have got the oplog up to date,
             // now we need to read forward in the oplog
             // from minUnapplied
+            BSONObjBuilder q;
+            addGTIDToBSON("$gte", minUnappliedGTID, q);
             BSONObjBuilder query;
-            addGTIDToBSON("$gte", minUnappliedGTID, query);
+            query.append("_id", q.done());
+
             // TODO: make this a read uncommitted cursor
             // especially when this code moves to a background thread
             // for running replication
@@ -442,7 +446,10 @@ namespace mongo {
                 shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(rsoplog, query.done());
                 while( c->ok() ) {
                     if ( c->currentMatches()) {
-                        applyTransactionFromOplog(c->current());
+                        BSONObj curr = c->current();
+                        lk.unlockDB();
+                        applyTransactionFromOplog(curr);
+                        lk.lockDB("local");
                     }
                     c->advance();
                 }

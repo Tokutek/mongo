@@ -205,10 +205,11 @@ namespace OpLogHelpers{
     }
 
     static void runCommandFromOplog(const char* ns, BSONObj op) {
-        Client::WriteContext ctx(ns);
         BufBuilder bb;
         BSONObjBuilder ob;
         BSONObj command = op[KEY_STR_ROW].embeddedObject();
+        // locking ought to be taken care of inside the command
+        // possibly redo how this works.
         _runCommands(ns, command, bb, ob, true, 0);
     }
 

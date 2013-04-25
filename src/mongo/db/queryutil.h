@@ -702,6 +702,7 @@ namespace mongo {
         const vector<bool> &inc() const { return _inc; }
         bool after() const { return _after; }
         void prepDive();
+        void getCurrentIntervals(vector<const FieldInterval *> intervals) const;
 
         /**
          * Helper class representing a position within a vector of ranges.  Public for testing.

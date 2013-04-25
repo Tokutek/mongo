@@ -198,14 +198,14 @@ namespace mongo {
             void lockTop(LockState&);
             void lockNestable(Nestable db);
             void lockOther(const string& db);
-            void lockDB(const string& ns);
-            void unlockDB();
 
         protected:
             void _tempRelease();
             void _relock();
 
         public:
+            void lockDB(const string& ns);
+            void unlockDB();
             DBRead(const StringData& dbOrNs);
             virtual ~DBRead();
 

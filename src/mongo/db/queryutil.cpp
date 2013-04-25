@@ -1499,6 +1499,14 @@ namespace mongo {
     _after(),
     _endNonUniversalRanges( endNonUniversalRanges() ) {
     }
+
+    // Get the current interval for each field range, as described by the CompoundRangeCounter
+    void FieldRangeVectorIterator::getCurrentIntervals(vector<const FieldInterval *> intervals) const {
+        const vector<FieldRange> &ranges = _v._ranges;
+        for ( int i = 0; i < _i.size(); i++ ) {
+            intervals[i] = &ranges[i].intervals()[ _i.get( i ) ];
+        }
+    }
     
     // TODO optimize more SERVER-5450.
     int FieldRangeVectorIterator::advance( const BSONObj &curr ) {

@@ -84,7 +84,8 @@ namespace mongo {
             // at this point, we know we have data that has not been caught up
             // with the producer, because queueCounter.numElems > 0
             // we apply it
-            Client::ReadContext ctx(rsoplog);
+            Lock::DBRead lk( "local" );
+            Client::Context ctx(rsoplog);
             Client::Transaction transaction(DB_READ_UNCOMMITTED);
             BSONObjBuilder q;
             addGTIDToBSON("$gt", lastUnappliedGTID, q);
@@ -101,7 +102,9 @@ namespace mongo {
                         BSONObj curr = c->current();
                         GTID currEntry = getGTIDFromOplogEntry(curr);
                         theReplSet->gtidManager->noteApplyingGTID(currEntry);
+                        lk.unlockDB();
                         applyTransactionFromOplog(curr);
+                        lk.lockDB("local");
                         
                         _mutex.lock();
                         theReplSet->gtidManager->noteGTIDApplied(currEntry);
