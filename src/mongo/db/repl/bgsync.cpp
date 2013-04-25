@@ -86,8 +86,10 @@ namespace mongo {
             // we apply it
             Client::ReadContext ctx(rsoplog);
             Client::Transaction transaction(DB_READ_UNCOMMITTED);
+            BSONObjBuilder q;
+            addGTIDToBSON("$gt", lastUnappliedGTID, q);
             BSONObjBuilder query;
-            addGTIDToBSON("$gt", lastUnappliedGTID, query);
+            query.append("_id", q.done());
             {
                 shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(
                     rsoplog, 

@@ -223,23 +223,23 @@ namespace OpLogHelpers{
         op.getFields(2, names, fields);
         const char* ns = fields[0].valuestrsafe();
         const char* opType = fields[1].valuestrsafe();
-        if (strcmp(opType, OP_STR_INSERT)) {
+        if (strcmp(opType, OP_STR_INSERT) == 0) {
             opCounters->gotInsert();
             runInsertFromOplog(ns, op);
         }
-        else if (strcmp(opType, OP_STR_UPDATE)) {
+        else if (strcmp(opType, OP_STR_UPDATE) == 0) {
             opCounters->gotUpdate();
             runUpdateFromOplog(ns, op);
         }
-        else if (strcmp(opType, OP_STR_DELETE)) {
+        else if (strcmp(opType, OP_STR_DELETE) == 0) {
             opCounters->gotDelete();
             runDeleteFromOplog(ns, op);
         }
-        else if (strcmp(opType, OP_STR_COMMAND)) {
+        else if (strcmp(opType, OP_STR_COMMAND) == 0) {
             opCounters->gotCommand();
             runCommandFromOplog(ns, op);
         }
-        else if (strcmp(opType, OP_STR_COMMENT)) {
+        else if (strcmp(opType, OP_STR_COMMENT) == 0) {
             // no-op
         }
         else {
