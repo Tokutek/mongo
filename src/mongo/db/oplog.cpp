@@ -220,6 +220,8 @@ namespace mongo {
     void applyTransactionFromOplog(BSONObj entry) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         if (!transactionAlreadyApplied) {
+            Client::AlternateTransactionStack altStack;
+            Client::Transaction transaction(DB_SERIALIZABLE);
             std::vector<BSONElement> ops = entry["ops"].Array();
             const size_t numOps = ops.size();
 
@@ -231,6 +233,7 @@ namespace mongo {
             // this entry has not been applied to collections
             BSONElementManipulator(entry["a"]).setBool(true);
             writeEntryToOplog(entry);
+            transaction.commit(0);
         }
     }
 }

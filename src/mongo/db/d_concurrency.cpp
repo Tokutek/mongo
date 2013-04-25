@@ -725,9 +725,6 @@ namespace mongo {
             return;
         }
 
-        // first lock for this db. check consistent order with local db lock so we never deadlock. local always comes last
-        massert(16100, str::stream() << "can't dblock:" << db << " when local or admin is already locked", ls.nestableCount() == 0);
-
         if( db != ls.otherName() )
         {
             mapsf<string,WrapperForRWLock*>::ref r(dblocks);

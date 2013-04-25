@@ -54,19 +54,23 @@ namespace mongo {
     }
 
     /* comment MUST only be set when initiating the set by the initiator */
-    void ReplSetConfig::saveConfigLocally(bo comment) {
+    void ReplSetConfig::saveConfigLocally(bo comment, bool onInitiate) {
         checkRsConfig();
         log() << "replSet info saving a newer config version to local.system.replset" << rsLog;
         {
             // TODO: does this really need to be a global lock?
             Lock::GlobalWrite lk;
             Client::Context cx( rsConfigNs );
-
+            Client::Transaction transaction(DB_SERIALIZABLE);    
+            if (onInitiate) {
+                cc().txn().txnIntiatingRs();
+            }
             BSONObj o = asBson();
             Helpers::putSingletonGod(rsConfigNs.c_str(), o, false/*logop=false; local db so would work regardless...*/);
             if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
                 OpLogHelpers::logComment(comment, &cc().txn());
             }
+            transaction.commit(0);
         }
         log() << "replSet saveConfigLocally done" << rsLog;
     }

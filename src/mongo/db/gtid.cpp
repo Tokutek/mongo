@@ -166,7 +166,7 @@ namespace mongo {
 
     // This function is called on a secondary when a GTID 
     // from the primary is added and committed to the opLog
-    void GTIDManager::noteGTIDAdded(const GTID& gtid) {
+    void GTIDManager::noteGTIDAdded(const GTID& gtid, uint64_t ts, uint64_t lastHash) {
         _lock.lock();
         // if we are adding a GTID on a secondary, then 
         // these values must be equal
@@ -175,6 +175,9 @@ namespace mongo {
         _lastLiveGTID = gtid;
         _minLiveGTID = _lastLiveGTID;
         _minLiveGTID.inc();
+
+        _lastTimestamp = ts;
+        _lastHash = lastHash;
 
         _minLiveCond.notify_all();
         _lock.unlock();
@@ -329,7 +332,7 @@ namespace mongo {
         uint64_t lastHash
         ) 
     {
-        return !(GTID::cmp(last, _lastLiveGTID) && 
+        return !((GTID::cmp(last, _lastLiveGTID) == 0) && 
                  lastTime == _lastTimestamp && 
                  lastHash == _lastHash);
     }

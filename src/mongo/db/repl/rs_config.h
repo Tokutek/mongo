@@ -132,7 +132,7 @@ namespace mongo {
         static bool legalChange(const ReplSetConfig& old, const ReplSetConfig& n, string& errmsg);
 
         //static void receivedNewConfig(BSONObj);
-        void saveConfigLocally(BSONObj comment); // to local db
+        void saveConfigLocally(BSONObj comment, bool onInitiate = false); // to local db
         string saveConfigEverywhere(); // returns textual info on what happened
 
         /**

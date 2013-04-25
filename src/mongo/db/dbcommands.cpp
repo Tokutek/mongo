@@ -1030,6 +1030,7 @@ namespace mongo {
         }
         virtual LockType locktype() const { return NONE; }
         virtual void help( stringstream& help ) const { help << "list databases on this server"; }
+        virtual bool needsTxn() const { return false; }
         CmdListDatabases() : Command("listDatabases" , true ) {}
         bool run(const string& dbname , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             vector< string > dbNames;
@@ -1504,6 +1505,7 @@ namespace mongo {
         virtual bool slaveOk() const {
             return true;
         }
+        virtual bool needsTxn() const { return false; }
         virtual LockType locktype() const { return NONE; }
         virtual void help( stringstream &help ) const {
             help << "{whatsmyuri:1}";

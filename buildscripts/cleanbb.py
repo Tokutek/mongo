@@ -27,6 +27,12 @@ def shouldKill( c ):
     if "test.sh" in c:
         return False
 
+    if "vi" in c:
+        return False
+
+    if "vim" in c:
+        return False
+
     if c.find( cwd ) >= 0:
         return True
 

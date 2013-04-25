@@ -86,37 +86,41 @@ namespace mongo {
             // we apply it
             Client::ReadContext ctx(rsoplog);
             Client::Transaction transaction(DB_READ_UNCOMMITTED);
+            BSONObjBuilder q;
+            addGTIDToBSON("$gt", lastUnappliedGTID, q);
             BSONObjBuilder query;
-            addGTIDToBSON("$gt", lastUnappliedGTID, query);
-            shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(
-                rsoplog, 
-                query.done()
-                );
+            query.append("_id", q.done());
+            {
+                shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(
+                    rsoplog, 
+                    query.done()
+                    );
 
-            while( c->ok() ) {
-                if (c->currentMatches()) {
-                    BSONObj curr = c->current();
-                    GTID currEntry = getGTIDFromOplogEntry(curr);
-                    theReplSet->gtidManager->noteApplyingGTID(currEntry);
-                    applyTransactionFromOplog(curr);
-                    
-                    _mutex.lock();
-                    theReplSet->gtidManager->noteGTIDApplied(currEntry);
-                    dassert(_queueCounter.numElems > 0);
-                    _queueCounter.numElems--;
-                    // this is a flow control mechanism, with bad numbers
-                    // hard coded for now just to get something going.
-                    // If the opSync thread notices that we have over 20000
-                    // transactions in the queue, it waits until we get below
-                    // 10000. This is where we signal that we have gotten there
-                    // Once we have spilling of transactions working, this
-                    // logic will need to be redone
-                    if (_queueCounter.numElems == 10000) {
-                        _queueCond.notify_all();
+                while( c->ok() ) {
+                    if (c->currentMatches()) {
+                        BSONObj curr = c->current();
+                        GTID currEntry = getGTIDFromOplogEntry(curr);
+                        theReplSet->gtidManager->noteApplyingGTID(currEntry);
+                        applyTransactionFromOplog(curr);
+                        
+                        _mutex.lock();
+                        theReplSet->gtidManager->noteGTIDApplied(currEntry);
+                        dassert(_queueCounter.numElems > 0);
+                        _queueCounter.numElems--;
+                        // this is a flow control mechanism, with bad numbers
+                        // hard coded for now just to get something going.
+                        // If the opSync thread notices that we have over 20000
+                        // transactions in the queue, it waits until we get below
+                        // 10000. This is where we signal that we have gotten there
+                        // Once we have spilling of transactions working, this
+                        // logic will need to be redone
+                        if (_queueCounter.numElems == 10000) {
+                            _queueCond.notify_all();
+                        }
+                        _mutex.unlock();
                     }
-                    _mutex.unlock();
+                    c->advance();
                 }
-                c->advance();
             }
             transaction.commit(0);
         }
@@ -253,9 +257,11 @@ namespace mongo {
                 }
                 {
                     GTID currEntry = getGTIDFromOplogEntry(o);
+                    uint64_t ts = o["ts"]._numberLong();
+                    uint64_t lastHash = o["h"].numberLong();
                     boost::unique_lock<boost::mutex> lock(_mutex);
                     // update counters
-                    theReplSet->gtidManager->noteGTIDAdded(currEntry);
+                    theReplSet->gtidManager->noteGTIDAdded(currEntry, ts, lastHash);
                     _queueCounter.waitTime += timer.millis();
                     // notify applier thread that data exists
                     if (_queueCounter.numElems == 0) {
