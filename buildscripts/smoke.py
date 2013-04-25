@@ -146,6 +146,13 @@ class mongod(object):
         sock.connect(("localhost", int(port)))
         sock.close()
 
+    def is_mongo_alive(self):
+        try:
+            self.check_mongo_port(int(port))
+            return True
+        except Exception, e:
+            return False 
+
     def did_mongod_start(self, port=mongod_port, timeout=300):
         while timeout > 0:
             time.sleep(1)
@@ -549,6 +556,9 @@ def run_tests(tests):
                     try:
                         if not quiet:
                             print f
+                        if not master.is_mongo_alive():
+                            # mongo died. restart it.
+                            master = mongod(small_oplog_rs=small_oplog_rs,small_oplog=small_oplog,no_journal=no_journal,no_preallocj=no_preallocj,auth=auth).__enter__()
                         # Record the failing test and re-raise.
                         losers[f.path] = f.status
                         raise f
