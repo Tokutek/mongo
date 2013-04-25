@@ -31,7 +31,7 @@ namespace mongo {
 
     class TouchCmd : public Command {
     public:
-        virtual LockType locktype() const { return NONE; }
+        virtual LockType locktype() const { return READ; }
         virtual bool adminOnly() const { return false; }
         virtual bool slaveOk() const { return true; }
         virtual bool maintenanceMode() const { return true; }
@@ -81,7 +81,6 @@ namespace mongo {
                     bool touch_indexes, 
                     BSONObjBuilder& result ) {
 
-            Client::ReadContext ctx(ns);
             NamespaceDetails *nsd = nsdetails(ns.c_str());
             if (!nsd) {
                 errmsg = "ns not found";
