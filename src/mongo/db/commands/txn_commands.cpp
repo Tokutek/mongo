@@ -27,7 +27,6 @@ namespace mongo {
         virtual LockType locktype() const { return NONE; }
         virtual bool adminOnly() const { return false; }
         virtual bool slaveOk() const { return true; }
-        virtual bool maintenanceMode() const { return true; }
         virtual bool logTheOp() { return false; }
         // dont create the transaction outside of us, because we are managing the
         // the transaction here
@@ -89,7 +88,6 @@ namespace mongo {
         virtual LockType locktype() const { return NONE; }
         virtual bool adminOnly() const { return false; }
         virtual bool slaveOk() const { return true; }
-        virtual bool maintenanceMode() const { return true; }
         virtual bool logTheOp() { return false; }
         // dont create the transaction outside of us, because we are managing the
         // the transaction here
@@ -130,7 +128,6 @@ namespace mongo {
         virtual LockType locktype() const { return NONE; }
         virtual bool adminOnly() const { return false; }
         virtual bool slaveOk() const { return true; }
-        virtual bool maintenanceMode() const { return true; }
         virtual bool logTheOp() { return false; }
         // dont create the transaction outside of us, because we are managing the
         // the transaction here
