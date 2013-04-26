@@ -90,16 +90,16 @@ namespace mongo {
         changeState(MemberState::RS_RECOVERING);
     }
 
-    void ReplSetImpl::assumePrimary(bool verifyHotness) {
+    void ReplSetImpl::assumePrimary() {
+        verify(lockedByMe());
         LOG(2) << "replSet assuming primary" << endl;
-        if (verifyHotness) {
-            verify( iAmPotentiallyHot() );
-        }
-
-        Lock::GlobalWrite lk;
+        verify( iAmPotentiallyHot() );
 
         // Make sure replication has stopped        
         BackgroundSync::get()->stopOpSyncThread();
+
+        Lock::GlobalWrite lk;
+
         gtidManager->verifyReadyToBecomePrimary();
 
         gtidManager->resetManager();
@@ -110,12 +110,11 @@ namespace mongo {
 
     bool ReplSetImpl::setMaintenanceMode(const bool inc) {
         lock replLock(this);
-        // Lock here to prevent state from changing between checking the state and changing it
-        Lock::GlobalWrite writeLock;
-
         if (box.getState().primary()) {
             return false;
         }
+        // Lock here to prevent state from changing between checking the state and changing it
+        Lock::GlobalWrite writeLock;
 
         if (inc) {
             log() << "replSet going into maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
@@ -124,9 +123,8 @@ namespace mongo {
             changeState(MemberState::RS_RECOVERING);
         }
         else {
-            _maintenanceMode--;
-            // no need to change state, syncTail will try to go live as a secondary soon
-
+            _maintenanceMode--;            
+            tryToGoLiveAsASecondary();
             log() << "leaving maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
         }
 
@@ -156,9 +154,12 @@ namespace mongo {
         return max;
     }
 
+    // Note, on input, rslock must be held
     void ReplSetImpl::relinquish() {
         {
-            Lock::GlobalWrite lk; // so we are synchronized with _logOp()
+            verify(lockedByMe());
+            // so we know writes are not simultaneously occurring
+            Lock::GlobalWrite lk;
 
             LOG(2) << "replSet attempting to relinquish" << endl;
             if( box.getState().primary() ) {
@@ -171,11 +172,6 @@ namespace mongo {
                 log() << "replSet closing client sockets after relinquishing primary" << rsLog;
                 MessagingPort::closeAllSockets(1);
                 BackgroundSync::get()->startOpSyncThread();
-            }
-            else if( box.getState().startup2() ) {
-                // This block probably isn't necessary
-                changeState(MemberState::RS_RECOVERING);
-                return;
             }
         }
 
@@ -526,6 +522,12 @@ namespace mongo {
         // replica set, or it does not require an initial sync
         startThreads();
         if (goLiveAsSecondary) {
+            lock rsLock( this );
+            Lock::GlobalWrite writeLock;
+            // temporarily change state to secondary to follow pattern
+            // that all threads going live as secondary are transitioning
+            // from RS_RECOVERING.
+            changeState(MemberState::RS_RECOVERING);
             tryToGoLiveAsASecondary();
         }
     }

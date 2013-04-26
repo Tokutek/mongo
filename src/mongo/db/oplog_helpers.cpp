@@ -190,7 +190,7 @@ namespace OpLogHelpers{
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         const char *names[] = { 
             KEY_STR_OLD_ROW, 
-            KEY_STR_OLD_ROW
+            KEY_STR_NEW_ROW
             };
         BSONElement fields[2];
         op.getFields(2, names, fields);

@@ -240,6 +240,9 @@ namespace mongo {
             try {
                 vote = yea(whoid);
                 dassert( hopeful->id() == whoid );
+                // Not sure where the right place to put this lock is. 
+                // Maybe this belongs at the top of the function?
+                RSBase::lock lk(&rs);
                 rs.relinquish();
                 log() << "replSet info voting yea for " <<  hopeful->fullName() << " (" << whoid << ')' << rsLog;
             }
@@ -425,8 +428,9 @@ namespace mongo {
                 else {
                     /* succeeded. */
                     LOG(1) << "replSet election succeeded, assuming primary role" << rsLog;
-                    success = true;
-                    rs.assumePrimary(true);
+                    // have an assumption here that rslock is held
+                    // at the top of the stack by the Manager::msgCheckNewState()
+                    rs.assumePrimary();
                 }
             }
         }

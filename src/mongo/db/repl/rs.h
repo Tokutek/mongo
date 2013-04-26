@@ -350,7 +350,7 @@ namespace mongo {
         bool _stepDown(int secs);
         bool _freeze(int secs);
     private:
-        void assumePrimary(bool verifyHotness);
+        void assumePrimary();
         void loadGTIDManager(bool quiet=false);
         void changeState(MemberState s);
 
@@ -528,7 +528,7 @@ namespace mongo {
 
 
         const ReplSetConfig::MemberCfg& myConfig() const { return _config; }
-        bool tryToGoLiveAsASecondary(); // readlocks
+        void tryToGoLiveAsASecondary(); // readlocks
         const uint64_t lastOtherOpTime() const;
         const GTID lastOtherGTID() const;
         
