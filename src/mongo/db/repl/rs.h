@@ -146,7 +146,12 @@ namespace mongo {
          */
         void percolate(const BSONObj& rid, const GTID& lastGTID);
         void associateSlave(const BSONObj& rid, const int memberId);
+<<<<<<< HEAD
         void updateSlave(const mongo::OID& id, const GTID& lastGTID);
+=======
+        void updateSlave(const mongo::OID& id, const OpTime& last);
+        void clearCache();
+>>>>>>> bd9e9d0... SERVER-9333 clear ghostcache at reconfig time
     };
 
     struct Target;
@@ -501,6 +506,8 @@ namespace mongo {
          * have called it again, passing in false.
          */
         bool setMaintenanceMode(const bool inc, string& errmsg);
+        // Records a new slave's id in the GhostSlave map, at handshake time.
+        void registerSlave(const BSONObj& rid, const int memberId);
     private:
         Member* head() const { return _members.head(); }
     public:

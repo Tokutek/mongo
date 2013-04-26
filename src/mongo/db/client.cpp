@@ -369,7 +369,7 @@ namespace mongo {
         _handshake = b.obj();
 
         if (theReplSet && o.hasField("member")) {
-            theReplSet->ghost->associateSlave(_remoteId, o["member"].Int());
+            theReplSet->registerSlave(_remoteId, o["member"].Int());
         }
     }
 
