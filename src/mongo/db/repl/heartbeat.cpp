@@ -103,7 +103,7 @@ namespace mongo {
             if( cmdObj["checkEmpty"].trueValue() ) {
                 result.append("hasData", replHasDatabases());
             }
-            if( (theReplSet == 0) || (theReplSet->startupStatus == ReplSetImpl::LOADINGCONFIG) ) {
+            if( (theReplSet == 0) || (theReplSet->startupStatus == ReplSetImpl::LOADINGCONFIG) || !theReplSet->gtidManager) {
                 string from( cmdObj.getStringField("from") );
                 if( !from.empty() ) {
                     scoped_lock lck( replSettings.discoveredSeeds_mx );
