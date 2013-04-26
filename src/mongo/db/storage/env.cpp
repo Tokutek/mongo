@@ -232,6 +232,16 @@ namespace mongo {
             TOKULOG(1) << "set db " << db << " descriptor to key pattern: " << key_pattern << endl;
         }
 
+        static void verify_db_descriptor(DB *db, const BSONObj &key_pattern) {
+            verify(db->cmp_descriptor->dbt.size == sizeof(Ordering));
+            const Ordering ordering = Ordering::make(key_pattern);
+            const int c = memcmp(db->cmp_descriptor->dbt.data, &ordering, sizeof(Ordering));
+            if (c != 0) {
+                problem() << " bad db descriptor on open, key pattern " << key_pattern << endl;
+            }
+            verify(c == 0);
+        }
+
         int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create) {
             // TODO: Refactor this option setting code to someplace else. It's here because
             // the YDB api doesn't allow a db->close to be called before db->open, and we
@@ -293,11 +303,17 @@ namespace mongo {
                 handle_ydb_error(r);
             }
 
+            // If this is a non-creating open for a read-only (or non-existent)
+            // transaction, we can use an alternate stack since there's nothing
+            // to roll back and no locktree locks to hold.
+            const bool needAltTxn = !may_create && (!cc().hasTxn() || cc().txn().readOnly());
+            scoped_ptr<Client::AlternateTransactionStack> altStack(!needAltTxn ? NULL :
+                                                                   new Client::AlternateTransactionStack());
+            scoped_ptr<Client::Transaction> altTxn(!needAltTxn ? NULL :
+                                                   new Client::Transaction(0));
+
             const int db_flags = may_create ? DB_CREATE : 0;
-            DB_TXN *txn = NULL;
-            if (may_create) {
-                txn = cc().txn().db_txn();
-            }
+            DB_TXN *txn = cc().txn().db_txn();
             r = db->open(db, txn, name.c_str(), NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
             if (r == ENOENT) {
                 verify(!may_create);
@@ -307,7 +323,10 @@ namespace mongo {
                 handle_ydb_error(r);
             }
 
-            set_db_descriptor(db, txn, key_pattern);
+            if (may_create) {
+                set_db_descriptor(db, txn, key_pattern);
+            }
+            verify_db_descriptor(db, key_pattern);
             *dbp = db;
         exit:
             return r;

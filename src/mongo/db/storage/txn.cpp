@@ -59,7 +59,10 @@ namespace mongo {
                                      : parent->_db_txn),
                                     (parent == NULL
                                      ? flags
-                                     : DB_INHERIT_ISOLATION)))
+                                     : DB_INHERIT_ISOLATION))),
+                 _flags(parent == NULL
+                        ? flags
+                        : parent->_flags)
         {
             DEV {
                 LOG(3) << "begin txn " << _db_txn << " (" << (parent == NULL ? NULL : parent->_db_txn)

@@ -628,24 +628,61 @@ namespace mongo {
         BSONObjSet _uncommittedPKs;
         SimpleMutex _mutex;
         SimpleMutex _deleteMutex;
-
-        friend class CappedCollectionRollback;
     };
 
-    // On startup, we install this hook for txn completion. In a perfect world
-    // we don't need a functoin pointer and we have a better idea of what
-    // object files get linked where, but for now we do this.
-    void noteTxnCompleted(const string &ns, const vector<BSONObj> &insertedPKs,
-                          long long nDelta, long long sizeDelta, bool committed) {
-        NamespaceDetails *d = nsdetails(ns.c_str());
-        if (d != NULL) {
-            if (committed) {
-                d->noteCommit(insertedPKs, nDelta, sizeDelta);
-            } else {
-                d->noteAbort(insertedPKs, nDelta, sizeDelta);
+    // On startup, we install these hooks for txn completion.
+    // In a perfect world we don't need an interface and we could just link
+    // directly with these functions, but linking is funny right new between
+    // coredb/mongos/mongod etc.
+    class TxnCompleteHooksImpl : public TxnCompleteHooks {
+    public:
+        virtual void noteTxnCompletedInserts(const string &ns,
+                                             const vector<BSONObj> &insertedPKs,
+                                             long long nDelta, long long sizeDelta,
+                                             bool committed) {
+            Lock::DBRead lk(ns);
+            if (dbHolder().get(ns, dbpath) != NULL) {
+                scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
+                                                new Client::Context(ns) : NULL);
+                NamespaceDetails *d = nsdetails(ns.c_str());
+                if (d != NULL) {
+                    if (committed) {
+                        d->noteCommit(insertedPKs, nDelta, sizeDelta);
+                    } else {
+                        d->noteAbort(insertedPKs, nDelta, sizeDelta);
+                    }
+                }
             }
         }
-    }
+
+        virtual void noteTxnAbortedFileOps(const set<string> &namespaces) {
+            for (set<string>::const_iterator i = namespaces.begin(); i != namespaces.end(); i++) {
+                const char *ns = i->c_str();
+
+                // We cannot be holding a read lock at this point, since we're in one of two situations:
+                // - Single-statement txn is aborting. If it did fileops, it had to hold a write lock,
+                //   and therefore it still is.
+                // - Multi-statement txn is aborting. The only way to do this is through a command that
+                //   takes no lock, therefore we're not read locked.
+                verify(!Lock::isReadLocked());
+
+                // If something is already write locked we must be in the single-statement case, so
+                // assert that the write locked namespace is this one.
+                if (Lock::somethingWriteLocked()) {
+                    verify(Lock::isWriteLocked(ns));
+                }
+
+                // The ydb requires that a txn closes any dictionaries it created beforeaborting.
+                // Hold a write lock while trying to close the namespace in the nsindex.
+                Lock::DBWrite lk(ns);
+                if (dbHolder().get(ns, dbpath) != NULL) {
+                    scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
+                                                    new Client::Context(ns) : NULL);
+                    (void) nsindex(ns)->close_ns(ns);
+                }
+            }
+        }
+    } _txnCompleteHooks;
 
     /* ------------------------------------------------------------------------- */
 
@@ -967,26 +1004,26 @@ namespace mongo {
             throw RetryWithWriteLock();
         }
 
+        // Note this ns in the rollback so if this transaction aborts, we'll
+        // close this ns, forcing the next user to reload in-memory metadata.
+        NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+        rollback.noteNs(_ns.c_str());
+
         shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
         // Ensure we initialize the spec in case the collection is empty.
         // This also causes an error to be thrown if we're trying to create an invalid index on an empty collection.
         index->getSpec();
         _indexBuildInProgress = true;
         _indexes.push_back(index);
-        try {
-            string thisns(index->parentNS());
-            uint64_t iter = 0;
-            const int i = idxNo(*index);
-            for (shared_ptr<Cursor> cursor(Helpers::findTableScan(thisns.c_str(), BSONObj())); cursor->ok(); cursor->advance(), iter++) {
-                if (iter % 1000 == 0) {
-                    killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
-                }
-                insertIntoOneIndex(i, cursor->currPK(), cursor->current(), 0);
+
+        string thisns(index->parentNS());
+        uint64_t iter = 0;
+        const int i = idxNo(*index);
+        for (scoped_ptr<Cursor> cursor(BasicCursor::make(this)); cursor->ok(); cursor->advance(), iter++) {
+            if (iter % 1000 == 0) {
+                killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
             }
-        } catch (DBException &e) {
-            _indexes.pop_back();
-            _indexBuildInProgress = false;
-            throw;
+            insertIntoOneIndex(i, cursor->currPK(), cursor->current(), 0);
         }
         _nIndexes++;
         _indexBuildInProgress = false;
@@ -1010,9 +1047,13 @@ namespace mongo {
     // through dropCollection, in which case we are dropping an entire collection,
     // hence the _id_ index will have to go.
     bool NamespaceDetails::dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex) {
+        Lock::assertWriteLocked(ns);
         TOKULOG(1) << "dropIndexes " << name << endl;
 
-        //BackgroundOperation::assertNoBgOpInProgForNs(ns);
+        // Note this ns in the rollback so if this transaction aborts, we'll
+        // close this ns, forcing the next user to reload in-memory metadata.
+        NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+        rollback.noteNs(_ns.c_str());
 
         NamespaceDetails *d = nsdetails(ns);
         ClientCursor::invalidate(ns);
@@ -1259,20 +1300,12 @@ namespace mongo {
     NamespaceDetails* getAndMaybeCreateNS(const char *ns, bool logop) {
         NamespaceDetails* details = nsdetails(ns);
         if (details == NULL) {
-            // if the txn stack size is greater than 1, we cannot be doing
-            // fileops. Fileops must happen in the context of a single
-            // transaction.
-            if (cc().txnStackSize() > 1) {
-                uasserted(16744, "Cannot insert into a non-existent collection when running a multi-statement transaction");
-            }
-            else {
-                string err;
-                BSONObj options;
-                bool created = userCreateNS(ns, options, err, logop);
-                uassert(16745, "failed to create collection", created);
-                details = nsdetails(ns);
-                uassert(16746, "failed to get collection after creating", details);
-            }
+            string err;
+            BSONObj options;
+            bool created = userCreateNS(ns, options, err, logop);
+            uassert(16745, "failed to create collection", created);
+            details = nsdetails(ns);
+            uassert(16746, "failed to get collection after creating", details);
         }
         return details;
     }
@@ -1284,14 +1317,11 @@ namespace mongo {
         verify(d != NULL);
         verify(d->name == name);
 
-        //BackgroundOperation::assertNoBgOpInProgForNs(name.c_str());
-
-        // Not sure we need this here, so removed.  If we do, we need to move it down 
-        // within other calls both (1) as they could be called from elsewhere and 
-        // (2) to keep the lock order right - groupcommitmutex must be locked before 
-        // mmmutex (if both are locked).
-        //
-        //  RWLockRecursive::Exclusive lk(MongoFile::mmmutex);
+        // Disable dropDatabase in a multi-statement transaction until
+        // we have the time/patience to test/debug it.
+        if (cc().txnStackSize() > 1) {
+            uasserted(16777, "Cannot dropDatabase in a multi-statement transaction.");
+        }
 
         d->namespaceIndex.drop();
         Database::closeDatabase(d->name.c_str(), d->path);
@@ -1386,24 +1416,6 @@ namespace mongo {
     }
 
     void renameNamespace(const char *from, const char *to, bool stayTemp) {
-        class Rollback {
-        public:
-            Rollback(const char *to) :
-                _to(to), _success(false) {
-            }
-            ~Rollback() {
-                if (!_success && nsdetails(_to) != NULL) {
-                    nsindex(_to)->kill_ns(_to);
-                }
-            }
-            void success() {
-                _success = true;
-            }
-        private:
-            const char *_to;
-            bool _success;
-        };
-
         Lock::assertWriteLocked(from);
         verify( nsdetails(from) != NULL );
         verify( nsdetails(to) == NULL );
@@ -1418,13 +1430,12 @@ namespace mongo {
         string sysIndexes = string(database) + ".system.indexes";
         string sysNamespaces = string(database) + ".system.namespaces";
 
-        Rollback rollback(to);
-
-        // Grab the serialized form of the namespace, and then close it.
+        // Generate the serialized form of the namespace, and then close it.
         // This will close the underlying dictionaries and allow us to
         // rename them in the environment.
         BSONObj serialized = nsdetails(from)->serialize();
-        nsindex(from)->close_ns(from);
+        bool closed = nsindex(from)->close_ns(from);
+        verify(closed);
 
         // Rename each index in system.indexes and system.namespaces
         {
@@ -1474,11 +1485,6 @@ namespace mongo {
 
         // Update the namespace index
         {
-            NamespaceIndex *ni = nsindex( from );
-            // Kill the old entry. Create a new serialized form of this namespace
-            // using the new name, modified spec, and modified indexes array. This
-            // will let us make a NamespaceDetails object and put it in the nsindex.
-            ni->kill_ns( from );
             BSONArrayBuilder newIndexesArray;
             vector<BSONElement> indexes = serialized["indexes"].Array();
             for (vector<BSONElement>::const_iterator it = indexes.begin(); it != indexes.end(); it++) {
@@ -1487,12 +1493,16 @@ namespace mongo {
             BSONObj newSerialized = NamespaceDetails::serialize( to, newSpec, serialized["pk"].Obj(),
                                                                  serialized["multiKeyIndexBits"].Long(),
                                                                  newIndexesArray.arr());
+            // Kill the old entry and replace it with the new name and modified spec.
+            // The next user of the newly-named namespace will need to open it.
+            NamespaceIndex *ni = nsindex( from );
+            ni->kill_ns( from );
             ni->update_ns( to, newSerialized, false );
-            ni->add_ns( to, shared_ptr<NamespaceDetails>() );
+            bool opened = ni->open_ns( to );
+            verify( opened );
+            verify( nsdetails(to) != NULL );
             verify( nsdetails(from) == NULL );
         }
-
-        rollback.success();
     }
 
     bool legalClientSystemNS( const string& ns , bool write ) {

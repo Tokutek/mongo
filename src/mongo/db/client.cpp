@@ -168,26 +168,23 @@ namespace mongo {
 
     /** "read lock, and set my context, all in one operation" 
      *  This handles (if not recursively locked) opening an unopened database.
+     *
+     *  It also handles opening an unopened namespace (ns param). This may
+     *  be the only code path where holding a read lock and trying to open
+     *  an unopened collection will work correctly.
      */
     Client::ReadContext::ReadContext(const string& ns, string path, bool doauth) {
-        // TODO: What did I do here to get runQuery operate on a null database object?
-
         {
             lk.reset( new Lock::DBRead(ns) );
             Database *db = dbHolder().get(ns, path);
             if( db ) {
-                c.reset( new Context(path, ns, db, doauth) );
                 try {
-                    nsdetails(ns.c_str());
+                    c.reset( new Context(path, ns, db, doauth) );
+                    return;
                 } catch (RetryWithWriteLock &e) {
-                    lk.reset(0);
-                    {
-                        Lock::GlobalWrite w;
-                        nsdetails(ns.c_str()); // open the nsdetails now that we have a write lock, which must succeed.
-                    }
-                    lk.reset( new Lock::DBRead(ns) );
+                    c.reset();
+                    lk.reset();
                 }
-                return;
             }
         }
 
@@ -275,6 +272,8 @@ namespace mongo {
         _client->_context = this;
         _client->_curOp->enter( this );
         checkNsAccess( doauth, writeLocked ? 1 : 0 );
+        // This opens the ns, if necessary, or throws if we aren't write locked.
+        nsdetails(_ns.c_str());
     }
 
     void Client::Context::_auth( int lockState ) {

@@ -30,11 +30,26 @@ namespace mongo {
     bool logTxnOperations();
     void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo));
     void setTxnGTIDManager(GTIDManager* m);
-    void setNoteTxnCompleted(void (*f)(const string &ns,
-                                       const vector<BSONObj> &insertedPKs,
-                                       long long nDelta,
-                                       long long sizeDelta,
-                                       bool committed));
+
+    class TxnCompleteHooks {
+    public:
+        virtual ~TxnCompleteHooks() { }
+        virtual void noteTxnCompletedInserts(const string &ns,
+                                             const vector<BSONObj> &insertedPKs,
+                                             long long nDelta, long long sizeDelta,
+                                             bool committed) {
+            assertNotImplemented();
+        }
+        virtual void noteTxnAbortedFileOps(const set<string> &namespaces) {
+            assertNotImplemented();
+        }
+    private:
+        void assertNotImplemented() {
+            msgasserted(16778, "bug: TxnCompleteHooks not set");
+        }
+    };
+
+    void setTxnCompleteHooks(TxnCompleteHooks *hooks);
 
     // Class to handle rollback of in-memory stats for capped collections.
     class CappedCollectionRollback {
@@ -62,6 +77,24 @@ namespace mongo {
         ContextMap _map;
     };
 
+    // Class to handle rollback of in-memory modifications to the namespace index
+    // On abort, we simply reload the map entry for each ns touched, bringing it in
+    // sync with whatever is on disk in the nsdb.
+    class NamespaceIndexRollback {
+    public:
+        void commit();
+
+        // Must be called before the actual transaction aborts.
+        void preAbort();
+
+        void transfer(NamespaceIndexRollback &parent);
+
+        void noteNs(const char *ns);
+
+    private:
+        set<string> _rollback;
+    };
+
     // class to wrap operations surrounding a storage::Txn.
     // as of now, includes writing of operations to opLog
     // and the committing/aborting of storage::Txn
@@ -84,6 +117,7 @@ namespace mongo {
         bool _initiatingRS;
 
         CappedCollectionRollback _cappedRollback;
+        NamespaceIndexRollback _nsIndexRollback;
 
     public:
         TxnContext(TxnContext *parent, int txnFlags);
@@ -94,6 +128,8 @@ namespace mongo {
         DB_TXN *db_txn() const { return _txn.db_txn(); }
         /** @return true iff this transaction is live */
         bool isLive() const { return _txn.isLive(); }
+        /** @return true iff this transaction is read only */
+        bool readOnly() const { return (_txn.flags() & DB_TXN_READ_ONLY) != 0; }
         // log an operations, represented in op, to _txnOps
         // if and when the root transaction commits, the operation
         // will be added to the opLog
@@ -103,6 +139,10 @@ namespace mongo {
 
         CappedCollectionRollback &cappedRollback() {
             return _cappedRollback;
+        }
+
+        NamespaceIndexRollback &nsIndexRollback() {
+            return _nsIndexRollback;
         }
 
     private:

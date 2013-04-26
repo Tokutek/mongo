@@ -1757,18 +1757,6 @@ namespace mongo {
             theReplSet->setMaintenanceMode(true);
         }
 
-        // before we start this command, check if we can run in a multi statement transaction
-        // If we cannot and are in a multi statement transaction, 
-        // then we must automatically commit the multi statement transaction
-        // before proceeding
-        if (!fromRepl && !c->canRunInMultiStmtTxn() && cc().hasTxn()) {
-            cc().commitTopTxn();
-            // after commiting the top transaction
-            // assert that there is no other transaction
-            // on the stack. There shouldn't be one
-            dassert(!cc().hasTxn());
-        }
-
         bool retval = false;
         TokuCommandSettings settings = c->getTokuCommandSettings();
         cc().setTokuCommandSettings(settings);

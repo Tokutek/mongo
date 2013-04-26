@@ -24,7 +24,8 @@ namespace mongo {
 
     TokuCommandSettings::TokuCommandSettings() 
         : _queryCursorMode(DEFAULT_LOCK_CURSOR),
-          _shouldBulkFetch(false) {
+          _shouldBulkFetch(false),
+          _shouldAppendPKForCapped(false) {
     }
 
     TokuCommandSettings::~TokuCommandSettings() {

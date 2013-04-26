@@ -499,11 +499,10 @@ namespace mongo {
 
         MONGO_ASSERT_ON_EXCEPTION_WITH_MSG( clearTmpFiles(), "clear tmp files" );
 
-        // the last thing we do before initializing storage is to
-        // install the txn commit/abort hook
-        void noteTxnCompleted(const string &ns, const vector<BSONObj> &insertedPKs,
-                              long long nDelta, long long sizeDelta, bool committed);
-        setNoteTxnCompleted(noteTxnCompleted);
+        // the last thing we do before initializing storage is to install the
+        // txn complete hooks, which live in namespace_details.cpp
+        extern TxnCompleteHooks _txnCompleteHooks;
+        setTxnCompleteHooks(&_txnCompleteHooks);
         storage::startup();
 
         // comes after storage::startup() because this reads from the database

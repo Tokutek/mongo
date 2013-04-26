@@ -1,4 +1,4 @@
-t = db.jstests_txn_isolation;
+t = db.jstests_toonew;
 
 // test that cursor getting TOKUDB_DICTIONARY_TOO_NEW works
 t.drop();

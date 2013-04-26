@@ -38,23 +38,13 @@ namespace mongo {
             // obj is something like this:
             // { _id: ObjectId('511d34f6d3080c48017a14d0'), ns: "test.leif", key: { a: -1.0 }, name: "a_-1", unique: true }
             const string &coll = obj["ns"].String();
-            const bool collIsNew = nsdetails(coll.c_str()) == NULL;
             NamespaceDetails *details = getAndMaybeCreateNS(coll.c_str(), logop);
             BSONObj key = obj["key"].Obj();
             int i = details->findIndexByKeyPattern(key);
             if (i >= 0) {
                 return ASSERT_ID_DUPKEY;
             } else {
-                try {
-                    details->createIndex(obj);
-                } catch (DBException &e) {
-                    if (collIsNew) {
-                        // We created the collection above just to create this index, but creating the index failed, so we should also roll back the collection creation.
-                        // This has some transaction-ignorant pieces in the NamespaceIndex so we have to manually undo them here.
-                        nsindex(coll.c_str())->kill_ns(coll.c_str());
-                    }
-                    throw;
-                }
+                details->createIndex(obj);
             }
         } else if (legalClientSystemNS(ns, true)) {
             if (mongoutils::str::endsWith(ns, ".system.users")) {
@@ -79,7 +69,6 @@ namespace mongo {
     void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
         if (mongoutils::str::contains(ns, "system.")) {
             massert(16748, "need transaction to run insertObjects", cc().txnStackSize() > 0);
-            uassert(16749, "cannot insert into system in a multi statement transaction", (cc().txnStackSize() == 1));
             uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
             massert(16750, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
             if (handle_system_collection_insert(ns, objs[0], logop) != 0) {
@@ -87,54 +76,43 @@ namespace mongo {
             }
         }
 
-        const bool collIsNew = nsdetails(ns) == NULL;
         NamespaceDetails *details = getAndMaybeCreateNS(ns, logop);
-        try {
-            NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
-            for (size_t i = 0; i < objs.size(); i++) {
-                const BSONObj &obj = objs[i];
-                try {
-                    uassert( 10059 , "object to insert too large", obj.objsize() <= BSONObjMaxUserSize);
-                    BSONObjIterator i( obj );
-                    while ( i.more() ) {
-                        BSONElement e = i.next();
-                        uassert( 13511 , "document to insert can't have $ fields" , e.fieldName()[0] != '$' );
-                    }
-                    uassert( 16440 ,  "_id cannot be an array", obj["_id"].type() != Array );
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+        for (size_t i = 0; i < objs.size(); i++) {
+            const BSONObj &obj = objs[i];
+            try {
+                uassert( 10059 , "object to insert too large", obj.objsize() <= BSONObjMaxUserSize);
+                BSONObjIterator i( obj );
+                while ( i.more() ) {
+                    BSONElement e = i.next();
+                    uassert( 13511 , "document to insert can't have $ fields" , e.fieldName()[0] != '$' );
+                }
+                uassert( 16440 ,  "_id cannot be an array", obj["_id"].type() != Array );
 
-                    BSONObj objModified = obj;
-                    BSONElementManipulator::lookForTimestamps(objModified);
-                    if (details->isCapped() && logop) {
-                        // unfortunate hack we need for capped collections
-                        // we do this because the logic for generating the pk
-                        // and what subsequent rows to delete are buried in the
-                        // namespace details object. There is probably a nicer way
-                        // to do this, but this works.
-                        details->insertObjectIntoCappedAndLogOps(objModified, flags);
-                        if (nsdt != NULL) {
-                            nsdt->notifyOfWriteOp();
-                        }
-                    }
-                    else {
-                        insertOneObject(details, nsdt, objModified, flags); // may add _id field
-                        if (logop) {
-                            OpLogHelpers::logInsert(ns, objModified, &cc().txn());
-                        }
-                    }
-                } catch (const UserException &) {
-                    if (!keepGoing || i == objs.size() - 1) {
-                        throw;
+                BSONObj objModified = obj;
+                BSONElementManipulator::lookForTimestamps(objModified);
+                if (details->isCapped() && logop) {
+                    // unfortunate hack we need for capped collections
+                    // we do this because the logic for generating the pk
+                    // and what subsequent rows to delete are buried in the
+                    // namespace details object. There is probably a nicer way
+                    // to do this, but this works.
+                    details->insertObjectIntoCappedAndLogOps(objModified, flags);
+                    if (nsdt != NULL) {
+                        nsdt->notifyOfWriteOp();
                     }
                 }
+                else {
+                    insertOneObject(details, nsdt, objModified, flags); // may add _id field
+                    if (logop) {
+                        OpLogHelpers::logInsert(ns, objModified, &cc().txn());
+                    }
+                }
+            } catch (const UserException &) {
+                if (!keepGoing || i == objs.size() - 1) {
+                    throw;
+                }
             }
-        }
-        catch (DBException &e) {
-            if (collIsNew) {
-                // We created the collection above just for this insert, but the insert failed, so we should also roll back the collection creation.
-                // This has some transaction-ignorant pieces in the NamespaceIndex so we have to manually undo them here.
-                nsindex(ns)->kill_ns(ns);
-            }
-            throw;
         }
     }
 

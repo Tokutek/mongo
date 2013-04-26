@@ -34,15 +34,8 @@ namespace mongo {
     static bool _logTxnOperations = false;
     static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) = NULL;
     static GTIDManager* txnGTIDManager = NULL;
-    // TODO: Remove this function pointer, replace it with more sane linking.
-    //
-    // It's a big mess linking txn_context.o and namespace_details.o in all
-    // the right places (coredb? serveronly? mongos? something always breaks)
-    static void (*_noteTxnCompleted)(const string &ns,
-                                     const vector<BSONObj> &insertedPKs,
-                                     long long nDelta,
-                                     long long sizeDelta,
-                                     bool committed);
+
+    TxnCompleteHooks *_completeHooks;
 
     void setTxnLogOperations(bool val) {
         _logTxnOperations = val;
@@ -56,16 +49,12 @@ namespace mongo {
         _logTxnToOplog = f;
     }
 
-    void setNoteTxnCompleted(void (*f)(const string &ns,
-                                       const vector<BSONObj> &insertedPKs,
-                                       long long nDelta,
-                                       long long sizeDelta,
-                                       bool committed)) {
-        _noteTxnCompleted = f;
-    }
-
     void setTxnGTIDManager(GTIDManager* m) {
         txnGTIDManager = m;
+    }
+
+    void setTxnCompleteHooks(TxnCompleteHooks *hooks) {
+        _completeHooks = hooks;
     }
 
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
@@ -124,15 +113,20 @@ namespace mongo {
             txnGTIDManager->noteLiveGTIDDone(gtid);
         }
 
+        // These rollback items must be processed after the ydb transaction completes.
         if (hasParent()) {
             _cappedRollback.transfer(_parent->_cappedRollback);
+            _nsIndexRollback.transfer(_parent->_nsIndexRollback);
         } else {
             _cappedRollback.commit();
+            _nsIndexRollback.commit();
         }
         _retired = true;
     }
 
     void TxnContext::abort() {
+        // The nsindex must rollback before abort.
+        _nsIndexRollback.preAbort();
         _txn.abort();
         _cappedRollback.abort();
         _retired = true;
@@ -173,7 +167,7 @@ namespace mongo {
         for (ContextMap::const_iterator it = _map.begin(); it != _map.end(); it++) {
             const string &ns = it->first;
             const Context &c = it->second;
-            _noteTxnCompleted(ns, c.insertedPKs, c.nDelta, c.sizeDelta, committed);
+            _completeHooks->noteTxnCompletedInserts(ns, c.insertedPKs, c.nDelta, c.sizeDelta, committed);
         }
     }
 
@@ -208,6 +202,29 @@ namespace mongo {
         Context &c = _map[ns];
         c.nDelta--;
         c.sizeDelta -= size;
+    }
+
+    /* --------------------------------------------------------------------- */
+
+    void NamespaceIndexRollback::commit() {
+        // nothing to do on commit
+    }
+
+    void NamespaceIndexRollback::preAbort() {
+        _completeHooks->noteTxnAbortedFileOps(_rollback);
+    }
+
+    void NamespaceIndexRollback::transfer(NamespaceIndexRollback &parent) {
+        TOKULOG(1) << "NamespaceIndexRollback::transfer processing "
+                   << parent._rollback.size() << " roll items." << endl;
+
+        // Promote rollback entries to parent.
+        set<string> &rollback = parent._rollback;
+        rollback.insert(_rollback.begin(), _rollback.end());
+    }
+
+    void NamespaceIndexRollback::noteNs(const char *ns) {
+        _rollback.insert(ns);
     }
 
 } // namespace mongo

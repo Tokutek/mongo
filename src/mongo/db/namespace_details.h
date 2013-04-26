@@ -530,62 +530,72 @@ namespace mongo {
 
         void init(bool may_create = false);
 
-        void open_ns(const char *ns);
+        // @return true if the ns existed and is now open, false otherwise.
+        bool open_ns(const char *ns);
 
-        void close_ns(const char *ns);
+        // @return true if the ns existed and was closed, false otherwise.
+        bool close_ns(const char *ns);
 
+        // The index entry for ns is removed and brought up-to-date with the nsdb on txn abort.
         void add_ns(const char *ns, shared_ptr<NamespaceDetails> details);
 
-        // If something changes that causes details->serialize() to be different, call this to persist it to the nsdb.
-        void update_ns(const char *ns, const BSONObj &serialized, bool overwrite);
-
+        // The index entry for ns is removed and brought up-to-date with the nsdb on txn abort.
         void kill_ns(const char *ns);
 
-        // TODO: if it->second.get() == NULL, open it and update the mapping
+        // If something changes that causes details->serialize() to be different,
+        // call this to persist it to the nsdb.
+        void update_ns(const char *ns, const BSONObj &serialized, bool overwrite);
+
+        // Every namespace that exists has an entry in _namespaces. Some
+        // entries may be "closed" in the sense that the key exists but the
+        // value is null. If the desired namespace is closed, we open it,
+        // which must succeed, by the first invariant.
         NamespaceDetails *details(const char *ns) {
-            if (namespaces.get() == NULL) {
-                return 0;
-            }
-            Namespace n(ns);
-            NamespaceDetailsMap::iterator it = namespaces->find(n);
-            if (it == namespaces->end()) {
+            init();
+            if (!allocated()) {
                 return NULL;
             }
-            if (it->second.get() == NULL) {
-                if (!Lock::isWriteLocked(ns)) {
-                    throw RetryWithWriteLock();
-                }
-                namespaces->erase(it);
-                open_ns(ns);
-                it = namespaces->find(n);
-                verify(it != namespaces->end());
+
+            Namespace n(ns);
+            NamespaceDetailsMap::iterator it = _namespaces->find(n);
+            if (it != _namespaces->end()) {
                 verify(it->second.get() != NULL);
+                return it->second.get();
             }
-            return it->second.get();
+
+            // The ns doesn't exist, or it's not opened.
+            const bool found = open_ns(ns);
+            if (found) {
+                // The ns existed, and now it's open.
+                it = _namespaces->find(n);
+                verify(it != _namespaces->end());
+                verify(it->second.get() != NULL);
+                return it->second.get();
+            }
+            return NULL;
         }
 
-        bool allocated() const { return namespaces.get() != NULL; }
+        bool allocated() const { return _namespaces.get() != NULL; }
 
-        void getNamespaces( list<string>& tofill ) const;
+        void getNamespaces( list<string>& tofill );
 
         // drop all collections and the nsindex, we're removing this database
         void drop();
 
         typedef std::map<Namespace, shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
 
-        struct PopulateExtra {
-            NamespaceDetailsMap &map;
-            std::exception *exc;
-            PopulateExtra(NamespaceDetailsMap &m) : map(m) {}
-        };
-
     private:
         void _init(bool may_create);
 
-        DB *nsdb;
-        scoped_ptr<NamespaceDetailsMap> namespaces;
-        string dir_;
-        string database_;
+        // The openMutex protects the mutual transition of _namespaces/_nsdb
+        // from null to non-null. DB locking protects the contents of _namespaces,
+        // and it also protects _namespaces/_nsdb from mutually transitioning
+        // from non-null to null.
+        DB *_nsdb;
+        scoped_ptr<NamespaceDetailsMap> _namespaces;
+        string _dir;
+        string _database;
+        SimpleMutex _openMutex;
     };
 
     // Defined in database.cpp

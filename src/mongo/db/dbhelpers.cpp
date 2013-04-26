@@ -102,12 +102,8 @@ namespace mongo {
 
     bool Helpers::findById( const char *ns, BSONObj query, BSONObj& result ) {
         Lock::assertAtLeastReadLocked(ns);
-        NamespaceDetails *d = nsindex(ns)->details(ns);
-        if ( ! d ) {
-            return false;
-        } else {
-            return d->findById(query, result);
-        }
+        NamespaceDetails *d = nsdetails(ns);
+        return d != NULL ? d->findById(query, result) : false;
     }
 
     shared_ptr<Cursor> Helpers::findTableScan(const char *ns, const BSONObj &order) {
