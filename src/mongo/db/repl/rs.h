@@ -507,6 +507,8 @@ namespace mongo {
 
     private:
         bool _syncDoInitialSync_clone( const char *master, const list<string>& dbs, shared_ptr<DBClientConnection> conn);
+        void _fillGaps(OplogReader* r); // helper function for initial sync
+        void _applyMissingOpsDuringInitialSync(); // helper function for initial sync
         bool _syncDoInitialSync();
         void syncDoInitialSync();
 
