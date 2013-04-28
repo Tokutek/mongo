@@ -453,7 +453,7 @@ namespace mongo {
     string ChunkInfo::toString() const {
         StringBuilder buf;
         buf << " min: " << min;
-        buf << " max: " << min;
+        buf << " max: " << max;
         return buf.str();
     }
 
