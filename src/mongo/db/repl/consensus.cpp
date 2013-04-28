@@ -427,10 +427,8 @@ namespace mongo {
                 }
                 else {
                     /* succeeded. */
-                    LOG(1) << "replSet election succeeded, assuming primary role" << rsLog;
-                    // have an assumption here that rslock is held
-                    // at the top of the stack by the Manager::msgCheckNewState()
-                    rs.assumePrimary();
+                    LOG(1) << "replSet election succeeded, assuming primary role" << rsLog;                    
+                    success = rs.assumePrimary();
                 }
             }
         }

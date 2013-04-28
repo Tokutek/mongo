@@ -149,7 +149,7 @@ namespace mongo {
         }
     }
 
-    void Manager::checkAuth() {
+    bool Manager::checkAuth() {
         int down = 0, authIssue = 0, total = 0;
 
         for( Member *m = rs->head(); m; m=m->next() ) {
@@ -169,21 +169,15 @@ namespace mongo {
         // secondary.
         if (authIssue > 0 && down == total) {
             log() << "replset error could not reach/authenticate against any members" << endl;
-
-            if (rs->box.getPrimary() == rs->_self) {
-                log() << "auth problems, relinquishing primary" << rsLog;
-                rs->relinquish();
-            }
-
-            rs->blockSync(true);
+            return true;
         }
-        else {
-            rs->blockSync(false);
-        }
+        rs->blockSync(false);
+        return false;
     }
 
     /** called as the health threads get new results */
     void Manager::msgCheckNewState() {
+        bool authIssue = false;
         {
             theReplSet->assertValid();
             rs->assertValid();
@@ -193,75 +187,87 @@ namespace mongo {
             if( busyWithElectSelf ) return;
             
             checkElectableSet();
-            checkAuth();
-
-            const Member *p = rs->box.getPrimary();
-            if( p && p != rs->_self ) {
-                if( !p->hbinfo().up() ||
-                        !p->hbinfo().hbstate.primary() ) {
-                    p = 0;
-                    rs->box.setOtherPrimary(0);
+            authIssue = checkAuth();
+            if (!authIssue) {
+                const Member *p = rs->box.getPrimary();
+                if( p && p != rs->_self ) {
+                    if( !p->hbinfo().up() ||
+                            !p->hbinfo().hbstate.primary() ) {
+                        p = 0;
+                        rs->box.setOtherPrimary(0);
+                    }
                 }
-            }
 
-            const Member *p2;
-            {
-                bool two;
-                p2 = findOtherPrimary(two);
-                if( two ) {
-                    /* two other nodes think they are primary (asynchronously polled) -- wait for things to settle down. */
-                    log() << "replSet info two primaries (transiently)" << rsLog;
-                    return;
+                const Member *p2;
+                {
+                    bool two;
+                    p2 = findOtherPrimary(two);
+                    if( two ) {
+                        /* two other nodes think they are primary (asynchronously polled) -- wait for things to settle down. */
+                        log() << "replSet info two primaries (transiently)" << rsLog;
+                        return;
+                    }
                 }
-            }
 
-            if( p2 ) {
-                noteARemoteIsPrimary(p2);
-                return;
-            }
-
-            /* didn't find anyone who wants to be primary */
-
-            if( p ) {
-                /* we are already primary */
-
-                if( p != rs->_self ) {
-                    rs->sethbmsg("error p != rs->self in checkNewState");
-                    log() << "replSet " << p->fullName() << rsLog;
-                    log() << "replSet " << rs->_self->fullName() << rsLog;
+                if( p2 ) {
+                    noteARemoteIsPrimary(p2);
                     return;
                 }
 
-                if( rs->elect.shouldRelinquish() ) {
-                    log() << "can't see a majority of the set, relinquishing primary" << rsLog;
-                    rs->relinquish();
+                /* didn't find anyone who wants to be primary */
+
+                if( p ) {
+                    /* we are already primary */
+
+                    if( p != rs->_self ) {
+                        rs->sethbmsg("error p != rs->self in checkNewState");
+                        log() << "replSet " << p->fullName() << rsLog;
+                        log() << "replSet " << rs->_self->fullName() << rsLog;
+                        return;
+                    }
+
+                    if( rs->elect.shouldRelinquish() ) {
+                        log() << "can't see a majority of the set, relinquishing primary" << rsLog;
+                        rs->relinquish();
+                    }
+
+                    return;
                 }
 
-                return;
+                if( !rs->iAmPotentiallyHot() ) { // if not we never try to be primary
+                    OCCASIONALLY log() << "replSet I don't see a primary and I can't elect myself" << endl;
+                    return;
+                }
+
+                /* no one seems to be primary.  shall we try to elect ourself? */
+                if( !rs->elect.aMajoritySeemsToBeUp() ) {
+                    static time_t last;
+                    static int n;
+                    int ll = 0;
+                    if( ++n > 5 ) ll++;
+                    if( last + 60 > time(0 ) ) ll++;
+                    LOG(ll) << "replSet can't see a majority, will not try to elect self" << rsLog;
+                    last = time(0);
+                    return;
+                }
+
+                if( !rs->iAmElectable() ) {
+                    return;
+                }
+
+                busyWithElectSelf = true; // don't try to do further elections & such while we are already working on one.
+            }
+        }
+        // blockSync outside of rslock
+        // can't hold rslock because we may try to stop the opsync thread
+        if (authIssue) {
+            if (rs->box.getPrimary() == rs->_self) {
+                log() << "auth problems, relinquishing primary" << rsLog;
+                rs->relinquish();
             }
 
-            if( !rs->iAmPotentiallyHot() ) { // if not we never try to be primary
-                OCCASIONALLY log() << "replSet I don't see a primary and I can't elect myself" << endl;
-                return;
-            }
-
-            /* no one seems to be primary.  shall we try to elect ourself? */
-            if( !rs->elect.aMajoritySeemsToBeUp() ) {
-                static time_t last;
-                static int n;
-                int ll = 0;
-                if( ++n > 5 ) ll++;
-                if( last + 60 > time(0 ) ) ll++;
-                LOG(ll) << "replSet can't see a majority, will not try to elect self" << rsLog;
-                last = time(0);
-                return;
-            }
-
-            if( !rs->iAmElectable() ) {
-                return;
-            }
-
-            busyWithElectSelf = true; // don't try to do further elections & such while we are already working on one.
+            rs->blockSync(true);
+            return;
         }
         try {
             rs->elect.electSelf();

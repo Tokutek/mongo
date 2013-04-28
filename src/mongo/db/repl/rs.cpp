@@ -90,26 +90,35 @@ namespace mongo {
         changeState(MemberState::RS_RECOVERING);
     }
 
-    void ReplSetImpl::assumePrimary() {
-        verify(lockedByMe());
+    bool ReplSetImpl::assumePrimary() {
+        boost::unique_lock<boost::mutex> lock(_stateChangeMutex);
+        
+        // Can't prove to myself that we are guaranteed to be
+        // in the secondary state here, so putting this here.
+        if (state() != MemberState::RS_SECONDARY) {
+            return false;
+        }
         LOG(2) << "replSet assuming primary" << endl;
         verify( iAmPotentiallyHot() );
 
         // Make sure replication has stopped        
         BackgroundSync::get()->stopOpSyncThread();
 
+        RSBase::lock rslk(this);
         Lock::GlobalWrite lk;
 
         gtidManager->verifyReadyToBecomePrimary();
 
         gtidManager->resetManager();
         changeState(MemberState::RS_PRIMARY);
+        return true;
     }
 
     void ReplSetImpl::changeState(MemberState s) { box.change(s, _self); }
 
     bool ReplSetImpl::setMaintenanceMode(const bool inc) {
-        lock replLock(this);
+        boost::unique_lock<boost::mutex> lock(_stateChangeMutex);
+        RSBase::lock lk(this);
         if (box.getState().primary()) {
             return false;
         }

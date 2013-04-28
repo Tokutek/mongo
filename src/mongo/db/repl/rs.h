@@ -97,7 +97,8 @@ namespace mongo {
 
         void noteARemoteIsPrimary(const Member *);
         void checkElectableSet();
-        void checkAuth();
+        // returns true if auth issue, false otherwise
+        bool checkAuth();
         virtual void starting();
     public:
         Manager(ReplSetImpl *rs);
@@ -339,6 +340,7 @@ namespace mongo {
         bool gotForceSync();
         void goStale(const Member* stale, GTID remoteGTID);
     private:
+        boost::mutex _stateChangeMutex; // used for some state changes, ugh
         set<ReplSetHealthPollTask*> healthTasks;
         void endOldHealthTasks();
         void startHealthTaskFor(Member *m);
@@ -350,7 +352,7 @@ namespace mongo {
         bool _stepDown(int secs);
         bool _freeze(int secs);
     private:
-        void assumePrimary();
+        bool assumePrimary();
         void loadGTIDManager(bool quiet=false);
         void changeState(MemberState s);
 

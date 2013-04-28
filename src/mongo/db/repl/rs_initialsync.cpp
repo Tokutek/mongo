@@ -269,9 +269,12 @@ namespace mongo {
 
     /**
      * Do the initial sync for this member.
+     * This code can use a little refactoring. bit ugly
      */
     bool ReplSetImpl::_syncDoInitialSync() {
         sethbmsg("initial sync pending",0);
+        bool needsFullSync = gtidManager->getLiveState().isInitial();
+        bool needGapsFilled = needsFullSync || replSettings.fastsync;
 
         // if this is the first node, it may have already become primary
         if ( box.getState().primary() ) {
@@ -279,29 +282,34 @@ namespace mongo {
             return true;
         }
 
-        const Member *source = getMemberToSyncTo();
-        if (!source) {
-            sethbmsg("initial sync need a member to be primary or secondary to do our initial sync", 0);
-            sleepsecs(15);
-            return false;
-        }
-
-        string sourceHostname = source->h().toString();
+        const Member *source = NULL;
         OplogReader r;
-        if( !r.connect(sourceHostname) ) {
-            sethbmsg( str::stream() << "initial sync couldn't connect to " << source->h().toString() , 0);
-            sleepsecs(15);
-            return false;
+        string sourceHostname;
+        // only bother making a connection if we need to connect for some reason
+        if (needGapsFilled) {
+            source = getMemberToSyncTo();
+            if (!source) {
+                sethbmsg("initial sync need a member to be primary or secondary to do our initial sync", 0);
+                sleepsecs(15);
+                return false;
+            }
+
+            sourceHostname = source->h().toString();
+            if( !r.connect(sourceHostname) ) {
+                sethbmsg( str::stream() << "initial sync couldn't connect to " << source->h().toString() , 0);
+                sleepsecs(15);
+                return false;
+            }
         }
 
-        BSONObj lastOp = r.getLastOp(rsoplog);
-        if( lastOp.isEmpty() ) {
-            sethbmsg("initial sync couldn't read remote oplog", 0);
-            sleepsecs(15);
-            return false;
-        }
+        if( needsFullSync ) {
+            BSONObj lastOp = r.getLastOp(rsoplog);
+            if( lastOp.isEmpty() ) {
+                sethbmsg("initial sync couldn't read remote oplog", 0);
+                sleepsecs(15);
+                return false;
+            }
 
-        if( gtidManager->getLiveState().isInitial() ) {
             sethbmsg("initial sync drop all databases", 0);
             dropAllDatabasesExceptLocal();
 
@@ -315,7 +323,6 @@ namespace mongo {
             fileOpsTransaction.commit(0);
 
             sethbmsg("initial sync clone all databases", 0);
-
             
             BSONObj beginCommand = BSON( 
                 "beginTransaction" << 1 << 
@@ -412,22 +419,24 @@ namespace mongo {
             bool ret = getLastGTIDinOplog(&lastEntry);
             isyncassert("could not get last oplog entry after clone", ret);
 
-            // TODO: query minLive and use that instead
-            GTID currEntry = minUnappliedGTID;
-            // first, we need to fill in the "gaps" in the oplog
-            while (GTID::cmp(currEntry, lastEntry) < 0) {
-                r.tailingQueryGTE(rsoplog, currEntry);
+            if (needGapsFilled) {
+                // TODO: query minLive and use that instead
+                GTID currEntry = minUnappliedGTID;
+                // first, we need to fill in the "gaps" in the oplog
                 while (GTID::cmp(currEntry, lastEntry) < 0) {
-                    bool hasMore = true;
-                    if (!r.moreInCurrentBatch()) {
-                        hasMore = r.more();
+                    r.tailingQueryGTE(rsoplog, currEntry);
+                    while (GTID::cmp(currEntry, lastEntry) < 0) {
+                        bool hasMore = true;
+                        if (!r.moreInCurrentBatch()) {
+                            hasMore = r.more();
+                        }
+                        if (!hasMore) {
+                            break;
+                        }
+                        BSONObj op = r.nextSafe().getOwned();
+                        currEntry = getGTIDFromOplogEntry(op);
+                        replicateTransactionToOplog(op);
                     }
-                    if (!hasMore) {
-                        break;
-                    }
-                    BSONObj op = r.nextSafe().getOwned();
-                    currEntry = getGTIDFromOplogEntry(op);
-                    replicateTransactionToOplog(op);
                 }
             }
 

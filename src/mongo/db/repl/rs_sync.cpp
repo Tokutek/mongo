@@ -136,16 +136,17 @@ namespace mongo {
     }
 
     void ReplSetImpl::blockSync(bool block) {
-        // RS lock is already taken in Manager::checkAuth
-        verify(lockedByMe());
-
         // if told to block, and currently not blocking,
         // stop opsync thread and go into recovering state
         if (block && !_blockSync) {
+            boost::unique_lock<boost::mutex> lock(_stateChangeMutex);
             BackgroundSync::get()->stopOpSyncThread();
+            RSBase::lock lk(this);
             changeState(MemberState::RS_RECOVERING);
         }
         else if (!block && _blockSync) {
+            // this is messy
+            // replLock is already locked on input here
             Lock::GlobalWrite writeLock;
             tryToGoLiveAsASecondary();
         }
