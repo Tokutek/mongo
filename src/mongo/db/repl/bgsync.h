@@ -89,6 +89,7 @@ namespace mongo {
         bool isStale(OplogReader& r, BSONObj& remoteOldestOp);
 
         bool hasCursor();
+        void verifySettled();
     public:
         static BackgroundSync* get();
         static void shutdown();

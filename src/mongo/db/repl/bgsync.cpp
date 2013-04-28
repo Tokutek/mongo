@@ -367,6 +367,30 @@ namespace mongo {
         return _currentSyncTarget;
     }
 
+    // does some sanity checks before finishing starting and stopping the opsync 
+    // thread that we are in a decent state
+    //
+    // called with _mutex held
+    void BackgroundSync::verifySettled() {
+        verify(_deque.size() == 0);
+        // do a sanity check on the GTID Manager
+        GTID lastLiveGTID;
+        GTID lastUnappliedGTID;
+        theReplSet->gtidManager->getLiveGTIDs(
+            &lastLiveGTID, 
+            &lastUnappliedGTID
+            );
+        verify(GTID::cmp(lastUnappliedGTID, lastLiveGTID) == 0);
+
+        GTID minLiveGTID;
+        GTID minUnappliedGTID;
+        theReplSet->gtidManager->getMins(
+            &minLiveGTID, 
+            &minUnappliedGTID
+            );
+        verify(GTID::cmp(minUnappliedGTID, minLiveGTID) == 0);
+    }
+
     void BackgroundSync::stopOpSyncThread() {
         boost::unique_lock<boost::mutex> lock(_mutex);
         _opSyncShouldRun = false;
@@ -381,29 +405,13 @@ namespace mongo {
             _queueDone.wait(lock);
         }
 
-        // do a sanity check on the GTID Manager
-        GTID lastLiveGTID;
-        GTID lastUnappliedGTID;
-        theReplSet->gtidManager->getLiveGTIDs(
-            &lastLiveGTID, 
-            &lastUnappliedGTID
-            );
-        dassert(GTID::cmp(lastUnappliedGTID, lastLiveGTID) == 0);
+        verifySettled();
     }
 
     void BackgroundSync::startOpSyncThread() {
         boost::unique_lock<boost::mutex> lock(_mutex);
+        verifySettled();
 
-        // do a sanity check on the GTID Manager
-        GTID lastLiveGTID;
-        GTID lastUnappliedGTID;
-        theReplSet->gtidManager->getLiveGTIDs(
-            &lastLiveGTID, 
-            &lastUnappliedGTID
-            );
-        dassert(GTID::cmp(lastUnappliedGTID, lastLiveGTID) == 0);
-
-        verify(_deque.size() == 0);
         _opSyncShouldRun = true;
         _opSyncCanRunCondVar.notify_all();
         while (!_opSyncRunning) {
