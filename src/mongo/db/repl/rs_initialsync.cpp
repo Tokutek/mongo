@@ -448,9 +448,6 @@ namespace mongo {
             BSONObjBuilder query;
             query.append("_id", q.done());
 
-            // TODO: make this a read uncommitted cursor
-            // especially when this code moves to a background thread
-            // for running replication
             {
                 shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(rsoplog, query.done());
                 while( c->ok() ) {
@@ -465,8 +462,6 @@ namespace mongo {
             }
             catchupTransaction.commit(0);
         }
-        // TODO: figure out what to do with these
-        verify( !box.getState().primary() ); // wouldn't make sense if we were.
 
         changeState(MemberState::RS_RECOVERING);
         sethbmsg("initial sync done",0);
