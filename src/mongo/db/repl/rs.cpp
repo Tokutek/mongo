@@ -91,7 +91,7 @@ namespace mongo {
     }
 
     bool ReplSetImpl::assumePrimary() {
-        boost::unique_lock<boost::mutex> lock(_stateChangeMutex);
+        boost::unique_lock<boost::mutex> lock(stateChangeMutex);
         
         // Can't prove to myself that we are guaranteed to be
         // in the secondary state here, so putting this here.
@@ -117,7 +117,7 @@ namespace mongo {
     void ReplSetImpl::changeState(MemberState s) { box.change(s, _self); }
 
     bool ReplSetImpl::setMaintenanceMode(const bool inc) {
-        boost::unique_lock<boost::mutex> lock(_stateChangeMutex);
+        boost::unique_lock<boost::mutex> lock(stateChangeMutex);
         {
             RSBase::lock lk(this);
             if (box.getState().primary()) {
@@ -174,7 +174,7 @@ namespace mongo {
         return max;
     }
 
-    // Note, on input, rslock must be held
+    // Note, on input, stateChangeMutex and rslock must be held
     void ReplSetImpl::relinquish() {
         {
             verify(lockedByMe());
@@ -212,7 +212,8 @@ namespace mongo {
 
     // for the replSetStepDown command
     bool ReplSetImpl::_stepDown(int secs) {
-        lock lk(this);
+        boost::unique_lock<boost::mutex> lock(stateChangeMutex);
+        RSBase::lock lk(this);
         if( box.getState().primary() ) {
             elect.steppedDown = time(0) + secs;
             log() << "replSet info stepping down as primary secs=" << secs << rsLog;
@@ -542,7 +543,8 @@ namespace mongo {
         // replica set, or it does not require an initial sync
         startThreads();
         if (goLiveAsSecondary) {
-            lock rsLock( this );
+            boost::unique_lock<boost::mutex> lock(stateChangeMutex);
+            RSBase::lock lk(this);
             Lock::GlobalWrite writeLock;
             // temporarily change state to secondary to follow pattern
             // that all threads going live as secondary are transitioning

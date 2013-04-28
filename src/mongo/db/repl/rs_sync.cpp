@@ -135,11 +135,13 @@ namespace mongo {
         return _forceSyncTarget != 0;
     }
 
+    // on input, _stateChangeMutex is held,
+    // see manager.cpp, msgCheckNewState
+    // that calls checkAuth
     void ReplSetImpl::blockSync(bool block) {
         // if told to block, and currently not blocking,
         // stop opsync thread and go into recovering state
         if (block && !_blockSync) {
-            boost::unique_lock<boost::mutex> lock(_stateChangeMutex);
             BackgroundSync::get()->stopOpSyncThread();
             RSBase::lock lk(this);
             changeState(MemberState::RS_RECOVERING);
@@ -147,6 +149,7 @@ namespace mongo {
         else if (!block && _blockSync) {
             // this is messy
             // replLock is already locked on input here
+            // see usage of this function in manager.cpp
             Lock::GlobalWrite writeLock;
             tryToGoLiveAsASecondary();
         }
