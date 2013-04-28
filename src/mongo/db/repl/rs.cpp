@@ -118,9 +118,11 @@ namespace mongo {
 
     bool ReplSetImpl::setMaintenanceMode(const bool inc) {
         boost::unique_lock<boost::mutex> lock(_stateChangeMutex);
-        RSBase::lock lk(this);
-        if (box.getState().primary()) {
-            return false;
+        {
+            RSBase::lock lk(this);
+            if (box.getState().primary()) {
+                return false;
+            }
         }
         // Lock here to prevent state from changing between checking the state and changing it
         Lock::GlobalWrite writeLock;
@@ -128,12 +130,21 @@ namespace mongo {
         if (inc) {
             log() << "replSet going into maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
 
+            BackgroundSync::get()->stopOpSyncThread();
             _maintenanceMode++;
+            RSBase::lock lk(this);
             changeState(MemberState::RS_RECOVERING);
         }
         else {
-            _maintenanceMode--;            
-            tryToGoLiveAsASecondary();
+            // user error
+            if (_maintenanceMode <= 0) {
+                return false;
+            }
+            _maintenanceMode--;
+            if (_maintenanceMode == 0) {
+                RSBase::lock lk(this);
+                tryToGoLiveAsASecondary();
+            }
             log() << "leaving maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
         }
 

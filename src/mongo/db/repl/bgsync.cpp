@@ -223,6 +223,13 @@ namespace mongo {
 
         while (!inShutdown()) {
             while (!inShutdown()) {
+                {
+                    // check if we should bail out
+                    boost::unique_lock<boost::mutex> lck(_mutex);
+                    if (!_opSyncShouldRun) {
+                        return 0;
+                    }
+                }
                 if (!r.moreInCurrentBatch()) {
                     // check to see if we have a request to sync
                     // from a specific target. If so, get out so that
