@@ -77,10 +77,11 @@ namespace mongo {
 
         virtual bool needsTxn() const { return false; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            GTIDManager* gtidMgr = theReplSet->gtidManager;
-            if( !check(errmsg, result) )
+            if( !check(errmsg, result) ) {
                 return false;
-
+            }
+            
+            GTIDManager* gtidMgr = theReplSet->gtidManager;
             if( cmdObj["set"].String() != theReplSet->name() ) {
                 errmsg = "wrong repl set name";
                 return false;

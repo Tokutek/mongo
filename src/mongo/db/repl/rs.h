@@ -645,7 +645,7 @@ namespace mongo {
                 return false;
             }
 
-            if( theReplSet == 0 ) {
+            if( theReplSet == 0 || theReplSet->gtidManager == NULL) {
                 result.append("startupStatus", ReplSet::startupStatus);
                 string s;
                 errmsg = ReplSet::startupStatusMsg.empty() ? "replset unknown error 2" : ReplSet::startupStatusMsg.get();
