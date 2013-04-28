@@ -63,11 +63,16 @@ namespace mongo {
 
         Member* _currentSyncTarget;
 
+        // double ended queue containing the ops
+        // that have been written to the oplog but yet
+        // to be applied to the collections.
+        // Its size should always be equal
+        // to _queueCounter.numElems
+        std::deque<BSONObj> _deque;
 
         struct QueueCounter {
             QueueCounter();
             unsigned long long waitTime;
-            unsigned int numElems;
         } _queueCounter;
 
         BackgroundSync();
