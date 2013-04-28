@@ -79,7 +79,6 @@ namespace mongo {
             _mutex.unlock();
 
             GTID currEntry = getGTIDFromOplogEntry(curr);
-            applyTransactionFromOplog(curr);
             theReplSet->gtidManager->noteApplyingGTID(currEntry);
             applyTransactionFromOplog(curr);
             
