@@ -435,7 +435,7 @@ namespace mongo {
                         }
                         BSONObj op = r.nextSafe().getOwned();
                         currEntry = getGTIDFromOplogEntry(op);
-                        replicateTransactionToOplog(op);
+                        replicateTransactionToOplogToFillGap(op);
                     }
                 }
             }

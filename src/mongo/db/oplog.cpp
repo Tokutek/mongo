@@ -198,16 +198,21 @@ namespace mongo {
 
     // assumes oplog is read locked on entry
     void replicateTransactionToOplog(BSONObj& op) {
+        // set the applied bool to false, to let the oplog know that
+        // this entry has not been applied to collections
+        BSONElementManipulator(op["a"]).setBool(false);
+        // write it to oplog
+        writeEntryToOplog(op);
+    }
+
+    // assumes oplog is read locked on entry
+    void replicateTransactionToOplogToFillGap(BSONObj& op) {
         GTID currEntry = getGTIDFromOplogEntry(op);
 
         // try inserting it into the oplog, if it does not
         // already exist
         if (!gtidExistsInOplog(currEntry)) {
-            // set the applied bool to false, to let the oplog know that
-            // this entry has not been applied to collections
-            BSONElementManipulator(op["a"]).setBool(false);
-            // write it to oplog
-            writeEntryToOplog(op);
+            replicateTransactionToOplog(op);
         }
     }
 
