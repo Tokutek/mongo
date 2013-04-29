@@ -152,21 +152,23 @@ namespace mongo {
     }
 
     void setupSignals( bool inFork ) {
-        signal(SIGTERM, sighandler);
-        signal(SIGINT, sighandler);
+        if ( !cmdLine.gdb ) {
+            signal(SIGTERM, sighandler);
+            signal(SIGINT, sighandler);
 
 #if defined(SIGQUIT)
-        signal( SIGQUIT , printStackAndExit );
+            signal( SIGQUIT , printStackAndExit );
 #endif
-        signal( SIGSEGV , printStackAndExit );
-        signal( SIGABRT , printStackAndExit );
-        signal( SIGFPE , printStackAndExit );
+            signal( SIGSEGV , printStackAndExit );
+            signal( SIGABRT , printStackAndExit );
+            signal( SIGFPE , printStackAndExit );
 #if defined(SIGBUS)
-        signal( SIGBUS , printStackAndExit );
+            signal( SIGBUS , printStackAndExit );
 #endif
 #if defined(SIGPIPE)
-        signal( SIGPIPE , SIG_IGN );
+            signal( SIGPIPE , SIG_IGN );
 #endif
+        }
 
         set_new_handler( my_new_handler );
     }
@@ -307,7 +309,8 @@ int _main(int argc, char* argv[]) {
     CmdLine::addGlobalOptions( general_options, hidden_options, ssl_options );
 
     general_options.add_options()
-    ("nohttpinterface", "disable http interface");
+    ("nohttpinterface", "disable http interface")
+    ("gdb", "go into a debug-friendly mode, disabling SIGINT/TERM handlers");
 
     hidden_options.add_options()
     ("releaseConnectionsAfterResponse", "" )
