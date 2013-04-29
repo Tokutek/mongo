@@ -120,6 +120,14 @@ namespace mongo {
 
     bool Client::shutdown() {
         _shutdown = true;
+        // client is being destroyed, if there are any transactions on our stack,
+        // abort them
+        if (_transactions) {
+            while (_transactions->hasLiveTxn()) {
+                _transactions->abortTxn();
+            }
+        }
+
         if ( inShutdown() ) {
             return false;
         }
@@ -129,18 +137,6 @@ namespace mongo {
         }
 
         return false;
-    }
-
-    void Client::abortLiveTransactions() {
-        verify(Lock::isW());
-        scoped_lock lk(clientsMutex);
-        for (set<Client*>::const_iterator i = clients.begin(); i != clients.end(); ++i) {
-            Client *c = *i;
-            while (c->hasTxn()) {
-                DEV { LOG(0) << "Aborting a txn for shutdown" << endl; }
-                c->abortTopTxn();
-            }
-        }
     }
 
     BSONObj CachedBSONObj::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");

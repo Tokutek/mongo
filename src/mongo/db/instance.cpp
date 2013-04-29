@@ -1002,7 +1002,6 @@ namespace mongo {
 
         {
             Lock::GlobalWrite lk;
-            Client::abortLiveTransactions();
             dbHolderW().closeDatabases(dbpath);
             storage::shutdown();
         }
