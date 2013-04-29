@@ -237,6 +237,7 @@ namespace mongo {
             // set the applied bool to false, to let the oplog know that
             // this entry has not been applied to collections
             BSONElementManipulator(entry["a"]).setBool(true);
+            Lock::DBRead lk1("local");
             writeEntryToOplog(entry);
             transaction.commit(0);
         }
