@@ -63,11 +63,16 @@ namespace mongo {
 
         Member* _currentSyncTarget;
 
+        // double ended queue containing the ops
+        // that have been written to the oplog but yet
+        // to be applied to the collections.
+        // Its size should always be equal
+        // to _queueCounter.numElems
+        std::deque<BSONObj> _deque;
 
         struct QueueCounter {
             QueueCounter();
             unsigned long long waitTime;
-            unsigned int numElems;
         } _queueCounter;
 
         BackgroundSync();
@@ -84,6 +89,7 @@ namespace mongo {
         bool isStale(OplogReader& r, BSONObj& remoteOldestOp);
 
         bool hasCursor();
+        void verifySettled();
     public:
         static BackgroundSync* get();
         static void shutdown();
@@ -101,9 +107,19 @@ namespace mongo {
         BSONObj getCounters();
 
         // for when we are assuming a primary
+        // or we are going  into maintenance mode or we are blocking sync
+        // When called, this must hold the replica set lock. It cannot hold a
+        // global write lock because it will be waiting for the applier thread
+        // to complete work. The applier thread needs to grab various DB
+        // locks to complete work. This is why grabbing a global write lock
+        // is out of the question. Instead, we use the rslock to ensure that
+        // only one thread is stopping this at a time.
         void stopOpSyncThread();
 
-        // for when we become a secondary
+        // for when we become a secondary. We may be transitioning from
+        // maintenance mode or from being a primary. This may hold the
+        // global write lock if it wishes to, but it is not necessary. Only the
+        // rslock is necessary.
         void startOpSyncThread();
 
     };

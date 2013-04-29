@@ -36,31 +36,28 @@ namespace mongo {
    
     /* should be in RECOVERING state on arrival here.
        readlocks
+       On input, should have repl lock and global write lock held
        @return true if transitioned to SECONDARY
     */
-    bool ReplSetImpl::tryToGoLiveAsASecondary() {
+    void ReplSetImpl::tryToGoLiveAsASecondary() {
         // make sure we're not primary, secondary, or fatal already
-        lock rsLock( this );
-        Lock::GlobalWrite writeLock;
-
+        verify(lockedByMe());
+        
+        // Not sure if this if clause is necessary anymore. Hard to prove
+        // either way for now, so leaving it in
         if (box.getState().primary() || box.getState().secondary() || box.getState().fatal()) {
-            return false;
+            return;
         }
 
-        if (_maintenanceMode > 0) {
+        if (_maintenanceMode > 0 || _blockSync) {
             // we're not actually going live
-            return true;
-        }
-
-        // if we're blocking sync, don't change state
-        if (_blockSync) {
-            return false;
+            return;
         }
 
         sethbmsg("");
         changeState(MemberState::RS_SECONDARY);
         BackgroundSync::get()->startOpSyncThread();
-        return true;
+        return;
     }
 
 
@@ -138,14 +135,25 @@ namespace mongo {
         return _forceSyncTarget != 0;
     }
 
+    // on input, _stateChangeMutex is held,
+    // see manager.cpp, msgCheckNewState
+    // that calls checkAuth
     void ReplSetImpl::blockSync(bool block) {
-        // RS lock is already taken in Manager::checkAuth
-        _blockSync = block;
-        if (_blockSync) {
-            // syncing is how we get into SECONDARY state, so we'll be stuck in
-            // RECOVERING until we unblock
+        // if told to block, and currently not blocking,
+        // stop opsync thread and go into recovering state
+        if (block && !_blockSync) {
+            BackgroundSync::get()->stopOpSyncThread();
+            RSBase::lock lk(this);
             changeState(MemberState::RS_RECOVERING);
         }
+        else if (!block && _blockSync) {
+            // this is messy
+            // replLock is already locked on input here
+            // see usage of this function in manager.cpp
+            Lock::GlobalWrite writeLock;
+            tryToGoLiveAsASecondary();
+        }
+        _blockSync = block;
     }
 
     void GhostSync::starting() {

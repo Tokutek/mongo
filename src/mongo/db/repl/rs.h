@@ -97,7 +97,8 @@ namespace mongo {
 
         void noteARemoteIsPrimary(const Member *);
         void checkElectableSet();
-        void checkAuth();
+        // returns true if auth issue, false otherwise
+        bool checkAuth();
         virtual void starting();
     public:
         Manager(ReplSetImpl *rs);
@@ -329,6 +330,7 @@ namespace mongo {
         StateBox box;
 
         GTIDManager* gtidManager;
+        boost::mutex stateChangeMutex;
         bool forceSyncFrom(const string& host, string& errmsg, BSONObjBuilder& result);
 
         /**
@@ -339,6 +341,13 @@ namespace mongo {
         bool gotForceSync();
         void goStale(const Member* stale, GTID remoteGTID);
     private:
+        // this lock protects the _blockSync variable and the _maintenanceMode
+        // variable. It must be taken before the rslock. It protects state changes
+        // that depend on those variables, meaning RS_SECONDARY, RS_PRIMARY,
+        // and RS_RECOVERING. Because one stops the opsync thread with this
+        // lock held, and stopping the opsync thread may take seconds, this
+        // lock may be held for a long time and should be taken before the
+        // rslock.
         set<ReplSetHealthPollTask*> healthTasks;
         void endOldHealthTasks();
         void startHealthTaskFor(Member *m);
@@ -350,7 +359,7 @@ namespace mongo {
         bool _stepDown(int secs);
         bool _freeze(int secs);
     private:
-        void assumePrimary(bool verifyHotness);
+        bool assumePrimary();
         void loadGTIDManager(bool quiet=false);
         void changeState(MemberState s);
 
@@ -498,6 +507,8 @@ namespace mongo {
 
     private:
         bool _syncDoInitialSync_clone( const char *master, const list<string>& dbs, shared_ptr<DBClientConnection> conn);
+        void _fillGaps(OplogReader* r); // helper function for initial sync
+        void _applyMissingOpsDuringInitialSync(); // helper function for initial sync
         bool _syncDoInitialSync();
         void syncDoInitialSync();
 
@@ -528,7 +539,7 @@ namespace mongo {
 
 
         const ReplSetConfig::MemberCfg& myConfig() const { return _config; }
-        bool tryToGoLiveAsASecondary(); // readlocks
+        void tryToGoLiveAsASecondary(); // readlocks
         const uint64_t lastOtherOpTime() const;
         const GTID lastOtherGTID() const;
         
@@ -636,7 +647,7 @@ namespace mongo {
                 return false;
             }
 
-            if( theReplSet == 0 ) {
+            if( theReplSet == 0 || theReplSet->gtidManager == NULL) {
                 result.append("startupStatus", ReplSet::startupStatus);
                 string s;
                 errmsg = ReplSet::startupStatusMsg.empty() ? "replset unknown error 2" : ReplSet::startupStatusMsg.get();

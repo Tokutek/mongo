@@ -307,6 +307,7 @@ namespace mongo {
         }
 
         CmdReplSetMaintenance() : ReplSetCommand("replSetMaintenance") { }
+        virtual bool needsTxn() const { return false; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if( !check(errmsg, result) )
                 return false;

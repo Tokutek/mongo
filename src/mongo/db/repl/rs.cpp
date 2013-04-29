@@ -90,43 +90,61 @@ namespace mongo {
         changeState(MemberState::RS_RECOVERING);
     }
 
-    void ReplSetImpl::assumePrimary(bool verifyHotness) {
-        LOG(2) << "replSet assuming primary" << endl;
-        if (verifyHotness) {
-            verify( iAmPotentiallyHot() );
+    bool ReplSetImpl::assumePrimary() {
+        boost::unique_lock<boost::mutex> lock(stateChangeMutex);
+        
+        // Can't prove to myself that we are guaranteed to be
+        // in the secondary state here, so putting this here.
+        if (state() != MemberState::RS_SECONDARY) {
+            return false;
         }
-
-        Lock::GlobalWrite lk;
+        LOG(2) << "replSet assuming primary" << endl;
+        verify( iAmPotentiallyHot() );
 
         // Make sure replication has stopped        
         BackgroundSync::get()->stopOpSyncThread();
+
+        RSBase::lock rslk(this);
+        Lock::GlobalWrite lk;
+
         gtidManager->verifyReadyToBecomePrimary();
 
         gtidManager->resetManager();
         changeState(MemberState::RS_PRIMARY);
+        return true;
     }
 
     void ReplSetImpl::changeState(MemberState s) { box.change(s, _self); }
 
     bool ReplSetImpl::setMaintenanceMode(const bool inc) {
-        lock replLock(this);
+        boost::unique_lock<boost::mutex> lock(stateChangeMutex);
+        {
+            RSBase::lock lk(this);
+            if (box.getState().primary()) {
+                return false;
+            }
+        }
         // Lock here to prevent state from changing between checking the state and changing it
         Lock::GlobalWrite writeLock;
-
-        if (box.getState().primary()) {
-            return false;
-        }
 
         if (inc) {
             log() << "replSet going into maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
 
+            BackgroundSync::get()->stopOpSyncThread();
             _maintenanceMode++;
+            RSBase::lock lk(this);
             changeState(MemberState::RS_RECOVERING);
         }
         else {
+            // user error
+            if (_maintenanceMode <= 0) {
+                return false;
+            }
             _maintenanceMode--;
-            // no need to change state, syncTail will try to go live as a secondary soon
-
+            if (_maintenanceMode == 0) {
+                RSBase::lock lk(this);
+                tryToGoLiveAsASecondary();
+            }
             log() << "leaving maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
         }
 
@@ -156,9 +174,12 @@ namespace mongo {
         return max;
     }
 
+    // Note, on input, stateChangeMutex and rslock must be held
     void ReplSetImpl::relinquish() {
         {
-            Lock::GlobalWrite lk; // so we are synchronized with _logOp()
+            verify(lockedByMe());
+            // so we know writes are not simultaneously occurring
+            Lock::GlobalWrite lk;
 
             LOG(2) << "replSet attempting to relinquish" << endl;
             if( box.getState().primary() ) {
@@ -171,11 +192,6 @@ namespace mongo {
                 log() << "replSet closing client sockets after relinquishing primary" << rsLog;
                 MessagingPort::closeAllSockets(1);
                 BackgroundSync::get()->startOpSyncThread();
-            }
-            else if( box.getState().startup2() ) {
-                // This block probably isn't necessary
-                changeState(MemberState::RS_RECOVERING);
-                return;
             }
         }
 
@@ -196,7 +212,8 @@ namespace mongo {
 
     // for the replSetStepDown command
     bool ReplSetImpl::_stepDown(int secs) {
-        lock lk(this);
+        boost::unique_lock<boost::mutex> lock(stateChangeMutex);
+        RSBase::lock lk(this);
         if( box.getState().primary() ) {
             elect.steppedDown = time(0) + secs;
             log() << "replSet info stepping down as primary secs=" << secs << rsLog;
@@ -526,6 +543,13 @@ namespace mongo {
         // replica set, or it does not require an initial sync
         startThreads();
         if (goLiveAsSecondary) {
+            boost::unique_lock<boost::mutex> lock(stateChangeMutex);
+            RSBase::lock lk(this);
+            Lock::GlobalWrite writeLock;
+            // temporarily change state to secondary to follow pattern
+            // that all threads going live as secondary are transitioning
+            // from RS_RECOVERING.
+            changeState(MemberState::RS_RECOVERING);
             tryToGoLiveAsASecondary();
         }
     }

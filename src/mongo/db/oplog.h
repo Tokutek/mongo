@@ -45,6 +45,7 @@ namespace mongo {
     bool gtidExistsInOplog(GTID gtid);
     void writeEntryToOplog(BSONObj entry);
     void replicateTransactionToOplog(BSONObj& op);
+    void replicateTransactionToOplogToFillGap(BSONObj& op);
     void applyTransactionFromOplog(BSONObj entry);
     
     /** puts obj in the oplog as a comment (a no-op).  Just for diags.

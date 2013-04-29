@@ -77,10 +77,11 @@ namespace mongo {
 
         virtual bool needsTxn() const { return false; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            GTIDManager* gtidMgr = theReplSet->gtidManager;
-            if( !check(errmsg, result) )
+            if( !check(errmsg, result) ) {
                 return false;
-
+            }
+            
+            GTIDManager* gtidMgr = theReplSet->gtidManager;
             if( cmdObj["set"].String() != theReplSet->name() ) {
                 errmsg = "wrong repl set name";
                 return false;
@@ -240,6 +241,10 @@ namespace mongo {
             try {
                 vote = yea(whoid);
                 dassert( hopeful->id() == whoid );
+                // Not sure where the right place to put this lock is. 
+                // Maybe this belongs at the top of the function?
+                boost::unique_lock<boost::mutex> lock(rs.stateChangeMutex);
+                RSBase::lock lk(&rs);
                 rs.relinquish();
                 log() << "replSet info voting yea for " <<  hopeful->fullName() << " (" << whoid << ')' << rsLog;
             }
@@ -424,9 +429,8 @@ namespace mongo {
                 }
                 else {
                     /* succeeded. */
-                    LOG(1) << "replSet election succeeded, assuming primary role" << rsLog;
-                    success = true;
-                    rs.assumePrimary(true);
+                    LOG(1) << "replSet election succeeded, assuming primary role" << rsLog;                    
+                    success = rs.assumePrimary();
                 }
             }
         }

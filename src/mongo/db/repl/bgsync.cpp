@@ -32,7 +32,7 @@ namespace mongo {
     {
     }
 
-    BackgroundSync::QueueCounter::QueueCounter() : waitTime(0), numElems(0) {
+    BackgroundSync::QueueCounter::QueueCounter() : waitTime(0) {
     }
 
     BackgroundSync* BackgroundSync::get() {
@@ -48,7 +48,8 @@ namespace mongo {
         {
             boost::unique_lock<boost::mutex> lock(_mutex);
             counters.appendIntOrLL("waitTimeMs", _queueCounter.waitTime);
-            counters.append("numElems", _queueCounter.numElems);
+            uint32_t size = _deque.size();
+            counters.append("numElems", size);
         }
         return counters.obj();
     }
@@ -66,66 +67,38 @@ namespace mongo {
     void BackgroundSync::applyOpsFromOplog() {
         GTID lastLiveGTID;
         GTID lastUnappliedGTID;
+        // TODO: handle shutdown
         while (1) {
             _mutex.lock();
             // wait until we know an item has been produced
-            while (_queueCounter.numElems == 0) {
+            while (_deque.size() == 0) {
                 _queueDone.notify_all();
                 _queueCond.wait(_mutex);
             }
-
-            theReplSet->gtidManager->getLiveGTIDs(
-                &lastLiveGTID, 
-                &lastUnappliedGTID
-                );
-            dassert(GTID::cmp(lastUnappliedGTID, lastLiveGTID) < 0);
+            BSONObj curr = _deque.front();
             _mutex.unlock();
 
-            // at this point, we know we have data that has not been caught up
-            // with the producer, because queueCounter.numElems > 0
-            // we apply it
-            Lock::DBRead lk( "local" );
-            Client::Context ctx(rsoplog);
-            Client::Transaction transaction(DB_READ_UNCOMMITTED);
-            BSONObjBuilder q;
-            addGTIDToBSON("$gt", lastUnappliedGTID, q);
-            BSONObjBuilder query;
-            query.append("_id", q.done());
-            {
-                shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(
-                    rsoplog, 
-                    query.done()
-                    );
-
-                while( c->ok() ) {
-                    if (c->currentMatches()) {
-                        BSONObj curr = c->current();
-                        GTID currEntry = getGTIDFromOplogEntry(curr);
-                        theReplSet->gtidManager->noteApplyingGTID(currEntry);
-                        lk.unlockDB();
-                        applyTransactionFromOplog(curr);
-                        lk.lockDB("local");
-                        
-                        _mutex.lock();
-                        theReplSet->gtidManager->noteGTIDApplied(currEntry);
-                        dassert(_queueCounter.numElems > 0);
-                        _queueCounter.numElems--;
-                        // this is a flow control mechanism, with bad numbers
-                        // hard coded for now just to get something going.
-                        // If the opSync thread notices that we have over 20000
-                        // transactions in the queue, it waits until we get below
-                        // 10000. This is where we signal that we have gotten there
-                        // Once we have spilling of transactions working, this
-                        // logic will need to be redone
-                        if (_queueCounter.numElems == 10000) {
-                            _queueCond.notify_all();
-                        }
-                        _mutex.unlock();
-                    }
-                    c->advance();
-                }
+            GTID currEntry = getGTIDFromOplogEntry(curr);
+            theReplSet->gtidManager->noteApplyingGTID(currEntry);
+            applyTransactionFromOplog(curr);
+            
+            _mutex.lock();
+            // I don't recall if noteGTIDApplied needs to be called within _mutex
+            theReplSet->gtidManager->noteGTIDApplied(currEntry);
+            dassert(_deque.size() > 0);
+            _deque.pop_front();
+            
+            // this is a flow control mechanism, with bad numbers
+            // hard coded for now just to get something going.
+            // If the opSync thread notices that we have over 20000
+            // transactions in the queue, it waits until we get below
+            // 10000. This is where we signal that we have gotten there
+            // Once we have spilling of transactions working, this
+            // logic will need to be redone
+            if (_deque.size() == 10000) {
+                _queueCond.notify_all();
             }
-            transaction.commit(0);
+            _mutex.unlock();
         }
     }
     
@@ -223,6 +196,13 @@ namespace mongo {
 
         while (!inShutdown()) {
             while (!inShutdown()) {
+                {
+                    // check if we should bail out
+                    boost::unique_lock<boost::mutex> lck(_mutex);
+                    if (!_opSyncShouldRun) {
+                        return 0;
+                    }
+                }
                 if (!r.moreInCurrentBatch()) {
                     // check to see if we have a request to sync
                     // from a specific target. If so, get out so that
@@ -267,10 +247,10 @@ namespace mongo {
                     theReplSet->gtidManager->noteGTIDAdded(currEntry, ts, lastHash);
                     _queueCounter.waitTime += timer.millis();
                     // notify applier thread that data exists
-                    if (_queueCounter.numElems == 0) {
+                    if (_deque.size() == 0) {
                         _queueCond.notify_all();
                     }
-                    _queueCounter.numElems++;
+                    _deque.push_back(o);
                     // this is a flow control mechanism, with bad numbers
                     // hard coded for now just to get something going.
                     // If the opSync thread notices that we have over 20000
@@ -278,7 +258,7 @@ namespace mongo {
                     // 10000. This is where we wait if we get too high
                     // Once we have spilling of transactions working, this
                     // logic will need to be redone
-                    if (_queueCounter.numElems > 20000) {
+                    if (_deque.size() > 20000) {
                         _queueCond.wait(lock);
                     }
                 }
@@ -386,6 +366,30 @@ namespace mongo {
         return _currentSyncTarget;
     }
 
+    // does some sanity checks before finishing starting and stopping the opsync 
+    // thread that we are in a decent state
+    //
+    // called with _mutex held
+    void BackgroundSync::verifySettled() {
+        verify(_deque.size() == 0);
+        // do a sanity check on the GTID Manager
+        GTID lastLiveGTID;
+        GTID lastUnappliedGTID;
+        theReplSet->gtidManager->getLiveGTIDs(
+            &lastLiveGTID, 
+            &lastUnappliedGTID
+            );
+        verify(GTID::cmp(lastUnappliedGTID, lastLiveGTID) == 0);
+
+        GTID minLiveGTID;
+        GTID minUnappliedGTID;
+        theReplSet->gtidManager->getMins(
+            &minLiveGTID, 
+            &minUnappliedGTID
+            );
+        verify(GTID::cmp(minUnappliedGTID, minLiveGTID) == 0);
+    }
+
     void BackgroundSync::stopOpSyncThread() {
         boost::unique_lock<boost::mutex> lock(_mutex);
         _opSyncShouldRun = false;
@@ -396,33 +400,17 @@ namespace mongo {
         verify(!_opSyncShouldRun);
 
         // wait for all things to be applied
-        while (_queueCounter.numElems > 0) {
+        while (_deque.size() > 0) {
             _queueDone.wait(lock);
         }
 
-        // do a sanity check on the GTID Manager
-        GTID lastLiveGTID;
-        GTID lastUnappliedGTID;
-        theReplSet->gtidManager->getLiveGTIDs(
-            &lastLiveGTID, 
-            &lastUnappliedGTID
-            );
-        dassert(GTID::cmp(lastUnappliedGTID, lastLiveGTID) == 0);
+        verifySettled();
     }
 
     void BackgroundSync::startOpSyncThread() {
         boost::unique_lock<boost::mutex> lock(_mutex);
+        verifySettled();
 
-        // do a sanity check on the GTID Manager
-        GTID lastLiveGTID;
-        GTID lastUnappliedGTID;
-        theReplSet->gtidManager->getLiveGTIDs(
-            &lastLiveGTID, 
-            &lastUnappliedGTID
-            );
-        dassert(GTID::cmp(lastUnappliedGTID, lastLiveGTID) == 0);
-
-        verify(_queueCounter.numElems == 0);
         _opSyncShouldRun = true;
         _opSyncCanRunCondVar.notify_all();
         while (!_opSyncRunning) {
