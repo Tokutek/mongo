@@ -390,6 +390,7 @@ env.StaticLibrary("coredb", [
         "db/keypattern.cpp",
         "db/keygenerator.cpp",
         "db/matcher.cpp",
+        "db/matcher/matcher.cpp",
         "db/spillable_vector.cpp",
         "db/txn_context.cpp",
         "db/gtid.cpp",

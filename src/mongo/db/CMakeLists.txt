@@ -99,6 +99,7 @@ add_library(coredb STATIC
   keypattern
   keygenerator
   matcher.cpp
+  matcher/matcher
   spillable_vector
   txn_context
   gtid

@@ -26,6 +26,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/query_optimizer.h"
+#include "mongo/db/matcher/matcher.h"
 #include "mongo/dbtests/dbtests.h"
 #include "mongo/util/timer.h"
 
@@ -46,12 +47,13 @@ namespace MatcherTests {
         const char * const _ns;
         DBDirectClient _client;
     };
-    
+
+    template <typename M>
     class Basic {
     public:
         void run() {
             BSONObj query = fromjson( "{\"a\":\"b\"}" );
-            Matcher m( query );
+            M m( query );
             ASSERT( m.matches( fromjson( "{\"a\":\"b\"}" ) ) );
         }
     };
@@ -406,8 +408,12 @@ namespace MatcherTests {
         All() : Suite( "matcher" ) {
         }
 
+#define ADD_BOTH(TEST) \
+        add< TEST<Matcher> >(); \
+        add< TEST<Matcher2> >();
+
         void setupTests() {
-            add<Basic>();
+            ADD_BOTH(Basic);
             add<DoubleEqual>();
             add<MixedNumericEqual>();
             add<MixedNumericGt>();
