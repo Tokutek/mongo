@@ -151,6 +151,7 @@ target_link_libraries(coredb LINK_PUBLIC
   coreserver
   plugins
   server_parameters
+  expressions
   foundation
   server_options
   storage_global_params_impl
