@@ -23,6 +23,7 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/db/db_flags.h"
 
 
 #define KEY_STR_OP_NAME "op"
@@ -164,14 +165,14 @@ namespace OpLogHelpers{
                 collNsd->createIndex(row);
             }
             // overwrite set to true because we are running on a secondary
-            insertOneObject(nsd, nsdt, row, true);
+            insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
         }
         else {
             Client::ReadContext ctx(ns);
             NamespaceDetails* nsd = nsdetails(ns);
             NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
             // overwrite set to true because we are running on a secondary
-            insertOneObject(nsd, nsdt, row, true);
+            insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
         }
     }
 

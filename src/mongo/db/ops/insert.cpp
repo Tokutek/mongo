@@ -69,8 +69,7 @@ namespace mongo {
         return 0;
     }
 
-    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, BSONObj &obj, bool overwrite) {
-        uint64_t flags = overwrite ? ND_UNIQUE_CHECKS_OFF : 0;
+    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, BSONObj &obj, uint64_t flags) {
         details->insertObject(obj, flags);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
