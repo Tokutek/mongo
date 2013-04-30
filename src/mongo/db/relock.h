@@ -25,6 +25,7 @@ namespace mongo {
 class RetryWithWriteLock : public DBException {
   public:
     RetryWithWriteLock() : DBException("Need to be write locked for this operation", 0) {}
+    RetryWithWriteLock(const string &s) : DBException("Need to be write locked for this operation: " + s, 0) {}
 };
 
 } // namespace mongo

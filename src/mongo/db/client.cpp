@@ -209,8 +209,8 @@ namespace mongo {
                 lk.reset( new Lock::DBRead(ns) );
                 c.reset( new Context(ns, path, doauth) );
             }
-            else { 
-                uasserted(16456, str::stream() << "can't open a database from a nested read lock " << ns);
+            else {
+                throw RetryWithWriteLock(str::stream() << "opening database for ns " << ns);
             }
         }
 
