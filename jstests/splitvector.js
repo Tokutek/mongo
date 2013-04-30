@@ -218,36 +218,41 @@ case8();
 // Case 9: splitVector "force" mode, where we split (possible small) chunks in the middle
 //
 
-f.drop();
-f.ensureIndex( { x: 1 } );
-
-var case9 = function() {
-    f.save( { x: 1 } );
-    f.save( { x: 2 } );
-    f.save( { x: 3 } );
+// We use estimates so we don't get exactly the midpoint each time, so we use assert.close.
+var case9 = function(n) {
+    for (var i = 0; i < n; ++i) {
+        f.save( { x: i } );
+    }
     db.getLastError();
+    f.reIndex(); // force stats to be updated
 
-    assert.eq( 3 , f.count() );
+    assert.eq( n , f.count() );
     print( f.getFullName() )
 
     res = db.runCommand( { splitVector: f.getFullName() , keyPattern: {x:1} , force : true } );
 
     assert.eq( true , res.ok , "9a" );
     assert.eq( 1 , res.splitKeys.length , "9b" );
-    assert.eq( 2 , res.splitKeys[0].x , "9c" );
+    assert.close( n/2 , res.splitKeys[0].x , "9c", -1 );
 
     if ( db.runCommand( "isMaster" ).msg != "isdbgrid" ) {
         res = db.adminCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , force : true } );
-        
+
         assert.eq( true , res.ok , "9a: " + tojson(res) );
         assert.eq( 1 , res.splitKeys.length , "9b: " + tojson(res) );
-        assert.eq( 2 , res.splitKeys[0].x , "9c: " + tojson(res) );
+        assert.close( n/2 , res.splitKeys[0].x , "9c: " + tojson(res), -1 );
         for( i=0; i < res.splitKeys.length; i++ ){
             assertFieldNamesMatch( res.splitKeys[i] , {x : 1} );
         }
     }
 }
-case9();
+// Since we're going to allow approximate points for "halfway" we should test a few different sizes.
+for (var n = 3; n < 16; ++n) {
+    f.drop();
+    f.ensureIndex( { x: 1 } );
+
+    case9(n);
+}
 
 // -------------------------
 // Repeat all cases using prefix shard key.
@@ -273,8 +278,11 @@ f.drop();
 f.ensureIndex( { x: 1, y: 1 } );
 case8();
 
-f.drop();
-f.ensureIndex( { x: 1, y: 1 } );
-case9();
+// Since we're going to allow approximate points for "halfway" we should test a few different sizes.
+for (var n = 3; n < 16; ++n) {
+    f.drop();
+    f.ensureIndex( { x: 1, y: 1 } );
+    case9(n);
+}
 
 print("PASSED");

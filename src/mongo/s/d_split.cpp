@@ -295,29 +295,21 @@ namespace mongo {
                     txn.commit();
                     return true;
                 }
-                
+
                 log() << "request split points lookup for chunk " << ns << " " << min << " -->> " << max << endl;
-                
-                // We'll use the average object size and number of object to find approximately how many keys
-                // each chunk should have. We'll split at half the maxChunkSize or maxChunkObjects, if
-                // provided.
-                const long long avgRecSize = dataSize / recCount;
-                long long keyCount = maxChunkSize / (2 * avgRecSize);
-                if ( maxChunkObjects && ( maxChunkObjects < keyCount ) ) {
-                    log() << "limiting split vector to " << maxChunkObjects << " (from " << keyCount << ") objects " << endl;
-                    keyCount = maxChunkObjects;
-                }
-                
+
                 //
-                // 2. Traverse the index and add the keyCount-th key to the result vector. If that key
-                //    appeared in the vector before, we omit it. The invariant here is that all the
-                //    instances of a given key value live in the same chunk.
+                // 2. Traverse the index and count sizes until we meet maxChunkSize, then add that
+                //    key to the result vector. If that key appeared in the vector before, we omit
+                //    it. The invariant here is that all the instances of a given key value live in
+                //    the same chunk.
                 //
-                
+
                 Timer timer;
+                long long currSize = 0;
                 long long currCount = 0;
                 long long numChunks = 0;
-                
+
                 {
                     IndexCursor *idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
                     shared_ptr<Cursor> c( idxCursor );
@@ -326,75 +318,78 @@ namespace mongo {
                         errmsg = "can't open a cursor for splitting (desired range is possibly empty)";
                         return false;
                     }
-                
+
                     // Use every 'keyCount'-th key as a split point. We add the initial key as a sentinel, to be removed
                     // at the end. If a key appears more times than entries allowed on a chunk, we issue a warning and
                     // split on the following key.
                     set<BSONObj> tooFrequentKeys;
-                    splitKeys.push_back( idxCursor->prettyKey( c->currKey().getOwned() ).extractFields( keyPattern ) );
-                    while ( 1 ) {
-                        while ( cc->ok() ) {
+                    splitKeys.push_back(idxCursor->prettyKey(c->currKey().getOwned()).extractFields(keyPattern));
+                    while (true) {
+                        while (cc->ok()) {
+                            const BSONObj &currObj = cc->current();
+                            currSize += currObj.objsize();
                             currCount++;
-                        
-                            if ( currCount > keyCount ) {
-                                BSONObj currKey = idxCursor->prettyKey( c->currKey() ).extractFields(keyPattern);
+
+                            // we want ~half-full chunks
+                            if (2 * currSize >= maxChunkSize || currCount >= maxChunkObjects) {
+                                BSONObj currKey = idxCursor->prettyKey(c->currKey()).extractFields(keyPattern);
                                 // Do not use this split key if it is the same used in the previous split point.
-                                if ( currKey.woCompare( splitKeys.back() ) == 0 ) {
-                                    tooFrequentKeys.insert( currKey.getOwned() );
+                                if (currKey.woCompare(splitKeys.back()) == 0) {
+                                    tooFrequentKeys.insert(currKey.getOwned());
                                 }
                                 else {
-                                    splitKeys.push_back( currKey.getOwned() );
+                                    splitKeys.push_back(currKey.getOwned());
                                     currCount = 0;
+                                    currSize = 0;
                                     numChunks++;
-                                
+
                                     LOG(4) << "picked a split key: " << currKey << endl;
                                 }
-                            
                             }
-                        
+
                             cc->advance();
-                        
+
                             // Stop if we have enough split points.
-                            if ( maxSplitPoints && ( numChunks >= maxSplitPoints ) ) {
+                            if (maxSplitPoints && (numChunks >= maxSplitPoints)) {
                                 log() << "max number of requested split points reached (" << numChunks
                                       << ") before the end of chunk " << ns << " " << min << " -->> " << max
                                       << endl;
                                 break;
                             }
-                        
                         }
-                    
-                        if ( splitKeys.size() > 1 || ! force )
+
+                        if (splitKeys.size() > 1 || !force) {
                             break;
-                    
+                        }
+
                         force = false;
-                        keyCount = currCount / 2;
+                        maxChunkObjects = currCount / 2;
                         currCount = 0;
-                        log() << "splitVector doing another cycle because of force, keyCount now: " << keyCount << endl;
-                    
-                        idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
-                        c.reset( idxCursor );
-                        cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
+                        LOG(0) << "splitVector doing another cycle because of force, maxChunkObjects now: " << maxChunkObjects << endl;
+
+                        idxCursor = new IndexCursor(d, *idx, min, max, false, 1);
+                        c.reset(idxCursor);
+                        cc.reset(new ClientCursor(QueryOption_NoCursorTimeout, c, ns));
                     }
 
                     //
                     // 3. Format the result and issue any warnings about the data we gathered while traversing the
                     //    index
                     //
-                
+
                     // Warn for keys that are more numerous than maxChunkSize allows.
                     for ( set<BSONObj>::const_iterator it = tooFrequentKeys.begin(); it != tooFrequentKeys.end(); ++it ) {
                         warning() << "chunk is larger than " << maxChunkSize
                                   << " bytes because of key " << idxCursor->prettyKey( *it ) << endl;
                     }
-                
+
                     // Remove the sentinel at the beginning before returning
                     splitKeys.erase( splitKeys.begin() );
                     verify( c.get() );
-                
+
                     if ( timer.millis() > cmdLine.slowMS ) {
                         warning() << "Finding the split vector for " <<  ns << " over "<< keyPattern
-                                  << " keyCount: " << keyCount << " numSplits: " << splitKeys.size() 
+                                  << " maxChunkObjects: " << maxChunkObjects << " numSplits: " << splitKeys.size() 
                                   << " lookedAt: " << currCount << " took " << timer.millis() << "ms"
                                   << endl;
                     }
