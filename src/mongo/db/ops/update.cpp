@@ -42,8 +42,9 @@ namespace mongo {
     {
         if (loud->logop) {
             OpLogHelpers::logUpdate(
-                loud->ns, 
-                oldObj, 
+                loud->ns,
+                pk,
+                oldObj,
                 newObj,
                 loud->fromMigrate,
                 &cc().txn()

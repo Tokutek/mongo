@@ -28,7 +28,7 @@ namespace OpLogHelpers{
 
     void logComment(BSONObj comment, TxnContext* txn);
     void logInsert(const char* ns, BSONObj row, TxnContext* txn);
-    void logUpdate(const char* ns, BSONObj oldRow, BSONObj newRow, bool fromMigrate, TxnContext* txn);
+    void logUpdate(const char* ns, const BSONObj& pk, const BSONObj& oldRow, const BSONObj& newRow, bool fromMigrate, TxnContext* txn);
     void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn);
     void logCommand(const char* ns, BSONObj row, TxnContext* txn);
     void applyOperationFromOplog(const BSONObj& op);
