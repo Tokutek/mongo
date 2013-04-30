@@ -63,7 +63,10 @@ res = db.runCommand( { checkShardingIndex: "test.jstests_shardingindex" , keyPat
 assert.eq( false , res.ok , "3a " + tojson(res) );
 
 f.remove( { y : 2 } );
-f.reIndex();
+// tokuds doesn't recalculate multikeyindexbits during reindex, must drop and re-create index explicitly
+f.dropIndex({x:1,y:1});
+f.ensureIndex({x:1,y:1});
+//f.reIndex();
 
 assert.eq( 1 , f.count() , "3. count after removing array value should be 1" );
 res = db.runCommand( { checkShardingIndex: "test.jstests_shardingindex" , keyPattern: {x:1, y:1} });
@@ -104,7 +107,10 @@ assert.eq( false , res.ok , "4e " + tojson(res) );
 
 
 f.remove( { y : 2 } );
-f.reIndex();
+// tokuds doesn't recalculate multikeyindexbits during reindex, must drop and re-create index explicitly
+f.dropIndex({x:1,y:1,z:1});
+f.ensureIndex({x:1,y:1,z:1});
+//f.reIndex();
 
 assert.eq( 1 , f.count() , "4. count after removing array value should be 1" );
 res = db.runCommand( { checkShardingIndex: "test.jstests_shardingindex" , keyPattern: {x:1, y:1, z:1} });
@@ -121,7 +127,10 @@ res = db.runCommand( { checkShardingIndex: "test.jstests_shardingindex" , keyPat
 assert.eq( false , res.ok , "4i " + tojson(res) );
 
 f.remove( { x : 3 } );
-f.reIndex(); // Necessary so that the index is no longer marked as multikey
+// tokuds doesn't recalculate multikeyindexbits during reindex, must drop and re-create index explicitly
+f.dropIndex({x:1,y:1,z:1});
+f.ensureIndex({x:1,y:1,z:1});
+//f.reIndex(); // Necessary so that the index is no longer marked as multikey
 
 assert.eq( 1 , f.count() , "4. count after removing array value should be 1 again" );
 res = db.runCommand( { checkShardingIndex: "test.jstests_shardingindex" , keyPattern: {x:1, y:1, z:1} });
