@@ -532,6 +532,30 @@ namespace mongo {
         delete database; // closes files
     }
 
+    static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &toupdate, const BSONObj &query, int flags) {
+        bool upsert = flags & UpdateOption_Upsert;
+        bool multi = flags & UpdateOption_Multi;
+        bool broadcast = flags & UpdateOption_Broadcast;
+
+        Lock::assertAtLeastReadLocked(ns);
+
+        // void ReplSetImpl::relinquish() uses big write lock so 
+        // this is thus synchronized given our lock above.
+        uassert(10054,  "not master", isMasterNs(ns));
+
+        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+        if (!broadcast && handlePossibleShardedMessage(m, 0)) {
+            return;
+        }
+
+        Client::Context ctx(ns);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+
+        UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
+        lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
+        transaction.commit();
+    }
+
     void receivedUpdate(Message& m, CurOp& op) {
         DbMessage d(m);
         const char *ns = d.getns();
@@ -539,15 +563,12 @@ namespace mongo {
         int flags = d.pullInt();
         BSONObj query = d.nextJsObj();
 
-        verify( d.moreJSObjs() );
-        verify( query.objsize() < m.header()->dataLen() );
+        verify(d.moreJSObjs());
+        verify(query.objsize() < m.header()->dataLen());
         BSONObj toupdate = d.nextJsObj();
-        uassert( 10055 , "update object too large", toupdate.objsize() <= BSONObjMaxUserSize);
-        verify( toupdate.objsize() < m.header()->dataLen() );
-        verify( query.objsize() + toupdate.objsize() < m.header()->dataLen() );
-        bool upsert = flags & UpdateOption_Upsert;
-        bool multi = flags & UpdateOption_Multi;
-        bool broadcast = flags & UpdateOption_Broadcast;
+        uassert(10055, "update object too large", toupdate.objsize() <= BSONObjMaxUserSize);
+        verify(toupdate.objsize() < m.header()->dataLen());
+        verify(query.objsize() + toupdate.objsize() < m.header()->dataLen());
 
         op.debug().query = query;
         op.setQuery(query);
@@ -556,30 +577,37 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
 
-        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-        if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
-            return;
-
         try {
-            Client::ReadContext ctx(ns);
-            Client::Transaction transaction(DB_SERIALIZABLE);
-
-            // void ReplSetImpl::relinquish() uses big write lock so 
-            // this is thus synchronized given our lock above.
-            uassert( 10054 ,  "not master", isMasterNs( ns ) );
-
-            UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
-            lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
-            transaction.commit();
+            Lock::DBRead lk(ns);
+            lockedReceivedUpdate(ns, m, op, toupdate, query, flags);
         }
         catch (RetryWithWriteLock &e) {
-            Client::WriteContext ctx(ns);
-            Client::Transaction transaction(DB_SERIALIZABLE);
-
-            UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
-            lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
-            transaction.commit();
+            Lock::DBWrite lk(ns);
+            lockedReceivedUpdate(ns, m, op, toupdate, query, flags);
         }
+    }
+
+    static void lockedReceivedDelete(const char *ns, Message &m, const BSONObj &pattern, int flags) {
+        bool justOne = flags & RemoveOption_JustOne;
+        bool broadcast = flags & RemoveOption_Broadcast;
+
+        Lock::assertAtLeastReadLocked(ns);
+
+        // writelock is used to synchronize stepdowns w/ writes
+        uassert(10056, "not master", isMasterNs(ns));
+
+        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+        if (!broadcast && handlePossibleShardedMessage(m, 0)) {
+            return;
+        }
+
+        Client::Context ctx(ns);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+
+        long long n = deleteObjects(ns, pattern, justOne, true);
+        lastError.getSafe()->recordDelete( n );
+
+        transaction.commit();
     }
 
     void receivedDelete(Message& m, CurOp& op) {
@@ -587,9 +615,7 @@ namespace mongo {
         const char *ns = d.getns();
         op.debug().ns = ns;
         int flags = d.pullInt();
-        bool justOne = flags & RemoveOption_JustOne;
-        bool broadcast = flags & RemoveOption_Broadcast;
-        verify( d.moreJSObjs() );
+        verify(d.moreJSObjs());
         BSONObj pattern = d.nextJsObj();
 
         op.debug().query = pattern;
@@ -599,20 +625,14 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
 
-        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-        if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
-            return;
-
-        Client::ReadContext ctx(ns);
-        Client::Transaction transaction(DB_SERIALIZABLE);
-
-        // writelock is used to synchronize stepdowns w/ writes
-        uassert( 10056 ,  "not master", isMasterNs( ns ) );
-
-        long long n = deleteObjects(ns, pattern, justOne, true);
-        lastError.getSafe()->recordDelete( n );
-
-        transaction.commit();
+        try {
+            Lock::DBRead lk(ns);
+            lockedReceivedDelete(ns, m, pattern, flags);
+        }
+        catch (RetryWithWriteLock &e) {
+            Lock::DBWrite lk(ns);
+            lockedReceivedDelete(ns, m, pattern, flags);
+        }
     }
 
     QueryResult* emptyMoreResult(long long);
@@ -776,19 +796,37 @@ namespace mongo {
         return ok;
     }
 
+    static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, bool keepGoing) {
+        Lock::assertAtLeastReadLocked(ns);
+
+        // writelock is used to synchronize stepdowns w/ writes
+        uassert(10058, "not master", isMasterNs(ns));
+
+        if (handlePossibleShardedMessage(m, 0)) {
+            return;
+        }
+
+        Client::Context ctx(ns);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+
+        insertObjects(ns, objs, keepGoing, 0, true);
+        globalOpCounters.incInsertInWriteLock(objs.size());
+        transaction.commit();
+    }
+
     void receivedInsert(Message& m, CurOp& op) {
         DbMessage d(m);
         const char *ns = d.getns();
         op.debug().ns = ns;
 
-        if( !d.moreJSObjs() ) {
+        if (!d.moreJSObjs()) {
             // strange.  should we complain?
             return;
         }
 
         vector<BSONObj> objs;
-        while (d.moreJSObjs()){
-            objs.push_back( d.nextJsObj() );
+        while (d.moreJSObjs()) {
+            objs.push_back(d.nextJsObj());
         }
 
         const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
@@ -797,28 +835,13 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
 
-        if ( handlePossibleShardedMessage( m , 0 ) )
-            return;
-
         try {
-            Client::ReadContext ctx(ns);
-            Client::Transaction transaction(DB_SERIALIZABLE);
-
-            // CONCURRENCY TODO: is being read locked in big log sufficient here?
-            // writelock is used to synchronize stepdowns w/ writes
-            uassert( 10058 , "not master", isMasterNs(ns) );
-
-            insertObjects(ns, objs, keepGoing, 0, true);
-            globalOpCounters.incInsertInWriteLock(objs.size());
-            transaction.commit();
+            Lock::DBRead lk(ns);
+            lockedReceivedInsert(ns, m, objs, keepGoing);
         }
         catch (RetryWithWriteLock &e) {
-            Client::WriteContext ctx(ns);
-            Client::Transaction transaction(DB_SERIALIZABLE);
-
-            insertObjects(ns, objs, keepGoing, 0, true);
-            globalOpCounters.incInsertInWriteLock(objs.size());
-            transaction.commit();
+            Lock::DBWrite lk(ns);
+            lockedReceivedInsert(ns, m, objs, keepGoing);
         }
     }
 
