@@ -23,6 +23,7 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/db/db_flags.h"
 
 
 #define KEY_STR_OP_NAME "op"
@@ -30,6 +31,7 @@
 #define KEY_STR_ROW "o"
 #define KEY_STR_OLD_ROW "o"
 #define KEY_STR_NEW_ROW "o2"
+#define KEY_STR_PK "pk"
 #define KEY_STR_COMMENT "o"
 #define KEY_STR_MIGRATE "fromMigrate"
 
@@ -87,9 +89,10 @@ namespace OpLogHelpers{
     }
 
     void logUpdate(
-        const char* ns, 
-        BSONObj oldRow, 
-        BSONObj newRow,
+        const char* ns,
+        const BSONObj& pk,
+        const BSONObj& oldRow, 
+        const BSONObj& newRow,
         bool fromMigrate,
         TxnContext* txn
         ) 
@@ -106,6 +109,7 @@ namespace OpLogHelpers{
             appendOpType(OP_STR_UPDATE, &b);
             appendNsStr(ns, &b);
             appendMigrate(fromMigrate, &b);
+            b.append(KEY_STR_PK, pk);
             b.append(KEY_STR_OLD_ROW, oldRow);
             b.append(KEY_STR_NEW_ROW, newRow);
             txn->logOp(b.obj());
@@ -164,14 +168,14 @@ namespace OpLogHelpers{
                 collNsd->createIndex(row);
             }
             // overwrite set to true because we are running on a secondary
-            insertOneObject(nsd, nsdt, row, true);
+            insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
         }
         else {
             Client::ReadContext ctx(ns);
             NamespaceDetails* nsd = nsdetails(ns);
             NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
             // overwrite set to true because we are running on a secondary
-            insertOneObject(nsd, nsdt, row, true);
+            insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
         }
     }
 
@@ -188,15 +192,16 @@ namespace OpLogHelpers{
         Client::ReadContext ctx(ns);
         NamespaceDetails* nsd = nsdetails(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
-        const char *names[] = { 
+        const char *names[] = {
+            KEY_STR_PK,
             KEY_STR_OLD_ROW, 
             KEY_STR_NEW_ROW
             };
         BSONElement fields[2];
         op.getFields(2, names, fields);
-        BSONObj oldRow = fields[0].Obj();
-        BSONObj newRow = fields[1].Obj();
-        BSONObj pk = oldRow["_id"].wrap("");
+        BSONObj pk = fields[0].Obj();
+        BSONObj oldRow = fields[1].Obj();
+        BSONObj newRow = fields[2].Obj();
         struct LogOpUpdateDetails loud;
         loud.logop = false;
         loud.ns = NULL;

@@ -1089,7 +1089,7 @@ namespace mongo {
         NamespaceDetails *d = nsdetails_maybe_create(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         BSONObj objMod = info;
-        insertOneObject(d, nsdt, objMod, false);
+        insertOneObject(d, nsdt, objMod, 0);
     }
 
     void NamespaceDetails::addDefaultIndexesToCatalog() {
@@ -1299,7 +1299,7 @@ namespace mongo {
         const char *system_ns = s.c_str();
         NamespaceDetails *d = nsdetails_maybe_create(system_ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(system_ns);
-        insertOneObject(d, nsdt, info, false);
+        insertOneObject(d, nsdt, info, 0);
     }
 
     void removeNamespaceFromCatalog(const string &ns) {
