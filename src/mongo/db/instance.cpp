@@ -556,6 +556,10 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
 
+        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+        if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
+            return;
+
         try {
             Client::ReadContext ctx(ns);
             Client::Transaction transaction(DB_SERIALIZABLE);
@@ -564,10 +568,6 @@ namespace mongo {
             // this is thus synchronized given our lock above.
             uassert( 10054 ,  "not master", isMasterNs( ns ) );
 
-            // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-            if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
-                return;
-
             UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
             lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
             transaction.commit();
@@ -575,10 +575,6 @@ namespace mongo {
         catch (RetryWithWriteLock &e) {
             Client::WriteContext ctx(ns);
             Client::Transaction transaction(DB_SERIALIZABLE);
-
-            // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-            if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
-                return;
 
             UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
             lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
@@ -602,15 +598,16 @@ namespace mongo {
         TokuCommandSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
+
+        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+        if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
+            return;
+
         Client::ReadContext ctx(ns);
         Client::Transaction transaction(DB_SERIALIZABLE);
 
         // writelock is used to synchronize stepdowns w/ writes
         uassert( 10056 ,  "not master", isMasterNs( ns ) );
-
-        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-        if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
-            return;
 
         long long n = deleteObjects(ns, pattern, justOne, true);
         lastError.getSafe()->recordDelete( n );
@@ -799,6 +796,10 @@ namespace mongo {
         TokuCommandSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
+
+        if ( handlePossibleShardedMessage( m , 0 ) )
+            return;
+
         try {
             Client::ReadContext ctx(ns);
             Client::Transaction transaction(DB_SERIALIZABLE);
@@ -807,9 +808,6 @@ namespace mongo {
             // writelock is used to synchronize stepdowns w/ writes
             uassert( 10058 , "not master", isMasterNs(ns) );
 
-            if ( handlePossibleShardedMessage( m , 0 ) )
-                return;
-
             insertObjects(ns, objs, keepGoing, 0, true);
             globalOpCounters.incInsertInWriteLock(objs.size());
             transaction.commit();
@@ -817,9 +815,6 @@ namespace mongo {
         catch (RetryWithWriteLock &e) {
             Client::WriteContext ctx(ns);
             Client::Transaction transaction(DB_SERIALIZABLE);
-
-            if ( handlePossibleShardedMessage( m , 0 ) )
-                return;
 
             insertObjects(ns, objs, keepGoing, 0, true);
             globalOpCounters.incInsertInWriteLock(objs.size());
