@@ -46,4 +46,12 @@ namespace mongo {
         _shouldBulkFetch = val;
     }
 
+    bool TokuCommandSettings::shouldCappedAppendPK() {
+        return _shouldAppendPKForCapped;
+    }
+
+    void TokuCommandSettings::setCappedAppendPK(bool val) {
+        _shouldAppendPKForCapped = val;
+    }
+
 } // namespace mongo

@@ -37,8 +37,10 @@
 
 // values for types of operations in opLog
 #define OP_STR_INSERT "i"
+#define OP_STR_CAPPED_INSERT "ci"
 #define OP_STR_UPDATE "u"
 #define OP_STR_DELETE "d"
+#define OP_STR_CAPPED_DELETE "cd"
 #define OP_STR_COMMENT "n"
 #define OP_STR_COMMAND "c"
 
@@ -83,6 +85,30 @@ namespace OpLogHelpers{
 
             appendOpType(OP_STR_INSERT, &b);
             appendNsStr(ns, &b);
+            b.append(KEY_STR_ROW, row);
+            txn->logOp(b.obj());
+        }
+    }
+
+    void logInsertForCapped(
+        const char* ns, 
+        BSONObj pk, 
+        BSONObj row, 
+        TxnContext* txn
+        ) 
+    {
+        if (logTxnOperations()) {
+            BSONObjBuilder b;
+            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
+              resetSlaveCache();
+            }
+            if (isLocalNs(ns)) {
+                return;
+            }
+
+            appendOpType(OP_STR_CAPPED_INSERT, &b);
+            appendNsStr(ns, &b);
+            b.append(KEY_STR_PK, pk);
             b.append(KEY_STR_ROW, row);
             txn->logOp(b.obj());
         }
@@ -134,6 +160,30 @@ namespace OpLogHelpers{
         }
     }
 
+    void logDeleteForCapped(
+        const char* ns, 
+        BSONObj pk,
+        BSONObj row, 
+        TxnContext* txn
+        ) 
+    {
+        if (logTxnOperations()) {
+            BSONObjBuilder b;
+            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
+              resetSlaveCache();
+            }
+            if (isLocalNs(ns)) {
+                return;
+            }
+
+            appendOpType(OP_STR_CAPPED_DELETE, &b);
+            appendNsStr(ns, &b);
+            b.append(KEY_STR_PK, pk);
+            b.append(KEY_STR_ROW, row);
+            txn->logOp(b.obj());
+        }
+    }
+
     void logCommand(const char* ns, BSONObj row, TxnContext* txn) {
         if (logTxnOperations()) {
             BSONObjBuilder b;
@@ -179,6 +229,20 @@ namespace OpLogHelpers{
         }
     }
 
+    static void runCappedInsertFromOplog(const char* ns, BSONObj op) {
+        BSONObj pk = op[KEY_STR_PK].Obj();
+        BSONObj row = op[KEY_STR_ROW].Obj();
+        // handle add index case
+        Client::ReadContext ctx(ns);
+        NamespaceDetails* nsd = nsdetails(ns);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+        // overwrite set to true because we are running on a secondary
+        if (nsdt != NULL) {
+            nsdt->notifyOfWriteOp();
+        }
+        nsd->insertObjectIntoCappedWithPK(pk, row, ND_UNIQUE_CHECKS_OFF);
+    }
+
     static void runDeleteFromOplog(const char* ns, BSONObj op) {
         Client::ReadContext ctx(ns);
         NamespaceDetails* nsd = nsdetails(ns);
@@ -186,6 +250,19 @@ namespace OpLogHelpers{
         BSONObj row = op[KEY_STR_ROW].Obj();
         BSONObj pk = row["_id"].wrap("");
         deleteOneObject(nsd, nsdt, pk, row);
+    }
+
+    static void runCappedDeleteFromOplog(const char* ns, BSONObj op) {
+        Client::ReadContext ctx(ns);
+        NamespaceDetails* nsd = nsdetails(ns);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+        BSONObj row = op[KEY_STR_ROW].Obj();
+        BSONObj pk = op[KEY_STR_PK].Obj();
+
+        nsd->deleteObjectIntoCappedWithPK(pk, row);
+        if (nsdt != NULL) {
+            nsdt->notifyOfWriteOp();
+        }
     }
 
     static void runUpdateFromOplog(const char* ns, BSONObj op) {
@@ -247,6 +324,14 @@ namespace OpLogHelpers{
         }
         else if (strcmp(opType, OP_STR_COMMENT) == 0) {
             // no-op
+        }
+        else if (strcmp(opType, OP_STR_CAPPED_INSERT) == 0) {
+            opCounters->gotInsert();
+            runCappedInsertFromOplog(ns, op);
+        }
+        else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
+            opCounters->gotDelete();
+            runCappedDeleteFromOplog(ns, op);
         }
         else {
             throw MsgAssertionException( 14825 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );

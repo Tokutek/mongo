@@ -399,13 +399,14 @@ namespace mongo {
             return b.obj();
         }
 
-        void checkUniqueSecondaryIndexes(const BSONObj &pk, const BSONObj &obj) {
+        void checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj, bool checkPk) {
             dassert(!pk.isEmpty());
             dassert(!obj.isEmpty());
 
             // Start at 1 to skip the primary key index. We don't need to perform
             // a unique check because we always generate a unique auto-increment pk.
-            for (int i = 1; i < nIndexes(); i++) {
+            int start = checkPk ? 0 : 1;
+            for (int i = start; i < nIndexes(); i++) {
                 IndexDetails &idx = *_indexes[i];
                 BSONObjSet keys;
                 idx.getKeysFromObject(obj, keys);
@@ -415,6 +416,68 @@ namespace mongo {
             }
         }
 
+        void getPkForCapped(BSONObj &pk) {
+            SimpleMutex::scoped_lock lk(_mutex);
+            BSONObjBuilder b(32);
+            b.append("", _nextPK.fetchAndAdd(1));
+            pk = b.obj();
+            _uncommittedPKs.insert(pk);
+        }
+
+        void insertObjectIntoCapped(BSONObj &pk, BSONObj &obj, uint64_t flags, bool checkPk) {
+            // Note the insert we're about to do.
+            CappedCollectionRollback &rollback = cc().txn().cappedRollback();
+            rollback.noteInsert(_ns, pk, obj.objsize());
+            _currentObjects.addAndFetch(1);
+            _currentSize.addAndFetch(obj.objsize());
+
+            checkUniqueIndexes(pk, obj, checkPk);
+
+            // The actual insert should not hold take any locks and does
+            // not need unique checks, since we generated a unique primary
+            // key and checked for uniquness constraints on secondaries above.
+            insertIntoIndexes(pk, obj, flags);
+        }
+
+        void noteInsertedObjectIntoCapped(const BSONObj &obj, bool logop) {
+            // If the collection is gorged, we need to do some trimming work.
+            long long n = _currentObjects.load();
+            long long size = _currentSize.load();
+            if (isGorged(n, size)) {
+                trim(obj.objsize(), logop);
+            }
+        }
+
+        // run an insertion where the PK is specified
+        // Can come from the applier thread on a slave or a cloner 
+        virtual void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+            // note that checkpk is on
+            insertObjectIntoCapped(pk, obj, flags, true);
+
+            SimpleMutex::scoped_lock lk(_mutex);
+            long long pkVal = pk[""].Long();
+            if (pkVal >= _nextPK.load()) {
+                _nextPK = AtomicWord<long long>(pkVal + 1);
+            }
+            _uncommittedPKs.insert(pk.copy());
+        }
+
+        virtual void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
+            obj = addIdField(obj);
+            uassert( 16774 , str::stream() << "document is larger than capped size "
+                     << obj.objsize() << " > " << _maxSize, obj.objsize() <= _maxSize );
+
+            // Generate the next pk and insert it into the set, under the lock
+            BSONObj pk;
+            getPkForCapped(pk);
+
+            insertObjectIntoCapped(pk, obj, flags | ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF, false);
+            OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, obj, &cc().txn());
+
+            // If the collection is gorged, we need to do some trimming work.
+            noteInsertedObjectIntoCapped(obj, true);
+        }
+
         void insertObject(BSONObj &obj, uint64_t flags) {
             obj = addIdField(obj);
             uassert( 16328 , str::stream() << "document is larger than capped size "
@@ -422,39 +485,25 @@ namespace mongo {
 
             // Generate the next pk and insert it into the set, under the lock
             BSONObj pk;
-            {
-                SimpleMutex::scoped_lock lk(_mutex);
-                BSONObjBuilder b(32);
-                b.append("", _nextPK.fetchAndAdd(1));
-                pk = b.obj();
-                _uncommittedPKs.insert(pk);
-            }
+            getPkForCapped(pk);
 
-            // Note the insert we're about to do.
-            CappedCollectionRollback &rollback = cc().txn().cappedRollback();
-            rollback.noteInsert(_ns, pk, obj.objsize());
-            long long n = _currentObjects.addAndFetch(1);
-            long long size = _currentSize.addAndFetch(obj.objsize());
-
-            // Do unique checks before trimming. If we don't do it first, we may
-            // trim off some objects that had the same unique keys as the new object.
-            // This call uasserts on duplicate key.
-            checkUniqueSecondaryIndexes(pk, obj);
+            insertObjectIntoCapped(pk, obj, flags | ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF, false);
 
             // If the collection is gorged, we need to do some trimming work.
-            if (isGorged(n, size)) {
-                trim(obj.objsize());
-            }
-
-            // The actual insert should not hold take any locks and does
-            // not need unique checks, since we generated a unique primary
-            // key and checked for uniquness constraints on secondaries above.
-            insertIntoIndexes(pk, obj, flags | ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
+            noteInsertedObjectIntoCapped(obj, false);
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
             massert(16460, "bug: cannot remove from a capped collection, "
                     " should have been enforced higher in the stack", false);
+        }
+
+        // run a deletion where the PK is specified
+        // Can come from the applier thread on a slave
+        virtual void deleteObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj) {
+            _deleteObject(pk, obj);
+            // just make it easy and invalidate this
+            _lastDeletedPK = BSONObj();
         }
 
         void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
@@ -516,10 +565,10 @@ namespace mongo {
             _currentSize.subtractAndFetch(size);
 
             NaturalOrderCollection::deleteObject(pk, obj);
-            _lastDeletedPK = pk.getOwned();
         }
 
-        void trim(int objsize) {
+        void trim(int objsize, bool logop) 
+        {
             SimpleMutex::scoped_lock lk(_deleteMutex);
             long long n = _currentObjects.load();
             long long size = _currentSize.load();
@@ -541,8 +590,13 @@ namespace mongo {
                     BSONObj oldestObj = c.current();
                     trimmedBytes += oldestPK.objsize();
                     
+                    if (logop) {
+                        OpLogHelpers::logDeleteForCapped(_ns.c_str(), oldestPK, oldestObj, &cc().txn());
+                    }
+                    
                     // Delete the object, reload the current objects/size
                     _deleteObject(oldestPK, oldestObj);
+                    _lastDeletedPK = oldestPK.getOwned();
                     n = _currentObjects.load();
                     size = _currentSize.load();
                     trimmedObjects++;
@@ -561,6 +615,7 @@ namespace mongo {
             for ( ; c->ok() ; c->advance() ) {
                 _deleteObject(c->currPK(), c->current());
             }
+            _lastDeletedPK = BSONObj();
         }
 
         const long long _maxSize;

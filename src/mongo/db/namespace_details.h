@@ -287,6 +287,18 @@ namespace mongo {
             massert( 16757, "bug: noted an abort, but it wasn't implemented", false );
         }
 
+        virtual void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
+            massert( 16771, "bug: should not call insertObjectIntoCappedAndLogOps into non-capped collection", false );
+        }
+
+        virtual void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+            massert( 16772, "bug: should not call insertObjectIntoCappedWithPK into non-capped collection", false );
+        }
+        
+        virtual void deleteObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj) {
+            massert( 16773, "bug: should not call deleteObjectIntoCappedWithPK into non-capped collection", false );
+        }
+
     protected:
         NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit NamespaceDetails(const BSONObj &serialized);

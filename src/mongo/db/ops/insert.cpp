@@ -104,9 +104,22 @@ namespace mongo {
 
                     BSONObj objModified = obj;
                     BSONElementManipulator::lookForTimestamps(objModified);
-                    insertOneObject(details, nsdt, objModified, flags); // may add _id field
-                    if (logop) {
-                        OpLogHelpers::logInsert(ns, objModified, &cc().txn());
+                    if (details->isCapped() && logop) {
+                        // unfortunate hack we need for capped collections
+                        // we do this because the logic for generating the pk
+                        // and what subsequent rows to delete are buried in the
+                        // namespace details object. There is probably a nicer way
+                        // to do this, but this works.
+                        details->insertObjectIntoCappedAndLogOps(objModified, flags);
+                        if (nsdt != NULL) {
+                            nsdt->notifyOfWriteOp();
+                        }
+                    }
+                    else {
+                        insertOneObject(details, nsdt, objModified, flags); // may add _id field
+                        if (logop) {
+                            OpLogHelpers::logInsert(ns, objModified, &cc().txn());
+                        }
                     }
                 } catch (const UserException &) {
                     if (!keepGoing || i == objs.size() - 1) {

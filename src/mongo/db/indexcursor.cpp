@@ -692,6 +692,13 @@ again:      while ( !allInclusive && ok() ) {
                 }
             }
         }
+        bool shouldAppendPK = _d->isCapped() && cc().tokuCommandSettings().shouldCappedAppendPK();
+        if (shouldAppendPK) {
+            BSONObjBuilder b;
+            b.appendElements(_currObj);
+            b.append("$_", _currPK);
+            return b.obj();
+        }
         return _currObj;
     }
 

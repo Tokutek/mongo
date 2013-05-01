@@ -27,6 +27,7 @@
 #include "mongo/db/repl.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/oplog_helpers.h"
+#include "mongo/db/db_flags.h"
 
 namespace mongo {
 
@@ -106,6 +107,7 @@ namespace mongo {
             bool slaveOk, 
             bool mayYield, 
             bool mayBeInterrupted, 
+            bool isCapped,
             Query q = Query()
             );
         struct Fun;
@@ -244,7 +246,31 @@ namespace mongo {
                 }
 
                 try {
-                    insertObject(to_collection, js, 0, logForRepl);
+                    if (_isCapped) {
+                        NamespaceDetails *d = nsdetails( to_collection );
+                        verify(d->isCapped());
+                        BSONObj pk = js["$_"].Obj();
+                        BSONObjBuilder rowBuilder;                        
+                        BSONObjIterator i(js);
+                        while( i.moreWithEOO() ) {
+                            BSONElement e = i.next();
+                            if ( e.eoo() ) {
+                                break;
+                            }
+                            if ( strcmp( e.fieldName(), "$_" ) != 0 ) {
+                                rowBuilder.append( e );
+                            }
+                        }
+                        BSONObj row = rowBuilder.obj();
+                        d->insertObjectIntoCappedWithPK(
+                            pk,
+                            row, 
+                            ND_LOCK_TREE_OFF
+                            );
+                    }
+                    else {
+                        insertObject(to_collection, js, 0, logForRepl);
+                    }
                 }
                 catch( UserException& e ) {
                     error() << "error: exception cloning object in " << from_collection << ' ' << e.what() << " obj:" << js.toString() << '\n';
@@ -267,6 +293,7 @@ namespace mongo {
         Client::Context *context;
         bool _mayYield;
         bool _mayBeInterrupted;
+        bool _isCapped;
     };
 
     /* copy the specified collection
@@ -279,7 +306,8 @@ namespace mongo {
         bool logForRepl, 
         bool slaveOk, 
         bool mayYield, 
-        bool mayBeInterrupted, 
+        bool mayBeInterrupted,
+        bool isCapped,
         Query query
         ) 
     {
@@ -297,8 +325,9 @@ namespace mongo {
         f.logForRepl = logForRepl;
         f._mayYield = mayYield;
         f._mayBeInterrupted = mayBeInterrupted;
+        f._isCapped = isCapped;
 
-        int options = QueryOption_NoCursorTimeout | 
+        int options = QueryOption_NoCursorTimeout | QueryOption_AddHiddenPK |
             ( slaveOk ? QueryOption_SlaveOk : 0 );
 
         {
@@ -344,6 +373,7 @@ namespace mongo {
             true,
             true, //mayYield
             false, //maybeInterrupted
+            false, // in this path, we don't set isCapped, so hidden PKs not copied
             Query(query)
             );
 
@@ -358,6 +388,7 @@ namespace mongo {
                 true,
                 true, //mayYield
                 false, // mayBeInterrupted
+                false, // isCapped
                 BSON( "ns" << ns )
                 );
         }
@@ -526,6 +557,7 @@ namespace mongo {
             const char *p = strchr(from_name, '.');
             verify(p);
             string to_name = todb + p;
+            bool isCapped = options["capped"].trueValue();
 
             {
                 string err;
@@ -542,6 +574,7 @@ namespace mongo {
                 opts.slaveOk, 
                 opts.mayYield, 
                 opts.mayBeInterrupted, 
+                isCapped,
                 q
                 );
         }
@@ -574,6 +607,7 @@ namespace mongo {
                 opts.slaveOk,
                 opts.mayYield,
                 opts.mayBeInterrupted,
+                false, //isCapped
                 query
                 );
         }

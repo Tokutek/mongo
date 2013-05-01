@@ -878,7 +878,7 @@ namespace mongo {
             int queryOptions ) {
 
         // mask options
-        queryOptions &= (int)( QueryOption_NoCursorTimeout | QueryOption_SlaveOk );
+        queryOptions &= (int)( QueryOption_NoCursorTimeout | QueryOption_SlaveOk | QueryOption_AddHiddenPK );
 
         auto_ptr<DBClientCursor> c( this->query(ns, query, 0, 0, fieldsToReturn, queryOptions) );
         uassert( 16090, "socket error for mapping query", c.get() );
@@ -905,7 +905,7 @@ namespace mongo {
         }
 
         // mask options
-        queryOptions &= (int)( QueryOption_NoCursorTimeout | QueryOption_SlaveOk );
+        queryOptions &= (int)( QueryOption_NoCursorTimeout | QueryOption_SlaveOk | QueryOption_AddHiddenPK);
         queryOptions |= (int)QueryOption_Exhaust;
 
         auto_ptr<DBClientCursor> c( this->query(ns, query, 0, 0, fieldsToReturn, queryOptions) );

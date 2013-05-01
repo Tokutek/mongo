@@ -28,6 +28,7 @@ namespace mongo {
     class TokuCommandSettings {
         QueryCursorMode _queryCursorMode; // default DEFAULT_LOCK_CURSOR
         bool _shouldBulkFetch; // default false
+        bool _shouldAppendPKForCapped; // if true, cursor->current should append the pk before returning the row
         public:    
         TokuCommandSettings();
         ~TokuCommandSettings();
@@ -36,6 +37,8 @@ namespace mongo {
         QueryCursorMode getQueryCursorMode();
         bool shouldBulkFetch();
         void setBulkFetch(bool val);
+        bool shouldCappedAppendPK();        
+        void setCappedAppendPK(bool val);
     };
 
 }

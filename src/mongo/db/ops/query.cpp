@@ -100,9 +100,11 @@ namespace mongo {
             // check for spoofing of the ns such that it does not match the one originally there for the cursor
             uassert(14833, "auth error", str::equals(ns, client_cursor->ns().c_str()));
 
+            int queryOptions = client_cursor->queryOptions();
             TokuCommandSettings settings;
             settings.setBulkFetch(true);
             settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
+            settings.setCappedAppendPK(queryOptions & QueryOption_AddHiddenPK);
             cc().setTokuCommandSettings(settings);
 
             // check that we properly set the transactions when the cursor was originally saved, and restore it into the current client
@@ -112,7 +114,6 @@ namespace mongo {
             if ( pass == 0 )
                 client_cursor->updateSlaveLocation( curop );
 
-            int queryOptions = client_cursor->queryOptions();
             
             curop.debug().query = client_cursor->query();
 
@@ -779,6 +780,7 @@ namespace mongo {
         {
             TokuCommandSettings settings;
             settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
+            settings.setCappedAppendPK(pq.hasOption(QueryOption_AddHiddenPK));
             cc().setTokuCommandSettings(settings);
             Client::ReadContext ctx(ns);
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
@@ -935,6 +937,7 @@ namespace mongo {
                 TokuCommandSettings settings;
                 settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
                 settings.setBulkFetch(true);
+                settings.setCappedAppendPK(pq.hasOption(QueryOption_AddHiddenPK));
                 cc().setTokuCommandSettings(settings);
                 Client::ReadContext ctx(ns);
                 Client::Transaction transaction((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY);
