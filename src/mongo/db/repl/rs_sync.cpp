@@ -221,7 +221,7 @@ namespace mongo {
 
     void GhostSync::percolate(const BSONObj& id, const GTID& lastGTID) {
         const OID rid = id["_id"].OID();
-        GhostSlave* slave;
+        shared_ptr<GhostSlave> slave;
         {
             rwlock lk( _lock , false );
 
@@ -231,13 +231,12 @@ namespace mongo {
                 return;
             }
 
-            slave = i->second.get();
+            slave = i->second;
             if (!slave->init) {
                 OCCASIONALLY log() << "couldn't percolate slave " << rid << " not init" << rsLog;
                 return;
             }
         }
-
         verify(slave->slave);
 
         const Member *target = BackgroundSync::get()->getSyncTarget();
