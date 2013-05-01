@@ -43,6 +43,7 @@
 #include "mongo/util/concurrency/value.h"
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/util/net/ssl_manager.h"
 #include "mongo/db/cmdline.h"
 
 namespace mongo {
@@ -408,8 +409,8 @@ namespace mongo {
         close();
 #ifdef MONGO_SSL
         if ( _ssl ) {
-            SSL_shutdown( _ssl );
-            SSL_free( _ssl );
+            _sslManager->SSL_shutdown( _ssl );
+            _sslManager->SSL_free( _ssl );
             _ssl = 0;
         }
 #endif
@@ -420,7 +421,7 @@ namespace mongo {
         _bytesIn = 0;
 #ifdef MONGO_SSL
         _ssl = 0;
-        _sslAccepted = 0;
+        _sslManager = 0;
 #endif
     }
 
@@ -438,29 +439,26 @@ namespace mongo {
     }
     
 #ifdef MONGO_SSL
-    void Socket::secure(SSLManager* mgr) {
+    void Socket::secure(SSLManagerInterface* mgr) {
         fassert(16503, mgr);
         fassert(16504, !_ssl);
         fassert(16505, _fd >= 0);
-        _ssl = mgr->connect(_fd);        
+        _sslManager = mgr;
+        _ssl = _sslManager->connect(_fd);
         mgr->validatePeerCertificate(_ssl);
     }
 
-    void Socket::secureAccepted( SSLManager * ssl ) { 
-        _sslAccepted = ssl;
+    void Socket::secureAccepted( SSLManagerInterface* ssl ) { 
+        _sslManager = ssl;
     }
 #endif
 
     void Socket::doSSLHandshake() {
 #ifdef MONGO_SSL
-        if (!_sslAccepted) return;
-        
+        if (!_sslManager) return;
         fassert(16506, _fd);
-        _ssl = _sslAccepted->accept(_fd);
-        _sslAccepted->validatePeerCertificate(_ssl);
-        _sslAccepted = 0;
-        
-        
+        _ssl = _sslManager->accept(_fd);
+        _sslManager->validatePeerCertificate(_ssl);
 #endif
     }
 
@@ -522,7 +520,7 @@ namespace mongo {
     int Socket::_send( const char * data , int len ) {
 #ifdef MONGO_SSL
         if ( _ssl ) {
-            return SSL_write( _ssl , data , len );
+            return _sslManager->SSL_write( _ssl , data , len );
         }
 #endif
         return ::send( _fd , data , len , portSendFlags );
@@ -680,7 +678,7 @@ namespace mongo {
     int Socket::_recv( char *buf, int max ) {
 #ifdef MONGO_SSL
         if ( _ssl ){
-            return SSL_read( _ssl , buf , max );
+            return _sslManager->SSL_read( _ssl , buf , max );
         }
 #endif
         return ::recv( _fd , buf , max , portRecvFlags );
@@ -689,8 +687,10 @@ namespace mongo {
     void Socket::_handleSendError(int ret, const char* context) {
 #ifdef MONGO_SSL
         if (_ssl) {
-            LOG(_logLevel) << "SSL Error ret: " << ret << " err: " << SSL_get_error(_ssl , ret) 
-                           << " " << ERR_error_string(ERR_get_error(), NULL) 
+            LOG(_logLevel) << "SSL Error ret: " << ret
+                           << " err: " << _sslManager->SSL_get_error(_ssl , ret)
+                           << " "
+                           << _sslManager->ERR_error_string(_sslManager->ERR_get_error(), NULL)
                            << endl;
             throw SocketException(SocketException::SEND_ERROR , remoteString());
         }
@@ -723,8 +723,10 @@ namespace mongo {
         // ret < 0
 #ifdef MONGO_SSL
         if (_ssl) {
-            LOG(_logLevel) << "SSL Error ret: " << ret << " err: " << SSL_get_error(_ssl , ret) 
-                           << " " << ERR_error_string(ERR_get_error(), NULL) 
+            LOG(_logLevel) << "SSL Error ret: " << ret
+                           << " err: " << _sslManager->SSL_get_error(_ssl , ret)
+                           << " "
+                           << _sslManager->ERR_error_string(_sslManager->ERR_get_error(), NULL)
                            << endl;
             throw SocketException(SocketException::RECV_ERROR, remoteString());
         }

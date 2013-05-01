@@ -79,7 +79,7 @@ namespace mongo {
         long long _elapsedTime;
         
 #ifdef MONGO_SSL
-        SSLManager* _ssl;
+        SSLManagerInterface* _ssl;
 #endif
         
         void _logListen( int port , bool ssl );

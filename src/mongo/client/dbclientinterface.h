@@ -1300,7 +1300,7 @@ namespace mongo {
         static bool _lazyKillCursor; // lazy means we piggy back kill cursors on next op
 
 #ifdef MONGO_SSL
-        SSLManager* sslManager();
+        SSLManagerInterface* sslManager();
 #endif
     };
 
