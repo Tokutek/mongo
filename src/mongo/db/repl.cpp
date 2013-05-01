@@ -171,6 +171,7 @@ namespace mongo {
             help << "Check if this server is primary for a replica pair/set; also if it is --master or --slave in simple master/slave setups.\n";
             help << "{ isMaster : 1 }";
         }
+        virtual bool needsTxn() const { return false; }
         virtual LockType locktype() const { return NONE; }
         CmdIsMaster() : Command("isMaster", true, "ismaster") { }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {

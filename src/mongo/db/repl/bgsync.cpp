@@ -289,7 +289,7 @@ namespace mongo {
         {
             boost::unique_lock<boost::mutex> lock(_mutex);
             GTID currLiveState = theReplSet->gtidManager->getLiveState();
-            if (GTID::cmp(currLiveState, remoteOldestGTID) <= 0) {
+            if (GTID::cmp(currLiveState, remoteOldestGTID) < 0) {
                 return true;
             }
         }
