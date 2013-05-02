@@ -288,7 +288,7 @@ namespace mongo {
         }
 
         virtual void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
-            massert( 16771, "bug: should not call insertObjectIntoCappedAndLogOps into non-capped collection", false );
+            massert( 16775, "bug: should not call insertObjectIntoCappedAndLogOps into non-capped collection", false );
         }
 
         virtual void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
