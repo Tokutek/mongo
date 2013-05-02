@@ -72,6 +72,19 @@ EOF
     set -e
 }
 
+function runscons() {
+    local dir=$1
+    local suite=$2
+    mkdir -p $dir/smokedata-$suite
+    set +e
+    (cd $dir ; \
+        exec scons \
+        --smokedbprefix="smokedata-$suite" \
+        $suite
+        )
+    set -e
+}
+
 # checkout the mongodb tests and run them against a mongodb tarball
 function test_mongodb() {
     extracted=$(basename ${source_tarball%.tar.gz})
@@ -91,9 +104,13 @@ function test_mongodb() {
         --directory $extracted \
         --file $origdir/$binary_tarball \
         $wildcardopt '*/bin/'
-    for suite in js sharding slowNightly #aggregation dur parallel perf tool
+    for suite in js sharding #aggregation dur parallel perf tool
     do
         runsuite $extracted $suite
+    done
+    for sconssuite in slowNightly
+    do
+        runscons $extracted $sconssuite
     done
 }
 
