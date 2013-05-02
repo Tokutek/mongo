@@ -799,7 +799,7 @@ env.Append( CPPPATH=['$EXTRACPPPATH'],
             LIBPATH=['$EXTRALIBPATH'] )
 
 # tokudb
-ltokudb = os.getenv('LIBTOKUDB_NAME', 'tokudb_static')
+ltokudb = os.getenv('LIBTOKUDB_NAME', 'tokufractaltree_static')
 ltokuportability = os.getenv('LIBTOKUPORTABILITY_NAME', 'tokuportability_static')
 tokupath = os.getenv('TOKUDB_PATH', '$BUILD_DIR/third_party/tokudb')
 if os.getenv('TOKUDB_PATH') is None:
