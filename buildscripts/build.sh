@@ -141,7 +141,7 @@ function build_fractal_tree() {
 
         pushd $tokufractaltreedir/examples
             # test the examples
-            sed -ie "s/LIBTOKUDB = tokudb/LIBTOKUDB = $tokufractaltree/" Makefile 
+            sed -ie "s/LIBTOKUDB = tokufractaltree/LIBTOKUDB = $tokufractaltree/" Makefile 
             sed -ie "s/LIBTOKUPORTABILITY = tokuportability/LIBTOKUPORTABILITY = $tokuportability/" Makefile
             if [ x"$(uname)" = x"Darwin" ] ; then
                 set +u
