@@ -87,10 +87,13 @@ function runscons() {
 
 # checkout the mongodb tests and run them against a mongodb tarball
 function test_mongodb() {
-    extracted=$(basename ${source_tarball%.tar.gz})
+    extracted=$(basename ${binary_tarball%.tar.gz})
     if [ ! -d $extracted ] ; then
+        mkdir $extracted
         tar --extract \
             --gzip \
+            --strip-components 1 \
+            --directory $extracted \
             --file $origdir/$source_tarball
     fi
     test -d $extracted
