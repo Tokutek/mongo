@@ -538,6 +538,9 @@ namespace mongo {
         case TOKU_LZMA_METHOD:
             b.append("compression", "lzma");
             break;
+        case TOKU_LZ4_METHOD:
+            b.append("compression", "lz4");
+            break;
         case TOKU_FAST_COMPRESSION_METHOD:
             b.append("compression", "fast");
             break;
