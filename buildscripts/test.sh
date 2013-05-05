@@ -111,7 +111,7 @@ function test_mongodb() {
     do
         runsuite $extracted $suite
     done
-    for sconssuite in slowNightly
+    for sconssuite in smokeJsSlowNightly
     do
         runscons $extracted $sconssuite
     done
