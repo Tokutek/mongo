@@ -31,6 +31,7 @@ add_library(authcore STATIC
   auth_external_state
   authorization_manager
   principal
+  principal_name
   principal_set
   privilege
   privilege_set
