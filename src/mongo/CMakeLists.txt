@@ -715,6 +715,18 @@ if (BUILD_TESTING)
       )
   endforeach ()
 
+  add_executable(expression_geo_test
+    db/matcher/expression_geo_test
+    db/matcher/expression_parser_geo_test
+    )
+  add_dependencies(expression_geo_test generate_error_codes generate_action_types)
+  link_recursive_deps(expression_geo_test
+    expressions_geo
+    unittest_main
+    unittest_crutch
+    ${TOKUMX_SSL_LIBRARIES}
+    )
+
   foreach (test
       field_checker_test
       )
@@ -1107,6 +1119,7 @@ if (BUILD_TESTING)
   foreach (test
       expression_test
       expression_parser_test
+      expression_geo_test
       )
     add_mongo_test(db/matcher ${test} ${test})
   endforeach ()

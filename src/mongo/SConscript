@@ -175,12 +175,27 @@ env.StaticLibrary('expressions',
                            '$BUILD_DIR/third_party/pcrecpp'
                            ] )
 
+env.StaticLibrary('expressions_geo',
+                  ['db/matcher/expression_geo.cpp',
+                   'db/matcher/expression_parser_geo.cpp'],
+                  LIBDEPS=['expressions','geoquery','geoparser'] )
+
+env.StaticLibrary('expressions_where',
+                  ['db/matcher/expression_where.cpp'],
+                  LIBDEPS=['expressions'] )
+
+
 env.CppUnitTest('expression_test',
                 ['db/matcher/expression_test.cpp',
                  'db/matcher/expression_leaf_test.cpp',
                  'db/matcher/expression_tree_test.cpp',
                  'db/matcher/expression_array_test.cpp'],
                 LIBDEPS=['expressions'] )
+
+env.CppUnitTest('expression_geo_test',
+                ['db/matcher/expression_geo_test.cpp',
+                 'db/matcher/expression_parser_geo_test.cpp'],
+                LIBDEPS=['expressions_geo'] )
 
 env.CppUnitTest('expression_parser_test',
                 ['db/matcher/expression_parser_test.cpp',
@@ -442,6 +457,8 @@ env.StaticLibrary("coredb", [
                            'plugins/plugins',
                            'server_parameters',
                            'expressions',
+                           'expressions_geo',
+                           'expressions_where',
                            '$BUILD_DIR/mongo/foundation',
                            'server_options',
                            '$BUILD_DIR/mongo/util/cmdline_utils/cmdline_utils',

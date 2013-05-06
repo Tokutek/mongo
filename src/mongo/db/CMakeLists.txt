@@ -153,6 +153,8 @@ target_link_libraries(coredb LINK_PUBLIC
   plugins
   server_parameters
   expressions
+  expressions_geo
+  expressions_where
   foundation
   server_options
   storage_global_params_impl

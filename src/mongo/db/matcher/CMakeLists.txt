@@ -14,3 +14,22 @@ target_link_libraries(expressions LINK_PUBLIC
   db_common
   ${PCRE_LIBRARIES}
   )
+
+add_library(expressions_geo STATIC
+  expression_geo
+  expression_parser_geo
+  )
+add_dependencies(expressions_geo generate_error_codes generate_action_types)
+target_link_libraries(expressions_geo LINK_PUBLIC
+  expressions
+  geoquery
+  geoparser
+  )
+
+add_library(expressions_where STATIC
+  expression_where
+  )
+add_dependencies(expressions_where generate_error_codes generate_action_types)
+target_link_libraries(expressions_where LINK_PUBLIC
+  expressions
+  )
