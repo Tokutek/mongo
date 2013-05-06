@@ -139,10 +139,11 @@ namespace MatcherTests {
         }
     };
 
+    template <typename M>
     class WithinBox {
     public:
         void run() {
-            Matcher m(fromjson("{loc:{$within:{$box:[{x:4,y:4},[6,6]]}}}"));
+            M m(fromjson("{loc:{$within:{$box:[{x: 4, y:4},[6,6]]}}}"));
             ASSERT(!m.matches(fromjson("{loc: [3,4]}")));
             ASSERT(m.matches(fromjson("{loc: [4,4]}")));
             ASSERT(m.matches(fromjson("{loc: [5,5]}")));
@@ -151,10 +152,11 @@ namespace MatcherTests {
         }
     };
 
+    template <typename M>
     class WithinPolygon {
     public:
         void run() {
-            Matcher m(fromjson("{loc:{$within:{$polygon:[[0,0],[0,5],[5,5],[5,0]]}}}"));
+            M m(fromjson("{loc:{$within:{$polygon:[{x:0,y:0},[0,5],[5,5],[5,0]]}}}"));
             ASSERT(m.matches(fromjson("{loc: [3,4]}")));
             ASSERT(m.matches(fromjson("{loc: [4,4]}")));
             ASSERT(m.matches(fromjson("{loc: {x:5,y:5}}")));
@@ -163,10 +165,11 @@ namespace MatcherTests {
         }
     };
 
+    template <typename M>
     class WithinCenter {
     public:
         void run() {
-            Matcher m(fromjson("{loc:{$within:{$center:[{x:30,y:30},10]}}}"));
+            M m(fromjson("{loc:{$within:{$center:[{x:30,y:30},10]}}}"));
             ASSERT(!m.matches(fromjson("{loc: [3,4]}")));
             ASSERT(m.matches(fromjson("{loc: {x:30,y:30}}")));
             ASSERT(m.matches(fromjson("{loc: [20,30]}")));
@@ -189,6 +192,17 @@ namespace MatcherTests {
             // The '0' entry of the 'a' array is matched.
             ASSERT( details.hasElemMatchKey() );
             ASSERT_EQUALS( string( "0" ), details.elemMatchKey() );
+        }
+    };
+
+    template <typename M>
+    class WhereSimple1 {
+    public:
+        void run() {
+            Client::ReadContext ctx( "unittests.matchertests" );
+            M m( BSON( "$where" << "function(){ return this.a == 1; }" ) );
+            ASSERT( m.matches( BSON( "a" << 1 ) ) );
+            ASSERT( !m.matches( BSON( "a" << 2 ) ) );
         }
     };
 
@@ -402,7 +416,83 @@ namespace MatcherTests {
             BSONObjBuilder _traversal;
         };
     };
-    
+
+    template <typename M>
+    class AtomicMatchTest {
+    public:
+        void run() {
+
+            {
+                M m( BSON( "x" << 5 ) );
+                ASSERT( !m.atomic() );
+            }
+
+            {
+                M m( BSON( "x" << 5 << "$atomic" << false ) );
+                ASSERT( !m.atomic() );
+            }
+
+            {
+                M m( BSON( "x" << 5 << "$atomic" << true ) );
+                ASSERT( m.atomic() );
+            }
+
+            {
+                bool threwError = false;
+                try {
+                    M m( BSON( "x" << 5 <<
+                               "$or" << BSON_ARRAY( BSON( "$atomic" << true << "y" << 6 ) ) ) );
+                }
+                catch ( ... ) {
+                    threwError = true;
+                }
+                ASSERT( threwError );
+            }
+        }
+    };
+
+    template <typename M>
+    class SingleSimpleCriterion {
+    public:
+        void run() {
+
+            {
+                M m( BSON( "x" << 5 ) );
+                ASSERT( m.singleSimpleCriterion() );
+            }
+
+            {
+                M m( BSON( "x" << 5 << "y" << 5 ) );
+                ASSERT( !m.singleSimpleCriterion() );
+            }
+
+            {
+                M m( BSON( "x" << BSON( "$gt" << 5 ) ) );
+                ASSERT( !m.singleSimpleCriterion() );
+            }
+
+        }
+    };
+
+    template <typename M>
+    class IndexPortion1 {
+    public:
+        void run() {
+            M full( BSON( "x" << 5 << "y" << 7 ) );
+            M partial( full, BSON( "x" << 1) );
+
+            ASSERT( full.matches( BSON( "x" << 5 << "y" << 7 ) ) );
+            ASSERT( partial.matches( BSON( "x" << 5 << "y" << 7 ) ) );
+
+            ASSERT( !full.matches( BSON( "x" << 5 << "y" << 8 ) ) );
+            ASSERT( partial.matches( BSON( "x" << 5 << "y" << 8 ) ) );
+
+            ASSERT( !full.keyMatch( partial ) );
+            ASSERT( full.keyMatch( full ) );
+            ASSERT( partial.keyMatch( partial ) );
+        }
+    };
+
     class All : public Suite {
     public:
         All() : Suite( "matcher" ) {
@@ -414,21 +504,25 @@ namespace MatcherTests {
 
         void setupTests() {
             ADD_BOTH(Basic);
-            add<DoubleEqual>();
-            add<MixedNumericEqual>();
-            add<MixedNumericGt>();
-            add<MixedNumericIN>();
-            add<Size>();
-            add<MixedNumericEmbedded>();
-            add<ElemMatchKey>();
+            ADD_BOTH(DoubleEqual);
+            ADD_BOTH(MixedNumericEqual);
+            ADD_BOTH(MixedNumericGt);
+            ADD_BOTH(MixedNumericIN);
+            ADD_BOTH(Size);
+            ADD_BOTH(MixedNumericEmbedded);
+            ADD_BOTH(ElemMatchKey);
+            ADD_BOTH(WhereSimple1);
             add<Covered::ElemMatchKeyUnindexed>();
             add<Covered::ElemMatchKeyIndexed>();
             add<Covered::ElemMatchKeyIndexedSingleKey>();
             add<AllTiming>();
             add<Visit>();
-            add<WithinBox>();
-            add<WithinCenter>();
-            add<WithinPolygon>();
+            ADD_BOTH(WithinBox);
+            ADD_BOTH(WithinCenter);
+            ADD_BOTH(WithinPolygon);
+            ADD_BOTH(AtomicMatchTest);
+            ADD_BOTH(SingleSimpleCriterion);
+            ADD_BOTH(IndexPortion1);
         }
     } dball;
 
