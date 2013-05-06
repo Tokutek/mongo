@@ -784,6 +784,13 @@ namespace mongo {
         }
     }
 
+    void NamespaceDetails::close() {
+        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+            IndexDetails *idx = it->get();
+            idx->close();
+        }
+    }
+
     // Serialize the information necessary to re-open this NamespaceDetails later.
     BSONObj NamespaceDetails::serialize(const char *ns, const BSONObj &options, const BSONObj &pk,
             unsigned long long multiKeyIndexBits, const BSONArray &indexes_array) {

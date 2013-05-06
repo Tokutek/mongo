@@ -100,6 +100,9 @@ namespace mongo {
         virtual ~NamespaceDetails() {
         }
 
+        // Closes all the underlying IndexDetails (in case one of them throws, we can't be doing this in a destructor).
+        void close();
+
         int nIndexes() const {
             return _nIndexes;
         }

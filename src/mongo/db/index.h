@@ -43,6 +43,9 @@ namespace mongo {
 
         ~IndexDetails();
 
+        // Closes the underlying DB *.  In case that throws, we can't do it in the destructor.
+        void close();
+
         BSONObj getKeyFromQuery(const BSONObj& query) const {
             BSONObj k = keyPattern();
             BSONObj res = query.extractFieldsUnDotted(k);

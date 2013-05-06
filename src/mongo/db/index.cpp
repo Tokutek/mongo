@@ -53,9 +53,14 @@ namespace mongo {
     }
 
     IndexDetails::~IndexDetails() {
+        verify(_db == NULL);
+    }
+
+    void IndexDetails::close() {
         TOKULOG(1) << "Closing IndexDetails " << indexNamespace() << endl;
         if (_db) {
             storage::db_close(_db);
+            _db = NULL;
         }
     }
 

@@ -22,13 +22,26 @@
 #include "mongo/db/storage/key.h"
 #include "mongo/db/storage/env.h"
 
+#include "mongo/util/stringutils.h"
+
 namespace mongo {
 
     NamespaceIndex::NamespaceIndex(const string &dir, const string &database) :
+        _nsdb(NULL), _namespaces(),
         _dir(dir), _database(database), _openMutex("nsOpenMutex") {
     }
 
     NamespaceIndex::~NamespaceIndex() {
+        for (NamespaceDetailsMap::iterator it = _namespaces.begin(); it != _namespaces.end(); ++it) {
+            shared_ptr<NamespaceDetails> d = it->second;
+            try {
+                d->close();
+            }
+            catch (DBException &e) {
+                // shouldn't throw in destructor
+                msgasserted(16779, mongoutils::str::stream() << "caught exception while closing " << (string) it->first << " to close NamespaceIndex " << _database << ": " << e.what());
+            }
+        }
         if (_nsdb != NULL) {
             TOKULOG(1) << "Closing NamespaceIndex " << _database << endl;
             storage::db_close(_nsdb);
@@ -42,7 +55,6 @@ namespace mongo {
             if (!allocated()) {
                 _init(may_create);
             }
-            verify(allocated());
         }
     }
 
@@ -129,7 +141,9 @@ namespace mongo {
             // Note this ns in the rollback, since we are about to modify its entry.
             NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
             rollback.noteNs(ns);
+            shared_ptr<NamespaceDetails> d = it->second;
             _namespaces.erase(it);
+            d->close();
         }
 
         BSONObj nsobj = BSON("ns" << ns);
@@ -153,7 +167,9 @@ namespace mongo {
 
     bool NamespaceIndex::open_ns(const char *ns) {
         init();
-        dassert(allocated()); // shouldn't try to open from an non-existent nsdb
+        if (!allocated()) {
+            return false;
+        }
 
         Namespace n(ns);
         BSONObj serialized;
@@ -193,7 +209,9 @@ namespace mongo {
             if (!Lock::isWriteLocked(ns)) {
                 throw RetryWithWriteLock();
             }
+            shared_ptr<NamespaceDetails> d = it->second;
             _namespaces.erase(it);
+            d->close();
             return true;
         }
         return false;
