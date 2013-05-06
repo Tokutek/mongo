@@ -73,15 +73,48 @@ namespace mongo {
         verify(_nsdb != NULL);
     }
 
+    struct getNamespacesExtra {
+        list<string> &tofill;
+        std::exception *ex;
+        getNamespacesExtra(list<string> &l) : tofill(l) {}
+    };
+
+    static int getNamespacesCallback(const DBT *key, const DBT *val, void *extra) {
+        getNamespacesExtra *e = static_cast<getNamespacesExtra *>(extra);
+        try {
+            if (key != NULL) {
+                verify(val != NULL);
+                const BSONObj obj(static_cast<char *>(val->data));
+                const string &ns = obj["ns"].String();
+                e->tofill.push_back(ns);
+            }
+            return 0;
+        }
+        catch (std::exception &ex) {
+            // Can't throw back through the ydb, so return -1 here and we'll throw on the other side.
+            e->ex = &ex;
+            return -1;
+        }
+    }
+
     void NamespaceIndex::getNamespaces( list<string>& tofill ) {
         init();
         if (!allocated()) {
             return;
         }
 
-        for (NamespaceDetailsMap::const_iterator it = _namespaces->begin(); it != _namespaces->end(); it++) {
-            const Namespace &n = it->first;
-            tofill.push_back((string) n);
+        getNamespacesExtra extra(tofill);
+        storage::Cursor c(_nsdb);
+        int r = 0;
+        while (r != DB_NOTFOUND) {
+            r = c.dbc()->c_getf_next(c.dbc(), 0, getNamespacesCallback, &extra);
+            if (r == -1) {
+                verify(extra.ex != NULL);
+                throw *extra.ex;
+            }
+            if (r != 0 && r != DB_NOTFOUND) {
+                storage::handle_ydb_error(r);
+            }
         }
     }
 

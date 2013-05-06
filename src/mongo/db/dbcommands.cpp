@@ -1430,13 +1430,14 @@ namespace mongo {
     public:
         DBStats() : Command( "dbStats", false, "dbstats" ) {}
         virtual bool slaveOk() const { return true; }
-        virtual LockType locktype() const { return READ; }
+        virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
         virtual void help( stringstream &help ) const {
             help << 
                 "Get stats on a database. Not instantaneous. Slower for databases with large .ns files.\n" << 
                 "Example: { dbStats:1, scale:1 }";
         }
-        bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
+        bool _run(const string& dbname, BSONObj& jsobj, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             int scale = 1;
             if ( jsobj["scale"].isNumber() ) {
                 scale = jsobj["scale"].numberInt();
@@ -1496,6 +1497,26 @@ namespace mongo {
             result.appendNumber( "indexStorageSize" , (long long) indexStorageSize / scale );
             return true;
         }
+        bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
+            try {
+                Client::ReadContext ctx(dbname);
+                Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+                bool ok = _run(dbname, jsobj, errmsg, result, fromRepl);
+                if (ok) {
+                    txn.commit();
+                }
+                return ok;
+            }
+            catch (RetryWithWriteLock &) {
+                Client::WriteContext ctx(dbname);
+                Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+                bool ok = _run(dbname, jsobj, errmsg, result, fromRepl);
+                if (ok) {
+                    txn.commit();
+                }
+                return ok;
+            }
+        }
     } cmdDBStats;
 
     /* Returns client's uri */
@@ -1522,8 +1543,29 @@ namespace mongo {
     public:
         DBHashCmd() : Command( "dbHash", false, "dbhash" ) {}
         virtual bool slaveOk() const { return true; }
-        virtual LockType locktype() const { return READ; }
+        virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
+            try {
+                Client::ReadContext ctx(dbname);
+                Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+                bool ok = _run(dbname, cmdObj, errmsg, result);
+                if (ok) {
+                    txn.commit();
+                }
+                return ok;
+            }
+            catch (RetryWithWriteLock &) {
+                Client::WriteContext ctx(dbname);
+                Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+                bool ok = _run(dbname, cmdObj, errmsg, result);
+                if (ok) {
+                    txn.commit();
+                }
+                return ok;
+            }
+        }
+        bool _run(const string& dbname , BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result) {
             list<string> colls;
             Database* db = cc().database();
             if ( db )
