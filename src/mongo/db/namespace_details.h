@@ -557,8 +557,8 @@ namespace mongo {
             }
 
             Namespace n(ns);
-            NamespaceDetailsMap::iterator it = _namespaces->find(n);
-            if (it != _namespaces->end()) {
+            NamespaceDetailsMap::iterator it = _namespaces.find(n);
+            if (it != _namespaces.end()) {
                 verify(it->second.get() != NULL);
                 return it->second.get();
             }
@@ -567,15 +567,15 @@ namespace mongo {
             const bool found = open_ns(ns);
             if (found) {
                 // The ns existed, and now it's open.
-                it = _namespaces->find(n);
-                verify(it != _namespaces->end());
+                it = _namespaces.find(n);
+                verify(it != _namespaces.end());
                 verify(it->second.get() != NULL);
                 return it->second.get();
             }
             return NULL;
         }
 
-        bool allocated() const { return _namespaces.get() != NULL; }
+        bool allocated() const { return _nsdb != NULL; }
 
         void getNamespaces( list<string>& tofill );
 
@@ -587,14 +587,14 @@ namespace mongo {
     private:
         void _init(bool may_create);
 
-        // The openMutex protects the mutual transition of _namespaces/_nsdb
-        // from null to non-null. DB locking protects the contents of _namespaces,
-        // and it also protects _namespaces/_nsdb from mutually transitioning
-        // from non-null to null.
         DB *_nsdb;
-        scoped_ptr<NamespaceDetailsMap> _namespaces;
+        NamespaceDetailsMap _namespaces;
         string _dir;
         string _database;
+        // The openMutex protects the transition of _nsdb from null to non-null. DB locking protects
+        // the contents of _namespaces, and it also protects _nsdb from transitioning from non-null
+        // to null.  This is necessary because we can open in a read lock (we just can't create in a
+        // read lock).
         SimpleMutex _openMutex;
     };
 

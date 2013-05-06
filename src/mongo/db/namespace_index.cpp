@@ -25,7 +25,6 @@
 namespace mongo {
 
     NamespaceIndex::NamespaceIndex(const string &dir, const string &database) :
-        _nsdb(NULL), _namespaces(NULL),
         _dir(dir), _database(database), _openMutex("nsOpenMutex") {
     }
 
@@ -43,7 +42,7 @@ namespace mongo {
             if (!allocated()) {
                 _init(may_create);
             }
-            verify((_namespaces.get() != NULL) == (_nsdb != NULL));
+            verify(allocated());
         }
     }
 
@@ -60,17 +59,13 @@ namespace mongo {
                 return;
             } else if (!Lock::isWriteLocked(_database)) {
                 // We would create it, but we're not write locked. Retry.
-                throw RetryWithWriteLock();
+                throw RetryWithWriteLock("creating new database " + _database);
             }
             // Try opening again with may_create = true
             r = storage::db_open(&_nsdb, nsdbname, info, true);
         } else if (r != 0) {
             storage::handle_ydb_error_fatal(r);
         }
-
-        // Start with an empty map. Existing namespaces are opened lazily.
-        _namespaces.reset(new NamespaceDetailsMap());
-        verify(_nsdb != NULL);
     }
 
     struct getNamespacesExtra {
@@ -128,13 +123,13 @@ namespace mongo {
         }
 
         Namespace n(ns);
-        NamespaceDetailsMap::iterator it = _namespaces->find(n);
-        if (it != _namespaces->end()) {
+        NamespaceDetailsMap::iterator it = _namespaces.find(n);
+        if (it != _namespaces.end()) {
             // Might not be in the _namespaces map if the ns exists but is closed.
             // Note this ns in the rollback, since we are about to modify its entry.
             NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
             rollback.noteNs(ns);
-            _namespaces->erase(it);
+            _namespaces.erase(it);
         }
 
         BSONObj nsobj = BSON("ns" << ns);
@@ -176,7 +171,7 @@ namespace mongo {
 
             shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized );
             std::pair<NamespaceDetailsMap::iterator, bool> ret;
-            ret = _namespaces->insert(make_pair(n, details));
+            ret = _namespaces.insert(make_pair(n, details));
             dassert(ret.second == true);
         } else if (r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);
@@ -193,12 +188,12 @@ namespace mongo {
 
         // Find and erase the old entry, if it exists.
         Namespace n(ns);
-        NamespaceDetailsMap::iterator it = _namespaces->find(n);
-        if (it != _namespaces->end()) {
+        NamespaceDetailsMap::iterator it = _namespaces.find(n);
+        if (it != _namespaces.end()) {
             if (!Lock::isWriteLocked(ns)) {
                 throw RetryWithWriteLock();
             }
-            _namespaces->erase(it);
+            _namespaces.erase(it);
             return true;
         }
         return false;
@@ -218,7 +213,7 @@ namespace mongo {
 
         Namespace n(ns);
         std::pair<NamespaceDetailsMap::iterator, bool> ret;
-        ret = _namespaces->insert(make_pair(n, details));
+        ret = _namespaces.insert(make_pair(n, details));
         dassert(ret.second == true);
     }
 
@@ -290,15 +285,11 @@ namespace mongo {
             dropCollection(ns, errmsg, result, true);
         }
         // Everything that was open should have been closed due to drop.
-        verify(_namespaces->empty());
+        verify(_namespaces.empty());
 
-        DB *db = _nsdb;
-        // nsdb and namespaces must be mutually null
+        storage::db_close(_nsdb);
         _nsdb = NULL;
-        _namespaces.reset();
-        storage::db_close(db);
         storage::db_remove(_database + ".ns");
     }
 
 } // namespace mongo
-
