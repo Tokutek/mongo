@@ -228,7 +228,7 @@ namespace mongo {
 
     void init() {
         serverID.init();
-        setupSignalHandlers();
+
         Logstream::get().addGlobalTee( new RamLog("global") );
     }
 
@@ -272,7 +272,7 @@ namespace mongo {
 using namespace mongo;
 
 static bool runMongosServer( bool doUpgrade ) {
-    setupSignals( false );
+    setupSignalHandlers();
     setThreadName( "mongosMain" );
     printShardingVersionInfo( false );
 
