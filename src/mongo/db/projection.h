@@ -18,13 +18,10 @@
 #pragma once
 
 #include "mongo/pch.h"
-#include "jsobj.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/matcher.h"
 
 namespace mongo {
-
-    // fwd decls
-    class Matcher;
-    class MatchDetails;
 
     /**
      * given a document and a projection specification
