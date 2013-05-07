@@ -1644,10 +1644,11 @@ namespace mongo {
 
             bool didAnything = false;
 
+            Client::ReadContext cx(ns);
+            Client::Transaction txn(DB_SERIALIZABLE);
+
             if ( xfer["deleted"].isABSONObj() ) {
                 BSONObjIterator i( xfer["deleted"].Obj() );
-                Client::ReadContext cx(ns);
-                Client::Transaction txn(DB_SERIALIZABLE);
                 while ( i.more() ) {
 
                     BSONObj id = i.next().Obj();
@@ -1679,14 +1680,10 @@ namespace mongo {
 
                     didAnything = true;
                 }
-                txn.commit();
-                *lastGTID = cx.ctx().getClient()->getLastOp();
             }
 
             if ( xfer["reload"].isABSONObj() ) {
                 BSONObjIterator i( xfer["reload"].Obj() );
-                Client::ReadContext cx(ns);
-                Client::Transaction txn(DB_SERIALIZABLE);
                 while ( i.more() ) {
                     BSONObj o = i.next().Obj();
 
@@ -1696,6 +1693,9 @@ namespace mongo {
 
                     didAnything = true;
                 }
+            }
+
+            if (didAnything) {
                 txn.commit();
                 *lastGTID = cx.ctx().getClient()->getLastOp();
             }
