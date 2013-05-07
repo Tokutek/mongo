@@ -82,6 +82,11 @@ namespace mongo {
 
         // Production thread
         uint32_t produce();
+        // for an operation with timestamp of opTimestamp,
+        // function will sleep in a loop until the appropriate time
+        // where it is ok to apply the operation to the oplog.
+        // Called in produce()
+        void handleSlaveDelay(uint64_t opTimestamp);
         // Check if rollback is necessary
         bool isRollbackRequired(OplogReader& r);
         void getOplogReader(OplogReader& r);

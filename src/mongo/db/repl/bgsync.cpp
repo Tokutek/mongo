@@ -162,6 +162,28 @@ namespace mongo {
         cc().shutdown();
     }
 
+    void BackgroundSync::handleSlaveDelay(uint64_t opTimestamp) {
+        uint64_t slaveDelayMillis = theReplSet->myConfig().slaveDelay * 1000;
+        uint64_t currTime = curTimeMillis64();
+        uint64_t timeOpShouldBeApplied = opTimestamp + slaveDelayMillis;
+        while (currTime < timeOpShouldBeApplied) {
+            uint64_t sleepTime = (timeOpShouldBeApplied - currTime);
+            // let's sleep for at most one second
+            sleepmillis((sleepTime < 1000) ? sleepTime : 1000);        
+            // check if we should bail out, as we don't want to 
+            // sleep the whole time possibly long delay time
+            // if we see we should be stopping
+            {
+                boost::unique_lock<boost::mutex> lck(_mutex);
+                if (!_opSyncShouldRun) {
+                    break;
+                }
+                // reset currTime
+                currTime = curTimeMillis64();
+            }
+        }
+    }
+
     // returns number of seconds to sleep, if any
     uint32_t BackgroundSync::produce() {
         // this oplog reader does not do a handshake because we don't want the server it's syncing
@@ -231,6 +253,15 @@ namespace mongo {
                 // This is the operation we have received from the target
                 // that we must put in our oplog with an applied field of false
                 BSONObj o = r.nextSafe().getOwned();
+                uint64_t ts = o["ts"]._numberLong();
+
+                // now that we have the element in o, let's check
+                // if there a delay is required (via slaveDelay) before
+                // writing it to the oplog
+                if (theReplSet->myConfig().slaveDelay > 0) {
+                    handleSlaveDelay(ts);
+                }
+                
                 Timer timer;
                 {
                     Client::Transaction transaction(DB_SERIALIZABLE);
@@ -240,7 +271,6 @@ namespace mongo {
                 }
                 {
                     GTID currEntry = getGTIDFromOplogEntry(o);
-                    uint64_t ts = o["ts"]._numberLong();
                     uint64_t lastHash = o["h"].numberLong();
                     boost::unique_lock<boost::mutex> lock(_mutex);
                     // update counters
