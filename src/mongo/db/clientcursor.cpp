@@ -336,22 +336,18 @@ namespace mongo {
         return x;
     }
 
-#if 0
-    void ClientCursor::storeOpForSlave( DiskLoc last ) {
+    void ClientCursor::storeOpForSlave( BSONObj curr ) {
         if ( ! ( _queryOptions & QueryOption_OplogReplay ))
             return;
 
-        if ( last.isNull() )
-            return;
-
-        BSONElement e = last.obj()["ts"];
-        if ( e.type() == Date || e.type() == Timestamp )
-            _slaveReadTill = e._opTime();
+        BSONElement e = curr["_id"];
+        if ( e.type() == BinData ) {
+            _slaveReadTill = getGTIDFromBSON("_id", curr);
+        }
     }
-#endif
 
     void ClientCursor::updateSlaveLocation( CurOp& curop ) {
-        if ( _slaveReadTill.isNull() )
+        if ( _slaveReadTill.isInitial() )
             return;
         mongo::updateSlaveLocation( curop , _ns.c_str() , _slaveReadTill );
     }

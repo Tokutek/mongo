@@ -49,7 +49,7 @@ namespace mongo {
         _shutdown(false),
         _desc(desc),
         _god(0),
-        _lastOp(0),
+        _lastGTID(0),
         _mp(p) {
     }
     Client::~Client() {}

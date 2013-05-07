@@ -170,7 +170,7 @@ namespace mongo {
             }
 
             Client& c = cc();
-            c.appendLastOp( result );
+            c.appendLastGTID( result );
 
             result.appendNumber( "connectionId" , c.getConnectionId() ); // for sharding; also useful in general for debugging
 

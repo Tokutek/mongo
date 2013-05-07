@@ -74,31 +74,36 @@ namespace mongo {
         return true;
     }
 
-    bool replHandshake(DBClientConnection *conn) {
+    void getMe(BSONObj& me) {
         string myname = getHostName();
+        Client::Transaction transaction(0);            
+        // local.me is an identifier for a server for getLastError w:2+
+        if ( ! Helpers::getSingleton( "local.me" , me ) ||
+             ! me.hasField("host") ||
+             me["host"].String() != myname ) {
+        
+            // clean out local.me
+            Helpers::emptyCollection("local.me");
+        
+            // repopulate
+            BSONObjBuilder b;
+            b.appendOID( "_id" , 0 , true );
+            b.append( "host", myname );
+            me = b.obj();
+            Helpers::putSingleton( "local.me" , me );
+        }
+        transaction.commit(0);
+    }
 
+    bool replHandshake(DBClientConnection *conn) {
         BSONObj me;
-
-        {
-            // TODO: (Zardosht) figure out if this local.me stuff is needed
-            Lock::DBWrite l("local");
-            Client::Transaction transaction(0);            
-            // local.me is an identifier for a server for getLastError w:2+
-            if ( ! Helpers::getSingleton( "local.me" , me ) ||
-                 ! me.hasField("host") ||
-                 me["host"].String() != myname ) {
-
-                // clean out local.me
-                Helpers::emptyCollection("local.me");
-
-                // repopulate
-                BSONObjBuilder b;
-                b.appendOID( "_id" , 0 , true );
-                b.append( "host", myname );
-                me = b.obj();
-                Helpers::putSingleton( "local.me" , me );
-            }
-            transaction.commit(0);
+        try {
+            Lock::DBRead lk("local");
+            getMe(me);
+        }
+        catch (RetryWithWriteLock &e) {
+            Lock::DBWrite lk("local");
+            getMe(me);
         }
 
         BSONObjBuilder cmd;

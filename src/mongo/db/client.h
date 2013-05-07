@@ -95,14 +95,20 @@ namespace mongo {
         Database* database() const {  return _context ? _context->db() : 0; }
         const char *ns() const { return _context->ns(); }
         const std::string desc() const { return _desc; }
-        void setLastOp( OpTime op ) { _lastOp = op; }
-        OpTime getLastOp() const { return _lastOp; }
+
+        // these function for threads that do writes to report to the client
+        // what the last GTID completed was. When a transaction commits,
+        // this value is set. Subsequently, when getLastError is called,
+        // this value is read to determine what point slaves should 
+        // catch up to in order to satisfy write concern
+        void setLastOp( GTID gtid ) { _lastGTID = gtid; }
+        GTID getLastOp() const { return _lastGTID; }
 
         /** caution -- use Context class instead */
         void setContext(Context *c) { _context = c; }
 
         /* report what the last operation was.  used by getlasterror */
-        void appendLastOp( BSONObjBuilder& b ) const;
+        void appendLastGTID( BSONObjBuilder& b ) const;
 
         bool isGod() const { return _god; } /* this is for map/reduce writes */
         string toString() const;
@@ -250,7 +256,7 @@ namespace mongo {
         std::string _desc;
         bool _god;
         AuthenticationInfo _ai;
-        OpTime _lastOp;
+        GTID _lastGTID;
         BSONObj _handshake;
         BSONObj _remoteId;
         AbstractMessagingPort * const _mp;

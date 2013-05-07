@@ -110,6 +110,10 @@ namespace mongo {
         // the GTIDManager that the commit is now done.
         if (gotGTID && !_initiatingRS) {
             dassert(txnGTIDManager);
+            // save the GTID for the client so that
+            // getLastError will know what GTID slaves
+            // need to be caught up to.
+            cc().setLastOp(gtid);
             txnGTIDManager->noteLiveGTIDDone(gtid);
         }
 

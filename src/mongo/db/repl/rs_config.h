@@ -79,11 +79,11 @@ namespace mongo {
             void check() const;   /* check validity, assert if not. */
             BSONObj asBson() const;
             bool potentiallyHot() const { return !arbiterOnly && priority > 0; }
-            void updateGroups(const OpTime& last) {
+            void updateGroups(const GTID& lastGTID) {
                 RACECHECK
                 scoped_lock lk(ReplSetConfig::groupMx);
                 for (set<TagSubgroup*>::const_iterator it = groups().begin(); it != groups().end(); it++) {
-                    (*it)->updateLast(last);
+                    (*it)->updateLast(lastGTID);
                 }
             }
             bool operator==(const MemberCfg& r) const {
@@ -189,7 +189,7 @@ namespace mongo {
             ~TagSubgroup(); // never called; not defined
             TagSubgroup(string nm) : name(nm) { }
             const string name;
-            OpTime last;
+            GTID last;
             vector<TagClause*> clauses;
 
             // this probably won't actually point to valid members after the
@@ -197,7 +197,7 @@ namespace mongo {
             // config
             set<MemberCfg*> m;
 
-            void updateLast(const OpTime& op);
+            void updateLast(const GTID& gtid);
 
             //string toString() const;
 
@@ -218,7 +218,7 @@ namespace mongo {
          * we had "dc" : 2, our subgroups might be "nyc", "sf", and "hk".
          */
         struct TagClause {
-            OpTime last;
+            GTID last;
             map<string,TagSubgroup*> subgroups;
             TagRule *rule;
             string name;
@@ -231,7 +231,7 @@ namespace mongo {
             int target;
             int actualTarget;
 
-            void updateLast(const OpTime& op);
+            void updateLast(const GTID& gtid);
             string toString() const;
         };
 
@@ -261,9 +261,9 @@ namespace mongo {
     public:
         struct TagRule {
             vector<TagClause*> clauses;
-            OpTime last;
+            GTID last;
 
-            void updateLast(const OpTime& op);
+            void updateLast(const GTID& gtid);
             string toString() const;
         };
     };

@@ -71,7 +71,6 @@ namespace mongo {
         _shutdown(false),
         _desc(desc),
         _god(0),
-        _lastOp(0),
         _mp(p)
     {
         _hasWrittenThisPass = false;
@@ -324,10 +323,10 @@ namespace mongo {
         checkNsAccess( doauth, Lock::somethingWriteLocked() ? 1 : 0 );
     }
 
-    void Client::appendLastOp( BSONObjBuilder& b ) const {
-        // _lastOp is never set if replication is off
-        if( theReplSet || ! _lastOp.isNull() ) {
-            b.appendTimestamp( "lastOp" , _lastOp.asDate() );
+    void Client::appendLastGTID( BSONObjBuilder& b ) const {
+        // _lastGTID is never set if replication is off
+        if( theReplSet || ! _lastGTID.isInitial()) {
+            addGTIDToBSON("lastGTID", _lastGTID, b);
         }
     }
 
@@ -388,6 +387,7 @@ namespace mongo {
         }
     }
 
+    // used to establish a slave for 'w' write concern
     void Client::gotHandshake( const BSONObj& o ) {
         BSONObjIterator i(o);
 

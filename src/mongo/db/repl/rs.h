@@ -109,9 +109,9 @@ namespace mongo {
 
     class GhostSync : public task::Server {
         struct GhostSlave : boost::noncopyable {
-            GhostSlave() : last(0), slave(0), init(false) { }
+            GhostSlave() : slave(0), init(false) { }
             OplogReader reader;
-            OpTime last;
+            GTID lastGTID;
             Member* slave;
             bool init;
         };
@@ -143,9 +143,9 @@ namespace mongo {
          * it to P (_currentSyncTarget). Then it would use this connection to
          * pretend to be S1, replicating off of P.
          */
-        void percolate(const BSONObj& rid, const OpTime& last);
+        void percolate(const BSONObj& rid, const GTID& lastGTID);
         void associateSlave(const BSONObj& rid, const int memberId);
-        void updateSlave(const mongo::OID& id, const OpTime& last);
+        void updateSlave(const mongo::OID& id, const GTID& lastGTID);
     };
 
     struct Target;
@@ -334,7 +334,7 @@ namespace mongo {
         bool forceSyncFrom(const string& host, string& errmsg, BSONObjBuilder& result);
 
         /**
-         * Find the closest member (using ping time) with a higher latest optime.
+         * Find the closest member (using ping time) with a higher latest GTID.
          */
         Member* getMemberToSyncTo();
         void veto(const string& host, unsigned secs=10);

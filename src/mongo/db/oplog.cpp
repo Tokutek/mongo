@@ -91,7 +91,6 @@ namespace mongo {
     
     static void _logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
         Lock::DBRead lk1("local");
-        mutex::scoped_lock lk2(OpTime::m);
 
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);

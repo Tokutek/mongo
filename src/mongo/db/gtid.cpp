@@ -50,11 +50,6 @@ namespace mongo {
         _GTSeqNo = 0;
     }
 
-    GTID::GTID(uint64_t primarySeqNo, uint64_t GTSeqNo) {
-        _primarySeqNo = primarySeqNo;
-        _GTSeqNo = GTSeqNo;
-    }
-
     GTID::GTID(const char* binData) {
         const char* pos = binData;
         uint64_t swappedPrim = *(uint64_t *)pos;

@@ -217,10 +217,10 @@ namespace mongo {
             }
             
             
-            ReplTime lastOpApplied = cc().getLastOp().asDate();
+            GTID lastGTID = cc().getLastOp();
             Timer t;
             for ( int i=0; i<3600; i++ ) {
-                if ( opReplicatedEnough( lastOpApplied , ( getSlaveCount() / 2 ) + 1 ) ) {
+                if ( opReplicatedEnough( lastGTID, ( getSlaveCount() / 2 ) + 1 ) ) {
                     LOG(t.seconds() < 30 ? 1 : 0) << "moveChunk repl sync took " << t.seconds() << " seconds" << migrateLog;
                     return;
                 }
@@ -1507,7 +1507,7 @@ namespace mongo {
             }
 
             // if running on a replicated system, we'll need to flush the docs we cloned to the secondaries
-            ReplTime lastOpApplied = cc().getLastOp().asDate();
+            GTID lastGTID = cc().getLastOp();
 
             {
                 // 4. do bulk of mods
@@ -1525,7 +1525,7 @@ namespace mongo {
                     if ( res["size"].number() == 0 )
                         break;
 
-                    apply( res , &lastOpApplied );
+                    apply( res , &lastGTID );
 
                     const int maxIterations = 3600*50;
                     int i;
@@ -1535,7 +1535,7 @@ namespace mongo {
                             return;
                         }
 
-                        if ( opReplicatedEnough( lastOpApplied ) )
+                        if ( opReplicatedEnough( lastGTID ) )
                             break;
 
                         if ( i > 100 ) {
@@ -1564,7 +1564,7 @@ namespace mongo {
                 while ( t.minutes() < 600 ) {
                     log() << "Waiting for replication to catch up before entering critical section"
                           << endl;
-                    if ( flushPendingWrites( lastOpApplied ) )
+                    if ( flushPendingWrites( lastGTID ) )
                         break;
                     sleepsecs(1);
                 }
@@ -1584,7 +1584,7 @@ namespace mongo {
                         return;
                     }
 
-                    if ( res["size"].number() > 0 && apply( res , &lastOpApplied ) )
+                    if ( res["size"].number() > 0 && apply( res , &lastGTID) )
                         continue;
 
                     if ( state == ABORT ) {
@@ -1593,7 +1593,7 @@ namespace mongo {
                     }
 
                     if ( state == COMMIT_START ) {
-                        if ( flushPendingWrites( lastOpApplied ) )
+                        if ( flushPendingWrites( lastGTID ) )
                             break;
                     }
 
@@ -1636,10 +1636,10 @@ namespace mongo {
 
         }
 
-        bool apply( const BSONObj& xfer , ReplTime* lastOpApplied ) {
-            ReplTime dummy;
-            if ( lastOpApplied == NULL ) {
-                lastOpApplied = &dummy;
+        bool apply( const BSONObj& xfer , GTID* lastGTID ) {
+            GTID dummy;
+            if ( lastGTID == NULL ) {
+                lastGTID = &dummy;
             }
 
             bool didAnything = false;
@@ -1677,10 +1677,10 @@ namespace mongo {
                                           /* cmdLine.moveParanoia ? &rs : 0 */ /*callback*/
                                           true ); /*fromMigrate*/
 
-                    *lastOpApplied = cx.ctx().getClient()->getLastOp().asDate();
                     didAnything = true;
                 }
                 txn.commit();
+                *lastGTID = cx.ctx().getClient()->getLastOp();
             }
 
             if ( xfer["reload"].isABSONObj() ) {
@@ -1694,28 +1694,27 @@ namespace mongo {
                     OpDebug debug;
                     updateObjects(ns.c_str(), o, id, true, false, true, debug, true);
 
-                    *lastOpApplied = cx.ctx().getClient()->getLastOp().asDate();
                     didAnything = true;
                 }
                 txn.commit();
+                *lastGTID = cx.ctx().getClient()->getLastOp();
             }
 
             return didAnything;
         }
 
-        bool opReplicatedEnough( const ReplTime& lastOpApplied ) {
+        bool opReplicatedEnough( const GTID& lastGTID ) {
             // if replication is on, try to force enough secondaries to catch up
             // TODO opReplicatedEnough should eventually honor priorities and geo-awareness
             //      for now, we try to replicate to a sensible number of secondaries
-            return mongo::opReplicatedEnough( lastOpApplied , slaveCount );
+            return mongo::opReplicatedEnough( lastGTID , slaveCount );
         }
 
-        bool flushPendingWrites( const ReplTime& lastOpApplied ) {
-            if ( ! opReplicatedEnough( lastOpApplied ) ) {
-                OpTime op( lastOpApplied );
+        bool flushPendingWrites( const GTID& lastGTID ) {
+            if ( ! opReplicatedEnough( lastGTID ) ) {
                 OCCASIONALLY warning() << "migrate commit waiting for " << slaveCount 
                                        << " slaves for '" << ns << "' " << min << " -> " << max 
-                                       << " waiting for: " << op
+                                       << " waiting for: " << lastGTID.toString()
                                        << migrateLog;
                 return false;
             }

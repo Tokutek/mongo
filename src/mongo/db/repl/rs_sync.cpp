@@ -185,7 +185,7 @@ namespace mongo {
         }
     }
 
-    void GhostSync::updateSlave(const mongo::OID& rid, const OpTime& last) {
+    void GhostSync::updateSlave(const mongo::OID& rid, const GTID& lastGTID) {
         rwlock lk( _lock , false );
         MAP::iterator i = _ghostCache.find( rid );
         if ( i == _ghostCache.end() ) {
@@ -199,10 +199,10 @@ namespace mongo {
             return;
         }
 
-        ((ReplSetConfig::MemberCfg)slave.slave->config()).updateGroups(last);
+        ((ReplSetConfig::MemberCfg)slave.slave->config()).updateGroups(lastGTID);
     }
 
-    void GhostSync::percolate(const BSONObj& id, const OpTime& last) {
+    void GhostSync::percolate(const BSONObj& id, const GTID& lastGTID) {
         const OID rid = id["_id"].OID();
         GhostSlave* slave;
         {
@@ -239,25 +239,24 @@ namespace mongo {
                     // error message logged in OplogReader::connect
                     return;
                 }
-                ::abort();
-                //slave->reader.ghostQueryGTE(rsoplog, last);
+                slave->reader.ghostQueryGTE(rsoplog, lastGTID);
             }
 
-            LOG(1) << "replSet last: " << slave->last.toString() << " to " << last.toString() << rsLog;
-            if (slave->last > last) {
+            LOG(1) << "replSet last: " << slave->lastGTID.toString() << " to " << lastGTID.toString() << rsLog;
+            if ( GTID::cmp(slave->lastGTID, lastGTID) > 0 ) {
                 return;
             }
 
-            while (slave->last <= last) {
+            while ( GTID::cmp(slave->lastGTID, lastGTID) <= 0 ) {
                 if (!slave->reader.more()) {
                     // we'll be back
                     return;
                 }
 
                 BSONObj o = slave->reader.nextSafe();
-                slave->last = o["ts"]._opTime();
+                slave->lastGTID = getGTIDFromBSON("_id", o);
             }
-            LOG(2) << "now last is " << slave->last.toString() << rsLog;
+            LOG(2) << "now last is " << slave->lastGTID.toString() << rsLog;
         }
         catch (DBException& e) {
             // we'll be back

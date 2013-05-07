@@ -166,7 +166,7 @@ namespace mongo {
     uint32_t BackgroundSync::produce() {
         // this oplog reader does not do a handshake because we don't want the server it's syncing
         // from to track how far it has synced
-        OplogReader r(false /* doHandshake */);
+        OplogReader r(true /* doHandshake */);
 
         // find a target to sync from the last op time written
         getOplogReader(r);

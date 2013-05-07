@@ -36,7 +36,7 @@ namespace mongo {
 
     using namespace mongoutils;
 
-    class SlaveTracking : public BackgroundJob { // SERVER-4328 todo review
+    class SlaveTracking { // SERVER-4328 todo review
     public:
         string name() const { return "SlaveTracking"; }
 
@@ -60,9 +60,6 @@ namespace mongo {
         };
 
         SlaveTracking() : _mutex("SlaveTracking") {
-            _dirty = false;
-            _started = false;
-            _currentlyUpdatingCache = false;
         }
 
         void run() {
@@ -70,81 +67,39 @@ namespace mongo {
             DBDirectClient db;
             while ( ! inShutdown() ) {
                 sleepsecs( 1 );
-
-                if ( ! _dirty )
-                    continue;
-
                 if ( inShutdown() )
-                    return;
-                
-                if ( lockedForWriting() ) {
-                    // note: there is still a race here
-                    // since we could call fsyncLock between this and the last lock
-                    RARELY log() << "can't update local.slaves because locked for writing" << endl;
-                    continue;
-                }
-
-                list< pair<BSONObj,BSONObj> > todo;
-
-                {
-                    scoped_lock mylk(_mutex);
-
-                    for ( map<Ident,OpTime>::iterator i=_slaves.begin(); i!=_slaves.end(); i++ ) {
-                        BSONObjBuilder temp;
-                        temp.appendTimestamp( "syncedTo" , i->second.asDate() );
-                        todo.push_back( pair<BSONObj,BSONObj>( i->first.obj.getOwned() ,
-                                                               BSON( "$set" << temp.obj() ).getOwned() ) );
-                    }
-                    _dirty = false;
-                }
-                
-                _currentlyUpdatingCache = true;
-                for ( list< pair<BSONObj,BSONObj> >::iterator i=todo.begin(); i!=todo.end(); i++ ) {
-                    db.update( NS , i->first , i->second , true );
-                }
-                _currentlyUpdatingCache = false;
-
-                _threadsWaitingForReplication.notify_all();
+                    return;                
             }
         }
 
         void reset() {
-            if ( _currentlyUpdatingCache )
-                return;
             scoped_lock mylk(_mutex);
             _slaves.clear();
         }
 
-        void update( const BSONObj& rid , const string& host , const string& ns , OpTime last ) {
+        void update( const BSONObj& rid , const string& host , const string& ns , GTID gtid ) {
             REPLDEBUG( host << " " << rid << " " << ns << " " << last );
 
             Ident ident(rid,host,ns);
 
             scoped_lock mylk(_mutex);
 
-            _slaves[ident] = last;
-            _dirty = true;
+            _slaves[ident] = gtid;
 
             if (theReplSet && theReplSet->isPrimary()) {
-                theReplSet->ghost->updateSlave(ident.obj["_id"].OID(), last);
+                theReplSet->ghost->updateSlave(ident.obj["_id"].OID(), gtid);
             }
 
-            if ( ! _started ) {
-                // start background thread here since we definitely need it
-                _started = true;
-                go();
-            }
-            
             _threadsWaitingForReplication.notify_all();
         }
 
-        bool opReplicatedEnough( OpTime op , BSONElement w ) {
+        bool opReplicatedEnough( const GTID& gtid, BSONElement w ) {
             RARELY {
                 REPLDEBUG( "looking for : " << op << " w=" << w );
             }
 
             if (w.isNumber()) {
-                return replicatedToNum(op, w.numberInt());
+                return replicatedToNum(gtid, w.numberInt());
             }
 
             uassert( 16250 , "w has to be a string or a number" , w.type() == String );
@@ -157,26 +112,26 @@ namespace mongo {
             if (wStr == "majority") {
                 // use the entire set, including arbiters, to prevent writing
                 // to a majority of the set but not a majority of voters
-                return replicatedToNum(op, theReplSet->config().getMajority());
+                return replicatedToNum(gtid, theReplSet->config().getMajority());
             }
 
             map<string,ReplSetConfig::TagRule*>::const_iterator it = theReplSet->config().rules.find(wStr);
             uassert(14830, str::stream() << "unrecognized getLastError mode: " << wStr,
                     it != theReplSet->config().rules.end());
 
-            return op <= (*it).second->last;
+            return GTID::cmp(gtid, (*it).second->last) <= 0; ;
         }
 
-        bool replicatedToNum(OpTime& op, int w) {
+        bool replicatedToNum(const GTID& gtid, int w) {
             if ( w <= 1 || ! _isMaster() )
                 return true;
 
             w--; // now this is the # of slaves i need
             scoped_lock mylk(_mutex);
-            return _replicatedToNum_slaves_locked( op, w );
+            return _replicatedToNum_slaves_locked( gtid, w );
         }
 
-        bool waitForReplication(OpTime& op, int w, int maxSecondsToWait) {
+        bool waitForReplication(const GTID& gtid, int w, int maxSecondsToWait) {
             if ( w <= 1 || ! _isMaster() )
                 return true;
 
@@ -187,17 +142,17 @@ namespace mongo {
             xt.sec += maxSecondsToWait;
             
             scoped_lock mylk(_mutex);
-            while ( ! _replicatedToNum_slaves_locked( op, w ) ) {
+            while ( ! _replicatedToNum_slaves_locked( gtid, w ) ) {
                 if ( ! _threadsWaitingForReplication.timed_wait( mylk.boost() , xt ) )
                     return false;
             }
             return true;
         }
 
-        bool _replicatedToNum_slaves_locked(OpTime& op, int numSlaves ) {
-            for ( map<Ident,OpTime>::iterator i=_slaves.begin(); i!=_slaves.end(); i++) {
-                OpTime s = i->second;
-                if ( s < op ) {
+        bool _replicatedToNum_slaves_locked(const GTID& gtid, int numSlaves ) {
+            for ( map<Ident,GTID>::iterator i=_slaves.begin(); i!=_slaves.end(); i++) {
+                GTID s = i->second;
+                if ( GTID::cmp(s, gtid) < 0 ) {
                     continue;
                 }
                 if ( --numSlaves == 0 )
@@ -217,17 +172,14 @@ namespace mongo {
         mutable mongo::mutex _mutex;
         boost::condition _threadsWaitingForReplication;
 
-        map<Ident,OpTime> _slaves;
-        bool _dirty;
-        bool _started;
-        bool _currentlyUpdatingCache; // this is not thread safe, but ok for our purposes
+        map<Ident,GTID> _slaves;
 
     } slaveTracking;
 
     const char * SlaveTracking::NS = "local.slaves";
 
-    void updateSlaveLocation( CurOp& curop, const char * ns , OpTime lastOp ) {
-        if ( lastOp.isNull() )
+    void updateSlaveLocation( CurOp& curop, const char * ns , GTID lastGTID ) {
+        if ( lastGTID.isInitial() )
             return;
 
         verify( str::startsWith(ns, "local.oplog.") );
@@ -238,26 +190,26 @@ namespace mongo {
         if ( rid.isEmpty() )
             return;
 
-        slaveTracking.update( rid , curop.getRemoteString( false ) , ns , lastOp );
+        slaveTracking.update( rid , curop.getRemoteString( false ) , ns , lastGTID );
 
         if (theReplSet && !theReplSet->isPrimary()) {
             // we don't know the slave's port, so we make the replica set keep
             // a map of rids to slaves
-            LOG(2) << "percolating " << lastOp.toString() << " from " << rid << endl;
-            theReplSet->ghost->send( boost::bind(&GhostSync::percolate, theReplSet->ghost, rid, lastOp) );
+            LOG(2) << "percolating " << lastGTID.toString() << " from " << rid << endl;
+            theReplSet->ghost->send( boost::bind(&GhostSync::percolate, theReplSet->ghost, rid, lastGTID) );
         }
     }
 
-    bool opReplicatedEnough( OpTime op , BSONElement w ) {
-        return slaveTracking.opReplicatedEnough( op , w );
+    bool opReplicatedEnough( GTID gtid, BSONElement w ) {
+        return slaveTracking.opReplicatedEnough( gtid, w );
     }
 
-    bool opReplicatedEnough( OpTime op , int w ) {
-        return slaveTracking.replicatedToNum( op , w );
+    bool opReplicatedEnough( GTID gtid, int w ) {
+        return slaveTracking.replicatedToNum( gtid, w );
     }
 
-    bool waitForReplication( OpTime op , int w , int maxSecondsToWait ) {
-        return slaveTracking.waitForReplication( op, w, maxSecondsToWait );
+    bool waitForReplication( GTID gtid, int w , int maxSecondsToWait ) {
+        return slaveTracking.waitForReplication( gtid, w, maxSecondsToWait );
     }
 
 

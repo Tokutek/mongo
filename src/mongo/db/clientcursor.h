@@ -275,16 +275,11 @@ namespace mongo {
          */
         bool shouldTimeout( unsigned millis );
 
-        //void storeOpForSlave( DiskLoc last );
+        void storeOpForSlave( BSONObj curr );
         void updateSlaveLocation( CurOp& curop );
 
         unsigned idleTime() const { return _idleAgeMillis; }
-
-        void slaveReadTill( const OpTime& t ) { _slaveReadTill = t; }
         
-        /** Just for testing. */
-        OpTime getSlaveReadTill() const { return _slaveReadTill; }
-
     public: // static methods
 
         static void idleTimeReport(unsigned millis);
@@ -320,7 +315,10 @@ namespace mongo {
         const BSONObj _query;            // used for logging diags only; optional in constructor
         int _queryOptions;        // see enum QueryOptions dbclient.h
 
-        OpTime _slaveReadTill;
+        // if this ClientCursor belongs to a secondary that is pulling
+        // data for replication, this will hold the point that the slave has
+        // read up to. Used for write concern
+        GTID _slaveReadTill;
 
         unsigned _idleAgeMillis;                 // how long has the cursor been around, relative to server idle time
 

@@ -119,6 +119,7 @@ namespace mongo {
 
             start = client_cursor->pos();
             Cursor *c = client_cursor->c();
+            BSONObj last;
 
             // This manager may be stale, but it's the state of chunking when the cursor was created.
             ShardChunkManagerPtr manager = client_cursor->getChunkManager();
@@ -174,6 +175,13 @@ namespace mongo {
                         //out() << "  but it's a dup \n";
                     }
                     else {
+                        // save this so that at the end of the loop,
+                        // we can update the location for write concern
+                        // in replication. Note that if this cursor is not
+                        // doing replication, this is pointless
+                        if ( client_cursor->queryOptions() & QueryOption_OplogReplay ) {
+                            last = c->current();
+                        }
                         n++;
 
                         client_cursor->fillQueryResultFromObj( b, &details );
@@ -189,7 +197,9 @@ namespace mongo {
             }
             
             if ( client_cursor ) {
-                //client_cursor->storeOpForSlave( last );
+                if ( client_cursor->queryOptions() & QueryOption_OplogReplay ) {
+                    client_cursor->storeOpForSlave( last );
+                }
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
 
                 // The cursor is still live, give back the stack.
@@ -663,7 +673,6 @@ namespace mongo {
         scoped_ptr<QueryResponseBuilder> queryResponseBuilder
                 ( QueryResponseBuilder::make( pq, cursor, queryPlan, oldPlan ) );
         bool saveClientCursor = false;
-        OpTime slaveReadTill;
         ClientCursor::Holder ccPointer( new ClientCursor( QueryOption_NoCursorTimeout, cursor, ns ) );
         
         for ( ; cursor->ok(); cursor->advance() ) {
@@ -679,10 +688,7 @@ namespace mongo {
             // Note slave's position in the oplog.
             if ( pq.hasOption( QueryOption_OplogReplay ) ) {
                 BSONObj current = cursor->current();
-                BSONElement e = current["ts"];
-                if ( e.type() == Date || e.type() == Timestamp ) {
-                    slaveReadTill = e._opTime();
-                }
+                ccPointer->storeOpForSlave(current);
             }
             
             if ( !cursor->supportGetMore() || pq.isExplain() ) {
@@ -725,11 +731,6 @@ namespace mongo {
                                               jsobj.getOwned() ) );
             cursorid = ccPointer->cursorid();
             DEV tlog(2) << "query has more, cursorid: " << cursorid << endl;
-            
-            // Save slave's position in the oplog.
-            if ( pq.hasOption( QueryOption_OplogReplay ) && !slaveReadTill.isNull() ) {
-                ccPointer->slaveReadTill( slaveReadTill );
-            }
             
             if ( !ccPointer->ok() && ccPointer->c()->tailable() ) {
                 DEV tlog() << "query has no more but tailable, cursorid: " << cursorid << endl;

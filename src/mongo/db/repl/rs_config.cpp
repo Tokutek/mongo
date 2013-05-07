@@ -193,20 +193,20 @@ namespace mongo {
         return result+"}";
     }
 
-    void ReplSetConfig::TagSubgroup::updateLast(const OpTime& op) {
+    void ReplSetConfig::TagSubgroup::updateLast(const GTID& gtid) {
         RACECHECK
-        if (last < op) {
-            last = op;
+        if (GTID::cmp(last, gtid) < 0) {
+            last = gtid;
 
             for (vector<TagClause*>::iterator it = clauses.begin(); it < clauses.end(); it++) {
-                (*it)->updateLast(op);
+                (*it)->updateLast(gtid);
             }
         }
     }
 
-    void ReplSetConfig::TagClause::updateLast(const OpTime& op) {
+    void ReplSetConfig::TagClause::updateLast(const GTID& gtid) {
         RACECHECK
-        if (last >= op) {
+        if (GTID::cmp(last, gtid) >= 0) {
             return;
         }
 
@@ -214,23 +214,23 @@ namespace mongo {
         int count = 0;
         map<string,TagSubgroup*>::iterator it;
         for (it = subgroups.begin(); it != subgroups.end(); it++) {
-            if ((*it).second->last >= op) {
+            if (GTID::cmp((*it).second->last, gtid) >= 0) {
                 count++;
             }
         }
 
         if (count >= actualTarget) {
-            last = op;
-            rule->updateLast(op);
+            last = gtid;
+            rule->updateLast(gtid);
         }
     }
 
-    void ReplSetConfig::TagRule::updateLast(const OpTime& op) {
-        OpTime *earliest = (OpTime*)&op;
+    void ReplSetConfig::TagRule::updateLast(const GTID& gtid) {
+        GTID *earliest = (GTID*)&gtid;
         vector<TagClause*>::iterator it;
 
         for (it = clauses.begin(); it < clauses.end(); it++) {
-            if ((*it)->last < *earliest) {
+            if ( GTID::cmp((*it)->last, *earliest) < 0 ) {
                 earliest = &(*it)->last;
             }
         }
@@ -443,7 +443,7 @@ namespace mongo {
 
                 // if all of the members of this clause involve the primary, it's always up-to-date
                 if (node->actualTarget == 0) {
-                    node->last = OpTime(INT_MAX, INT_MAX);
+                    node->last = GTID_MAX;
                     primaryOnly++;
                 }
 
@@ -454,7 +454,7 @@ namespace mongo {
 
             // if all of the clauses are satisfied by the primary, this rule is trivially true
             if (primaryOnly == r->clauses.size()) {
-                r->last = OpTime(INT_MAX, INT_MAX);
+                r->last = GTID_MAX;
             }
 
             // if we got here, this is a valid rule

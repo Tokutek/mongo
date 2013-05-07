@@ -28,13 +28,13 @@
  */
 namespace mongo {
 
-    void updateSlaveLocation( CurOp& curop, const char * oplog_ns , OpTime lastOp );
+    void updateSlaveLocation( CurOp& curop, const char * oplog_ns , GTID lastGTID );
 
     /** @return true if op has made it to w servers */
-    bool opReplicatedEnough( OpTime op , int w );
-    bool opReplicatedEnough( OpTime op , BSONElement w );
+    bool opReplicatedEnough( GTID gtid , int w );
+    bool opReplicatedEnough( GTID gtid , BSONElement w );
 
-    bool waitForReplication( OpTime op , int w , int maxSecondsToWait );
+    bool waitForReplication( GTID gtid , int w , int maxSecondsToWait );
 
     void resetSlaveCache();
     unsigned getSlaveCount();

@@ -18,6 +18,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/jsobj.h"
+#include <limits>
 
 #include <db.h>
 
@@ -31,7 +32,10 @@ namespace mongo {
         static int cmp(GTID a, GTID b);
         static uint32_t GTIDBinarySize();
         GTID();
-        GTID(uint64_t primarySeqNo, uint64_t GTSeqNo);
+        GTID(uint64_t primarySeqNo, uint64_t GTSeqNo){
+            _primarySeqNo = primarySeqNo;
+            _GTSeqNo = GTSeqNo;
+        }
         GTID(const char* binData);
         ~GTID(){};
         void serializeBinaryData(char* binData);
@@ -40,6 +44,8 @@ namespace mongo {
         string toString() const;
         bool isInitial() const;
     };
+
+    static const GTID GTID_MAX(std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max());
 
     struct GTIDCmp {
         bool operator()( const GTID& l, const GTID& r ) const {
