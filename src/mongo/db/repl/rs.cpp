@@ -36,14 +36,6 @@ namespace mongo {
     
     using namespace bson;
 
-#ifdef MONGO_PLATFORM_64
-    const int ReplSetImpl::replWriterThreadCount = 2;
-    const int ReplSetImpl::replPrefetcherThreadCount = 2;
-#else
-    const int ReplSetImpl::replWriterThreadCount = 2;
-    const int ReplSetImpl::replPrefetcherThreadCount = 2;
-#endif
-
     bool replSet = false;
     ReplSet *theReplSet = 0;
 
@@ -390,8 +382,6 @@ namespace mongo {
         _maintenanceMode(0),
         mgr( new Manager(this) ),
         ghost( new GhostSync(this) ),
-        _writerPool(replWriterThreadCount),
-        _prefetcherPool(replPrefetcherThreadCount),
         _indexPrefetchConfig(PREFETCH_ALL) {
 
         gtidManager = NULL; // will be initialized in loadGTIDManager
@@ -446,8 +436,6 @@ namespace mongo {
         _maintenanceMode(0),
         mgr(0),
         ghost(0),
-        _writerPool(replWriterThreadCount),
-        _prefetcherPool(replPrefetcherThreadCount),
         oplogVersion(0),
         _indexPrefetchConfig(PREFETCH_ALL) {
     }
