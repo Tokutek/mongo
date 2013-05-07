@@ -248,10 +248,8 @@ namespace mongo {
                                     const BSONObj& max ,
                                     const BSONObj& keyPattern ,
                                     bool maxInclusive ,
-                                    bool secondaryThrottle ,
                                     bool fromMigrate ) {
         long long numDeleted = 0;
-        long long millisWaitingForReplication = 0;
 
         Client::ReadContext ctx(ns);
         Client::Transaction txn(DB_SERIALIZABLE);
@@ -272,22 +270,6 @@ namespace mongo {
             OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate, &cc().txn());
             deleteOneObject(d, nsdt, pk, obj);
             numDeleted++;
-            // Let's not wait for replication for now.  TODO(leif): maybe put this back.
-#if 0
-            Timer secondaryThrottleTime;
-
-            if ( secondaryThrottle ) {
-                if ( ! waitForReplication( c.getLastOp(), 2, 60 /* seconds to wait */ ) ) {
-                    warning() << "replication to secondaries for removeRange at least 60 seconds behind" << endl;
-                }
-                millisWaitingForReplication += secondaryThrottleTime.millis();
-            }
-#endif
-        }
-
-        if ( secondaryThrottle ) {
-            log() << "Helpers::removeRangeUnlocked time spent waiting for replication: "  
-                  << millisWaitingForReplication << "ms" << endl;
         }
 
         txn.commit();
