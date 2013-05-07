@@ -456,7 +456,7 @@ namespace mongo {
     ReplSet::ReplSet() : ReplSetImpl() {}
 
     void ReplSetImpl::loadGTIDManager(bool quiet) {
-        Lock::DBRead lk(rsoplog);
+        Lock::DBWrite lk(rsoplog);
         BSONObj o;
         if( Helpers::getLast(rsoplog, o) ) {
             GTID lastGTID = getGTIDFromBSON("_id", o);
