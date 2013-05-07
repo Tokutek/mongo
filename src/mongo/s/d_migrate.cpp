@@ -212,8 +212,7 @@ namespace mongo {
                 log() << "moveChunk deleted " << numDeleted << " documents for "
                       << this->toString() << migrateLog;
             }
-            
-            
+
             GTID lastGTID = cc().getLastOp();
             Timer t;
             for ( int i=0; i<3600; i++ ) {
@@ -223,7 +222,7 @@ namespace mongo {
                 }
                 sleepsecs(1);
             }
-            
+
             warning() << "moveChunk repl sync timed out after " << t.seconds() << " seconds" << migrateLog;
         }
 
@@ -1469,7 +1468,15 @@ namespace mongo {
                         BSONObj o = i.next().Obj();
                         BSONObj id = o["_id"].wrap();
                         OpDebug debug;
-                        updateObjects(ns.c_str(), o, id, true, false, true, debug, true);
+                        updateObjects(ns.c_str(),
+                                      o,
+                                      id,
+                                      true,  // upsert
+                                      false, // multi
+                                      true,  // logop
+                                      debug,
+                                      true   // fromMigrate
+                                      );
 
                         thisTime++;
                         numCloned++;
