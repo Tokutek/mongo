@@ -877,6 +877,7 @@ if (BUILD_TESTING)
       action_set_test
       principal_set_test
       privilege_set_test
+      role_graph_test
       authorization_manager_test
       )
     add_mongo_test(db/auth ${test} ${test})

@@ -30,6 +30,8 @@ add_library(authcore STATIC
   "${CMAKE_CURRENT_BINARY_DIR}/action_type.cpp"
   auth_external_state
   authorization_manager
+  role_graph
+  role_name
   principal
   principal_name
   principal_set
@@ -74,6 +76,7 @@ if (BUILD_TESTING)
       action_set_test
       principal_set_test
       privilege_set_test
+      role_graph_test
       authorization_manager_test
       )
     add_executable(${test} ${test})
