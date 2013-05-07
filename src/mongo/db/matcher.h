@@ -21,15 +21,22 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "jsobj.h"
 #include "pcrecpp.h"
 #include "geo/shapes.h"
+=======
+#include "mongo/db/diskloc.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/geo/geoquery.h"
+>>>>>>> 38a311a... SERVER-6400: prep to have both MatcherOld and Matcher2 in the code base
 #include "mongo/db/matcher/match_details.h"
 
 namespace mongo {
 
     class Cursor;
     class CoveredIndexMatcher;
+<<<<<<< HEAD
     class ElementMatcher;
     class Matcher;
     class FieldRangeVector;
@@ -140,6 +147,10 @@ namespace mongo {
         }
     };
 
+=======
+    class FieldRangeVector;
+
+>>>>>>> 38a311a... SERVER-6400: prep to have both MatcherOld and Matcher2 in the code base
     struct element_lt {
         bool operator()(const BSONElement& l, const BSONElement& r) const {
             int x = (int) l.canonicalType() - (int) r.canonicalType();
@@ -149,6 +160,7 @@ namespace mongo {
         }
     };
 
+<<<<<<< HEAD
     /**
      * An interface for visiting a Matcher and all of its nested Matchers and ElementMatchers.
      * RegexMatchers are not visited.
@@ -159,6 +171,10 @@ namespace mongo {
         virtual void visitMatcher( const Matcher& matcher ) {}
         virtual void visitElementMatcher( const ElementMatcher& elementMatcher ) {}
     };
+=======
+#include "matcher_old.h"
+#include "mongo/db/matcher/matcher.h"
+>>>>>>> 38a311a... SERVER-6400: prep to have both MatcherOld and Matcher2 in the code base
 
     class ElementMatcher {
     public:
@@ -203,6 +219,7 @@ namespace mongo {
        e.g.
            db.foo.find( { a : 3 } );
 
+<<<<<<< HEAD
        { a : 3 } is the pattern object.  See manual for full info.
 
        GT/LT:
@@ -332,6 +349,10 @@ namespace mongo {
 
         friend class CoveredIndexMatcher;
     };
+=======
+    typedef MatcherOld Matcher;
+    //typedef Matcher2 Matcher;
+>>>>>>> 38a311a... SERVER-6400: prep to have both MatcherOld and Matcher2 in the code base
 
     // If match succeeds on index key, then attempt to match full document.
     class CoveredIndexMatcher : boost::noncopyable {
