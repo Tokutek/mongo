@@ -68,8 +68,6 @@ namespace mongo {
         }
         bool usingReplSets() const { return !_replSet.empty(); }
 
-        string rsIndexPrefetch;// --indexPrefetch
-
         // for master/slave replication
         string source;         // --source
         string only;           // --only

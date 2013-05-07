@@ -964,7 +964,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             cmdLine._replSet = params["replSet"].as<string>().c_str();
         }
         if (params.count("replIndexPrefetch")) {
-            cmdLine.rsIndexPrefetch = params["replIndexPrefetch"].as<std::string>();
+            out() << " replIndexPrefetch is a deprecated parameter" << endl;
         }
         if (params.count("only")) {
             cmdLine.only = params["only"].as<string>().c_str();
