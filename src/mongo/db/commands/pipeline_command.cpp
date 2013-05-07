@@ -39,6 +39,7 @@ namespace mongo {
         virtual bool run(const string &db, BSONObj &cmdObj, int options,
                          string &errmsg, BSONObjBuilder &result, bool fromRepl);
         virtual LockType locktype() const;
+        virtual bool needsTxn() const { return false; }
         virtual bool slaveOk() const;
         virtual void help(stringstream &help) const;
 

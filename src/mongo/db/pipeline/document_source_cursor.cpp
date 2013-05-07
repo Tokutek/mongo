@@ -18,6 +18,7 @@
 
 #include "mongo/db/pipeline/document_source.h"
 
+#include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/pipeline/document.h"
@@ -27,6 +28,7 @@ namespace mongo {
 
     DocumentSourceCursor::CursorWithContext::CursorWithContext( const string& ns )
             : _context(ns)
+            , _txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY)
             , _chunkMgr(shardingState.needShardChunkManager( ns )
                         ? shardingState.getShardChunkManager( ns )
                         : ShardChunkManagerPtr()) {

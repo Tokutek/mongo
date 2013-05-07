@@ -28,6 +28,7 @@
 #include "db/pipeline/value.h"
 #include "util/string_writer.h"
 #include "mongo/db/projection.h"
+#include "mongo/db/client.h"
 
 namespace mongo {
     class Accumulator;
@@ -363,6 +364,7 @@ namespace mongo {
             // Must be the first struct member for proper construction and destruction, as other
             // members may depend on the read lock it acquires.
             Client::ReadContext _context;
+            Client::Transaction _txn;
             shared_ptr<ShardChunkManager> _chunkMgr;
             ClientCursor::Holder _cursor;
         };
