@@ -238,8 +238,6 @@ namespace mongo {
                 ::_exit(-1);
             }
 
-            FileAllocator::get()->start();
-
             storage::startup();
         }
 

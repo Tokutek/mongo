@@ -495,8 +495,6 @@ namespace mongo {
         acquirePathLock(doing_repair);
         boost::filesystem::remove_all( dbpath + "/_tmp/" );
 
-        FileAllocator::get()->start();
-
         MONGO_ASSERT_ON_EXCEPTION_WITH_MSG( clearTmpFiles(), "clear tmp files" );
 
         // the last thing we do before initializing storage is to install the

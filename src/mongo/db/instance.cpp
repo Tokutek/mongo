@@ -980,12 +980,6 @@ namespace mongo {
         log() << "shutdown: going to close sockets..." << endl;
         boost::thread close_socket_thread( boost::bind(MessagingPort::closeAllSockets, 0) );
 
-        // wait until file preallocation finishes
-        // we would only hang here if the file_allocator code generates a
-        // synchronous signal, which we don't expect
-        log() << "shutdown: waiting for fs preallocator..." << endl;
-        FileAllocator::get()->waitUntilFinished();
-
         // TODO: (figure out what this code is doing and what should happen)
         // originally this was done when journaling was on
         if( true ) {

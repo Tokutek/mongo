@@ -210,8 +210,6 @@ namespace mongo {
                 log() << "32bit" << endl;
             log() << "random seed: " << seed << endl;
 
-            FileAllocator::get()->start();
-
             vector<string> suites;
             if (params.count("suites")) {
                 suites = params["suites"].as< vector<string> >();
