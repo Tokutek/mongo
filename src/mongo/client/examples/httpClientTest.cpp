@@ -61,5 +61,6 @@ int main( int argc, const char **argv, char **envp) {
 #ifdef MONGO_SSL
     play( "https://www.mongodb.com/" );
 #endif
-    
+
+    return EXIT_SUCCESS;
 }
