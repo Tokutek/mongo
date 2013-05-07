@@ -19,17 +19,5 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mongo/pch.h"
-#include "mongo/db/matcher.h"
-#include "mongo/util/goodies.h"
-#include "mongo/util/startup_test.h"
-#include "mongo/scripting/engine.h"
-#include "mongo/db/queryutil.h"
-#include "mongo/db/client.h"
-#include "mongo/db/namespacestring.h"
-#include "mongo/db/auth/authorization_session.h"
-
-#ifdef USE_OLD_MATCHER
 #include "matcher_old.cpp"
-#endif
 
