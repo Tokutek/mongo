@@ -840,14 +840,14 @@ static int mongoDbMain(int argc, char* argv[]) {
         if( params.count("journalCommitInterval") ) {
             cmdLine.logFlushPeriod = params["journalCommitInterval"].as<uint32_t>();
             out() << "--journalCommitInterval deprecated, treating as --logFlushPeriod" << endl;
-            if( cmdLine.logFlushPeriod < 0 || cmdLine.logFlushPeriod > 300 ) {
+            if( cmdLine.logFlushPeriod > 300 ) {
                 out() << "--logFlushPeriod out of allowed range (0-300ms)" << endl;
                 dbexit( EXIT_BADOPTIONS );
             }
         }
         if( params.count("logFlushPeriod") ) {
             cmdLine.logFlushPeriod = params["logFlushPeriod"].as<uint32_t>();
-            if( cmdLine.logFlushPeriod < 0 || cmdLine.logFlushPeriod > 300 ) {
+            if( cmdLine.logFlushPeriod > 300 ) {
                 out() << "--logFlushPeriod out of allowed range (0-300ms)" << endl;
                 dbexit( EXIT_BADOPTIONS );
             }

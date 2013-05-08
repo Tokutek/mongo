@@ -56,7 +56,6 @@ namespace mongo {
 
     /* if 1 sync() is running */
     volatile int syncing = 0;
-    static volatile int relinquishSyncingSome = 0;
 
     /* "dead" means something really bad happened like replication falling completely out of sync.
        when non-null, we are dead and the string is informational

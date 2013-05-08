@@ -246,7 +246,7 @@ namespace mongo {
             GTID lastGTID = theReplSet->gtidManager->getLiveState();
             GTID closestGTID = theReplSet->lastOtherGTID();
             uint64_t diff = (lastOp > closest) ? lastOp - closest : 0;
-            while (now <= timeout && (diff < 0 || diff > 10000)) {
+            while (now <= timeout && diff > 10000) {
                 sleepsecs(1);
                 now++;
 
@@ -255,7 +255,7 @@ namespace mongo {
                 diff = (lastOp > closest) ? lastOp - closest : 0;
             }
 
-            if (diff < 0 || diff > 10000) {
+            if (diff > 10000) {
                 errmsg = "no secondaries within 10 seconds of my optime";
                 result.appendNumber("closest", closest/1000);
                 result.appendNumber("difference", diff/1000);
