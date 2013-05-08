@@ -409,6 +409,8 @@ namespace mongo {
 
             // now deal with creation of oplog
             // first delete any existing data in the oplog
+
+            // TODO: take DBWrite("local") lock here, not in sub functions
             Client::Transaction fileOpsTransaction(DB_SERIALIZABLE);
             deleteOplogFiles();
             // now recreate the oplog
@@ -437,6 +439,8 @@ namespace mongo {
             // has a higher chance of failing, and I don't know at the moment
             // if it is ok to do fileops successfully, and then an operation (cloning) that
             // later causes an abort. So, to be cautious, they are separate
+
+            // TODO: take GlobalWrite lock around initial clone
             Client::Transaction cloneTransaction(DB_SERIALIZABLE);
             bool ret = _syncDoInitialSync_clone(
                 sourceHostname.c_str(), 
@@ -455,7 +459,8 @@ namespace mongo {
             // on the remote machine's local database, we need to copy
             // the entire (small) replInfo dictionary, and the necessary portion
             // of the oplog
-            {                
+            {
+                // TODO: then you don't need a write lock here
                 Client::WriteContext ctx(rsoplog);
                 // first copy the replInfo, as we will use its information
                 // to determine  how much of the opLog to copy

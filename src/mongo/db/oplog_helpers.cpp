@@ -221,6 +221,7 @@ namespace OpLogHelpers{
             insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
         }
         else {
+            // TODO: make these retries
             Client::ReadContext ctx(ns);
             NamespaceDetails* nsd = nsdetails(ns);
             NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
@@ -237,10 +238,10 @@ namespace OpLogHelpers{
         NamespaceDetails* nsd = nsdetails(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         // overwrite set to true because we are running on a secondary
+        nsd->insertObjectIntoCappedWithPK(pk, row, ND_UNIQUE_CHECKS_OFF);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }
-        nsd->insertObjectIntoCappedWithPK(pk, row, ND_UNIQUE_CHECKS_OFF);
     }
 
     static void runDeleteFromOplog(const char* ns, BSONObj op) {
@@ -283,6 +284,7 @@ namespace OpLogHelpers{
         loud.logop = false;
         loud.ns = NULL;
         loud.fromMigrate = false;
+        // make loud be NULL
         updateOneObject(nsd, nsdt, pk, oldRow, newRow, &loud);
     }
 
