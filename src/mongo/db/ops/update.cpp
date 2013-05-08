@@ -40,7 +40,7 @@ namespace mongo {
         struct LogOpUpdateDetails* loud
         ) 
     {
-        if (loud->logop) {
+        if (loud && loud->logop) {
             OpLogHelpers::logUpdate(
                 loud->ns,
                 pk,

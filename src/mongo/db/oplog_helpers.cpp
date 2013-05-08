@@ -201,6 +201,17 @@ namespace OpLogHelpers{
         }
     }
 
+    static void runNonSystemInsertFromOplogWithLock(
+        const char* ns, 
+        BSONObj row
+        ) 
+    {
+        NamespaceDetails* nsd = nsdetails(ns);
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+        // overwrite set to true because we are running on a secondary
+        insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
+    }
+    
     static void runInsertFromOplog(const char* ns, BSONObj op) {
         BSONObj row = op[KEY_STR_ROW].Obj();
         // handle add index case
@@ -221,31 +232,48 @@ namespace OpLogHelpers{
             insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
         }
         else {
-            // TODO: make these retries
-            Client::ReadContext ctx(ns);
-            NamespaceDetails* nsd = nsdetails(ns);
-            NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
-            // overwrite set to true because we are running on a secondary
-            insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
+            try {
+                Client::ReadContext ctx(ns);
+                runNonSystemInsertFromOplogWithLock(ns, row);
+            }
+            catch (RetryWithWriteLock &e) {
+                Client::WriteContext ctx(ns);
+                runNonSystemInsertFromOplogWithLock(ns, row);
+            }
         }
     }
 
-    static void runCappedInsertFromOplog(const char* ns, BSONObj op) {
-        BSONObj pk = op[KEY_STR_PK].Obj();
-        BSONObj row = op[KEY_STR_ROW].Obj();
-        // handle add index case
-        Client::ReadContext ctx(ns);
-        NamespaceDetails* nsd = nsdetails(ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+    static void runCappedInsertFromOplogWithLock(
+        const char* ns, 
+        BSONObj& pk,
+        BSONObj& row
+        ) 
+    {
+        NamespaceDetails* nsd = NULL;
+        NamespaceDetailsTransient *nsdt = NULL;
+        nsd = nsdetails(ns);
+        nsdt = &NamespaceDetailsTransient::get(ns);
         // overwrite set to true because we are running on a secondary
         nsd->insertObjectIntoCappedWithPK(pk, row, ND_UNIQUE_CHECKS_OFF);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }
     }
+    
+    static void runCappedInsertFromOplog(const char* ns, BSONObj op) {
+        BSONObj pk = op[KEY_STR_PK].Obj();
+        BSONObj row = op[KEY_STR_ROW].Obj();
+        try {
+            Client::ReadContext ctx(ns);
+            runCappedInsertFromOplogWithLock(ns, pk, row);
+        }
+        catch (RetryWithWriteLock &e) {
+            Client::WriteContext ctx(ns);
+            runCappedInsertFromOplogWithLock(ns, pk, row);
+        }
+    }
 
-    static void runDeleteFromOplog(const char* ns, BSONObj op) {
-        Client::ReadContext ctx(ns);
+    static void runDeleteFromOplogWithLock(const char* ns, BSONObj op) {
         NamespaceDetails* nsd = nsdetails(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         BSONObj row = op[KEY_STR_ROW].Obj();
@@ -253,8 +281,18 @@ namespace OpLogHelpers{
         deleteOneObject(nsd, nsdt, pk, row);
     }
 
-    static void runCappedDeleteFromOplog(const char* ns, BSONObj op) {
-        Client::ReadContext ctx(ns);
+    static void runDeleteFromOplog(const char* ns, BSONObj op) {
+        try {
+            Client::ReadContext ctx(ns);
+            runDeleteFromOplogWithLock(ns, op);
+        }
+        catch (RetryWithWriteLock &e) {
+            Client::WriteContext ctx(ns);
+            runDeleteFromOplogWithLock(ns, op);
+        }        
+    }
+
+    static void runCappedDeleteFromOplogWithLock(const char* ns, BSONObj op) {
         NamespaceDetails* nsd = nsdetails(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         BSONObj row = op[KEY_STR_ROW].Obj();
@@ -265,9 +303,19 @@ namespace OpLogHelpers{
             nsdt->notifyOfWriteOp();
         }
     }
+    
+    static void runCappedDeleteFromOplog(const char* ns, BSONObj op) {
+        try {
+            Client::ReadContext ctx(ns);
+            runCappedDeleteFromOplogWithLock(ns, op);
+        }
+        catch (RetryWithWriteLock &e) {
+            Client::WriteContext ctx(ns);
+            runCappedDeleteFromOplogWithLock(ns, op);
+        }
+    }
 
-    static void runUpdateFromOplog(const char* ns, BSONObj op) {
-        Client::ReadContext ctx(ns);
+    static void runUpdateFromOplogWithLock(const char* ns, BSONObj op) {
         NamespaceDetails* nsd = nsdetails(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         const char *names[] = {
@@ -280,12 +328,18 @@ namespace OpLogHelpers{
         BSONObj pk = fields[0].Obj();
         BSONObj oldRow = fields[1].Obj();
         BSONObj newRow = fields[2].Obj();
-        struct LogOpUpdateDetails loud;
-        loud.logop = false;
-        loud.ns = NULL;
-        loud.fromMigrate = false;
         // make loud be NULL
-        updateOneObject(nsd, nsdt, pk, oldRow, newRow, &loud);
+        updateOneObject(nsd, nsdt, pk, oldRow, newRow, NULL);
+    }
+    static void runUpdateFromOplog(const char* ns, BSONObj op) {
+        try {
+            Client::ReadContext ctx(ns);
+            runUpdateFromOplogWithLock(ns, op);
+        }
+        catch (RetryWithWriteLock &e) {
+            Client::WriteContext ctx(ns);
+            runUpdateFromOplogWithLock(ns, op);
+        }        
     }
 
     static void runCommandFromOplog(const char* ns, BSONObj op) {
