@@ -264,8 +264,8 @@ namespace mongo {
                 
                 Timer timer;
                 {
-                    Client::Transaction transaction(DB_SERIALIZABLE);
                     Client::ReadContext ctx(rsoplog);
+                    Client::Transaction transaction(DB_SERIALIZABLE);
                     replicateTransactionToOplog(o);
                     transaction.commit(0);
                 }

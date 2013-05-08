@@ -428,6 +428,7 @@ namespace mongo {
 
     void ReplSetImpl::loadGTIDManager(bool quiet) {
         Lock::DBWrite lk(rsoplog);
+        Client::Transaction txn(DB_SERIALIZABLE);
         BSONObj o;
         if( Helpers::getLast(rsoplog, o) ) {
             GTID lastGTID = getGTIDFromBSON("_id", o);
@@ -443,6 +444,7 @@ namespace mongo {
             gtidManager = new GTIDManager(lastGTID, curTimeMillis64(), 0);
             setTxnGTIDManager(gtidManager);
         }
+        txn.commit();
     }
 
     /* call after constructing to start */
@@ -451,9 +453,7 @@ namespace mongo {
             // this might now work on secondaries
             // on secondaries, at this point in the code, we may not have yet created
             // the oplog, but we will see
-            Client::Transaction txn(DB_SERIALIZABLE);
             loadGTIDManager();
-            txn.commit();
         }
         catch(std::exception& e) {
             log() << "replSet error fatal couldn't query the local " << rsoplog << " collection.  Terminating mongod after 30 seconds." << rsLog;
@@ -491,8 +491,8 @@ namespace mongo {
                 // a full clone from someone
                 syncDoInitialSync();
                 {
-                    Client::Transaction transaction(0);
                     Client::ReadContext ctx(rsoplog);
+                    Client::Transaction transaction(0);
                     BSONObj o;
                     bool ret= Helpers::getLast(rsoplog, o);
                     verify(ret);
