@@ -27,14 +27,13 @@
 
 namespace mongo {
 
-    void LeafMatchExpression::initPath( const StringData& path ) {
-        _path = path;
-        _fieldRef.parse( _path );
-    }
-
-
     bool LeafMatchExpression::matches( const MatchableDocument* doc, MatchDetails* details ) const {
         //log() << "e doc: " << doc << " path: " << _path << std::endl;
+
+
+        bool traversedArray = false;
+        int32_t idxPath = 0;
+        BSONElement e = doc->getFieldDottedOrArray( path, &idxPath, &traversedArray );
 
         bool traversedArray = false;
         size_t idxPath = 0;
@@ -324,18 +323,25 @@ namespace mongo {
         return e.type() == _type;
     }
 
-    bool TypeMatchExpression::matches( const BSONObj& doc, MatchDetails* details ) const {
+    bool TypeMatchExpression::matches( const MatchableDocument* doc, MatchDetails* details ) const {
         return _matches( _path, doc, details );
     }
 
-    bool TypeMatchExpression::_matches( const StringData& path, const BSONObj& doc, MatchDetails* details ) const {
+    bool TypeMatchExpression::_matches( const StringData& path,
+                                        const MatchableDocument* doc,
+                                        MatchDetails* details ) const {
 
         FieldRef fieldRef;
         fieldRef.parse( path );
 
         bool traversedArray = false;
+<<<<<<< HEAD
         size_t idxPath = 0;
         BSONElement e = doc->getFieldDottedOrArray( fieldRef, &idxPath, &traversedArray );
+=======
+        int32_t idxPath = 0;
+        BSONElement e = doc->getFieldDottedOrArray( pathRef, &idxPath, &traversedArray );
+>>>>>>> 3893e7f... SERVER-6400 Use an abstraction layer into MatchExpression for different formats
 
         string rest = pathToString( fieldRef, idxPath+1 );
 
@@ -351,7 +357,8 @@ namespace mongo {
                 found = matchesSingleElement( x );
             }
             else if ( x.isABSONObj() ) {
-                found = _matches( rest, x.Obj(), details );
+                BSONMatchableDocument doc( x.Obj() );
+                found = _matches( rest, &doc, details );
             }
 
             if ( found ) {

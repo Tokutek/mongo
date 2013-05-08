@@ -117,7 +117,8 @@ namespace mongo {
         _expression.reset( result.getValue() );
     }
 
-    Matcher2::Matcher2( const Matcher2 &docMatcher, const BSONObj &constrainIndexKey ) {
+    Matcher2::Matcher2( const Matcher2 &docMatcher, const BSONObj &constrainIndexKey )
+        : _indexKey( constrainIndexKey ) {
 
         MatchExpression* indexExpression = spliceForIndex( constrainIndexKey,
                                                           docMatcher._expression.get() );
@@ -128,7 +129,15 @@ namespace mongo {
     bool Matcher2::matches(const BSONObj& doc, MatchDetails* details ) const {
         if ( !_expression )
             return true;
-        return _expression->matches( doc, details );
+
+        if ( _indexKey.isEmpty() )
+            return _expression->matchesBSON( doc, details );
+
+        if ( !doc.isEmpty() && doc.firstElement().fieldName()[0] )
+            return _expression->matchesBSON( doc, details );
+
+        IndexKeyMatchableDocument mydoc( _indexKey, doc );
+        return _expression->matches( &mydoc, details );
     }
 
 
