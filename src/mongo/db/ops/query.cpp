@@ -111,9 +111,7 @@ namespace mongo {
             verify(client_cursor->transactions.get() != NULL);
             cc().swapTransactionStack(client_cursor->transactions);
 
-            if ( pass == 0 )
-                client_cursor->updateSlaveLocation( curop );
-
+            client_cursor->updateSlaveLocation( curop );
             
             curop.debug().query = client_cursor->query();
 

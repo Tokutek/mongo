@@ -185,7 +185,85 @@ namespace mongo {
 
                 BSONElement e = cmdObj["w"];
                 if ( e.ok() ) {
-                    problem() << "replication not supported yet, ignoring!" << endl;
+
+                    if ( cmdLine.configsvr && (!e.isNumber() || e.numberInt() > 1) ) {
+                        // w:1 on config servers should still work, but anything greater than that
+                        // should not.
+                        result.append( "wnote", "can't use w on config servers" );
+                        result.append( "err", "norepl" );
+                        return true;
+                    }
+
+                    int timeout = cmdObj["wtimeout"].numberInt();
+                    Timer t;
+
+                    long long passes = 0;
+                    char buf[32];
+                    GTID gtid = c.getLastOp();
+
+                    if ( gtid.isInitial() ) {
+                        if ( anyReplEnabled() ) {
+                            result.append( "wnote" , "no write has been done on this connection" );
+                        }
+                        else if ( e.isNumber() && e.numberInt() <= 1 ) {
+                            // don't do anything
+                            // w=1 and no repl, so this is fine
+                        }
+                        else {
+                            // w=2 and no repl
+                            stringstream errmsg;
+                            errmsg << "no replication has been enabled, so w=" <<
+                                      e.toString(false) << " won't work";
+                            result.append( "wnote" , errmsg.str() );
+                            result.append( "err", "norepl" );
+                            return true;
+                        }
+
+                        result.appendNull( "err" );
+                        return true;
+                    }
+
+                    if ( !theReplSet && !e.isNumber() ) {
+                        result.append( "wnote", "cannot use non integer w values for non-replica sets" );
+                        result.append( "err", "noreplset" );
+                        return true;
+                    }
+
+                    while ( 1 ) {
+                        if ( !_isMaster() ) {
+                            // this should be in the while loop in case we step down
+                            errmsg = "not master";
+                            result.append( "wnote", "no longer primary" );
+                            return false;
+                        }
+
+                        // check this first for w=0 or w=1
+                        if ( opReplicatedEnough( gtid, e ) ) {
+                            break;
+                        }
+
+                        // if replication isn't enabled (e.g., config servers)
+                        if ( ! anyReplEnabled() ) {
+                            result.append( "err", "norepl" );
+                            return true;
+                        }
+
+                        if ( timeout > 0 && t.millis() >= timeout ) {
+                            result.append( "wtimeout" , true );
+                            errmsg = "timed out waiting for slaves";
+                            result.append( "waited" , t.millis() );
+                            result.append( "err" , "timeout" );
+                            return true;
+                        }
+
+                        verify( sprintf( buf , "w block pass: %lld" , ++passes ) < 30 );
+                        c.curop()->setMessage( buf );
+                        sleepmillis(1);
+                        killCurrentOp.checkForInterrupt();
+                    }
+
+                    int myMillis = t.millis();
+                    result.appendNumber( "wtime" , myMillis );
                 }
             }
 
