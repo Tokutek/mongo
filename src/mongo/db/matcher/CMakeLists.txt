@@ -6,6 +6,7 @@ add_library(expressions STATIC
   expression_tree
   expression_parser
   expression_parser_tree
+  matchable
   match_details
   )
 add_dependencies(expressions generate_error_codes generate_action_types)
