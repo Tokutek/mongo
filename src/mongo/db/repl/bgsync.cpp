@@ -149,7 +149,7 @@ namespace mongo {
                     continue;
                 }
 
-                produce();
+                timeToSleep = produce();
             }
             catch (DBException& e) {
                 sethbmsg(str::stream() << "db exception in producer: " << e.toString());
