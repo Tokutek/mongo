@@ -69,36 +69,38 @@ namespace mongo {
         GTID lastUnappliedGTID;
         // TODO: handle shutdown
         while (1) {
-            _mutex.lock();
-            // wait until we know an item has been produced
-            while (_deque.size() == 0) {
-                _queueDone.notify_all();
-                _queueCond.wait(_mutex);
+            BSONObj curr;
+            {
+                boost::unique_lock<boost::mutex> lck(_mutex);
+                // wait until we know an item has been produced
+                while (_deque.size() == 0) {
+                    _queueDone.notify_all();
+                    _queueCond.wait(_mutex);
+                }
+                curr = _deque.front();
             }
-            BSONObj curr = _deque.front();
-            _mutex.unlock();
-
             GTID currEntry = getGTIDFromOplogEntry(curr);
             theReplSet->gtidManager->noteApplyingGTID(currEntry);
             applyTransactionFromOplog(curr);
-            
-            _mutex.lock();
-            // I don't recall if noteGTIDApplied needs to be called within _mutex
-            theReplSet->gtidManager->noteGTIDApplied(currEntry);
-            dassert(_deque.size() > 0);
-            _deque.pop_front();
-            
-            // this is a flow control mechanism, with bad numbers
-            // hard coded for now just to get something going.
-            // If the opSync thread notices that we have over 20000
-            // transactions in the queue, it waits until we get below
-            // 10000. This is where we signal that we have gotten there
-            // Once we have spilling of transactions working, this
-            // logic will need to be redone
-            if (_deque.size() == 10000) {
-                _queueCond.notify_all();
+
+            {
+                boost::unique_lock<boost::mutex> lck(_mutex);
+                // I don't recall if noteGTIDApplied needs to be called within _mutex
+                theReplSet->gtidManager->noteGTIDApplied(currEntry);
+                dassert(_deque.size() > 0);
+                _deque.pop_front();
+                
+                // this is a flow control mechanism, with bad numbers
+                // hard coded for now just to get something going.
+                // If the opSync thread notices that we have over 20000
+                // transactions in the queue, it waits until we get below
+                // 10000. This is where we signal that we have gotten there
+                // Once we have spilling of transactions working, this
+                // logic will need to be redone
+                if (_deque.size() == 10000) {
+                    _queueCond.notify_all();
+                }
             }
-            _mutex.unlock();
         }
     }
     
@@ -199,7 +201,6 @@ namespace mongo {
             boost::unique_lock<boost::mutex> lock(_mutex);
 
             if (_currentSyncTarget == NULL) {
-                lock.unlock();
                 // if there is no one to sync from
                 return 1; //sleep one second
             }
