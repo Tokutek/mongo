@@ -138,7 +138,7 @@ namespace mongo {
         int32_t idxPath = 0;
         BSONElement e = getFieldDottedOrArray( doc, path, &idxPath, &traversedArray );
 
-        string rest = pathToString( path, idxPath+1 );
+        string rest = path.dottedField( idxPath+1 );
 
         if ( rest.size() == 0 ) {
             if ( e.type() == Array )
