@@ -63,6 +63,7 @@ namespace mongo {
             lastNonce.reset(n);
             return true;
         }
+        bool needsTxn() const { return false; }
     } cmdGetNonce;
 
     CmdLogout cmdLogout;
