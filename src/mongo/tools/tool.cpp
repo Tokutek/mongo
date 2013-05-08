@@ -238,6 +238,10 @@ namespace mongo {
                 ::_exit(-1);
             }
 
+            // the last thing we do before initializing storage is to install the
+            // txn complete hooks, which live in namespace_details.cpp
+            extern TxnCompleteHooks _txnCompleteHooks;
+            setTxnCompleteHooks(&_txnCompleteHooks);
             storage::startup();
         }
 

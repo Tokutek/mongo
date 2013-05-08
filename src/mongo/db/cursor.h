@@ -140,7 +140,7 @@ namespace mongo {
     class FieldRange;
     class FieldRangeVector;
     class FieldRangeVectorIterator;
-    class FieldInterval;
+    struct FieldInterval;
     
     // Class for storing rows bulk fetched from TokuDB
     class RowBuffer {

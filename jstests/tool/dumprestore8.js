@@ -31,7 +31,9 @@ db.bar.ensureIndex({x:1});
 barDocCount = db.bar.count();
 assert.gt( barDocCount, 0 , "No documents inserted" );
 assert.lt( db.bar.count(), 1000 , "Capped collection didn't evict documents" );
-assert.eq( 5 , db.system.indexes.count() , "Indexes weren't created right" );
+// namespaces($_) + foo (_id, a, b) + bar (_id, $_, x)
+db.system.indexes.find().forEach(printjson)
+assert.eq( 7 , db.system.indexes.count() , "Indexes weren't created right" );
 
 
 // Full dump/restore
@@ -52,7 +54,8 @@ for (var i = 0; i < 10; i++) {
     db.bar.save({x:i});
 }
 assert.eq( barDocCount, db.bar.count(), "Capped collection didn't evict documents after restore." );
-assert.eq( 5 , db.system.indexes.count() , "Indexes weren't created correctly by restore" );
+// namespace + foo (_id, a, b) + bar (_id, $_, x)
+assert.eq( 7 , db.system.indexes.count() , "Indexes weren't created correctly by restore" );
 
 
 // Dump/restore single DB
@@ -77,7 +80,8 @@ for (var i = 0; i < 10; i++) {
     db.bar.save({x:i});
 }
 assert.eq( barDocCount, db.bar.count(), "Capped collection didn't evict documents after restore 2." );
-assert.eq( 5 , db.system.indexes.count() , "Indexes weren't created correctly by restore 2" );
+// namespace + foo (_id, a, b) + bar (_id, $_, x)
+assert.eq( 7 , db.system.indexes.count() , "Indexes weren't created correctly by restore 2" );
 
 
 // Dump/restore single collection
@@ -100,6 +104,7 @@ for (var i = 0; i < 10; i++) {
     db.baz.save({x:i});
 }
 assert.eq( barDocCount, db.baz.count(), "Capped collection didn't evict documents after restore 3." );
-assert.eq( 2 , db.system.indexes.count() , "Indexes weren't created correctly by restore 3" );
+// namespace + capped _id, $_ + x
+assert.eq( 4 , db.system.indexes.count() , "Indexes weren't created correctly by restore 3" );
 
 t.stop();
