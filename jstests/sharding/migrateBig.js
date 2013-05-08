@@ -34,7 +34,8 @@ for ( done=0; done<2*1024*1024; done+=big.length ){
 
 db.printShardingStatus()
 
-assert.throws( function(){  s.adminCommand( { movechunk : "test.foo" , find : { x : 50 } , to : s.getOther( s.getServer( "test" ) ).name } ); } , [] , "move should fail" )
+// This is a big migration, it would fail on vanilla but succeed on tokuds
+s.adminCommand( { movechunk : "test.foo" , find : { x : 50 } , to : s.getOther( s.getServer( "test" ) ).name } );
 
 for ( i=0; i<20; i+= 2 ) {
     try {

@@ -303,7 +303,7 @@ namespace mongo {
         return true;
     }
 
-    bool Chunk::moveAndCommit( const Shard& to , long long chunkSize /* bytes */, BSONObj& res ) const {
+    bool Chunk::moveAndCommit(const Shard &to, BSONObj &res) const {
         uassert( 10167 ,  "can't move shard to its current location!" , getShard() != to );
 
         log() << "moving chunk ns: " << _manager->getns() << " moving ( " << toString() << ") " << _shard.toString() << " -> " << to.toString() << endl;
@@ -323,7 +323,6 @@ namespace mongo {
                                                          ///////////////////////////////
                                                          "min" << _min <<
                                                          "max" << _max <<
-                                                         "maxChunkSizeBytes" << chunkSize <<
                                                          "shardId" << genID() <<
                                                          "configdb" << configServer.modelServer()
                                                          ) ,
@@ -424,7 +423,6 @@ namespace mongo {
                 massert( 10412 ,
                          str::stream() << "moveAndCommit failed: " << res ,
                          toMove->moveAndCommit( newLocation , 
-                                                MaxChunkSize , 
                                                 res ) );
                 
                 // update our config

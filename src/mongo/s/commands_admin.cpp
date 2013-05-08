@@ -856,12 +856,6 @@ namespace mongo {
 
                 Shard to = Shard::make( toString );
 
-                // so far, chunk size serves test purposes; it may or may not become a supported parameter
-                long long maxChunkSizeBytes = cmdObj["maxChunkSizeBytes"].numberLong();
-                if ( maxChunkSizeBytes == 0 ) {
-                    maxChunkSizeBytes = Chunk::MaxChunkSize;
-                }
-
                 tlog() << "CMD: movechunk: " << cmdObj << endl;
 
                 ChunkManagerPtr info = config->getChunkManager( ns );
@@ -874,7 +868,7 @@ namespace mongo {
                 }
 
                 BSONObj res;
-                if ( ! c->moveAndCommit( to , maxChunkSizeBytes , res ) ) {
+                if ( ! c->moveAndCommit(to, res) ) {
                     errmsg = "move failed";
                     result.append( "cause" , res );
                     return false;

@@ -158,7 +158,7 @@ namespace mongo {
          * @param res the object containing details about the migrate execution
          * @return true if move was successful
          */
-        bool moveAndCommit( const Shard& to , long long chunkSize , BSONObj& res ) const;
+        bool moveAndCommit(const Shard &to, BSONObj &res) const;
 
         /**
          * @return size of shard in bytes

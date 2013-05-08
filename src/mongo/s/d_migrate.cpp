@@ -261,11 +261,13 @@ namespace mongo {
     class MigrateFromStatus {
     public:
 
-        MigrateFromStatus() : _m("MigrateFromStatus") , _workLock("MigrateFromStatus::workLock") {
-            _active = false;
-            _inCriticalSection = false;
-            _memoryUsed = 0;
-        }
+        MigrateFromStatus()
+                : _m("MigrateFromStatus"),
+                  _inCriticalSection(false),
+                  _active(false),
+                  _memoryUsed(0),
+                  _workLock("MigrateFromStatus::workLock"),
+                  _snapshotTaken(false) {}
 
         void start( string ns ,
                     const BSONObj& min ,
@@ -296,6 +298,7 @@ namespace mongo {
             verify( _reload.size() == 0 );
             verify( _memoryUsed == 0 );
 
+            _snapshotTaken = false;
             _active = true;
         }
 
@@ -314,6 +317,7 @@ namespace mongo {
             _memoryUsed = 0;
 
             scoped_lock l(_m);
+            _snapshotTaken = false;
             _active = false;
             _inCriticalSection = false;
         }
@@ -324,6 +328,10 @@ namespace mongo {
 
             if ( _ns != ns )
                 return;
+
+            if (!_snapshotTaken) {
+                return;
+            }
 
             // no need to log if this is not an insertion, an update, or an actual deletion
             // note: opstr 'db' isn't a deletion but a mention that a database exists (for replication
@@ -436,149 +444,85 @@ namespace mongo {
         }
 
         /**
-         * Get the primary keys that belong to the chunk migrated and sort them in _clonePKs (to avoid seeking disk later)
+         * Get the BSONs that belong to the chunk migrated in shard key order.
          *
          * @param maxChunkSize number of bytes beyond which a chunk's base data (no indices) is considered too large to move
          * @param errmsg filled with textual description of error if this call return false
          * @return false if approximate chunk size is too big to move or true otherwise
          */
-        bool storeCurrentLocs( long long maxChunkSize , string& errmsg , BSONObjBuilder& result ) {
-            Client::ReadContext ctx( _ns );
-            Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            NamespaceDetails *d = nsdetails( _ns.c_str() );
-            if ( ! d ) {
-                errmsg = "ns not found, should be impossible";
-                return false;
-            }
-
-            const IndexDetails *idx = d->findIndexByPrefix( _shardKeyPattern ,
-                                                            true );  /* require single key */
-
-            if ( idx == NULL ) {
-                errmsg = mongoutils::str::stream() << "can't find index for " << _shardKeyPattern << " in storeCurrentLocs" << causedBy( errmsg );
-                return false;
-            }
-            // Assume both min and max non-empty, append MinKey's to make them fit chosen index
-            BSONObj min = Helpers::modifiedRangeBound( _min , idx->keyPattern() , -1 );
-            BSONObj max = Helpers::modifiedRangeBound( _max , idx->keyPattern() , -1 );
-
-            IndexCursor *idxCursor = new IndexCursor( d , *idx , min , max , false , 1 );
-            {
-                auto_ptr<ClientCursor> cc(
-                    new ClientCursor( QueryOption_NoCursorTimeout ,
-                                      shared_ptr<Cursor>( idxCursor ) ,  _ns ) );
-
-                // use the average object size to estimate how many objects a full chunk would carry
-                // do that while traversing the chunk's range using the sharding index, below
-                // there's a fair amount of slack before we determine a chunk is too large because object sizes will vary
-                NamespaceDetailsAccStats stats;
-                BSONObjBuilder statsResult;
-                d->fillCollectionStats(&stats, &statsResult, 1);
-                unsigned long long maxRecsWhenFull;
-                long long avgRecSize;
-                const long long totalRecs = stats.count;
-                if ( totalRecs > 0 ) {
-                    avgRecSize = std::max( stats.size / totalRecs, 1ULL ); // prevent divide by zero
-                    maxRecsWhenFull = maxChunkSize / avgRecSize;
-                    maxRecsWhenFull = std::min( (unsigned long long)(Chunk::MaxObjectPerChunk + 1) , 130 * maxRecsWhenFull / 100 /* slack */ );
-                }
-                else {
-                    avgRecSize = 0;
-                    maxRecsWhenFull = Chunk::MaxObjectPerChunk + 1;
-                }
-            
-                // do a full traversal of the chunk and don't stop even if we think it is a large chunk
-                // we want the number of records to better report, in that case
-                bool isLargeChunk = false;
-                unsigned long long recCount = 0;;
-                while ( cc->ok() ) {
-                    BSONObj pk = cc->currPK();
-                    if ( ! isLargeChunk ) {
-                        scoped_spinlock lk( _trackerLocks );
-                        _clonePKs.insert( pk.getOwned() );
-                    }
-                    cc->advance();
-
-                    if ( ++recCount > maxRecsWhenFull ) {
-                        isLargeChunk = true;
-                    }
-                }
-
-                if ( isLargeChunk ) {
-                    warning() << "can't move chunk of size (approximately) " << recCount * avgRecSize
-                              << " because maximum size allowed to move is " << maxChunkSize
-                              << " ns: " << _ns << " " << _min << " -> " << _max
-                              << migrateLog;
-                    result.appendBool( "chunkTooBig" , true );
-                    result.appendNumber( "estimatedChunkSize" , (long long)(recCount * avgRecSize) );
-                    errmsg = "chunk too big to move";
-                    return false;
-                }
-            }
-
-            {
-                scoped_spinlock lk( _trackerLocks );
-                log() << "moveChunk number of documents: " << _clonePKs.size() << migrateLog;
-            }
-            txn.commit();
-            return true;
-        }
-
-        bool clone( string& errmsg , BSONObjBuilder& result ) {
+        bool clone(string& errmsg , BSONObjBuilder& result ) {
             if ( ! _getActive() ) {
                 errmsg = "not active";
                 return false;
             }
 
-            int allocSize = BSONObjMaxUserSize;
-            // TODO(leif): maybe reimplement this calculation?
-#if 0
-            {
-                Client::ReadContext ctx( _ns );
-                NamespaceDetails *d = nsdetails( _ns.c_str() );
-                verify( d );
-                scoped_spinlock lk( _trackerLocks );
-                allocSize = std::min(BSONObjMaxUserSize, (int)((12 + d->averageObjectSize()) * _clonePKs.size()));
-            }
-#endif
-            BSONArrayBuilder a (allocSize);
-            Client::ReadContext ctx( _ns );
-            Client::Transaction txn(DB_TXN_SNAPSHOT);
-            while ( 1 ) {
-                bool filledBuffer = false;
+            NamespaceDetails *d;
+            if (_cc.get() == NULL) {
+                dassert(!_txn);
+                Client::WriteContext ctx(_ns);
+                _snapshotTaken = true;
+                _txn.reset(new Client::Transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY));
 
+                d = nsdetails(_ns.c_str());
+                if (d == NULL) {
+                    errmsg = "ns not found, should be impossible";
+                    return false;
+                }
+
+                const IndexDetails *idx = d->findIndexByPrefix( _shardKeyPattern ,
+                                                                true );  /* require single key */
+
+                if ( idx == NULL ) {
+                    errmsg = mongoutils::str::stream() << "can't find index for " << _shardKeyPattern << " in _migrateClone" << causedBy( errmsg );
+                    return false;
+                }
+                // Assume both min and max non-empty, append MinKey's to make them fit chosen index
+                BSONObj min = Helpers::modifiedRangeBound( _min , idx->keyPattern() , -1 );
+                BSONObj max = Helpers::modifiedRangeBound( _max , idx->keyPattern() , -1 );
+
+                shared_ptr<Cursor> idxCursor(new IndexCursor( d , *idx , min , max , false , 1 ));
+                _cc.reset(new ClientCursor(QueryOption_NoCursorTimeout, idxCursor, _ns));
+
+                cc().swapTransactionStack(_txnStack);
+            }
+
+            {
+                WithTxnStack wts(_txnStack);
+                Client::ReadContext ctx(_ns);
+
+                int allocSize = BSONObjMaxUserSize;
+                // TODO(leif): maybe reimplement this calculation?
+#if 0
                 {
+                    Client::ReadContext ctx( _ns );
                     NamespaceDetails *d = nsdetails( _ns.c_str() );
                     verify( d );
                     scoped_spinlock lk( _trackerLocks );
-                    set<BSONObj>::iterator i = _clonePKs.begin();
-                    for ( ; i!=_clonePKs.end(); ++i ) {
+                    allocSize = std::min(BSONObjMaxUserSize, (int)((12 + d->averageObjectSize()) * _clonePKs.size()));
+                }
+#endif
+                BSONArrayBuilder a(allocSize);
 
-                        BSONObj o;
-                        const BSONObj &pk = *i;
-                        bool found = d->findByPK( pk, o );
-                        verify(found);
-
-                        // use the builder size instead of accumulating 'o's size so that we take into consideration
-                        // the overhead of BSONArray indices
-                        if ( a.len() + o.objsize() + 1024 > BSONObjMaxUserSize ) {
-                            filledBuffer = true; // break out of outer while loop
-                            break;
-                        }
-
-                        a.append( o );
-                    }
-
-                    _clonePKs.erase( _clonePKs.begin() , i );
-
-                    if ( _clonePKs.empty() || filledBuffer )
+                bool empty = true;
+                for (; _cc->ok(); _cc->advance()) {
+                    BSONObj obj = _cc->current();
+                    if (a.len() + obj.objsize() + 1024 > BSONObjMaxUserSize) {
+                        // have to do another batch after this
                         break;
+                    }
+                    a.append(obj);
+                    empty = false;
                 }
 
-            }
-            txn.commit();
+                result.appendArray( "objects" , a.arr() );
 
-            result.appendArray( "objects" , a.arr() );
+                if (empty) {
+                    _cc.reset();
+                    _txn->commit(0);
+                    _txn.reset();
+                }
+            }
+
             return true;
         }
 
@@ -630,6 +574,22 @@ namespace mongo {
 
         mutable mongo::mutex _workLock; // this is used to make sure only 1 thread is doing serious work
                                         // for now, this means migrate or removing old chunk data
+
+        bool _snapshotTaken;
+        scoped_ptr<Client::Transaction> _txn;
+        shared_ptr<Client::TransactionStack> _txnStack;
+        auto_ptr<ClientCursor> _cc;
+
+        class WithTxnStack : boost::noncopyable {
+            shared_ptr<Client::TransactionStack> &_stack;
+          public:
+            WithTxnStack(shared_ptr<Client::TransactionStack> &stack) : _stack(stack) {
+                cc().swapTransactionStack(_stack);
+            }
+            ~WithTxnStack() {
+                cc().swapTransactionStack(_stack);
+            }
+        };
 
         bool _getActive() const { scoped_lock l(_m); return _active; }
         void _setActive( bool b ) { scoped_lock l(_m); _active = b; }
@@ -791,7 +751,6 @@ namespace mongo {
             BSONObj min  = cmdObj["min"].Obj();
             BSONObj max  = cmdObj["max"].Obj();
             BSONElement shardId = cmdObj["shardId"];
-            BSONElement maxSizeElem = cmdObj["maxChunkSizeBytes"];
 
             if ( ns.empty() ) {
                 errmsg = "need to specify namespace in command";
@@ -821,12 +780,6 @@ namespace mongo {
                 errmsg = "need shardId";
                 return false;
             }
-
-            if ( maxSizeElem.eoo() || ! maxSizeElem.isNumber() ) {
-                errmsg = "need to specify maxChunkSizeBytes";
-                return false;
-            }
-            const long long maxChunkSize = maxSizeElem.numberLong(); // in bytes
 
             if ( ! shardingState.enabled() ) {
                 if ( cmdObj["configdb"].type() != String ) {
@@ -978,10 +931,6 @@ namespace mongo {
 
             MigrateStatusHolder statusHolder( ns , min , max , shardKeyPattern );
             {
-                // this gets a read lock, so we know we have a checkpoint for mods
-                if ( ! migrateFromStatus.storeCurrentLocs( maxChunkSize , errmsg , result ) )
-                    return false;
-
                 scoped_ptr<ScopedDbConnection> connTo(
                         ScopedDbConnection::getScopedDbConnection( toShard.getConnString() ) );
                 BSONObj res;
