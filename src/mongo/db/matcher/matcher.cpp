@@ -25,6 +25,87 @@
 
 namespace mongo {
 
+    class IndexKeyMatchableDocument : public MatchableDocument {
+    public:
+        IndexKeyMatchableDocument( const BSONObj& pattern,
+                                   const BSONObj& doc )
+            : _pattern( pattern ), _doc( doc ) {
+        }
+
+        BSONObj toBSON() const {
+            // TODO: this isn't quite correct because of dots
+            // don't think it'll ever be called though
+            return _doc.replaceFieldNames( _pattern );
+        }
+
+        virtual BSONElement getFieldDottedOrArray( const FieldRef& path,
+                                                   size_t* idxPath,
+                                                   bool* inArray ) const;
+
+        virtual void getFieldsDotted( const StringData& name,
+                                      BSONElementSet &ret,
+                                      bool expandLastArray = true ) const;
+
+    private:
+
+        BSONElement _getElement( const FieldRef& path ) const;
+
+        BSONObj _pattern;
+        BSONObj _doc;
+
+    };
+
+    BSONElement IndexKeyMatchableDocument::_getElement( const FieldRef& path ) const {
+        BSONObjIterator patternIterator( _pattern );
+        BSONObjIterator docIterator( _doc );
+
+        while ( patternIterator.more() ) {
+            BSONElement patternElement = patternIterator.next();
+            verify( docIterator.more() );
+            BSONElement docElement = docIterator.next();
+
+            if ( path.equalsDottedField( patternElement.fieldName() ) ) {
+                return docElement;
+            }
+        }
+
+        return BSONElement();
+    }
+
+
+    BSONElement IndexKeyMatchableDocument::getFieldDottedOrArray( const FieldRef& path,
+                                                                  size_t* idxPath,
+                                                                  bool* inArray ) const {
+        BSONElement res = _getElement( path );
+        if ( !res.eoo() ) {
+            *idxPath = path.numParts() - 1;
+            *inArray = false;
+        }
+
+        return res;
+    }
+
+    void IndexKeyMatchableDocument::getFieldsDotted( const StringData& name,
+                                                     BSONElementSet &ret,
+                                                     bool expandLastArray ) const {
+        BSONObjIterator patternIterator( _pattern );
+        BSONObjIterator docIterator( _pattern );
+
+        while ( patternIterator.more() ) {
+            BSONElement patternElement = patternIterator.next();
+            verify( docIterator.more() );
+            BSONElement docElement = docIterator.next();
+
+            if ( name == patternElement.fieldName() ) {
+                ret.insert( docElement );
+            }
+        }
+
+    }
+
+
+    // -----------------
+
     Matcher2::Matcher2( const BSONObj& pattern, bool nested )
         : _pattern( pattern ) {
 
@@ -172,7 +253,7 @@ namespace mongo {
         case MatchExpression::MOD:
         case MatchExpression::MATCH_IN: {
             const LeafMatchExpression* lme = static_cast<const LeafMatchExpression*>( full );
-            if ( !keys.count( lme->getPath().toString() ) )
+            if ( !keys.count( lme->path().toString() ) )
                 return NULL;
             return lme->shallowClone();
         }

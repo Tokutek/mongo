@@ -38,7 +38,7 @@ namespace mongo {
 
         bool traversedArray = false;
         size_t idxPath = 0;
-        BSONElement e = doc->getFieldDottedOrArray( _fieldRef, &idxPath, &traversedArray );
+        BSONElement e = doc->getFieldDottedOrArray( path, &idxPath, &traversedArray );
 
         if ( e.type() != Array || traversedArray || idxPath + 1 == _fieldRef.numParts() ) {
             return matchesSingleElement( e );
@@ -134,8 +134,8 @@ namespace mongo {
         path.parse(_path);
 
         bool traversedArray = false;
-        int32_t idxPath = 0;
-        BSONElement e = getFieldDottedOrArray( doc, path, &idxPath, &traversedArray );
+        size_t idxPath = 0;
+        BSONElement e = doc->getFieldDottedOrArray( path, &idxPath, &traversedArray );
 
         string rest = path.dottedField( idxPath+1 );
 
