@@ -24,7 +24,8 @@ db2.dropDatabase(); // make sure everybody's empty
 
 assert.eq( 0 , db.system.indexes.count() , "setup1" );
 c.ensureIndex({ x : 1} );
-assert.eq( 2 , db.system.indexes.count() , "setup2" ); // _id and x_1
+// namespaces($_) + dumprestore4(_id, x)
+assert.eq( 3 , db.system.indexes.count() , "setup2" );
 
 assert.eq( 0, t.runTool( "dump" , "-d" , dbname, "--out", t.ext ), "dump")
 
@@ -35,8 +36,8 @@ c.drop();
 assert.eq( 0, t.runTool( "restore" , "--dir" , t.ext + "/" + dbname, "-d", dbname2 ), "restore" );
 
 // issue (1)
-assert.eq( 2 , db2.system.indexes.count() , "after restore 1" );
+assert.eq( 3 , db2.system.indexes.count() , "after restore 1" );
 // issue (2)
-assert.eq( 0 , db.system.indexes.count() , "after restore 2" );
+assert.eq( 1 , db.system.indexes.count() , "after restore 2" ); // namespaces($_)
 
 t.stop();
