@@ -145,6 +145,13 @@ namespace mongo {
                 writeOpsToOplog(gtid, timestamp, hash);
             }
         }
+        // handle work related to logging of transaction for chunk migrations
+        if (hasParent()) {
+            transferOpsForShardingToParent();
+        }
+        else {
+            writeOpsToMigrateLog();
+        }
         _txn.commit(flags);
         // if the commit of this transaction got a GTID, then notify 
         // the GTIDManager that the commit is now done.
@@ -202,9 +209,6 @@ namespace mongo {
             BSONElement curr = iter.next();
             _parent->logOpForReplication(curr.Obj());
         }
-
-        _parent->_txnOpsForSharding.insert(_parent->_txnOpsForSharding.end(),
-                                           _txnOpsForSharding.begin(), _txnOpsForSharding.end());
     }
 
     void TxnContext::writeOpsToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {
@@ -212,6 +216,15 @@ namespace mongo {
         dassert(_logTxnToOplog);
         BSONArray array = _txnOps.arr();
         _logTxnToOplog(gtid, timestamp, hash, array);
+    }
+
+    void TxnContext::transferOpsForShardingToParent() {
+        _parent->_txnOpsForSharding.insert(_parent->_txnOpsForSharding.end(),
+                                           _txnOpsForSharding.begin(), _txnOpsForSharding.end());
+    }
+
+    void TxnContext::writeOpsToMigrateLog() {
+        // TODO
     }
 
     void CappedCollectionRollback::_complete(const bool committed) {

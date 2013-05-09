@@ -160,6 +160,8 @@ namespace mongo {
         // transfer operations in _txnOps to _parent->_txnOps
         void transferOpsToParent();
         void writeOpsToOplog(GTID gtid, uint64_t timestamp, uint64_t hash);
+        void transferOpsForShardingToParent();
+        void writeOpsToMigrateLog();
     };
 
 } // namespace mongo
