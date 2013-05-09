@@ -1882,20 +1882,38 @@ namespace mongo {
             // read lock
             verify( ! c->logTheOp() );
             string ns = c->parseNs(dbname, cmdObj);
-            scoped_ptr<Lock::GlobalRead> lk;
-            if( c->lockGlobally() )
-                lk.reset( new Lock::GlobalRead() );
 
-            // Read contexts use a snapshot transaction and are marked as read only.
-            Client::ReadContext ctx( ns , dbpath, c->requiresAuth() ); // read locks
+            try {
+                scoped_ptr<Lock::ScopedLock> lk(c->lockGlobally()
+                                                ? static_cast<Lock::ScopedLock *>(new Lock::GlobalRead())
+                                                : static_cast<Lock::ScopedLock *>(new Lock::DBRead(ns)));
+                Client::Context ctx(ns, dbpath, c->requiresAuth());
+                scoped_ptr<Client::Transaction> txn((!fromRepl && c->needsTxn())
+                                                    ? new Client::Transaction(c->txnFlags())
+                                                    : NULL);
 
-            scoped_ptr<Client::Transaction> transaction((!fromRepl && c->needsTxn()) ? new Client::Transaction(c->txnFlags()) : NULL);
+                client.curop()->ensureStarted();
+                retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
 
-            client.curop()->ensureStarted();
-            retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
+                if (retval && txn) {
+                    txn->commit();
+                }
+            }
+            catch (RetryWithWriteLock) {
+                scoped_ptr<Lock::ScopedLock> lk(c->lockGlobally()
+                                                ? static_cast<Lock::ScopedLock *>(new Lock::GlobalWrite())
+                                                : static_cast<Lock::ScopedLock *>(new Lock::DBWrite(dbname)));
+                Client::Context ctx(ns, dbpath, c->requiresAuth());
+                scoped_ptr<Client::Transaction> txn((!fromRepl && c->needsTxn())
+                                                    ? new Client::Transaction(c->txnFlags())
+                                                    : NULL);
 
-            if (retval && transaction) {
-                transaction->commit();
+                client.curop()->ensureStarted();
+                retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
+
+                if (retval && txn) {
+                    txn->commit();
+                }
             }
         }
         else {
@@ -1910,14 +1928,15 @@ namespace mongo {
                     log() << "need global W lock but already have w on command : " << cmdObj.toString() << endl;
                 }
             }
-            scoped_ptr<Lock::ScopedLock> lk( global ? 
-                                             static_cast<Lock::ScopedLock*>( new Lock::GlobalWrite() ) :
-                                             static_cast<Lock::ScopedLock*>( new Lock::DBWrite( dbname ) ) );
-
-            scoped_ptr<Client::Transaction> transaction((!fromRepl && c->needsTxn()) ? new Client::Transaction(c->txnFlags()) : NULL);
+            scoped_ptr<Lock::ScopedLock> lk(global
+                                            ? static_cast<Lock::ScopedLock*>(new Lock::GlobalWrite())
+                                            : static_cast<Lock::ScopedLock*>(new Lock::DBWrite(dbname)));
+            Client::Context tc(dbname, dbpath, c->requiresAuth());
+            scoped_ptr<Client::Transaction> transaction((!fromRepl && c->needsTxn())
+                                                        ? new Client::Transaction(c->txnFlags())
+                                                        : NULL);
 
             client.curop()->ensureStarted();
-            Client::Context tc(dbname, dbpath, c->requiresAuth());
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
             if ( retval && c->logTheOp() && ! fromRepl ) {
                 OpLogHelpers::logCommand(cmdns, cmdObj, &cc().txn());
