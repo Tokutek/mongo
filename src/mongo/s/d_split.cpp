@@ -622,10 +622,8 @@ namespace mongo {
             vector<ChunkInfo> newChunks;
 
             try {
-                shared_ptr<ScopedDbConnection> conn(
-                    ScopedDbConnection::getInternalScopedDbConnection(
-                        shardingState.getConfigServer() ) );
-                RemoteTransaction txn(conn, "serializable");
+                scoped_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer()));
+                RemoteTransaction txn(conn->conn(), "serializable");
 
                 // Check the precondition
                 BSONObjBuilder b;

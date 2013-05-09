@@ -26,8 +26,8 @@
 
 namespace mongo {
 
-    RemoteTransaction::RemoteTransaction(shared_ptr<ScopedDbConnection> conn, const string &isolation) : _conn(conn) {
-        bool ok = _conn->get()->beginTransaction(isolation);
+    RemoteTransaction::RemoteTransaction(DBClientWithCommands &conn, const string &isolation) : _conn(&conn) {
+        bool ok = _conn->beginTransaction(isolation);
         verify(ok);
     }
 
@@ -45,17 +45,17 @@ namespace mongo {
     }
 
     bool RemoteTransaction::commit(BSONObj *res) {
-        bool ok = _conn->get()->commitTransaction(res);
+        bool ok = _conn->commitTransaction(res);
         if (ok) {
-            _conn.reset();
+            _conn = NULL;
         }
         return ok;
     }
 
     bool RemoteTransaction::rollback(BSONObj *res) {
-        bool ok = _conn->get()->rollbackTransaction(res);
+        bool ok = _conn->rollbackTransaction(res);
         if (ok) {
-            _conn.reset();
+            _conn = NULL;
         }
         return ok;
     }

@@ -22,21 +22,23 @@
 
 namespace mongo {
 
-    class ScopedDbConnection;
+    class DBClientWithCommands;
     class BSONObj;
 
     /**
-       RemoteTransaction manages the lifetime of a multi-statement transaction on another machine, over a ScopedDbConnection.
+       RemoteTransaction manages the lifetime of a multi-statement transaction on another machine.
        When created, it begins a transaction on the remote machine, and when destroyed, if the transaction is still live, it performs a rollback.
 
+       You should only issue requests related to this transaction along this connection.
+       You should consider getting the connection from a ScopedDbConnection if possible.
        You should not close the connection until the transaction has committed or rolled back.
 
        Example:
 
-           shared_ptr<ScopedDbConnection> conn(ScopedDbConnection::getScopedDbConnection("localhost:27017"));
+           scoped_ptr<ScopedDbConnection> conn(ScopedDbConnection::getScopedDbConnection("localhost:27017"));
            {
                // If the insert to ns2.mycoll fails below, the entire transaction is rolled back.
-               RemoteTransaction txn(conn);
+               RemoteTransaction txn(conn->conn());
                conn->get()->insert("ns1.mycoll", BSON("a" << 1 << "b" << 1));
                conn->get()->insert("ns2.mycoll", BSON("x" << 2 << "y" << 2));
                txn.commit();
@@ -44,13 +46,13 @@ namespace mongo {
            conn->done();
      */
     class RemoteTransaction : boost::noncopyable {
-        shared_ptr<ScopedDbConnection> _conn;
+        DBClientWithCommands *_conn;
       public:
         /** Creates a remote transaction using a ScopedDbConnection.
             @param conn -- The connection to use for this transaction.
             @param isolation -- What isolation level to use.  Possible values are serializable, mvcc (default), and readUncommitted.
         */
-        RemoteTransaction(shared_ptr<ScopedDbConnection> conn, const string &isolation = "mvcc");
+        RemoteTransaction(DBClientWithCommands &conn, const string &isolation = "mvcc");
         /** Rolls back the transaction if necessary, and releases the underlying connection. */
         ~RemoteTransaction();
         /** Commits the transaction and releases the underlying connection.

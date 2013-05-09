@@ -1160,8 +1160,8 @@ namespace mongo {
                 // local one (so to bump version for the entire shard)
 
                 try {
-                    shared_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer(), 10.0));
-                    RemoteTransaction txn(conn, "serializable");
+                    scoped_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer(), 10.0));
+                    RemoteTransaction txn(conn->conn(), "serializable");
 
                     // Check the precondition
                     BSONObjBuilder b;
