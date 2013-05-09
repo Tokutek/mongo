@@ -23,6 +23,9 @@
 #include "mongo/db/repl.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/storage/env.h"
+
+#include "mongo/s/d_logic.h"
+
 #include "mongo/util/time_support.h"
 
 namespace mongo {
@@ -31,18 +34,22 @@ namespace mongo {
     // because this bool depends on replication, and replication is not
     // compiled with coredb. So, in startReplication, we will set this
     // to true
-    static bool _logTxnOperations = false;
+    static bool _logTxnOpsForReplication = false;
+    static bool _logTxnOpsForSharding = false;
     static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) = NULL;
+    static bool (*_shouldLogOpForSharding)(const char *, const char *, const BSONObj &) = NULL;
+    static bool (*_shouldLogUpdateOpForSharding)(const char *, const char *, const BSONObj &, const BSONObj &) = NULL;
+
     static GTIDManager* txnGTIDManager = NULL;
 
     TxnCompleteHooks *_completeHooks;
 
-    void setTxnLogOperations(bool val) {
-        _logTxnOperations = val;
+    void setLogTxnOpsForReplication(bool val) {
+        _logTxnOpsForReplication = val;
     }
 
-    bool logTxnOperations() {
-        return _logTxnOperations;
+    bool logTxnOpsForReplication() {
+        return _logTxnOpsForReplication;
     }
 
     void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo)) {
@@ -55,6 +62,39 @@ namespace mongo {
 
     void setTxnCompleteHooks(TxnCompleteHooks *hooks) {
         _completeHooks = hooks;
+    }
+
+    void enableLogTxnOpsForSharding(bool (*shouldLogOp)(const char *, const char *, const BSONObj &),
+                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &)) {
+        _logTxnOpsForSharding = true;
+        _shouldLogOpForSharding = shouldLogOp;
+        _shouldLogUpdateOpForSharding = shouldLogUpdateOp;
+    }
+
+    void disableLogTxnOpsForSharding(void) {
+        _logTxnOpsForSharding = false;
+        _shouldLogOpForSharding = NULL;
+        _shouldLogUpdateOpForSharding = NULL;
+    }
+
+    bool logTxnOpsForSharding() {
+        return _logTxnOpsForSharding;
+    }
+
+    bool shouldLogTxnOpForSharding(const char *opstr, const char *ns, const BSONObj &row) {
+        if (!logTxnOpsForSharding()) {
+            return false;
+        }
+        dassert(_shouldLogOpForSharding != NULL);
+        return _shouldLogOpForSharding(opstr, ns, row);
+    }
+
+    bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj) {
+        if (!logTxnOpsForSharding()) {
+            return false;
+        }
+        dassert(_shouldLogUpdateOpForSharding != NULL);
+        return _shouldLogUpdateOpForSharding(opstr, ns, oldObj, newObj);
     }
 
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
@@ -136,11 +176,15 @@ namespace mongo {
         _retired = true;
     }
 
-    void TxnContext::logOp(BSONObj op) {
-        if (_logTxnOperations) {
-            _txnOps.append(op);
-            _numOperations++;
-        }
+    void TxnContext::logOpForReplication(BSONObj op) {
+        dassert(logTxnOpsForReplication());
+        _txnOps.append(op);
+        _numOperations++;
+    }
+
+    void TxnContext::logOpForSharding(BSONObj op) {
+        dassert(logTxnOpsForSharding());
+        _txnOpsForSharding.push_back(op);
     }
 
     bool TxnContext::hasParent() {
@@ -156,12 +200,15 @@ namespace mongo {
         BSONObjIterator iter(array);
         while (iter.more()) {
             BSONElement curr = iter.next();
-            _parent->logOp(curr.Obj());
+            _parent->logOpForReplication(curr.Obj());
         }
+
+        _parent->_txnOpsForSharding.insert(_parent->_txnOpsForSharding.end(),
+                                           _txnOpsForSharding.begin(), _txnOpsForSharding.end());
     }
 
     void TxnContext::writeOpsToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {
-        dassert(_logTxnOperations);
+        dassert(logTxnOpsForReplication());
         dassert(_logTxnToOplog);
         BSONArray array = _txnOps.arr();
         _logTxnToOplog(gtid, timestamp, hash, array);

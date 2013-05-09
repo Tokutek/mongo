@@ -251,5 +251,7 @@ namespace mongo {
     }
 
     void logOpForSharding( const char * opstr , const char * ns , const BSONObj& obj , BSONObj * patt );
+    bool shouldLogOpForSharding(const char *opstr, const char *ns, const BSONObj &obj);
+    bool shouldLogUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj);
 
 }

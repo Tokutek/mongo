@@ -65,16 +65,17 @@ namespace OpLogHelpers{
     }
     
     void logComment(BSONObj comment, TxnContext* txn) {
-        if (logTxnOperations()) {
+        if (logTxnOpsForReplication()) {
             BSONObjBuilder b;
             appendOpType(OP_STR_COMMENT, &b);
             b.append(KEY_STR_COMMENT, comment);
-            txn->logOp(b.obj());
+            txn->logOpForReplication(b.obj());
         }
     }
     
     void logInsert(const char* ns, BSONObj row, TxnContext* txn) {
-        if (logTxnOperations()) {
+        bool logForSharding = shouldLogTxnOpForSharding(OP_STR_INSERT, ns, row);
+        if (logTxnOpsForReplication() || logForSharding) {
             BSONObjBuilder b;
             if (isLocalNs(ns)) {
                 return;
@@ -83,7 +84,13 @@ namespace OpLogHelpers{
             appendOpType(OP_STR_INSERT, &b);
             appendNsStr(ns, &b);
             b.append(KEY_STR_ROW, row);
-            txn->logOp(b.obj());
+            BSONObj logObj = b.obj();
+            if (logTxnOpsForReplication()) {
+                txn->logOpForReplication(logObj);
+            }
+            if (logForSharding) {
+                txn->logOpForSharding(logObj);
+            }
         }
     }
 
@@ -94,7 +101,7 @@ namespace OpLogHelpers{
         TxnContext* txn
         ) 
     {
-        if (logTxnOperations()) {
+        if (logTxnOpsForReplication()) {
             BSONObjBuilder b;
             if (isLocalNs(ns)) {
                 return;
@@ -104,7 +111,7 @@ namespace OpLogHelpers{
             appendNsStr(ns, &b);
             b.append(KEY_STR_PK, pk);
             b.append(KEY_STR_ROW, row);
-            txn->logOp(b.obj());
+            txn->logOpForReplication(b.obj());
         }
     }
 
@@ -117,7 +124,8 @@ namespace OpLogHelpers{
         TxnContext* txn
         ) 
     {
-        if (logTxnOperations()) {
+        bool logForSharding = !fromMigrate && shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldRow, newRow);
+        if (logTxnOpsForReplication() || logForSharding) {
             BSONObjBuilder b;
             if (isLocalNs(ns)) {
                 return;
@@ -129,12 +137,19 @@ namespace OpLogHelpers{
             b.append(KEY_STR_PK, pk);
             b.append(KEY_STR_OLD_ROW, oldRow);
             b.append(KEY_STR_NEW_ROW, newRow);
-            txn->logOp(b.obj());
+            BSONObj logObj = b.obj();
+            if (logTxnOpsForReplication()) {
+                txn->logOpForReplication(logObj);
+            }
+            if (logForSharding) {
+                txn->logOpForSharding(logObj);
+            }
         }
     }
 
     void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn) {
-        if (logTxnOperations()) {
+        bool logForSharding = !fromMigrate && shouldLogTxnOpForSharding(OP_STR_DELETE, ns, row);
+        if (logTxnOpsForReplication() || logForSharding) {
             BSONObjBuilder b;
             if (isLocalNs(ns)) {
                 return;
@@ -144,7 +159,13 @@ namespace OpLogHelpers{
             appendNsStr(ns, &b);
             appendMigrate(fromMigrate, &b);
             b.append(KEY_STR_ROW, row);
-            txn->logOp(b.obj());
+            BSONObj logObj = b.obj();
+            if (logTxnOpsForReplication()) {
+                txn->logOpForReplication(logObj);
+            }
+            if (logForSharding) {
+                txn->logOpForSharding(logObj);
+            }
         }
     }
 
@@ -155,7 +176,7 @@ namespace OpLogHelpers{
         TxnContext* txn
         ) 
     {
-        if (logTxnOperations()) {
+        if (logTxnOpsForReplication()) {
             BSONObjBuilder b;
             if (isLocalNs(ns)) {
                 return;
@@ -165,12 +186,15 @@ namespace OpLogHelpers{
             appendNsStr(ns, &b);
             b.append(KEY_STR_PK, pk);
             b.append(KEY_STR_ROW, row);
-            txn->logOp(b.obj());
+            txn->logOpForReplication(b.obj());
         }
     }
 
     void logCommand(const char* ns, BSONObj row, TxnContext* txn) {
-        if (logTxnOperations()) {
+        // We do not need to log for sharding because commands are only logged right now if they
+        // take a write lock, and we have a read lock the whole time we're logging things for
+        // sharding.  TODO: If this changes, we need to start logging commands.
+        if (logTxnOpsForReplication()) {
             BSONObjBuilder b;
             if (isLocalNs(ns)) {
                 return;
@@ -179,7 +203,7 @@ namespace OpLogHelpers{
             appendOpType(OP_STR_COMMAND, &b);
             appendNsStr(ns, &b);
             b.append(KEY_STR_ROW, row);
-            txn->logOp(b.obj());
+            txn->logOpForReplication(b.obj());
         }
     }
 

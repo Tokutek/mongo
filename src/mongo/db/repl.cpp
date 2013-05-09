@@ -195,7 +195,7 @@ namespace mongo {
         /* if we are going to be a replica set, we aren't doing other forms of replication. */
         if( !cmdLine._replSet.empty() ) {
             replSet = true;
-            setTxnLogOperations(true);
+            setLogTxnOpsForReplication(true);
             setLogTxnToOplog(logTransactionOps);
             ReplSetCmdline *replSetCmdline = new ReplSetCmdline(cmdLine._replSet);
             boost::thread t( boost::bind( &startReplSets, replSetCmdline) );

@@ -40,6 +40,7 @@
 #include "mongo/db/repl_block.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/repl.h"
+#include "mongo/db/txn_context.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
 
@@ -317,9 +318,29 @@ namespace mongo {
             _memoryUsed = 0;
 
             scoped_lock l(_m);
+            disableLogTxnOpsForSharding();
             _snapshotTaken = false;
             _active = false;
             _inCriticalSection = false;
+        }
+
+        bool shouldLogOp(const char *opstr, const char *ns, const BSONObj &obj) {
+            // TODO: actually do this.
+            return false;
+        }
+
+        bool shouldLogUpdateOp(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj) {
+            // Just a sanity check.  ShardStrategy::_prepareUpdate() appears to prevent you from updating a document such that the shard key changes.
+            // We just verify that old and new have the same shard key, and pass to the normal case.
+            // But we call shouldLogOp first to avoid doing the comparison if, say, we're in the wrong ns and we can stop early.
+            bool should = shouldLogOp(opstr, ns, oldObj);
+            if (should) {
+                ShardKeyPattern shardKey(_shardKeyPattern);
+                BSONObj oldKey = shardKey.extractKey(oldObj);
+                BSONObj newKey = shardKey.extractKey(newObj);
+                verify(oldKey.equal(newKey));
+            }
+            return should;
         }
 
         void logOp( const char * opstr , const char * ns , const BSONObj& obj , BSONObj * patt ) {
@@ -460,6 +481,8 @@ namespace mongo {
             if (_cc.get() == NULL) {
                 dassert(!_txn);
                 Client::WriteContext ctx(_ns);
+                enableLogTxnOpsForSharding(shouldLogOpForSharding,
+                                           shouldLogUpdateOpForSharding);
                 _snapshotTaken = true;
                 _txn.reset(new Client::Transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY));
 
@@ -676,6 +699,14 @@ namespace mongo {
 
     void logOpForSharding( const char * opstr , const char * ns , const BSONObj& obj , BSONObj * patt ) {
         migrateFromStatus.logOp( opstr , ns , obj , patt );
+    }
+
+    bool shouldLogOpForSharding(const char *opstr, const char *ns, const BSONObj &obj) {
+        return migrateFromStatus.shouldLogOp(opstr, ns, obj);
+    }
+
+    bool shouldLogUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj) {
+        return migrateFromStatus.shouldLogUpdateOp(opstr, ns, oldObj, newObj);
     }
 
     class TransferModsCommand : public ChunkCommandHelper {

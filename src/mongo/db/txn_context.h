@@ -29,8 +29,13 @@ namespace mongo {
     class GTID;
     class GTIDManager;
 
-    void setTxnLogOperations(bool val);
-    bool logTxnOperations();
+    void setLogTxnOpsForReplication(bool val);
+    bool logTxnOpsForReplication();
+    void enableLogTxnOpsForSharding(bool (*shouldLogOp)(const char *, const char *, const BSONObj &),
+                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &));
+    void disableLogTxnOpsForSharding(void);
+    bool shouldLogTxnOpForSharding(const char *opstr, const char *ns, const BSONObj &obj);
+    bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj);
     void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo));
     void setTxnGTIDManager(GTIDManager* m);
 
@@ -113,6 +118,8 @@ namespace mongo {
         BSONArrayBuilder _txnOps;
         uint64_t _numOperations; //number of operations added to _txnOps
 
+        vector<BSONObj> _txnOpsForSharding;
+
         // this is a hack. During rs initiation, where we log a comment
         // to the opLog, we don't have a gtidManager available yet. We
         // set this bool to let commit know that it is ok to not have a gtidManager
@@ -136,7 +143,8 @@ namespace mongo {
         // log an operations, represented in op, to _txnOps
         // if and when the root transaction commits, the operation
         // will be added to the opLog
-        void logOp(BSONObj op);        
+        void logOpForReplication(BSONObj op);        
+        void logOpForSharding(BSONObj op);        
         bool hasParent();
         void txnIntiatingRs();
 
