@@ -40,6 +40,7 @@
 #include "mongo/db/cursor.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/instance.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/txn_context.h"
@@ -338,6 +339,7 @@ namespace mongo {
                 Client::Transaction txn(DB_SERIALIZABLE);
                 dropCollection(MIGRATE_LOG_NS, err, res, false);
                 _nextMigrateLogId.store(0);
+                _nextIdToTransfer = 0;
                 _migrateLogDetails = getAndMaybeCreateNS(MIGRATE_LOG_NS, false);
                 verify(_migrateLogDetails != NULL);
                 txn.commit();
@@ -426,35 +428,6 @@ namespace mongo {
             insertOneObject(nsdetails(MIGRATE_LOG_NS), NULL, logObj, ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
         }
 
-        void xfer( list<BSONObj> * l , BSONObjBuilder& b , const char * name , long long& size , bool explode ) {
-            const long long maxSize = 1024 * 1024;
-
-            if ( l->size() == 0 || size > maxSize )
-                return;
-
-            BSONArrayBuilder arr(b.subarrayStart(name));
-
-            list<BSONObj>::iterator i = l->begin();
-
-            while ( i != l->end() && size < maxSize ) {
-                BSONObj t = *i;
-                if ( explode ) {
-                    BSONObj it;
-                    if ( Helpers::findById( _ns.c_str() , t, it ) ) {
-                        arr.append( it );
-                        size += it.objsize();
-                    }
-                }
-                else {
-                    arr.append( t );
-                }
-                i = l->erase( i );
-                size += t.objsize();
-            }
-
-            arr.done();
-        }
-
         /**
          * called from the dest of a migrate
          * transfers mods from src to dest
@@ -465,17 +438,26 @@ namespace mongo {
                 return false;
             }
 
-            long long size = 0;
+            BSONArrayBuilder arr(b.subarrayStart("mods"));
+            const long long maxSize = 1024 * 1024;
 
-            {
-                Client::ReadContext cx( _ns );
+            long long nextMigrateLogId = _nextMigrateLogId.load();
+            dassert(nextMigrateLogId >= _nextIdToTransfer);
 
-                xfer( &_deleted , b , "deleted" , size , false );
-                xfer( &_reload , b , "reload" , size , true );
+            if (nextMigrateLogId > _nextIdToTransfer) {
+                DBDirectClient conn;
+                auto_ptr<DBClientCursor> cur(conn.query(MIGRATE_LOG_NS, QUERY("_id" << GTE << _nextIdToTransfer << LT << nextMigrateLogId)));
+                while (cur->more()) {
+                    BSONObj obj = cur->next();
+                    if (arr.len() + obj.objsize() > maxSize) {
+                        break;
+                    }
+                    _nextIdToTransfer = obj["_id"].numberLong() + 1;
+                    arr.append(obj);
+                }
             }
 
-            b.append( "size" , size );
-
+            arr.done();
             return true;
         }
 
@@ -617,6 +599,7 @@ namespace mongo {
         static const char MIGRATE_LOG_NS[];
         NamespaceDetails *_migrateLogDetails;
         AtomicWord<long long> _nextMigrateLogId;
+        long long _nextIdToTransfer;
 
         bool _snapshotTaken;
         scoped_ptr<Client::Transaction> _txn;
@@ -1509,10 +1492,12 @@ namespace mongo {
                         conn.done();
                         return;
                     }
-                    if ( res["size"].number() == 0 )
+                    vector<BSONElement> modElements = res["mods"].Array();
+                    if (modElements.empty()) {
                         break;
+                    }
 
-                    apply( res , &lastGTID );
+                    apply(modElements, &lastGTID);
 
                     const int maxIterations = 3600*50;
                     int i;
@@ -1571,8 +1556,10 @@ namespace mongo {
                         return;
                     }
 
-                    if ( res["size"].number() > 0 && apply( res , &lastGTID) )
+                    vector<BSONElement> modElements = res["mods"].Array();
+                    if (apply(modElements, &lastGTID)) {
                         continue;
+                    }
 
                     if ( state == ABORT ) {
                         timing.note( "aborted" );
@@ -1623,70 +1610,31 @@ namespace mongo {
 
         }
 
-        bool apply( const BSONObj& xfer , GTID* lastGTID ) {
+        bool apply(const vector<BSONElement> &modElements, GTID* lastGTID) {
+            if (modElements.empty()) {
+                return false;
+            }
+
             GTID dummy;
             if ( lastGTID == NULL ) {
                 lastGTID = &dummy;
             }
 
-            bool didAnything = false;
-
-            Client::ReadContext cx(ns);
+            Client::ReadContext ctx(ns);
             Client::Transaction txn(DB_SERIALIZABLE);
 
-            if ( xfer["deleted"].isABSONObj() ) {
-                BSONObjIterator i( xfer["deleted"].Obj() );
-                while ( i.more() ) {
-
-                    BSONObj id = i.next().Obj();
-
-                    // do not apply deletes if they do not belong to the chunk being migrated
-                    BSONObj fullObj;
-                    if ( Helpers::findById( ns.c_str() , id, fullObj ) ) {
-                        if ( ! isInRange( fullObj , min , max , shardKeyPattern ) ) {
-                            log() << "not applying out of range deletion: " << fullObj << migrateLog;
-
-                            continue;
-                        }
-                    }
-
-                    // id object most likely has form { _id : ObjectId(...) }
-                    // infer from that correct index to use, e.g. { _id : 1 }
-                    BSONObj idIndexPattern;
-                    Helpers::toKeyFormat( id , idIndexPattern );
-
-                    // TODO: create a better interface to remove objects directly
-                    Helpers::removeRange( ns ,
-                                          id ,
-                                          id,
-                                          idIndexPattern ,
-                                          true , /*maxInclusive*/
-                                          /* cmdLine.moveParanoia ? &rs : 0 */ /*callback*/
-                                          true ); /*fromMigrate*/
-
-                    didAnything = true;
+            for (vector<BSONElement>::const_iterator it = modElements.begin(); it != modElements.end(); ++it) {
+                BSONObj mod = it->Obj();
+                vector<BSONElement> logObjElts = mod["a"].Array();
+                for (vector<BSONElement>::const_iterator lit = logObjElts.begin(); lit != logObjElts.end(); ++lit) {
+                    OpLogHelpers::applyOperationFromOplog(lit->Obj());
                 }
             }
 
-            if ( xfer["reload"].isABSONObj() ) {
-                BSONObjIterator i( xfer["reload"].Obj() );
-                while ( i.more() ) {
-                    BSONObj o = i.next().Obj();
+            txn.commit();
+            *lastGTID = ctx.ctx().getClient()->getLastOp();
 
-                    BSONObj id = o["_id"].wrap();
-                    OpDebug debug;
-                    updateObjects(ns.c_str(), o, id, true, false, true, debug, true);
-
-                    didAnything = true;
-                }
-            }
-
-            if (didAnything) {
-                txn.commit();
-                *lastGTID = cx.ctx().getClient()->getLastOp();
-            }
-
-            return didAnything;
+            return true;
         }
 
         bool opReplicatedEnough( const GTID& lastGTID ) {
