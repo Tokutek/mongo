@@ -192,8 +192,24 @@ namespace mongo {
                 
                 for ( size_t i=0; i<all.size(); i++ ) {
                     BSONObj temp = all[i];
-                    if ( isOk( temp ) )
-                        continue;
+                    if (isOk(temp)) {
+                        if (i == 0) {
+                            continue;
+                        }
+                        else {
+                            if (temp.equal(all[0])) {
+                                continue;
+                            }
+                            stringstream ss;
+                            ss << "write $cmd failed on a node: " << temp.jsonString()
+                               << " from " << _conns[i]->toString()
+                               << " differs from " << all[0].jsonString()
+                               << " from " << _conns[0]->toString()
+                               << " ns: " << ns
+                               << " cmd: " << query.toString();
+                            throw UserException(16780, ss.str());
+                        }
+                    }
                     stringstream ss;
                     ss << "write $cmd failed on a node: " << temp.jsonString();
                     ss << " " << _conns[i]->toString();
