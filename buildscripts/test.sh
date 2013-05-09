@@ -111,10 +111,10 @@ function test_mongodb() {
     do
         runsuite $extracted $suite
     done
-    for sconssuite in smokeJsSlowNightly
-    do
-        runscons $extracted $sconssuite
-    done
+    #for sconssuite in smokeJsSlowNightly
+    #do
+    #    runscons $extracted $sconssuite
+    #done
 }
 
 PATH=$HOME/bin:$PATH
