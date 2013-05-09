@@ -518,6 +518,9 @@ namespace mongo {
                 goLiveAsSecondary = true;
             }
         }
+        else {
+            changeState(MemberState::RS_ARBITER);
+        }
 
         // When we get here,
         // we know either the server is the sole primary in a single node
