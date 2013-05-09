@@ -26,6 +26,15 @@ namespace mongo {
 // helpers for opLog stuff
 namespace OpLogHelpers{
 
+    // values for types of operations in opLog
+    static const char OP_STR_INSERT[] = "i";
+    static const char OP_STR_CAPPED_INSERT[] = "ci";
+    static const char OP_STR_UPDATE[] = "u";
+    static const char OP_STR_DELETE[] = "d";
+    static const char OP_STR_CAPPED_DELETE[] = "cd";
+    static const char OP_STR_COMMENT[] = "n";
+    static const char OP_STR_COMMAND[] = "c";
+
     void logComment(BSONObj comment, TxnContext* txn);
     void logInsert(const char* ns, BSONObj row, TxnContext* txn);    
     void logInsertForCapped(const char* ns, BSONObj pk, BSONObj row, TxnContext* txn);

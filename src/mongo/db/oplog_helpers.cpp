@@ -35,15 +35,6 @@
 #define KEY_STR_COMMENT "o"
 #define KEY_STR_MIGRATE "fromMigrate"
 
-// values for types of operations in opLog
-#define OP_STR_INSERT "i"
-#define OP_STR_CAPPED_INSERT "ci"
-#define OP_STR_UPDATE "u"
-#define OP_STR_DELETE "d"
-#define OP_STR_CAPPED_DELETE "cd"
-#define OP_STR_COMMENT "n"
-#define OP_STR_COMMAND "c"
-
 namespace mongo {
 namespace OpLogHelpers{
 
