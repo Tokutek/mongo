@@ -36,9 +36,6 @@
 
 namespace mongo {
 
-    // from d_migrate.cpp
-    void logOpForSharding( const char * opstr , const char * ns , const BSONObj& obj , BSONObj * patt );
-
     int __findingStartInitialTimeout = 5; // configurable for testing
 
     // cached copies of these...so don't rename them, drop them, etc.!!!
@@ -123,8 +120,6 @@ namespace mongo {
     
     void logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
         _logTransactionOps(gtid, timestamp, hash, opInfo);
-        // TODO: Figure out for sharding
-        //logOpForSharding( opstr , ns , obj , patt );
     }
 
     void createOplog() {

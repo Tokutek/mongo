@@ -31,6 +31,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/dbhelpers.h"
+#include "mongo/db/db_flags.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/hasher.h"
@@ -39,6 +40,7 @@
 #include "mongo/db/cursor.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/oplog_helpers.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/ops/insert.h"
@@ -268,6 +270,8 @@ namespace mongo {
                   _active(false),
                   _memoryUsed(0),
                   _workLock("MigrateFromStatus::workLock"),
+                  _migrateLogDetails(NULL),
+                  _nextMigrateLogId(0),
                   _snapshotTaken(false) {}
 
         void start( string ns ,
@@ -300,6 +304,7 @@ namespace mongo {
             verify( _memoryUsed == 0 );
 
             _snapshotTaken = false;
+            clearMigrateLog();
             _active = true;
         }
 
@@ -320,12 +325,74 @@ namespace mongo {
             scoped_lock l(_m);
             disableLogTxnOpsForSharding();
             _snapshotTaken = false;
+            clearMigrateLog();
             _active = false;
             _inCriticalSection = false;
         }
 
+        void clearMigrateLog() {
+            string err;
+            BSONObjBuilder res;
+            try {
+                Client::WriteContext ctx(MIGRATE_LOG_NS);
+                Client::Transaction txn(DB_SERIALIZABLE);
+                dropCollection(MIGRATE_LOG_NS, err, res, false);
+                _nextMigrateLogId.store(0);
+                _migrateLogDetails = getAndMaybeCreateNS(MIGRATE_LOG_NS, false);
+                verify(_migrateLogDetails != NULL);
+                txn.commit();
+            }
+            catch (DBException &e) {
+                stringstream ss;
+                ss << "Error clearing " << MIGRATE_LOG_NS << " to prepare for chunk migration."
+                   << " err: " << err
+                   << " res: " << res.obj()
+                   << " exc: " << e.what();
+                problem() << ss.str() << endl;
+                throw e;
+            }
+        }
+
         bool shouldLogOp(const char *opstr, const char *ns, const BSONObj &obj) {
-            // TODO: actually do this.
+            if (!_getActive()) {
+                return false;
+            }
+
+            if (!mongoutils::str::equals(_ns.c_str(), ns)) {
+                return false;
+            }
+
+            massert(16781, mongoutils::str::stream()
+                    << "a capped collection is being sharded, this should not happen"
+                    << " ns: " << ns
+                    << " opstr: " << opstr,
+                    !(mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_CAPPED_INSERT) ||
+                      mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_CAPPED_DELETE)));
+
+            if (!_snapshotTaken) {
+                return false;
+            }
+
+            if (mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_DELETE) &&
+                getThreadName().find(cleanUpThreadName) == 0) {
+                // This really shouldn't happen but I'm having a hard time proving it right now.
+                problem() << "Someone tried to log a delete for migration while we're cleaning up a migration."
+                          << " This doesn't make sense since those deletes should be marked fromMigrate."
+                          << " The op is"
+                          << " opstr: " << opstr
+                          << " ns: " << ns
+                          << " obj: " << obj << endl;
+                // we don't want to xfer things we're cleaning
+                // as then they'll be deleted on TO
+                // which is bad
+                return false;
+            }
+
+            if (mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_INSERT) ||
+                mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_DELETE) ||
+                mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_UPDATE)) {
+                return isInRange(obj, _min, _max, _shardKeyPattern);
+            }
             return false;
         }
 
@@ -344,75 +411,19 @@ namespace mongo {
         }
 
         void writeOpsToMigrateLog(const vector<BSONObj> &objs) {
-            // TODO
-        }
-
-        void logOp( const char * opstr , const char * ns , const BSONObj& obj , BSONObj * patt ) {
-            if ( ! _getActive() )
-                return;
-
-            if ( _ns != ns )
-                return;
-
-            if (!_snapshotTaken) {
-                return;
-            }
-
-            // no need to log if this is not an insertion, an update, or an actual deletion
-            // note: opstr 'db' isn't a deletion but a mention that a database exists (for replication
-            // machinery mostly)
-            char op = opstr[0];
-            if ( op == 'n' || op =='c' || ( op == 'd' && opstr[1] == 'b' ) )
-                return;
-
-            BSONElement ide;
-            if ( patt )
-                ide = patt->getField( "_id" );
-            else
-                ide = obj["_id"];
-
-            if ( ide.eoo() ) {
-                warning() << "logOpForSharding got mod with no _id, ignoring  obj: " << obj << migrateLog;
-                return;
-            }
-
-            BSONObj it;
-
-            switch ( opstr[0] ) {
-
-            case 'd': {
-
-                if (getThreadName().find(cleanUpThreadName) == 0) {
-                    // we don't want to xfer things we're cleaning
-                    // as then they'll be deleted on TO
-                    // which is bad
-                    return;
+            BSONObjBuilder b;
+            b << "_id" << _nextMigrateLogId.fetchAndAdd(1);
+            {
+                BSONArrayBuilder arr(b.subarrayStart("a"));
+                for (vector<BSONObj>::const_iterator it = objs.begin(); it != objs.end(); ++it) {
+                    arr.append(*it);
                 }
-
-                // can't filter deletes :(
-                _deleted.push_back( ide.wrap() );
-                _memoryUsed += ide.size() + 5;
-                return;
+                arr.done();
             }
+            BSONObj logObj = b.obj();
 
-            case 'i':
-                it = obj;
-                break;
-
-            case 'u':
-                if ( ! Helpers::findById( _ns.c_str() , ide.wrap() , it ) ) {
-                    warning() << "logOpForSharding couldn't find: " << ide << " even though should have" << migrateLog;
-                    return;
-                }
-                break;
-
-            }
-
-            if ( ! isInRange( it , _min , _max , _shardKeyPattern ) )
-                return;
-
-            _reload.push_back( ide.wrap() );
-            _memoryUsed += ide.size() + 5;
+            Client::ReadContext ctx(MIGRATE_LOG_NS);
+            insertOneObject(nsdetails(MIGRATE_LOG_NS), NULL, logObj, ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
         }
 
         void xfer( list<BSONObj> * l , BSONObjBuilder& b , const char * name , long long& size , bool explode ) {
@@ -603,6 +614,10 @@ namespace mongo {
         mutable mongo::mutex _workLock; // this is used to make sure only 1 thread is doing serious work
                                         // for now, this means migrate or removing old chunk data
 
+        static const char MIGRATE_LOG_NS[];
+        NamespaceDetails *_migrateLogDetails;
+        AtomicWord<long long> _nextMigrateLogId;
+
         bool _snapshotTaken;
         scoped_ptr<Client::Transaction> _txn;
         shared_ptr<Client::TransactionStack> _txnStack;
@@ -623,6 +638,8 @@ namespace mongo {
         void _setActive( bool b ) { scoped_lock l(_m); _active = b; }
 
     } migrateFromStatus;
+
+    const char MigrateFromStatus::MIGRATE_LOG_NS[] = "local.migratelog.sh";
 
     struct MigrateStatusHolder {
         MigrateStatusHolder( string ns ,
@@ -700,10 +717,6 @@ namespace mongo {
         catch ( ... ) {
             log() << " unknown error cleaning old data" << migrateLog;
         }
-    }
-
-    void logOpForSharding( const char * opstr , const char * ns , const BSONObj& obj , BSONObj * patt ) {
-        migrateFromStatus.logOp( opstr , ns , obj , patt );
     }
 
     bool shouldLogOpForSharding(const char *opstr, const char *ns, const BSONObj &obj) {
