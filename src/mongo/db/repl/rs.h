@@ -353,8 +353,7 @@ namespace mongo {
         void startHealthTaskFor(Member *m);
 
         Consensus elect;
-        void relinquish();
-        void forgetPrimary();
+        void relinquish(bool startReplication = true);
     protected:
         bool _stepDown(int secs);
         bool _freeze(int secs);

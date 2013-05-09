@@ -121,8 +121,6 @@ namespace mongo {
                 return false;
             }
         }
-        // Lock here to prevent state from changing between checking the state and changing it
-        Lock::GlobalWrite writeLock;
 
         if (inc) {
             log() << "replSet going into maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
@@ -130,9 +128,14 @@ namespace mongo {
             stopReplication();
             _maintenanceMode++;
             RSBase::lock lk(this);
+            // Lock here to prevent state from changing between checking the state and changing it
+            // also, grab GlobalWrite here, because it must be grabbed after rslock
+            Lock::GlobalWrite writeLock;
             changeState(MemberState::RS_RECOVERING);
         }
         else {
+            // Lock here to prevent state from changing between checking the state and changing it
+            Lock::GlobalWrite writeLock;
             // user error
             if (_maintenanceMode <= 0) {
                 return false;
@@ -172,7 +175,7 @@ namespace mongo {
     }
 
     // Note, on input, stateChangeMutex and rslock must be held
-    void ReplSetImpl::relinquish() {
+    void ReplSetImpl::relinquish(bool startRepl) {
         {
             verify(lockedByMe());
             // so we know writes are not simultaneously occurring
@@ -188,7 +191,9 @@ namespace mongo {
                 // case they are not)
                 log() << "replSet closing client sockets after relinquishing primary" << rsLog;
                 MessagingPort::closeAllSockets(1);
-                startReplication();
+                if (startRepl) {
+                    startReplication();
+                }
             }
         }
 
@@ -196,15 +201,6 @@ namespace mongo {
         // if and when it gets promoted to a primary again, only then it should reload the sharding state
         // the rationale here is that this mongod won't bring stale state when it regains primaryhood
         shardingState.resetShardingState();
-    }
-
-    /* look freshly for who is primary - includes relinquishing ourself. */
-    void ReplSetImpl::forgetPrimary() {
-        if( box.getState().primary() )
-            relinquish();
-        else {
-            box.setOtherPrimary(0);
-        }
     }
 
     // for the replSetStepDown command
@@ -618,6 +614,23 @@ namespace mongo {
                 log() << c.toString() << rsLog;
 
                 loadConfig();  // redo config from scratch
+                // if we were shunned, and had to wait for a new config,
+                // reset the state to either arbiter or secondary, based on
+                // config options
+                //
+                // I don't know of a better way to do this, unfortunately
+                // The problem is I don't want the background sync threads to
+                // handle the state transitions, as those might become racy
+                // with maintenanceMode. So doing it here
+                if (iAmArbiterOnly()) {
+                    changeState(MemberState::RS_ARBITER);
+                }
+                else if (_maintenanceMode > 0 || _blockSync) {
+                    changeState(MemberState::RS_RECOVERING);
+                }
+                else {
+                    changeState(MemberState::RS_SECONDARY);
+                }
                 return false; 
             }
             uassert( 13302, "replSet error self appears twice in the repl set configuration", me<=1 );
@@ -676,7 +689,20 @@ namespace mongo {
             if( p )
                 oldPrimaryId = p->id();
         }
-        forgetPrimary();
+        
+        if( box.getState().primary() ) {
+            // If we are here, that means we must be doing
+            // a reconfig, and must have been called by
+            // haveNewConfig
+            verify(reconf);
+            // don't start replication in the middle of a config
+            // haveNewConfig will take care of restarting
+            // replication if we exit this as a secondary
+            relinquish(false);
+        }
+        else {
+            box.setOtherPrimary(0);
+        }
 
         // not setting _self to 0 as other threads use _self w/o locking
         int me = 0;
@@ -871,8 +897,17 @@ namespace mongo {
         newConfig.saveConfigLocally(comment);
 
         try {
+            boost::unique_lock<boost::mutex> lock(stateChangeMutex);
+            if (state().secondary()) {
+                stopReplication();
+            }
+            // going into this function, we know there is no replication running
             if (initFromConfig(newConfig, true)) {
                 log() << "replSet replSetReconfig new config saved locally" << rsLog;
+            }
+            // if necessary, restart replication
+            if (isSecondary()) {
+                startReplication();
             }
         }
         catch(DBException& e) {
