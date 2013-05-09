@@ -150,11 +150,13 @@ namespace mongo {
             }
         }
         // handle work related to logging of transaction for chunk migrations
-        if (hasParent()) {
-            transferOpsForShardingToParent();
-        }
-        else {
-            writeTxnOpsToMigrateLog();
+        if (!_txnOpsForSharding.empty()) {
+            if (hasParent()) {
+                transferOpsForShardingToParent();
+            }
+            else {
+                writeTxnOpsToMigrateLog();
+            }
         }
         _txn.commit(flags);
         // if the commit of this transaction got a GTID, then notify 
