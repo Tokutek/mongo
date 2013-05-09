@@ -789,7 +789,7 @@ namespace mongo {
         public:
             NotAllowedOnShardedClusterCmd(const char *n) : PublicGridCommand(n) {}
 
-            virtual bool run(const string &, BSONObj &, int, string &, BSONObjBuilder &, bool) {
+            virtual bool run(const string &, BSONObj &, int, string &errmsg, BSONObjBuilder &, bool) {
                 // TODO: Allow multi-statement transactions on databases that aren't sharded.
                 // This requires us to restrict a multi-statement transaction to a single database, which we're not sure we want to do yet.
                 errmsg = "can't do command: " + name + " on sharded cluster";
