@@ -434,14 +434,14 @@ namespace mongo {
             GTID lastGTID = getGTIDFromBSON("_id", o);
             uint64_t lastTime = o["ts"]._numberLong();
             uint64_t lastHash = o["h"].numberLong();
-            gtidManager = new GTIDManager(lastGTID, lastTime, lastHash);
+            gtidManager = new GTIDManager(lastGTID, lastTime, lastHash, _id);
             setTxnGTIDManager(gtidManager);
             
         }
         else {
             // make a GTIDManager that starts from scratch
             GTID lastGTID;
-            gtidManager = new GTIDManager(lastGTID, curTimeMillis64(), 0);
+            gtidManager = new GTIDManager(lastGTID, curTimeMillis64(), 0, _id);
             setTxnGTIDManager(gtidManager);
         }
         txn.commit();

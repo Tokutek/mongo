@@ -90,7 +90,8 @@ namespace mongo {
 
 
     
-    GTIDManager::GTIDManager( GTID lastGTID, uint64_t lastTime, uint64_t lastHash ) {
+    GTIDManager::GTIDManager( GTID lastGTID, uint64_t lastTime, uint64_t lastHash, uint32_t id ) {
+        _selfID = id;
         _lastLiveGTID = lastGTID;
         _minLiveGTID = _lastLiveGTID;
         _minLiveGTID.inc(); // comment this
@@ -122,7 +123,7 @@ namespace mongo {
         *gtid = _lastLiveGTID;
         _liveGTIDs.insert(*gtid);
         _lastTimestamp = *timestamp;
-        *hash = _lastHash + 1; // temporary
+        *hash = (_lastHash* 131 + *timestamp) * 17 + _selfID;
         _lastHash = *hash;
     }
     

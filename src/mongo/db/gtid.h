@@ -96,9 +96,11 @@ namespace mongo {
         // in milliseconds, derived from curTimeMillis64
         uint64_t _lastTimestamp;
         uint64_t _lastHash;
+
+        uint32_t _selfID; // used for hash construction
         
         public:            
-        GTIDManager( GTID lastGTID, uint64_t lastTime, uint64_t lastHash );
+        GTIDManager( GTID lastGTID, uint64_t lastTime, uint64_t lastHash, uint32_t id );
         ~GTIDManager();
 
         // methods for running on a primary
