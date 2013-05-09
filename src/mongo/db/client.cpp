@@ -162,7 +162,16 @@ namespace mongo {
         _ns( ns ), 
         _db(0)
     {
-        _finishInit( doauth );
+        try {
+            _finishInit( doauth );
+        }
+        catch (RetryWithWriteLock &e) {
+            // we need to manually clean up but still re-throw, because we're in the constructor
+            _client->_curOp->recordGlobalTime(_timer.micros());
+            _client->_curOp->leave( this );
+            _client->_context = _oldContext;
+            throw e;
+        }
     }
 
     /** "read lock, and set my context, all in one operation" 
