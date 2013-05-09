@@ -785,6 +785,34 @@ namespace mongo {
 
         } DataSizeCmd;
 
+        class NotAllowedOnShardedClusterCmd : public PublicGridCommand {
+        public:
+            NotAllowedOnShardedClusterCmd(const char *n) : PublicGridCommand(n) {}
+
+            virtual bool run(const string &, BSONObj &, int, string &, BSONObjBuilder &, bool) {
+                // TODO: Allow multi-statement transactions on databases that aren't sharded.
+                // This requires us to restrict a multi-statement transaction to a single database, which we're not sure we want to do yet.
+                errmsg = "can't do command: " + name + " on sharded cluster";
+                return false;
+            }
+        };
+
+        class BeginTransactionCmd : public NotAllowedOnShardedClusterCmd  {
+        public:
+            BeginTransactionCmd() : NotAllowedOnShardedClusterCmd("beginTransaction") {}
+        } beginTransactionCmd;
+
+        class CommitTransactionCmd : public NotAllowedOnShardedClusterCmd  {
+        public:
+            CommitTransactionCmd() : NotAllowedOnShardedClusterCmd("commitTransaction") {}
+        } commitTransactionCmd;
+
+        class RollbackTransactionCmd : public NotAllowedOnShardedClusterCmd  {
+        public:
+            RollbackTransactionCmd() : NotAllowedOnShardedClusterCmd("rollbackTransaction") {}
+        } rollbackTransactionCmd;
+
+
         class ConvertToCappedCmd : public NotAllowedOnShardedCollectionCmd  {
         public:
             ConvertToCappedCmd() : NotAllowedOnShardedCollectionCmd("convertToCapped") {}

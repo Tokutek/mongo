@@ -94,7 +94,7 @@ namespace mongo {
         verify( iAmPotentiallyHot() );
 
         // Make sure replication has stopped        
-        BackgroundSync::get()->stopOpSyncThread();
+        stopReplication();
 
         RSBase::lock rslk(this);
         Lock::GlobalWrite lk;
@@ -127,7 +127,7 @@ namespace mongo {
         if (inc) {
             log() << "replSet going into maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
 
-            BackgroundSync::get()->stopOpSyncThread();
+            stopReplication();
             _maintenanceMode++;
             RSBase::lock lk(this);
             changeState(MemberState::RS_RECOVERING);
@@ -188,7 +188,7 @@ namespace mongo {
                 // case they are not)
                 log() << "replSet closing client sockets after relinquishing primary" << rsLog;
                 MessagingPort::closeAllSockets(1);
-                BackgroundSync::get()->startOpSyncThread();
+                startReplication();
             }
         }
 
@@ -517,6 +517,9 @@ namespace mongo {
                 }
                 goLiveAsSecondary = true;
             }
+        }
+        else {
+            changeState(MemberState::RS_ARBITER);
         }
 
         // When we get here,
@@ -955,6 +958,24 @@ namespace mongo {
         }
 
         cc().shutdown();
+    }
+
+    // look at comments in BackgroundSync::stopOpSyncThread for rules
+    void ReplSetImpl::stopReplication() {
+        // arbiters do not have these threads running, so only do this
+        // if we are not an arbiter
+        if (!iAmArbiterOnly()) {
+            BackgroundSync::get()->stopOpSyncThread();
+        }
+    }
+
+    // look at comments in BackgroundSync::startOpSyncThread for rules
+    void ReplSetImpl::startReplication() {
+        // arbiters do not have these threads running, so only do this
+        // if we are not an arbiter
+        if (!iAmArbiterOnly()) {
+            BackgroundSync::get()->startOpSyncThread();
+        }
     }
 }
 
