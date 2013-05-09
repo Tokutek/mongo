@@ -346,10 +346,10 @@ namespace mongo {
             // add this server to the electable set if it is within 10
             // seconds of the latest optime we know of
             else if( info["e"].trueValue() &&
-                     mem.opTime >= theReplSet->gtidManager->getCurrTimestamp()- 10000) 
+                     mem.opTime + 10000 >= theReplSet->gtidManager->getCurrTimestamp()) 
             {
                 unsigned lastOp = theReplSet->lastOtherOpTime();
-                if (lastOp > 0 && mem.opTime >= lastOp - 10000) {
+                if (lastOp > 0 && mem.opTime + 10000 >= lastOp) {
                     theReplSet->addToElectable(mem.id());
                 }
             }

@@ -1850,7 +1850,12 @@ namespace mongo {
             LOG( 2 ) << "command: " << cmdObj << endl;
 
         if (c->maintenanceMode() && theReplSet && theReplSet->isSecondary()) {
-            theReplSet->setMaintenanceMode(true);
+            string errmsg;
+            bool set = theReplSet->setMaintenanceMode(true, errmsg);
+            if (!set) {
+                result.append( "errmsg" , errmsg );
+                return false;
+            }
         }
 
         bool retval = false;
@@ -1951,7 +1956,8 @@ namespace mongo {
         }
 
         if (c->maintenanceMode() && theReplSet) {
-            theReplSet->setMaintenanceMode(false);
+            string errmsg;
+            theReplSet->setMaintenanceMode(false, errmsg);
         }
 
         return retval;

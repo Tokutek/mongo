@@ -487,7 +487,7 @@ namespace mongo {
          * call this and it will leave maintenance mode once all of the callers
          * have called it again, passing in false.
          */
-        bool setMaintenanceMode(const bool inc);
+        bool setMaintenanceMode(const bool inc, string& errmsg);
     private:
         Member* head() const { return _members.head(); }
     public:

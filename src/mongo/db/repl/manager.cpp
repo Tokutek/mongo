@@ -98,7 +98,7 @@ namespace mongo {
         // make sure the electable set is up-to-date
         if (rs->elect.aMajoritySeemsToBeUp() &&
             rs->iAmPotentiallyHot() &&
-            (otherOp == 0 || rs->gtidManager->getCurrTimestamp()>= otherOp - 10000)) {
+            (otherOp == 0 || rs->gtidManager->getCurrTimestamp() + 10000 >= otherOp)) {
             theReplSet->addToElectable(rs->selfId());
         }
         else {
@@ -113,7 +113,7 @@ namespace mongo {
             highestPriority->config().priority > primary->config().priority &&
             // if we're stepping down to allow another member to become primary, we
             // better have another member (otherOp), and it should be up-to-date
-            otherOp != 0 && highestPriority->hbinfo().opTime >= otherOp - 10000) {
+            otherOp != 0 && highestPriority->hbinfo().opTime + 10000 >= otherOp) {
             log() << "stepping down " << primary->fullName() << " (priority " <<
                 primary->config().priority << "), " << highestPriority->fullName() <<
                 " is priority " << highestPriority->config().priority << " and " <<

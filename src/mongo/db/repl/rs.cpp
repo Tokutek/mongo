@@ -108,11 +108,16 @@ namespace mongo {
 
     void ReplSetImpl::changeState(MemberState s) { box.change(s, _self); }
 
-    bool ReplSetImpl::setMaintenanceMode(const bool inc) {
+    bool ReplSetImpl::setMaintenanceMode(const bool inc, string& errmsg) {
         boost::unique_lock<boost::mutex> lock(stateChangeMutex);
         {
             RSBase::lock lk(this);
             if (box.getState().primary()) {
+                errmsg = "primaries can't modify maintenance mode";
+                return false;
+            }
+            else if (myConfig().arbiterOnly) {
+                errmsg = "arbiters can't modify maintenance mode";
                 return false;
             }
         }
@@ -441,7 +446,12 @@ namespace mongo {
         else {
             // make a GTIDManager that starts from scratch
             GTID lastGTID;
-            gtidManager = new GTIDManager(lastGTID, curTimeMillis64(), 0, _id);
+            // note we initialize the lastTime to 0, so arbiters never get fooled
+            // into thinking they are ahead of actual running systems.
+            // Either this, or we need to change the code in 
+            // ReplSetHealthPollTask::up, where we check if a potential
+            // primary is within 10 seconds of this machine
+            gtidManager = new GTIDManager(lastGTID, 0, 0, _id);
             setTxnGTIDManager(gtidManager);
         }
         txn.commit();

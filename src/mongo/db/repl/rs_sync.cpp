@@ -139,21 +139,26 @@ namespace mongo {
     // see manager.cpp, msgCheckNewState
     // that calls checkAuth
     void ReplSetImpl::blockSync(bool block) {
-        // if told to block, and currently not blocking,
-        // stop opsync thread and go into recovering state
-        if (block && !_blockSync) {
-            BackgroundSync::get()->stopOpSyncThread();
-            RSBase::lock lk(this);
-            changeState(MemberState::RS_RECOVERING);
+        // arbiters don't sync. So check for it before we
+        // we try to modify states that put it in recovering
+        // or secondary
+        if (!myConfig().arbiterOnly) {
+            // if told to block, and currently not blocking,
+            // stop opsync thread and go into recovering state
+            if (block && !_blockSync) {
+                BackgroundSync::get()->stopOpSyncThread();
+                RSBase::lock lk(this);
+                changeState(MemberState::RS_RECOVERING);
+            }
+            else if (!block && _blockSync) {
+                // this is messy
+                // replLock is already locked on input here
+                // see usage of this function in manager.cpp
+                Lock::GlobalWrite writeLock;
+                tryToGoLiveAsASecondary();
+            }
+            _blockSync = block;
         }
-        else if (!block && _blockSync) {
-            // this is messy
-            // replLock is already locked on input here
-            // see usage of this function in manager.cpp
-            Lock::GlobalWrite writeLock;
-            tryToGoLiveAsASecondary();
-        }
-        _blockSync = block;
     }
 
     void GhostSync::starting() {
