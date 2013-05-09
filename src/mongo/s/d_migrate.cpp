@@ -343,6 +343,10 @@ namespace mongo {
             return should;
         }
 
+        void writeOpsToMigrateLog(const vector<BSONObj> &objs) {
+            // TODO
+        }
+
         void logOp( const char * opstr , const char * ns , const BSONObj& obj , BSONObj * patt ) {
             if ( ! _getActive() )
                 return;
@@ -481,8 +485,9 @@ namespace mongo {
             if (_cc.get() == NULL) {
                 dassert(!_txn);
                 Client::WriteContext ctx(_ns);
-                enableLogTxnOpsForSharding(shouldLogOpForSharding,
-                                           shouldLogUpdateOpForSharding);
+                enableLogTxnOpsForSharding(mongo::shouldLogOpForSharding,
+                                           mongo::shouldLogUpdateOpForSharding,
+                                           mongo::writeOpsToMigrateLog);
                 _snapshotTaken = true;
                 _txn.reset(new Client::Transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY));
 
@@ -707,6 +712,10 @@ namespace mongo {
 
     bool shouldLogUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj) {
         return migrateFromStatus.shouldLogUpdateOp(opstr, ns, oldObj, newObj);
+    }
+
+    void writeOpsToMigrateLog(const vector<BSONObj> &objs) {
+        migrateFromStatus.writeOpsToMigrateLog(objs);
     }
 
     class TransferModsCommand : public ChunkCommandHelper {

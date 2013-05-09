@@ -39,6 +39,7 @@ namespace mongo {
     static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) = NULL;
     static bool (*_shouldLogOpForSharding)(const char *, const char *, const BSONObj &) = NULL;
     static bool (*_shouldLogUpdateOpForSharding)(const char *, const char *, const BSONObj &, const BSONObj &) = NULL;
+    static void (*_writeOpsToMigrateLog)(const vector<BSONObj> &) = NULL;
 
     static GTIDManager* txnGTIDManager = NULL;
 
@@ -65,16 +66,19 @@ namespace mongo {
     }
 
     void enableLogTxnOpsForSharding(bool (*shouldLogOp)(const char *, const char *, const BSONObj &),
-                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &)) {
+                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &),
+                                    void (*writeOps)(const vector<BSONObj> &)) {
         _logTxnOpsForSharding = true;
         _shouldLogOpForSharding = shouldLogOp;
         _shouldLogUpdateOpForSharding = shouldLogUpdateOp;
+        _writeOpsToMigrateLog = writeOps;
     }
 
     void disableLogTxnOpsForSharding(void) {
         _logTxnOpsForSharding = false;
         _shouldLogOpForSharding = NULL;
         _shouldLogUpdateOpForSharding = NULL;
+        _writeOpsToMigrateLog = NULL;
     }
 
     bool logTxnOpsForSharding() {
@@ -150,7 +154,7 @@ namespace mongo {
             transferOpsForShardingToParent();
         }
         else {
-            writeOpsToMigrateLog();
+            writeTxnOpsToMigrateLog();
         }
         _txn.commit(flags);
         // if the commit of this transaction got a GTID, then notify 
@@ -223,8 +227,10 @@ namespace mongo {
                                            _txnOpsForSharding.begin(), _txnOpsForSharding.end());
     }
 
-    void TxnContext::writeOpsToMigrateLog() {
-        // TODO
+    void TxnContext::writeTxnOpsToMigrateLog() {
+        dassert(logTxnOpsForSharding());
+        dassert(_writeOpsToMigrateLog != NULL);
+        _writeOpsToMigrateLog(_txnOpsForSharding);
     }
 
     void CappedCollectionRollback::_complete(const bool committed) {

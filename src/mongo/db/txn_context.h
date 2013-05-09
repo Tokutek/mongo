@@ -32,7 +32,8 @@ namespace mongo {
     void setLogTxnOpsForReplication(bool val);
     bool logTxnOpsForReplication();
     void enableLogTxnOpsForSharding(bool (*shouldLogOp)(const char *, const char *, const BSONObj &),
-                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &));
+                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &),
+                                    void (*writeOps)(const vector<BSONObj> &));
     void disableLogTxnOpsForSharding(void);
     bool shouldLogTxnOpForSharding(const char *opstr, const char *ns, const BSONObj &obj);
     bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj);
@@ -161,7 +162,7 @@ namespace mongo {
         void transferOpsToParent();
         void writeOpsToOplog(GTID gtid, uint64_t timestamp, uint64_t hash);
         void transferOpsForShardingToParent();
-        void writeOpsToMigrateLog();
+        void writeTxnOpsToMigrateLog();
     };
 
 } // namespace mongo
