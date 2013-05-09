@@ -304,7 +304,6 @@ class mongod(object):
             argv = [ 'buildscripts/valgrind.bash', '--show-reachable=yes', '--leak-check=full', '--suppressions=valgrind.suppressions' ] + argv
         elif drd:
             argv = [ 'buildscripts/valgrind.bash', '--tool=drd' ] + argv
-        proc = Popen(argv, stdout=self.outfile)
 
         if os.sys.platform == "win32":
             # Create a job object with the "kill on job close"
@@ -313,6 +312,12 @@ class mongod(object):
             # and lets us terminate the whole tree of processes
             # rather than orphaning the mongod.
             import win32job
+
+            # Magic number needed to allow job reassignment in Windows 7
+            # see: MSDN - Process Creation Flags - ms684863
+            CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+
+            proc = Popen(argv, creationflags=CREATE_BREAKAWAY_FROM_JOB, stdout=self.outfile)
 
             self.job_object = win32job.CreateJobObject(None, '')
 
@@ -325,6 +330,9 @@ class mongod(object):
                 job_info)
 
             win32job.AssignProcessToJobObject(self.job_object, proc._handle)
+
+        else:
+            proc = Popen(argv, stdout=self.outfile)
 
         return proc
 
