@@ -521,6 +521,9 @@ namespace mongo {
         void tryToGoLiveAsASecondary(); // readlocks
         const uint64_t lastOtherOpTime() const;
         const GTID lastOtherGTID() const;
+
+        void stopReplication();
+        void startReplication();
         
         int oplogVersion;
     };

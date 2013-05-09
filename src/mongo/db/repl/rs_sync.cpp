@@ -56,7 +56,7 @@ namespace mongo {
 
         sethbmsg("");
         changeState(MemberState::RS_SECONDARY);
-        BackgroundSync::get()->startOpSyncThread();
+        startReplication();
         return;
     }
 
@@ -146,7 +146,7 @@ namespace mongo {
             // if told to block, and currently not blocking,
             // stop opsync thread and go into recovering state
             if (block && !_blockSync) {
-                BackgroundSync::get()->stopOpSyncThread();
+                stopReplication();
                 RSBase::lock lk(this);
                 changeState(MemberState::RS_RECOVERING);
             }
