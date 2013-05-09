@@ -64,6 +64,33 @@ namespace mongo {
          */
         bool fsync( string& errmsg );
 
+        // --- from DBClientWithCommands
+
+        /** Begin a multi-statement transaction.  See DBClientWithCommands::beginTransaction().
+            This puts the SyncClusterConnection in a synchronous mode even for "read" commands and queries.
+
+            @param isolation isolation level.  Options are "mvcc" (default), "serializable", and "readUncommitted".
+            @param res pointer to object to return the result of the begin.
+            @return true iff the begin was successful.
+         */
+        virtual bool beginTransaction(const string &isolation = "mvcc", BSONObj *res = NULL);
+
+        /** Commit a multi-statement transaction.  See DBClientWithCommands::commitTransaction().
+            This resolves the SyncClusterConnection's synchronous mode if successful.
+
+            @param res pointer to object to return the result of the commit.
+            @return true iff the commit was successful.
+         */
+        virtual bool commitTransaction(BSONObj *res = NULL);
+
+        /** Rollback a multi-statement transaction.  See DBClientWithCommands::rollbackTransaction().
+            This resolves the SyncClusterConnection's synchronous mode if successful.
+
+            @param res pointer to object to return the result of the rollback.
+            @return true iff the rollback was successful.
+         */
+        virtual bool rollbackTransaction(BSONObj *res = NULL);
+
         // --- from DBClientInterface
 
         virtual BSONObj findOne(const string &ns, const Query& query, const BSONObj *fieldsToReturn, int queryOptions);
@@ -126,6 +153,7 @@ namespace mongo {
         vector<DBClientConnection*> _conns;
         map<string,int> _lockTypes;
         mongo::mutex _mutex;
+        int _txnNestLevel;
 
         vector<BSONObj> _lastErrors;
 

@@ -396,6 +396,23 @@ namespace mongo {
         return isOk(info);
     }
 
+    bool DBClientWithCommands::beginTransaction(const string &isolation, BSONObj *res) {
+        BSONObj o;
+        if (res == NULL) {
+            res = &o;
+        }
+        // The dbname needs to be something but it doesn't need to be anything in particular.
+        return runCommand("x", BSON("beginTransaction" << "" << "isolation" << isolation), *res);
+    }
+
+    bool DBClientWithCommands::commitTransaction(BSONObj *res) {
+        return simpleCommand("x", res, "commitTransaction");
+    }
+
+    bool DBClientWithCommands::rollbackTransaction(BSONObj *res) {
+        return simpleCommand("x", res, "rollbackTransaction");
+    }
+
     /* note - we build a bson obj here -- for something that is super common like getlasterror you
               should have that object prebuilt as that would be faster.
     */

@@ -592,6 +592,31 @@ namespace mongo {
         virtual bool runCommand(const string &dbname, const BSONObj& cmd, BSONObj &info,
                                 int options=0, const AuthenticationTable* auth = NULL);
 
+        /** Begin a multi-statement transaction.
+            If you are using a SyncClusterConnection, you must use these wrappers (or a RemoteTransaction), not bare runCommand() calls.
+
+            @param isolation isolation level.  Options are "mvcc" (default), "serializable", and "readUncommitted".
+            @param res pointer to object to return the result of the begin.
+            @return true iff the begin was successful.
+         */
+        virtual bool beginTransaction(const string &isolation = "mvcc", BSONObj *res = NULL);
+
+        /** Commit a multi-statement transaction.
+            If you are using a SyncClusterConnection, you must use these wrappers (or a RemoteTransaction), not bare runCommand() calls.
+
+            @param res pointer to object to return the result of the commit.
+            @return true iff the commit was successful.
+         */
+        virtual bool commitTransaction(BSONObj *res = NULL);
+
+        /** Rollback a multi-statement transaction.
+            If you are using a SyncClusterConnection, you must use these wrappers (or a RemoteTransaction), not bare runCommand() calls.
+
+            @param res pointer to object to return the result of the rollback.
+            @return true iff the rollback was successful.
+         */
+        virtual bool rollbackTransaction(BSONObj *res = NULL);
+
         /** Authorize access to a particular database.
             Authentication is separate for each database on the server -- you may authenticate for any
             number of databases on a single connection.

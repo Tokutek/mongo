@@ -27,48 +27,37 @@
 namespace mongo {
 
     RemoteTransaction::RemoteTransaction(shared_ptr<ScopedDbConnection> conn, const string &isolation) : _conn(conn) {
-        bool ok;
-        try {
-            BSONObj beginResult;
-            // Need something for the ns here, though it's not used, the server checks that it's a valid name, so pass "x".
-            ok = _conn->get()->runCommand("x", BSON( "beginTransaction" << "" << "isolation" << isolation ), beginResult);
-        }
-        catch (DBException &e) {
-            ok = false;
-        }
+        bool ok = _conn->get()->beginTransaction(isolation);
         verify(ok);
     }
 
     RemoteTransaction::~RemoteTransaction() {
         if (_conn) {
-            rollback();
+            bool ok;
+            try {
+                ok = rollback();
+            }
+            catch (DBException &e) {
+                ok = false;
+            }
+            verify(ok);
         }
     }
 
-    void RemoteTransaction::commit() {
-        bool ok;
-        try {
-            BSONObj commitResult;
-            ok = _conn->get()->runCommand("x", BSON( "commitTransaction" << "" ), commitResult);
+    bool RemoteTransaction::commit(BSONObj *res) {
+        bool ok = _conn->get()->commitTransaction(res);
+        if (ok) {
+            _conn.reset();
         }
-        catch (DBException &e) {
-            ok = false;
-        }
-        verify(ok);
-        _conn.reset();
+        return ok;
     }
 
-    void RemoteTransaction::rollback() {
-        bool ok;
-        try {
-            BSONObj rollbackResult;
-            ok = _conn->get()->runCommand("x", BSON( "rollbackTransaction" << "" ), rollbackResult);
+    bool RemoteTransaction::rollback(BSONObj *res) {
+        bool ok = _conn->get()->rollbackTransaction(res);
+        if (ok) {
+            _conn.reset();
         }
-        catch (DBException &e) {
-            ok = false;
-        }
-        verify(ok);
-        _conn.reset();
+        return ok;
     }
 
 } // namespace mongo
