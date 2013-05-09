@@ -39,9 +39,6 @@ namespace mongo {
     class SlaveTracking { // SERVER-4328 todo review
     public:
         string name() const { return "SlaveTracking"; }
-
-        static const char * NS;
-
         struct Ident {
 
             Ident(const BSONObj& r, const string& h, const string& n) {
@@ -175,8 +172,6 @@ namespace mongo {
         map<Ident,GTID> _slaves;
 
     } slaveTracking;
-
-    const char * SlaveTracking::NS = "local.slaves";
 
     void updateSlaveLocation( CurOp& curop, const char * ns , GTID lastGTID ) {
         if ( lastGTID.isInitial() )

@@ -23,7 +23,6 @@
 #include "curop.h"
 
 /**
-   local.slaves  - current location for all slaves
 
  */
 namespace mongo {

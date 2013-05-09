@@ -76,9 +76,6 @@ namespace OpLogHelpers{
     void logInsert(const char* ns, BSONObj row, TxnContext* txn) {
         if (logTxnOperations()) {
             BSONObjBuilder b;
-            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-              resetSlaveCache();
-            }
             if (isLocalNs(ns)) {
                 return;
             }
@@ -99,9 +96,6 @@ namespace OpLogHelpers{
     {
         if (logTxnOperations()) {
             BSONObjBuilder b;
-            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-              resetSlaveCache();
-            }
             if (isLocalNs(ns)) {
                 return;
             }
@@ -125,9 +119,6 @@ namespace OpLogHelpers{
     {
         if (logTxnOperations()) {
             BSONObjBuilder b;
-            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-              resetSlaveCache();
-            }
             if (isLocalNs(ns)) {
                 return;
             }
@@ -145,9 +136,6 @@ namespace OpLogHelpers{
     void logDelete(const char* ns, BSONObj row, bool fromMigrate, TxnContext* txn) {
         if (logTxnOperations()) {
             BSONObjBuilder b;
-            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-              resetSlaveCache();
-            }
             if (isLocalNs(ns)) {
                 return;
             }
@@ -169,9 +157,6 @@ namespace OpLogHelpers{
     {
         if (logTxnOperations()) {
             BSONObjBuilder b;
-            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-              resetSlaveCache();
-            }
             if (isLocalNs(ns)) {
                 return;
             }
@@ -187,9 +172,6 @@ namespace OpLogHelpers{
     void logCommand(const char* ns, BSONObj row, TxnContext* txn) {
         if (logTxnOperations()) {
             BSONObjBuilder b;
-            if ( strncmp(ns, "local.slaves", 12) == 0 ) {
-              resetSlaveCache();
-            }
             if (isLocalNs(ns)) {
                 return;
             }
