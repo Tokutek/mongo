@@ -18,9 +18,9 @@
 #include "mongo/pch.h"
 
 #include "mongo/bson/bsonobjiterator.h"
+#include "mongo/db/gtid.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/repl.h"
-#include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/time_support.h"

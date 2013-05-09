@@ -18,13 +18,16 @@
 #define MONGO_DB_TXNCONTEXT_H
 
 #include "mongo/pch.h"
-#include "mongo/db/storage/txn.h"
-#include "mongo/db/jsobj.h"
-#include "mongo/db/gtid.h"
 
 #include <db.h>
 
+#include "mongo/db/jsobj.h"
+#include "mongo/db/storage/txn.h"
+
 namespace mongo {
+
+    class GTID;
+    class GTIDManager;
 
     void setTxnLogOperations(bool val);
     bool logTxnOperations();

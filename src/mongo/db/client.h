@@ -38,6 +38,7 @@
 #include "../util/concurrency/rwlock.h"
 #include "d_concurrency.h"
 #include "mongo/db/lockstate.h"
+#include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
 //#include "mongo/db/storage/txn.h"
 #include "mongo/util/paths.h"
