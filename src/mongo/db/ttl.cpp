@@ -79,25 +79,41 @@ namespace mongo {
                     TokuCommandSettings settings;
                     settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
                     cc().setTokuCommandSettings(settings);
-                    Client::ReadContext ctx(ns);
-                    Client::Transaction transaction(DB_SERIALIZABLE);
-                    NamespaceDetails* nsd = nsdetails( ns.c_str() );
-                    if ( ! nsd ) {
-                        // collection was dropped
-                        continue;
+                    try {
+                        // Can't factor out the try/catch blocks because of the continue statements.
+                        Client::ReadContext ctx(ns);
+                        Client::Transaction transaction(DB_SERIALIZABLE);
+                        NamespaceDetails* nsd = nsdetails(ns.c_str());
+                        if (!nsd) {
+                            // collection was dropped
+                            continue;
+                        }
+                        // only do deletes if on master
+                        if (!isMasterNs(dbName.c_str())) {
+                            continue;
+                        }
+                        n = deleteObjects(ns.c_str(), query, false, true);
+                        transaction.commit();
                     }
-                    // only do deletes if on master
-                    if ( ! isMasterNs( dbName.c_str() ) ) {
-                        continue;
+                    catch (RetryWithWriteLock) {
+                        Client::WriteContext ctx(ns);
+                        Client::Transaction transaction(DB_SERIALIZABLE);
+                        NamespaceDetails* nsd = nsdetails(ns.c_str());
+                        if (!nsd) {
+                            // collection was dropped
+                            continue;
+                        }
+                        // only do deletes if on master
+                        if (!isMasterNs(dbName.c_str())) {
+                            continue;
+                        }
+                        n = deleteObjects(ns.c_str(), query, false, true);
+                        transaction.commit();
                     }
-
-                    n = deleteObjects( ns.c_str() , query , false , true );
-                    transaction.commit();
                 }
 
                 LOG(1) << "\tTTL deleted: " << n << endl;
             }
-            
         }
 
         virtual void run() {
