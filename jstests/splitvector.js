@@ -236,7 +236,7 @@ var case9 = function(n) {
     assert.close( n/2 , res.splitKeys[0].x , "9c", -1 );
 
     if ( db.runCommand( "isMaster" ).msg != "isdbgrid" ) {
-        res = db.adminCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , force : true } );
+        res = db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , force : true } );
 
         assert.eq( true , res.ok , "9a: " + tojson(res) );
         assert.eq( 1 , res.splitKeys.length , "9b: " + tojson(res) );
