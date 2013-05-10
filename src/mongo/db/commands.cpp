@@ -62,7 +62,7 @@ namespace mongo {
         } else if (locktype() == WRITE) {
             return DB_SERIALIZABLE;
         } else {
-            return DB_SERIALIZABLE;
+            msgasserted(16782, "can't call txnFlags with locktype NONE");
         }
     }
 
