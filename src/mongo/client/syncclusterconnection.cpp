@@ -176,9 +176,7 @@ namespace mongo {
         if ( ns.find( ".$cmd" ) != string::npos ) {
             string cmdName = query.obj.firstElementFieldName();
 
-            int lockType = _lockType( cmdName );
-
-            if ( lockType > 0 ) { // write $cmd
+            if (_requiresSync(cmdName)) { // write $cmd
                 string errmsg;
                 if ( ! prepare( errmsg ) )
                     throw UserException( 13104 , (string)"SyncClusterConnection::findOne prepare failed: " + errmsg );
@@ -310,8 +308,8 @@ namespace mongo {
         _lastErrors.clear();
         if ( ns.find( ".$cmd" ) != string::npos ) {
             string cmdName = query.obj.firstElementFieldName();
-            int lockType = _lockType( cmdName );
-            uassert( 13054 , (string)"write $cmd not supported in SyncClusterConnection::query for:" + cmdName , lockType <= 0 );
+            uassert(16783, (string)"$cmd not supported in SyncClusterConnection::query during a multi-statement transaction for:" + cmdName, _txnNestLevel == 0);
+            uassert(13054, (string)"write $cmd not supported in SyncClusterConnection::query for:" + cmdName , !_requiresSync(cmdName));
         }
 
         return _queryOnActive( ns , query , nToReturn , nToSkip , fieldsToReturn , queryOptions , batchSize );
@@ -482,26 +480,26 @@ namespace mongo {
         verify(0);
     }
 
-    int SyncClusterConnection::_lockType( const string& name ) {
+    bool SyncClusterConnection::_requiresSync( const string& name ) {
         if (_txnNestLevel > 0) {
             // Force us to act in "write to all" mode if we're inside a multi-statement transaction.
-            return 1;
+            return true;
         }
         {
             scoped_lock lk(_mutex);
-            map<string,int>::iterator i = _lockTypes.find( name );
-            if ( i != _lockTypes.end() )
+            map<string,int>::iterator i = _syncRequiredMap.find( name );
+            if ( i != _syncRequiredMap.end() )
                 return i->second;
         }
 
         BSONObj info;
         uassert( 13053 , str::stream() << "help failed: " << info , _commandOnActive( "admin" , BSON( name << "1" << "help" << 1 ) , info ) );
 
-        int lockType = info["lockType"].numberInt();
+        bool requiresSync = info["requiresSync"].trueValue();
 
         scoped_lock lk(_mutex);
-        _lockTypes[name] = lockType;
-        return lockType;
+        _syncRequiredMap[name] = requiresSync;
+        return requiresSync;
     }
 
     bool SyncClusterConnection::beginTransaction(const string &isolation, BSONObj *res) {

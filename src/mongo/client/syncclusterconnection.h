@@ -144,14 +144,14 @@ namespace mongo {
         bool _commandOnActive(const string &dbname, const BSONObj& cmd, BSONObj &info, int options=0);
         auto_ptr<DBClientCursor> _queryOnActive(const string &ns, Query query, int nToReturn, int nToSkip,
                                                 const BSONObj *fieldsToReturn, int queryOptions, int batchSize );
-        int _lockType( const string& name );
+        bool _requiresSync(const string& name);
         void _checkLast();
         void _connect( string host );
 
         string _address;
         vector<string> _connAddresses;
         vector<DBClientConnection*> _conns;
-        map<string,int> _lockTypes;
+        map<string,int> _syncRequiredMap;
         mongo::mutex _mutex;
         int _txnNestLevel;
 
