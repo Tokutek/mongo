@@ -28,29 +28,29 @@ namespace mongo {
           _shouldAppendPKForCapped(false)
     {}
 
-    inline TokuCommandSettings& TokuCommandSettings::setQueryCursorMode(QueryCursorMode mode) {
+    TokuCommandSettings& TokuCommandSettings::setQueryCursorMode(QueryCursorMode mode) {
         _queryCursorMode = mode;
         return *this;
     }
 
-    inline QueryCursorMode TokuCommandSettings::getQueryCursorMode() {
+    QueryCursorMode TokuCommandSettings::getQueryCursorMode() {
         return _queryCursorMode;
     }
 
-    inline bool TokuCommandSettings::shouldBulkFetch() {
+    bool TokuCommandSettings::shouldBulkFetch() {
         return _shouldBulkFetch;
     }
 
-    inline TokuCommandSettings& TokuCommandSettings::setBulkFetch(bool val) {
+    TokuCommandSettings& TokuCommandSettings::setBulkFetch(bool val) {
         _shouldBulkFetch = val;
         return *this;
     }
 
-    inline bool TokuCommandSettings::shouldCappedAppendPK() {
+    bool TokuCommandSettings::shouldCappedAppendPK() {
         return _shouldAppendPKForCapped;
     }
 
-    inline TokuCommandSettings& TokuCommandSettings::setCappedAppendPK(bool val) {
+    TokuCommandSettings& TokuCommandSettings::setCappedAppendPK(bool val) {
         _shouldAppendPKForCapped = val;
         return *this;
     }
