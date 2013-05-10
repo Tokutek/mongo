@@ -181,6 +181,7 @@ namespace {
         clusterAdminRoleReadActions.addAction(ActionType::touch);
         clusterAdminRoleReadActions.addAction(ActionType::unlock);
         clusterAdminRoleReadActions.addAction(ActionType::unsetSharding);
+        clusterAdminRoleReadActions.addAction(ActionType::writeBacksQueued);
 
         clusterAdminRoleWriteActions.addAction(ActionType::addShard);
         clusterAdminRoleWriteActions.addAction(ActionType::applyOps);
@@ -242,7 +243,6 @@ namespace {
         internalActions.addAction(ActionType::replSetGetRBID);
         internalActions.addAction(ActionType::replSetHeartbeat);
         internalActions.addAction(ActionType::writebacklisten);
-        internalActions.addAction(ActionType::writeBacksQueued);
         internalActions.addAction(ActionType::_migrateClone);
         internalActions.addAction(ActionType::_recvChunkAbort);
         internalActions.addAction(ActionType::_recvChunkCommit);
