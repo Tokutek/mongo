@@ -17,7 +17,7 @@ assert.throws( function(){ t.save( { x : 3 } ); } , null , "B1" );
 // It's ok even for some of the mongod to be unreachable for read-only cmd
 assert.eq( 2, t.find({}).count() );
 // It's NOT ok for some of the mongod to be unreachable for write cmd
-assert.throws( function(){ t.getDB().runCommand({ profile: 1 }); }); 
+assert.throws( function(){ t.getDB().runCommand({ findAndModify: "test.sync1", query: {}, remove: true }); }); 
 assert.eq( 2 , t.find().itcount() , "B2" );
 test.tempStart();
 test.checkHashes( "test" , "B3" );
@@ -28,7 +28,7 @@ assert.throws( function(){ t.save( { x : 3 } ); } );
 // It's ok even for some of the mongod to be unreachable for read-only cmd
 assert.eq( 2, t.find({}).count() );
 // It's NOT ok for some of the mongod to be unreachable for write cmd
-assert.throws( function(){ t.getDB().runCommand({ profile: 1 }); }); 
+assert.throws( function(){ t.getDB().runCommand({ findAndModify: "test.sync1", query: {}, remove: true }); }); 
 assert.eq( 2 , t.find().itcount() );
 test.tempStart( 1 );
 
