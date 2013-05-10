@@ -52,7 +52,7 @@ namespace mongo {
 
     inline TokuCommandSettings& TokuCommandSettings::setCappedAppendPK(bool val) {
         _shouldAppendPKForCapped = val;
-        return *this
+        return *this;
     }
 
 } // namespace mongo
