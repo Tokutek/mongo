@@ -19,26 +19,26 @@
 #include "mongo/pch.h"
 
 namespace mongo {
+
     typedef enum {
         DEFAULT_LOCK_CURSOR, // Cursors will pass no flags and use default settings of transaction
         READ_LOCK_CURSOR, //Cursors are serializable and grab read locks
         WRITE_LOCK_CURSOR // cursors are serializable and grab write locks (DB_RMW)
     } QueryCursorMode;
-    
+
     class TokuCommandSettings {
         QueryCursorMode _queryCursorMode; // default DEFAULT_LOCK_CURSOR
         bool _shouldBulkFetch; // default false
         bool _shouldAppendPKForCapped; // if true, cursor->current should append the pk before returning the row
-        public:    
+      public:
         TokuCommandSettings();
-        ~TokuCommandSettings();
-    
-        void setQueryCursorMode(QueryCursorMode mode);
+
+        TokuCommandSettings& setQueryCursorMode(QueryCursorMode mode);
         QueryCursorMode getQueryCursorMode();
         bool shouldBulkFetch();
-        void setBulkFetch(bool val);
-        bool shouldCappedAppendPK();        
-        void setCappedAppendPK(bool val);
+        TokuCommandSettings& setBulkFetch(bool val);
+        bool shouldCappedAppendPK();
+        TokuCommandSettings& setCappedAppendPK(bool val);
     };
 
-}
+} // namespace mongo

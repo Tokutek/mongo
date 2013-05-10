@@ -22,37 +22,37 @@
 
 namespace mongo {
 
-    TokuCommandSettings::TokuCommandSettings() 
+    TokuCommandSettings::TokuCommandSettings()
         : _queryCursorMode(DEFAULT_LOCK_CURSOR),
           _shouldBulkFetch(false),
-          _shouldAppendPKForCapped(false) {
-    }
+          _shouldAppendPKForCapped(false)
+    {}
 
-    TokuCommandSettings::~TokuCommandSettings() {
-    }
-
-    void TokuCommandSettings::setQueryCursorMode(QueryCursorMode mode) {
+    inline TokuCommandSettings& TokuCommandSettings::setQueryCursorMode(QueryCursorMode mode) {
         _queryCursorMode = mode;
+        return *this;
     }
 
-    QueryCursorMode TokuCommandSettings::getQueryCursorMode() {
+    inline QueryCursorMode TokuCommandSettings::getQueryCursorMode() {
         return _queryCursorMode;
     }
 
-    bool TokuCommandSettings::shouldBulkFetch() {
+    inline bool TokuCommandSettings::shouldBulkFetch() {
         return _shouldBulkFetch;
     }
 
-    void TokuCommandSettings::setBulkFetch(bool val) {
+    inline TokuCommandSettings& TokuCommandSettings::setBulkFetch(bool val) {
         _shouldBulkFetch = val;
+        return *this;
     }
 
-    bool TokuCommandSettings::shouldCappedAppendPK() {
+    inline bool TokuCommandSettings::shouldCappedAppendPK() {
         return _shouldAppendPKForCapped;
     }
 
-    void TokuCommandSettings::setCappedAppendPK(bool val) {
+    inline TokuCommandSettings& TokuCommandSettings::setCappedAppendPK(bool val) {
         _shouldAppendPKForCapped = val;
+        return *this
     }
 
 } // namespace mongo
