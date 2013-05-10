@@ -152,7 +152,7 @@ namespace mongo {
         cmd.appendBool( "force" , true );
         BSONObj cmdObj = cmd.obj();
 
-        if ( ! conn->get()->runCommand( "admin" , cmdObj , result )) {
+        if ( ! conn->get()->runCommand( nsToDatabase(_manager->getns()) , cmdObj , result )) {
             conn->done();
             ostringstream os;
             os << "splitVector command (median key) failed: " << result;
@@ -182,7 +182,7 @@ namespace mongo {
         cmd.append( "maxChunkObjects" , maxObjs );
         BSONObj cmdObj = cmd.obj();
 
-        if ( ! conn->get()->runCommand( "admin" , cmdObj , result )) {
+        if ( ! conn->get()->runCommand( nsToDatabase(_manager->getns()) , cmdObj , result )) {
             conn->done();
             ostringstream os;
             os << "splitVector command failed: " << result;
@@ -449,7 +449,7 @@ namespace mongo {
                 ScopedDbConnection::getInternalScopedDbConnection( getShard().getConnString() ) );
 
         BSONObj result;
-        uassert( 10169 ,  "datasize failed!" , conn->get()->runCommand( "admin" ,
+        uassert( 10169 ,  "datasize failed!" , conn->get()->runCommand( nsToDatabase(_manager->getns()) ,
                  BSON( "datasize" << _manager->getns()
                        << "keyPattern" << _manager->getShardKey().key()
                        << "min" << getMin()
