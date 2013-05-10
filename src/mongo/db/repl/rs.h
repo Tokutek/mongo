@@ -597,6 +597,10 @@ namespace mongo {
         virtual bool adminOnly() const { return true; }
         virtual bool logTheOp() { return false; }
         virtual LockType locktype() const { return NONE; }
+        virtual bool needsTxn() const { return false; }
+        virtual int txnFlags() const { return noTxnFlags(); }
+        virtual bool requiresSync() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual void help( stringstream &help ) const { help << "internal"; }
 
         /**

@@ -51,12 +51,9 @@ namespace mongo {
 
     namespace dbgrid_pub_cmds {
 
-        class PublicGridCommand : public Command {
+        class PublicGridCommand : public InformationCommand {
         public:
-            PublicGridCommand( const char* n, const char* oldname=NULL ) : Command( n, false, oldname ) {
-            }
-            virtual bool slaveOk() const {
-                return true;
+            PublicGridCommand( const char* n, const char* oldname=NULL ) : InformationCommand( n, false, oldname ) {
             }
             virtual bool adminOnly() const {
                 return false;
@@ -65,9 +62,6 @@ namespace mongo {
             // Override if passthrough should also send query options
             // Safer as off by default, can slowly enable as we add more tests
             virtual bool passOptions() const { return false; }
-
-            // all grid commands are designed not to lock
-            virtual LockType locktype() const { return NONE; }
 
         protected:
 
@@ -100,15 +94,11 @@ namespace mongo {
             }
         };
 
-        class RunOnAllShardsCommand : public Command {
+        class RunOnAllShardsCommand : public InformationCommand {
         public:
-            RunOnAllShardsCommand(const char* n, const char* oldname=NULL) : Command(n, false, oldname) {}
+            RunOnAllShardsCommand(const char* n, const char* oldname=NULL) : InformationCommand(n, false, oldname) {}
 
-            virtual bool slaveOk() const { return true; }
             virtual bool adminOnly() const { return false; }
-
-            // all grid commands are designed not to lock
-            virtual LockType locktype() const { return NONE; }
 
 
             // default impl uses all shards for DB
@@ -219,11 +209,6 @@ namespace mongo {
             ReIndexCmd() :  AllShardsCollectionCommand("reIndex") {}
         } reIndexCmd;
 
-        class CollectionModCmd : public AllShardsCollectionCommand {
-        public:
-            CollectionModCmd() :  AllShardsCollectionCommand("collMod") {}
-        } collectionModCmd;
-
         class ProfileCmd : public PublicGridCommand {
         public:
             ProfileCmd() :  PublicGridCommand("profile") {}
@@ -260,11 +245,6 @@ namespace mongo {
                 output.appendBool("valid", true);
             }
         } validateCmd;
-
-        class RepairDatabaseCmd : public RunOnAllShardsCommand {
-        public:
-            RepairDatabaseCmd() :  RunOnAllShardsCommand("repairDatabase") {}
-        } repairDatabaseCmd;
 
         class DBStatsCmd : public RunOnAllShardsCommand {
         public:
@@ -811,17 +791,6 @@ namespace mongo {
         public:
             RollbackTransactionCmd() : NotAllowedOnShardedClusterCmd("rollbackTransaction") {}
         } rollbackTransactionCmd;
-
-
-        class ConvertToCappedCmd : public NotAllowedOnShardedCollectionCmd  {
-        public:
-            ConvertToCappedCmd() : NotAllowedOnShardedCollectionCmd("convertToCapped") {}
-
-            virtual string getFullNS( const string& dbName , const BSONObj& cmdObj ) {
-                return dbName + "." + cmdObj.firstElement().valuestrsafe();
-            }
-
-        } convertToCappedCmd;
 
 
         class GroupCmd : public NotAllowedOnShardedCollectionCmd  {
@@ -1524,25 +1493,6 @@ namespace mongo {
                 return 1;
             }
         } mrCmd;
-
-        class ApplyOpsCmd : public PublicGridCommand {
-        public:
-            ApplyOpsCmd() : PublicGridCommand( "applyOps" ) {}
-            virtual bool run(const string& dbName , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
-                errmsg = "applyOps not allowed through mongos";
-                return false;
-            }
-        } applyOpsCmd;
-
-
-        class CompactCmd : public PublicGridCommand {
-        public:
-            CompactCmd() : PublicGridCommand( "compact" ) {}
-            virtual bool run(const string& dbName , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
-                errmsg = "compact not allowed through mongos";
-                return false;
-            }
-        } compactCmd;
 
         class EvalCmd : public PublicGridCommand {
         public:

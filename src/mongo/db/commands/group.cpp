@@ -23,13 +23,11 @@
 
 namespace mongo {
 
-    class GroupCommand : public Command {
-    public:
-        GroupCommand() : Command("group") {}
-        virtual LockType locktype() const { return READ; }
+    class GroupCommand : public QueryCommand {
+      public:
+        GroupCommand() : QueryCommand("group") {}
         virtual bool slaveOk() const { return false; }
         virtual bool slaveOverrideOk() const { return true; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual void help( stringstream &help ) const {
             help << "http://dochub.mongodb.org/core/aggregation";
         }

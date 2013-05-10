@@ -255,14 +255,11 @@ namespace mongo {
     } staticShardInfo;
 
 
-    class CmdGetShardMap : public Command {
-    public:
-        CmdGetShardMap() : Command( "getShardMap" ){}
+    class CmdGetShardMap : public InformationCommand {
+      public:
+        CmdGetShardMap() : InformationCommand("getShardMap", false) {}
         virtual void help( stringstream &help ) const { help<<"internal"; }
-        virtual LockType locktype() const { return NONE; }
-        virtual bool slaveOk() const { return true; }
         virtual bool adminOnly() const { return true; }
-
         virtual bool run(const string&, mongo::BSONObj&, int, std::string& errmsg , mongo::BSONObjBuilder& result, bool) {
             return staticShardInfo.getShardMap( result , errmsg );
         }

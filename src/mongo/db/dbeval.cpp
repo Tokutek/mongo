@@ -114,8 +114,11 @@ namespace mongo {
             help << "Evaluate javascript at the server.\n" "http://dochub.mongodb.org/core/serversidecodeexecution";
         }
         virtual LockType locktype() const { return NONE; }
+        virtual bool requiresSync() const { return true; }
         CmdEval() : Command("eval", false, "$eval") { }
         virtual bool needsTxn() const { return false; }
+        virtual int txnFlags() const { return noTxnFlags(); }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
 
             AuthenticationInfo *ai = cc().getAuthenticationInfo();

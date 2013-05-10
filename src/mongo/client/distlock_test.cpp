@@ -50,10 +50,10 @@
 
 namespace mongo {
 
-    class TestDistLockWithSync: public Command {
+    class TestDistLockWithSync: public InformationCommand {
     public:
         TestDistLockWithSync() :
-            Command("_testDistLockWithSyncCluster") {
+            InformationCommand("_testDistLockWithSyncCluster") {
         }
         virtual void help(stringstream& help) const {
             help << "should not be calling this directly" << endl;
@@ -64,9 +64,6 @@ namespace mongo {
         }
         virtual bool adminOnly() const {
             return true;
-        }
-        virtual LockType locktype() const {
-            return NONE;
         }
 
         static void runThread() {
@@ -141,13 +138,13 @@ namespace mongo {
 
 
 
-    class TestDistLockWithSkew: public Command {
+    class TestDistLockWithSkew: public InformationCommand {
     public:
 
         static const int logLvl = 1;
 
         TestDistLockWithSkew() :
-            Command("_testDistLockWithSkew") {
+            InformationCommand("_testDistLockWithSkew") {
         }
         virtual void help(stringstream& help) const {
             help << "should not be calling this directly" << endl;
@@ -158,9 +155,6 @@ namespace mongo {
         }
         virtual bool adminOnly() const {
             return true;
-        }
-        virtual LockType locktype() const {
-            return NONE;
         }
 
         void runThread(ConnectionString& hostConn, unsigned threadId, unsigned seed,
@@ -410,10 +404,10 @@ namespace mongo {
      * Utility command to virtually skew the clock of a mongo server a particular amount.
      * This skews the clock globally, per-thread skew is also possible.
      */
-    class SkewClockCommand: public Command {
+    class SkewClockCommand: public InformationCommand {
     public:
         SkewClockCommand() :
-            Command("_skewClockCommand") {
+            InformationCommand("_skewClockCommand") {
         }
         virtual void help(stringstream& help) const {
             help << "should not be calling this directly" << endl;
@@ -424,9 +418,6 @@ namespace mongo {
         }
         virtual bool adminOnly() const {
             return true;
-        }
-        virtual LockType locktype() const {
-            return NONE;
         }
 
         bool run(const string&, BSONObj& cmdObj, int, string& errmsg,
@@ -447,4 +438,3 @@ namespace mongo {
     } testSkewClockCommand;
 
 }
-

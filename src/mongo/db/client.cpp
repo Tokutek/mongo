@@ -424,20 +424,16 @@ namespace mongo {
         return currentClient.get();
     }
 
-    class HandshakeCmd : public Command {
-    public:
+    class HandshakeCmd : public InformationCommand {
+      public:
         void help(stringstream& h) const { h << "internal"; }
-        HandshakeCmd() : Command( "handshake" ) {}
-        virtual LockType locktype() const { return NONE; }
-        virtual bool slaveOk() const { return true; }
+        HandshakeCmd() : InformationCommand("handshake", false) {}
         virtual bool adminOnly() const { return false; }
-        virtual bool needsTxn() const { return false; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             Client& c = cc();
             c.gotHandshake( cmdObj );
-            return 1;
+            return true;
         }
-
     } handshakeCmd;
 
     class ClientListPlugin : public WebStatusPlugin {

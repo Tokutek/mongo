@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <db.h>
+
 #include "jsobj.h"
 #include "../util/mongoutils/str.h"
 #include "mongo/db/toku_command_settings.h"
@@ -61,16 +63,21 @@ namespace mongo {
          */
         virtual LockType locktype() const = 0;
 
+        /** if true, this command must go to all members in a SyncClusterConnection.
+            We add this because we can now have modifications without a locktype of WRITE, which is what we used to use to determine this for SyncClusterConnection.
+         */
+        virtual bool requiresSync() const = 0;
+
         /** if true, lock globally instead of just the one database. by default only the one 
             database will be locked. 
         */
         virtual bool lockGlobally() const { return false; }
 
         /** @return true iff this command wants a transaction */
-        virtual bool needsTxn() const { return true; }
+        virtual bool needsTxn() const = 0;
 
         /** @return true iff this command can run in a multi statement transaction */
-        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const = 0;
 
         virtual TokuCommandSettings getTokuCommandSettings() const {
             TokuCommandSettings settings;
@@ -79,7 +86,7 @@ namespace mongo {
         }
 
         /** @return what transaction flags to use */
-        virtual int txnFlags() const;
+        virtual int txnFlags() const = 0;
 
         /* Return true if only the admin ns has privileges to run this command. */
         virtual bool adminOnly() const {
@@ -154,6 +161,11 @@ namespace mongo {
         static map<string,Command*> * _commandsByBestName;
         static map<string,Command*> * _webCommands;
 
+        int noTxnFlags() const {
+            msgasserted(16782, mongoutils::str::stream() << "can't call txnFlags with locktype NONE on command " << name);
+            return 0;
+        }
+
     public:
         static const map<string,Command*>* commandsByBestName() { return _commandsByBestName; }
         static const map<string,Command*>* webCommands() { return _webCommands; }
@@ -161,6 +173,78 @@ namespace mongo {
         static bool runAgainstRegistered(const char *ns, BSONObj& jsobj, BSONObjBuilder& anObjBuilder, int queryOptions = 0);
         static LockType locktype( const string& name );
         static Command * findCommand( const string& name );
+    };
+
+    /** A command that modifies metadata in some way. */
+    class FileopsCommand : public Command {
+      public:
+        FileopsCommand(const char *name, bool webUI=false, const char *oldName=NULL) : Command(name, webUI, oldName) {}
+        virtual LockType locktype() const { return WRITE; }
+        virtual bool requiresSync() const { return true; }
+        virtual bool needsTxn() const { return true; }
+        virtual int txnFlags() const { return DB_SERIALIZABLE; }
+        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
+        // These require some thought
+        virtual bool logTheOp() = 0;
+        virtual bool slaveOk() const = 0;
+    };
+
+    /** A command that writes userdata to a Toku dictionary. */
+    class ModifyCommand : public Command {
+      public:
+        ModifyCommand(const char *name, bool webUI=false, const char *oldName=NULL) : Command(name, webUI, oldName) {}
+        virtual bool slaveOk() const { return false; }
+        virtual LockType locktype() const { return READ; }
+        virtual bool requiresSync() const { return true; }
+        virtual bool needsTxn() const { return true; }
+        virtual int txnFlags() const { return DB_SERIALIZABLE; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+    };
+
+    /** A command that only reads data out of a Toku dictionary. */
+    class QueryCommand : public Command {
+      public:
+        QueryCommand(const char *name, bool webUI=false, const char *oldName=NULL) : Command(name, webUI, oldName) {}
+        virtual bool slaveOk() const { return true; }
+        virtual LockType locktype() const { return READ; }
+        virtual bool requiresSync() const { return false; }
+        virtual bool needsTxn() const { return true; }
+        virtual int txnFlags() const { return DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings().setBulkFetch(true); }
+    };
+
+    /** A command that doesn't read or write anything from Toku dictionaries, and just looks at some memory (like engine status) */
+    class InformationCommand : public Command {
+      public:
+        InformationCommand(const char *name, bool webUI=true, const char *oldName=NULL) : Command(name, webUI, oldName) {}
+        virtual bool slaveOk() const { return true; }
+        virtual bool slaveOverrideOk() const { return true; }
+        virtual LockType locktype() const { return NONE; }
+        virtual bool requiresSync() const { return false; }
+        virtual bool needsTxn() const { return false; }
+        virtual int txnFlags() const { return noTxnFlags(); }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+    };
+
+    /** deprecated in tokuds */
+    class DeprecatedCommand : public InformationCommand {
+      public:
+        DeprecatedCommand(const char *name, bool webUI=false, const char *oldName=NULL) : InformationCommand(name, false, oldName) {}
+        bool maintenanceMode() const { return true; }
+        void help(stringstream &h) const { h << name << " is a deprecated command"; }
+        bool run(const string&, BSONObj&, int, string &errmsg, BSONObjBuilder &res, bool) {
+            stringstream ss;
+            ss << name << " is a deprecated command, ignoring!";
+            problem() << ss.str() << endl;
+            errmsg = ss.str();
+            res.append("errmsg", errmsg);
+            res.append("ok", false);
+            return false;
+        }
     };
 
     class CmdShutdown : public Command {
@@ -175,8 +259,12 @@ namespace mongo {
             return true;
         }
         virtual LockType locktype() const { return NONE; }
+        virtual bool requiresSync() const { return false; }
         // Cannot have a transaction while shutting down the server.
         virtual bool needsTxn() const { return false; }
+        virtual int txnFlags() const { return noTxnFlags(); }
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
         virtual void help( stringstream& help ) const;
         CmdShutdown() : Command("shutdown") {}
         bool run(const string& dbname, BSONObj& cmdObj, int options, string& errmsg, BSONObjBuilder& result, bool fromRepl);

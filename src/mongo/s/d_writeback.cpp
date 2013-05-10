@@ -132,13 +132,11 @@ namespace mongo {
     // ---------- admin commands ----------
 
     // Note, this command will block until there is something to WriteBack
-    class WriteBackCommand : public Command {
+    class WriteBackCommand : public InformationCommand {
     public:
-        virtual LockType locktype() const { return NONE; }
-        virtual bool slaveOk() const { return true; }
         virtual bool adminOnly() const { return true; }
 
-        WriteBackCommand() : Command( "writebacklisten" ) {}
+        WriteBackCommand() : InformationCommand("writebacklisten") {}
 
         void help(stringstream& h) const { h<<"internal"; }
 
@@ -181,14 +179,10 @@ namespace mongo {
         }
     } writeBackCommand;
 
-    class WriteBacksQueuedCommand : public Command {
+    class WriteBacksQueuedCommand : public InformationCommand {
     public:
-        virtual LockType locktype() const { return NONE; }
-        virtual bool slaveOk() const { return true; }
         virtual bool adminOnly() const { return true; }
-
-        WriteBacksQueuedCommand() : Command( "writeBacksQueued" ) {}
-
+        WriteBacksQueuedCommand() : InformationCommand("writeBacksQueued") {}
         void help(stringstream& help) const {
             help << "Returns whether there are operations in the writeback queue at the time the command was called. "
                  << "This is an internal command";

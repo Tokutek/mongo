@@ -81,9 +81,14 @@ namespace mongo {
 
     class CompactCmd : public Command {
     public:
-        virtual LockType locktype() const { return NONE; }
-        virtual bool adminOnly() const { return false; }
         virtual bool slaveOk() const { return true; }
+        virtual LockType locktype() const { return NONE; }
+        virtual bool requiresSync() const { return false; }
+        virtual bool needsTxn() const { return false; }
+        virtual int txnFlags() const { return noTxnFlags(); }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual bool adminOnly() const { return false; }
         virtual bool maintenanceMode() const { return true; }
         virtual bool logTheOp() { return false; }
         virtual void help( stringstream& help ) const {

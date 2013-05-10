@@ -375,16 +375,12 @@ namespace mongo {
 
     // QUESTION: Restrict to the namespace from which this command was issued?
     // Alternatively, make this command admin-only?
-    class CmdCursorInfo : public Command {
+    class CmdCursorInfo : public InformationCommand {
     public:
-        CmdCursorInfo() : Command( "cursorInfo", true ) {}
-        virtual bool slaveOk() const { return true; }
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
+        CmdCursorInfo() : InformationCommand("cursorInfo") {}
         virtual void help( stringstream& help ) const {
             help << " example: { cursorInfo : 1 }";
         }
-        virtual LockType locktype() const { return NONE; }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             ClientCursor::appendStats( result );
             return true;

@@ -129,11 +129,9 @@ namespace mongo {
 #endif
 
 
-    class IsSelfCommand : public Command {
-    public:
-        IsSelfCommand() : Command("_isSelf") , _cacheLock( "IsSelfCommand::_cacheLock" ) {}
-        virtual bool slaveOk() const { return true; }
-        virtual LockType locktype() const { return NONE; }
+    class IsSelfCommand : public InformationCommand {
+      public:
+        IsSelfCommand() : InformationCommand("_isSelf") , _cacheLock( "IsSelfCommand::_cacheLock" ) {}
         virtual void help( stringstream &help ) const {
             help << "{ _isSelf : 1 } INTERNAL ONLY";
         }

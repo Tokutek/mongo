@@ -248,8 +248,11 @@ namespace mongo {
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
         virtual LockType locktype() const { return NONE; }
+        virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }
-
+        virtual int txnFlags() const { return noTxnFlags(); }
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
     };
 
     bool isInRange( const BSONObj& obj ,
@@ -750,8 +753,12 @@ namespace mongo {
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
         virtual LockType locktype() const { return NONE; }
+        // this makes so little sense...
+        virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }
-
+        virtual int txnFlags() const { return noTxnFlags(); }
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
 
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             // 1. parse options
@@ -1833,7 +1840,7 @@ namespace mongo {
             return true;
         }
 
-    } recvChunkAboortCommand;
+    } recvChunkAbortCommand;
 
 
     class IsInRangeTest : public StartupTest {

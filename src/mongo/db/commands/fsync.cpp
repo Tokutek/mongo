@@ -46,6 +46,11 @@ namespace mongo {
         FSyncCommand() : Command( "fsync" ), m("lockfsync") { locked=false; pendingUnlock=false; }
         virtual LockType locktype() const { return NONE; }
         virtual bool slaveOk() const { return true; }
+        virtual bool requiresSync() const { return false; }
+        virtual bool needsTxn() const { return false; }
+        virtual int txnFlags() const { return noTxnFlags(); }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
         virtual bool adminOnly() const { return true; }
         virtual void help(stringstream& h) const { h << url(); }
         virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {

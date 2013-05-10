@@ -22,12 +22,9 @@
 
 namespace mongo {
 
-    class DistinctCommand : public Command {
+    class DistinctCommand : public QueryCommand {
     public:
-        DistinctCommand() : Command("distinct") {}
-        virtual bool slaveOk() const { return true; }
-        virtual LockType locktype() const { return READ; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
+        DistinctCommand() : QueryCommand("distinct") {}
         virtual void help( stringstream &help ) const {
             help << "{ distinct : 'collection name' , key : 'a.b' , query : {} }";
         }

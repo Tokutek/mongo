@@ -98,15 +98,11 @@ namespace mongo {
     } cmdCloud;
 #endif
 
-    class CmdBuildInfo : public Command {
+    class CmdBuildInfo : public InformationCommand {
     public:
-        CmdBuildInfo() : Command( "buildInfo", true, "buildinfo" ) {}
-        virtual bool slaveOk() const { return true; }
+        CmdBuildInfo() : InformationCommand("buildInfo", true, "buildinfo") {}
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return false; }
-        virtual LockType locktype() const { return NONE; }
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual void help( stringstream &help ) const {
             help << "get version #, etc.\n";
             help << "{ buildinfo:1 }";
@@ -132,12 +128,10 @@ namespace mongo {
 
     const char* fetchReplIndexPrefetchParam();
 
-    class CmdGet : public Command {
+    class CmdGet : public InformationCommand {
     public:
-        CmdGet() : Command( "getParameter" ) { }
-        virtual bool slaveOk() const { return true; }
+        CmdGet() : InformationCommand("getParameter", false) {}
         virtual bool adminOnly() const { return true; }
-        virtual LockType locktype() const { return NONE; }
         virtual void help( stringstream &help ) const {
             help << "get administrative option(s)\nexample:\n";
             help << "{ getParameter:1, notablescan:1 }\n";
@@ -148,8 +142,6 @@ namespace mongo {
             help << "  syncdelay\n";
             help << "{ getParameter:'*' } to get everything\n";
         }
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             bool all = *cmdObj.firstElement().valuestrsafe() == '*';
 
@@ -188,12 +180,10 @@ namespace mongo {
     // tempish
     bool setParmsMongodSpecific(const string& dbname, BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result, bool fromRepl );
 
-    class CmdSet : public Command {
+    class CmdSet : public InformationCommand {
     public:
-        CmdSet() : Command( "setParameter" ) { }
-        virtual bool slaveOk() const { return true; }
+        CmdSet() : InformationCommand("setParameter", false) {}
         virtual bool adminOnly() const { return true; }
-        virtual LockType locktype() const { return NONE; }
         virtual void help( stringstream &help ) const {
             help << "set administrative option(s)\n";
             help << "{ setParameter:1, <param>:<value> }\n";
@@ -307,14 +297,10 @@ namespace mongo {
         }
     } cmdSet;
 
-    class PingCommand : public Command {
+    class PingCommand : public InformationCommand {
     public:
-        PingCommand() : Command( "ping" ) {}
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual bool slaveOk() const { return true; }
+        PingCommand() : InformationCommand("ping") {}
         virtual void help( stringstream &help ) const { help << "a way to check that the server is alive. responds immediately even if server is in a db lock."; }
-        virtual LockType locktype() const { return NONE; }
         virtual bool requiresAuth() { return false; }
         virtual bool run(const string& badns, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             // IMPORTANT: Don't put anything in here that might lock db - including authentication
@@ -322,15 +308,10 @@ namespace mongo {
         }
     } pingCmd;
 
-    class FeaturesCmd : public Command {
+    class FeaturesCmd : public InformationCommand {
     public:
-        FeaturesCmd() : Command( "features", true ) {}
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
+        FeaturesCmd() : InformationCommand("features") {}
         void help(stringstream& h) const { h << "return build level feature settings"; }
-        virtual bool slaveOk() const { return true; }
-        virtual bool readOnly() { return true; }
-        virtual LockType locktype() const { return NONE; }
         virtual bool run(const string& ns, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if ( globalScriptEngine ) {
                 BSONObjBuilder bb( result.subobjStart( "js" ) );
@@ -347,17 +328,9 @@ namespace mongo {
 
     } featuresCmd;
 
-    class HostInfoCmd : public Command {
+    class HostInfoCmd : public InformationCommand {
     public:
-        HostInfoCmd() : Command("hostInfo", true) {}
-        virtual bool slaveOk() const {
-            return true;
-        }
-
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual LockType locktype() const { return NONE; }
-
+        HostInfoCmd() : InformationCommand("hostInfo") {}
         virtual void help( stringstream& help ) const {
             help << "returns information about the daemon's host";
         }
@@ -386,15 +359,11 @@ namespace mongo {
 
     } hostInfoCmd;
 
-    class ListCommandsCmd : public Command {
+    class ListCommandsCmd : public InformationCommand {
     public:
         virtual void help( stringstream &help ) const { help << "get a list of all db commands"; }
-        ListCommandsCmd() : Command( "listCommands", false ) {}
-        virtual LockType locktype() const { return NONE; }
-        virtual bool slaveOk() const { return true; }
+        ListCommandsCmd() : InformationCommand("listCommands", false) {}
         virtual bool adminOnly() const { return false; }
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool run(const string& ns, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             BSONObjBuilder b( result.subobjStart( "commands" ) );
             for ( map<string,Command*>::iterator i=_commands->begin(); i!=_commands->end(); ++i ) {
@@ -439,46 +408,31 @@ namespace mongo {
     }
 
     /* for testing purposes only */
-    class CmdForceError : public Command {
+    class CmdForceError : public InformationCommand {
     public:
         virtual void help( stringstream& help ) const {
             help << "for testing purposes only.  forces a user assertion exception";
         }
-        virtual bool logTheOp() {
-            return false;
-        }
-        virtual bool slaveOk() const {
-            return true;
-        }
-        virtual LockType locktype() const { return NONE; }
-        CmdForceError() : Command("forceerror") {}
+        CmdForceError() : InformationCommand("forceerror", false) {}
         bool run(const string& dbnamne, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             uassert( 10038 , "forced error", false);
             return true;
         }
     } cmdForceError;
 
-    class AvailableQueryOptions : public Command {
+    class AvailableQueryOptions : public InformationCommand {
     public:
-        AvailableQueryOptions() : Command( "availableQueryOptions" , false , "availablequeryoptions" ) {}
-        virtual bool slaveOk() const { return true; }
-        virtual LockType locktype() const { return NONE; }
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
+        AvailableQueryOptions() : InformationCommand("availableQueryOptions", false, "availablequeryoptions") {}
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             result << "options" << QueryOption_AllSupported;
             return true;
         }
     } availableQueryOptionsCmd;
 
-    class GetLogCmd : public Command {
+    class GetLogCmd : public InformationCommand {
     public:
-        GetLogCmd() : Command( "getLog" ){}
-
-        virtual bool slaveOk() const { return true; }
-        virtual LockType locktype() const { return NONE; }
+        GetLogCmd() : InformationCommand("getLog", false) {}
         virtual bool adminOnly() const { return true; }
-
         virtual void help( stringstream& help ) const {
             help << "{ getLog : '*' }  OR { getLog : 'global' }";
         }

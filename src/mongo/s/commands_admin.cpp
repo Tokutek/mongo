@@ -55,19 +55,13 @@ namespace mongo {
 
     namespace dbgrid_cmds {
 
-        class GridAdminCmd : public Command {
+        class GridAdminCmd : public InformationCommand {
         public:
-            GridAdminCmd( const char * n ) : Command( n , false, tolowerString(n).c_str() ) {
-            }
-            virtual bool slaveOk() const {
-                return true;
+            GridAdminCmd( const char * n ) : InformationCommand( n , false, tolowerString(n).c_str() ) {
             }
             virtual bool adminOnly() const {
                 return true;
             }
-
-            // all grid commands are designed not to lock
-            virtual LockType locktype() const { return NONE; }
 
             bool okForConfigChanges( string& errmsg ) {
                 string e;
@@ -113,14 +107,11 @@ namespace mongo {
         } flushRouterConfigCmd;
 
 
-        class ServerStatusCmd : public Command {
+        class ServerStatusCmd : public InformationCommand {
         public:
-            ServerStatusCmd() : Command( "serverStatus" , true ) {
+            ServerStatusCmd() : InformationCommand( "serverStatus" , true ) {
                 _started = time(0);
             }
-
-            virtual bool slaveOk() const { return true; }
-            virtual LockType locktype() const { return NONE; }
 
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
                 result.append( "host" , prettyHostName() );
@@ -1118,14 +1109,10 @@ namespace mongo {
 
         // --------------- public commands ----------------
 
-        class IsDbGridCmd : public Command {
+        class IsDbGridCmd : public InformationCommand {
         public:
-            virtual LockType locktype() const { return NONE; }
             virtual bool requiresAuth() { return false; }
-            virtual bool slaveOk() const {
-                return true;
-            }
-            IsDbGridCmd() : Command("isdbgrid") { }
+            IsDbGridCmd() : InformationCommand("isdbgrid", false) { }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 result.append("isdbgrid", 1);
                 result.append("hostname", getHostNameCached());
@@ -1133,17 +1120,13 @@ namespace mongo {
             }
         } isdbgrid;
 
-        class CmdIsMaster : public Command {
+        class CmdIsMaster : public InformationCommand {
         public:
-            virtual LockType locktype() const { return NONE; }
             virtual bool requiresAuth() { return false; }
-            virtual bool slaveOk() const {
-                return true;
-            }
             virtual void help( stringstream& help ) const {
                 help << "test if this is master half of a replica pair";
             }
-            CmdIsMaster() : Command("isMaster" , false , "ismaster") { }
+            CmdIsMaster() : InformationCommand("isMaster" , false , "ismaster") { }
             virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 result.appendBool("ismaster", true );
                 result.append("msg", "isdbgrid");
@@ -1152,16 +1135,9 @@ namespace mongo {
             }
         } ismaster;
 
-        class CmdWhatsMyUri : public Command {
+        class CmdWhatsMyUri : public InformationCommand {
         public:
-            CmdWhatsMyUri() : Command("whatsmyuri") { }
-            virtual bool logTheOp() {
-                return false; // the modification will be logged directly
-            }
-            virtual bool slaveOk() const {
-                return true;
-            }
-            virtual LockType locktype() const { return NONE; }
+            CmdWhatsMyUri() : InformationCommand("whatsmyuri", false) { }
             virtual void help( stringstream &help ) const {
                 help << "{whatsmyuri:1}";
             }
@@ -1172,34 +1148,25 @@ namespace mongo {
         } cmdWhatsMyUri;
 
 
-        class CmdShardingGetPrevError : public Command {
+        class CmdShardingGetPrevError : public InformationCommand {
         public:
-            virtual LockType locktype() const { return NONE; }
             virtual bool requiresAuth() { return false; }
-
-            virtual bool slaveOk() const {
-                return true;
-            }
             virtual void help( stringstream& help ) const {
                 help << "get previous error (since last reseterror command)";
             }
-            CmdShardingGetPrevError() : Command( "getPrevError" , false , "getpreverror") { }
+            CmdShardingGetPrevError() : InformationCommand( "getPrevError" , false , "getpreverror") { }
             virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 errmsg += "getpreverror not supported for sharded environments";
                 return false;
             }
         } cmdGetPrevError;
 
-        class CmdShardingGetLastError : public Command {
+        class CmdShardingGetLastError : public InformationCommand {
         public:
-            virtual LockType locktype() const { return NONE; }
-            virtual bool slaveOk() const {
-                return true;
-            }
             virtual void help( stringstream& help ) const {
                 help << "check for an error on the last command executed";
             }
-            CmdShardingGetLastError() : Command("getLastError" , false , "getlasterror") { }
+            CmdShardingGetLastError() : InformationCommand("getLastError" , false , "getlasterror") { }
 
             virtual bool run(const string& dbName, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 LastError *le = lastError.disableForCommand();
@@ -1219,14 +1186,9 @@ namespace mongo {
 
     }
 
-    class CmdShardingResetError : public Command {
+    class CmdShardingResetError : public InformationCommand {
     public:
-        CmdShardingResetError() : Command( "resetError" , false , "reseterror" ) {}
-
-        virtual LockType locktype() const { return NONE; }
-        virtual bool slaveOk() const {
-            return true;
-        }
+        CmdShardingResetError() : InformationCommand( "resetError" , false , "reseterror" ) {}
 
         bool run(const string& dbName , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             LastError *le = lastError.get();
@@ -1248,15 +1210,12 @@ namespace mongo {
         }
     } cmdShardingResetError;
 
-    class CmdListDatabases : public Command {
+    class CmdListDatabases : public InformationCommand {
     public:
-        CmdListDatabases() : Command("listDatabases", true , "listdatabases" ) {}
+        CmdListDatabases() : InformationCommand("listDatabases", true, "listdatabases") {}
 
         virtual bool logTheOp() { return false; }
-        virtual bool slaveOk() const { return true; }
-        virtual bool slaveOverrideOk() const { return true; }
         virtual bool adminOnly() const { return true; }
-        virtual LockType locktype() const { return NONE; }
         virtual void help( stringstream& help ) const { help << "list databases on cluster"; }
 
         bool run(const string& , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
@@ -1374,14 +1333,11 @@ namespace mongo {
 
     } cmdListDatabases;
 
-    class CmdCloseAllDatabases : public Command {
+    class CmdCloseAllDatabases : public InformationCommand {
     public:
-        CmdCloseAllDatabases() : Command("closeAllDatabases", false , "closeAllDatabases" ) {}
+        CmdCloseAllDatabases() : InformationCommand("closeAllDatabases", false) {}
         virtual bool logTheOp() { return false; }
-        virtual bool slaveOk() const { return true; }
-        virtual bool slaveOverrideOk() const { return true; }
         virtual bool adminOnly() const { return true; }
-        virtual LockType locktype() const { return NONE; }
         virtual void help( stringstream& help ) const { help << "Not supported sharded"; }
 
         bool run(const string& , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& /*result*/, bool /*fromRepl*/) {
@@ -1391,13 +1347,11 @@ namespace mongo {
     } cmdCloseAllDatabases;
 
 
-    class CmdReplSetGetStatus : public Command {
+    class CmdReplSetGetStatus : public InformationCommand {
     public:
-        CmdReplSetGetStatus() : Command("replSetGetStatus"){}
+        CmdReplSetGetStatus() : InformationCommand("replSetGetStatus", false){}
         virtual bool logTheOp() { return false; }
-        virtual bool slaveOk() const { return true; }
         virtual bool adminOnly() const { return true; }
-        virtual LockType locktype() const { return NONE; }
         virtual void help( stringstream& help ) const { help << "Not supported through mongos"; }
 
         bool run(const string& , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {

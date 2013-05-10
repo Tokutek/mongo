@@ -35,11 +35,15 @@ namespace mongo {
     public:
         // virtuals from Command
         virtual ~PipelineCommand();
-        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool run(const string &db, BSONObj &cmdObj, int options,
                          string &errmsg, BSONObjBuilder &result, bool fromRepl);
         virtual LockType locktype() const;
+        // can't know if you're going to do a write op yet, you just shouldn't do aggregate on a SyncClusterConnection
+        virtual bool requiresSync() const { return true; }
         virtual bool needsTxn() const { return false; }
+        virtual int txnFlags() const { return noTxnFlags(); }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
         virtual bool slaveOk() const;
         virtual void help(stringstream &help) const;
 

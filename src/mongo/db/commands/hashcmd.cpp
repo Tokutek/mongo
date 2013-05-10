@@ -25,13 +25,9 @@
 
 namespace mongo {
 
-    class CmdHashElt : public Command {
+    class CmdHashElt : public InformationCommand {
     public:
-        CmdHashElt() : Command("_hashBSONElement") {};
-        virtual LockType locktype() const { return NONE; }
-        virtual bool slaveOk() const { return true; }
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
+        CmdHashElt() : InformationCommand("_hashBSONElement") {};
         virtual void help( stringstream& help ) const {
             help << "returns the hash of the first BSONElement val in a BSONObj";
         }

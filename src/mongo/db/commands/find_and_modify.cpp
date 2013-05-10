@@ -43,7 +43,10 @@ namespace mongo {
         virtual bool logTheOp() { return false; } // the modifications will be logged directly
         virtual bool slaveOk() const { return false; }
         virtual LockType locktype() const { return NONE; }
+        virtual bool requiresSync() const { return true; }
         virtual bool needsTxn() const { return false; }
+        virtual int txnFlags() const { return DB_SERIALIZABLE; }
+        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
         
         /* this will eventually replace run,  once sort is handled */
         bool runNoDirectClient( const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {

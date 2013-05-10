@@ -55,17 +55,6 @@ namespace mongo {
         return dbname + '.' + coll;
     }
 
-    int Command::txnFlags() const {
-        if (locktype() == READ) {
-            // TODO: Maybe add DB_TXN_READ_ONLY?
-            return DB_TXN_SNAPSHOT;
-        } else if (locktype() == WRITE) {
-            return DB_SERIALIZABLE;
-        } else {
-            msgasserted(16782, "can't call txnFlags with locktype NONE");
-        }
-    }
-
     void Command::htmlHelp(stringstream& ss) const {
         string helpStr;
         {
@@ -190,36 +179,26 @@ namespace mongo {
 
     extern DBConnectionPool pool;
 
-    class PoolFlushCmd : public Command {
+    class PoolFlushCmd : public InformationCommand {
     public:
-        PoolFlushCmd() : Command( "connPoolSync" , false , "connpoolsync" ) {}
+        PoolFlushCmd() : InformationCommand( "connPoolSync" , false , "connpoolsync" ) {}
         virtual void help( stringstream &help ) const { help<<"internal"; }
-        virtual LockType locktype() const { return NONE; }
         virtual bool run(const string&, mongo::BSONObj&, int, std::string&, mongo::BSONObjBuilder& result, bool) {
             pool.flush();
             return true;
         }
-        virtual bool slaveOk() const {
-            return true;
-        }
-
     } poolFlushCmd;
 
-    class PoolStats : public Command {
+    class PoolStats : public InformationCommand {
     public:
-        PoolStats() : Command( "connPoolStats" ) {}
+        PoolStats() : InformationCommand( "connPoolStats", false ) {}
         virtual void help( stringstream &help ) const { help<<"stats about connection pool"; }
-        virtual LockType locktype() const { return NONE; }
         virtual bool run(const string&, mongo::BSONObj&, int, std::string&, mongo::BSONObjBuilder& result, bool) {
             pool.appendInfo( result );
             result.append( "numDBClientConnection" , DBClientConnection::getNumConnections() );
             result.append( "numAScopedConnection" , AScopedConnection::getNumConnections() );
             return true;
         }
-        virtual bool slaveOk() const {
-            return true;
-        }
-
     } poolStatsCmd;
 
 } // namespace mongo

@@ -395,12 +395,12 @@ namespace mongo {
     public:
         MongodShardCommand( const char * n ) : Command( n ) {
         }
-        virtual bool slaveOk() const {
-            return false;
-        }
-        virtual bool adminOnly() const {
-            return true;
-        }
+        virtual bool slaveOk() const { return false; }
+        virtual bool adminOnly() const { return true; }
+        virtual bool requiresSync() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual bool needsTxn() const { return false; }
+        virtual int txnFlags() const { return noTxnFlags(); }
     };
 
 

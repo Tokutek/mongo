@@ -988,7 +988,6 @@ namespace mongo {
             /* why !replset ?
                bad things happen with --slave (i think because of this)
             */
-            virtual bool canRunInMultiStmtTxn() const { return true; }
             virtual bool slaveOk() const { return !replSet; }
 
             virtual bool slaveOverrideOk() const { return true; }
@@ -1000,6 +999,11 @@ namespace mongo {
             }
 
             virtual LockType locktype() const { return NONE; }
+            virtual bool requiresSync() const { return false; }
+            virtual bool needsTxn() const { return false; }
+            virtual int txnFlags() const { return noTxnFlags(); }
+            virtual bool canRunInMultiStmtTxn() const { return true; }
+            virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings().setBulkFetch(true); }
 
             bool run(const string& dbname , BSONObj& cmd, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
                 Timer t;
@@ -1191,6 +1195,12 @@ namespace mongo {
             virtual bool slaveOverrideOk() const { return true; }
 
             virtual LockType locktype() const { return NONE; }
+            virtual bool requiresSync() const { return false; }
+            virtual bool needsTxn() const { return false; }
+            virtual int txnFlags() const { return noTxnFlags(); }
+            virtual bool canRunInMultiStmtTxn() const { return true; }
+            virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings().setBulkFetch(true); }
+
             bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 ShardedConnectionInfo::addHook();
                 // legacy name

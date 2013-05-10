@@ -22,24 +22,17 @@
 
 namespace mongo {
 
-    class BeginTransactionCmd : public Command {
+    class BeginTransactionCmd : public InformationCommand {
     public:
-        virtual LockType locktype() const { return NONE; }
         virtual bool adminOnly() const { return false; }
-        virtual bool slaveOk() const { return true; }
-        virtual bool logTheOp() { return false; }
-        // dont create the transaction outside of us, because we are managing the
-        // the transaction here
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual bool requiresAuth() { return true; }
         virtual void help( stringstream& help ) const {
             help << "begin transaction\n"
                 "Create a transaction for multiple statements.\n"
                 "{ beginTransaction, [isolation : ]  }\n"
                 " Possible values for isolation: serializable, mvcc (default), readUncommitted \n";
         }
-        virtual bool requiresAuth() { return true; }
-        BeginTransactionCmd() : Command("beginTransaction") { }
+        BeginTransactionCmd() : InformationCommand("beginTransaction") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
@@ -83,23 +76,16 @@ namespace mongo {
         }
     } beginTransactionCmd;
 
-    class CommitTransactionCmd : public Command {
+    class CommitTransactionCmd : public InformationCommand {
     public:
-        virtual LockType locktype() const { return NONE; }
         virtual bool adminOnly() const { return false; }
-        virtual bool slaveOk() const { return true; }
-        virtual bool logTheOp() { return false; }
-        // dont create the transaction outside of us, because we are managing the
-        // the transaction here
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual bool requiresAuth() { return true; }
         virtual void help( stringstream& help ) const {
             help << "commit transaction\n"
                 "If running a multi statement transaction, commit transaction, no-op otherwise .\n"
                 "{ commitTransaction }";
         }
-        virtual bool requiresAuth() { return true; }
-        CommitTransactionCmd() : Command("commitTransaction") { }
+        CommitTransactionCmd() : InformationCommand("commitTransaction") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
@@ -123,23 +109,16 @@ namespace mongo {
         }
     } commitTransactionCmd;
 
-    class RollbackTransactionCmd : public Command {
+    class RollbackTransactionCmd : public InformationCommand {
     public:
-        virtual LockType locktype() const { return NONE; }
         virtual bool adminOnly() const { return false; }
-        virtual bool slaveOk() const { return true; }
-        virtual bool logTheOp() { return false; }
-        // dont create the transaction outside of us, because we are managing the
-        // the transaction here
-        virtual bool needsTxn() const { return false; }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual bool requiresAuth() { return true; }
         virtual void help( stringstream& help ) const {
             help << "rollback transaction\n"
                 "If running a multi statement transaction, rollback transaction, no-op otherwise .\n"
                 "{ rollbackTransaction }";
         }
-        virtual bool requiresAuth() { return true; }
-        RollbackTransactionCmd() : Command("rollbackTransaction") { }
+        RollbackTransactionCmd() : InformationCommand("rollbackTransaction") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 

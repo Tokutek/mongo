@@ -584,13 +584,11 @@ namespace mongo {
 #endif
     }
 
-    class CmdGetCmdLineOpts : Command {
+    class CmdGetCmdLineOpts : InformationCommand {
     public:
-        CmdGetCmdLineOpts(): Command("getCmdLineOpts") {}
+        CmdGetCmdLineOpts(): InformationCommand("getCmdLineOpts", false) {}
         void help(stringstream& h) const { h << "get argv"; }
-        virtual LockType locktype() const { return NONE; }
         virtual bool adminOnly() const { return true; }
-        virtual bool slaveOk() const { return true; }
 
         virtual bool run(const string&, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             result.append("argv", argvArray);

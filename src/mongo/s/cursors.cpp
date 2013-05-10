@@ -319,14 +319,12 @@ namespace mongo {
         task::repeat( new CursorTimeoutTask , 400 );
     }
 
-    class CmdCursorInfo : public Command {
+    class CmdCursorInfo : public InformationCommand {
     public:
-        CmdCursorInfo() : Command( "cursorInfo", true ) {}
-        virtual bool slaveOk() const { return true; }
+        CmdCursorInfo() : InformationCommand("cursorInfo") {}
         virtual void help( stringstream& help ) const {
             help << " example: { cursorInfo : 1 }";
         }
-        virtual LockType locktype() const { return NONE; }
         bool run(const string&, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             cursorCache.appendInfo( result );
             if ( jsobj["setTimeout"].isNumber() )

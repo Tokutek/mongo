@@ -147,13 +147,11 @@ namespace mongo {
         bb.done();
     }
 
-    class TopCmd : public Command {
+    class TopCmd : public InformationCommand {
     public:
-        TopCmd() : Command( "top", true ) {}
+        TopCmd() : InformationCommand("top") {}
 
-        virtual bool slaveOk() const { return true; }
         virtual bool adminOnly() const { return true; }
-        virtual LockType locktype() const { return NONE; }
         virtual void help( stringstream& help ) const { help << "usage by collection, in micros "; }
 
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
