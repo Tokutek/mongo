@@ -142,7 +142,8 @@ namespace mongo {
         // arbiters don't sync. So check for it before we
         // we try to modify states that put it in recovering
         // or secondary
-        if (!myConfig().arbiterOnly) {
+        // also, can only blockSync if we are a secondary or recoverying
+        if (!myConfig().arbiterOnly && (box.getState().secondary() || box.getState().recovering())) {
             // if told to block, and currently not blocking,
             // stop opsync thread and go into recovering state
             if (block && !_blockSync) {

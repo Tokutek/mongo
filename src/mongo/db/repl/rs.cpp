@@ -120,6 +120,10 @@ namespace mongo {
                 errmsg = "arbiters can't modify maintenance mode";
                 return false;
             }
+            else if (!box.getState().secondary() && !box.getState().recovering()) {
+                errmsg = "cannot modify maintenance mode unless in secondary state or recovering state";
+                return false;
+            }
         }
 
         if (inc) {
