@@ -893,6 +893,7 @@ namespace mongo {
            @param ns collection to be indexed
            @param keys the "key pattern" for the index.  e.g., { name : 1 }
            @param unique if true, indicates that key uniqueness should be enforced for this index
+           @param clustering if true, indicates that data should be clustered with this index
            @param name if not specified, it will be created from the keys automatically (which is recommended)
            @param cache if set to false, the index cache for the connection won't remember this call
            @param background build index in the background (see mongodb docs/wiki for details)
@@ -900,8 +901,8 @@ namespace mongo {
            @return whether or not sent message to db.
              should be true on first call, false on subsequent unless resetIndexCache was called
          */
-        virtual bool ensureIndex( const string &ns , BSONObj keys , bool unique = false, const string &name = "",
-                                  bool cache = true, bool background = false, int v = -1 );
+        virtual bool ensureIndex( const string &ns , BSONObj keys , bool unique = false, bool clustering = false,
+                                  const string &name = "", bool cache = true, bool background = false, int v = -1 );
 
         /**
            clears the index cache, so the subsequent call to ensureIndex for any index will go to the server

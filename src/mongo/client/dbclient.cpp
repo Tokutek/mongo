@@ -1126,7 +1126,7 @@ namespace mongo {
         return ss.str();
     }
 
-    bool DBClientWithCommands::ensureIndex( const string &ns , BSONObj keys , bool unique, const string & name , bool cache, bool background, int version ) {
+    bool DBClientWithCommands::ensureIndex( const string &ns , BSONObj keys , bool unique, bool clustering, const string & name , bool cache, bool background, int version ) {
         BSONObjBuilder toSave;
         toSave.append( "ns" , ns );
         toSave.append( "key" , keys );
@@ -1149,6 +1149,10 @@ namespace mongo {
 
         if ( unique )
             toSave.appendBool( "unique", unique );
+
+        if (clustering) {
+            toSave.appendBool("clustering", clustering);
+        }
 
         if( background ) 
             toSave.appendBool( "background", true );

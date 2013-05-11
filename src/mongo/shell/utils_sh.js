@@ -64,7 +64,7 @@ sh.enableSharding = function( dbname ) {
     return sh._adminCommand( { enableSharding : dbname } );
 }
 
-sh.shardCollection = function( fullName , key , unique ) {
+sh.shardCollection = function( fullName , key , unique , clustering ) {
     sh._checkFullName( fullName )
     assert( key , "need a key" )
     assert( typeof( key ) == "object" , "key needs to be an object" )
@@ -72,6 +72,9 @@ sh.shardCollection = function( fullName , key , unique ) {
     var cmd = { shardCollection : fullName , key : key }
     if ( unique ) 
         cmd.unique = true;
+
+    if ( clustering !== undefined )
+        cmd.clustering = clustering;
 
     return sh._adminCommand( cmd );
 }

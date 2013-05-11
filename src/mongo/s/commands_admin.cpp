@@ -600,6 +600,36 @@ namespace mongo {
                     BSONObj currentKey = idx["key"].embeddedObject();
                     // Check 2.i. and 2.ii.
                     if ( ! idx["sparse"].trueValue() && proposedKey.isPrefixOf( currentKey ) ) {
+                        BSONElement ce = cmdObj["clustering"];
+                        if (idx["clustering"].trueValue()) {
+                            if (ce.ok() && !ce.trueValue()) {
+                                stringstream ss;
+                                ss << "key " << currentKey << " is clustering, but a non-clustering key was requested.";
+                                errmsg = ss.str();
+                                conn->done();
+                                return false;
+                            }
+                        }
+                        else {
+                            if (ce.ok() && !ce.trueValue()) {
+                                LOG(0) << "WARNING: Sharding " << ns << " on non-clustering key " << currentKey
+                                       << ". This may lead to poor performance of migrations and range queries." << endl;
+                            }
+                            else {
+                                stringstream ss;
+                                ss << "Sharding " << ns << " on the non-clustering key " << currentKey
+                                   << " may lead to poor performance of migrations and range queries."
+                                   << " Either consider sharding on a different key (with a clustering index)"
+                                   << " or drop the index " << currentKey << " and re-create it as a"
+                                   << " clustering index. If you are sure you want to shard on a non-clustering"
+                                   << " index, try again with sh.shardCollection(\"" << ns << "\", {key: "
+                                   << currentKey << ", clustering: false}).";
+                                errmsg = ss.str();
+                                LOG(0) << ss.str() << endl;
+                                conn->done();
+                                return false;
+                            }
+                        }
                         hasUsefulIndexForKey = true;
                     }
                 }
@@ -643,7 +673,7 @@ namespace mongo {
                 }
                 // 4. if no useful index, and collection is non-empty, fail
                 else if ( conn->get()->count( ns ) != 0 ) {
-                    errmsg = str::stream() << "please create an index that starts with the "
+                    errmsg = str::stream() << "please create a clustering index that starts with the "
                                            << "shard key before sharding.";
                     result.append( "proposedKey" , proposedKey );
                     result.appendArray( "curIndexes" , allIndexes.done() );
@@ -654,12 +684,15 @@ namespace mongo {
                 //    Only need to call ensureIndex on primary shard, since indexes get copied to
                 //    receiving shard whenever a migrate occurs.
                 else {
+                    BSONElement ce = cmdObj["clustering"];
+                    bool clustering = (ce.ok() ? ce.trueValue() : true);
                     // call ensureIndex with cache=false, see SERVER-1691
-                    bool ensureSuccess = conn->get()->ensureIndex( ns ,
-                                                                   proposedKey ,
-                                                                   careAboutUnique ,
-                                                                   "" ,
-                                                                   false );
+                    bool ensureSuccess = conn->get()->ensureIndex(ns,
+                                                                  proposedKey,
+                                                                  careAboutUnique,
+                                                                  clustering,
+                                                                  "",
+                                                                  false);
                     if ( ! ensureSuccess ) {
                         errmsg = "ensureIndex failed to create index on primary shard";
                         conn->done();
