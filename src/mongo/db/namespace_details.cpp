@@ -953,7 +953,11 @@ namespace mongo {
                 // Insert the keys that exist in newKeys but do not exist in oldKeys
                 for (BSONObjSet::iterator n = newKeys.begin(); n != newKeys.end(); n++) {
                     const BSONObj &k = *n;
-                    if (!orderedSetContains(oldKeys, k)) {
+                    if (idx.clustering()) {
+                        // if clustering, overwrite every key with the new data
+                        idx.insertPair(k, &pk, newObj, ND_UNIQUE_CHECKS_OFF);
+                    }
+                    else if (!orderedSetContains(oldKeys, k)) {
                         idx.insertPair(k, &pk, newObj, 0);
                     }
                 }
