@@ -845,24 +845,37 @@ namespace mongo {
         }
     }
 
-    void getDatabaseNames( vector< string > &names , const string& usePath ) {
-        boost::filesystem::path path( usePath );
-        for ( boost::filesystem::directory_iterator i( path );
-                i != boost::filesystem::directory_iterator(); ++i ) {
-            if (false) {
-            //if ( directoryperdb )
-                boost::filesystem::path p = *i;
-                string dbName = p.leaf();
-                p /= ( dbName + ".ns" );
-                if ( exists( p ) )
-                    names.push_back( dbName );
-            }
-            else {
-                string fileName = boost::filesystem::path(*i).leaf();
-                if ( fileName.length() > 3 && fileName.substr( fileName.length() - 3, 3 ) == ".ns" )
-                    names.push_back( fileName.substr( 0, fileName.length() - 3 ) );
+    struct getDatabaseNamesExtra {
+        vector<string> &names;
+        getDatabaseNamesExtra(vector<string> &n) : names(n) {}
+    };
+
+    static int getDatabaseNamesCallback(const DBT *key, const DBT *val, void *extra) {
+        getDatabaseNamesExtra *e = static_cast<getDatabaseNamesExtra *>(extra);
+        size_t length = key->size;
+        if (length > 0) {
+            // strip off the trailing NULL in the key
+            char *cp = (char *) key->data + length - 1;
+            if (*cp == 0)
+                length -= 1;
+            if (length >= 3 && strcmp((char *) key->data + length - 3, ".ns") == 0) {
+                e->names.push_back(string((char *) key->data, length - 3));
             }
         }
+        return 0;
+    } 
+
+    void getDatabaseNames2( vector< string > &names) {
+        // create a cursor on the tokudb directory and search for <database>.ns keys
+        storage::DirectoryCursor c(storage::env, cc().txn().db_txn());
+        getDatabaseNamesExtra extra(names);
+        int r = 0;
+        while (r != DB_NOTFOUND) {
+            r = c.dbc()->c_getf_next(c.dbc(), 0, getDatabaseNamesCallback, &extra);
+        }
+    }
+
+    void getDatabaseNames( vector< string > &names , const string& usePath ) {
     }
 
     /* returns true if there is data on this server.  useful when starting replication.
