@@ -30,7 +30,7 @@ function retry() {
     test $exitcode = 0
 }
 
-function runsuite() {
+function choosepython() {
     local python=python
     if command -v python2.7 &>/dev/null; then
         python=python2.7
@@ -54,35 +54,7 @@ EOF
             set -u
         fi
     fi
-    local dir=$1
-    local suite=$2
-    mkdir -p $dir/smokedata-$suite
-    set +e
-    # smoke.py (by way of cleanbb.py) will kill anything running in the test directory (where we extracted)
-    # so if this bash script is running with that PWD, smoke.py will kill us
-    # but it won't kill itself, so we just make sure that *only* it runs in that directory and we're safe
-    (cd $dir ; \
-        exec $python buildscripts/smoke.py \
-            --with-cleanbb \
-            --continue-on-failure \
-            --smoke-db-prefix="smokedata-$suite" \
-            --quiet \
-            $suite
-        )
-    set -e
-}
-
-function runscons() {
-    local dir=$1
-    local suite=$2
-    mkdir -p $dir/smokedata-$suite
-    set +e
-    (cd $dir ; \
-        exec scons \
-        --smokedbprefix="smokedata-$suite" \
-        $suite
-        )
-    set -e
+    echo $python
 }
 
 # checkout the mongodb tests and run them against a mongodb tarball
@@ -107,14 +79,19 @@ function test_mongodb() {
         --directory $extracted \
         --file $origdir/$binary_tarball \
         $wildcardopt '*/bin/'
-    for suite in js sharding #aggregation dur parallel perf tool
-    do
-        runsuite $extracted $suite
-    done
-    #for sconssuite in smokeJsSlowNightly
-    #do
-    #    runscons $extracted $sconssuite
-    #done
+    mkdir -p $extracted/smokedata
+    set +e
+    # smoke.py (by way of cleanbb.py) will kill anything running in the test directory (where we extracted)
+    # so if this bash script is running with that PWD, smoke.py will kill us
+    # but it won't kill itself, so we just make sure that *only* it runs in that directory and we're safe
+    (cd $extracted ; \
+        exec $(choosepython) buildscripts/smoke.py \
+            --with-cleanbb \
+            --continue-on-failure \
+            --smoke-db-prefix=smokedata \
+            --quiet \
+            js sharding jsSlowNightly aggregation tool)
+    set -e
 }
 
 PATH=$HOME/bin:$PATH
