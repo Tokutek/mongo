@@ -46,7 +46,7 @@ coll.drop()
 jsTest.log( "Re-enabling sharding with a different key..." )
 
 admin.runCommand({ enableSharding : coll.getDB() + "" })
-coll.ensureIndex({ notId : 1 })
+coll.ensureIndex({ notId : 1 }, {clustering: true})
 admin.runCommand({ shardCollection : coll  + "", key : { notId : 1 } })
 
 for( var i = 0; i < 100; i++ ) {

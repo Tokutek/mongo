@@ -10,7 +10,7 @@ db = s.getDB( "test" );
 
 // Create some data
 for (i=0; i < 100; i++) { db.limit_push.insert({ _id : i, x: i}); } 
-db.limit_push.ensureIndex( { x : 1 } );
+db.limit_push.ensureIndex( { x : 1 }, {clustering: true} );
 assert.eq( 100 , db.limit_push.find().length() , "Incorrect number of documents" );
 
 // Shard the collection

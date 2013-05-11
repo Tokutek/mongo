@@ -10,7 +10,7 @@ var coll = mongos.getCollection( "foo.bar" )
 
 printjson( admin.runCommand({ enableSharding : coll.getDB() + "" }) )
 
-coll.ensureIndex({ shardKey : 1 })
+coll.ensureIndex({ shardKey : 1 }, {clustering: true})
 printjson( admin.runCommand({ shardCollection : coll + "", key : { shardKey : 1 } }) )
 
 var timeBadInsert = function(){

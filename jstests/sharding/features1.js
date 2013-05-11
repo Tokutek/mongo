@@ -19,7 +19,7 @@ db = s.getDB( "test" );
 a = s._connections[0].getDB( "test" );
 b = s._connections[1].getDB( "test" );
 
-db.foo.ensureIndex( { y : 1 } );
+db.foo.ensureIndex( { y : 1 } , {clustering: true});
 
 s.adminCommand( { split : "test.foo" , middle : { num : 10 } } );
 s.adminCommand( { movechunk : "test.foo" , find : { num : 20 } , to : s.getOther( s.getServer( "test" ) ).name } );
@@ -36,7 +36,7 @@ assert.eq( 3 , b.foo.getIndexKeys().length , "b index 1" );
 
 // ---- make sure if you add an index it goes everywhere ------
 
-db.foo.ensureIndex( { x : 1 } );
+db.foo.ensureIndex( { x : 1 }, {clustering: true} );
 
 s.sync();
 
@@ -45,30 +45,30 @@ assert.eq( 4 , b.foo.getIndexKeys().length , "b index 2" );
 
 // ---- no unique indexes ------
 
-db.foo.ensureIndex( { z : 1 } , true );
+db.foo.ensureIndex( { z : 1 }, {unique: true, clustering: true} );
 
 s.sync();
 
 assert.eq( 4 , a.foo.getIndexKeys().length , "a index 3" );
 assert.eq( 4 , b.foo.getIndexKeys().length , "b index 3" );
 
-db.foo.ensureIndex( { num : 1 , bar : 1 } , true );
+db.foo.ensureIndex( { num : 1 , bar : 1 } , { unique: true, clustering: true } );
 s.sync();
 assert.eq( 5 , b.foo.getIndexKeys().length , "c index 3" );
 
 // ---- can't shard thing with unique indexes
 
-db.foo2.ensureIndex( { a : 1 } );
+db.foo2.ensureIndex( { a : 1 }, {clustering: true} );
 s.sync();
 printjson( db.system.indexes.find( { ns : "test.foo2" } ).toArray() );
 assert( s.admin.runCommand( { shardcollection : "test.foo2" , key : { num : 1 } } ).ok , "shard with index" );
 
-db.foo3.ensureIndex( { a : 1 } , true );
+db.foo3.ensureIndex( { a : 1 } , { unique: true, clustering: true } );
 s.sync();
 printjson( db.system.indexes.find( { ns : "test.foo3" } ).toArray() );
 assert( ! s.admin.runCommand( { shardcollection : "test.foo3" , key : { num : 1 } } ).ok , "shard with unique index" );
 
-db.foo7.ensureIndex( { num : 1 , a : 1 } , true );
+db.foo7.ensureIndex( { num : 1 , a : 1 } , {unique: true, clustering: true} );
 s.sync();
 printjson( db.system.indexes.find( { ns : "test.foo7" } ).toArray() );
 assert( s.admin.runCommand( { shardcollection : "test.foo7" , key : { num : 1 } } ).ok , "shard with ok unique index" );
@@ -143,7 +143,7 @@ assert( ! s.admin.runCommand( { shardcollection : "test.foo5" , key : { num : 1 
 db.foo6.save( { a : 1 } );
 db.foo6.save( { a : 3 } );
 db.foo6.save( { a : 3 } );
-db.foo6.ensureIndex( { a : 1 } );
+db.foo6.ensureIndex( { a : 1 }, {clustering: true} );
 s.sync();
 printjson( db.system.indexes.find( { ns : "test.foo6" } ).toArray() );
 
@@ -171,7 +171,7 @@ assert( ! s.admin.runCommand( { shardcollection : "test.foo8" , key : { a : 1 } 
 
 db.foo9.save( { b : 1 } );
 db.getLastError();
-db.foo9.ensureIndex( { a : 1 } );
+db.foo9.ensureIndex( { a : 1 }, {clustering: true} );
 assert( ! s.admin.runCommand( { shardcollection : "test.foo9" , key : { a : 1 } } ).ok , "entry with null value" );
 
 

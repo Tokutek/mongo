@@ -139,7 +139,7 @@ for ( var i=0; i<types.length; i++ ){
     c.update( makeObjectDotted( curT.values[3] ) , { $set : { xx : 17 } } , {upsert: true});
     assert.eq( null , db.getLastError() , curT.name + " upserts should work if they include the shard key in the query" );
 
-    c.ensureIndex( { _id : 1 } , { unique : true } );
+    c.ensureIndex( { _id : 1 } , { unique : true, clustering : true } );
     assert.eq( null , db.getLastError() , curT.name + " creating _id index should be ok" );
     
     // multi update

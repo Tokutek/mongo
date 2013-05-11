@@ -21,7 +21,7 @@ for ( i=0; i<200000; i++ ){
 }
 
 // enable sharding of the collection. Only 1 chunk.
-t.ensureIndex( { a : 1 } );
+t.ensureIndex( { a : 1 }, {clustering: true} );
 s.adminCommand( { enablesharding : dbname } );
 s.adminCommand( { shardcollection : ns , key: { a : 1 } } );
 

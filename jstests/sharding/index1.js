@@ -19,8 +19,8 @@ for ( var i = 0; i < 19; i++ ) {
 	if ( i == 0 ) {
 
 		// Unique index exists, but not the right one.
-		coll.ensureIndex( { num : 1 }, { unique : true } )
-		coll.ensureIndex( { x : 1 } )
+		coll.ensureIndex( { num : 1 }, { unique : true, clustering: true } )
+		coll.ensureIndex( { x : 1 }, {clustering: true} )
 
 		passed = false
 		try {
@@ -35,8 +35,8 @@ for ( var i = 0; i < 19; i++ ) {
 	if ( i == 1 ) {
 		
 		// Unique index exists as prefix, also index exists
-		coll.ensureIndex( { x : 1 } )
-		coll.ensureIndex( { x : 1, num : 1 }, { unique : true } )
+		coll.ensureIndex( { x : 1 }, {clustering: true} )
+		coll.ensureIndex( { x : 1, num : 1 }, { unique : true, clustering: true } )
 		
 		try{
 			s.adminCommand({ shardcollection : "" + coll, key : { x : 1 } })
@@ -49,8 +49,8 @@ for ( var i = 0; i < 19; i++ ) {
 	}
 	if ( i == 2 ) {
 		// Non-unique index exists as prefix, also index exists.  No unique index.
-		coll.ensureIndex( { x : 1 } )
-		coll.ensureIndex( { x : 1, num : 1 } )
+		coll.ensureIndex( { x : 1 }, {clustering: true} )
+		coll.ensureIndex( { x : 1, num : 1 }, {clustering: true} )
 
         passed = false;
 		try{
@@ -66,8 +66,8 @@ for ( var i = 0; i < 19; i++ ) {
 	if ( i == 3 ) {
 
 		// Unique index exists as prefix, also unique index exists
-		coll.ensureIndex( { num : 1 }, { unique : true })
-		coll.ensureIndex( { num : 1 , x : 1 }, { unique : true } )
+		coll.ensureIndex( { num : 1 }, { unique : true, clustering: true })
+		coll.ensureIndex( { num : 1 , x : 1 }, { unique : true, clustering: true } )
 
 		try{
 			s.adminCommand({ shardcollection : "" + coll, key : { num : 1 }, unique : true })
@@ -81,7 +81,7 @@ for ( var i = 0; i < 19; i++ ) {
 	if ( i == 4 ) {
 
 		// Unique index exists as id, also unique prefix index exists
-		coll.ensureIndex( { _id : 1, num : 1 }, { unique : true } )
+		coll.ensureIndex( { _id : 1, num : 1 }, { unique : true , clustering: true } )
 
 		try{
 			s.adminCommand({ shardcollection : "" + coll, key : { _id : 1 }, unique : true })
@@ -95,7 +95,7 @@ for ( var i = 0; i < 19; i++ ) {
 	if ( i == 5 ) {
 
 		// Unique index exists as id, also unique prefix index exists
-		coll.ensureIndex( { _id : 1, num : 1 }, { unique : true } )
+		coll.ensureIndex( { _id : 1, num : 1 }, { unique : true , clustering: true } )
 
 		try{
 			s.adminCommand({ shardcollection : "" + coll, key : { _id : 1, num : 1 }, unique : true })
@@ -111,7 +111,7 @@ for ( var i = 0; i < 19; i++ ) {
 		coll.remove({})
 		
 		// Unique index does not exist, also unique prefix index exists
-		coll.ensureIndex( { num : 1, _id : 1 }, { unique : true } )
+		coll.ensureIndex( { num : 1, _id : 1 }, { unique : true , clustering: true } )
 
 		try{
 			s.adminCommand({ shardcollection : "" + coll, key : { num : 1 }, unique : true })
@@ -165,8 +165,8 @@ for ( var i = 0; i < 19; i++ ) {
     if ( i == 9 ) {
 
 		// Unique index exists on a different field as well
-		coll.ensureIndex( { num : 1 }, { unique : true } )
-		coll.ensureIndex( { x : 1 }, { unique : true} )
+		coll.ensureIndex( { num : 1 }, { unique : true , clustering: true } )
+		coll.ensureIndex( { x : 1 }, { unique : true , clustering: true} )
 
         passed = false
 		try {
@@ -191,7 +191,7 @@ for ( var i = 0; i < 19; i++ ) {
         assert( !passed , "Should not be able to shard without index");
 
         //now add containing index and try sharding by prefix
-        coll.ensureIndex( {num : 1, x : 1} );
+        coll.ensureIndex( {num : 1, x : 1}, {clustering: true} );
 
 		try{
 			s.adminCommand( { shardcollection : "" + coll, key : { num : 1 } } );
@@ -211,7 +211,7 @@ for ( var i = 0; i < 19; i++ ) {
         coll.remove({})
 
         //empty collection with useful index. check new index not created
-        coll.ensureIndex( {num : 1, x : 1} );
+        coll.ensureIndex( {num : 1, x : 1}, {clustering: true} );
 
         try{
             s.adminCommand( { shardcollection : "" + coll, key : { num : 1 } } );
@@ -231,7 +231,7 @@ for ( var i = 0; i < 19; i++ ) {
 
         //check multikey values for x make index unusable for shard key
         coll.save({num : 100 , x : [2,3] });
-        coll.ensureIndex( {num : 1, x : 1} );
+        coll.ensureIndex( {num : 1, x : 1}, {clustering: true} );
 
         passed = false;
         try{
@@ -246,7 +246,7 @@ for ( var i = 0; i < 19; i++ ) {
     if ( i == 13 ){
 
         coll.save({ num : [100, 200], x : 10});
-        coll.ensureIndex( { num : 1, x : 1} );
+        coll.ensureIndex( { num : 1, x : 1}, {clustering: true} );
 
         passed = false;
         try{
@@ -262,7 +262,7 @@ for ( var i = 0; i < 19; i++ ) {
     if ( i == 14 ){
 
         coll.save({ num : 100, x : 10, y : [1,2]});
-        coll.ensureIndex( { num : 1, x : 1, y : 1} );
+        coll.ensureIndex( { num : 1, x : 1, y : 1}, {clustering: true} );
 
         passed = false;
         try{
@@ -278,7 +278,7 @@ for ( var i = 0; i < 19; i++ ) {
     if ( i == 15 ) {
 
         // try sharding with a hashed index
-        coll.ensureIndex( { num : "hashed"} );
+        coll.ensureIndex( { num : "hashed"}, {clustering: true} );
 
         try{
             s.adminCommand( { shardcollection : "" + coll, key : { num : "hashed" } } );
@@ -291,7 +291,7 @@ for ( var i = 0; i < 19; i++ ) {
     if ( i == 16 ) {
 
         // create hashed index, but try to declare it unique when sharding
-        coll.ensureIndex( { num : "hashed"} )
+        coll.ensureIndex( { num : "hashed"}, {clustering: true} )
 
         passed = false;
         try{
@@ -307,8 +307,8 @@ for ( var i = 0; i < 19; i++ ) {
     if ( i == 17 ) {
 
         // create hashed index, but unrelated unique index present
-        coll.ensureIndex( { x : "hashed" } );
-        coll.ensureIndex( { num : 1 }, { unique : true} );
+        coll.ensureIndex( { x : "hashed" }, {clustering: true} );
+        coll.ensureIndex( { num : 1 }, { unique : true, clustering: true} );
 
         passed = false;
         try {
@@ -324,8 +324,8 @@ for ( var i = 0; i < 19; i++ ) {
     if ( i == 18 ) {
 
         // create hashed index, and a regular unique index exists on same field
-        coll.ensureIndex( { num : "hashed" } );
-        coll.ensureIndex( { num : 1 }, { unique : true } );
+        coll.ensureIndex( { num : "hashed" }, {clustering: true} );
+        coll.ensureIndex( { num : 1 }, { unique : true, clustering: true } );
 
         try{
             s.adminCommand({ shardcollection : "" + coll, key : { num : "hashed" } } );

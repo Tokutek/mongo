@@ -21,7 +21,7 @@ db.getLastError();
 assert.throws( function(){ s.adminCommand( { shardCollection : coll.getFullName(), key : { num : 1 } } ) } )
 
 //create usable index
-coll.ensureIndex({num : 1, x : 1});
+coll.ensureIndex({num : 1, x : 1}, {clustering: true});
 db.getLastError();
 
 //usable index, but doc with empty 'num' value, so still should throw
@@ -72,7 +72,7 @@ coll.remove({ num : 100 });
 db.getLastError();
 //coll.reIndex();
 coll.dropIndex({num:1});
-coll.ensureIndex({num:1});
+coll.ensureIndex({num:1}, {clustering: true});
 db.getLastError();
 var result4 = admin.runCommand( { movechunk : coll.getFullName() , find : { num : 70 } , to : s.getOther( s.getServer( "test" ) ).name } );
 printjson( result4 );

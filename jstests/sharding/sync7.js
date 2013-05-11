@@ -34,7 +34,7 @@ assert.eq( result.ok, 0, "Move command should not have succeeded!" )
 
 // Enable sharding on DB and collection
 result = otherMongos.getDB("admin").runCommand( { enablesharding : "test1" } );
-result = otherMongos.getDB("test1").foo.ensureIndex( { a : 1 } );
+result = otherMongos.getDB("test1").foo.ensureIndex( { a : 1 }, {clustering: true} );
 result = otherMongos.getDB("admin").runCommand( { shardcollection : "test1.foo", key : { a : 1 } } );
 print("  Collection Sharded! ")
 

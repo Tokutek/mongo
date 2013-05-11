@@ -96,7 +96,7 @@ for( var i = 0; i < 10; i++ ){
     checkError( false )
 }
 
-coll.ensureIndex({ _id : 1, i : 1 })
+coll.ensureIndex({ _id : 1, i : 1 }, { clustering: true })
 
 try {
     st.shardColl( coll, { _id : 1, i : 1 },  { _id : ObjectId(), i : 1 } )
@@ -115,7 +115,7 @@ for( var i = 0; i < 10; i++ ){
     checkError( false )
 }
 
-coll.ensureIndex({ _id : 1, i : 1 })
+coll.ensureIndex({ _id : 1, i : 1 }, { clustering: true })
 
 st.shardColl( coll, { _id : 1, i : 1 },  { _id : ObjectId(), i : 1 } )
 

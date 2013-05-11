@@ -17,7 +17,7 @@ var coll = mongos.getCollection( "foo.bar" );
 
 printjson( admin.runCommand({ enableSharding : coll.getDB() + "" }) );
 printjson( admin.runCommand({ movePrimary : coll.getDB() + "", to : shards[0]._id }) );
-printjson( coll.ensureIndex({ skey : 1, extra : 1 }) );
+printjson( coll.ensureIndex({ skey : 1, extra : 1 }, {clustering: true}) );
 printjson( admin.runCommand({ shardCollection : coll + "", key : { skey : 1 } }) );
 
 for( var i = 0; i < 5; i++ ){

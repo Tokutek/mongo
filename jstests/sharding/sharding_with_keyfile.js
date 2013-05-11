@@ -37,7 +37,7 @@ var coll = mongos.getCollection( "test.foo" )
 st.shardColl( coll, { _id : 1 }, false )
 
 // Create an index so we can find by num later
-coll.ensureIndex({ insert : 1 })
+coll.ensureIndex({ insert : 1 }, {clustering: true})
 
 // For more logging
 // mongos.getDB("admin").runCommand({ setParameter : 1, logLevel : 3 })

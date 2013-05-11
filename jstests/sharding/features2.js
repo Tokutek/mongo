@@ -18,7 +18,7 @@ db = s.getDB( "test" );
 db.foo.save( { x : 1 } );
 db.foo.save( { x : 2 } );
 db.foo.save( { x : 3 } );
-db.foo.ensureIndex( { x : 1 } );
+db.foo.ensureIndex( { x : 1 }, {clustering: true} );
 
 assert.eq( "1,2,3" , db.foo.distinct( "x" ) , "distinct 1" );
 assert( a.foo.distinct("x").length == 3 || b.foo.distinct("x").length == 3 , "distinct 2" );
@@ -78,7 +78,7 @@ if (false) { // TODO(leif): re-enable mapreduce test
     db.mr.save( { x : 2 , tags : [ "b" , "c" ] } );
     db.mr.save( { x : 3 , tags : [ "c" , "a" ] } );
     db.mr.save( { x : 4 , tags : [ "b" , "c" ] } );
-    db.mr.ensureIndex( { x : 1 } );
+    db.mr.ensureIndex( { x : 1 }, {clustering: true} );
 
     m = function(){
         this.tags.forEach(

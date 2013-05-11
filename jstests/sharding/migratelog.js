@@ -4,7 +4,7 @@ st.stopBalancer();
 var db = st.getDB("migratelogtest");
 st.adminCommand({enableSharding: "migratelogtest"});
 db.foo.drop();
-db.foo.ensureIndex({_id: 1});
+db.foo.ensureIndex({_id: 1}, {clustering: true});
 st.adminCommand({shardCollection: "migratelogtest.foo", key: {'_id': 1}});
 
 var s = "a";

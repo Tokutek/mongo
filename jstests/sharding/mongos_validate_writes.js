@@ -25,7 +25,7 @@ var staleCollA = staleMongosA.getCollection( coll + "" )
 var staleCollB = staleMongosB.getCollection( coll + "" )
 
 printjson( admin.runCommand({ enableSharding : coll.getDB() + "" }) )
-coll.ensureIndex({ a : 1 })
+coll.ensureIndex({ a : 1 }, {clustering: true})
 printjson( admin.runCommand({ shardCollection : coll + "", key : { a : 1 } }) )
 
 // Let the stale mongos see the collection state
@@ -34,7 +34,7 @@ staleCollB.findOne()
 
 // Change the collection sharding state
 coll.drop()
-coll.ensureIndex({ b : 1 })
+coll.ensureIndex({ b : 1 }, {clustering: true})
 printjson( admin.runCommand({ shardCollection : coll + "", key : { b : 1 } }) )
 
 // Make sure that we can successfully insert, even though we have stale state
@@ -47,7 +47,7 @@ assert.neq( null, staleCollB.getDB().getLastError() )
 
 // Change the collection sharding state
 coll.drop()
-coll.ensureIndex({ c : 1 })
+coll.ensureIndex({ c : 1 }, {clustering: true})
 printjson( admin.runCommand({ shardCollection : coll + "", key : { c : 1 } }) )
 
 // Make sure we can successfully upsert, even though we have stale state
@@ -60,7 +60,7 @@ assert.neq( null, staleCollB.getDB().getLastError() )
 
 // Change the collection sharding state
 coll.drop()
-coll.ensureIndex({ d : 1 })
+coll.ensureIndex({ d : 1 }, {clustering: true})
 printjson( admin.runCommand({ shardCollection : coll + "", key : { d : 1 } }) )
 
 // Make sure we can successfully update, even though we have stale state
@@ -78,7 +78,7 @@ assert.eq( staleCollB.findOne().x, "x" )
 
 // Change the collection sharding state
 coll.drop()
-coll.ensureIndex({ e : 1 })
+coll.ensureIndex({ e : 1 }, {clustering: true})
 // Deletes need to be across two shards to trigger an error - this is probably an exceptional case
 printjson( admin.runCommand({ movePrimary : coll.getDB() + "", to : "shard0000" }) )
 printjson( admin.runCommand({ shardCollection : coll + "", key : { e : 1 } }) )

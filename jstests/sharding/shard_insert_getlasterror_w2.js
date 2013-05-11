@@ -39,7 +39,7 @@ function go() {
 
     // Enable sharding on test db and its collection foo
     enableSharding (routerConn, 'test')
-    db['foo'].ensureIndex({x: 1})
+    db['foo'].ensureIndex({x: 1}, { clustering : true })
     shardCollection (routerConn, 'test', 'foo', {x: 1})
 
     sleep(30000)
