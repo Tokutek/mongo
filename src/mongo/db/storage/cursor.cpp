@@ -41,6 +41,12 @@ namespace mongo {
             }
         }
 
+        DirectoryCursor::DirectoryCursor(DB_ENV *env, DB_TXN *txn) : Cursor(NULL) {
+            int r = env->get_cursor_for_directory(env, txn, &_dbc);
+            if (r != 0)
+                handle_ydb_error(r);
+        }
+
     } // namespace storage
 
 } // namespace mongo

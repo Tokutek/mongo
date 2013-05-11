@@ -34,9 +34,15 @@ namespace mongo {
             DBC *dbc() const {
                 return _dbc;
             }
-        private:
+        protected:
             DBC *_dbc;
         };
+
+        class DirectoryCursor : public Cursor {
+        public:
+            DirectoryCursor(DB_ENV *env, DB_TXN *txn);
+        };
+
 
     } // namespace storage
 
