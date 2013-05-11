@@ -379,6 +379,8 @@ namespace mongo {
     }
 
     ReplSetImpl::ReplSetImpl(ReplSetCmdline& replSetCmdline) : 
+        _replInfoUpdateRunning(false),
+        _replInfoUpdateShouldRun(true),
         elect(this),
         _forceSyncTarget(0),
         _blockSync(false),
@@ -960,7 +962,8 @@ namespace mongo {
     }
 
     void ReplSet::shutdown() {
-        BackgroundSync::shutdown();
+        BackgroundSync::get()->shutdown();
+        stopReplInfoThread();
     }
 
     void replLocalAuth() {
@@ -980,11 +983,12 @@ namespace mongo {
     }
 
     void ReplSetImpl::updateReplInfoThread() {
+        _replInfoUpdateRunning = true;
         Client::initThread("updateReplInfo");
         replLocalAuth();
         // not sure if this is correct, don't yet know how to ensure
         // that we don't have race conditions with shutdown
-        while (!inShutdown()) {
+        while (_replInfoUpdateShouldRun) {
             if (theReplSet) {
                 try {
                     _updateReplInfo();
@@ -995,8 +999,17 @@ namespace mongo {
             }
             sleepsecs(1);
         }
-
         cc().shutdown();
+        _replInfoUpdateRunning = false;
+    }
+
+    void ReplSetImpl::stopReplInfoThread() {        
+        _replInfoUpdateShouldRun = false;
+        log() << "waiting for updateReplInfo thread to end" << endl;
+        while (_replInfoUpdateRunning) {
+            sleepsecs(1);
+            log() << "still waiting for updateReplInfo thread to end..." << endl;
+        }
     }
 
     // look at comments in BackgroundSync::stopOpSyncThread for rules

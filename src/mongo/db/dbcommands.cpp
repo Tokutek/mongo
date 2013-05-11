@@ -336,6 +336,10 @@ namespace mongo {
             // regardless of whether they caught up, we'll shut down
         }
 
+        if (theReplSet) {
+            theReplSet->shutdown();
+        }
+
         writelocktry wlt( 2 * 60 * 1000 );
         uassert( 13455 , "dbexit timed out getting lock" , wlt.got() );
         return shutdownHelper();

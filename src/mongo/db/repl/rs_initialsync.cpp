@@ -441,6 +441,7 @@ namespace mongo {
             // later causes an abort. So, to be cautious, they are separate
 
             // TODO: take GlobalWrite lock around initial clone
+            // at the moment, locking in cloner makes this a little problematic
             Client::Transaction cloneTransaction(DB_SERIALIZABLE);
             bool ret = _syncDoInitialSync_clone(
                 sourceHostname.c_str(), 

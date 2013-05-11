@@ -341,6 +341,10 @@ namespace mongo {
         bool gotForceSync();
         void goStale(const Member* stale, GTID remoteGTID);
     private:
+        // for replInfoUpdate
+        bool _replInfoUpdateRunning;
+        bool _replInfoUpdateShouldRun;
+
         // this lock protects the _blockSync variable and the _maintenanceMode
         // variable. It must be taken before the rslock. It protects state changes
         // that depend on those variables, meaning RS_SECONDARY, RS_PRIMARY,
@@ -491,6 +495,7 @@ namespace mongo {
         Member* head() const { return _members.head(); }
     public:
         const Member* findById(unsigned id) const;
+        void stopReplInfoThread();
     private:
         void _getTargets(list<Target>&, int &configVersion);
         void getTargets(list<Target>&, int &configVersion);

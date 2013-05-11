@@ -28,7 +28,11 @@ namespace mongo {
 
     BackgroundSync::BackgroundSync() : _opSyncShouldRun(false),
                                             _opSyncRunning(false),
-                                            _currentSyncTarget(NULL)
+                                            _currentSyncTarget(NULL),
+                                            _opSyncShouldExit(false),
+                                            _opSyncInProgress(false),
+                                            _applierShouldExit(false),
+                                            _applierInProgress(false)
     {
     }
 
@@ -55,27 +59,64 @@ namespace mongo {
     }
 
     void BackgroundSync::shutdown() {
+        // first get producer thread to exit
+        log() << "trying to shutdown bgsync" << endl;
+        {
+            boost::unique_lock<boost::mutex> lock(_mutex);
+            _opSyncShouldExit = true;
+            _opSyncCanRunCondVar.notify_all();
+        }
+        // this does not need to be efficient
+        // just sleep for periods of one second
+        // until we see that we are no longer running 
+        // the opSync thread
+        log() << "waiting for opSync thread to end" << endl;
+        while (_opSyncInProgress) {
+            sleepsecs(1);
+            log() << "still waiting for opSync thread to end... " << endl;
+        }
+
+        // at this point, the opSync thread should be done
+        _queueCond.notify_all();
+        
+        // now get applier thread to exit
+        {
+            boost::unique_lock<boost::mutex> lock(_mutex);
+            _applierShouldExit = true;
+            _queueCond.notify_all();
+        }
+        // same reasoning as with _opSyncInProgress above
+        log() << "waiting for applier thread to end" << endl;
+        while (_applierInProgress) {
+            sleepsecs(1);
+            log() << "still waiting for applier thread to end..." << endl;
+        }
+        log() << "shutdown of bgsync complete" << endl;
     }
 
     void BackgroundSync::applierThread() {
+        _applierInProgress = true;
         Client::initThread("applier");
         replLocalAuth();
         applyOpsFromOplog();
         cc().shutdown();
+        _applierInProgress = false;
     }
 
     void BackgroundSync::applyOpsFromOplog() {
         GTID lastLiveGTID;
         GTID lastUnappliedGTID;
-        // TODO: handle shutdown
         while (1) {
             BSONObj curr;
             {
                 boost::unique_lock<boost::mutex> lck(_mutex);
                 // wait until we know an item has been produced
-                while (_deque.size() == 0) {
+                while (_deque.size() == 0 && !_applierShouldExit) {
                     _queueDone.notify_all();
                     _queueCond.wait(_mutex);
+                }
+                if (_deque.size() == 0 && _applierShouldExit) {
+                    return; 
                 }
                 curr = _deque.front();
             }
@@ -105,11 +146,12 @@ namespace mongo {
     }
     
     void BackgroundSync::producerThread() {
+        _opSyncInProgress = true;
         Client::initThread("rsBackgroundSync");
         replLocalAuth();
         uint32_t timeToSleep = 0;
 
-        while (!inShutdown()) {
+        while (!_opSyncShouldExit) {
             if (timeToSleep) {
                 {
                     boost::unique_lock<boost::mutex> lck(_mutex);
@@ -117,14 +159,21 @@ namespace mongo {
                     // notify other threads that we are not running
                     _opSyncRunningCondVar.notify_all();
                 }
-                sleepsecs(timeToSleep);
+                for (uint32_t i = 0; i < timeToSleep; i++) {
+                    sleepsecs(1);
+                    // get out if we need to
+                    if (_opSyncShouldExit) { break; }
+                }
                 timeToSleep = 0;
             }
+            // get out if we need to
+            if (_opSyncShouldExit) { break; }
+
             {
                 boost::unique_lock<boost::mutex> lck(_mutex);
                 _opSyncRunning = false;
 
-                while (!_opSyncShouldRun) {
+                while (!_opSyncShouldRun && !_opSyncShouldExit) {
                     // notify other threads that we are not running
                     _opSyncRunningCondVar.notify_all();
                     // wait for permission that we can run
@@ -135,12 +184,8 @@ namespace mongo {
                 _opSyncRunningCondVar.notify_all();
                 _opSyncRunning = true;
             }
-
-            if (!theReplSet) {
-                log() << "replSet warning did not receive a valid config yet, sleeping 20 seconds " << rsLog;
-                timeToSleep = 20;
-                continue;
-            }
+            // get out if we need to
+            if (_opSyncShouldExit) { break; }
 
             try {
                 MemberState state = theReplSet->state();
@@ -148,7 +193,8 @@ namespace mongo {
                     timeToSleep = 5;
                     continue;
                 }
-
+                // this does the work of reading a remote oplog
+                // and writing it to our oplog
                 timeToSleep = produce();
             }
             catch (DBException& e) {
@@ -157,11 +203,13 @@ namespace mongo {
             }
             catch (std::exception& e2) {
                 sethbmsg(str::stream() << "exception in producer: " << e2.what());
-                timeToSleep = 60;
+                timeToSleep = 10;
             }
         }
 
         cc().shutdown();
+        _opSyncRunning = false; // this is racy, but who cares, we are shutting down
+        _opSyncInProgress = false;
     }
 
     void BackgroundSync::handleSlaveDelay(uint64_t opTimestamp) {
@@ -217,8 +265,8 @@ namespace mongo {
             return 0;
         }
 
-        while (!inShutdown()) {
-            while (!inShutdown()) {
+        while (!_opSyncShouldExit) {
+            while (!_opSyncShouldExit) {
                 {
                     // check if we should bail out
                     boost::unique_lock<boost::mutex> lck(_mutex);

@@ -70,6 +70,23 @@ namespace mongo {
         // to _queueCounter.numElems
         std::deque<BSONObj> _deque;
 
+        // these variables are relevant to shutdown
+
+        // states if opSync should exit, because we are shutting down
+        // this variable can be racy. It only ever transitions from false
+        // to true.
+        bool _opSyncShouldExit;
+        // this variable is true if producerThread is running
+        // at all. This is different than _opSyncRunning
+        // in that _opSyncRunning tells us if we are actively
+        // trying to sync from another machine, whereas this
+        // just tells us that the opsync thread is doing SOMETHING
+        bool _opSyncInProgress;
+        // variable that tells the applier thread if it should be running
+        bool _applierShouldExit;
+        // variable that states if the applier thread is alive doing anything
+        bool _applierInProgress;
+
         struct QueueCounter {
             QueueCounter();
             unsigned long long waitTime;
@@ -97,7 +114,7 @@ namespace mongo {
         void verifySettled();
     public:
         static BackgroundSync* get();
-        static void shutdown();
+        void shutdown();
         virtual ~BackgroundSync() {}
 
         void applierThread();
