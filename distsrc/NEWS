@@ -1,8 +1,8 @@
-tokumon news
-============
+tokuds news
+===========
 
-tokumon 0.1.0
--------------
+tokuds 0.1.0
+------------
 Release date: 2013-04-15
 
 General
@@ -36,8 +36,8 @@ New features and improvements
     - The system allocator has been changed fully to jemalloc.
 
 
-tokumon 0.0.4
--------------
+tokuds 0.0.4
+------------
 Release date: 2013-04-08
 
 New features and improvements
@@ -56,8 +56,8 @@ Bug Fixes
       #6456)
 
 
-tokumon 0.0.2
--------------
+tokuds 0.0.2
+------------
 Release date: 2013-03-14
 
 General
