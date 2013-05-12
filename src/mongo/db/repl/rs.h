@@ -343,7 +343,13 @@ namespace mongo {
     private:
         // for replInfoUpdate
         bool _replInfoUpdateRunning;
-        bool _replInfoUpdateShouldRun;
+        // for oplog purge
+        bool _replOplogPurgeRunning;
+        bool _replBackgroundShouldRun;
+
+        // for purge thread
+        boost::mutex _purgeMutex;
+        boost::condition _purgeCond;
 
         // this lock protects the _blockSync variable and the _maintenanceMode
         // variable. It must be taken before the rslock. It protects state changes
@@ -500,6 +506,7 @@ namespace mongo {
         void _getTargets(list<Target>&, int &configVersion);
         void getTargets(list<Target>&, int &configVersion);
         void startThreads();
+        void purgeOplogThread();
         void _updateReplInfo();
         void updateReplInfoThread();
         friend class FeedbackThread;

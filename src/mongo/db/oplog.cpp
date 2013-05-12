@@ -236,4 +236,13 @@ namespace mongo {
             transaction.commit(DB_TXN_NOSYNC);
         }
     }
+    
+    void purgeEntryFromOplog(BSONObj entry) {
+        verify(rsOplogDetails);
+        // TODO: (add flags of prelocked)
+        BSONObj pk = entry["_id"].wrap("");
+        Lock::DBRead lk(rsoplog);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        rsOplogDetails->deleteObject(pk, entry);
+    }
 }

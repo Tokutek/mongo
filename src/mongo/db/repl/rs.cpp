@@ -29,6 +29,7 @@
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/util/time_support.h"
+#include "mongo/db/oplog.h"
 
 using namespace std;
 
@@ -380,7 +381,8 @@ namespace mongo {
 
     ReplSetImpl::ReplSetImpl(ReplSetCmdline& replSetCmdline) : 
         _replInfoUpdateRunning(false),
-        _replInfoUpdateShouldRun(true),
+        _replOplogPurgeRunning(false),
+        _replBackgroundShouldRun(true),
         elect(this),
         _forceSyncTarget(0),
         _blockSync(false),
@@ -972,6 +974,62 @@ namespace mongo {
         cc().getAuthenticationInfo()->authorize("local","_repl");
     }
 
+    void ReplSetImpl::purgeOplogThread() {
+        _replOplogPurgeRunning = true;
+        GTID lastTimeRead;
+        Client::initThread("purgeOplog");
+        while (_replBackgroundShouldRun) {
+            if (cmdLine.expireOplogDays) {
+                // 24*3600*1000 is number of milliseconds in a day
+                // the age allowed for an oplog entry, in milliseconds,
+                // is the number of days specified in the command line, in milliseconds, plus
+                // a slack period of one hour.
+                uint64_t ageAllowed = (cmdLine.expireOplogDays * 24*3600*1000) + (3600*1000);
+                uint64_t minTime = curTimeMillis64() - ageAllowed;
+                // now get the minimum entry in the oplog, if it has timestamp
+                // less than minTime, delete it, otherwise, 
+                BSONObj result;
+                bool ret;
+                if (lastTimeRead.isInitial()) {
+                    ret = Helpers::getFirst(rsoplog, result);
+                }
+                else {
+                    BSONObjBuilder q;
+                    addGTIDToBSON("$gt", lastTimeRead, q);
+                    BSONObjBuilder query;
+                    query.append("_id", q.done());
+                    BSONObj result;
+                    ret = Helpers::findOne(rsoplog, query.done(), result, false);
+                }
+                if (ret) {
+                    lastTimeRead = getGTIDFromBSON("_id", result);                    
+                    uint64_t ts = result["ts"]._numberLong();
+                    if (ts < minTime) {
+                        // delete the row "result"
+                        purgeEntryFromOplog(result);
+                    }
+                    else {
+                        boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                        uint64_t millisToWait = ts - minTime;
+                        // do a timed_wait of that long
+                        _purgeCond.timed_wait(
+                            _purgeMutex, 
+                            boost::posix_time::milliseconds(millisToWait)
+                            );
+                    }
+                }
+                // there is no data, just sleep for now
+                else {
+                    sleepsecs(2);
+                }
+            }
+            else {                
+                _purgeCond.wait(_purgeMutex);
+            }
+        }        
+        _replOplogPurgeRunning = false;
+    }
+
     void ReplSetImpl::_updateReplInfo() {
         GTID minUnappliedGTID;
         GTID minLiveGTID;
@@ -988,7 +1046,7 @@ namespace mongo {
         replLocalAuth();
         // not sure if this is correct, don't yet know how to ensure
         // that we don't have race conditions with shutdown
-        while (_replInfoUpdateShouldRun) {
+        while (_replBackgroundShouldRun) {
             if (theReplSet) {
                 try {
                     _updateReplInfo();
@@ -1004,11 +1062,19 @@ namespace mongo {
     }
 
     void ReplSetImpl::stopReplInfoThread() {        
-        _replInfoUpdateShouldRun = false;
+        _replBackgroundShouldRun = false;
         log() << "waiting for updateReplInfo thread to end" << endl;
         while (_replInfoUpdateRunning) {
             sleepsecs(1);
             log() << "still waiting for updateReplInfo thread to end..." << endl;
+        }
+        {
+            boost::unique_lock<boost::mutex> lock(_purgeMutex);
+            _purgeCond.notify_all();
+        }
+        while (_replOplogPurgeRunning) {
+            sleepsecs(1);
+            log() << "still waiting for oplog purge thread to end..." << endl;
         }
     }
 

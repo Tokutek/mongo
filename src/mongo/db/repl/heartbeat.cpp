@@ -401,6 +401,7 @@ namespace mongo {
         boost::thread producer(boost::bind(&BackgroundSync::applierThread, sync));
         boost::thread applier(boost::bind(&BackgroundSync::producerThread, sync));
         boost::thread replInfoUpdater(boost::bind(&ReplSetImpl::updateReplInfoThread, this));
+        boost::thread replPurgeOplog(boost::bind(&ReplSetImpl::purgeOplogThread, this));
 
         task::fork(ghost);
 
