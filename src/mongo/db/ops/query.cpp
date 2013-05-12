@@ -99,7 +99,7 @@ namespace mongo {
         else {
             // check for spoofing of the ns such that it does not match the one originally there for the cursor
             uassert(14833, "auth error", str::equals(ns, client_cursor->ns().c_str()));
-            uassert(0, "oplog cursor reading data that is too old", !client_cursor->lastOpForSlaveTooOld());
+            uassert(16784, "oplog cursor reading data that is too old", !client_cursor->lastOpForSlaveTooOld());
 
             int queryOptions = client_cursor->queryOptions();
             TokuCommandSettings settings;
@@ -695,7 +695,7 @@ namespace mongo {
                 // check if data we are about to return may be too stale
                 if (!opChecked) {
                     uint64_t ts = current["ts"]._numberLong();
-                    uassert(0, "oplog cursor reading data that is too old", ts);
+                    uassert(16785, "oplog cursor reading data that is too old", ts);
                     opChecked = true;
                 }
             }
