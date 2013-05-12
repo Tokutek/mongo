@@ -990,37 +990,48 @@ namespace mongo {
                 // less than minTime, delete it, otherwise, 
                 BSONObj result;
                 bool ret;
-                if (lastTimeRead.isInitial()) {
-                    ret = Helpers::getFirst(rsoplog, result);
-                }
-                else {
-                    BSONObjBuilder q;
-                    addGTIDToBSON("$gt", lastTimeRead, q);
-                    BSONObjBuilder query;
-                    query.append("_id", q.done());
-                    BSONObj result;
-                    ret = Helpers::findOne(rsoplog, query.done(), result, false);
-                }
-                if (ret) {
-                    lastTimeRead = getGTIDFromBSON("_id", result);                    
-                    uint64_t ts = result["ts"]._numberLong();
-                    if (ts < minTime) {
-                        // delete the row "result"
-                        purgeEntryFromOplog(result);
+                uint64_t millisToWait = 0;
+                // do a possible deletion from the oplog, if we find an entry
+                // old enough. If not, we will sleep
+                {
+                    Lock::DBRead lk(rsoplog);
+                    Client::Transaction transaction(DB_SERIALIZABLE);
+                    if (lastTimeRead.isInitial()) {
+                        ret = Helpers::getFirst(rsoplog, result);
                     }
                     else {
-                        boost::unique_lock<boost::mutex> lock(_purgeMutex);
-                        uint64_t millisToWait = ts - minTime;
-                        // do a timed_wait of that long
-                        _purgeCond.timed_wait(
-                            _purgeMutex, 
-                            boost::posix_time::milliseconds(millisToWait)
-                            );
+                        BSONObjBuilder q;
+                        addGTIDToBSON("$gt", lastTimeRead, q);
+                        BSONObjBuilder query;
+                        query.append("_id", q.done());
+                        BSONObj result;
+                        ret = Helpers::findOne(rsoplog, query.done(), result, false);
                     }
+                    if (ret) {
+                        lastTimeRead = getGTIDFromBSON("_id", result);                    
+                        uint64_t ts = result["ts"]._numberLong();
+                        if (ts < minTime) {
+                            // delete the row "result"
+                            purgeEntryFromOplog(result);
+                        }
+                        else {
+                            millisToWait = ts - minTime;
+                        }
+                    }
+                    // there is no data, just sleep for now
+                    // this should be rare
+                    else {
+                        millisToWait = 2000;
+                    }
+                    transaction.commit(DB_TXN_NOSYNC);
                 }
-                // there is no data, just sleep for now
-                else {
-                    sleepsecs(2);
+                // do a timed_wait, if necessary
+                if (millisToWait > 0) {
+                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                    _purgeCond.timed_wait(
+                        _purgeMutex, 
+                        boost::posix_time::milliseconds(millisToWait)
+                        );
                 }
             }
             else {                

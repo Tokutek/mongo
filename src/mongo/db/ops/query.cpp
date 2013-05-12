@@ -99,6 +99,7 @@ namespace mongo {
         else {
             // check for spoofing of the ns such that it does not match the one originally there for the cursor
             uassert(14833, "auth error", str::equals(ns, client_cursor->ns().c_str()));
+            uassert(0, "oplog cursor reading data that is too old", !client_cursor->lastOpForSlaveTooOld());
 
             int queryOptions = client_cursor->queryOptions();
             TokuCommandSettings settings;
@@ -672,6 +673,10 @@ namespace mongo {
                 ( QueryResponseBuilder::make( pq, cursor, queryPlan, oldPlan ) );
         bool saveClientCursor = false;
         ClientCursor::Holder ccPointer( new ClientCursor( QueryOption_NoCursorTimeout, cursor, ns ) );
+
+        // for oplog cursors, we check if we are reading data that is too old and might
+        // be stale.
+        bool opChecked = false;
         
         for ( ; cursor->ok(); cursor->advance() ) {
 
@@ -687,6 +692,12 @@ namespace mongo {
             if ( pq.hasOption( QueryOption_OplogReplay ) ) {
                 BSONObj current = cursor->current();
                 ccPointer->storeOpForSlave(current);
+                // check if data we are about to return may be too stale
+                if (!opChecked) {
+                    uint64_t ts = current["ts"]._numberLong();
+                    uassert(0, "oplog cursor reading data that is too old", ts);
+                    opChecked = true;
+                }
             }
             
             if ( !cursor->supportGetMore() || pq.isExplain() ) {

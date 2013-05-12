@@ -241,8 +241,6 @@ namespace mongo {
         verify(rsOplogDetails);
         // TODO: (add flags of prelocked)
         BSONObj pk = entry["_id"].wrap("");
-        Lock::DBRead lk(rsoplog);
-        Client::Transaction transaction(DB_SERIALIZABLE);
         rsOplogDetails->deleteObject(pk, entry);
     }
 }

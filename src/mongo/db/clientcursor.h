@@ -54,6 +54,8 @@ namespace mongo {
     typedef map<CursorId, ClientCursor*> CCById;
 
     extern BSONObj id_obj;
+    
+    bool opForSlaveTooOld(uint64_t ts);
 
     class ClientCursor : private boost::noncopyable {
         friend class CmdCursorInfo;
@@ -277,6 +279,7 @@ namespace mongo {
 
         void storeOpForSlave( BSONObj curr );
         void updateSlaveLocation( CurOp& curop );
+        bool lastOpForSlaveTooOld();
 
         unsigned idleTime() const { return _idleAgeMillis; }
         
@@ -319,6 +322,7 @@ namespace mongo {
         // data for replication, this will hold the point that the slave has
         // read up to. Used for write concern
         GTID _slaveReadTill;
+        uint64_t _slaveReadTillTS;
 
         unsigned _idleAgeMillis;                 // how long has the cursor been around, relative to server idle time
 

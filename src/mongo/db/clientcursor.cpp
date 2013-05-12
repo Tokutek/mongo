@@ -37,6 +37,17 @@
 
 namespace mongo {
 
+    bool opForSlaveTooOld(uint64_t ts) {
+        if (ts && cmdLine.expireOplogDays) {
+            uint64_t minTime = curTimeMillis64() - (cmdLine.expireOplogDays*24*3600*1000);            
+            if (ts < minTime) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
     CCById ClientCursor::clientCursorsById;
     boost::recursive_mutex& ClientCursor::ccmutex( *(new boost::recursive_mutex()) );
     long long ClientCursor::numberTimedOut = 0;
@@ -181,6 +192,7 @@ namespace mongo {
         _ns(ns), _db( cc().database() ),
         _c(c), _pos(0),
         _query(query),  _queryOptions(queryOptions),
+        _slaveReadTillTS(0),
         _idleAgeMillis(0), _pinValue(0) {
 
         Lock::assertAtLeastReadLocked(ns);
@@ -343,6 +355,7 @@ namespace mongo {
         BSONElement e = curr["_id"];
         if ( e.type() == BinData ) {
             _slaveReadTill = getGTIDFromBSON("_id", curr);
+            _slaveReadTillTS = curr["ts"]._numberLong();
         }
     }
 
@@ -352,6 +365,9 @@ namespace mongo {
         mongo::updateSlaveLocation( curop , _ns.c_str() , _slaveReadTill );
     }
 
+    bool ClientCursor::lastOpForSlaveTooOld() {
+        return opForSlaveTooOld(_slaveReadTillTS);
+    }
 
     void ClientCursor::appendStats( BSONObjBuilder& result ) {
         recursive_scoped_lock lock(ccmutex);
