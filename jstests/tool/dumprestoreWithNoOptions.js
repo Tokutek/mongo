@@ -20,7 +20,9 @@ db.dropDatabase();
 
 var options = { capped: true, size: 1000, autoIndexId: true };
 db.createCollection('capped', options);
-assert.eq( 1, db.system.indexes.count(), "auto index not created" );
+// db.system.indexes.find().forEach(printjson)
+// namespaces($_) + capped($_,_id)
+assert.eq( 3, db.system.indexes.count(), "auto index not created" );
 var cappedOptions = db.capped.exists().options;
 for ( var opt in options ) {
   assert.eq(options[opt], cappedOptions[opt], 'invalid option')
@@ -47,7 +49,8 @@ assert(undefined === db.capped.exists().options, "restore options not ignored");
 db.dropDatabase();
 var options = { capped: true, size: 1000, autoIndexId: true };
 db.createCollection('capped', options);
-assert.eq( 1, db.system.indexes.count(), "auto index not created" );
+// db.system.indexes.find().forEach(printjson)
+assert.eq( 3, db.system.indexes.count(), "auto index not created" );
 var cappedOptions = db.capped.exists().options;
 for ( var opt in options ) {
   assert.eq(options[opt], cappedOptions[opt], 'invalid option')
@@ -76,7 +79,8 @@ assert(undefined === db.capped.exists().options, "restore options not ignored");
 db.dropDatabase();
 var options = { capped: true, size: 1000, autoIndexId: true };
 db.createCollection('capped', options);
-assert.eq( 1, db.system.indexes.count(), "auto index not created" );
+// db.system.indexes.find().forEach(printjson)
+assert.eq( 3, db.system.indexes.count(), "auto index not created" );
 var cappedOptions = db.capped.exists().options;
 for ( var opt in options ) {
   assert.eq(options[opt], cappedOptions[opt], 'invalid option')
