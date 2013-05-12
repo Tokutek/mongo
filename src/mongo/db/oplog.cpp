@@ -232,7 +232,8 @@ namespace mongo {
             BSONElementManipulator(entry["a"]).setBool(true);
             Lock::DBRead lk1("local");
             writeEntryToOplog(entry);
-            transaction.commit(0);
+            // we are operating as a secondary. We don't have to fsync
+            transaction.commit(DB_TXN_NOSYNC);
         }
     }
 }

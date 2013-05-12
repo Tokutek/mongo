@@ -315,8 +315,9 @@ namespace mongo {
                 {
                     Client::ReadContext ctx(rsoplog);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    replicateTransactionToOplog(o);
-                    transaction.commit(0);
+                    replicateTransactionToOplog(o);                    
+                    // we are operating as a secondary. We don't have to fsync
+                    transaction.commit(DB_TXN_NOSYNC);
                 }
                 {
                     GTID currEntry = getGTIDFromOplogEntry(o);
