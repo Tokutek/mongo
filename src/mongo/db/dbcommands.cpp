@@ -1088,7 +1088,7 @@ namespace mongo {
         CmdListDatabases() : Command("listDatabases" , true ) {}
         bool run(const string& dbname , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             vector< string > dbNames;
-            getDatabaseNames2( dbNames );
+            getDatabaseNamesLocked( dbNames );
             vector< BSONObj > dbInfos;
 
             set<string> seen;

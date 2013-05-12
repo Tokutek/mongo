@@ -865,17 +865,20 @@ namespace mongo {
         return 0;
     } 
 
-    void getDatabaseNames2( vector< string > &names) {
+    void getDatabaseNamesLocked( vector< string > &names) {
         // create a cursor on the tokudb directory and search for <database>.ns keys
         storage::DirectoryCursor c(storage::env, cc().txn().db_txn());
         getDatabaseNamesExtra extra(names);
         int r = 0;
-        while (r != DB_NOTFOUND) {
+        while (r == 0) {
             r = c.dbc()->c_getf_next(c.dbc(), 0, getDatabaseNamesCallback, &extra);
+            if (r != 0 && r != DB_NOTFOUND)
+                storage::handle_ydb_error(r);
         }
     }
 
     void getDatabaseNames( vector< string > &names , const string& usePath ) {
+        // RFP track down all callers
     }
 
     /* returns true if there is data on this server.  useful when starting replication.
