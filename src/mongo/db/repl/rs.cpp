@@ -77,12 +77,15 @@ namespace mongo {
         log() << "replSet error RS102 too stale to catch up, at least from " << stale->fullName() << rsLog;
         log() << "replSet our last GTID : " << gtidManager->getLiveState().toString() << rsLog;
         log() << "replSet oldest at " << stale->fullName() << " : " << remoteGTID.toString() << rsLog;
-        log() << "replSet See http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember" << rsLog;
 
-        sethbmsg("error RS102 too stale to catch up");
-        changeState(MemberState::RS_RECOVERING);
+        sethbmsg("error RS102 too stale to catch up, going fatal");
+        changeState(MemberState::RS_FATAL);
     }
 
+    void ReplSetImpl::goFatal() {
+        changeState(MemberState::RS_FATAL);
+    }
+    
     bool ReplSetImpl::assumePrimary() {
         boost::unique_lock<boost::mutex> lock(stateChangeMutex);
         

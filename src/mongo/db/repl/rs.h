@@ -340,6 +340,7 @@ namespace mongo {
         void veto(const string& host, unsigned secs=10);
         bool gotForceSync();
         void goStale(const Member* stale, GTID remoteGTID);
+        void goFatal();
     private:
         // for replInfoUpdate
         bool _replInfoUpdateRunning;

@@ -262,7 +262,10 @@ namespace mongo {
         }
 
         if (isRollbackRequired(r)) {
-            return 0;
+            // for now, sleep 5 seconds and try again.
+            // If we are not fatal, then we will keep trying to sync
+            // from another machine
+            return 5;
         }
 
         while (!_opSyncShouldExit) {
@@ -423,7 +426,7 @@ namespace mongo {
     bool BackgroundSync::isRollbackRequired(OplogReader& r) {
         string hn = r.conn()->getServerAddress();
         if (!r.more()) {
-            ::abort();
+            log() << "replSet error empty query result from " << hn << " oplog" << rsLog;
             return true;
         }
 
@@ -433,8 +436,10 @@ namespace mongo {
         GTID gtid = getGTIDFromBSON("_id", o);
         
         if( theReplSet->gtidManager->rollbackNeeded(gtid, ts, lastHash)) {
-            log() << "rollback needed!" << rsLog;
-            ::abort();
+            log() << "rollback needed! Our GTID" << 
+                theReplSet->gtidManager->getLiveState().toString() << 
+                " remote GTID: " << gtid.toString() << ". Going fatal." << rsLog;
+            theReplSet->goFatal();
             return true;
         }
 
