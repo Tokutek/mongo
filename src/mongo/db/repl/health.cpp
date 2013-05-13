@@ -134,6 +134,8 @@ namespace mongo {
         ss << "<tr>";
 
         set<string> skip;
+        // we save ts as a timestamp, so even though we don't really
+        // use OpTimes anymore, this code is fine
         be e = op["ts"];
         if( e.type() == Date || e.type() == Timestamp ) {
             OpTime ot = e._opTime();
@@ -203,6 +205,8 @@ namespace mongo {
         ss << table(h, true);
         //ss << "<pre>\n";
         int n = 0;
+        // we save ts as a timestamp, so even though we don't really
+        // use OpTimes anymore, this code is fine
         OpTime otFirst;
         OpTime otLast;
         OpTime otEnd;
