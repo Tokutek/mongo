@@ -34,11 +34,14 @@ assert.eq( 1 , s.config.chunks.count() , "step 1 - need one large chunk" );
 primary = s.getServer( "test" ).getDB( "test" );
 secondary = s.getOther( primary ).getDB( "test" );
 
+// maxChunkSizeBytes is ignored in tokuds
+if (0) {
 // Make sure that we don't move that chunk if it goes past what we consider the maximum chunk size
 print("Checkpoint 1a")
 max = 200 * 1024 * 1024;
 moveChunkCmd = { movechunk : "test.foo" , find : { _id : 1 } , to : secondary.getMongo().name , maxChunkSizeBytes : max };
 assert.throws( function() { s.adminCommand( moveChunkCmd ); } );
+}
 
 // Move the chunk
 print("checkpoint 1b");
