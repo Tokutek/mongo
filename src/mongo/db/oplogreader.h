@@ -52,7 +52,7 @@ namespace mongo {
 
         /* Do a tailing query, but only send the ts field back. */
         void ghostQueryGTE(const char *ns, GTID gtid) {
-            const BSONObj fields = BSON("ts" << 1 << "_id" << 0);
+            const BSONObj fields = BSON("ts" << 1 << "_id" << 1);
             return tailingQueryGTE(ns, gtid, &fields);
         }
 
