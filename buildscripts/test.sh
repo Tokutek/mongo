@@ -90,7 +90,7 @@ function test_mongodb() {
             --continue-on-failure \
             --smoke-db-prefix=smokedata \
             --quiet \
-            js sharding jsSlowNightly aggregation tool)
+            js sharding jsSlowNightly replSets aggregation tool)
     set -e
 }
 
