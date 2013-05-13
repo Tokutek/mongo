@@ -90,7 +90,7 @@ assert.lte( before.query + 10 , after.query , "B3" )
 
 // --- add more data ----
 
-db.foo.ensureIndex( { x : 1 } )
+db.foo.ensureIndex( { x : 1 }, { clustering: true } )
 
 for ( i=0; i<100; i++ ){
     if ( i == 17 ) continue;
