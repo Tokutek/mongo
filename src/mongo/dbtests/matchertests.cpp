@@ -390,7 +390,6 @@ namespace MatcherTests {
                 ASSERT( !m.hasExistsFalse() );
             }
 
-
             {
                 M m( BSON( "$and" << BSON_ARRAY( BSON( "a" << BSON( "$exists" << false ) ) ) ) );
                 ASSERT( m.hasExistsFalse() );
@@ -398,6 +397,11 @@ namespace MatcherTests {
 
             {
                 M m( BSON( "$and" << BSON_ARRAY( BSON( "a" << BSON( "$exists" << false ) ) ) ) );
+                ASSERT( m.hasExistsFalse() );
+            }
+
+            {
+                M m( BSON( "$or" << BSON_ARRAY( BSON( "a" << BSON( "$exists" << true ) ) ) ) );
                 ASSERT( m.hasExistsFalse() );
             }
 
