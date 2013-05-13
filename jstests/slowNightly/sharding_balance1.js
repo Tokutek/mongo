@@ -1,5 +1,6 @@
 // sharding_balance1.js
 
+assert(false, "this test fails, probably because splitVector is not accurate");
 
 s = new ShardingTest( "slow_sharding_balance1" , 2 , 1 , 1 , { chunksize : 1 } )
 
