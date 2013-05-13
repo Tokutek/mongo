@@ -392,7 +392,6 @@ namespace mongo {
         mgr( new Manager(this) ),
         ghost( new GhostSync(this) ) {
 
-        gtidManager = NULL; // will be initialized in loadGTIDManager
         _cfg = 0;
         memset(_hbmsg, 0, sizeof(_hbmsg));
         strcpy( _hbmsg , "initial startup" );
@@ -435,7 +434,7 @@ namespace mongo {
     ReplSet::ReplSet(ReplSetCmdline& replSetCmdline) : ReplSetImpl(replSetCmdline) {}
     ReplSet::ReplSet() : ReplSetImpl() {}
 
-    void ReplSetImpl::loadGTIDManager(bool quiet) {
+    void ReplSetImpl::loadGTIDManager() {
         Lock::DBWrite lk(rsoplog);
         Client::Transaction txn(DB_SERIALIZABLE);
         BSONObj o;
@@ -443,8 +442,8 @@ namespace mongo {
             GTID lastGTID = getGTIDFromBSON("_id", o);
             uint64_t lastTime = o["ts"]._numberLong();
             uint64_t lastHash = o["h"].numberLong();
-            gtidManager = new GTIDManager(lastGTID, lastTime, lastHash, _id);
-            setTxnGTIDManager(gtidManager);
+            gtidManager.reset(new GTIDManager(lastGTID, lastTime, lastHash, _id));
+            setTxnGTIDManager(gtidManager.get());
             
         }
         else {
@@ -455,8 +454,8 @@ namespace mongo {
             // Either this, or we need to change the code in 
             // ReplSetHealthPollTask::up, where we check if a potential
             // primary is within 10 seconds of this machine
-            gtidManager = new GTIDManager(lastGTID, 0, 0, _id);
-            setTxnGTIDManager(gtidManager);
+            gtidManager.reset(new GTIDManager(lastGTID, 0, 0, _id));
+            setTxnGTIDManager(gtidManager.get());
         }
         txn.commit();
     }

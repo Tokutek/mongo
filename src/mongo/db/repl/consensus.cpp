@@ -30,7 +30,7 @@ namespace mongo {
     private:
 
         bool shouldVeto(const BSONObj& cmdObj, string& errmsg) {
-            GTIDManager* gtidMgr = theReplSet->gtidManager;
+            GTIDManager* gtidMgr = theReplSet->gtidManager.get();
             // don't veto older versions
             if (cmdObj["id"].eoo()) {
                 // they won't be looking for the veto field
@@ -80,7 +80,7 @@ namespace mongo {
                 return false;
             }
             
-            GTIDManager* gtidMgr = theReplSet->gtidManager;
+            GTIDManager* gtidMgr = theReplSet->gtidManager.get();
             if( cmdObj["set"].String() != theReplSet->name() ) {
                 errmsg = "wrong repl set name";
                 return false;

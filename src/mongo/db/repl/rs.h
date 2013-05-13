@@ -329,7 +329,7 @@ namespace mongo {
 
         StateBox box;
 
-        GTIDManager* gtidManager;
+        shared_ptr<GTIDManager> gtidManager;
         boost::mutex stateChangeMutex;
         bool forceSyncFrom(const string& host, string& errmsg, BSONObjBuilder& result);
 
@@ -369,7 +369,7 @@ namespace mongo {
         bool _freeze(int secs);
     private:
         bool assumePrimary();
-        void loadGTIDManager(bool quiet=false);
+        void loadGTIDManager();
         void changeState(MemberState s);
 
         Member* _forceSyncTarget;
