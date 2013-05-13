@@ -221,7 +221,11 @@ namespace OpLogHelpers{
             NamespaceDetails* collNsd = nsdetails(coll.c_str());
             int i = collNsd->findIndexByKeyPattern(key);
             if (i >= 0) {
-                uasserted(16737, "index exists on secondary");
+                // the index already exists, so this is a no-op
+                // Note that for create index and drop index, we
+                // are tolerant of the fact that the operation may
+                // have already been done
+                return;
             } else {
                 collNsd->createIndex(row);
             }
