@@ -100,8 +100,8 @@ namespace mongo {
         writeEntryToOplog(bb);
     }
 
+    // assumes it is locked on entry
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID) {
-        Lock::DBRead lk("local");
         BufBuilder bufbuilder(256);
         BSONObjBuilder b(bufbuilder);
         b.append("_id", "minLive");

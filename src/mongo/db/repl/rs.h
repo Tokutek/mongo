@@ -507,7 +507,6 @@ namespace mongo {
         void getTargets(list<Target>&, int &configVersion);
         void startThreads();
         void purgeOplogThread();
-        void _updateReplInfo();
         void updateReplInfoThread();
         friend class FeedbackThread;
         friend class CmdReplSetElect;

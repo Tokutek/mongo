@@ -1040,18 +1040,10 @@ namespace mongo {
         _replOplogPurgeRunning = false;
     }
 
-    void ReplSetImpl::_updateReplInfo() {
-        GTID minUnappliedGTID;
-        GTID minLiveGTID;
-        verify(gtidManager != NULL);
-        gtidManager->getMins(&minLiveGTID, &minUnappliedGTID);
-        Client::Transaction transaction(DB_SERIALIZABLE);
-        logToReplInfo(minLiveGTID, minUnappliedGTID);
-        transaction.commit();
-    }
-
     void ReplSetImpl::updateReplInfoThread() {
         _replInfoUpdateRunning = true;
+        GTID lastMinUnappliedGTID;
+        GTID lastMinLiveGTID;
         Client::initThread("updateReplInfo");
         replLocalAuth();
         // not sure if this is correct, don't yet know how to ensure
@@ -1059,7 +1051,21 @@ namespace mongo {
         while (_replBackgroundShouldRun) {
             if (theReplSet) {
                 try {
-                    _updateReplInfo();
+                    GTID minUnappliedGTID;
+                    GTID minLiveGTID;
+                    verify(gtidManager != NULL);
+                    gtidManager->getMins(&minLiveGTID, &minUnappliedGTID);
+                    if (GTID::cmp(lastMinLiveGTID, minLiveGTID) != 0 ||
+                        GTID::cmp(lastMinUnappliedGTID, minUnappliedGTID) != 0
+                        )
+                    {
+                        Lock::DBRead lk("local");
+                        Client::Transaction transaction(DB_SERIALIZABLE);
+                        logToReplInfo(minLiveGTID, minUnappliedGTID);
+                        lastMinUnappliedGTID = minUnappliedGTID;
+                        lastMinLiveGTID = minLiveGTID;
+                        transaction.commit();
+                    }
                 }
                 catch (...) {
                     log() << "exception cought in updateReplInfo thread: " << rsLog;
