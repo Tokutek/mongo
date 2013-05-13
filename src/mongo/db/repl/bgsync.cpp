@@ -64,6 +64,7 @@ namespace mongo {
         {
             boost::unique_lock<boost::mutex> lock(_mutex);
             _opSyncShouldExit = true;
+            _opSyncShouldRun = false;
             _opSyncCanRunCondVar.notify_all();
         }
         // this does not need to be efficient
