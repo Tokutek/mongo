@@ -30,7 +30,7 @@ t.ensureIndex( { x : 1 } , { expireAfterSeconds : 20000 } );
 
 // split chunk in half by _id, and move one chunk to the other shard
 s.adminCommand( {split : ns , middle : {_id : 12 } } );
-s.adminCommand( {moveChunk : ns , find : {_id : 0} , to : "shard0000" } )
+s.adminCommand( {moveChunk : ns , find : {_id : 0} , to : "shard0001" } )
 
 // one shard will lose 12/12 docs, the other 6/12, so count will go
 // from 24 -> 18 or 12 -> 6
