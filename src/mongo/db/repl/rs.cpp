@@ -995,7 +995,7 @@ namespace mongo {
                 uint64_t millisToWait = 0;
                 // do a possible deletion from the oplog, if we find an entry
                 // old enough. If not, we will sleep
-                {
+                try {
                     Lock::DBRead lk(rsoplog);
                     Client::Transaction transaction(DB_SERIALIZABLE);
                     if (lastTimeRead.isInitial()) {
@@ -1026,6 +1026,10 @@ namespace mongo {
                         millisToWait = 2000;
                     }
                     transaction.commit(DB_TXN_NOSYNC);
+                }
+                catch (...) {
+                    log() << "exception cought in purgeOplog thread: " << rsLog;
+                    millisToWait = 2000;
                 }
                 // do a timed_wait, if necessary
                 if (millisToWait > 0) {

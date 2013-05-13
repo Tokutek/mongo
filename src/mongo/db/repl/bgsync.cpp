@@ -107,40 +107,50 @@ namespace mongo {
         GTID lastLiveGTID;
         GTID lastUnappliedGTID;
         while (1) {
-            BSONObj curr;
-            {
-                boost::unique_lock<boost::mutex> lck(_mutex);
-                // wait until we know an item has been produced
-                while (_deque.size() == 0 && !_applierShouldExit) {
-                    _queueDone.notify_all();
-                    _queueCond.wait(_mutex);
+            try {
+                BSONObj curr;
+                {
+                    boost::unique_lock<boost::mutex> lck(_mutex);
+                    // wait until we know an item has been produced
+                    while (_deque.size() == 0 && !_applierShouldExit) {
+                        _queueDone.notify_all();
+                        _queueCond.wait(_mutex);
+                    }
+                    if (_deque.size() == 0 && _applierShouldExit) {
+                        return; 
+                    }
+                    curr = _deque.front();
                 }
-                if (_deque.size() == 0 && _applierShouldExit) {
-                    return; 
-                }
-                curr = _deque.front();
-            }
-            GTID currEntry = getGTIDFromOplogEntry(curr);
-            theReplSet->gtidManager->noteApplyingGTID(currEntry);
-            applyTransactionFromOplog(curr);
+                GTID currEntry = getGTIDFromOplogEntry(curr);
+                theReplSet->gtidManager->noteApplyingGTID(currEntry);
+                applyTransactionFromOplog(curr);
 
-            {
-                boost::unique_lock<boost::mutex> lck(_mutex);
-                // I don't recall if noteGTIDApplied needs to be called within _mutex
-                theReplSet->gtidManager->noteGTIDApplied(currEntry);
-                dassert(_deque.size() > 0);
-                _deque.pop_front();
-                
-                // this is a flow control mechanism, with bad numbers
-                // hard coded for now just to get something going.
-                // If the opSync thread notices that we have over 20000
-                // transactions in the queue, it waits until we get below
-                // 10000. This is where we signal that we have gotten there
-                // Once we have spilling of transactions working, this
-                // logic will need to be redone
-                if (_deque.size() == 10000) {
-                    _queueCond.notify_all();
+                {
+                    boost::unique_lock<boost::mutex> lck(_mutex);
+                    // I don't recall if noteGTIDApplied needs to be called within _mutex
+                    theReplSet->gtidManager->noteGTIDApplied(currEntry);
+                    dassert(_deque.size() > 0);
+                    _deque.pop_front();
+                    
+                    // this is a flow control mechanism, with bad numbers
+                    // hard coded for now just to get something going.
+                    // If the opSync thread notices that we have over 20000
+                    // transactions in the queue, it waits until we get below
+                    // 10000. This is where we signal that we have gotten there
+                    // Once we have spilling of transactions working, this
+                    // logic will need to be redone
+                    if (_deque.size() == 10000) {
+                        _queueCond.notify_all();
+                    }
                 }
+            }
+            catch (DBException& e) {
+                sethbmsg(str::stream() << "db exception in producer on applier thread: " << e.toString());
+                sleepsecs(2);
+            }
+            catch (std::exception& e2) {
+                sethbmsg(str::stream() << "exception in producer on applier thread: " << e2.what());
+                sleepsecs(2);
             }
         }
     }
