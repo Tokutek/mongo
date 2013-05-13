@@ -854,7 +854,7 @@ namespace mongo {
         getDatabaseNamesExtra *e = static_cast<getDatabaseNamesExtra *>(extra);
         size_t length = key->size;
         if (length > 0) {
-            // strip off the trailing NULL in the key
+            // strip off the trailing 0 in the key
             char *cp = (char *) key->data + length - 1;
             if (*cp == 0)
                 length -= 1;
@@ -865,7 +865,8 @@ namespace mongo {
         return 0;
     } 
 
-    void getDatabaseNamesLocked( vector< string > &names) {
+    void getDatabaseNames( vector< string > &names) {
+        Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         // create a cursor on the tokudb directory and search for <database>.ns keys
         storage::DirectoryCursor c(storage::env, cc().txn().db_txn());
         getDatabaseNamesExtra extra(names);
@@ -875,10 +876,6 @@ namespace mongo {
             if (r != 0 && r != DB_NOTFOUND)
                 storage::handle_ydb_error(r);
         }
-    }
-
-    void getDatabaseNames( vector< string > &names , const string& usePath ) {
-        // RFP track down all callers
     }
 
     /* returns true if there is data on this server.  useful when starting replication.

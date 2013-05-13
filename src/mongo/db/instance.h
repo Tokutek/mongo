@@ -72,9 +72,7 @@ namespace mongo {
 
     void assembleResponse( Message &m, DbResponse &dbresponse, const HostAndPort &client );
 
-    void getDatabaseNames( vector< string > &names , const string& usePath = dbpath );
-
-    void getDatabaseNamesLocked( vector< string > &names);
+    void getDatabaseNames( vector< string > &names);
 
     /* returns true if there is no data on this server.  useful when starting replication.
        local database does NOT count.

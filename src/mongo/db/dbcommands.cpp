@@ -1082,13 +1082,13 @@ namespace mongo {
         virtual bool adminOnly() const {
             return true;
         }
-        virtual LockType locktype() const { return READ; }
+        virtual LockType locktype() const { return NONE; }
         virtual void help( stringstream& help ) const { help << "list databases on this server"; }
-        virtual bool needsTxn() const { return true; }
+        virtual bool needsTxn() const { return false; }
         CmdListDatabases() : Command("listDatabases" , true ) {}
         bool run(const string& dbname , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             vector< string > dbNames;
-            getDatabaseNamesLocked( dbNames );
+            getDatabaseNames( dbNames );
             vector< BSONObj > dbInfos;
 
             set<string> seen;
@@ -1886,7 +1886,7 @@ namespace mongo {
                 retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
             }
         }
-        else if( c->locktype() != Command::WRITE ) { 
+        else if( c->locktype() == Command::READ ) { 
             // read lock
             verify( ! c->logTheOp() );
             string ns = c->parseNs(dbname, cmdObj);
