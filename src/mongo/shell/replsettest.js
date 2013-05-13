@@ -476,12 +476,12 @@ ReplSetTest.prototype.reInitiate = function() {
     this.initiate( config , 'replSetReconfig' );
 }
 
-ReplSetTest.prototype.getLastOpTimeWritten = function() {
+ReplSetTest.prototype.getLastGTID = function() {
     this.getMaster();
     jsTest.attempt({context : this, desc : "awaiting oplog query", timeout: 30000},
                  function() {
                      try {
-                         this.latest = this.liveNodes.master.getDB("local")['oplog.rs'].find({}).sort({'$natural': -1}).limit(1).next()['ts'];
+                         this.latest = this.liveNodes.master.getDB("local")['oplog.rs'].find({}).sort({'$natural': -1}).limit(1).next()['_id'];
                      }
                      catch(e) {
                          print("ReplSetTest caught exception " + e);
@@ -494,7 +494,7 @@ ReplSetTest.prototype.getLastOpTimeWritten = function() {
 ReplSetTest.prototype.awaitReplication = function(timeout) {
     timeout = timeout || 30000;
 
-    this.getLastOpTimeWritten();
+    this.getLastGTID();
 
     print("ReplSetTest " + this.latest);
 
@@ -517,15 +517,15 @@ ReplSetTest.prototype.awaitReplication = function(timeout) {
                              if(log.find({}).sort({'$natural': -1}).limit(1).hasNext()) {
                                  var entry = log.find({}).sort({'$natural': -1}).limit(1).next();
                                  printjson( entry );
-                                 var ts = entry['ts'];
-                                 print("ReplSetTest await TS for " + slave + " is " + ts.t+":"+ts.i + " and latest is " + this.latest.t+":"+this.latest.i);
+                                 var gtid = entry['_id'];
+                                 print("ReplSetTest await GTID for " + slave + " is " + gtid.hex() + " and latest is " + this.latest.hex() );
 
-                                 if (this.latest.t < ts.t || (this.latest.t == ts.t && this.latest.i < ts.i)) {
-                                     this.latest = this.liveNodes.master.getDB("local")['oplog.rs'].find({}).sort({'$natural': -1}).limit(1).next()['ts'];
+                                 if (this.latest < gtid) {
+                                     this.latest = this.liveNodes.master.getDB("local")['oplog.rs'].find({}).sort({'$natural': -1}).limit(1).next()['_id'];
                                  }
 
                                  print("ReplSetTest await oplog size for " + slave + " is " + log.count());
-                                 synced = (synced && friendlyEqual(this.latest,ts))
+                                 synced = (synced && friendlyEqual(this.latest, gtid))
                              }
                              else {
                                  print( "ReplSetTest waiting for " + slave + " to have an oplog built." )
@@ -542,7 +542,7 @@ ReplSetTest.prototype.awaitReplication = function(timeout) {
                          print("ReplSetTest.awaitReplication: caught exception "+e);
 
                          // we might have a new master now
-                         this.getLastOpTimeWritten();
+                         this.getLastGTID();
 
                          return false;
                      }
