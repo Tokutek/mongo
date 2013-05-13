@@ -1044,6 +1044,7 @@ namespace mongo {
                 _purgeCond.wait(_purgeMutex);
             }
         }        
+        cc().shutdown();
         _replOplogPurgeRunning = false;
     }
 
