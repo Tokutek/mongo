@@ -845,23 +845,36 @@ namespace mongo {
         }
     }
 
-    void getDatabaseNames( vector< string > &names , const string& usePath ) {
-        boost::filesystem::path path( usePath );
-        for ( boost::filesystem::directory_iterator i( path );
-                i != boost::filesystem::directory_iterator(); ++i ) {
-            if (false) {
-            //if ( directoryperdb )
-                boost::filesystem::path p = *i;
-                string dbName = p.leaf();
-                p /= ( dbName + ".ns" );
-                if ( exists( p ) )
-                    names.push_back( dbName );
+    struct getDatabaseNamesExtra {
+        vector<string> &names;
+        getDatabaseNamesExtra(vector<string> &n) : names(n) {}
+    };
+
+    static int getDatabaseNamesCallback(const DBT *key, const DBT *val, void *extra) {
+        getDatabaseNamesExtra *e = static_cast<getDatabaseNamesExtra *>(extra);
+        size_t length = key->size;
+        if (length > 0) {
+            // strip off the trailing 0 in the key
+            char *cp = (char *) key->data + length - 1;
+            if (*cp == 0)
+                length -= 1;
+            if (length >= 3 && strcmp((char *) key->data + length - 3, ".ns") == 0) {
+                e->names.push_back(string((char *) key->data, length - 3));
             }
-            else {
-                string fileName = boost::filesystem::path(*i).leaf();
-                if ( fileName.length() > 3 && fileName.substr( fileName.length() - 3, 3 ) == ".ns" )
-                    names.push_back( fileName.substr( 0, fileName.length() - 3 ) );
-            }
+        }
+        return 0;
+    } 
+
+    void getDatabaseNames( vector< string > &names) {
+        Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+        // create a cursor on the tokudb directory and search for <database>.ns keys
+        storage::DirectoryCursor c(storage::env, cc().txn().db_txn());
+        getDatabaseNamesExtra extra(names);
+        int r = 0;
+        while (r == 0) {
+            r = c.dbc()->c_getf_next(c.dbc(), 0, getDatabaseNamesCallback, &extra);
+            if (r != 0 && r != DB_NOTFOUND)
+                storage::handle_ydb_error(r);
         }
     }
 
@@ -929,10 +942,17 @@ namespace mongo {
     HostAndPort DBDirectClient::_clientHost = HostAndPort( "0.0.0.0" , 0 );
 
     unsigned long long DBDirectClient::count(const string &ns, const BSONObj& query, int options, int limit, int skip ) {
-        Lock::DBRead lk( ns );
         string errmsg;
         int errCode;
-        long long res = runCount( ns.c_str() , _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
+        long long res;
+        try {
+            Lock::DBRead lk( ns );
+            res = runCount( ns.c_str() , _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
+        }
+        catch (RetryWithWriteLock &e) {
+            Lock::DBWrite lk( ns);
+            res = runCount( ns.c_str() , _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
+        }
         if ( res == -1 ) {
             // namespace doesn't exist
             return 0;

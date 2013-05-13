@@ -130,7 +130,7 @@ namespace mongo {
         }
         
         vector<string> others;
-        getDatabaseNames( others , path );
+        getDatabaseNames( others );
         
         set<string> allShortNames;
         dbHolder().getAllShortNames(allShortNames, inholderlock);
