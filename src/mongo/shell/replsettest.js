@@ -514,18 +514,14 @@ ReplSetTest.prototype.awaitReplication = function(timeout) {
 
                              slave.getDB("admin").getMongo().setSlaveOk();
                              var log = slave.getDB("local")['oplog.rs'];
-                             if(log.find({}).sort({'$natural': -1}).limit(1).hasNext()) {
-                                 var entry = log.find({}).sort({'$natural': -1}).limit(1).next();
+                             cursor = log.find({_id: this.latest});
+                             if(cursor.hasNext()) {
+                                 var entry = cursor.next();
                                  printjson( entry );
                                  var gtid = entry['_id'];
                                  print("ReplSetTest await GTID for " + slave + " is " + gtid.hex() + " and latest is " + this.latest.hex() );
 
-                                 if (this.latest < gtid) {
-                                     this.latest = this.liveNodes.master.getDB("local")['oplog.rs'].find({}).sort({'$natural': -1}).limit(1).next()['_id'];
-                                 }
-
-                                 print("ReplSetTest await oplog size for " + slave + " is " + log.count());
-                                 synced = (synced && friendlyEqual(this.latest, gtid))
+                                 synced = (synced && friendlyEqual(this.latest, gtid) && entry['a'] == true)
                              }
                              else {
                                  print( "ReplSetTest waiting for " + slave + " to have an oplog built." )
