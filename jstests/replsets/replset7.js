@@ -43,4 +43,4 @@ rt.awaitSecondaryNodes();
 
 // Do we have an index?
 assert.eq (1, slave.getDB( 'd' )['system.indexes']
-           .find({"v" : 1,"key" : {"x" : 1},"unique" : true,"ns" : "d.c","name" : "x_1"}).count());
+           .find({"key" : {"x" : 1},"unique" : true,"ns" : "d.c","name" : "x_1"}).count());
