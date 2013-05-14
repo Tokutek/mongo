@@ -98,7 +98,8 @@ namespace mongo {
             }
             // check not only our own GTID, but any other member we can reach
             else if (GTID::cmp(remoteGTID, ourGTID) < 0 ||
-                     GTID::cmp(remoteGTID, theReplSet->lastOtherGTID())) {
+                     GTID::cmp(remoteGTID, theReplSet->lastOtherGTID()) < 0) {                
+                //log() << "we are fresher! remoteGTID" << remoteGTID.toString() << " ourGTID " << ourGTID.toString() << " lastOther " << theReplSet->lastOtherGTID() << " " << rsLog;
                 weAreFresher = true;
             }
             addGTIDToBSON("GTID", ourGTID, result);
