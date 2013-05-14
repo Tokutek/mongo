@@ -15,6 +15,7 @@
  * 8: check s2.state == 3
  */
 
+assert(false, "this fails because the oplog isn't capped, and it uses ReplSetTest.overflow()");
 
 var w = 0;
 var wait = function(f) {
