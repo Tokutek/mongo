@@ -876,6 +876,9 @@ namespace mongo {
             if (r != 0 && r != DB_NOTFOUND)
                 storage::handle_ydb_error(r);
         }
+        if (r == 0) {
+            txn.commit();
+        }
     }
 
     /* returns true if there is data on this server.  useful when starting replication.
