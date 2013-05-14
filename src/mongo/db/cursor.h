@@ -365,30 +365,30 @@ namespace mongo {
     protected:
         BasicCursor( NamespaceDetails *d, int direction = 1 );
 
-        class DummyCursor : public Cursor {
-        public:
-            DummyCursor( int direction = 1 ) : _direction(direction) { }
-            bool ok() { return false; }
-            BSONObj current() { return BSONObj(); }
-            bool advance() { return false; }
-            virtual string toString() const {
-                return _direction > 0 ? "BasicCursor" : "ReverseCursor";
-            }
-            virtual bool getsetdup(const BSONObj &pk) { return false; }
-            virtual bool isMultiKey() const { return false; }
-            virtual bool modifiedKeys() const { return false; }
-            virtual bool supportGetMore() { return true; }
-            virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { }
-            virtual void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) { }
-            virtual long long nscanned() const { return 0; }
-
-        private:
-            int _direction;
-        };
 
     private:
         IndexCursor _c;
         int _direction;
     };
 
+    class DummyCursor : public Cursor {
+    public:
+        DummyCursor( int direction = 1 ) : _direction(direction) { }
+        bool ok() { return false; }
+        BSONObj current() { return BSONObj(); }
+        bool advance() { return false; }
+        virtual string toString() const {
+            return _direction > 0 ? "BasicCursor" : "ReverseCursor";
+        }
+        virtual bool getsetdup(const BSONObj &pk) { return false; }
+        virtual bool isMultiKey() const { return false; }
+        virtual bool modifiedKeys() const { return false; }
+        virtual bool supportGetMore() { return true; }
+        virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { }
+        virtual void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) { }
+        virtual long long nscanned() const { return 0; }
+
+    private:
+        int _direction;
+    };
 } // namespace mongo

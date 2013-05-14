@@ -541,9 +541,21 @@ namespace mongo {
                                          bool requireOrder,
                                          QueryPlanSummary *singlePlanSummary ) {
 
-        CursorGenerator generator( ns, query, order, planPolicy, simpleEqualityMatch, parsedQuery,
-                                   requireOrder, singlePlanSummary );
-        return generator.generate();
+        try {
+            CursorGenerator generator( ns, query, order, planPolicy, simpleEqualityMatch, parsedQuery,
+                                       requireOrder, singlePlanSummary );
+            return generator.generate();
+        }
+        catch ( DBException& e ) {
+            if (e.getCode() == 16768) {
+                shared_ptr<Cursor> ret;
+                ret.reset(new DummyCursor(1));
+                return ret;
+            }
+            else {
+                throw;
+            }
+        }
     }
     
     CursorGenerator::CursorGenerator( const char *ns,

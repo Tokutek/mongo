@@ -11,6 +11,7 @@ s = startParallelShell(' \
 x = db.runCommand("beginTransaction");
 assert(x.ok == 1);
 sleep(2000);
-assert.throws(function(){t.count()});
+x = t.count();
+assert.eq(x,0);
 x = db.runCommand("commitTransaction");
 s();

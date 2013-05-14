@@ -76,3 +76,18 @@ sleep(1000);
 assert.throws(function(){t.count()});
 r = db.runCommand({"commitTransaction":1});
 s();
+
+// simple dictionary too new test
+t.drop();
+r = db.runCommand({"beginTransaction":1, "isolation":"mvcc"});
+s = startParallelShell(' \
+        t = db.jstests_txn_isolation; \
+        t.insert({a:"during"}); \
+        sleep(10000); \
+');
+
+sleep(1000);
+r = t.count();
+assert(r == 0);
+r = db.runCommand({"commitTransaction":1});
+s();
