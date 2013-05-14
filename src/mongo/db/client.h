@@ -245,6 +245,20 @@ namespace mongo {
             _transactions.swap(other);
         }
 
+        /**
+         * After you have saved a TransactionStack somewhere, you can use this class to temporarily return it to cc() and then save it back out again.
+         */
+        class WithTxnStack : boost::noncopyable {
+            shared_ptr<Client::TransactionStack> &_stack;
+            bool _released;
+          public:
+            WithTxnStack(shared_ptr<Client::TransactionStack> &stack);
+            ~WithTxnStack();
+            void release() {
+                _released = true;
+            }
+        };
+
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
         friend class CurOp;
@@ -371,6 +385,15 @@ namespace mongo {
         Client * c = currentClient.get();
         verify( c );
         return *c;
+    }
+
+    inline Client::WithTxnStack::WithTxnStack(shared_ptr<Client::TransactionStack> &stack) : _stack(stack), _released(false) {
+        cc().swapTransactionStack(_stack);
+    }
+    inline Client::WithTxnStack::~WithTxnStack() {
+        if (!_released) {
+            cc().swapTransactionStack(_stack);
+        }
     }
 
     inline Client::GodScope::GodScope() {

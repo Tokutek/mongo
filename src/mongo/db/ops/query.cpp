@@ -108,9 +108,8 @@ namespace mongo {
             settings.setCappedAppendPK(queryOptions & QueryOption_AddHiddenPK);
             cc().setTokuCommandSettings(settings);
 
-            // check that we properly set the transactions when the cursor was originally saved, and restore it into the current client
             verify(client_cursor->transactions.get() != NULL);
-            cc().swapTransactionStack(client_cursor->transactions);
+            Client::WithTxnStack wts(client_cursor->transactions);
 
             client_cursor->updateSlaveLocation( curop );
             
@@ -134,8 +133,6 @@ namespace mongo {
                             continue;
 
                         if( n == 0 && (queryOptions & QueryOption_AwaitData) && pass < 1000 ) {
-                            // The cursor is still live, give back the stack.
-                            cc().swapTransactionStack(client_cursor->transactions);
                             return 0;
                         }
 
@@ -200,9 +197,10 @@ namespace mongo {
                     client_cursor->storeOpForSlave( last );
                 }
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
-
-                // The cursor is still live, give back the stack.
-                cc().swapTransactionStack(client_cursor->transactions);
+            } else {
+                // We're done with this transaction, commit it and release it back to the Client.
+                cc().commitTopTxn();
+                wts.release();
             }
         }
 

@@ -511,7 +511,7 @@ namespace mongo {
             }
 
             {
-                WithTxnStack wts(_txnStack);
+                Client::WithTxnStack wts(_txnStack);
                 Client::ReadContext ctx(_ns);
 
                 int allocSize = BSONObjMaxUserSize;
@@ -608,17 +608,6 @@ namespace mongo {
         scoped_ptr<Client::Transaction> _txn;
         shared_ptr<Client::TransactionStack> _txnStack;
         auto_ptr<ClientCursor> _cc;
-
-        class WithTxnStack : boost::noncopyable {
-            shared_ptr<Client::TransactionStack> &_stack;
-          public:
-            WithTxnStack(shared_ptr<Client::TransactionStack> &stack) : _stack(stack) {
-                cc().swapTransactionStack(_stack);
-            }
-            ~WithTxnStack() {
-                cc().swapTransactionStack(_stack);
-            }
-        };
 
         bool _getActive() const { scoped_lock l(_m); return _active; }
         void _setActive( bool b ) { scoped_lock l(_m); _active = b; }
