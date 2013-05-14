@@ -118,7 +118,18 @@ namespace mongo {
 
         boost::unique_lock<boost::mutex> lock(_lock);
         dassert(GTID::cmp(_lastLiveGTID, _lastUnappliedGTID) == 0);
-        _lastLiveGTID.inc();
+        if (_incPrimary) {
+            _incPrimary = false;
+            _lastLiveGTID.inc_primary();
+        }
+        else {
+            _lastLiveGTID.inc();
+        }
+
+        if (_liveGTIDs.size() == 0) {
+            _minLiveGTID = _lastLiveGTID;
+        }
+
         _lastUnappliedGTID = _lastLiveGTID;
         *gtid = _lastLiveGTID;
         _liveGTIDs.insert(*gtid);
@@ -229,7 +240,10 @@ namespace mongo {
     void GTIDManager::resetManager() {
         boost::unique_lock<boost::mutex> lock(_lock);
         dassert(_liveGTIDs.size() == 0);
-        _lastLiveGTID.inc_primary();
+        // tell the GTID Manager that the next GTID
+        // we get for a primary, we increment the primary
+        _incPrimary = true;
+
         _minLiveGTID = _lastLiveGTID;
         _minLiveGTID.inc();
 

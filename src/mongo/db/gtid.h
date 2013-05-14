@@ -60,6 +60,17 @@ namespace mongo {
 
         // notified when the min live GTID changes
         boost::condition _minLiveCond;
+
+        // when a machine newly assumes primary, we want to
+        // increment the primary sequence number of the GTIDs
+        // that are handed out, but we do not want to do it
+        // until we call getGTIDForPrimary. Otherwise,
+        // in a system where no writes are happening, elections
+        // may stall because this machine will think the last GTID is
+        // some high value that has never actually been given out.
+        // So, we use this bool as a signal to getGTIDForPrimary
+        // to increment the primary sequence number
+        bool _incPrimary;
         
         // GTID to give out should a primary ask for one to use
         // On a secondary, this is the last GTID seen incremented
