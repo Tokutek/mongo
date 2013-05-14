@@ -1027,12 +1027,12 @@ namespace mongo {
                 BSONObjBuilder b;
                 b.append( "name", *i );
 
-                problem() << "don't know how to calculate the sizeOnDisk of a databse yet!" << endl;
+                problem() << "don't know how to calculate the sizeOnDisk of a database yet!" << endl;
                 boost::intmax_t size = 0;
                 b.append( "sizeOnDisk", (double) size );
                 totalSize += size;
                 
-                if (0) { // RFP locking
+                if (1) {
                     Client::ReadContext rc( *i + ".system.namespaces" );
                     b.appendBool( "empty", rc.ctx().db()->isEmpty() );
                 }
@@ -1044,7 +1044,7 @@ namespace mongo {
 
             // TODO: erh 1/1/2010 I think this is broken where path != dbpath ??
             set<string> allShortNames;
-            if (0) { // RFP locking
+            if (1) {
                 Lock::GlobalRead lk;
                 dbHolder().getAllShortNames( allShortNames );
             }
@@ -1059,7 +1059,7 @@ namespace mongo {
                 b.append( "name" , name );
                 b.append( "sizeOnDisk" , (double)1.0 );
 
-                if (0) { // RFP locking
+                if (1) {
                     Client::ReadContext ctx( name );
                     b.appendBool( "empty", ctx.ctx().db()->isEmpty() );
                 }
