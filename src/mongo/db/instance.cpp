@@ -876,7 +876,7 @@ namespace mongo {
             if (r != 0 && r != DB_NOTFOUND)
                 storage::handle_ydb_error(r);
         }
-        if (r == 0) {
+        if (r == DB_NOTFOUND) {
             txn.commit();
         }
     }
