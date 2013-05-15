@@ -524,7 +524,12 @@ ReplSetTest.prototype.awaitReplication = function(timeout) {
                                  synced = (synced && friendlyEqual(this.latest, gtid) && entry['a'] == true)
                              }
                              else {
-                                 print( "ReplSetTest waiting for " + slave + " to have an oplog built." )
+                                 print( "ReplSetTest waiting for " + slave + " to have " + this.latest.hex() + " found." );
+								 if (log.find({}).sort({'$natural': -1}).limit(1).hasNext()) {
+	                                 var entry = log.find({}).sort({'$natural': -1}).limit(1).next();
+									 print ("last we currently have is: ");
+									 printjson(entry);
+								 }
                                  synced = false;
                              }
                          }
