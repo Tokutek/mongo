@@ -487,6 +487,7 @@ namespace mongo {
             }
         }
         else {
+            Lock::DBWrite lk("local");
             openOplogFiles();
         }
         if (needGapsFilled) {
