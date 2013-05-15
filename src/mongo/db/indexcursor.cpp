@@ -631,10 +631,16 @@ again:      while ( !allInclusive && ok() ) {
     }
 
     void IndexCursor::_advance() {
+        // first try to get data from the bulk fetch buffer
         _ok = _buffer.next();
+        // if there is not data remaining in the bulk fetch buffer,
+        // do a fractal tree call to get more rows
         if ( !ok() ) {
             _ok = fetchMoreRows();
         }
+        // at this point, if there are rows to be gotten,
+        // it is residing in the bulk fetch buffer.
+        // Get a row from the bulk fetch buffer
         if ( ok() ) {
             getCurrentFromBuffer();
         }
