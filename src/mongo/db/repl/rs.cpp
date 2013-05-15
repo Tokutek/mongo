@@ -909,15 +909,23 @@ namespace mongo {
         try {
             boost::unique_lock<boost::mutex> lock(stateChangeMutex);
             if (state().secondary()) {
+                log() << "stopping replication because we have a new config" << endl;
                 stopReplication();
+                log() << "stopped replication because we have a new config" << endl;
             }
             // going into this function, we know there is no replication running
+            RSBase::lock lk(this);
             if (initFromConfig(newConfig, true)) {
                 log() << "replSet replSetReconfig new config saved locally" << rsLog;
             }
             // if necessary, restart replication
             if (isSecondary()) {
+                log() << "starting replication because we have a new config" << endl;
                 startReplication();
+                log() << "started replication because we have a new config" << endl;
+            }
+            else {
+                log() << "NOT starting replication because we have a new config" << endl;
             }
         }
         catch(DBException& e) {

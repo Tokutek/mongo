@@ -484,6 +484,11 @@ namespace mongo {
             &minUnappliedGTID
             );
         verify(GTID::cmp(minUnappliedGTID, minLiveGTID) == 0);
+        log() << "GTIDs: " << 
+            lastLiveGTID.toString() << " " << 
+            lastUnappliedGTID.toString() << " " << 
+            minLiveGTID.toString() << " " <<
+            minUnappliedGTID.toString() << endl;
     }
 
     void BackgroundSync::stopOpSyncThread() {
