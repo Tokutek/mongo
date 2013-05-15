@@ -361,6 +361,8 @@ namespace mongo {
         bool logForRepl
         ) 
     {
+        Client::Context ctx(ns);
+
         // main data
         copy(
             ns.c_str(), 
