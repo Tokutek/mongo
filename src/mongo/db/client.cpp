@@ -151,6 +151,8 @@ namespace mongo {
         verify( db == 0 || db->isOk() );
         _client->_context = this;
         checkNsAccess( doauth );
+        // opens the collection or throws RetryWithWriteLock
+        nsdetails(_ns.c_str());
     }
 
     Client::Context::Context(const string& ns, string path , bool doauth, bool doVersion) :
@@ -264,6 +266,8 @@ namespace mongo {
         _client->_context = this;
         _client->_curOp->enter( this );
         checkNsAccess( doauth );
+        // opens the collection or throws RetryWithWriteLock
+        nsdetails(_ns.c_str());
     }
 
     void Client::Context::_finishInit( bool doauth ) {
@@ -277,7 +281,7 @@ namespace mongo {
         _client->_context = this;
         _client->_curOp->enter( this );
         checkNsAccess( doauth, writeLocked ? 1 : 0 );
-        // This opens the ns, if necessary, or throws if we aren't write locked.
+        // opens the collection or throws RetryWithWriteLock
         nsdetails(_ns.c_str());
     }
 
