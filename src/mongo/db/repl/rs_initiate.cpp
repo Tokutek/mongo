@@ -177,11 +177,13 @@ namespace mongo {
                 /* check that we don't already have an oplog.  that could cause issues.
                    it is ok if the initiating member has *other* data than that.
                    */
+                Client::Transaction transaction(DB_SERIALIZABLE);
                 BSONObj o;
                 if( Helpers::getFirst(rsoplog, o) ) {
                     errmsg = rsoplog + string(" is not empty on the initiating member.  cannot initiate.");
                     return false;
                 }
+                transaction.commit(0);
             }
 
             if( ReplSet::startupStatus == ReplSet::BADCONFIG ) {
