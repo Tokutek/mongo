@@ -68,11 +68,6 @@ namespace mongo {
 
         int getTailingQueryOptions() const { return _tailingQueryOptions; }
 
-        // only used by the OplogTool
-        // generally, the tailing query options are set
-        // on construction of the OplogReader
-        void setTailingQueryOptions( int tailingQueryOptions ) { _tailingQueryOptions = tailingQueryOptions; }
-
         void peek(vector<BSONObj>& v, int n) {
             if( cursor.get() ) {
                 cursor->peek(v,n);

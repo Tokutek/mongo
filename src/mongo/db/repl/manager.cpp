@@ -263,11 +263,13 @@ namespace mongo {
             // blockSync outside of rslock
             // can't hold rslock because we may try to stop the opsync thread
             if (authIssue) {
-                if (rs->box.getPrimary() == rs->_self) {
-                    log() << "auth problems, relinquishing primary" << rsLog;
-                    rs->relinquish();
+                {
+                    RSBase::lock lk(rs);
+                    if (rs->box.getPrimary() == rs->_self) {
+                        log() << "auth problems, relinquishing primary" << rsLog;
+                        rs->relinquish();
+                    }
                 }
-
                 rs->blockSync(true);
                 return;
             }
