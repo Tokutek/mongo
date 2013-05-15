@@ -124,6 +124,7 @@ namespace mongo {
     /*static*/
     string Database::duplicateUncasedName( bool inholderlock, const string &name, const string &path, set< string > *duplicates ) {
         Lock::assertAtLeastReadLocked(name);
+        verify(Lock::isRW());
 
         if ( duplicates ) {
             duplicates->clear();   
