@@ -119,18 +119,7 @@ namespace mongo {
         //RecordStats& recordStats() { return _recordStats; }
 
     private:
-        /**
-         * @throws DatabaseDifferCaseCode if the name is a duplicate based on
-         * case insensitive matching.
-         */
-        void checkDuplicateUncasedNames(bool inholderlockalready) const;
     public:
-        /**
-         * @return name of an existing database with same text name but different
-         * casing, if one exists.  Otherwise the empty string is returned.  If
-         * 'duplicates' is specified, it is filled with all duplicate names.
-         */
-        static string duplicateUncasedName( bool inholderlockalready, const string &name, const string &path, set< string > *duplicates = 0 );
 
         const string name; // "alleyinsider"
         const string path;

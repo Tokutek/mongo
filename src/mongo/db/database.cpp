@@ -82,7 +82,6 @@ namespace mongo {
 #endif
             }
             profile = cmdLine.defaultProfile;
-            checkDuplicateUncasedNames(true);
             // If already exists, open.  Otherwise behave as if empty until
             // there's a write, then open.
             namespaceIndex.init();
@@ -110,53 +109,8 @@ namespace mongo {
 #endif
             throw;
         }
-    }
-    
-    void Database::checkDuplicateUncasedNames(bool inholderlock) const {
-        string duplicate = duplicateUncasedName(inholderlock, name, path );
-        if ( !duplicate.empty() ) {
-            stringstream ss;
-            ss << "db already exists with different case other: [" << duplicate << "] me [" << name << "]";
-            uasserted( DatabaseDifferCaseCode , ss.str() );
-        }
-    }
+    }    
 
-    /*static*/
-    string Database::duplicateUncasedName( bool inholderlock, const string &name, const string &path, set< string > *duplicates ) {
-        Lock::assertAtLeastReadLocked(name);
-        verify(Lock::isRW());
-
-        if ( duplicates ) {
-            duplicates->clear();   
-        }
-        
-        vector<string> others;
-        getDatabaseNames( others );
-        
-        set<string> allShortNames;
-        dbHolder().getAllShortNames(allShortNames, inholderlock);
-        
-        others.insert( others.end(), allShortNames.begin(), allShortNames.end() );
-        
-        for ( unsigned i=0; i<others.size(); i++ ) {
-
-            if ( strcasecmp( others[i].c_str() , name.c_str() ) )
-                continue;
-            
-            if ( strcmp( others[i].c_str() , name.c_str() ) == 0 )
-                continue;
-
-            if ( duplicates ) {
-                duplicates->insert( others[i] );
-            } else {
-                return others[i];
-            }
-        }
-        if ( duplicates ) {
-            return duplicates->empty() ? "" : *duplicates->begin();
-        }
-        return "";
-    }
     
 #if 0
     boost::filesystem::path Database::fileName( int n ) const {
