@@ -654,11 +654,13 @@ again:      while ( !allInclusive && ok() ) {
             _advance();
         } else {
             if ( tailable() ) {
-                // There may be keys between the current key and the end key.
-                dassert( _currKey <= _endKey );
                 if ( _currKey < _endKey ) {
                     _advance();
                 } else {
+                    // reset _currKey, we may have accidentally
+                    // gone past _endKey when we did our last advance
+                    // and saw something we are not allowed to see
+                    _currKey = _endKey;
                     // The cursor advanced reached the minimum safe bound.
                     // Read a new safe bound from the namespace and reposition 
                     // to the current key. checkCurrent() will mark the cursor as ok()
@@ -666,7 +668,6 @@ again:      while ( !allInclusive && ok() ) {
                     _endKey = _d->minUnsafeKey();
                     findKey( _currKey.isEmpty() ? minKey : _currKey );
                 }
-                dassert( _currKey <= _endKey );
             } else {
                 // Exhausted cursors that are not tailable never advance
                 return false;
