@@ -70,15 +70,15 @@ namespace mongo {
 
     void openOplogFiles() {
         const char *logns = rsoplog;
-        if ( rsOplogDetails == 0 ) {
-            Client::Context ctx( logns , dbpath, false);
+        if (rsOplogDetails == NULL) {
+            Client::Context ctx(logns , dbpath, false);
             localDB = ctx.db();
             verify( localDB );
             rsOplogDetails = nsdetails(logns);
             massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
         }
         if (replInfoDetails == NULL) {
-            Client::Context ctx( rsReplInfo , dbpath, false);
+            Client::Context ctx(rsReplInfo , dbpath, false);
             replInfoDetails = nsdetails(rsReplInfo);
             massert(16747, "local.replInfo missing. did you drop it? if so restart server", replInfoDetails);
         }
