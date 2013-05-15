@@ -48,10 +48,10 @@ doTest = function( signal ) {
   print("sleeping");  
   sleep(20000);
   var indexes = slave[0].stats().indexes;
-  assert.eq(indexes, 2, 'number of indexes');
+  assert.eq(indexes, 4, 'number of indexes');
 
   indexes = slave[1].stats().indexes;
-  assert.eq(indexes, 1);
+  assert.eq(indexes, 3);
 
   
   indexes = slave[0].x.stats().indexSizes;
