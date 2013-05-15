@@ -37,6 +37,7 @@
 #include "mongo/bson/util/atomic_int.h"
 
 #include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/introspect.h"
