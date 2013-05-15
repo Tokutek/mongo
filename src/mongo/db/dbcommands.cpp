@@ -1007,10 +1007,11 @@ namespace mongo {
         virtual bool slaveOk() const { return true; }
         virtual bool slaveOverrideOk() const { return true; }
         virtual bool adminOnly() const { return true; }
-        virtual LockType locktype() const { return NONE; }
+        virtual LockType locktype() const { return READ; }
+        virtual bool lockGlobally() const { return true; }
         virtual bool requiresSync() const { return false; }
-        virtual bool needsTxn() const { return false; }
-        virtual int txnFlags() const { return noTxnFlags(); }
+        virtual bool needsTxn() const { return true; }
+        virtual int txnFlags() const { return DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT; }
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
 
