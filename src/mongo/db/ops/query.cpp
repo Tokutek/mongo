@@ -143,12 +143,6 @@ namespace mongo {
                     // Done with this cursor, steal transaction stack back to commit or abort it here.
                     bool ok = ClientCursor::erase(cursorid);
                     verify(ok);
-                    if (ok) {
-                        // transaction for this query is done,
-                        // commit it
-                        verify(cc().hasTxn());
-                        cc().commitTopTxn();
-                    }
                     cursorid = 0;
                     client_cursor = 0;
                     break;
