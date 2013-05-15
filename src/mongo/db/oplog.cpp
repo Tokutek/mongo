@@ -52,7 +52,6 @@ namespace mongo {
     }
 
     void deleteOplogFiles() {
-        Lock::DBWrite lk1("local");
         localDB = NULL;
         rsOplogDetails = NULL;
         replInfoDetails = NULL;
@@ -70,7 +69,6 @@ namespace mongo {
     }
 
     void openOplogFiles() {
-        Lock::DBWrite lk1("local");
         const char *logns = rsoplog;
         if ( rsOplogDetails == 0 ) {
             Client::Context ctx( logns , dbpath, false);
@@ -123,7 +121,6 @@ namespace mongo {
     }
 
     void createOplog() {
-        Lock::GlobalWrite lk;
         bool rs = !cmdLine._replSet.empty();
         verify(rs);
         

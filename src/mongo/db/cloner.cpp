@@ -18,6 +18,8 @@
 
 #include "mongo/pch.h"
 #include "mongo/bson/util/builder.h"
+#include "mongo/client/dbclientinterface.h"
+#include "mongo/client/remote_transaction.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cloner.h"
 #include "mongo/db/jsobj.h"
@@ -81,24 +83,20 @@ namespace mongo {
         string& errmsg
         ) 
     {
-        shared_ptr<DBClientConnection> con(new DBClientConnection());
-        bool same = masterSameProcess(masterHost);
-        verify(!same);
-        if (!con->connect( masterHost, errmsg)) {
-            con.reset();
-            goto exit;
+        verify(!masterSameProcess(masterHost));
+        shared_ptr<DBClientConnection> conn = boost::make_shared<DBClientConnection>();
+        if (!conn->connect(masterHost, errmsg)) {
+            return shared_ptr<DBClientConnection>();
         }
-        if( !replAuthenticate(con.get()) ) {
+        if (!replAuthenticate(conn.get())) {
             errmsg = "can't authenticate replication";
-            con.reset();
-            goto exit;
+            return shared_ptr<DBClientConnection>();
         }
-    exit:
-        return con;
+        return conn;
     }
 
     class Cloner: boost::noncopyable {
-        shared_ptr< DBClientBase > conn;
+        shared_ptr<DBClientBase> conn;
         void copy(
             const char *from_ns, 
             const char *to_ns, 
@@ -112,14 +110,13 @@ namespace mongo {
             );
         struct Fun;
     public:
-        Cloner() { }
+        Cloner(shared_ptr<DBClientBase> &c) : conn(c) {}
 
         /* slaveOk     - if true it is ok if the source of the data is !ismaster.
            useReplAuth - use the credentials we normally use as a replication slave for the cloning
            snapshot    - use $snapshot mode for copying collections.  note this should not be used when it isn't required, as it will be slower.
                          for example repairDatabase need not use it.
         */
-        void setConnection( shared_ptr<DBClientBase> c ) { conn = c; }
 
         /** copy the entire database */
         bool go(
@@ -617,7 +614,7 @@ namespace mongo {
     bool cloneFrom( 
         const string& masterHost , 
         const CloneOptions& options , 
-        shared_ptr<DBClientConnection> conn,
+        shared_ptr<DBClientBase> conn,
         string& errmsg /* out */
         ) 
     {
@@ -626,8 +623,7 @@ namespace mongo {
         myset.reset( new set<string>() );
         clonedCollections = myset.get();
         
-        Cloner c;
-        c.setConnection(conn);
+        Cloner c(conn);
         return c.go(
             masterHost.c_str(),
             options,
@@ -638,15 +634,14 @@ namespace mongo {
     }
 
     void cloneCollectionData(
-        shared_ptr<DBClientConnection> conn,
+        shared_ptr<DBClientBase> conn,
         const string& ns, 
         const BSONObj& query,
         bool copyIndexes,
         bool logForRepl
         ) 
     {
-        Cloner c;
-        c.setConnection(conn);
+        Cloner c(conn);
         c.copyCollectionData(
             ns,
             query,
@@ -684,7 +679,6 @@ namespace mongo {
             ) 
         {
             verify(!fromRepl);
-            shared_ptr<DBClientConnection> clientConn;
             string from = cmdObj.getStringField("clone");
             if ( from.empty() )
                 return false;
@@ -711,47 +705,35 @@ namespace mongo {
                 return false;
             }
 
-            Cloner c;
+            shared_ptr<DBClientBase> sconn;
+            scoped_ptr<RemoteTransaction> rtxn;
             if (masterSameProcess(from.c_str())) {
-                shared_ptr<DBDirectClient> dconn(new DBDirectClient());
-                c.setConnection(dconn);
+                sconn = boost::make_shared<DBDirectClient>();
             }
             else {
-                shared_ptr<DBClientConnection> conn = makeConnection(
-                    from.c_str(), 
-                    errmsg
-                    );
-                if (!conn.get()) {
-                    // errmsg should be set
+                sconn = makeConnection(from.c_str(), errmsg);
+                if (!sconn) {
                     return false;
                 }
-                c.setConnection(conn);
-                clientConn = conn;
-            }
-            // at this point, if clientConn is set, that means
-            // we are not using a direct client, and we should
-            // create a multi statement transaction for the work
-            if (clientConn.get()) {
-                BSONObj beginCommand = BSON( 
-                    "beginTransaction" << 1 << 
-                    "isolation" << "mvcc"
-                    );
-                BSONObj ret;
-                if( !clientConn->runCommand(cc().getContext()->db()->name, beginCommand, ret)) {
+                // since this is a remote connection, we should
+                // create a multi statement transaction for the work
+                try {
+                    rtxn.reset(new RemoteTransaction(*sconn, "mvcc"));
+                }
+                catch (DBException &e) {
                     errmsg = "unable to begin transaction over connection";
                     return false;
                 }
             }
+            verify(sconn);
+            Cloner c(sconn);
 
             set<string> clonedColls;
             bool rval = c.go( from.c_str(), opts, clonedColls, errmsg );
-            if (clientConn.get()) {
-                BSONObj commitCommand = BSON("commitTransaction" << 1);
-                // does not matter if we can't commit,
-                // when we leave, killing connection will abort
-                // the transaction on the connection
-                BSONObj ret;
-                clientConn->runCommand(cc().getContext()->db()->name, commitCommand, ret);
+
+            if (rval && rtxn) {
+                bool ok = rtxn->commit();
+                verify(ok);
             }            
 
             BSONArrayBuilder barr;
@@ -823,28 +805,18 @@ namespace mongo {
                 " " << ( copyIndexes ? "" : ", not copying indexes" ) <<
                 endl;
 
-            Cloner c;
-            // TODO(leif): used ScopedDbConnection and RemoteTransaction
-            shared_ptr<DBClientConnection> myconn;
-            myconn.reset( new DBClientConnection() );
-            if ( ! myconn->connect( fromhost , errmsg ) ) {
+            shared_ptr<DBClientConnection> myconn = boost::make_shared<DBClientConnection>();
+            if (!myconn->connect(fromhost, errmsg)) {
                 return false;
             }
+            shared_ptr<DBClientBase> conn = myconn;
             
+            RemoteTransaction rtxn(*conn, "mvcc");
+
             Client::WriteContext ctx(collection);
             Client::Transaction txn(DB_SERIALIZABLE);
             
-            BSONObj beginCommand = BSON( 
-                "beginTransaction" << 1 << 
-                "isolation" << "mvcc"
-                );
-            BSONObj ret;
-            if( !myconn->runCommand(ctx.ctx().db()->name, beginCommand, ret)) {
-                errmsg = "unable to begin transaction over connection";
-                return false;
-            }
-            
-            c.setConnection( myconn );
+            Cloner c(conn);
             bool retval = c.copyCollection(
                 collection,
                 query,
@@ -853,13 +825,11 @@ namespace mongo {
                 );
 
             if (retval) {
-                BSONObj commitCommand = BSON("commitTransaction" << 1);
-                // does not matter if we can't commit,
-                // when we leave, killing connection will abort
-                // the transaction on the connection
-                myconn->runCommand(ctx.ctx().db()->name, commitCommand, ret);
                 txn.commit();
+                bool ok = rtxn.commit();
+                verify(ok);
             }
+
             return retval;
         }
     } cmdclonecollection;
@@ -955,7 +925,6 @@ namespace mongo {
             // clone command should not be logged,
             // and therefore, fromRepl should be false.
             verify(!fromRepl);
-            shared_ptr<DBClientConnection> clientConn;
             bool slaveOk = cmdObj["slaveOk"].trueValue();
             string fromhost = cmdObj.getStringField("fromhost");
             bool fromSelf = fromhost.empty();
@@ -973,15 +942,14 @@ namespace mongo {
             }
 
             // SERVER-4328 todo lock just the two db's not everything for the fromself case
-            scoped_ptr<Lock::ScopedLock> lk( 
-                fromSelf ? 
-                    static_cast<Lock::ScopedLock*>( new Lock::GlobalWrite() ) : 
-                    static_cast<Lock::ScopedLock*>( new Lock::DBWrite( todb ) ) 
-                );
+            scoped_ptr<Lock::ScopedLock> lk(fromSelf
+                                            ? static_cast<Lock::ScopedLock*>(new Lock::GlobalWrite())
+                                            : static_cast<Lock::ScopedLock*>(new Lock::DBWrite(todb)));
 
             Client::Context tc(todb);
             Client::Transaction txn(DB_SERIALIZABLE);
-            Cloner c;
+            shared_ptr<DBClientBase> conn;
+            scoped_ptr<RemoteTransaction> rtxn;
             string username = cmdObj.getStringField( "username" );
             string nonce = cmdObj.getStringField( "nonce" );
             string key = cmdObj.getStringField( "key" );
@@ -1001,8 +969,16 @@ namespace mongo {
                         return false;
                     }
                 }
-                c.setConnection( cc().authConn() );
-                clientConn = cc().authConn();
+                conn = cc().authConn();
+                // we are not using a direct client, so we should
+                // create a multi statement transaction for the work
+                try {
+                    rtxn.reset(new RemoteTransaction(*conn, "mvcc"));
+                }
+                catch (DBException &e) {
+                    errmsg = "unable to begin transaction over connection";
+                    return false;
+                }
             }
             else {
                 // check if the input parameters are asking for a self-clone
@@ -1012,36 +988,27 @@ namespace mongo {
                 }
 
                 if (masterSameProcess(fromhost.c_str())) {
-                    shared_ptr<DBDirectClient> dconn(new DBDirectClient());
-                    c.setConnection(dconn);
+                    conn = boost::make_shared<DBDirectClient>();
                 }
                 else {
-                    shared_ptr<DBClientConnection> conn = makeConnection(
-                        fromhost.c_str(), 
-                        errmsg
-                        );
-                    if (!conn.get()) {
+                    conn = makeConnection(fromhost.c_str(), errmsg);
+                    if (!conn) {
                         // errmsg should be set
                         return false;
                     }
-                    c.setConnection(conn);
-                    clientConn = conn;
+                    // we are not using a direct client, so we should
+                    // create a multi statement transaction for the work
+                    try {
+                        rtxn.reset(new RemoteTransaction(*conn, "mvcc"));
+                    }
+                    catch (DBException &e) {
+                        errmsg = "unable to begin transaction over connection";
+                        return false;
+                    }
                 }
             }
-            // at this point, if clientConn is set, that means
-            // we are not using a direct client, and we should
-            // create a multi statement transaction for the work
-            if (clientConn.get()) {
-                BSONObj beginCommand = BSON( 
-                    "beginTransaction" << 1 << 
-                    "isolation" << "mvcc"
-                    );
-                BSONObj ret;
-                if( !clientConn->runCommand(cc().getContext()->db()->name, beginCommand, ret)) {
-                    errmsg = "unable to begin transaction over connection";
-                    return false;
-                }
-            }
+            verify(conn);
+            Cloner c(conn);
             bool res = c.go(
                 fromhost.c_str(),
                 errmsg,
@@ -1053,13 +1020,8 @@ namespace mongo {
                 false /*mayBeInterrupted*/
                 );
             if (res) {
-                if (clientConn.get()) {
-                    BSONObj commitCommand = BSON("commitTransaction" << 1);
-                    // does not matter if we can't commit,
-                    // when we leave, killing connection will abort
-                    // the transaction on the connection
-                    BSONObj ret;
-                    clientConn->runCommand(cc().getContext()->db()->name, commitCommand, ret);
+                if (rtxn) {
+                    rtxn->commit();
                 }
                 txn.commit();
             }
