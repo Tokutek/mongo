@@ -188,7 +188,6 @@ namespace mongo {
             
             if ( client_cursor ) {
                 if ( client_cursor->queryOptions() & QueryOption_OplogReplay ) {
-                    cout << " storeOpForSlave in processGetMore " << last << endl;
                     client_cursor->storeOpForSlave( last );
                 }
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
@@ -763,7 +762,6 @@ namespace mongo {
             ccPointer->fields = pq.getFieldPtr();
 
             if (pq.hasOption( QueryOption_OplogReplay )) {
-                cout << " storeOpForSlave in query " << last << endl;
                 ccPointer->storeOpForSlave(last);
             }
             // Clones the transaction and hand's off responsibility
