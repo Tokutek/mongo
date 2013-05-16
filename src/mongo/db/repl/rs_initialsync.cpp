@@ -344,7 +344,7 @@ namespace mongo {
                         BSONObj curr = c->current();                    
                         bool transactionAlreadyApplied = curr["a"].Bool();
                         if (!transactionAlreadyApplied) {
-                            unappliedTransactions.push_back(curr);
+                            unappliedTransactions.push_back(curr.getOwned());
                         }
                     }
                     c->advance();
