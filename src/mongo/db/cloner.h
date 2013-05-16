@@ -28,7 +28,6 @@ namespace mongo {
             logForRepl = true;
             slaveOk = false;
             useReplAuth = false;
-            mayYield = true;
             mayBeInterrupted = false;
 
             syncData = true;
@@ -41,7 +40,6 @@ namespace mongo {
         bool logForRepl;
         bool slaveOk;
         bool useReplAuth;
-        bool mayYield;
         bool mayBeInterrupted;
 
         bool syncData;

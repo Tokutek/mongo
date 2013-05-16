@@ -103,7 +103,6 @@ namespace mongo {
             bool isindex, 
             bool logForRepl,
             bool slaveOk, 
-            bool mayYield, 
             bool mayBeInterrupted, 
             bool isCapped,
             Query q = Query()
@@ -126,7 +125,6 @@ namespace mongo {
             bool logForRepl, 
             bool slaveOk, 
             bool useReplAuth, 
-            bool mayYield, 
             bool mayBeInterrupted, 
             int *errCode = 0
             );
@@ -159,7 +157,7 @@ namespace mongo {
        we need to fix up the value in the "ns" parameter so that the name prefix is correct on a
        copy to a new name.
     */
-    BSONObj fixindex(BSONObj o) {
+    static BSONObj fixindex(BSONObj o, const string &dbname) {
         BSONObjBuilder b;
         BSONObjIterator i(o);
         while ( i.moreWithEOO() ) {
@@ -180,7 +178,7 @@ namespace mongo {
                     );
                 const char *p = strchr(e.valuestr(), '.');
                 uassert( 10025 , "bad ns field for index during dbcopy [2]", p);
-                string newname = cc().database()->name + p;
+                string newname = dbname + p;
                 b.append("ns", newname);
             }
             else
@@ -193,90 +191,63 @@ namespace mongo {
     struct Cloner::Fun {
         Fun() : lastLog(0) { }
         time_t lastLog;
-        void operator()( DBClientCursorBatchIterator &i ) {
-            Lock::GlobalWrite lk;
-            if ( context ) {
-                context->relocked();
-            }
-
-            while( i.moreInCurrentBatch() ) {
+        void operator()(DBClientCursorBatchIterator &i) {
+            const string to_dbname = nsToDatabase(to_collection);
+            while (i.moreInCurrentBatch()) {
                 // yield some
-                if ( n % 128 == 127 ) {
+                if (n % 128 == 127) {
                     time_t now = time(0);
-                    if( now - lastLog >= 60 ) { 
+                    if (now - lastLog >= 60) { 
                         // report progress
-                        if( lastLog ) {
+                        if (lastLog) {
                             log() << "clone " << to_collection << ' ' << n << endl;
                         }
                         lastLog = now;
                     }
-                    mayInterrupt( _mayBeInterrupted );
-                    dbtempreleaseif t( _mayYield );
+                    mayInterrupt(_mayBeInterrupted);
                 }
 
-                BSONObj tmp = i.nextSafe();
-
-                /* assure object is valid.  note this will slow us down a little. */
-                if ( !tmp.valid() ) {
-                    stringstream ss;
-                    ss << "Cloner: skipping corrupt object from " << from_collection;
-                    BSONElement e = tmp.firstElement();
-                    try {
-                        e.validate();
-                        ss << " firstElement: " << e;
-                    }
-                    catch( ... ) {
-                        ss << " firstElement corrupt";
-                    }
-                    out() << ss.str() << endl;
-                    continue;
-                }
-
+                BSONObj js = i.nextSafe();
                 ++n;
 
-                BSONObj js = tmp;
-                if ( isindex ) {
-                    verify( strstr(from_collection, "system.indexes") );
-                    js = fixindex(tmp);
-                    storedForLater->push_back( js.getOwned() );
-                    continue;
+                if (isindex) {
+                    verify(strstr(from_collection, "system.indexes"));
+                    storedForLater->push_back(fixindex(js, to_dbname).getOwned());
                 }
-
-                try {
-                    if (_isCapped) {
-                        NamespaceDetails *d = nsdetails( to_collection );
-                        verify(d->isCapped());
-                        BSONObj pk = js["$_"].Obj();
-                        BSONObjBuilder rowBuilder;                        
-                        BSONObjIterator i(js);
-                        while( i.moreWithEOO() ) {
-                            BSONElement e = i.next();
-                            if ( e.eoo() ) {
-                                break;
+                else {
+                    try {
+                        Client::ReadContext ctx(to_collection);
+                        if (_isCapped) {
+                            NamespaceDetails *d = nsdetails(to_collection);
+                            verify(d->isCapped());
+                            BSONObj pk = js["$_"].Obj();
+                            BSONObjBuilder rowBuilder;                        
+                            BSONObjIterator it(js);
+                            while (it.moreWithEOO()) {
+                                BSONElement e = it.next();
+                                if (e.eoo()) {
+                                    break;
+                                }
+                                if (!mongoutils::str::equals(e.fieldName(), "$_")) {
+                                    rowBuilder.append(e);
+                                }
                             }
-                            if ( strcmp( e.fieldName(), "$_" ) != 0 ) {
-                                rowBuilder.append( e );
-                            }
+                            BSONObj row = rowBuilder.obj();
+                            d->insertObjectIntoCappedWithPK(pk, row, ND_LOCK_TREE_OFF);
                         }
-                        BSONObj row = rowBuilder.obj();
-                        d->insertObjectIntoCappedWithPK(
-                            pk,
-                            row, 
-                            ND_LOCK_TREE_OFF
-                            );
+                        else {
+                            insertObject(to_collection, js, 0, logForRepl);
+                        }
                     }
-                    else {
-                        insertObject(to_collection, js, 0, logForRepl);
+                    catch (UserException& e) {
+                        error() << "error: exception cloning object in " << from_collection << ' ' << e.what() << " obj:" << js.toString() << '\n';
+                        throw;
                     }
-                }
-                catch( UserException& e ) {
-                    error() << "error: exception cloning object in " << from_collection << ' ' << e.what() << " obj:" << js.toString() << '\n';
-                    throw;
-                }
 
-                RARELY if ( time( 0 ) - saveLast > 60 ) {
-                    log() << n << " objects cloned so far from collection " << from_collection << endl;
-                    saveLast = time( 0 );
+                    RARELY if ( time( 0 ) - saveLast > 60 ) {
+                        log() << n << " objects cloned so far from collection " << from_collection << endl;
+                        saveLast = time( 0 );
+                    }
                 }
             }
         }
@@ -287,8 +258,6 @@ namespace mongo {
         time_t saveLast;
         list<BSONObj> *storedForLater;
         bool logForRepl;
-        Client::Context *context;
-        bool _mayYield;
         bool _mayBeInterrupted;
         bool _isCapped;
     };
@@ -302,7 +271,6 @@ namespace mongo {
         bool isindex, 
         bool logForRepl, 
         bool slaveOk, 
-        bool mayYield, 
         bool mayBeInterrupted,
         bool isCapped,
         Query query
@@ -320,36 +288,24 @@ namespace mongo {
         f.saveLast = time( 0 );
         f.storedForLater = &storedForLater;
         f.logForRepl = logForRepl;
-        f._mayYield = mayYield;
         f._mayBeInterrupted = mayBeInterrupted;
         f._isCapped = isCapped;
 
         int options = QueryOption_NoCursorTimeout | QueryOption_AddHiddenPK |
             ( slaveOk ? QueryOption_SlaveOk : 0 );
 
-        {
-            f.context = cc().getContext();
-            mayInterrupt( mayBeInterrupted );
-            dbtempreleaseif r( mayYield );
-            conn->query(
-                boost::function<void(DBClientCursorBatchIterator &)>( f ), 
-                from_collection, 
-                query, 
-                0, 
-                options 
-                );
-        }
+        mayInterrupt( mayBeInterrupted );
+        conn->query(boost::function<void(DBClientCursorBatchIterator &)>(f), from_collection, query, 0, options);
 
-        if ( storedForLater.size() ) {
-            for ( list<BSONObj>::iterator i = storedForLater.begin(); i!=storedForLater.end(); i++ ) {
-                BSONObj js = *i;
-                try {
-                    insertObject(to_collection, js, 0, logForRepl);
-                }
-                catch( UserException& e ) {
-                    error() << "error: exception cloning object in " << from_collection << ' ' << e.what() << " obj:" << js.toString() << '\n';
-                    throw;
-                }
+        for ( list<BSONObj>::iterator i = storedForLater.begin(); i!=storedForLater.end(); i++ ) {
+            BSONObj js = *i;
+            try {
+                Client::WriteContext ctx(js.getStringField("ns"));
+                insertObject(to_collection, js, 0, logForRepl);
+            }
+            catch( UserException& e ) {
+                error() << "error: exception cloning object in " << from_collection << ' ' << e.what() << " obj:" << js.toString() << '\n';
+                throw;
             }
         }
     }
@@ -361,8 +317,6 @@ namespace mongo {
         bool logForRepl
         ) 
     {
-        Client::Context ctx(ns);
-
         // main data
         copy(
             ns.c_str(), 
@@ -370,7 +324,6 @@ namespace mongo {
             false, // isindex
             logForRepl, //logForRepl
             true,
-            true, //mayYield
             false, //maybeInterrupted
             false, // in this path, we don't set isCapped, so hidden PKs not copied
             Query(query)
@@ -378,14 +331,13 @@ namespace mongo {
 
         if( copyIndexes ) {
             // indexes
-            string temp = cc().getContext()->db()->name + ".system.indexes";
+            string dbname = nsToDatabase(ns) + ".system.indexes";
             copy(
-                temp.c_str(),
-                temp.c_str(),
+                dbname.c_str(),
+                dbname.c_str(),
                 true, //isindex
                 logForRepl, //logForRepl
                 true,
-                true, //mayYield
                 false, // mayBeInterrupted
                 false, // isCapped
                 BSON( "ns" << ns )
@@ -428,7 +380,6 @@ namespace mongo {
         bool logForRepl, 
         bool slaveOk, 
         bool useReplAuth, 
-        bool mayYield, 
         bool mayBeInterrupted, 
         int *errCode
         )
@@ -440,7 +391,6 @@ namespace mongo {
         opts.logForRepl = logForRepl;
         opts.slaveOk = slaveOk;
         opts.useReplAuth = useReplAuth;
-        opts.mayYield = mayYield;
         opts.mayBeInterrupted = mayBeInterrupted;
 
         set<string> clonedColls;
@@ -472,10 +422,8 @@ namespace mongo {
         clonedColls.clear();
         if ( opts.syncData ) {
             mayInterrupt( opts.mayBeInterrupted );
-            dbtempreleaseif r( opts.mayYield );
 
             // just using exhaust for collection copying right now
-            
             auto_ptr<DBClientCursor> c = conn->query( 
                 ns.c_str(), 
                 BSONObj(), 
@@ -543,10 +491,7 @@ namespace mongo {
         }
 
         for ( list<BSONObj>::iterator i=toClone.begin(); i != toClone.end(); i++ ) {
-            {
-                mayInterrupt( opts.mayBeInterrupted );
-                dbtempreleaseif r( opts.mayYield );
-            }
+            mayInterrupt( opts.mayBeInterrupted );
             BSONObj collection = *i;
             LOG(2) << "  really will clone: " << collection << endl;
             const char * from_name = collection["name"].valuestr();
@@ -571,7 +516,6 @@ namespace mongo {
                 false, 
                 opts.logForRepl, 
                 opts.slaveOk, 
-                opts.mayYield, 
                 opts.mayBeInterrupted, 
                 isCapped,
                 q
@@ -604,7 +548,6 @@ namespace mongo {
                 true,
                 opts.logForRepl,
                 opts.slaveOk,
-                opts.mayYield,
                 opts.mayBeInterrupted,
                 false, //isCapped
                 query
@@ -620,16 +563,13 @@ namespace mongo {
         string& errmsg /* out */
         ) 
     {
-        set<string>* clonedCollections; 
-        scoped_ptr< set<string> > myset;
-        myset.reset( new set<string>() );
-        clonedCollections = myset.get();
+        set<string> clonedCollections;
         
         Cloner c(conn);
         return c.go(
             masterHost.c_str(),
             options,
-            *clonedCollections,
+            clonedCollections,
             errmsg,
             NULL
             );
@@ -1018,7 +958,6 @@ namespace mongo {
                 true, /*logForReplication=*/
                 slaveOk,
                 false, /*replauth*/
-                true, /*mayYield*/
                 false /*mayBeInterrupted*/
                 );
             if (res) {

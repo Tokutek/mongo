@@ -92,7 +92,6 @@ namespace mongo {
         options.logForRepl = false;
         options.slaveOk = true;
         options.useReplAuth = true;
-        options.mayYield = true;
         options.mayBeInterrupted = false;
         
         options.syncData = true;
