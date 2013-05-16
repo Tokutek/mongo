@@ -188,6 +188,7 @@ namespace mongo {
             
             if ( client_cursor ) {
                 if ( client_cursor->queryOptions() & QueryOption_OplogReplay ) {
+                    cout << " storeOpForSlave in processGetMore " << last << endl;
                     client_cursor->storeOpForSlave( last );
                 }
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
@@ -664,12 +665,17 @@ namespace mongo {
         scoped_ptr<QueryResponseBuilder> queryResponseBuilder
                 ( QueryResponseBuilder::make( pq, cursor, queryPlan, oldPlan ) );
         bool saveClientCursor = false;
-        ClientCursor::Holder ccPointer( new ClientCursor( QueryOption_NoCursorTimeout, cursor, ns ) );
+        int options = QueryOption_NoCursorTimeout;
+        if (pq.hasOption( QueryOption_OplogReplay )) {
+            options |= QueryOption_OplogReplay;
+        }
+        ClientCursor::Holder ccPointer( new ClientCursor( options, cursor, ns ) );
 
         // for oplog cursors, we check if we are reading data that is too old and might
         // be stale.
         bool opChecked = false;
-        
+        bool slaveLocationUpdated = false;
+        BSONObj last;
         for ( ; cursor->ok(); cursor->advance() ) {
 
             if ( pq.getMaxScan() && cursor->nscanned() > pq.getMaxScan() ) {
@@ -683,7 +689,16 @@ namespace mongo {
             // Note slave's position in the oplog.
             if ( pq.hasOption( QueryOption_OplogReplay ) ) {
                 BSONObj current = cursor->current();
-                ccPointer->storeOpForSlave(current);
+                last = current;
+                
+                // the first row returned is equal to the last element that
+                // the slave has synced up to, so we might as well update
+                // the slave location
+                if (!slaveLocationUpdated) {
+                    ccPointer->storeOpForSlave(current);
+                    ccPointer->updateSlaveLocation(curop);
+                    slaveLocationUpdated = true;
+                }
                 // check if data we are about to return may be too stale
                 if (!opChecked) {
                     uint64_t ts = current["ts"]._numberLong();
@@ -746,6 +761,11 @@ namespace mongo {
             ccPointer->setPos( nReturned );
             ccPointer->pq = pq_shared;
             ccPointer->fields = pq.getFieldPtr();
+
+            if (pq.hasOption( QueryOption_OplogReplay )) {
+                cout << " storeOpForSlave in query " << last << endl;
+                ccPointer->storeOpForSlave(last);
+            }
             // Clones the transaction and hand's off responsibility
             // of its completion to the client cursor's destructor.
             cc().swapTransactionStack(ccPointer->transactions);
