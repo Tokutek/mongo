@@ -151,8 +151,17 @@ namespace mongo {
         verify( db == 0 || db->isOk() );
         _client->_context = this;
         checkNsAccess( doauth );
-        // opens the collection or throws RetryWithWriteLock
-        nsdetails(_ns.c_str());
+        try {
+            // opens the collection or throws RetryWithWriteLock
+            nsdetails(_ns.c_str());
+        }
+        catch (RetryWithWriteLock &e) {
+            // we need to manually clean up but still re-throw, because we're in the constructor
+            _client->_curOp->recordGlobalTime(_timer.micros());
+            _client->_curOp->leave( this );
+            _client->_context = _oldContext;
+            throw e;
+        }
     }
 
     Client::Context::Context(const string& ns, string path , bool doauth, bool doVersion) :
@@ -266,8 +275,17 @@ namespace mongo {
         _client->_context = this;
         _client->_curOp->enter( this );
         checkNsAccess( doauth );
-        // opens the collection or throws RetryWithWriteLock
-        nsdetails(_ns.c_str());
+        try {
+            // opens the collection or throws RetryWithWriteLock
+            nsdetails(_ns.c_str());
+        }
+        catch (RetryWithWriteLock &e) {
+            // we need to manually clean up but still re-throw, because we're in the constructor
+            _client->_curOp->recordGlobalTime(_timer.micros());
+            _client->_curOp->leave( this );
+            _client->_context = _oldContext;
+            throw e;
+        }
     }
 
     void Client::Context::_finishInit( bool doauth ) {
