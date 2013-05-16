@@ -52,7 +52,6 @@ namespace mongo {
     }
 
     void deleteOplogFiles() {
-        Lock::DBWrite lk1("local");
         localDB = NULL;
         rsOplogDetails = NULL;
         replInfoDetails = NULL;
@@ -70,17 +69,16 @@ namespace mongo {
     }
 
     void openOplogFiles() {
-        Lock::DBWrite lk1("local");
         const char *logns = rsoplog;
-        if ( rsOplogDetails == 0 ) {
-            Client::Context ctx( logns , dbpath, false);
+        if (rsOplogDetails == NULL) {
+            Client::Context ctx(logns , dbpath, false);
             localDB = ctx.db();
             verify( localDB );
             rsOplogDetails = nsdetails(logns);
             massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
         }
         if (replInfoDetails == NULL) {
-            Client::Context ctx( rsReplInfo , dbpath, false);
+            Client::Context ctx(rsReplInfo , dbpath, false);
             replInfoDetails = nsdetails(rsReplInfo);
             massert(16747, "local.replInfo missing. did you drop it? if so restart server", replInfoDetails);
         }
@@ -123,7 +121,6 @@ namespace mongo {
     }
 
     void createOplog() {
-        Lock::GlobalWrite lk;
         bool rs = !cmdLine._replSet.empty();
         verify(rs);
         
@@ -230,8 +227,10 @@ namespace mongo {
             // set the applied bool to false, to let the oplog know that
             // this entry has not been applied to collections
             BSONElementManipulator(entry["a"]).setBool(true);
-            Lock::DBRead lk1("local");
-            writeEntryToOplog(entry);
+            {
+                Lock::DBRead lk1("local");
+                writeEntryToOplog(entry);
+            }
             // we are operating as a secondary. We don't have to fsync
             transaction.commit(DB_TXN_NOSYNC);
         }

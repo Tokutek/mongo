@@ -18,6 +18,7 @@
 
 #include "mongo/db/repl/rs.h"
 
+#include "mongo/client/remote_transaction.h"
 #include "mongo/db/client.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/oplog.h"
@@ -36,14 +37,11 @@ namespace mongo {
     using namespace bson;
 
     static void dropAllDatabasesExceptLocal() {
-        Lock::GlobalWrite lk;
-
         vector<string> n;
         getDatabaseNames(n);
-        if( n.size() == 0 ) return;
-        log() << "dropAllDatabasesExceptLocal " << n.size() << endl;
-        for( vector<string>::iterator i = n.begin(); i != n.end(); i++ ) {
-            if( *i != "local" ) {
+        LOG(0) << "dropAllDatabasesExceptLocal " << n.size() << endl;
+        for (vector<string>::const_iterator i = n.begin(); i != n.end(); i++) {
+            if (*i != "local") {
                 Client::Context ctx(*i);
                 dropDatabase(*i);
             }
@@ -111,18 +109,18 @@ namespace mongo {
         shared_ptr<DBClientConnection> conn
         ) 
     {
-        for( list<string>::const_iterator i = dbs.begin(); i != dbs.end(); i++ ) {
+        verify(Lock::isW());
+        for (list<string>::const_iterator i = dbs.begin(); i != dbs.end(); i++) {
             string db = *i;
-            if( db == "local" ) 
+            if (db == "local") {
                 continue;
+            }
             
-            sethbmsg( str::stream() << "initial sync cloning db: " << db , 0);
+            sethbmsg(str::stream() << "initial sync cloning db: " << db, 0);
 
-            Client::WriteContext ctx(db);
-            if ( ! clone( master, db,  conn) ) {
-                sethbmsg( str::stream() 
-                              << "initial sync error clone of " << db 
-                              << " failed sleeping 5 minutes" ,0);
+            Client::Context ctx(db);
+            if (!clone(master, db, conn)) {
+                sethbmsg(str::stream() << "initial sync error clone of " << db << " failed sleeping 5 minutes", 0);
                 return false;
             }
         }
@@ -404,97 +402,92 @@ namespace mongo {
                 return false;
             }
 
-            sethbmsg("initial sync drop all databases", 0);
-            dropAllDatabasesExceptLocal();
+            {
+                Lock::GlobalWrite lk;
+                Client::Transaction dropTransaction(DB_SERIALIZABLE);
+                sethbmsg("initial sync drop all databases", 0);
+                dropAllDatabasesExceptLocal();
+                dropTransaction.commit();
+            }
 
             // now deal with creation of oplog
             // first delete any existing data in the oplog
 
-            // TODO: take DBWrite("local") lock here, not in sub functions
-            Client::Transaction fileOpsTransaction(DB_SERIALIZABLE);
-            deleteOplogFiles();
-            // now recreate the oplog
-            createOplog();
-            openOplogFiles();
-            fileOpsTransaction.commit(0);
-
-            sethbmsg("initial sync clone all databases", 0);
-            
-            BSONObj beginCommand = BSON( 
-                "beginTransaction" << 1 << 
-                "isolation" << "mvcc"
-                );
-            BSONObj commandRet;
-            if( !r.conn()->runCommand("local", beginCommand, commandRet)) {
-                sethbmsg("failed to begin transaction for copying data", 0);
-                sleepsecs(1);
-                return false;
-            }
-
-            list<string> dbs = r.conn()->getDatabaseNames();
-
-            //
-            // Not sure if it is necessary to have a separate fileOps 
-            // transaction and clone transaction. The cloneTransaction
-            // has a higher chance of failing, and I don't know at the moment
-            // if it is ok to do fileops successfully, and then an operation (cloning) that
-            // later causes an abort. So, to be cautious, they are separate
-
-            // TODO: take GlobalWrite lock around initial clone
-            // at the moment, locking in cloner makes this a little problematic
-            Client::Transaction cloneTransaction(DB_SERIALIZABLE);
-            bool ret = _syncDoInitialSync_clone(
-                sourceHostname.c_str(), 
-                dbs, 
-                r.conn_shared()
-                );
-
-            if (!ret) {
-                veto(source->fullName(), 600);
-                sleepsecs(300);
-                return false;
-            }
-
-            // at this point, we have copied all of the data from the 
-            // remote machine. Now we need to copy the replication information
-            // on the remote machine's local database, we need to copy
-            // the entire (small) replInfo dictionary, and the necessary portion
-            // of the oplog
             {
-                // TODO: then you don't need a write lock here
-                Client::WriteContext ctx(rsoplog);
-                // first copy the replInfo, as we will use its information
-                // to determine  how much of the opLog to copy
-                BSONObj q;
-                cloneCollectionData(
-                    r.conn_shared(),
-                    rsReplInfo,
-                    q,
-                    true, //copyIndexes
-                    false //logForRepl
-                    );
-
-                // copy entire oplog (probably overkill)
-                cloneCollectionData(
-                    r.conn_shared(),
-                    rsoplog,
-                    q,
-                    true, //copyIndexes
-                    false //logForRepl
-                    );
+                Lock::DBWrite lk("local");
+                Client::Transaction fileOpsTransaction(DB_SERIALIZABLE);
+                deleteOplogFiles();
+                // now recreate the oplog
+                createOplog();
+                openOplogFiles();
+                fileOpsTransaction.commit(0);
             }
-            cloneTransaction.commit(0);
 
-            BSONObj commitCommand = BSON("commitTransaction" << 1);
-            if (!r.conn()->runCommand("local", commitCommand, commandRet)) {
-                sethbmsg("failed to commit transaction for copying data", 0);
+            try {
+                sethbmsg("initial sync clone all databases", 0);
+            
+                shared_ptr<DBClientConnection> conn(r.conn_shared());
+                RemoteTransaction rtxn(*conn, "mvcc");
+
+                list<string> dbs = conn->getDatabaseNames();
+
+                //
+                // Not sure if it is necessary to have a separate fileOps 
+                // transaction and clone transaction. The cloneTransaction
+                // has a higher chance of failing, and I don't know at the moment
+                // if it is ok to do fileops successfully, and then an operation (cloning) that
+                // later causes an abort. So, to be cautious, they are separate
+
+                {
+                    Lock::GlobalWrite lk;
+                    Client::Transaction cloneTransaction(DB_SERIALIZABLE);
+                    bool ret = _syncDoInitialSync_clone(sourceHostname.c_str(), dbs, conn);
+
+                    if (!ret) {
+                        veto(source->fullName(), 600);
+                        sleepsecs(300);
+                        return false;
+                    }
+
+                    // at this point, we have copied all of the data from the 
+                    // remote machine. Now we need to copy the replication information
+                    // on the remote machine's local database, we need to copy
+                    // the entire (small) replInfo dictionary, and the necessary portion
+                    // of the oplog
+
+                    // first copy the replInfo, as we will use its information
+                    // to determine  how much of the opLog to copy
+                    BSONObj q;
+                    cloneCollectionData(conn,
+                                        rsReplInfo,
+                                        q,
+                                        true, //copyIndexes
+                                        false //logForRepl
+                                        );
+
+                    // copy entire oplog (probably overkill)
+                    cloneCollectionData(conn,
+                                        rsoplog,
+                                        q,
+                                        true, //copyIndexes
+                                        false //logForRepl
+                                        );
+
+                    cloneTransaction.commit(0);
+                }
+
+                bool ok = rtxn.commit();
+                verify(ok);  // absolutely no reason this should fail, it was read only
+                // data should now be consistent
+            }
+            catch (DBException &e) {
+                sethbmsg("exception trying to copy data", 0);
                 sleepsecs(1);
                 return false;
             }
-            // data should now be consistent
-
         }
         else {
+            Lock::DBWrite lk("local");
             openOplogFiles();
         }
         if (needGapsFilled) {

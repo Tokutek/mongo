@@ -33,14 +33,13 @@ namespace mongo {
 
     RemoteTransaction::~RemoteTransaction() {
         if (_conn) {
-            bool ok;
             try {
-                ok = rollback();
+                rollback();
             }
             catch (DBException &e) {
-                ok = false;
+                LOG(1) << "error rolling back RemoteTransaction" << endl;
+                // not much else we can do
             }
-            verify(ok);
         }
     }
 

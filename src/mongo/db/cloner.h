@@ -48,15 +48,17 @@ namespace mongo {
         bool syncIndexes;
     };
 
+    class DBClientBase;
+
     bool cloneFrom(
         const string& masterHost , 
         const CloneOptions& options , 
-        shared_ptr<DBClientConnection> conn,
+        shared_ptr<DBClientBase> conn,
         string& errmsg /* out */
         );
     
     void cloneCollectionData(
-        shared_ptr<DBClientConnection> conn,
+        shared_ptr<DBClientBase> conn,
         const string& ns, 
         const BSONObj& query,
         bool copyIndexes,
