@@ -621,7 +621,7 @@ namespace mongo {
                 s << " command: ";
             else
                 s << " query: ";
-            s << query.toString();
+            s << query.toString(false, true);
         }
         
         if ( ! updateobj.isEmpty() ) {
