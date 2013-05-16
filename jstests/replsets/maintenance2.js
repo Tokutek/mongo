@@ -34,7 +34,7 @@ doTest = function( signal ) {
 
     // This method will check the oplogs of the master
     // and slaves in the set and wait until the change has replicated.
-    // replTest.awaitReplication();
+    replTest.awaitReplication();
 
     slaves = replTest.liveNodes.slaves;
     assert( slaves.length == 2, "Expected 2 slaves but length was " + slaves.length );
