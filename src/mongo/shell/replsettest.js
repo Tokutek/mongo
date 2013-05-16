@@ -492,7 +492,7 @@ ReplSetTest.prototype.getLastGTID = function() {
 };
 
 ReplSetTest.prototype.awaitReplication = function(timeout) {
-    timeout = timeout || 30000;
+    timeout = timeout || 45000;
 
     this.getLastGTID();
 
