@@ -84,13 +84,11 @@ namespace mongo {
         ) 
     {
         verify(!masterSameProcess(masterHost));
-        shared_ptr<DBClientConnection> conn = boost::make_shared<DBClientConnection>();
-        if (!conn->connect(masterHost, errmsg)) {
-            return shared_ptr<DBClientConnection>();
-        }
+        ConnectionString cs = ConnectionString::parse(masterHost, errmsg);
+        shared_ptr<DBClientConnection> conn(static_cast<DBClientConnection *>(cs.connect(errmsg)));
         if (!replAuthenticate(conn.get())) {
             errmsg = "can't authenticate replication";
-            return shared_ptr<DBClientConnection>();
+            conn.reset();
         }
         return conn;
     }
@@ -869,7 +867,7 @@ namespace mongo {
             verify(!fromRepl);
             bool slaveOk = cmdObj["slaveOk"].trueValue();
             string fromhost = cmdObj.getStringField("fromhost");
-            bool fromSelf = fromhost.empty();
+            bool fromSelf = fromhost.empty() || mongoutils::str::startsWith(fromhost, "localhost:");
             if ( fromSelf ) {
                 /* copy from self */
                 stringstream ss;
