@@ -605,6 +605,22 @@ namespace mongo {
         responseLength = -1;
     }
 
+    bool OpDebug::vetoLog( const CurOp& curop ) const {
+        // this is causing many tests to output lots of logs
+        // we don't need it.
+        // Basically, this is the case of oplog cursors still trying
+        // to connect to a machine even though the machine is shutting
+        // down. We should find a way for the oplog to veto
+        // that machine, but can't find method to do it now
+        if (exceptionInfo.code == 11600 && 
+            mongoutils::str::equals(ns.toString().c_str(), "local.oplog.rs")
+            )
+        {
+            return true;
+        }
+        return false;
+    }
+
 
 #define OPDEBUG_TOSTRING_HELP(x) if( x >= 0 ) s << " " #x ":" << (x)
 #define OPDEBUG_TOSTRING_HELP_BOOL(x) if( x ) s << " " #x ":" << (x)

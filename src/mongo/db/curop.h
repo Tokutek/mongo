@@ -37,6 +37,8 @@ namespace mongo {
         OpDebug() : ns(""){ reset(); }
 
         void reset();
+        // if returns true, then don't log info
+        bool vetoLog( const CurOp& curop ) const;
         
         string report( const CurOp& curop ) const;
         void append( const CurOp& curop, BSONObjBuilder& b ) const;

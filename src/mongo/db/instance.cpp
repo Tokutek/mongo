@@ -447,7 +447,7 @@ namespace mongo {
 
         logThreshold += currentOp.getExpectedLatencyMs();
 
-        if ( shouldLog || debug.executionTime > logThreshold ) {
+        if ( (shouldLog || debug.executionTime > logThreshold) && !debug.vetoLog(currentOp) ) {
             mongo::tlog() << debug.report( currentOp ) << endl;
         }
 
@@ -766,7 +766,9 @@ namespace mongo {
             ex->getInfo().append( err );
             BSONObj errObj = err.done();
 
-            log() << errObj << endl;
+            if (!ex->interrupted()) {
+                log() << errObj << endl;
+            }
 
             curop.debug().exceptionInfo = ex->getInfo();
 
