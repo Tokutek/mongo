@@ -494,7 +494,7 @@ namespace mongo {
 
         for ( list<BSONObj>::iterator i=toClone.begin(); i != toClone.end(); i++ ) {
             mayInterrupt( opts.mayBeInterrupted );
-            if (!checkCollectionsExist(*conn, todb, toCloneNames, errmsg)) {
+            if (!checkCollectionsExist(*conn, opts.fromDB, toCloneNames, errmsg)) {
                 return false;
             }
             BSONObj collection = *i;
@@ -528,7 +528,7 @@ namespace mongo {
         }
 
         // check that they still exists before syncing indexes
-        if (!checkCollectionsExist(*conn, todb, toCloneNames, errmsg)) {
+        if (!checkCollectionsExist(*conn, opts.fromDB, toCloneNames, errmsg)) {
             return false;
         }
 
@@ -565,7 +565,7 @@ namespace mongo {
         }
 
         // check one more time at the end to make sure we got everything
-        if (!checkCollectionsExist(*conn, todb, toCloneNames, errmsg)) {
+        if (!checkCollectionsExist(*conn, opts.fromDB, toCloneNames, errmsg)) {
             return false;
         }
         return true;
