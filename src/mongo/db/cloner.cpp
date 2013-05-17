@@ -952,7 +952,7 @@ namespace mongo {
             verify(!fromRepl);
             bool slaveOk = cmdObj["slaveOk"].trueValue();
             string fromhost = cmdObj.getStringField("fromhost");
-            bool fromSelf = fromhost.empty() || mongoutils::str::startsWith(fromhost, "localhost:");
+            bool fromSelf = fromhost.empty();
             if ( fromSelf ) {
                 /* copy from self */
                 stringstream ss;
@@ -966,13 +966,7 @@ namespace mongo {
                 return false;
             }
 
-            // SERVER-4328 todo lock just the two db's not everything for the fromself case
-            scoped_ptr<Lock::ScopedLock> lk(fromSelf
-                                            ? static_cast<Lock::ScopedLock*>(new Lock::GlobalWrite())
-                                            : static_cast<Lock::ScopedLock*>(new Lock::DBWrite(todb)));
-
-            Client::Context tc(todb);
-            Client::Transaction txn(DB_SERIALIZABLE);
+            scoped_ptr<Lock::ScopedLock> lk;
             shared_ptr<DBClientBase> conn;
             scoped_ptr<RemoteTransaction> rtxn;
             string username = cmdObj.getStringField( "username" );
@@ -981,19 +975,18 @@ namespace mongo {
             if ( !username.empty() && !nonce.empty() && !key.empty() ) {
                 uassert( 13008, "must call copydbgetnonce first", cc().authConn().get() );
                 BSONObj ret;
-                {
-                    dbtemprelease t;
-                    BSONObj command = BSON( 
-                        "authenticate" << 1 << 
-                        "user" << username << 
-                        "nonce" << nonce << 
-                        "key" << key
-                        );
-                    if ( !cc().authConn()->runCommand( fromdb, command, ret ) ) {
-                        errmsg = "unable to login " + ret.toString();
-                        return false;
-                    }
+                BSONObj command = BSON( 
+                    "authenticate" << 1 << 
+                    "user" << username << 
+                    "nonce" << nonce << 
+                    "key" << key
+                                        );
+                if ( !cc().authConn()->runCommand( fromdb, command, ret ) ) {
+                    errmsg = "unable to login " + ret.toString();
+                    return false;
                 }
+
+                lk.reset(static_cast<Lock::ScopedLock *>(new Lock::DBWrite(todb)));
                 conn = cc().authConn();
                 // we are not using a direct client, so we should
                 // create a multi statement transaction for the work
@@ -1006,16 +999,22 @@ namespace mongo {
                 }
             }
             else {
-                // check if the input parameters are asking for a self-clone
-                // if so, gracefully exit
-                if (!checkSelfClone(fromhost.c_str(), fromdb, errmsg)) {
-                    return false;
+                {
+                    Client::ReadContext rctx(todb); // this is annoying, checkSelfClone needs cc().database()
+                    // check if the input parameters are asking for a self-clone
+                    // if so, gracefully exit
+                    if (!checkSelfClone(fromhost.c_str(), fromdb, errmsg)) {
+                        return false;
+                    }
                 }
 
                 if (masterSameProcess(fromhost.c_str())) {
+                    // SERVER-4328 todo lock just the two db's not everything for the fromself case
+                    lk.reset(static_cast<Lock::ScopedLock *>(new Lock::GlobalWrite()));
                     conn = boost::make_shared<DBDirectClient>();
                 }
                 else {
+                    lk.reset(static_cast<Lock::ScopedLock *>(new Lock::DBWrite(todb)));
                     conn = makeConnection(fromhost.c_str(), errmsg);
                     if (!conn) {
                         // errmsg should be set
@@ -1032,6 +1031,8 @@ namespace mongo {
                     }
                 }
             }
+            Client::Context tc(todb);
+            Client::Transaction txn(DB_SERIALIZABLE);
             verify(conn);
             Cloner c(conn);
             bool res = c.go(
