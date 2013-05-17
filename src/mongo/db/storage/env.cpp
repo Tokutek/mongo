@@ -530,7 +530,7 @@ namespace mongo {
                     _do_assert(msgasserted, 16766,
                                "No header found when reading dictionary from disk. There may be data corruption.");
                 case TOKUDB_MVCC_DICTIONARY_TOO_NEW:
-                    _do_assert(uasserted, 16768,
+                    _do_assert(uasserted, DICTIONARY_TOO_NEW_ASSERT_ID,
                                "Accessed dictionary created after this transaction began. Try restarting the transaction.");
                 default: 
                 {

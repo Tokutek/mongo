@@ -24,6 +24,7 @@
 #include "mongo/db/cursor.h"
 #include "mongo/db/explain.h"
 #include "mongo/db/queryoptimizer.h"
+#include "mongo/db/storage/env.h"
 
 namespace mongo {
     
@@ -547,7 +548,7 @@ namespace mongo {
             return generator.generate();
         }
         catch ( DBException& e ) {
-            if (e.getCode() == 16768) {
+            if (e.getCode() == storage::DICTIONARY_TOO_NEW_ASSERT_ID) {
                 shared_ptr<Cursor> ret;
                 ret.reset(new DummyCursor(1));
                 return ret;
