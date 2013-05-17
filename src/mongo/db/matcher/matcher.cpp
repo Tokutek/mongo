@@ -167,11 +167,7 @@ namespace mongo {
             case MatchExpression::EXISTS: {
                 if ( depth > 0 )
                     return true;
-                const ExistsMatchExpression* exists = static_cast<const ExistsMatchExpression*>(e);
-                bool x = !exists->rightSideBool();
-                if ( negated )
-                    x = !x;
-                return x;
+                return negated;
             }
 
             case MatchExpression::NOT: {
