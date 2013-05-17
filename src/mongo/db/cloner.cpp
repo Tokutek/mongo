@@ -867,7 +867,7 @@ namespace mongo {
             verify(!fromRepl);
             bool slaveOk = cmdObj["slaveOk"].trueValue();
             string fromhost = cmdObj.getStringField("fromhost");
-            bool fromSelf = fromhost.empty();
+            bool fromSelf = fromhost.empty() || mongoutils::str::startsWith(fromhost, "localhost:");
             if ( fromSelf ) {
                 /* copy from self */
                 stringstream ss;
