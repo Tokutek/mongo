@@ -324,8 +324,8 @@ namespace OpLogHelpers{
             KEY_STR_OLD_ROW, 
             KEY_STR_NEW_ROW
             };
-        BSONElement fields[2];
-        op.getFields(2, names, fields);
+        BSONElement fields[3];
+        op.getFields(3, names, fields);
         BSONObj pk = fields[0].Obj();
         BSONObj oldRow = fields[1].Obj();
         BSONObj newRow = fields[2].Obj();
