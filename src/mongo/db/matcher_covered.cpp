@@ -73,12 +73,13 @@ namespace mongo {
             }
         }
 
-        if ( details )
-            details->setLoadedRecord( true );
-
         // Couldn't match off key, need to read full document.
         const BSONObj obj = cursor->current();
         bool res = _docMatcher->matches( obj, details ) && !isOrClauseDup( obj );
+
+        if ( details )
+            details->setLoadedRecord( true );
+
         LOG(5) << "CoveredIndexMatcher _docMatcher->matches() returns " << res << endl;
         return res;
     }
