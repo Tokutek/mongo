@@ -82,8 +82,6 @@ namespace mongo {
         virtual bool equivalent( const MatchExpression* other ) const;
 
     protected:
-        bool _invertForNE( bool normal ) const;
-
         BSONElement _rhs;
     };
 
@@ -140,18 +138,6 @@ namespace mongo {
         }
 
     };
-
-    class NEMatchExpression : public ComparisonMatchExpression {
-    public:
-        NEMatchExpression() : ComparisonMatchExpression( NE ){}
-        virtual LeafMatchExpression* shallowClone() const {
-            ComparisonMatchExpression* e = new NEMatchExpression();
-            e->init( path(), _rhs  );
-            return e;
-        }
-
-    };
-
 
     class RegexMatchExpression : public LeafMatchExpression {
     public:
