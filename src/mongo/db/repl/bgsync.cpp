@@ -247,6 +247,22 @@ namespace mongo {
 
     // returns number of seconds to sleep, if any
     uint32_t BackgroundSync::produce() {
+
+        // normally msgCheckNewState gets called periodically, but in a single node repl set
+        // there are no heartbeat threads, so we do it here to be sure.  this is relevant if the
+        // singleton member has done a stepDown() and needs to come back up.
+        if (theReplSet->config().members.size() == 1 &&
+            theReplSet->myConfig().potentiallyHot()) {
+            Manager* mgr = theReplSet->mgr;
+            // When would mgr be null?  During replsettest'ing, in which case we should
+            // fall through and actually apply ops as if we were a real secondary.
+            if (mgr) {
+                mgr->send(boost::bind(&Manager::msgCheckNewState, theReplSet->mgr));
+                // There should never be ops to sync in a 1-member set, anyway
+                return 1;
+            }
+        }
+
         // this oplog reader does not do a handshake because we don't want the server it's syncing
         // from to track how far it has synced
         OplogReader r(true /* doHandshake */);
