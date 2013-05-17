@@ -39,20 +39,17 @@ namespace mongo {
     int __findingStartInitialTimeout = 5; // configurable for testing
 
     // cached copies of these...so don't rename them, drop them, etc.!!!
-    static Database *localDB = 0;
     static NamespaceDetails *rsOplogDetails = NULL;
     static NamespaceDetails *replInfoDetails = NULL;
     
     void oplogCheckCloseDatabase( Database * db ) {
         verify( Lock::isW() );
-        localDB = 0;
         rsOplogDetails = NULL;
         replInfoDetails = NULL;
         resetSlaveCache();
     }
 
     void deleteOplogFiles() {
-        localDB = NULL;
         rsOplogDetails = NULL;
         replInfoDetails = NULL;
         
@@ -72,8 +69,6 @@ namespace mongo {
         const char *logns = rsoplog;
         if (rsOplogDetails == NULL) {
             Client::Context ctx(logns , dbpath, false);
-            localDB = ctx.db();
-            verify( localDB );
             rsOplogDetails = nsdetails(logns);
             massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
         }
