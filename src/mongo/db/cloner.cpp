@@ -396,6 +396,8 @@ namespace mongo {
 
     }
 
+    static bool checkCollectionsExist(DBClientBase &conn, const string &dbname, const vector<string> &collnames, string &errmsg);
+
     bool Cloner::go(
         const char *masterHost,
         const CloneOptions& opts,
@@ -417,6 +419,7 @@ namespace mongo {
            */
         string ns = opts.fromDB + ".system.namespaces";
         list<BSONObj> toClone;
+        vector<string> toCloneNames;
         clonedColls.clear();
         if ( opts.syncData ) {
             mayInterrupt( opts.mayBeInterrupted );
@@ -485,11 +488,15 @@ namespace mongo {
 
                 clonedColls.insert( from_name );
                 toClone.push_back( collection.getOwned() );
+                toCloneNames.push_back(from_name);
             }
         }
 
         for ( list<BSONObj>::iterator i=toClone.begin(); i != toClone.end(); i++ ) {
             mayInterrupt( opts.mayBeInterrupted );
+            if (!checkCollectionsExist(*conn, todb, toCloneNames, errmsg)) {
+                return false;
+            }
             BSONObj collection = *i;
             LOG(2) << "  really will clone: " << collection << endl;
             const char * from_name = collection["name"].valuestr();
@@ -518,6 +525,11 @@ namespace mongo {
                 isCapped,
                 q
                 );
+        }
+
+        // check that they still exists before syncing indexes
+        if (!checkCollectionsExist(*conn, todb, toCloneNames, errmsg)) {
+            return false;
         }
 
         // now build the indexes
@@ -551,7 +563,80 @@ namespace mongo {
                 query
                 );
         }
+
+        // check one more time at the end to make sure we got everything
+        if (!checkCollectionsExist(*conn, todb, toCloneNames, errmsg)) {
+            return false;
+        }
         return true;
+    }
+
+    /**
+       During an initial sync, we need to periodically check whether the collections we're cloning have been dropped.
+       There is also the possibility that a collection could be dropped and re-created before we get to it.
+       Therefore we also try to create a cursor and check for "dictionary too new" errors.
+       This command returns true iff all the collections exist and have not been created since the transaction started.
+       This is only really a useful property when run in a multi-statement transaction.
+     */
+    class CmdCollectionsExist : public QueryCommand {
+      public:
+        CmdCollectionsExist() : QueryCommand("_collectionsExist") {}
+        virtual void help(stringstream &h) const { h << "internal use only"; }
+        virtual bool slaveOk() const { return true; }
+        virtual bool run(const string &dbname, BSONObj &jsobj, int, string &errmsg, BSONObjBuilder &result, bool) {
+            BSONElement arrElt = jsobj["_collectionsExist"];
+            if (!arrElt.ok() || arrElt.type() != Array) {
+                errmsg = "argument must be an array";
+                return false;
+            }
+            vector<BSONElement> v = arrElt.Array();
+            for (vector<BSONElement>::const_iterator it = v.begin(); it != v.end(); ++it) {
+                const BSONElement &e = *it;
+                if (!e.ok() || e.type() != String) {
+                    errmsg = "each collection name must be a string";
+                    return false;
+                }
+                if (!checkCollection(dbname, e.String(), errmsg)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+      private:
+        bool checkCollection(const string &dbname, const string &collname, string &errmsg) {
+            const string ns = (mongoutils::str::startsWith(collname, dbname + ".")
+                               ? collname
+                               : dbname + "." + collname);
+            NamespaceDetails *d = nsdetails(ns.c_str());
+            if (d == NULL) {
+                errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped";
+                return false;
+            }
+            try {
+                scoped_ptr<Cursor> _c(BasicCursor::make(d));
+            }
+            catch (DBException &e) {
+                if (e.getCode() == storage::DICTIONARY_TOO_NEW_ASSERT_ID) {
+                    errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped and re-created";
+                    return false;
+                }
+                else {
+                    throw;
+                }
+            }
+            return true;
+        }
+    } collectionsExistCommand;
+
+    // Utility wrapper for the _collectionsExist command.
+    static bool checkCollectionsExist(DBClientBase &conn, const string &dbname, const vector<string> &collnames, string &errmsg) {
+        BSONObj res;
+        bool ok = conn.runCommand(dbname, BSON("_collectionsExist" << collnames), res);
+        if (!ok) {
+            errmsg = res["errmsg"].String();
+            LOG(1) << errmsg << endl;
+        }
+        return ok;
     }
 
     bool cloneFrom( 

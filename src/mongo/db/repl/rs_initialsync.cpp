@@ -19,17 +19,21 @@
 #include "mongo/db/repl/rs.h"
 
 #include "mongo/client/remote_transaction.h"
+
 #include "mongo/db/client.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/dbhelpers.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/oplogreader.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/rs_optime.h"
 #include "mongo/db/repl/rs_sync.h"
+#include "mongo/db/storage/env.h"
+
 #include "mongo/util/mongoutils/str.h"
-#include "mongo/db/instance.h"
-#include "mongo/db/jsobjmanipulator.h"
 
 namespace mongo {
 
