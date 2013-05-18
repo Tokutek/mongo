@@ -29,8 +29,10 @@ doTest = function( signal ) {
 
   // insert a record
   master.foo.insert({x:1});
-  master.runCommand({getlasterror:1, w:2});
-
+  //master.runCommand({getlasterror:1, w:2});
+  // put a sleep here instead of a getlasterror, because getlasterror does
+  // not guarantee that the data is applied, just that it is on the slave
+  sleep(500);
   var doc = master.foo.findOne();
   assert.eq(doc.x, 1);
 

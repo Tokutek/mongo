@@ -224,6 +224,7 @@ namespace mongo {
     }
 
     void BackgroundSync::handleSlaveDelay(uint64_t opTimestamp) {
+        dassert(_opSyncRunning);
         uint64_t slaveDelayMillis = theReplSet->myConfig().slaveDelay * 1000;
         uint64_t currTime = curTimeMillis64();
         uint64_t timeOpShouldBeApplied = opTimestamp + slaveDelayMillis;
@@ -239,9 +240,9 @@ namespace mongo {
                 if (!_opSyncShouldRun) {
                     break;
                 }
-                // reset currTime
-                currTime = curTimeMillis64();
             }
+            // reset currTime
+            currTime = curTimeMillis64();
         }
     }
 
@@ -339,6 +340,12 @@ namespace mongo {
                 // writing it to the oplog
                 if (theReplSet->myConfig().slaveDelay > 0) {
                     handleSlaveDelay(ts);
+                    {
+                        boost::unique_lock<boost::mutex> lck(_mutex);
+                        if (!_opSyncShouldRun) {
+                            break;
+                        }
+                    }
                 }
                 
                 Timer timer;
