@@ -103,7 +103,7 @@ namespace mongo {
          * @return if the keyPattern and pkPattern have all the information needed to return then
          *         return a new KeyOnly otherwise null
          *         NOTE: a key may have modified the actual data
-         *               which has to be handled above this (arrays, geo)
+         *               which has to be handled above this (arrays)
          */
         KeyOnly *checkKey( const BSONObj &keyPattern, const BSONObj &pkPattern ) const;
 
