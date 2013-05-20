@@ -1023,7 +1023,14 @@ namespace mongo {
         shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
         // Ensure we initialize the spec in case the collection is empty.
         // This also causes an error to be thrown if we're trying to create an invalid index on an empty collection.
-        index->getSpec();
+        try {
+            index->getSpec();
+        }
+        catch (DBException &) {
+            // Can't let the IndexDetails destructor get called on its own any more, see IndexDetails::close for why.
+            index->close();
+            throw;
+        }
         _indexBuildInProgress = true;
         _indexes.push_back(index);
 
