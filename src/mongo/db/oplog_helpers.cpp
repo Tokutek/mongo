@@ -52,7 +52,6 @@ namespace OpLogHelpers{
 
     static inline bool isLocalNs(const char* ns) {
         return (strncmp(ns, "local.", 6) == 0);
-        // TODO: (Zardosht) figure out what resetSlaveCache does and when we should call it
     }
     
     void logComment(BSONObj comment, TxnContext* txn) {

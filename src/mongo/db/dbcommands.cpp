@@ -1074,40 +1074,6 @@ namespace mongo {
         }
     } cmdListDatabases;
 
-    /* note an access to a database right after this will open it back up - so this is mainly
-       for diagnostic purposes.
-       */
-    class CmdCloseAllDatabases : public Command {
-    public:
-        virtual void help( stringstream& help ) const { help << "Close all database files.\nA new request will cause an immediate reopening; thus, this is mostly for testing purposes."; }
-        virtual bool adminOnly() const { return true; }
-        virtual bool slaveOk() const { return false; }
-        virtual bool lockGlobally() const { return true; }
-        virtual LockType locktype() const { return WRITE; }
-        virtual bool requiresSync() const { return false; }
-        virtual bool needsTxn() const { return false; }
-        virtual int txnFlags() const { return noTxnFlags(); }
-        virtual bool canRunInMultiStmtTxn() const { return false; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
-
-        CmdCloseAllDatabases() : Command( "closeAllDatabases" ) {}
-        bool run(const string& dbname , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
-            bool ok;
-            try {
-                ok = dbHolderW().closeAll( dbpath , result, false );
-            }
-            catch(DBException&) { 
-                throw;
-            }
-            catch(...) { 
-                log() << "ERROR uncaught exception in command closeAllDatabases" << endl;
-                errmsg = "unexpected uncaught exception";
-                return false;
-            }
-            return ok;
-        }
-    } cmdCloseAllDatabases;
-
     class CmdFileMD5 : public QueryCommand {
     public:
         CmdFileMD5() : QueryCommand( "filemd5" ) {}
