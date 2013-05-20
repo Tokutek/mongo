@@ -1718,7 +1718,7 @@ namespace mongo {
         // If we cannot and are in a multi statement transaction, 
         // then we must automatically commit the multi statement transaction
         // before proceeding
-        if (!fromRepl && !c->canRunInMultiStmtTxn() && cc().hasTxn()) {
+        if (!fromRepl && !c->canRunInMultiStmtTxn()) {
             uassert(16786, "cannot run command inside of multi statement transaction", !cc().hasTxn());
         }
 
