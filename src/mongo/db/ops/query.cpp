@@ -111,7 +111,9 @@ namespace mongo {
             verify(client_cursor->transactions.get() != NULL);
             Client::WithTxnStack wts(client_cursor->transactions);
 
-            client_cursor->updateSlaveLocation( curop );
+            if (pass == 0) {
+                client_cursor->updateSlaveLocation( curop );
+            }
             
             curop.debug().query = client_cursor->query();
 
