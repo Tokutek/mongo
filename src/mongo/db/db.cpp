@@ -370,6 +370,7 @@ namespace mongo {
 
     void clearTmpCollections() {
         Lock::GlobalWrite lk; // _openAllFiles is false at this point, so this is helpful for the query below to work as you can't open files when readlocked
+        Client::Transaction txn(DB_SERIALIZABLE);
         Client::GodScope gs;
         vector< string > toDelete;
         DBDirectClient cli;
@@ -387,6 +388,7 @@ namespace mongo {
             log() << "Dropping old temporary collection: " << *i << endl;
             cli.dropCollection( *i );
         }
+        txn.commit();
     }
 
     /**

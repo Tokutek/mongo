@@ -868,7 +868,6 @@ namespace mongo {
     } 
 
     void getDatabaseNames( vector< string > &names) {
-        Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         // create a cursor on the tokudb directory and search for <database>.ns keys
         storage::DirectoryCursor c(storage::env, cc().txn().db_txn());
         getDatabaseNamesExtra extra(names);
@@ -878,9 +877,6 @@ namespace mongo {
             if (r != 0 && r != DB_NOTFOUND)
                 storage::handle_ydb_error(r);
         }
-        if (r == DB_NOTFOUND) {
-            txn.commit();
-        }
     }
 
     /* returns true if there is data on this server.  useful when starting replication.
@@ -889,7 +885,12 @@ namespace mongo {
     */
     bool replHasDatabases() {
         vector<string> names;
-        getDatabaseNames(names);
+        {
+            Lock::GlobalRead lk;
+            Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
+            getDatabaseNames(names);
+            txn.commit();
+        }
         if( names.size() >= 2 ) return true;
         if( names.size() == 1 ) {
             if( names[0] != "local" )
