@@ -511,8 +511,6 @@ namespace mongo {
         Database *database = ctx->db();
         verify( database->name == db );
 
-        oplogCheckCloseDatabase( database ); // oplog caches some things, dirty its caches
-
         // TokuDB: We need to watch out for this, too.
 #if 0
         if( BackgroundOperation::inProgForDb(db) ) {

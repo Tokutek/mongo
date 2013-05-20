@@ -42,13 +42,6 @@ namespace mongo {
     static NamespaceDetails *rsOplogDetails = NULL;
     static NamespaceDetails *replInfoDetails = NULL;
     
-    void oplogCheckCloseDatabase( Database * db ) {
-        verify( Lock::isW() );
-        rsOplogDetails = NULL;
-        replInfoDetails = NULL;
-        resetSlaveCache();
-    }
-
     void deleteOplogFiles() {
         rsOplogDetails = NULL;
         replInfoDetails = NULL;

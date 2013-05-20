@@ -363,6 +363,10 @@ namespace mongo {
                 errmsg = "Cannot drop 'config' database if mongod started with --configsvr";
                 return false;
             }
+            if ( replSet && (dbname == "local")) {
+                errmsg = "Cannot drop 'local' database if mongod started --replSet";
+                return false;
+            }
             BSONElement e = cmdObj.firstElement();
             log() << "dropDatabase " << dbname << endl;
             int p = (int) e.number();

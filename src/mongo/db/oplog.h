@@ -53,7 +53,6 @@ namespace mongo {
         convention is
           { msg : "text", ... }
     */
-    void oplogCheckCloseDatabase( Database * db );
 
     extern int __findingStartInitialTimeout; // configurable for testing
 
