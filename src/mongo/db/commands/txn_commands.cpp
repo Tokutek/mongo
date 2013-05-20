@@ -64,14 +64,10 @@ namespace mongo {
                     uasserted(16739, "invalid isolation passed in");
                 }
             }
-            // we already have a multi-stmt transaction, do nothing
-            if (cc().hasTxn()) {
-                result.append("status", "transaction exists, no-op");
-            }
-            else {
-                cc().beginClientTxn(iso_flags);
-                result.append("status", "transaction began");
-            }
+
+            uassert(16787, "transaction already exists", !cc().hasTxn());
+            cc().beginClientTxn(iso_flags);
+            result.append("status", "transaction began");
             return true;
         }
     } beginTransactionCmd;
@@ -94,17 +90,12 @@ namespace mongo {
                          BSONObjBuilder& result, 
                          bool fromRepl) 
         {
-            if (!cc().hasTxn()) {
-                // we don't have a multi-stmt transaction, do nothing
-                result.append("status", "no transaction exists, no-op");
-            }
-            else {
-                result.append("status", "transaction committed");
-                cc().commitTopTxn();
-                // after committing txn, there should be 
-                // no txn left on stack, having a dassert to verify
-                dassert(!cc().hasTxn());
-            }
+            uassert(16788, "no transaction exists to be committed", cc().hasTxn());
+            result.append("status", "transaction committed");
+            cc().commitTopTxn();
+            // after committing txn, there should be 
+            // no txn left on stack, having a dassert to verify
+            dassert(!cc().hasTxn());
             return true;
         }
     } commitTransactionCmd;
@@ -127,17 +118,12 @@ namespace mongo {
                          BSONObjBuilder& result, 
                          bool fromRepl) 
         {
-            if (!cc().hasTxn()) {
-                // we don't have a multi-stmt transaction, do nothing
-                result.append("status", "no transaction exists, no-op");
-            }
-            else {
-                result.append("status", "transaction rolled back");
-                cc().abortTopTxn();
-                // after committing txn, there should be 
-                // no txn left on stack, having a dassert to verify
-                dassert(!cc().hasTxn());
-            }
+            uassert(16789, "no transaction exists to be rolled back", cc().hasTxn());
+            result.append("status", "transaction rolled back");
+            cc().abortTopTxn();
+            // after committing txn, there should be 
+            // no txn left on stack, having a dassert to verify
+            dassert(!cc().hasTxn());
             return true;
         }
     } rollbackTransactionCmd;

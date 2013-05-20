@@ -1,13 +1,8 @@
 // verify that we can create multiple indexes with the same key
 
 // try committing a transaction without having begun one
-t = db.runCommand({"commitTransaction":1});
-assert(t.ok == 1);
-assert(t.status == "no transaction exists, no-op");
-
-t = db.runCommand({"rollbackTransaction":1});
-assert(t.ok == 1);
-assert(t.status == "no transaction exists, no-op");
+assert.throws(db.runCommand({"commitTransaction":1}));
+assert.throws(db.runCommand({"rollbackTransaction":1}));
 
 // begin a transaction
 t = db.runCommand({"beginTransaction":1});
@@ -15,9 +10,7 @@ assert(t.ok == 1);
 assert(t.status == "transaction began");
 
 // trying to begin again should work, but with different status
-t = db.runCommand({"beginTransaction":1});
-assert(t.ok == 1);
-assert(t.status == "transaction exists, no-op");
+assert.throws(db.runCommand({"beginTransaction":1}));
 
 // try committing a transaction
 t = db.runCommand({"commitTransaction":1});
