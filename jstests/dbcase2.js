@@ -4,6 +4,7 @@ a = db.getSisterDB( "dbcasetest_dbnamea" )
 b = db.getSisterDB( "dbcasetest_dbnameA" )
 
 a.c.count();
-assert.throws( function() { b.c.count() } );
+b.c.count();
+//assert.throws( function() { b.c.count() } );
 
-assert.eq( -1, db.getMongo().getDBNames().indexOf( "dbcasetest_dbnameA" ) );
+assert.neq( -1, db.getMongo().getDBNames().indexOf( "dbcasetest_dbnameA" ) );

@@ -11,10 +11,11 @@ assert.eq( 0 , z.code || 0 , "A : " + tojson(z) )
 
 b.foo.save( { x : 1 } )
 z = db.getLastErrorObj();
-assert.eq( 13297 , z.code || 0 , "B : " + tojson(z) )
+assert.eq( 0 , z.code || 0 , "B : " + tojson(z) )
+//assert.eq( 13297 , z.code || 0 , "B : " + tojson(z) )
 
 assert.neq( -1, db.getMongo().getDBNames().indexOf( a.getName() ) );
-assert.eq( -1, db.getMongo().getDBNames().indexOf( b.getName() ) );
+assert.neq( -1, db.getMongo().getDBNames().indexOf( b.getName() ) );
 printjson( db.getMongo().getDBs().databases );
 
 a.dropDatabase();
