@@ -24,6 +24,7 @@
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/db_flags.h"
+#include "mongo/db/repl/rs.h"
 
 
 #define KEY_STR_OP_NAME "op"
@@ -207,29 +208,31 @@ namespace OpLogHelpers{
         // overwrite set to true because we are running on a secondary
         insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
     }
-    
     static void runInsertFromOplog(const char* ns, BSONObj op) {
         BSONObj row = op[KEY_STR_ROW].Obj();
         // handle add index case
         if (mongoutils::str::endsWith(ns, ".system.indexes")) {
-            Client::WriteContext ctx(ns);
-            NamespaceDetails* nsd = nsdetails(ns);
-            NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
-            BSONObj key = row["key"].Obj();
-            const string &coll = row["ns"].String();
-            NamespaceDetails* collNsd = nsdetails(coll.c_str());
-            int i = collNsd->findIndexByKeyPattern(key);
-            if (i >= 0) {
-                // the index already exists, so this is a no-op
-                // Note that for create index and drop index, we
-                // are tolerant of the fact that the operation may
-                // have already been done
-                return;
-            } else {
-                collNsd->createIndex(row);
+            // do not build the index if the user has disabled
+            if (theReplSet->buildIndexes()) {
+                Client::WriteContext ctx(ns);
+                NamespaceDetails* nsd = nsdetails(ns);
+                NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
+                BSONObj key = row["key"].Obj();
+                const string &coll = row["ns"].String();
+                NamespaceDetails* collNsd = nsdetails(coll.c_str());
+                int i = collNsd->findIndexByKeyPattern(key);
+                if (i >= 0) {
+                    // the index already exists, so this is a no-op
+                    // Note that for create index and drop index, we
+                    // are tolerant of the fact that the operation may
+                    // have already been done
+                    return;
+                } else {
+                    collNsd->createIndex(row);
+                }
+                // overwrite set to true because we are running on a secondary
+                insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
             }
-            // overwrite set to true because we are running on a secondary
-            insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
         }
         else {
             try {

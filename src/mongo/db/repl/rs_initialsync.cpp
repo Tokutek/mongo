@@ -86,7 +86,8 @@ namespace mongo {
     static bool clone(
         const char *master, 
         string db,
-        shared_ptr<DBClientConnection> conn
+        shared_ptr<DBClientConnection> conn,
+        bool syncIndexes
         ) 
     {
         CloneOptions options;
@@ -99,7 +100,7 @@ namespace mongo {
         options.mayBeInterrupted = false;
         
         options.syncData = true;
-        options.syncIndexes = true;
+        options.syncIndexes = syncIndexes;
 
         string err;
         return cloneFrom(master, options, conn, err);
@@ -122,7 +123,7 @@ namespace mongo {
             sethbmsg(str::stream() << "initial sync cloning db: " << db, 0);
 
             Client::Context ctx(db);
-            if (!clone(master, db, conn)) {
+            if (!clone(master, db, conn, _buildIndexes)) {
                 sethbmsg(str::stream() << "initial sync error clone of " << db << " failed sleeping 5 minutes", 0);
                 return false;
             }
