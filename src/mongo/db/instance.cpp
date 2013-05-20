@@ -868,6 +868,7 @@ namespace mongo {
     } 
 
     void getDatabaseNames( vector< string > &names) {
+        verify(Lock::isRW());
         // create a cursor on the tokudb directory and search for <database>.ns keys
         storage::DirectoryCursor c(storage::env, cc().txn().db_txn());
         getDatabaseNamesExtra extra(names);
