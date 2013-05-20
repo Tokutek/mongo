@@ -38,11 +38,8 @@ printjson( mastercol.stats() );
 print("Slave1:");
 printjson( slave1col.stats() );
 
-assert.eq( 0 , mastercol.stats().userFlags , "userFlags not 0 on primary");
-assert.eq( 0 , slave1col.stats().userFlags , "userFlags not 0 on secondary");
-
 // create TTL index, wait for TTL monitor to kick in, then check that
-// userFlags get set to 1, and correct number of docs age out
+// the correct number of docs age out
 mastercol.ensureIndex( { x : 1 } , { expireAfterSeconds : 20000 } );
 masterdb.getLastError();
 rt.awaitReplication();
@@ -55,8 +52,6 @@ printjson( mastercol.stats() );
 print("Slave1:");
 printjson( slave1col.stats() );
 
-assert.eq( 1 , mastercol.stats().userFlags , "userFlags not 1 on primary" );
-assert.eq( 1 , slave1col.stats().userFlags , "userFlags not 1 on secondary" );
 assert.eq( 6 , mastercol.count() , "docs not deleted on primary" );
 assert.eq( 6 , slave1col.count() , "docs not deleted on secondary" );
 
@@ -70,11 +65,10 @@ rt.awaitSecondaryNodes();
 
 var slave2col = slave.getDB( 'd' )[ 'c' ];
 
-// check that its userFlags are also 1, and it has right number of docs
+// check that it has right number of docs
 print("New Slave stats:");
 printjson( slave2col.stats() );
 
-assert.eq( 1 , slave2col.stats().userFlags , "userFlags not 1 on new secondary");
 assert.eq( 6 , slave2col.count() , "wrong number of docs on new secondary");
 
 // finish up
