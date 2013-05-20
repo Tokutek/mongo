@@ -1714,6 +1714,13 @@ namespace mongo {
                 return false;
             }
         }
+        // before we start this command, check if we can run in a multi statement transaction
+        // If we cannot and are in a multi statement transaction, 
+        // then we must automatically commit the multi statement transaction
+        // before proceeding
+        if (!fromRepl && !c->canRunInMultiStmtTxn() && cc().hasTxn()) {
+            uassert(16786, "cannot run command inside of multi statement transaction", !cc().hasTxn());
+        }
 
         bool retval = false;
         TokuCommandSettings settings = c->getTokuCommandSettings();
