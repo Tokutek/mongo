@@ -1623,6 +1623,34 @@ namespace mongo {
         return true;
     }
 
+    static bool canRunCommand(
+        Command * c,
+        string& dbname,
+        int queryOptions,
+        bool fromRepl,
+        BSONObjBuilder& result
+        )
+    {
+        bool canRunHere =
+            isMaster( dbname.c_str() ) ||
+            c->slaveOk() ||
+            ( c->slaveOverrideOk() && ( queryOptions & QueryOption_SlaveOk ) ) ||
+            fromRepl;
+
+        if ( ! canRunHere ) {
+            result.append( "errmsg" , "not master" );
+            result.append( "note" , "from execCommand" );
+            return false;
+        }
+
+        if ( ! c->maintenanceOk() && theReplSet && ! isMaster( dbname.c_str() ) && ! theReplSet->isSecondary() ) {
+            result.append( "errmsg" , "node is recovering" );
+            result.append( "note" , "from execCommand" );
+            return false;
+        }
+        return true;
+    }
+
     /**
      * this handles
      - auth
@@ -1685,24 +1713,6 @@ namespace mongo {
             return true;
         }
 
-        bool canRunHere =
-            isMaster( dbname.c_str() ) ||
-            c->slaveOk() ||
-            ( c->slaveOverrideOk() && ( queryOptions & QueryOption_SlaveOk ) ) ||
-            fromRepl;
-
-        if ( ! canRunHere ) {
-            result.append( "errmsg" , "not master" );
-            result.append( "note" , "from execCommand" );
-            return false;
-        }
-
-        if ( ! c->maintenanceOk() && theReplSet && ! isMaster( dbname.c_str() ) && ! theReplSet->isSecondary() ) {
-            result.append( "errmsg" , "node is recovering" );
-            result.append( "note" , "from execCommand" );
-            return false;
-        }
-
         if ( c->adminOnly() )
             LOG( 2 ) << "command: " << cmdObj << endl;
 
@@ -1719,6 +1729,10 @@ namespace mongo {
         cc().setTokuCommandSettings(settings);
 
         if ( c->locktype() == Command::NONE ) {
+            // not sure of the semantics of running this without having a lock held
+            if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
+                return false;
+            }
             verify(!c->lockGlobally());
 
             // This assert means your command has LockType NONE but thinks it needs a transaction.
@@ -1752,6 +1766,9 @@ namespace mongo {
                 scoped_ptr<Lock::ScopedLock> lk(c->lockGlobally()
                                                 ? static_cast<Lock::ScopedLock *>(new Lock::GlobalRead())
                                                 : static_cast<Lock::ScopedLock *>(new Lock::DBRead(ns)));
+                if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
+                    return false;
+                }
                 Client::Context ctx(ns, dbpath, c->requiresAuth());
                 scoped_ptr<Client::Transaction> txn((!fromRepl && c->needsTxn())
                                                     ? new Client::Transaction(c->txnFlags())
@@ -1772,6 +1789,9 @@ namespace mongo {
                 scoped_ptr<Lock::ScopedLock> lk(c->lockGlobally()
                                                 ? static_cast<Lock::ScopedLock *>(new Lock::GlobalWrite())
                                                 : static_cast<Lock::ScopedLock *>(new Lock::DBWrite(dbname)));
+                if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
+                    return false;
+                }
                 Client::Context ctx(ns, dbpath, c->requiresAuth());
                 scoped_ptr<Client::Transaction> txn((!fromRepl && c->needsTxn())
                                                     ? new Client::Transaction(c->txnFlags())
@@ -1804,6 +1824,9 @@ namespace mongo {
             scoped_ptr<Lock::ScopedLock> lk(global
                                             ? static_cast<Lock::ScopedLock*>(new Lock::GlobalWrite())
                                             : static_cast<Lock::ScopedLock*>(new Lock::DBWrite(dbname)));
+            if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
+                return false;
+            }
             Client::Context tc(dbname, dbpath, c->requiresAuth());
             scoped_ptr<Client::Transaction> transaction((!fromRepl && c->needsTxn())
                                                         ? new Client::Transaction(c->txnFlags())
