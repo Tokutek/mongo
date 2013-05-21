@@ -120,6 +120,7 @@ namespace mongo {
     // called when we transition from primary to secondary
     // a global write lock is held while this is happening
     void Client::abortLiveTransactions() {
+        verify(Lock::isW());
         scoped_lock bl(Client::clientsMutex);
         for( set<Client*>::iterator i = Client::clients.begin(); i != Client::clients.end(); i++ ) {
             Client *c = *i;

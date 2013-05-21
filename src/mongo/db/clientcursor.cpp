@@ -64,6 +64,7 @@ namespace mongo {
     }
 
     void ClientCursor::invalidateAllCursors() {
+        verify(Lock::isW());
         for( LockedIterator i; i.ok(); ) {
             i.deleteAndAdvance();
         }
