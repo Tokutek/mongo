@@ -42,6 +42,11 @@ namespace mongo {
         _txns.pop();
     }
 
+    void Client::TransactionStack::commitTxn() {
+        int flags = (cmdLine.logFlushPeriod == 0) ? 0 : DB_TXN_NOSYNC;
+        commitTxn(flags);
+    }
+
     void Client::TransactionStack::abortTxn() {
         DEV { LOG(3) << "abort transaction(" << _txns.size() - 1 << ")" << endl; }
         _txns.top()->abort();
@@ -98,6 +103,16 @@ namespace mongo {
         dassert(_txn == &(stack->txn()));
         dassert(_txn->isLive());
         stack->commitTxn(flags);
+        _txn = NULL;
+    }
+
+    void Client::Transaction::commit() {
+        dassert(_txn != NULL);
+        Client::TransactionStack *stack = cc()._transactions.get();
+        dassert(stack != NULL);
+        dassert(_txn == &(stack->txn()));
+        dassert(_txn->isLive());
+        stack->commitTxn();
         _txn = NULL;
     }
 

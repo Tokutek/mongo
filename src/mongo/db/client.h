@@ -151,6 +151,7 @@ namespace mongo {
             void beginTxn(int flags);
             /** Commit the innermost transaction. */
             void commitTxn(int flags);
+            void commitTxn();
             /** Abort the innermost transaction. */
             void abortTxn();
             uint32_t numLiveTxns();
@@ -185,7 +186,8 @@ namespace mongo {
           public:
             explicit Transaction(int flags);
             ~Transaction();
-            void commit(int flags = 0);
+            void commit(int flags);
+            void commit();
             void abort();
         };
 
@@ -197,7 +199,7 @@ namespace mongo {
         }
 
         void commitTopTxn() {
-            _transactions->commitTxn(0);
+            _transactions->commitTxn();
         }
 
         void abortTopTxn() {

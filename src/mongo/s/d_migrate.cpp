@@ -542,7 +542,7 @@ namespace mongo {
 
                 if (empty) {
                     _cc.reset();
-                    _txn->commit(0);
+                    _txn->commit();
                     _txn.reset();
                 }
             }

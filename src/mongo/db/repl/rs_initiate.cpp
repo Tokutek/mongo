@@ -183,7 +183,7 @@ namespace mongo {
                     errmsg = rsoplog + string(" is not empty on the initiating member.  cannot initiate.");
                     return false;
                 }
-                transaction.commit(0);
+                transaction.commit();
             }
 
             if( ReplSet::startupStatus == ReplSet::BADCONFIG ) {
