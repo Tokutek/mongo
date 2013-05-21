@@ -134,11 +134,11 @@ namespace mongo {
             log() << "replSet going into maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
 
             stopReplication();
-            _maintenanceMode++;
             RSBase::lock lk(this);
             // Lock here to prevent state from changing between checking the state and changing it
             // also, grab GlobalWrite here, because it must be grabbed after rslock
             Lock::GlobalWrite writeLock;
+            _maintenanceMode++;
             changeState(MemberState::RS_RECOVERING);
         }
         else {
