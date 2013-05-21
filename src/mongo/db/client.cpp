@@ -202,7 +202,6 @@ namespace mongo {
                     return;
                 } catch (RetryWithWriteLock &e) {
                     c.reset();
-                    lk.reset();
                 }
             }
         }
