@@ -89,7 +89,6 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
         virtual bool adminOnly() const { return false; }
-        virtual bool maintenanceMode() const { return true; }
         virtual bool logTheOp() { return false; }
         virtual void help( stringstream& help ) const {
             help << "compact collection\n"

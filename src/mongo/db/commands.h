@@ -129,11 +129,6 @@ namespace mongo {
         */
         virtual bool requiresAuth() { return true; }
 
-        /* Return true if a replica set secondary should go into "recovering"
-           (unreadable) state while running this command.
-         */
-        virtual bool maintenanceMode() const { return false; }
-
         /* Return true if command should be permitted when a replica set secondary is in "recovering"
            (unreadable) state.
          */
@@ -234,7 +229,6 @@ namespace mongo {
     class DeprecatedCommand : public InformationCommand {
       public:
         DeprecatedCommand(const char *name, bool webUI=false, const char *oldName=NULL) : InformationCommand(name, false, oldName) {}
-        bool maintenanceMode() const { return true; }
         void help(stringstream &h) const { h << name << " is a deprecated command"; }
         bool run(const string&, BSONObj&, int, string &errmsg, BSONObjBuilder &res, bool) {
             stringstream ss;

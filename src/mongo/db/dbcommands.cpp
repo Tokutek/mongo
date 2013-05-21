@@ -1706,14 +1706,6 @@ namespace mongo {
         if ( c->adminOnly() )
             LOG( 2 ) << "command: " << cmdObj << endl;
 
-        if (c->maintenanceMode() && theReplSet && theReplSet->isSecondary()) {
-            string errmsg;
-            bool set = theReplSet->setMaintenanceMode(true, errmsg);
-            if (!set) {
-                result.append( "errmsg" , errmsg );
-                return false;
-            }
-        }
         // before we start this command, check if we can run in a multi statement transaction
         // If we cannot and are in a multi statement transaction, 
         // then we must automatically commit the multi statement transaction
@@ -1826,11 +1818,6 @@ namespace mongo {
             if (retval && transaction) {
                 transaction->commit();
             }
-        }
-
-        if (c->maintenanceMode() && theReplSet) {
-            string errmsg;
-            theReplSet->setMaintenanceMode(false, errmsg);
         }
 
         return retval;

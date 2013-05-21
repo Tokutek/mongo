@@ -32,7 +32,6 @@ namespace mongo {
     class TouchCmd : public QueryCommand {
     public:
         virtual bool adminOnly() const { return false; }
-        virtual bool maintenanceMode() const { return true; }
         virtual void help( stringstream& help ) const {
             help << "touch collection\n"
                 "Page in all data for the given collection\n"
