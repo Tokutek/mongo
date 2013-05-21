@@ -63,6 +63,11 @@ namespace mongo {
         }
     }
 
+    void ClientCursor::invalidateAllCursors() {
+        for( LockedIterator i; i.ok(); ) {
+            i.deleteAndAdvance();
+        }
+    }
 
     /* ------------------------------------------- */
 

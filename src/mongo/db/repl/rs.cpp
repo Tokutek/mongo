@@ -199,6 +199,18 @@ namespace mongo {
                 // case they are not)
                 log() << "replSet closing client sockets after relinquishing primary" << rsLog;
                 MessagingPort::closeAllSockets(1);
+
+                // abort all transactions lying around in clients. There should be no
+                // transaction happening. Because we have global write lock,  and
+                // we are not at risk of aborting a transaction that is in the middle
+                // of doing something in a thread. The only transaction a thread
+                // begins without holding some lock should be replication, and replication
+                // is not running yet. We also need to invalidate all cursors
+                // because they may have been part of multi statement
+                // transactions.
+                ClientCursor::invalidateAllCursors();
+                Client::abortLiveTransactions();
+
                 if (startRepl) {
                     startReplication();
                 }

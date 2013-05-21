@@ -81,6 +81,8 @@ namespace mongo {
                 return;
             initThread(desc);
         }
+        static void abortLiveTransactions();
+
 
         /** this has to be called as the client goes away, but before thread termination
          *  @return true if anything was done

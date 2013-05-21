@@ -26,6 +26,7 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
+        virtual LockType locktype() const { return READ; }
         virtual void help( stringstream& help ) const {
             help << "begin transaction\n"
                 "Create a transaction for multiple statements.\n"
@@ -76,6 +77,7 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
+        virtual LockType locktype() const { return READ; }
         virtual void help( stringstream& help ) const {
             help << "commit transaction\n"
                 "If running a multi statement transaction, commit transaction, no-op otherwise .\n"
@@ -104,6 +106,7 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
+        virtual LockType locktype() const { return READ; }
         virtual void help( stringstream& help ) const {
             help << "rollback transaction\n"
                 "If running a multi statement transaction, rollback transaction, no-op otherwise .\n"

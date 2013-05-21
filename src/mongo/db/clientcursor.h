@@ -175,6 +175,7 @@ namespace mongo {
            Used by drop, dropIndexes, dropDatabase.
         */
         static void invalidate(const char *ns);
+        static void invalidateAllCursors();
 
         // --- some pass through helpers for Cursor ---
 
