@@ -146,6 +146,7 @@ namespace mongo {
         virtual LockType locktype() const { return NONE; }
         virtual bool needsTxn() const { return false; }
         CmdReplSetInitiate() : ReplSetCommand("replSetInitiate") { }
+        virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual void help(stringstream& h) const {
             h << "Initiate/christen a replica set.";
             h << "\nhttp://dochub.mongodb.org/core/replicasetcommands";

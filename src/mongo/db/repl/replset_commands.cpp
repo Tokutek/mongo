@@ -143,6 +143,7 @@ namespace mongo {
         }
         CmdReplSetReconfig() : ReplSetCommand("replSetReconfig"), mutex("rsreconfig") { }
         virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual bool run(const string& a, BSONObj& b, int e, string& errmsg, BSONObjBuilder& c, bool d) {
             try {
                 rwlock_try_write lk(mutex);
@@ -258,6 +259,7 @@ namespace mongo {
         }
 
         CmdReplSetStepDown() : ReplSetCommand("replSetStepDown") { }
+        virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if( !check(errmsg, result) )
                 return false;
@@ -308,6 +310,7 @@ namespace mongo {
 
         CmdReplSetMaintenance() : ReplSetCommand("replSetMaintenance") { }
         virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if( !check(errmsg, result) )
                 return false;
