@@ -143,6 +143,7 @@ namespace mongo {
         }
         else {
             // Lock here to prevent state from changing between checking the state and changing it
+            RSBase::lock lk(this);
             Lock::GlobalWrite writeLock;
             // user error
             if (_maintenanceMode <= 0) {
@@ -150,7 +151,6 @@ namespace mongo {
             }
             _maintenanceMode--;
             if (_maintenanceMode == 0) {
-                RSBase::lock lk(this);
                 tryToGoLiveAsASecondary();
             }
             log() << "leaving maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
