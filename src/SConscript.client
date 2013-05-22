@@ -4,7 +4,7 @@
 # programs.
 Import('env has_option installSetup use_system_version_of_library')
 
-Import('nix linux darwin windows')
+Import('nix darwin windows')
 
 buildShared = False
 if has_option("sharedclient"):
@@ -68,6 +68,7 @@ clientSourceBasic = [
     'mongo/util/concurrency/mutexdebugger.cpp',
     'mongo/util/debug_util.cpp',
     'mongo/util/stacktrace.cpp',
+    'mongo/util/file.cpp',
     'mongo/util/fail_point.cpp',
     'mongo/util/fail_point_registry.cpp',
     'mongo/util/fail_point_service.cpp',
@@ -188,10 +189,8 @@ mongoClientSharedLib = None
 if buildShared:
 
     # TODO: When we are ready to set a SONAME for mongoclient, set SHLIBVERSION=x.y.z in this
-    # environment to enable SCons versioned shared library support, and then change the two
-    # 'Install' calls in this block to 'InstallVersionedLibrary'. SHLIBVERSION and
-    # InstallVersionedLibrary support is only stable in SCons > 2.3.0, so if you add support
-    # here, be sure to add an EnsuredSconsVersion here as well.
+    # environment to enable SCons versioned shared library support. This support is only stable
+    # in SCons > 2.3.0, so if you add it here, be sure to add a EnsuredSconsVersion as well.
     sharedLibEnv = env.Clone()
     sharedLibEnv.AppendUnique(
         LIBS=mongoClientLibs + mongoClientSysLibDeps,
@@ -200,12 +199,9 @@ if buildShared:
         # libraries as dependency terminals.
         LIBDEPS=mongoClientLibDeps)
 
-    if linux:
-        sharedLibEnv.AppendUnique(SHLINKFLAGS=["-Wl,--as-needed", "-Wl,-zdefs"])
-
     mongoClientSharedLib = sharedLibEnv.SharedLibrary('mongoclient', clientObjects)
 
-    mongoClientSharedLibInstall = sharedLibEnv.Install(
+    mongoClientSharedLibInstall = sharedLibEnv.InstallVersionedLib(
         '#/sharedclient', mongoClientSharedLib)
 
     if darwin:
@@ -220,7 +216,11 @@ if buildShared:
     mongoClientInstalls.append(mongoClientSharedLibInstall)
 
     if installSetup.libraries:
+<<<<<<< HEAD
         mongoClientSharedLibPrefixInstall = sharedLibEnv.Install(
+=======
+        mongoClientSharedLibPrefixInstall = sharedLibEnv.InstallVersionedLib(
+>>>>>>> da8c0fa... SERVER-6514 Re-add support for building the C++ driver shared library
             '$INSTALL_DIR/lib', mongoClientSharedLib)
         if darwin:
             sharedLibEnv.AddPostAction(
@@ -290,9 +290,12 @@ if buildShared:
 
     sharedClientProgramInstalls = sharedClientEnv.Install("#/sharedclient", sharedClientPrograms)
     clientTests.append(sharedClientProgramInstalls)
+<<<<<<< HEAD
 
 clientTests.append(
     clientEnv.Install('#/', clientEnv.Program('bsondemo', 'mongo/bson/bsondemo/bsondemo.cpp')))
+=======
+>>>>>>> da8c0fa... SERVER-6514 Re-add support for building the C++ driver shared library
 
 clientEnv.Alias('clientTests', clientTests, [])
 
