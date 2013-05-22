@@ -26,7 +26,6 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
-        virtual LockType locktype() const { return READ; }
         virtual void help( stringstream& help ) const {
             help << "begin transaction\n"
                 "Create a transaction for multiple statements.\n"
@@ -43,6 +42,7 @@ namespace mongo {
                          bool fromRepl) 
         {
             uint32_t iso_flags = 0;
+            rwlock(multiStmtTransactionLock, false);
             BSONElement isoBSON = cmdObj["isolation"];
             if (isoBSON.eoo()) {
                 iso_flags = DB_TXN_SNAPSHOT;
@@ -77,7 +77,6 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
-        virtual LockType locktype() const { return READ; }
         virtual void help( stringstream& help ) const {
             help << "commit transaction\n"
                 "If running a multi statement transaction, commit transaction, no-op otherwise .\n"
@@ -92,6 +91,7 @@ namespace mongo {
                          BSONObjBuilder& result, 
                          bool fromRepl) 
         {
+            rwlock(multiStmtTransactionLock, false);
             uassert(16788, "no transaction exists to be committed", cc().hasTxn());
             result.append("status", "transaction committed");
             cc().commitTopTxn();
@@ -106,7 +106,6 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
-        virtual LockType locktype() const { return READ; }
         virtual void help( stringstream& help ) const {
             help << "rollback transaction\n"
                 "If running a multi statement transaction, rollback transaction, no-op otherwise .\n"
@@ -121,6 +120,7 @@ namespace mongo {
                          BSONObjBuilder& result, 
                          bool fromRepl) 
         {
+            rwlock(multiStmtTransactionLock, false);
             uassert(16789, "no transaction exists to be rolled back", cc().hasTxn());
             result.append("status", "transaction rolled back");
             cc().abortTopTxn();

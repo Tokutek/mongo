@@ -55,6 +55,7 @@ namespace mongo {
     class AbstractMessagingPort;
     class LockCollectionForReading;
     class DBClientConnection;
+    extern RWLock multiStmtTransactionLock;
 
     TSP_DECLARE(Client, currentClient)
 
