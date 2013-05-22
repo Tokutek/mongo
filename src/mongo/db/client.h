@@ -46,7 +46,6 @@
 
 namespace mongo {
 
-    extern class ReplSet *theReplSet;
     class AuthenticationInfo;
     class Database;
     class CurOp;
@@ -55,6 +54,9 @@ namespace mongo {
     class AbstractMessagingPort;
     class LockCollectionForReading;
     class DBClientConnection;
+    class ReplSet;
+
+    extern ReplSet *theReplSet;
     extern RWLock multiStmtTransactionLock;
 
     TSP_DECLARE(Client, currentClient)
