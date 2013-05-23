@@ -157,11 +157,6 @@ namespace mongo {
 #endif
     }
 
-    /* if server is really busy, wait a bit */
-    void beNice() {
-        sleepmicros( Client::recommendedYieldMicros() );
-    }
-
     class MyMessageHandler : public MessageHandler {
     public:
         virtual void connected( AbstractMessagingPort* p ) {
@@ -210,7 +205,6 @@ namespace mongo {
                             m.appendData(b.buf(), b.len());
                             b.decouple();
                             DEV log() << "exhaust=true sending more" << endl;
-                            beNice();
                             continue; // this goes back to top loop
                         }
                     }
