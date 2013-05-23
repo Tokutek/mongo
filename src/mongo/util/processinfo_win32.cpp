@@ -23,8 +23,6 @@
 
 #include <boost/scoped_array.hpp>
 
-using namespace std;
-
 namespace mongo {
 
     // dynamically link to psapi.dll (in case this version of Windows
