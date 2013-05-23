@@ -43,6 +43,7 @@ namespace mongo {
         void inc_primary();        
         string toString() const;
         bool isInitial() const;
+        friend class GTIDManagerTest; // for testing
     };
 
     static const GTID GTID_MAX(std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max());
@@ -149,6 +150,8 @@ namespace mongo {
         void catchUnappliedToLive();
 
         bool rollbackNeeded(const GTID& last, uint64_t lastTime, uint64_t lastHash);
+
+        friend class GTIDManagerTest; // for testing
         
     };
     void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result);

@@ -95,6 +95,7 @@ namespace mongo {
         _lastLiveGTID = lastGTID;
         _minLiveGTID = _lastLiveGTID;
         _minLiveGTID.inc(); // comment this
+        _incPrimary = false;
 
         // note that _minUnappliedGTID is not set
 
