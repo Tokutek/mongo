@@ -28,6 +28,7 @@ add_dependencies(serverauth generate_error_codes generate_action_types)
 add_library(authcore STATIC
   action_set
   "${CMAKE_CURRENT_BINARY_DIR}/action_type.cpp"
+  auth_global_external_state
   auth_session_external_state
   authorization_manager
   role_graph
@@ -58,6 +59,7 @@ target_link_libraries(authservercommon LINK_PUBLIC
   )
 
 add_library(authmongod STATIC
+  auth_global_external_state_d
   auth_session_external_state_d
   )
 add_dependencies(authmongod generate_error_codes generate_action_types)
@@ -66,6 +68,7 @@ target_link_libraries(authmongod LINK_PUBLIC
   )
 
 add_library(authmongos STATIC
+  auth_global_external_state_s
   auth_session_external_state_s
   )
 add_dependencies(authmongos generate_error_codes generate_action_types)
