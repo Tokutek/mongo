@@ -34,10 +34,11 @@ add_library(authcore STATIC
   role_name
   authorization_session
   principal
-  principal_name
   principal_set
   privilege
   privilege_set
+  user
+  user_name
   )
 add_dependencies(authcore generate_error_codes generate_action_types)
 target_link_libraries(authcore LINK_PUBLIC

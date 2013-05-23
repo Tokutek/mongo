@@ -86,7 +86,7 @@ namespace {
         if (digest) {
             std::string user;
             status = bsonExtractStringField(saslParameters,
-                                            saslCommandPrincipalFieldName,
+                                            saslCommandUserFieldName,
                                             &user);
             if (!status.isOK())
                 return status;
@@ -136,7 +136,7 @@ namespace {
         session->setParameter(SaslClientSession::parameterServiceHostname, value);
 
         status = bsonExtractStringField(saslParameters,
-                                        saslCommandPrincipalFieldName,
+                                        saslCommandUserFieldName,
                                         &value);
         if (!status.isOK())
             return status;
@@ -161,20 +161,20 @@ namespace {
 
         int saslLogLevel = getSaslClientLogLevel(saslParameters);
 
-        SaslClientSession session;
-        Status status = configureSession(&session, client, saslParameters);
-        if (!status.isOK())
-            return status;
-
         std::string targetDatabase;
         try {
-            status = bsonExtractStringFieldWithDefault(saslParameters,
-                                                       saslCommandPrincipalSourceFieldName,
-                                                       saslDefaultDBName,
-                                                       &targetDatabase);
+            Status status = bsonExtractStringFieldWithDefault(saslParameters,
+                                                              saslCommandUserSourceFieldName,
+                                                              saslDefaultDBName,
+                                                              &targetDatabase);
+            if (!status.isOK())
+                return status;
         } catch (const DBException& ex) {
             return ex.toStatus();
         }
+
+        SaslClientSession session;
+        Status status = configureSession(&session, client, saslParameters);
         if (!status.isOK())
             return status;
 
