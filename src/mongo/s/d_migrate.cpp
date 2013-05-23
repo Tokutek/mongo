@@ -1410,11 +1410,10 @@ namespace mongo {
             verify( ! min.isEmpty() );
             verify( ! max.isEmpty() );
             
-            slaveCount = ( getSlaveCount() / 2 ) + 1;
+            replSetMajorityCount = theReplSet ? theReplSet->config().getMajority() : 0;
 
             log() << "starting receiving-end of migration of chunk " << min << " -> " << max <<
-                    " for collection " << ns << " from " << from <<
-                    " (" << getSlaveCount() << " slaves detected)" << endl;
+                    " for collection " << ns << " from " << from << endl;
 
             string errmsg;
             MoveTimingHelper timing( "to" , ns , min , max , 5 /* steps */ , errmsg );
@@ -1699,12 +1698,12 @@ namespace mongo {
             // if replication is on, try to force enough secondaries to catch up
             // TODO opReplicatedEnough should eventually honor priorities and geo-awareness
             //      for now, we try to replicate to a sensible number of secondaries
-            return mongo::opReplicatedEnough( lastGTID , slaveCount );
+            return mongo::opReplicatedEnough( lastGTID , replSetMajorityCount );
         }
 
         bool flushPendingWrites( const GTID& lastGTID ) {
             if ( ! opReplicatedEnough( lastGTID ) ) {
-                OCCASIONALLY warning() << "migrate commit waiting for " << slaveCount 
+                OCCASIONALLY warning() << "migrate commit waiting for " << replSetMajorityCount 
                                        << " slaves for '" << ns << "' " << min << " -> " << max 
                                        << " waiting for: " << lastGTID.toString()
                                        << migrateLog;
@@ -1785,7 +1784,7 @@ namespace mongo {
         long long numCatchup;
         long long numSteady;
 
-        int slaveCount;
+        int replSetMajorityCount;
 
         enum State { READY , CLONE , CATCHUP , STEADY , COMMIT_START , DONE , FAIL , ABORT } state;
         string errmsg;
