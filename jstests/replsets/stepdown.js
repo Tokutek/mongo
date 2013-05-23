@@ -14,9 +14,9 @@ master.getDB("foo").bar.insert({x:1});
 replTest.awaitReplication();
 
 // lock secondary
-print("\nlock secondary");
+print("\nput secondary in maintenance");
 var locked = replTest.liveNodes.slaves[0];
-printjson( locked.getDB("admin").runCommand({fsync : 1, lock : 1}) );
+printjson( locked.getDB("admin").runCommand({replSetMaintenance : true}) );
 
 print("\nwaiting 11ish seconds");
 
@@ -51,7 +51,7 @@ assert.eq(r2.ismaster, false);
 assert.eq(r2.secondary, true);
 
 print("\nunlock");
-printjson(locked.getDB("admin").$cmd.sys.unlock.findOne());
+printjson( locked.getDB("admin").runCommand({replSetMaintenance : false}) );
 
 print("\nreset stepped down time");
 master.getDB("admin").runCommand({replSetFreeze:0});
