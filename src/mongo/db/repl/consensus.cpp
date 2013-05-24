@@ -216,20 +216,17 @@ namespace mongo {
             log() << "replSet electCmdReceived couldn't find member with id " << whoid << rsLog;
             vote = -10000;
         }
-        else if( primary && 
-            primary == rs._self && 
-            GTID::cmp(rs.gtidManager->getLiveState(), hopeful->hbinfo().gtid) >= 0 
-            )
+        else if( primary && primary == rs._self)
         {
             // hbinfo is not updated, so we have to check the primary's last GTID separately
             log() << "I am already primary, " << hopeful->fullName()
                   << " can try again once I've stepped down" << rsLog;
             vote = -10000;
         }
-        else if( primary && GTID::cmp(primary->hbinfo().gtid, hopeful->hbinfo().gtid) >= 0) {
+        else if( primary ) {
             // other members might be aware of more up-to-date nodes
             log() << hopeful->fullName() << " is trying to elect itself but " <<
-                  primary->fullName() << " is already primary and more up-to-date" << rsLog;
+                  primary->fullName() << " is already primary" << rsLog;
             vote = -10000;
         }
         else if( highestPriority && highestPriority->config().priority > hopeful->config().priority) {
