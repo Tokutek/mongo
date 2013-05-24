@@ -3,11 +3,13 @@ tokumon news
 
 tokumon 0.1.1
 -------------
-Release date: TBD
+Release date: 2013-05-23
 
 Bug fixes
 ~~~~~~~~~
 
+    - Provide extra debugging information in the log, for fractal tree
+      errors.
 
 
 tokumon 0.1.0
