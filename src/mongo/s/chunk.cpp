@@ -50,7 +50,6 @@ namespace mongo {
     string Chunk::chunkMetadataNS = "config.chunks";
 
     int Chunk::MaxChunkSize = 1024 * 1024 * 64;
-    int Chunk::MaxObjectPerChunk = 250000;
 
     // Can be overridden from command line
     bool Chunk::ShouldAutoSplit = true;
@@ -167,7 +166,7 @@ namespace mongo {
         conn->done();
     }
 
-    void Chunk::pickSplitVector( vector<BSONObj>& splitPoints , int chunkSize /* bytes */, int maxPoints, int maxObjs ) const {
+    void Chunk::pickSplitVector( vector<BSONObj>& splitPoints , int chunkSize /* bytes */, int maxPoints ) const {
         // Ask the mongod holding this chunk to figure out the split points.
         scoped_ptr<ScopedDbConnection> conn(
                 ScopedDbConnection::getInternalScopedDbConnection( getShard().getConnString() ) );
@@ -179,7 +178,6 @@ namespace mongo {
         cmd.append( "max" , getMax() );
         cmd.append( "maxChunkSizeBytes" , chunkSize );
         cmd.append( "maxSplitPoints" , maxPoints );
-        cmd.append( "maxChunkObjects" , maxObjs );
         BSONObj cmdObj = cmd.obj();
 
         if ( ! conn->get()->runCommand( nsToDatabase(_manager->getns()) , cmdObj , result )) {
@@ -205,7 +203,7 @@ namespace mongo {
         if ( ! force ) {
             vector<BSONObj> candidates;
             const int maxPoints = 2;
-            pickSplitVector( candidates , getManager()->getCurrentDesiredChunkSize() , maxPoints , MaxObjectPerChunk );
+            pickSplitVector( candidates , getManager()->getCurrentDesiredChunkSize() , maxPoints );
             if ( candidates.size() <= 1 ) {
                 // no split points means there isn't enough data to split on
                 // 1 split point means we have between half the chunk size to full chunk size

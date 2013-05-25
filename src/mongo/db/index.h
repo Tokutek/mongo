@@ -150,6 +150,8 @@ namespace mongo {
         void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
         void optimize();
 
+        void pickSplitVector(const BSONObj &chunkMin, const BSONObj &chunkMax, long long maxChunkSize, long long maxSplitPoints, bool force, vector<BSONObj> &splitPoints) const;
+
         class Cursor : public storage::Cursor {
         public:
             Cursor(const IndexDetails &idx, const int flags = 0) :

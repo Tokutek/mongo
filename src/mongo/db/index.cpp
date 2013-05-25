@@ -116,6 +116,117 @@ namespace mongo {
         return NamespaceDetailsTransient::get_inlock( info()["ns"].valuestr() ).getIndexSpec( this );
     }
 
+    void IndexDetails::pickSplitVector(const BSONObj &chunkMin, const BSONObj &chunkMax, long long maxChunkSize, long long maxSplitPoints, bool force, vector<BSONObj> &splitPoints) const {
+        massert(16790, "IndexDetails::pickSplitVector doesn't yet support force", !force);
+        massert(16791, "pickSplitVector only works on clustering indexes", clustering());
+        class SplitVectorFinder {
+            std::exception *_ex;
+            const IndexDetails &_d;
+            const Ordering &_ordering;
+            storage::Key _chunkMin, _chunkMax;
+            storage::KeyV1Owned _chunkMaxV1;
+            long long _maxChunkSize;
+            long long _maxSplitPoints;
+            vector<BSONObj> &_splitPoints;
+            bool _chunkTooBig;
+            bool _doneFindingPoints;
+
+            void isTooBigCallback(const DBT *endKey, uint64_t skipped) try {
+                if (endKey == NULL) {
+                    return;
+                }
+                const storage::KeyV1 sKey(static_cast<char *>(endKey->data));
+                const int c = sKey.woCompare(_chunkMaxV1, _ordering);
+                if (c < 0) {
+                    _maxChunkSize = skipped / 2;
+                    _chunkTooBig = true;
+                }
+            }
+            catch (std::exception &e) {
+                _ex = &e;
+            }
+            void getPointCallback(const DBT *endKey, uint64_t skipped) try {
+                if (endKey == NULL) {
+                    _doneFindingPoints = true;
+                    return;
+                }
+                const storage::KeyV1 sKey(static_cast<char *>(endKey->data));
+                const int c = sKey.woCompare(_chunkMaxV1, _ordering);
+                if (c >= 0) {
+                    _doneFindingPoints = true;
+                    return;
+                }
+                // TODO: compare to current chunkMin and if equal, skip this key by setting pk to maxKey (see tooFrequentKeys logic)
+                _chunkMin.reset(sKey, _d.isIdIndex() ? NULL : &minKey);
+
+                // Now we must construct a split key with the right field names
+                BSONObj splitKey = sKey.toBson();
+                BSONObj pat = _d.keyPattern();
+                BSONObjBuilder b;
+                BSONObjIterator keyIter(splitKey);
+                BSONObjIterator patIter(pat);
+                while (keyIter.more()) {
+                    massert(16792, str::stream() << "keyPattern " << pat << " shorter than key " << splitKey, patIter.more());
+                    BSONElement keyElt = keyIter.next();
+                    BSONElement patElt = patIter.next();
+                    b.appendAs(keyElt, patElt.fieldName());
+                }
+                massert(16793, str::stream() << "keyPattern " << pat << " longer than key " << splitKey, !patIter.more());
+
+                _splitPoints.push_back(b.obj());
+                if (_maxSplitPoints && _splitPoints.size() >= (size_t) _maxSplitPoints) {
+                    _doneFindingPoints = true;
+                }
+            }
+            catch (std::exception &e) {
+                _ex = &e;
+            }
+          public:
+            SplitVectorFinder(const IndexDetails &d, const BSONObj &min, const BSONObj &max, long long maxChunkSize, long long maxSplitPoints, vector<BSONObj> &splitPoints)
+                    : _ex(NULL),
+                      _d(d),
+                      _ordering(*reinterpret_cast<const Ordering *>(_d._db->cmp_descriptor->dbt.data)),
+                      _chunkMin(min, _d.isIdIndex() ? NULL : &minKey),
+                      _chunkMax(max, _d.isIdIndex() ? NULL : &maxKey),
+                      _chunkMaxV1(max),
+                      _maxChunkSize(maxChunkSize),
+                      _maxSplitPoints(maxSplitPoints),
+                      _splitPoints(splitPoints),
+                      _chunkTooBig(false),
+                      _doneFindingPoints(false)
+            {}
+            static void isTooBigCallbackWrapper(const DBT *endKey, uint64_t skipped, void *thisv) {
+                SplitVectorFinder *thisp = static_cast<SplitVectorFinder *>(thisv);
+                thisp->isTooBigCallback(endKey, skipped);
+            }
+            static void getPointCallbackWrapper(const DBT *endKey, uint64_t skipped, void *thisv) {
+                SplitVectorFinder *thisp = static_cast<SplitVectorFinder *>(thisv);
+                thisp->getPointCallback(endKey, skipped);
+            }
+            void getKeyAfterBytes(void (*callback)(const DBT *, uint64_t, void *)) {
+                DBT minDbt = _chunkMin.dbt();
+                int r = _d._db->get_key_after_bytes(_d._db, cc().txn().db_txn(), &minDbt, _maxChunkSize, callback, this, 0);
+                if (r != 0) {
+                    storage::handle_ydb_error(r);
+                }
+                if (_ex != NULL) {
+                    throw *_ex;
+                }
+            }
+            void find() {
+                getKeyAfterBytes(isTooBigCallbackWrapper);
+                if (!_chunkTooBig) {
+                    return;
+                }
+                while (!_doneFindingPoints) {
+                    getKeyAfterBytes(getPointCallbackWrapper);
+                }
+            }
+        };
+        SplitVectorFinder finder(*this, chunkMin, chunkMax, maxChunkSize, maxSplitPoints, splitPoints);
+        finder.find();
+    }
+
     void IndexDetails::uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const {
         const Ordering &ordering(*reinterpret_cast<const Ordering *>(_db->cmp_descriptor->dbt.data));
         const int c = newkey.woCompare(oldkey, ordering);

@@ -161,6 +161,16 @@ namespace mongo {
                 _size = size;
             }
 
+            void reset(const KeyV1 &other, const BSONObj *pk) {
+                _b.reset();
+                _b.appendBuf(other.data(), other.dataSize());
+                if (pk != NULL) {
+                    _b.appendBuf(pk->objdata(), pk->objsize());
+                }
+                _buf = _b.buf();
+                _size = _b.len();
+            }
+
             BSONObj key() const {
                 BufBuilder bb;
                 return key(bb).getOwned();

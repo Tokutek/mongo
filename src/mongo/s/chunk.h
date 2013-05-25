@@ -144,7 +144,7 @@ namespace mongo {
          * @param maxPoints limits the number of split points that are needed, zero is max (optional)
          * @param maxObjs limits the number of objects in each chunk, zero is as max (optional)
          */
-        void pickSplitVector( vector<BSONObj>& splitPoints , int chunkSize , int maxPoints = 0, int maxObjs = 0) const;
+        void pickSplitVector( vector<BSONObj>& splitPoints , int chunkSize , int maxPoints = 0) const;
 
         //
         // migration support
@@ -185,7 +185,6 @@ namespace mongo {
 
         static string chunkMetadataNS;
         static int MaxChunkSize;
-        static int MaxObjectPerChunk;
         static bool ShouldAutoSplit;
 
         //

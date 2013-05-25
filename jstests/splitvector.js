@@ -21,8 +21,10 @@ assertChunkSizes = function ( splitVec , numDocs , maxChunkSize , msg ){
         
         // It is okay for the last chunk to be  smaller. A collection's size does not
         // need to be exactly a multiple of maxChunkSize.
-        if ( i < splitVec.length - 2 )
-            assert.close( maxChunkSize , size , "A"+i , -3 );
+        if ( i < splitVec.length - 2 ) {
+            distance = (maxChunkSize > size) ? maxChunkSize - size : size - maxChunkSize;
+            assert.lt(distance, 64<<10, "A"+i);
+        }
         else
             assert.gt( maxChunkSize , size , "A"+i , msg + "b" );
     }
@@ -68,7 +70,7 @@ assert.eq( false, db.runCommand( { splitVector: "test.jstests_splitvector" , key
 // -------------------------
 // Case 3: empty collection
 
-f.ensureIndex( { x: 1} );
+f.ensureIndex( { x: 1}, {clustering: true} );
 assert.eq( [], db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } ).splitKeys , "3");
 
 
@@ -76,7 +78,7 @@ assert.eq( [], db.runCommand( { splitVector: "test.jstests_splitvector" , keyPat
 // Case 4: uniform collection
 
 f.drop();
-f.ensureIndex( { x: 1 } );
+f.ensureIndex( { x: 1 }, {clustering: true} );
 
 var case4 = function() {
     // Get baseline document size
@@ -85,13 +87,15 @@ var case4 = function() {
     f.save( { x: 0, y: filler } );
     docSize = db.runCommand( { datasize: "test.jstests_splitvector" } ).size;
     assert.gt( docSize, 500 , "4a" );
+    print(docSize);
 
     // Fill collection and get split vector for 1MB maxChunkSize
-    numDocs = 20000;
+    numDocs = 50000;
     for( i=1; i<numDocs; i++ ){
         f.save( { x: i, y: filler } );
     }
     db.getLastError();
+    printjson(db.runCommand({datasize:"test.jstests_splitvector"}));
     res = db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } );
 
     // splitVector aims at getting half-full chunks after split
@@ -110,7 +114,7 @@ case4();
 // Case 5: limit number of split points
 
 f.drop();
-f.ensureIndex( { x: 1 } );
+f.ensureIndex( { x: 1 }, {clustering: true} );
 
 var case5 = function() {
     // Fill collection and get split vector for 1MB maxChunkSize
@@ -131,9 +135,11 @@ case5();
 
 // -------------------------
 // Case 6: limit number of objects in a chunk
+// This is deprecated.
 
+if (0) {
 f.drop();
-f.ensureIndex( { x: 1 } );
+f.ensureIndex( { x: 1 }, {clustering: true} );
 
 var case6 = function() {
     // Fill collection and get split vector for 1MB maxChunkSize
@@ -151,13 +157,14 @@ var case6 = function() {
     }
 }
 case6();
+}
 
 // -------------------------
 // Case 7: enough occurances of min key documents to pass the chunk limit
 // [1111111111111111,2,3)
 
 f.drop();
-f.ensureIndex( { x: 1 } );
+f.ensureIndex( { x: 1 }, {clustering: true} );
 
 var case7 = function() {
     // Fill collection and get split vector for 1MB maxChunkSize
@@ -185,7 +192,7 @@ case7();
 // [1, 22222222222222, 3)
 
 f.drop();
-f.ensureIndex( { x: 1 } );
+f.ensureIndex( { x: 1 }, {clustering: true} );
 
 var case8 = function() {
     for( i=1; i<10; i++ ){
@@ -249,7 +256,7 @@ var case9 = function(n) {
 // Since we're going to allow approximate points for "halfway" we should test a few different sizes.
 for (var n = 3; n < 16; ++n) {
     f.drop();
-    f.ensureIndex( { x: 1 } );
+    f.ensureIndex( { x: 1 }, {clustering: true} );
 
     case9(n);
 }
@@ -259,29 +266,29 @@ for (var n = 3; n < 16; ++n) {
 //
 
 f.drop();
-f.ensureIndex( { x: 1, y: 1 } );
+f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
 case4();
 
 f.drop();
-f.ensureIndex( { x: 1, y: 1 } );
+f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
 case5();
 
 f.drop();
-f.ensureIndex( { x: 1, y: 1 } );
+f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
 case6();
 
 f.drop();
-f.ensureIndex( { x: 1, y: 1 } );
+f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
 case7();
 
 f.drop();
-f.ensureIndex( { x: 1, y: 1 } );
+f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
 case8();
 
 // Since we're going to allow approximate points for "halfway" we should test a few different sizes.
 for (var n = 3; n < 16; ++n) {
     f.drop();
-    f.ensureIndex( { x: 1, y: 1 } );
+    f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
     case9(n);
 }
 
