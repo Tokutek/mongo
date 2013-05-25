@@ -74,27 +74,6 @@ namespace mongo {
             // the move requires acquiring the collection metadata's lock, which can fail
             log() << "balancer move failed: " << res << " from: " << chunkInfo.from << " to: " << chunkInfo.to
                   << " chunk: " << chunkInfo.chunk << endl;
-
-            if ( res["chunkTooBig"].trueValue() ) {
-                // reload just to be safe
-                cm = cfg->getChunkManager( chunkInfo.ns );
-                verify( cm );
-                c = cm->findIntersectingChunk( chunkInfo.chunk.min );
-                
-                log() << "forcing a split because migrate failed for size reasons" << endl;
-                
-                res = BSONObj();
-                c->singleSplit( true , res );
-                log() << "forced split results: " << res << endl;
-                
-                if ( ! res["ok"].trueValue() ) {
-                    log() << "marking chunk as jumbo: " << c->toString() << endl;
-                    c->markAsJumbo();
-                    // we increment moveCount so we do another round right away
-                    movedCount++;
-                }
-
-            }
         }
 
         return movedCount;
