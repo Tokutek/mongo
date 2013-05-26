@@ -448,7 +448,11 @@ namespace mongo {
         if (stale) {
             GTID remoteOldestGTID = getGTIDFromBSON("_id", oldest);
             theReplSet->goStale(stale, remoteOldestGTID);
-            sleepsecs(120);
+            // vanilla Mongo used to do a sleep of 120 seconds here
+            // We removed it. It seems excessive, and if this machine is doing
+            // nothing anyway, sleeping won't help. It might as well
+            // return with a null sync target, and produce() will handle
+            // that fact and sleep one second
         }
 
         {
