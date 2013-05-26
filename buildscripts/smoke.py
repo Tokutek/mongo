@@ -585,7 +585,7 @@ def report():
         print "%d tests didn't get run" % num_missed
     if losers:
         print "The following tests failed (with exit code):"
-        for loser in losers:
+        for loser in sorted(losers.keys()):
             print "%s\t%d" % (loser, losers[loser])
 
     def missing(lst, src, dst):
