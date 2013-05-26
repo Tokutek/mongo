@@ -27,7 +27,7 @@ s.adminCommand( { enablesharding : "test" } );
 res = s.adminCommand( { shardcollection : "test.data" , key : { _id : 1 } } );
 printjson( res );
 
-assert.eq( 40 , s.config.chunks.find().itcount() , "not right number of chunks" );
+assert.eq( 41 , s.config.chunks.find().itcount() , "not right number of chunks" );
 
 
 s.stop();
