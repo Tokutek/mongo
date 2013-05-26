@@ -52,6 +52,10 @@ var assertFieldNamesMatch = function( splitPoint , keyPattern ){
 // -------------------------
 
 f = db.jstests_splitvector;
+
+// run everything once with clustering indexes, and then again without clustering indexes
+for (var cl = 1; cl >= 0; --cl) {
+
 f.drop();
 
 // -------------------------
@@ -70,7 +74,7 @@ assert.eq( false, db.runCommand( { splitVector: "test.jstests_splitvector" , key
 // -------------------------
 // Case 3: empty collection
 
-f.ensureIndex( { x: 1}, {clustering: true} );
+f.ensureIndex( { x: 1}, {clustering:cl} );
 assert.eq( [], db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } ).splitKeys , "3");
 
 
@@ -78,7 +82,7 @@ assert.eq( [], db.runCommand( { splitVector: "test.jstests_splitvector" , keyPat
 // Case 4: uniform collection
 
 f.drop();
-f.ensureIndex( { x: 1 }, {clustering: true} );
+f.ensureIndex( { x: 1 }, {clustering:cl} );
 
 var case4 = function() {
     // Get baseline document size
@@ -117,7 +121,7 @@ case4();
 // Case 5: limit number of split points
 
 f.drop();
-f.ensureIndex( { x: 1 }, {clustering: true} );
+f.ensureIndex( { x: 1 }, {clustering:cl} );
 
 var case5 = function() {
     // Fill collection and get split vector for 1MB maxChunkSize
@@ -142,7 +146,7 @@ case5();
 
 if (0) {
 f.drop();
-f.ensureIndex( { x: 1 }, {clustering: true} );
+f.ensureIndex( { x: 1 }, {clustering:cl} );
 
 var case6 = function() {
     // Fill collection and get split vector for 1MB maxChunkSize
@@ -167,7 +171,7 @@ case6();
 // [1111111111111111,2,3)
 
 f.drop();
-f.ensureIndex( { x: 1 }, {clustering: true} );
+f.ensureIndex( { x: 1 }, {clustering:cl} );
 
 var case7 = function() {
     // Fill collection and get split vector for 1MB maxChunkSize
@@ -195,7 +199,7 @@ case7();
 // [1, 22222222222222, 3)
 
 f.drop();
-f.ensureIndex( { x: 1 }, {clustering: true} );
+f.ensureIndex( { x: 1 }, {clustering:cl} );
 
 var case8 = function() {
     for( i=1; i<10; i++ ){
@@ -259,7 +263,7 @@ var case9 = function(n) {
 // Since we're going to allow approximate points for "halfway" we should test a few different sizes.
 for (var n = 3; n < 16; ++n) {
     f.drop();
-    f.ensureIndex( { x: 1 }, {clustering: true} );
+    f.ensureIndex( { x: 1 }, {clustering:cl} );
 
     case9(n);
 }
@@ -269,32 +273,34 @@ for (var n = 3; n < 16; ++n) {
 //
 
 f.drop();
-f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
+f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
 case4();
 
 f.drop();
-f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
+f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
 case5();
 
 if (0) {
 f.drop();
-f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
+f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
 case6();
 }
 
 f.drop();
-f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
+f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
 case7();
 
 f.drop();
-f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
+f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
 case8();
 
 // Since we're going to allow approximate points for "halfway" we should test a few different sizes.
 for (var n = 3; n < 16; ++n) {
     f.drop();
-    f.ensureIndex( { x: 1, y: 1 }, {clustering: true} );
+    f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
     case9(n);
+}
+
 }
 
 print("PASSED");
