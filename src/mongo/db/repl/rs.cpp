@@ -82,23 +82,30 @@ namespace mongo {
         changeState(MemberState::RS_FATAL);
     }
 
-    void ReplSetImpl::goFatal() {
-        changeState(MemberState::RS_FATAL);
+    void ReplSetImpl::goToRollbackState() {
+        changeState(MemberState::RS_ROLLBACK);
+    }
+
+    void ReplSetImpl::leaveRollbackState() {
+        changeState(MemberState::RS_SECONDARY);
     }
     
     bool ReplSetImpl::assumePrimary() {
         boost::unique_lock<boost::mutex> lock(stateChangeMutex);
         
-        // Can't prove to myself that we are guaranteed to be
-        // in the secondary state here, so putting this here.
+        // Make sure replication has stopped
+        stopReplication();
+
+        // Theoretically, we could have been in the rollback state when
+        // we decided to assume primary, and then transitioned to fatal
+        // before stopping replication. If so, just get out.
+        // Given that we are not a secondary, it is ok that replication is
+        // stopped
         if (state() != MemberState::RS_SECONDARY) {
             return false;
         }
         LOG(2) << "replSet assuming primary" << endl;
         verify( iAmPotentiallyHot() );
-
-        // Make sure replication has stopped        
-        stopReplication();
 
         RSBase::lock rslk(this);
         Lock::GlobalWrite lk;
@@ -124,16 +131,17 @@ namespace mongo {
                 errmsg = "arbiters can't modify maintenance mode";
                 return false;
             }
-            else if (!box.getState().secondary() && !box.getState().recovering()) {
-                errmsg = "cannot modify maintenance mode unless in secondary state or recovering state";
-                return false;
-            }
         }
 
         if (inc) {
             log() << "replSet going into maintenance mode (" << _maintenanceMode << " other tasks)" << rsLog;
 
             stopReplication();
+            // check after stopReplication because we may be fatal
+            if (!box.getState().secondary() && !box.getState().recovering()) {
+                errmsg = "cannot modify maintenance mode unless in secondary state or recovering state";
+                return false;
+            }
             RSBase::lock lk(this);
             // Lock here to prevent state from changing between checking the state and changing it
             // also, grab GlobalWrite here, because it must be grabbed after rslock
@@ -147,6 +155,7 @@ namespace mongo {
             Lock::GlobalWrite writeLock;
             // user error
             if (_maintenanceMode <= 0) {
+                errmsg = "cannot set maintenance mode to false when not in maintenance mode to begin with";
                 return false;
             }
             _maintenanceMode--;
@@ -460,8 +469,7 @@ namespace mongo {
             uint64_t lastTime = o["ts"]._numberLong();
             uint64_t lastHash = o["h"].numberLong();
             gtidManager.reset(new GTIDManager(lastGTID, lastTime, lastHash, _id));
-            setTxnGTIDManager(gtidManager.get());
-            
+            setTxnGTIDManager(gtidManager.get());            
         }
         else {
             // make a GTIDManager that starts from scratch
@@ -922,13 +930,13 @@ namespace mongo {
 
         try {
             boost::unique_lock<boost::mutex> lock(stateChangeMutex);
-            if (state().secondary()) {
-                log() << "stopping replication because we have a new config" << endl;
-                stopReplication();
-                log() << "stopped replication because we have a new config" << endl;
-            }
+            log() << "stopping replication because we have a new config" << endl;
+            stopReplication();
+            log() << "stopped replication because we have a new config" << endl;
             // going into this function, we know there is no replication running
             RSBase::lock lk(this);
+            // if we are fatal, we will just fall into the catch block below
+            massert(16796, "we are fatal, cannot create a new config", !state().fatal());
             if (initFromConfig(newConfig, true)) {
                 log() << "replSet replSetReconfig new config saved locally" << rsLog;
             }
@@ -1070,6 +1078,18 @@ namespace mongo {
         _replOplogPurgeRunning = false;
     }
 
+    void ReplSetImpl::forceUpdateReplInfo() {
+        boost::unique_lock<boost::mutex> lock(_replInfoMutex);
+        GTID minUnappliedGTID;
+        GTID minLiveGTID;
+        verify(gtidManager != NULL);
+        gtidManager->getMins(&minLiveGTID, &minUnappliedGTID);
+        Lock::DBRead lk("local");
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        logToReplInfo(minLiveGTID, minUnappliedGTID);
+        transaction.commit();
+    }
+
     void ReplSetImpl::updateReplInfoThread() {
         _replInfoUpdateRunning = true;
         GTID lastMinUnappliedGTID;
@@ -1081,10 +1101,14 @@ namespace mongo {
         while (_replBackgroundShouldRun) {
             if (theReplSet) {
                 try {
+                    boost::unique_lock<boost::mutex> lock(_replInfoMutex);
                     GTID minUnappliedGTID;
                     GTID minLiveGTID;
                     verify(gtidManager != NULL);
                     gtidManager->getMins(&minLiveGTID, &minUnappliedGTID);
+                    // Note that these CANNOT be >, they must be !=. In the
+                    // case of rollback, these values may go backwards, and this
+                    // thread must capture that information.
                     if (GTID::cmp(lastMinLiveGTID, minLiveGTID) != 0 ||
                         GTID::cmp(lastMinUnappliedGTID, minUnappliedGTID) != 0
                         )

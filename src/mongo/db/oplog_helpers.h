@@ -43,6 +43,7 @@ namespace OpLogHelpers{
     void logDeleteForCapped(const char* ns, BSONObj pk, BSONObj row, TxnContext* txn);
     void logCommand(const char* ns, BSONObj row, TxnContext* txn);
     void applyOperationFromOplog(const BSONObj& op);
+    void rollbackOperationFromOplog(const BSONObj& op);
 }
 
 

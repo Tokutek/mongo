@@ -45,6 +45,7 @@ namespace mongo {
         
         // Not sure if this if clause is necessary anymore. Hard to prove
         // either way for now, so leaving it in
+        // note that because replication is not running, we cannot be in rollback state
         if (box.getState().primary() || box.getState().secondary() || box.getState().fatal()) {
             return;
         }
@@ -149,7 +150,9 @@ namespace mongo {
             if (block && !_blockSync) {
                 stopReplication();
                 RSBase::lock lk(this);
-                changeState(MemberState::RS_RECOVERING);
+                if (!box.getState().fatal()) {
+                    changeState(MemberState::RS_RECOVERING);
+                }
             }
             else if (!block && _blockSync) {
                 // this is messy

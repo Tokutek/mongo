@@ -83,6 +83,8 @@ namespace mongo {
         b.append("ops", opInfo);
 
         BSONObj bb = b.done();
+        // write it to oplog
+        LOG(3) << "writing " << bb.toString(false, true) << " to master " << endl;
         writeEntryToOplog(bb);
     }
 
@@ -174,13 +176,11 @@ namespace mongo {
         uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
         rsOplogDetails->insertObject(entry, flags);
     }
-
     // assumes oplog is read locked on entry
     void replicateTransactionToOplog(BSONObj& op) {
         // set the applied bool to false, to let the oplog know that
         // this entry has not been applied to collections
         BSONElementManipulator(op["a"]).setBool(false);
-        // write it to oplog
         writeEntryToOplog(op);
     }
 
@@ -222,6 +222,26 @@ namespace mongo {
             // we are operating as a secondary. We don't have to fsync
             transaction.commit(DB_TXN_NOSYNC);
         }
+    }
+
+    void rollbackTransactionFromOplog(BSONObj entry) {
+        bool transactionAlreadyApplied = entry["a"].Bool();
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        if (transactionAlreadyApplied) {
+            std::vector<BSONElement> ops = entry["ops"].Array();
+            const size_t numOps = ops.size();
+
+            for(size_t i = 0; i < numOps; ++i) {
+                // note that we have to rollback the transaction backwards
+                BSONElement* curr = &ops[numOps - i - 1];
+                OpLogHelpers::rollbackOperationFromOplog(curr->Obj());
+            }
+        }
+        {
+            Lock::DBRead lk1("local");
+            purgeEntryFromOplog(entry);
+        }
+        transaction.commit(DB_TXN_NOSYNC);
     }
     
     void purgeEntryFromOplog(BSONObj entry) {

@@ -56,6 +56,11 @@ namespace mongo {
             return tailingQueryGTE(ns, gtid, &fields);
         }
 
+        // gets a cursor on the remote oplog that runs in reverse, starting from
+        // the greatest GTID that is less than or equal to lastGTID
+        shared_ptr<DBClientCursor> getRollbackCursor(GTID lastGTID);
+        
+
         bool more() {
             uassert( 15910, "Doesn't have cursor for reading oplog", cursor.get() );
             return cursor->more();

@@ -47,6 +47,7 @@ namespace mongo {
     void replicateTransactionToOplog(BSONObj& op);
     void replicateTransactionToOplogToFillGap(BSONObj& op);
     void applyTransactionFromOplog(BSONObj entry);
+    void rollbackTransactionFromOplog(BSONObj entry);
     void purgeEntryFromOplog(BSONObj entry);
     
     /** puts obj in the oplog as a comment (a no-op).  Just for diags.

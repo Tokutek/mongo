@@ -106,6 +106,9 @@ namespace mongo {
         void handleSlaveDelay(uint64_t opTimestamp);
         // Check if rollback is necessary
         bool isRollbackRequired(OplogReader& r);
+        // tries to perform a rollback. If the rollback is impossible,
+        // throws a RollbackOplogException
+        void runRollback(OplogReader& r, uint64_t oplogTS);
         void getOplogReader(OplogReader& r);
         // check latest GTID against the remote's earliest GTID, filling in remoteOldestOp.
         bool isStale(OplogReader& r, BSONObj& remoteOldestOp);

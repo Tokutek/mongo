@@ -318,7 +318,7 @@ namespace OpLogHelpers{
         }
     }
 
-    static void runUpdateFromOplogWithLock(const char* ns, BSONObj op) {
+    static void runUpdateFromOplogWithLock(const char* ns, BSONObj op, bool isRollback) {
         NamespaceDetails* nsd = nsdetails(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         const char *names[] = {
@@ -331,17 +331,28 @@ namespace OpLogHelpers{
         BSONObj pk = fields[0].Obj();
         BSONObj oldRow = fields[1].Obj();
         BSONObj newRow = fields[2].Obj();
-        // make loud be NULL
-        updateOneObject(nsd, nsdt, pk, oldRow, newRow, NULL);
+        // note the only difference between these two cases is
+        // what is passed as the before image, and what is passed
+        // as after. In normal replication, we replace oldRow with newRow.
+        // In rollback, we replace newRow with oldRow
+        if (isRollback) {
+            // if this is a rollback, then the newRow is what is in the
+            // collections, that we want to replace with oldRow
+            updateOneObject(nsd, nsdt, pk, newRow, oldRow, NULL);
+        }
+        else {
+            // normal replication case
+            updateOneObject(nsd, nsdt, pk, oldRow, newRow, NULL);
+        }
     }
-    static void runUpdateFromOplog(const char* ns, BSONObj op) {
+    static void runUpdateFromOplog(const char* ns, BSONObj op, bool isRollback) {
         try {
             Client::ReadContext ctx(ns);
-            runUpdateFromOplogWithLock(ns, op);
+            runUpdateFromOplogWithLock(ns, op, isRollback);
         }
         catch (RetryWithWriteLock &e) {
             Client::WriteContext ctx(ns);
-            runUpdateFromOplogWithLock(ns, op);
+            runUpdateFromOplogWithLock(ns, op, isRollback);
         }        
     }
 
@@ -354,6 +365,12 @@ namespace OpLogHelpers{
         _runCommands(ns, command, bb, ob, true, 0);
     }
 
+    static void rollbackCommandFromOplog(const char* ns, BSONObj op) {
+        BSONObj command = op[KEY_STR_ROW].embeddedObject();
+        log() << "Cannot rollback command " << op << rsLog;
+        throw RollbackOplogException(str::stream() << "Could not rollback command " << command << " on ns " << ns);
+    }
+    
     void applyOperationFromOplog(const BSONObj& op) {
         LOG(6) << "applying op: " << op << endl;
         OpCounters* opCounters = &replOpCounters;
@@ -371,7 +388,7 @@ namespace OpLogHelpers{
         }
         else if (strcmp(opType, OP_STR_UPDATE) == 0) {
             opCounters->gotUpdate();
-            runUpdateFromOplog(ns, op);
+            runUpdateFromOplog(ns, op, false);
         }
         else if (strcmp(opType, OP_STR_DELETE) == 0) {
             opCounters->gotDelete();
@@ -394,6 +411,54 @@ namespace OpLogHelpers{
         }
         else {
             throw MsgAssertionException( 14825 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );
+        }
+    }
+
+    static void runRollbackInsertFromOplog(const char* ns, BSONObj op) {
+        // handle add index case
+        if (mongoutils::str::endsWith(ns, ".system.indexes")) {
+            throw RollbackOplogException(str::stream() << "Not rolling back an add index on " << ns << ". Op: " << op.toString(false, true));
+        }
+        else {
+            // the rollback of a normal insert is to do the delete
+            runDeleteFromOplog(ns, op);
+        }
+    }
+
+    void rollbackOperationFromOplog(const BSONObj& op) {
+        LOG(6) << "rolling back op: " << op << endl;
+        const char *names[] = { 
+            KEY_STR_NS, 
+            KEY_STR_OP_NAME
+            };
+        BSONElement fields[2];
+        op.getFields(2, names, fields);
+        const char* ns = fields[0].valuestrsafe();
+        const char* opType = fields[1].valuestrsafe();
+        if (strcmp(opType, OP_STR_INSERT) == 0) {
+            runRollbackInsertFromOplog(ns, op);
+        }
+        else if (strcmp(opType, OP_STR_UPDATE) == 0) {
+            runUpdateFromOplog(ns, op, true);
+        }
+        else if (strcmp(opType, OP_STR_DELETE) == 0) {
+            // the rollback of a delete is to do the insert
+            runInsertFromOplog(ns, op);
+        }
+        else if (strcmp(opType, OP_STR_COMMAND) == 0) {
+            rollbackCommandFromOplog(ns, op);
+        }
+        else if (strcmp(opType, OP_STR_COMMENT) == 0) {
+            // no-op
+        }
+        else if (strcmp(opType, OP_STR_CAPPED_INSERT) == 0) {
+            runCappedDeleteFromOplog(ns, op);
+        }
+        else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
+            runCappedInsertFromOplog(ns, op);
+        }
+        else {
+            throw MsgAssertionException( 16795 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );
         }
     }
 } // namespace OpLogHelpers
