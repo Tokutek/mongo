@@ -464,6 +464,13 @@ namespace mongo {
     bool BackgroundSync::isRollbackRequired(OplogReader& r) {
         string hn = r.conn()->getServerAddress();
         if (!r.more()) {
+            // In vanilla Mongo, this happened for one of the
+            // following reasons:
+            //  - we were ahead of what we are syncing from (don't
+            //    think that is possible anymore)
+            //  - remote oplog is empty for some weird reason
+            // in either case, if it (strangely) happens, we'll just return
+            // and our caller will simply try again after a short sleep.
             log() << "replSet error empty query result from " << hn << " oplog" << rsLog;
             return true;
         }
