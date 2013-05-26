@@ -33,6 +33,8 @@
 
 namespace mongo {
 
+    class NamespaceDetails;
+
     /* Details about a particular index. There is one of these effectively for each object in
        system.namespaces (although this also includes the head pointer, which is not in that
        collection).
@@ -150,7 +152,7 @@ namespace mongo {
         void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
         void optimize();
 
-        void pickSplitVector(const BSONObj &chunkMin, const BSONObj &chunkMax, long long maxChunkSize, long long maxSplitPoints, bool force, vector<BSONObj> &splitPoints) const;
+        void pickSplitVector(NamespaceDetails *nd, const BSONObj &keyPattern, const BSONObj &chunkMin, const BSONObj &chunkMax, long long maxChunkSize, long long maxSplitPoints, bool force, vector<BSONObj> &splitPoints) const;
 
         class Cursor : public storage::Cursor {
         public:

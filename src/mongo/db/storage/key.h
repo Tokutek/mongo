@@ -161,6 +161,17 @@ namespace mongo {
                 _size = size;
             }
 
+            void reset(const BSONObj &other, const BSONObj *pk) {
+                _b.reset();
+                KeyV1Owned otherOwned(other);
+                _b.appendBuf(otherOwned.data(), otherOwned.dataSize());
+                if (pk != NULL) {
+                    _b.appendBuf(pk->objdata(), pk->objsize());
+                }
+                _buf = _b.buf();
+                _size = _b.len();
+            }
+
             void reset(const KeyV1 &other, const BSONObj *pk) {
                 _b.reset();
                 _b.appendBuf(other.data(), other.dataSize());

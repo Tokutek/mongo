@@ -253,15 +253,15 @@ namespace mongo {
                     }
                 }
 
-                if ( maxChunkSize <= 0 ) {
+                if ( !force && maxChunkSize <= 0 ) {
                     errmsg = "need to specify the desired max chunk size (maxChunkSize or maxChunkSizeBytes)";
                     return false;
                 }
             }
 
-            if (!force) {
+            if (!force && idx->clustering()) {
                 // fast path through get_key_after_bytes path
-                idx->pickSplitVector(min, max, maxChunkSize, maxSplitPoints, force, splitKeys);
+                idx->pickSplitVector(d, keyPattern, min, max, maxChunkSize, maxSplitPoints, force, splitKeys);
             } else {
                 // Haven't implemented a better version using get_key_after_bytes yet, do the slow thing
                 NamespaceDetailsAccStats stats;
@@ -269,7 +269,12 @@ namespace mongo {
                 d->fillCollectionStats(&stats, &statsResult, 1);
                 const long long recCount = stats.count;
                 const long long dataSize = stats.size;
-                maxChunkSize = dataSize;
+
+                // 'force'-ing a split is equivalent to having maxChunkSize be the size of the current chunk, i.e., the
+                // logic below will split that chunk in half
+                if (force) {
+                    maxChunkSize = dataSize;
+                }
 
                 // If there's not enough data for more than one chunk, no point continuing.
                 if ( dataSize < maxChunkSize || recCount == 0 ) {
