@@ -97,7 +97,7 @@ namespace mongo {
 
     CmdLine cmdLine;
     static bool scriptingEnabled = true;
-    static bool noHttpInterface = false;
+    static bool httpInterface = false;
     bool shouldRepairDatabases = 0;
     Timer startupSrandTimer;
 
@@ -271,7 +271,7 @@ namespace mongo {
 
         logStartup();
         startReplication();
-        if ( !noHttpInterface )
+        if ( httpInterface )
             boost::thread web( boost::bind(&webServerThread, new RestAdminAccess() /* takes ownership */));
 
 #if(TESTEXHAUST)
@@ -860,7 +860,6 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("loaderMaxMemory", po::value(&cmdLine.loaderMaxMemory), "tokumx memory limit (in bytes) for a single bulk loader to use. the bulk loader is used to build foreground indexes and is also utilized by mongorestore/import")
     ("loaderCompressTmp", po::value(&cmdLine.loaderCompressTmp), "the bulk loader (used for mongoimport/mongorestore and non-background index builds) will compress intermediate files (see tmpDir) when writing them to disk")
     ("noauth", "run without security")
-    ("nohttpinterface", "disable http interface")
     ("nojournal", "DEPRECATED)")
     ("noprealloc", "disable data file preallocation - will often hurt performance")
     ("noscripting", "disable scripting engine")
@@ -1126,8 +1125,12 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         if (params.count("nopreallocj")) {
             out() << "nopreallocj deprecated" << endl;
         }
-        if (params.count("nohttpinterface")) {
-            noHttpInterface = true;
+        if (params.count("httpinterface")) {
+            if (params.count("nohttpinterface")) {
+                log() << "can't have both --httpinterface and --nohttpinterface" << endl;
+                ::_exit( EXIT_BADOPTIONS );
+            }
+            httpInterface = true;
         }
         if (params.count("rest")) {
             cmdLine.rest = true;
