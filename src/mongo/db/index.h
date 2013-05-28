@@ -29,6 +29,7 @@
 #include "mongo/db/namespace.h"
 #include "mongo/db/storage/cursor.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/db/storage/key.h"
 #include "mongo/db/storage/txn.h"
 
 namespace mongo {
@@ -152,7 +153,8 @@ namespace mongo {
         void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
         void optimize();
 
-        void pickSplitVector(NamespaceDetails *nd, const BSONObj &keyPattern, const BSONObj &chunkMin, const BSONObj &chunkMax, long long maxChunkSize, long long maxSplitPoints, bool force, vector<BSONObj> &splitPoints) const;
+        template<class Callback>
+        void getKeyAfterBytes(const storage::Key &startKey, uint64_t skipLen, Callback &cb) const;
 
         class Cursor : public storage::Cursor {
         public:
@@ -205,6 +207,46 @@ namespace mongo {
         uint32_t _readPageSize;
         uint32_t _pageSize;
     };
+
+    template<class Callback>
+    void IndexDetails::getKeyAfterBytes(const storage::Key &startKey, uint64_t skipLen, Callback &cb) const {
+        class CallbackWrapper {
+            Callback &_cb;
+          public:
+            std::exception *ex;
+            CallbackWrapper(Callback &cb) : _cb(cb), ex(NULL) {}
+            static void call(const DBT *endKeyDBT, uint64_t skipped, void *thisv) {
+                CallbackWrapper *t = static_cast<CallbackWrapper *>(thisv);
+                try {
+                    if (endKeyDBT == NULL) {
+                        t->_cb(NULL, NULL, skipped);
+                    }
+                    else {                
+                        storage::KeyV1 endKey(static_cast<char *>(endKeyDBT->data));
+                        if (endKey.dataSize() < endKeyDBT->size) {
+                            BSONObj endPK(static_cast<char *>(endKeyDBT->data) + endKey.dataSize());
+                            t->_cb(&endKey, &endPK, skipped);
+                        }
+                        else {
+                            t->_cb(&endKey, NULL, skipped);
+                        }
+                    }
+                }
+                catch (std::exception &e) {
+                    t->ex = &e;
+                }
+            }
+        };
+        DBT minDBT = startKey.dbt();
+        CallbackWrapper cbw(cb);
+        int r = _db->get_key_after_bytes(_db, cc().txn().db_txn(), &minDBT, skipLen, &CallbackWrapper::call, &cbw, 0);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
+        if (cbw.ex != NULL) {
+            throw *cbw.ex;
+        }
+    }
 
 } // namespace mongo
 
