@@ -752,6 +752,8 @@ namespace mongo {
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(ns, options));
         } else if (options["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(ns, options));
+        } else if (options["natural"].trueValue()) {
+            return shared_ptr<NamespaceDetails>(new NaturalOrderCollection(ns, options));
         } else {
             return shared_ptr<NamespaceDetails>(new IndexedCollection(ns, options));
         }
@@ -779,6 +781,8 @@ namespace mongo {
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(serialized));
         } else if (serialized["options"]["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(serialized));
+        } else if (serialized["options"]["natural"].trueValue()) {
+            return shared_ptr<NamespaceDetails>(new NaturalOrderCollection(serialized));
         } else {
             return shared_ptr<NamespaceDetails>(new IndexedCollection(serialized));
         }

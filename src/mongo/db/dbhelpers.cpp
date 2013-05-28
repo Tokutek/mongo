@@ -169,17 +169,6 @@ namespace mongo {
         return true;
     }
 
-    void Helpers::upsert( const string& ns , const BSONObj& o, bool fromMigrate ) {
-        msgasserted(16740, "Helpers::upsert is deprecated, it should only be used by mapreduce now anyway");
-        BSONElement e = o["_id"];
-        verify( e.type() );
-        BSONObj id = e.wrap();
-
-        OpDebug debug;
-        Client::Context context(ns);
-        updateObjects(ns.c_str(), o, /*pattern=*/id, /*upsert=*/true, /*multi=*/false , /*logtheop=*/true , debug, fromMigrate );
-    }
-
     void Helpers::putSingleton(const char *ns, BSONObj obj) {
         OpDebug debug;
         Client::Context context(ns);

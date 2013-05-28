@@ -92,13 +92,6 @@ namespace mongo {
         bool getFirst(const char *ns, BSONObj& result);
         bool getLast(const char *ns, BSONObj& result); // get last object int he collection; e.g. {$natural : -1}
 
-        /**
-         * you have to lock
-         * you do not have to have Context set
-         * o has to have an _id field or will assert
-         */
-        void upsert( const string& ns , const BSONObj& o, bool fromMigrate = false );
-
         /** You do not need to set the database before calling.
             @return true if collection is empty.
         */

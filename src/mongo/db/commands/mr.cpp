@@ -26,6 +26,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/db/ops/update.h"
 #include "mongo/s/d_chunk_manager.h"
 #include "mongo/s/d_logic.h"
 #include "mongo/s/grid.h"
@@ -344,7 +345,9 @@ namespace mongo {
                 {
                     Client::WriteContext ctx( _config.incLong );
                     string err;
-                    if ( ! userCreateNS( _config.incLong.c_str() , BSON( "autoIndexId" << 0 << "temp" << true ) , err , false ) ) {
+                    // Specifying { natural : 1 } creates a "natural order" collection,
+                    // which does not automaticall add/index the _id field.
+                    if ( ! userCreateNS( _config.incLong.c_str() , BSON( "natural" << 1 << "temp" << true ) , err , false ) ) {
                         uasserted( 13631 , str::stream() << "userCreateNS failed for mr incLong ns: " << _config.incLong << " err: " << err );
                     }
                 }
@@ -382,7 +385,10 @@ namespace mongo {
                     }
 
                     BSONObj indexToInsert = b.obj();
-                    insert( Namespace( _config.tempLong.c_str() ).getSisterNS( "system.indexes" ).c_str() , indexToInsert );
+
+                    string sysIndexes( Namespace( _config.tempLong.c_str() ).getSisterNS( "system.indexes" ) );
+                    Client::WriteContext ctx( sysIndexes.c_str() );
+                    insert( sysIndexes.c_str() , indexToInsert );
                 }
 
             }
@@ -490,6 +496,24 @@ namespace mongo {
         // End SERVER-6116
         //
 
+        static void upsert( const string& ns , const BSONObj& o, bool fromMigrate = false ) {
+            BSONElement e = o["_id"];
+            verify( e.type() );
+            BSONObj id = e.wrap();
+
+            OpDebug debug;
+            Client::Context context(ns);
+            updateObjects(ns.c_str(),
+                          o,
+                          /*pattern=*/ id,
+                          /*upsert=*/ true,
+                          /*multi=*/ false,
+                          /*logtheop=*/ true,
+                          debug,
+                          fromMigrate);
+        }
+
+
         long long State::postProcessCollectionNonAtomic(CurOp* op, ProgressMeterHolder& pm) {
 
             if ( _config.finalLong == _config.tempLong )
@@ -518,8 +542,7 @@ namespace mongo {
                 while ( cursor->more() ) {
                     Lock::DBWrite lock( _config.finalLong );
                     BSONObj o = cursor->next();
-                    Helpers::upsert( _config.finalLong , o );
-                    //getDur().commitIfNeeded();
+                    upsert( _config.finalLong , o );
                     pm.hit();
                 }
                 _db.dropCollection( _config.tempLong );
@@ -547,12 +570,11 @@ namespace mongo {
                         values.clear();
                         values.push_back( temp );
                         values.push_back( old );
-                        Helpers::upsert( _config.finalLong , _config.reducer->finalReduce( values , _config.finalizer.get() ) );
+                        upsert( _config.finalLong , _config.reducer->finalReduce( values , _config.finalizer.get() ) );
                     }
                     else {
-                        Helpers::upsert( _config.finalLong , temp );
+                        upsert( _config.finalLong , temp );
                     }
-                    //getDur().commitIfNeeded();
                     pm.hit();
                 }
                 _db.dropCollection( _config.tempLong );
@@ -568,8 +590,7 @@ namespace mongo {
         void State::insert( const string& ns , const BSONObj& o ) {
             verify( _onDisk );
 
-            Client::WriteContext ctx( ns );
-
+            Client::ReadContext ctx( ns.c_str() );
             insertObject( ns.c_str() , o );
         }
 
@@ -806,13 +827,8 @@ namespace mongo {
                 killCurrentOp.checkForInterrupt();
             }
 
-            {
-                dbtempreleasecond tl;
-                if ( ! tl.unlocked() )
-                    LOG( LL_WARNING ) << "map/reduce can't temp release" << endl;
-                // reduce and finalize last array
-                finalReduce( all );
-            }
+            // reduce and finalize last array
+            finalReduce( all );
 
             pm.finished();
         }
@@ -842,7 +858,7 @@ namespace mongo {
                     // only 1 value for this key
                     if ( _onDisk ) {
                         // this key has low cardinality, so just write to collection
-                        Client::WriteContext ctx(_config.incLong.c_str());
+                        Client::ReadContext ctx(_config.incLong.c_str());
                         _insertToInc( *(all.begin()) );
                     }
                     else {
@@ -1016,25 +1032,11 @@ namespace mongo {
 
                 uassert( 16149 , "cannot run map reduce without the js engine", globalScriptEngine );
 
-                ClientCursor::Holder holdCursor;
+                // Get chunk manager before we check our version, to make sure it doesn't increment
+                // in the meantime
                 ShardChunkManagerPtr chunkManager;
-
-                {
-                    // Get chunk manager before we check our version, to make sure it doesn't increment
-                    // in the meantime
-                    if ( shardingState.needShardChunkManager( config.ns ) ) {
-                        chunkManager = shardingState.getShardChunkManager( config.ns );
-                    }
-
-                    // Check our version immediately, to avoid migrations happening in the meantime while we do prep
-                    Client::ReadContext ctx( config.ns );
-
-                    // Get a very basic cursor, prevents deletion of migrated data while we m/r
-                    shared_ptr<Cursor> temp = NamespaceDetailsTransient::getCursor( config.ns.c_str(), BSONObj(), BSONObj() );
-                    uassert( 15876, str::stream() << "could not create cursor over " << config.ns << " to hold data while prepping m/r", temp.get() );
-                    holdCursor.reset( new ClientCursor( QueryOption_NoCursorTimeout , temp , config.ns.c_str() ) );
-                    uassert( 15877, str::stream() << "could not create m/r holding client cursor over " << config.ns, holdCursor );
-
+                if ( shardingState.needShardChunkManager( config.ns ) ) {
+                    chunkManager = shardingState.getShardChunkManager( config.ns );
                 }
 
                 bool shouldHaveData = false;
@@ -1065,6 +1067,8 @@ namespace mongo {
                 }
 
                 try {
+                    Client::Transaction transaction(DB_TXN_SNAPSHOT);
+
                     state.init();
                     state.prepTempCollection();
                     ProgressMeterHolder pm( op->setMessage( "m/r: (1/3) emit phase" , state.incomingDocuments() ) );
@@ -1072,13 +1076,7 @@ namespace mongo {
                     wassert( config.limit < 0x4000000 ); // see case on next line to 32 bit unsigned
                     long long mapTime = 0;
                     {
-                        // We've got a cursor preventing migrations off, now re-establish our useful cursor
-
-                        // Need lock and context to use it
-                        Lock::DBRead lock( config.ns );
-                        // This context does no version check, safe b/c we checked earlier and have an
-                        // open cursor
-                        Client::Context ctx( config.ns, dbpath, true, false );
+                        Client::ReadContext ctx( config.ns );
 
                         // obtain full cursor on data to apply mr to
                         shared_ptr<Cursor> temp = NamespaceDetailsTransient::getCursor( config.ns.c_str(), config.filter, config.sort );
@@ -1160,6 +1158,8 @@ namespace mongo {
                         errmsg = "there were emits but no data!";
                         return false;
                     }
+
+                    transaction.commit();
                 }
                 catch( SendStaleConfigException& e ){
                     log() << "mr detected stale config, should retry" << causedBy(e) << endl;
@@ -1170,6 +1170,11 @@ namespace mongo {
                 catch ( AssertionException& e ){
                     log() << "mr failed, removing collection" << causedBy(e) << endl;
                     throw e;
+                }
+                catch ( RetryWithWriteLock &e ) {
+                    msgasserted(16795, str::stream() << 
+                                   "Unhandled RetryWithWriteLock excpetion thrown during MapReduceCommand." <<
+                                   "Either a necessary collection was dropped manually, or you hit a bug. ");
                 }
                 catch ( std::exception& e ){
                     log() << "mr failed, removing collection" << causedBy(e) << endl;
@@ -1201,7 +1206,16 @@ namespace mongo {
             virtual bool canRunInMultiStmtTxn() const { return true; }
             virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings().setBulkFetch(true); }
 
-            bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
+            bool run(const string& dbname , BSONObj& cmdObj, int k, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+                try {
+                    return _run(dbname, cmdObj, k, errmsg, result, fromRepl);
+                } catch ( RetryWithWriteLock &e ) {
+                    msgasserted(16796, str::stream() << 
+                                   "Unhandled RetryWithWriteLock excpetion thrown during MapReduceFinishCommand." <<
+                                   "Either a necessary collection was dropped manually, or you hit a bug. ");
+                }
+            }
+            bool _run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 ShardedConnectionInfo::addHook();
                 // legacy name
                 string shardedOutputCollection = cmdObj["shardedOutputCollection"].valuestrsafe();
@@ -1242,6 +1256,7 @@ namespace mongo {
                     }
                 }
 
+                Client::Transaction transaction(DB_TXN_SNAPSHOT);
                 state.prepTempCollection();
 
                 BSONList values;
@@ -1340,6 +1355,7 @@ namespace mongo {
                 countsB.append("output", outputCount);
                 result.append( "counts" , countsB.obj() );
 
+                transaction.commit();
                 return 1;
             }
         } mapReduceFinishCommand;
