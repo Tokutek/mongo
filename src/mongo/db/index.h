@@ -237,9 +237,9 @@ namespace mongo {
                 }
             }
         };
-        DBT minDBT = startKey.dbt();
+        DBT startDBT = startKey.dbt();
         CallbackWrapper cbw(cb);
-        int r = _db->get_key_after_bytes(_db, cc().txn().db_txn(), &minDBT, skipLen, &CallbackWrapper::call, &cbw, 0);
+        int r = _db->get_key_after_bytes(_db, cc().txn().db_txn(), &startDBT, skipLen, &CallbackWrapper::call, &cbw, 0);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
