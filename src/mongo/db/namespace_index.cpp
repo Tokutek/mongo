@@ -191,24 +191,17 @@ namespace mongo {
     }
 
     bool NamespaceIndex::close_ns(const char *ns) {
+        Lock::assertWriteLocked(ns);
         // No need to initialize first. If the nsdb is null at this point,
         // we simply say that the ns you want to close wasn't open.
         if (!allocated()) {
             return false;
         }
 
-        // We need to hold a shared lock on the openRWLock because we
-        // may only have a DBRead lock. We don't check for a DBWrite
-        // lock (and possible throw) until we know there's an ns to close.
-        SimpleRWLock::Shared lk(_openRWLock);
-
         // Find and erase the old entry, if it exists.
         Namespace n(ns);
         NamespaceDetailsMap::iterator it = _namespaces.find(n);
         if (it != _namespaces.end()) {
-            if (!Lock::isWriteLocked(ns)) {
-                throw RetryWithWriteLock();
-            }
             shared_ptr<NamespaceDetails> d = it->second;
             _namespaces.erase(it);
             d->close();
