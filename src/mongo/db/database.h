@@ -23,37 +23,20 @@
 
 namespace mongo {
 
-    //class Extent;
-    //class MongoDataFile;
-    class ClientCursor;
-    // TODO: TokuDB: We most likely will need something to abstract
-    // the "concept" of a diskloc so we can have a map like the one below.
-    // FIND OUT IF THIS IS TRUE.
-#if 0
-    struct ByLocKey;
-    typedef map<ByLocKey, ClientCursor*> CCByLoc;
-#endif
-
     /**
-     * Database represents a database database
-     * Each database database has its own set of files -- dbname.ns, dbname.0, dbname.1, ...
-     * NOT memory mapped
+     * Database represents an set of namespaces. It has an index mapping
+     * namespace name to NamespaceDetails object, if it exists and is open.
+     * The database is represented on disk as a TokuDB dictionary named dbname.ns
     */
     class Database {
     public:
-        //static bool _openAllFiles;
-
         // you probably need to be in dbHolderMutex when constructing this
         Database(const char *nm, /*out*/ bool& newDb, const string& _path = dbpath);
-    private:
-        ~Database(); // closes files and other cleanup see below.
-    public:
+
         /* you must use this to close - there is essential code in this method that is not in the ~Database destructor.
            thus the destructor is private.  this could be cleaned up one day...
         */
         static void closeDatabase( const char *db, const string& path );
-
-        //void openAllFiles();
 
         /**
          * tries to make sure that this hasn't been deleted
@@ -63,47 +46,9 @@ namespace mongo {
         bool isEmpty() { return ! namespaceIndex.allocated(); }
 
         /**
-         * total file size of Database in bytes
-         */
-        long long fileSize() const;
-
-        //int numFiles() const;
-
-        /**
-         * returns file valid for file number n
-         */
-        //boost::filesystem::path fileName( int n ) const;
-
-    private:
-        //bool exists(int n) const;
-        //bool openExistingFile( int n );
-
-    public:
-        /**
-         * return file n.  if it doesn't exist, create it
-         */
-        //MongoDataFile* getFile( int n, int sizeNeeded = 0, bool preallocateOnly = false );
-
-        //MongoDataFile* addAFile( int sizeNeeded, bool preallocateNextFile );
-
-        /**
-         * makes sure we have an extra file at the end that is empty
-         * safe to call this multiple times - the implementation will only preallocate one file
-         */
-        //void preallocateAFile() { getFile( numFiles() , 0, true ); }
-
-        //MongoDataFile* suitableFile( const char *ns, int sizeNeeded, bool preallocate, bool enforceQuota );
-
-        //Extent* allocExtent( const char *ns, int size, bool capped, bool enforceQuota );
-
-        //MongoDataFile* newestFile();
-
-        /**
          * @return true if success.  false if bad level or error creating profile ns
          */
         bool setProfilingLevel( int newLevel , string& errmsg );
-
-        void flushFiles( bool sync );
 
         /**
          * @return true if ns is part of the database
@@ -115,34 +60,17 @@ namespace mongo {
             return ns[name.size()] == '.';
         }
 
-        //const RecordStats& recordStats() const { return _recordStats; }
-        //RecordStats& recordStats() { return _recordStats; }
-
-    private:
-    public:
-
+        // TODO: Make all of these private
         const string name; // "alleyinsider"
         const string path;
-
-    private:
-
-        // must be in the dbLock when touching this (and write locked when writing to of course)
-        // however during Database object construction we aren't, which is ok as it isn't yet visible
-        //   to others and we are in the dbholder lock then.
-        //vector<MongoDataFile*> _files;
-
-    public: // this should be private later
 
         NamespaceIndex namespaceIndex;
         int profile; // 0=off.
         const string profileName; // "alleyinsider.system.profile"
-        // TODO: TokuDB Find out how to do this without disklocs and whether it is necessary for us, or for what features.
-        //CCByLoc ccByLoc;
         int magic; // used for making sure the object is still loaded in memory
 
     private:
-        //RecordStats _recordStats;
-        
+        ~Database(); // closes files and other cleanup see below.
     };
 
 } // namespace mongo
