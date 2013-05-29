@@ -546,6 +546,18 @@ namespace mongo {
         // call this to persist it to the nsdb.
         void update_ns(const char *ns, const BSONObj &serialized, bool overwrite);
 
+        // Find an NamespaceDetails in the nsindex.
+        // Will not open the if its closed, unlike nsdetails()
+        NamespaceDetails *find_ns(const char *ns) {
+            init();
+            if (!allocated()) {
+                return NULL;
+            }
+
+            SimpleRWLock::Shared lk(_openRWLock);
+            return find_ns_locked(ns);
+        }
+
         // Every namespace that exists has an entry in _namespaces. Some
         // entries may be "closed" in the sense that the key exists but the
         // value is null. If the desired namespace is closed, we open it,
@@ -556,19 +568,15 @@ namespace mongo {
                 return NULL;
             }
 
-            {
-                // Try to find the ns in a shared lock. If it's there, we're done.
-                SimpleRWLock::Shared lk(_openRWLock);
-                NamespaceDetails *d = find_ns(ns);
-                if (d != NULL) {
-                    return d;
-                }
+            NamespaceDetails *d = find_ns(ns);
+            if (d != NULL) {
+                return d;
             }
 
             // The ns doesn't exist, or it's not opened. Grab an exclusive lock
             // and do the open if we still can't find it.
             SimpleRWLock::Exclusive lk(_openRWLock);
-            NamespaceDetails *d = find_ns(ns);
+            d = find_ns_locked(ns);
             return d != NULL ? d : open_ns(ns);
         }
 
@@ -586,7 +594,7 @@ namespace mongo {
 
         // @return NamespaceDetails object is the ns is currently open, NULL otherwise.
         // requires: openRWLock is locked, either shared or exclusively.
-        NamespaceDetails *find_ns(const char *ns) {
+        NamespaceDetails *find_ns_locked(const char *ns) {
             Namespace n(ns);
             NamespaceDetailsMap::iterator it = _namespaces.find(n);
             if (it != _namespaces.end()) {

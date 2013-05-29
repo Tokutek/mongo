@@ -641,10 +641,15 @@ namespace mongo {
                                              long long nDelta, long long sizeDelta,
                                              bool committed) {
             Lock::DBRead lk(ns);
-            if (dbHolder().get(ns, dbpath) != NULL) {
+            if (dbHolder().__isLoaded(ns, dbpath)) {
                 scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                                 new Client::Context(ns) : NULL);
-                NamespaceDetails *d = nsdetails(ns.c_str());
+                // Because this transaction did inserts, we're guarunteed to be the
+                // only party capable of closing/reopening the ns due to file-ops.
+                // So, if the ns is open, note the commit/abort to fix up in-memory
+                // stats and do nothing otherwise since there are no stats to fix.
+                NamespaceIndex *ni = nsindex(ns.c_str());
+                NamespaceDetails *d = ni->find_ns(ns.c_str());
                 if (d != NULL) {
                     if (committed) {
                         d->noteCommit(insertedPKs, nDelta, sizeDelta);
@@ -675,7 +680,7 @@ namespace mongo {
                 // The ydb requires that a txn closes any dictionaries it created beforeaborting.
                 // Hold a write lock while trying to close the namespace in the nsindex.
                 Lock::DBWrite lk(ns);
-                if (dbHolder().get(ns, dbpath) != NULL) {
+                if (dbHolder().__isLoaded(ns, dbpath)) {
                     scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                                     new Client::Context(ns) : NULL);
                     (void) nsindex(ns)->close_ns(ns);
