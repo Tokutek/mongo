@@ -223,7 +223,7 @@ namespace mongo {
                     }
                     else {                
                         storage::KeyV1 endKey(static_cast<char *>(endKeyDBT->data));
-                        if (endKey.dataSize() < endKeyDBT->size) {
+                        if (endKey.dataSize() < (ssize_t) endKeyDBT->size) {
                             BSONObj endPK(static_cast<char *>(endKeyDBT->data) + endKey.dataSize());
                             t->_cb(&endKey, &endPK, skipped);
                         }
