@@ -936,7 +936,7 @@ namespace mongo {
             // going into this function, we know there is no replication running
             RSBase::lock lk(this);
             // if we are fatal, we will just fall into the catch block below
-            massert(16796, "we are fatal, cannot create a new config", !state().fatal());
+            massert(16803, "we are fatal, cannot create a new config", !state().fatal());
             if (initFromConfig(newConfig, true)) {
                 log() << "replSet replSetReconfig new config saved locally" << rsLog;
             }
