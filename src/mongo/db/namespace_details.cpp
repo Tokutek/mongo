@@ -1520,8 +1520,6 @@ namespace mongo {
             NamespaceIndex *ni = nsindex( from );
             ni->kill_ns( from );
             ni->update_ns( to, newSerialized, false );
-            bool opened = ni->open_ns( to );
-            verify( opened );
             verify( nsdetails(to) != NULL );
             verify( nsdetails(from) == NULL );
         }

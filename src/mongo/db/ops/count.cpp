@@ -27,7 +27,7 @@
 namespace mongo {
 
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
-        Client::Context ctx(ns);
+        Client::ReadContext ctx(ns);
         NamespaceDetails *d = nsdetails( ns );
         if ( !d ) {
             err = "ns missing";

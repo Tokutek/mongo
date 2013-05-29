@@ -84,7 +84,7 @@ namespace CountTests {
             BSONObj cmd = fromjson( "{\"query\":{}}" );
             string err;
             int errCode;
-            ASSERT_EQUALS( 1, Helpers::runCount( ns(), cmd, err, errCode ) );
+            ASSERT_EQUALS( 1, runCount( ns(), cmd, err, errCode ) );
         }
     };
     
@@ -97,7 +97,7 @@ namespace CountTests {
             BSONObj cmd = fromjson( "{\"query\":{\"a\":\"b\"}}" );
             string err;
             int errCode;
-            ASSERT_EQUALS( 2, Helpers::runCount( ns(), cmd, err, errCode ) );
+            ASSERT_EQUALS( 2, runCount( ns(), cmd, err, errCode ) );
         }
     };
     
@@ -109,7 +109,7 @@ namespace CountTests {
             BSONObj cmd = fromjson( "{\"query\":{},\"fields\":{\"a\":1}}" );
             string err;
             int errCode;
-            ASSERT_EQUALS( 2, Helpers::runCount( ns(), cmd, err, errCode ) );
+            ASSERT_EQUALS( 2, runCount( ns(), cmd, err, errCode ) );
         }
     };
     
@@ -122,7 +122,7 @@ namespace CountTests {
             BSONObj cmd = fromjson( "{\"query\":{\"a\":\"b\"},\"fields\":{\"a\":1}}" );
             string err;
             int errCode;
-            ASSERT_EQUALS( 1, Helpers::runCount( ns(), cmd, err, errCode ) );
+            ASSERT_EQUALS( 1, runCount( ns(), cmd, err, errCode ) );
         }
     };
     
@@ -134,7 +134,7 @@ namespace CountTests {
             BSONObj cmd = fromjson( "{\"query\":{\"a\":/^b/}}" );
             string err;
             int errCode;
-            ASSERT_EQUALS( 1, Helpers::runCount( ns(), cmd, err, errCode ) );
+            ASSERT_EQUALS( 1, runCount( ns(), cmd, err, errCode ) );
         }
     };
 

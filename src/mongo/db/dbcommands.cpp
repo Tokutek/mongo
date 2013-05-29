@@ -1596,18 +1596,9 @@ namespace mongo {
             throw;
         }
         catch (RetryWithWriteLock &e) {
-            if (!Lock::somethingWriteLocked()) {
-                LOG(1) << "command failed with read lock, will retry with write lock" << causedBy(e) << endl;
-                throw e;
-            }
-            else {
-                LOG(1) << "RetryWithWriteLock thrown while holding a write lock!" << causedBy(e) << endl;
-                stringstream ss;
-                ss << "exception: " << e.what();
-                result.append( "errmsg" , ss.str() );
-                result.append( "code" , e.getCode() );
-                return false;
-            }
+            uasserted(16796, str::stream() << 
+                             "bug: Unhandled RetryWithWriteLock exception thrown during cmd: " << causedBy(e)
+                             << ". Either a necessary collection was dropped manually, or you hit a bug. ");
         }
         catch ( DBException& e ) {
 
@@ -1762,51 +1753,35 @@ namespace mongo {
             // read lock
             string ns = c->parseNs(dbname, cmdObj);
 
-            try {
-                scoped_ptr<Lock::ScopedLock> lk(c->lockGlobally()
-                                                ? static_cast<Lock::ScopedLock *>(new Lock::GlobalRead())
-                                                : static_cast<Lock::ScopedLock *>(new Lock::DBRead(ns)));
-                if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
-                    return false;
-                }
-                Client::Context ctx(ns, dbpath, c->requiresAuth());
-                scoped_ptr<Client::Transaction> txn((!fromRepl && c->needsTxn())
-                                                    ? new Client::Transaction(c->txnFlags())
-                                                    : NULL);
-
-                client.curop()->ensureStarted();
-                retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
-
-                if ( retval && c->logTheOp() && ! fromRepl ) {
-                    OpLogHelpers::logCommand(cmdns, cmdObj, &cc().txn());
-                }
-
-                if (retval && txn) {
-                    txn->commit();
-                }
+            // Establish a read context first, which will open the db if it is closed.
+            //
+            // If we end up needing a global read lock, then our ReadContext is not
+            // sufficient. Upgrade to a global read lock. Note that the db may close
+            // between lock acquisions, but that's okay - we'll uassert later in the
+            // Client::Context constructor and the user must retry the command.
+            scoped_ptr<Client::ReadContext> rctx(new Client::ReadContext(ns, dbpath, c->requiresAuth()));
+            scoped_ptr<Lock::GlobalRead> lk;
+            if (c->lockGlobally()) {
+                rctx.reset();
+                lk.reset(new Lock::GlobalRead());
             }
-            catch (RetryWithWriteLock) {
-                scoped_ptr<Lock::ScopedLock> lk(c->lockGlobally()
-                                                ? static_cast<Lock::ScopedLock *>(new Lock::GlobalWrite())
-                                                : static_cast<Lock::ScopedLock *>(new Lock::DBWrite(dbname)));
-                if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
-                    return false;
-                }
-                Client::Context ctx(ns, dbpath, c->requiresAuth());
-                scoped_ptr<Client::Transaction> txn((!fromRepl && c->needsTxn())
-                                                    ? new Client::Transaction(c->txnFlags())
-                                                    : NULL);
+            Client::Context ctx(ns, dbpath, c->requiresAuth());
+            if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
+                return false;
+            }
 
-                client.curop()->ensureStarted();
-                retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
+            scoped_ptr<Client::Transaction> txn((!fromRepl && c->needsTxn())
+                                                ? new Client::Transaction(c->txnFlags())
+                                                : NULL);
+            client.curop()->ensureStarted();
+            retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
 
-                if ( retval && c->logTheOp() && ! fromRepl ) {
-                    OpLogHelpers::logCommand(cmdns, cmdObj, &cc().txn());
-                }
+            if ( retval && c->logTheOp() && ! fromRepl ) {
+                OpLogHelpers::logCommand(cmdns, cmdObj, &cc().txn());
+            }
 
-                if (retval && txn) {
-                    txn->commit();
-                }
+            if (retval && txn) {
+                txn->commit();
             }
         }
         else {
@@ -1827,11 +1802,11 @@ namespace mongo {
             if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
                 return false;
             }
-            Client::Context tc(dbname, dbpath, c->requiresAuth());
+
+            Client::Context ctx(dbname, dbpath, c->requiresAuth());
             scoped_ptr<Client::Transaction> transaction((!fromRepl && c->needsTxn())
                                                         ? new Client::Transaction(c->txnFlags())
                                                         : NULL);
-
             client.curop()->ensureStarted();
             retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
             if ( retval && c->logTheOp() && ! fromRepl ) {

@@ -245,80 +245,17 @@ namespace mongo {
             if ( cmdObj["sort"].eoo() )
                 return runNoDirectClient( dbname , cmdObj , x, errmsg , result, y );
 
-            const bool upsert = cmdObj["upsert"].trueValue();
             string ns = dbname + '.' + cmdObj.firstElement().valuestr();
 
-            // If we're going to do it with a DBDirectClient, we'll need a lock and a transaction to tie everything together.
-            // TODO(leif): if we can't do something below in a multi-statement transaction, that'll be bad.  Maybe reimplement if that's a problem.
-            try {
-                Lock::DBRead lk(ns.c_str());
-                Client::Transaction txn(DB_SERIALIZABLE);
-                if (upsert) {
-                    // First, check if the collection exists.
-                    Client::Context ctx(ns);
-                    NamespaceDetails *d = nsdetails(ns.c_str());
-                    if (d == NULL) {
-                        // We know we need to do fileops.  We'd normally fail below because we can't
-                        // do fileops in a multi-statement transaction, and with a DBDirectClient it
-                        // seems like that's what we're doing.  Throw immediately to get to the
-                        // catch block, and we'll create the collection down there first.
-                        throw RetryWithWriteLock();
-                    }
-                }
-                bool ok = runWithDirectClient(dbname, cmdObj, x, errmsg, result, y);
-                if (ok) {
-                    txn.commit();
-                }
-                return ok;
+            // Find and modify using a direct client is essentially a multi-statement transaction.
+            // This is the root transaction.
+            Client::Transaction txn(DB_SERIALIZABLE);
+
+            bool ok = runWithDirectClient(dbname, cmdObj, x, errmsg, result, y);
+            if (ok) {
+                txn.commit();
             }
-            catch (RetryWithWriteLock &e) {
-                Lock::DBWrite lk(ns.c_str());
-                Client::Transaction txn(DB_SERIALIZABLE);
-                bool didCreateNS = false;
-                bool ok = false;
-                if (upsert) {
-                    Client::Context ctx(ns);
-                    NamespaceDetails *d = nsdetails(ns.c_str());
-                    if (d == NULL) {
-                        // If the collection doesn't exist, we need to create it here.  The
-                        // DBDirectClient can't create it as a side effect because it looks like a
-                        // multi-statement transaction, and those can't do fileops.  We also need to
-                        // undo it in the case of an abort or other failure.
-                        NamespaceDetails *d = getAndMaybeCreateNS(ns.c_str(), true);
-                        verify(d != NULL);
-                        didCreateNS = true;
-                    }
-                }
-                try {
-                    ok = runWithDirectClient(dbname, cmdObj, x, errmsg, result, y);
-                }
-                catch (DBException &e) {
-                    if (didCreateNS) {
-                        string err;
-                        BSONObjBuilder b;
-                        dropCollection(ns, err, b, false);
-                        if (err.size()) {
-                            LOG(0) << "error dropping collection on error path for findAndModify: " << err
-                                   << ": " << b.obj() << endl;
-                        }
-                    }
-                    throw e;
-                }
-                if (ok) {
-                    txn.commit();
-                } else {
-                    if (didCreateNS) {
-                        string err;
-                        BSONObjBuilder b;
-                        dropCollection(ns, err, b, false);
-                        if (err.size()) {
-                            LOG(0) << "error dropping collection on error path for findAndModify: " << err
-                                   << ": " << b.obj() << endl;
-                        }
-                    }
-                }
-                return ok;
-            }
+            return ok;
         }
 
         bool runWithDirectClient(const string &dbname, BSONObj &cmdObj, int x, string &errmsg, BSONObjBuilder &result, bool y) {

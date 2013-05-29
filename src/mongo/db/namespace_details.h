@@ -34,8 +34,8 @@
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/querypattern.h"
 #include "mongo/db/relock.h"
-
 #include "mongo/db/storage/env.h"
+#include "mongo/util/concurrency/simplerwlock.h"
 
 namespace mongo {
 
@@ -533,9 +533,6 @@ namespace mongo {
 
         void init(bool may_create = false);
 
-        // @return true if the ns existed and is now open, false otherwise.
-        bool open_ns(const char *ns);
-
         // @return true if the ns existed and was closed, false otherwise.
         bool close_ns(const char *ns);
 
@@ -559,23 +556,20 @@ namespace mongo {
                 return NULL;
             }
 
-            Namespace n(ns);
-            NamespaceDetailsMap::iterator it = _namespaces.find(n);
-            if (it != _namespaces.end()) {
-                verify(it->second.get() != NULL);
-                return it->second.get();
+            {
+                // Try to find the ns in a shared lock. If it's there, we're done.
+                SimpleRWLock::Shared lk(_openRWLock);
+                NamespaceDetails *d = find_ns(ns);
+                if (d != NULL) {
+                    return d;
+                }
             }
 
-            // The ns doesn't exist, or it's not opened.
-            const bool found = open_ns(ns);
-            if (found) {
-                // The ns existed, and now it's open.
-                it = _namespaces.find(n);
-                verify(it != _namespaces.end());
-                verify(it->second.get() != NULL);
-                return it->second.get();
-            }
-            return NULL;
+            // The ns doesn't exist, or it's not opened. Grab an exclusive lock
+            // and do the open if we still can't find it.
+            SimpleRWLock::Exclusive lk(_openRWLock);
+            NamespaceDetails *d = find_ns(ns);
+            return d != NULL ? d : open_ns(ns);
         }
 
         bool allocated() const { return _nsdb != NULL; }
@@ -590,15 +584,29 @@ namespace mongo {
     private:
         void _init(bool may_create);
 
+        // @return NamespaceDetails object is the ns is currently open, NULL otherwise.
+        // requires: openRWLock is locked, either shared or exclusively.
+        NamespaceDetails *find_ns(const char *ns) {
+            Namespace n(ns);
+            NamespaceDetailsMap::iterator it = _namespaces.find(n);
+            if (it != _namespaces.end()) {
+                verify(it->second.get() != NULL);
+                return it->second.get();
+            }
+            return NULL;
+        }
+
+        // @return NamespaceDetails object if the ns existed and is now open, NULL otherwise.
+        // requires: _openRWLock is locked, exclusively.
+        NamespaceDetails *open_ns(const char *ns);
+
         DB *_nsdb;
         NamespaceDetailsMap _namespaces;
         string _dir;
         string _database;
-        // The openMutex protects the transition of _nsdb from null to non-null. DB locking protects
-        // the contents of _namespaces, and it also protects _nsdb from transitioning from non-null
-        // to null.  This is necessary because we can open in a read lock (we just can't create in a
-        // read lock).
-        SimpleMutex _openMutex;
+        // This rwlock serializes _nsdb/_namespaces opens and lookups in a DBRead lock.
+        // It isn't necessary to hold this rwlock in a a DBWrite lock.
+        SimpleRWLock _openRWLock;
     };
 
     // Defined in database.cpp

@@ -856,48 +856,6 @@ namespace mongo {
         return true;
     }
 
-    static string lockedRunQuery(Message& m, QueryMessage& q, CurOp& curop, Message &result, 
-                                 shared_ptr<ParsedQuery>& pq_shared, ParsedQuery& pq, bool hasRetried) {
-        BSONObj jsobj = q.query;
-        int queryOptions = q.queryOptions;
-        const char *ns = q.ns;
-
-        bool explain = pq.isExplain();
-        BSONObj order = pq.getOrder();
-        BSONObj query = pq.getFilter();
-
-        const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
-        Client::Transaction transaction((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY);    
-        const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
-                
-        replVerifyReadsOk(&pq);
-                
-        if ( pq.hasOption( QueryOption_CursorTailable ) ) {
-            NamespaceDetails *d = nsdetails( ns );
-            if (d != NULL && !(d->isCapped() || str::equals(ns, rsoplog))) {
-                uasserted( 13051, "tailable cursor requested on non-capped, non-oplog collection" );
-            }
-            const BSONObj nat1 = BSON( "$natural" << 1 );
-            if ( order.isEmpty() ) {
-                order = nat1;
-            } else {
-                uassert( 13052, "only {$natural:1} order allowed for tailable cursor", order == nat1 );
-            }
-        }
-            
-        // Run a regular query.
-
-        const bool getCachedExplainPlan = ! hasRetried && explain && ! pq.hasIndexSpecifier();
-        const bool savedCursor = queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query,
-                                                          order, pq_shared, shardingVersionAtStart,
-                                                          getCachedExplainPlan, transaction, result );
-        // Did not save the cursor, so we can commit the transaction now.
-        if (!savedCursor) {
-            transaction.commit();
-        }
-        return curop.debug().exhaust ? ns : "";
-    }
-
     /**
      * Run a query -- includes checking for and running a Command.
      * @return points to ns if exhaust mode. 0=normal mode
@@ -1002,18 +960,43 @@ namespace mongo {
         bool hasRetried = false;
         while ( 1 ) {
             try {
+                const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
+
                 Client::ReadContext ctx(ns);
-                return lockedRunQuery(m, q, curop, result, pq_shared, pq, hasRetried);
+                Client::Transaction transaction((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY);    
+                const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
+                        
+                replVerifyReadsOk(&pq);
+                        
+                if ( pq.hasOption( QueryOption_CursorTailable ) ) {
+                    NamespaceDetails *d = nsdetails( ns );
+                    if (d != NULL && !(d->isCapped() || str::equals(ns, rsoplog))) {
+                        uasserted( 13051, "tailable cursor requested on non-capped, non-oplog collection" );
+                    }
+                    const BSONObj nat1 = BSON( "$natural" << 1 );
+                    if ( order.isEmpty() ) {
+                        order = nat1;
+                    } else {
+                        uassert( 13052, "only {$natural:1} order allowed for tailable cursor", order == nat1 );
+                    }
+                }
+                    
+                // Run a regular query.
+
+                const bool getCachedExplainPlan = ! hasRetried && explain && ! pq.hasIndexSpecifier();
+                const bool savedCursor = queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query,
+                                                                  order, pq_shared, shardingVersionAtStart,
+                                                                  getCachedExplainPlan, transaction, result );
+                // Did not save the cursor, so we can commit the transaction now.
+                if (!savedCursor) {
+                    transaction.commit();
+                }
+                return curop.debug().exhaust ? ns : "";
             }
             catch ( const QueryRetryException & ) {
                 // In some cases the query may be retried if there is an in memory sort size assertion.
                 verify( ! hasRetried );
                 hasRetried = true;
-            }
-            catch (RetryWithWriteLock & ) {
-                log() << "retry " << ns << endl;
-                Client::WriteContext ctx(ns);
-                return lockedRunQuery(m, q, curop, result, pq_shared, pq, hasRetried);
             }
         }
     }

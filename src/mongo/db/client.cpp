@@ -164,17 +164,6 @@ namespace mongo {
         verify( db == 0 || db->isOk() );
         _client->_context = this;
         checkNsAccess( doauth );
-        try {
-            // opens the collection or throws RetryWithWriteLock
-            nsdetails(_ns.c_str());
-        }
-        catch (RetryWithWriteLock &e) {
-            // we need to manually clean up but still re-throw, because we're in the constructor
-            _client->_curOp->recordGlobalTime(_timer.micros());
-            _client->_curOp->leave( this );
-            _client->_context = _oldContext;
-            throw e;
-        }
     }
 
     Client::Context::Context(const string& ns, string path , bool doauth, bool doVersion) :
@@ -186,36 +175,19 @@ namespace mongo {
         _ns( ns ), 
         _db(0)
     {
-        try {
-            _finishInit( doauth );
-        }
-        catch (RetryWithWriteLock &e) {
-            // we need to manually clean up but still re-throw, because we're in the constructor
-            _client->_curOp->recordGlobalTime(_timer.micros());
-            _client->_curOp->leave( this );
-            _client->_context = _oldContext;
-            throw e;
-        }
+        _finishInit( doauth );
     }
 
     /** "read lock, and set my context, all in one operation" 
      *  This handles (if not recursively locked) opening an unopened database.
-     *
-     *  It also handles opening an unopened namespace (ns param). This may
-     *  be the only code path where holding a read lock and trying to open
-     *  an unopened collection will work correctly.
      */
     Client::ReadContext::ReadContext(const string& ns, string path, bool doauth) {
         {
             lk.reset( new Lock::DBRead(ns) );
             Database *db = dbHolder().get(ns, path);
-            if( db ) {
-                try {
-                    c.reset( new Context(path, ns, db, doauth) );
-                    return;
-                } catch (RetryWithWriteLock &e) {
-                    c.reset();
-                }
+            if ( db ) {
+                c.reset( new Context(path, ns, db, doauth) );
+                return;
             }
         }
 
@@ -238,7 +210,7 @@ namespace mongo {
                 c.reset( new Context(ns, path, doauth) );
             }
             else {
-                throw RetryWithWriteLock(str::stream() << "opening database for ns " << ns);
+                uasserted(16801, str::stream() << "can't open a database from a nested read lock " << ns); 
             }
         }
 
@@ -287,17 +259,6 @@ namespace mongo {
         _client->_context = this;
         _client->_curOp->enter( this );
         checkNsAccess( doauth );
-        try {
-            // opens the collection or throws RetryWithWriteLock
-            nsdetails(_ns.c_str());
-        }
-        catch (RetryWithWriteLock &e) {
-            // we need to manually clean up but still re-throw, because we're in the constructor
-            _client->_curOp->recordGlobalTime(_timer.micros());
-            _client->_curOp->leave( this );
-            _client->_context = _oldContext;
-            throw e;
-        }
     }
 
     void Client::Context::_finishInit( bool doauth ) {
@@ -311,8 +272,6 @@ namespace mongo {
         _client->_context = this;
         _client->_curOp->enter( this );
         checkNsAccess( doauth, writeLocked ? 1 : 0 );
-        // opens the collection or throws RetryWithWriteLock
-        nsdetails(_ns.c_str());
     }
 
     void Client::Context::_auth( int lockState ) {

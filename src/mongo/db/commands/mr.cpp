@@ -1171,11 +1171,6 @@ namespace mongo {
                     log() << "mr failed, removing collection" << causedBy(e) << endl;
                     throw e;
                 }
-                catch ( RetryWithWriteLock &e ) {
-                    msgasserted(16795, str::stream() << 
-                                   "Unhandled RetryWithWriteLock excpetion thrown during MapReduceCommand." <<
-                                   "Either a necessary collection was dropped manually, or you hit a bug. ");
-                }
                 catch ( std::exception& e ){
                     log() << "mr failed, removing collection" << causedBy(e) << endl;
                     throw e;
@@ -1206,16 +1201,7 @@ namespace mongo {
             virtual bool canRunInMultiStmtTxn() const { return true; }
             virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings().setBulkFetch(true); }
 
-            bool run(const string& dbname , BSONObj& cmdObj, int k, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-                try {
-                    return _run(dbname, cmdObj, k, errmsg, result, fromRepl);
-                } catch ( RetryWithWriteLock &e ) {
-                    msgasserted(16796, str::stream() << 
-                                   "Unhandled RetryWithWriteLock excpetion thrown during MapReduceFinishCommand." <<
-                                   "Either a necessary collection was dropped manually, or you hit a bug. ");
-                }
-            }
-            bool _run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
+            bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 ShardedConnectionInfo::addHook();
                 // legacy name
                 string shardedOutputCollection = cmdObj["shardedOutputCollection"].valuestrsafe();

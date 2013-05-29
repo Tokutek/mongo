@@ -270,10 +270,4 @@ namespace mongo {
         deleteObjects(ns, BSONObj(), false);
     }
 
-    long long Helpers::runCount(const char *ns, const BSONObj& cmd, string& err, int& errCode ) {
-        Lock::DBRead lk(ns);
-        long long r = mongo::runCount(ns, cmd, err, errCode);
-        return r;
-    }
-
 } // namespace mongo

@@ -28,7 +28,7 @@ namespace mongo {
 
     NamespaceIndex::NamespaceIndex(const string &dir, const string &database) :
         _nsdb(NULL), _namespaces(),
-        _dir(dir), _database(database), _openMutex("nsOpenMutex") {
+        _dir(dir), _database(database), _openRWLock("nsOpenRWLock") {
     }
 
     NamespaceIndex::~NamespaceIndex() {
@@ -51,7 +51,7 @@ namespace mongo {
     void NamespaceIndex::init(bool may_create) {
         Lock::assertAtLeastReadLocked(_database);
         if (!allocated()) {
-            SimpleMutex::scoped_lock lk(_openMutex);
+            SimpleRWLock::Exclusive lk(_openRWLock);
             if (!allocated()) {
                 _init(may_create);
             }
@@ -165,13 +165,12 @@ namespace mongo {
         return 0;
     }
 
-    bool NamespaceIndex::open_ns(const char *ns) {
+    NamespaceDetails *NamespaceIndex::open_ns(const char *ns) {
         init();
         if (!allocated()) {
-            return false;
+            return NULL;
         }
 
-        Namespace n(ns);
         BSONObj serialized;
         BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
@@ -179,20 +178,16 @@ namespace mongo {
         DB_TXN *db_txn = cc().hasTxn() ? cc().txn().db_txn() : NULL;
         int r = _nsdb->getf_set(_nsdb, db_txn, 0, &ndbt, getf_serialized, &serialized);
         if (r == 0) {
-            if (!Lock::isWriteLocked(ns)) {
-                // Something exists in the nsdb for this ns, but we're not write locked.
-                TOKULOG(1) << "Tried to open ns << " << ns << ", but wasn't write locked." << endl;
-                throw RetryWithWriteLock();
-            }
-
+            Namespace n(ns);
+            NamespaceDetailsMap::iterator it = _namespaces.find(n);
             shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized );
-            std::pair<NamespaceDetailsMap::iterator, bool> ret;
-            ret = _namespaces.insert(make_pair(n, details));
-            dassert(ret.second == true);
+            std::pair<NamespaceDetailsMap::iterator, bool> ret = _namespaces.insert(make_pair(n, details));
+            verify(ret.second == true);
+            return details.get();
         } else if (r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);
         }
-        return r == 0;
+        return NULL;
     }
 
     bool NamespaceIndex::close_ns(const char *ns) {
@@ -201,6 +196,11 @@ namespace mongo {
         if (!allocated()) {
             return false;
         }
+
+        // We need to hold a shared lock on the openRWLock because we
+        // may only have a DBRead lock. We don't check for a DBWrite
+        // lock (and possible throw) until we know there's an ns to close.
+        SimpleRWLock::Shared lk(_openRWLock);
 
         // Find and erase the old entry, if it exists.
         Namespace n(ns);

@@ -1003,22 +1003,22 @@ namespace QueryOptimizerTests {
                 Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 string err;
                 int errCode;
-                ASSERT_EQUALS( 0, Helpers::runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
+                ASSERT_EQUALS( 0, runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
                 BSONObj one = BSON( "a" << 1 );
                 BSONObj fourA = BSON( "a" << 4 );
                 BSONObj fourB = BSON( "a" << 4 );
                 insertObject( ns(), one );
-                ASSERT_EQUALS( 0, Helpers::runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
+                ASSERT_EQUALS( 0, runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
                 insertObject( ns(), fourA );
-                ASSERT_EQUALS( 1, Helpers::runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
+                ASSERT_EQUALS( 1, runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
                 insertObject( ns(), fourB );
-                ASSERT_EQUALS( 2, Helpers::runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
-                ASSERT_EQUALS( 3, Helpers::runCount( ns(), BSON( "query" << BSONObj() ), err, errCode ) );
-                ASSERT_EQUALS( 3, Helpers::runCount( ns(), BSON( "query" << BSON( "a" << GT << 0 ) ), err, errCode ) );
+                ASSERT_EQUALS( 2, runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
+                ASSERT_EQUALS( 3, runCount( ns(), BSON( "query" << BSONObj() ), err, errCode ) );
+                ASSERT_EQUALS( 3, runCount( ns(), BSON( "query" << BSON( "a" << GT << 0 ) ), err, errCode ) );
                 // missing ns
-                ASSERT_EQUALS( -1, Helpers::runCount( "unittests.missingNS", BSONObj(), err, errCode ) );
+                ASSERT_EQUALS( -1, runCount( "unittests.missingNS", BSONObj(), err, errCode ) );
                 // impossible match
-                ASSERT_EQUALS( 0, Helpers::runCount( ns(), BSON( "query" << BSON( "a" << GT << 0 << LT << -1 ) ), err, errCode ) );
+                ASSERT_EQUALS( 0, runCount( ns(), BSON( "query" << BSON( "a" << GT << 0 << LT << -1 ) ), err, errCode ) );
             }
         };
 

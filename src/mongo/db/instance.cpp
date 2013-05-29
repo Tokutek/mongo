@@ -535,8 +535,6 @@ namespace mongo {
         bool multi = flags & UpdateOption_Multi;
         bool broadcast = flags & UpdateOption_Broadcast;
 
-        Lock::assertAtLeastReadLocked(ns);
-
         // void ReplSetImpl::relinquish() uses big write lock so 
         // this is thus synchronized given our lock above.
         uassert(10054,  "not master", isMasterNs(ns));
@@ -546,9 +544,7 @@ namespace mongo {
             return;
         }
 
-        Client::Context ctx(ns);
         Client::Transaction transaction(DB_SERIALIZABLE);
-
         UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
         lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
         transaction.commit();
@@ -576,36 +572,13 @@ namespace mongo {
         cc().setTokuCommandSettings(settings);
 
         try {
-            Lock::DBRead lk(ns);
+            Client::ReadContext ctx(ns);
             lockedReceivedUpdate(ns, m, op, toupdate, query, flags);
         }
         catch (RetryWithWriteLock &e) {
-            Lock::DBWrite lk(ns);
+            Client::WriteContext ctx(ns);
             lockedReceivedUpdate(ns, m, op, toupdate, query, flags);
         }
-    }
-
-    static void lockedReceivedDelete(const char *ns, Message &m, const BSONObj &pattern, int flags) {
-        bool justOne = flags & RemoveOption_JustOne;
-        bool broadcast = flags & RemoveOption_Broadcast;
-
-        Lock::assertAtLeastReadLocked(ns);
-
-        // writelock is used to synchronize stepdowns w/ writes
-        uassert(10056, "not master", isMasterNs(ns));
-
-        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-        if (!broadcast && handlePossibleShardedMessage(m, 0)) {
-            return;
-        }
-
-        Client::Context ctx(ns);
-        Client::Transaction transaction(DB_SERIALIZABLE);
-
-        long long n = deleteObjects(ns, pattern, justOne, true);
-        lastError.getSafe()->recordDelete( n );
-
-        transaction.commit();
     }
 
     void receivedDelete(Message& m, CurOp& op) {
@@ -623,14 +596,23 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setTokuCommandSettings(settings);
 
-        try {
-            Lock::DBRead lk(ns);
-            lockedReceivedDelete(ns, m, pattern, flags);
+        Client::ReadContext ctx(ns);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+
+        bool justOne = flags & RemoveOption_JustOne;
+        bool broadcast = flags & RemoveOption_Broadcast;
+
+        // writelock is used to synchronize stepdowns w/ writes
+        uassert(10056, "not master", isMasterNs(ns));
+
+        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+        if (!broadcast && handlePossibleShardedMessage(m, 0)) {
+            return;
         }
-        catch (RetryWithWriteLock &e) {
-            Lock::DBWrite lk(ns);
-            lockedReceivedDelete(ns, m, pattern, flags);
-        }
+
+        long long n = deleteObjects(ns, pattern, justOne, true);
+        lastError.getSafe()->recordDelete( n );
+        transaction.commit();
     }
 
     QueryResult* emptyMoreResult(long long);
@@ -797,8 +779,6 @@ namespace mongo {
     }
 
     static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, bool keepGoing) {
-        Lock::assertAtLeastReadLocked(ns);
-
         // writelock is used to synchronize stepdowns w/ writes
         uassert(10058, "not master", isMasterNs(ns));
 
@@ -806,9 +786,7 @@ namespace mongo {
             return;
         }
 
-        Client::Context ctx(ns);
         Client::Transaction transaction(DB_SERIALIZABLE);
-
         insertObjects(ns, objs, keepGoing, 0, true);
         globalOpCounters.incInsertInWriteLock(objs.size());
         transaction.commit();
@@ -836,11 +814,11 @@ namespace mongo {
         cc().setTokuCommandSettings(settings);
 
         try {
-            Lock::DBRead lk(ns);
+            Client::ReadContext ctx(ns);
             lockedReceivedInsert(ns, m, objs, keepGoing);
         }
         catch (RetryWithWriteLock &e) {
-            Lock::DBWrite lk(ns);
+            Client::WriteContext ctx(ns);
             lockedReceivedInsert(ns, m, objs, keepGoing);
         }
     }
@@ -949,15 +927,7 @@ namespace mongo {
     unsigned long long DBDirectClient::count(const string &ns, const BSONObj& query, int options, int limit, int skip ) {
         string errmsg;
         int errCode;
-        long long res;
-        try {
-            Lock::DBRead lk( ns );
-            res = runCount( ns.c_str() , _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
-        }
-        catch (RetryWithWriteLock &e) {
-            Lock::DBWrite lk( ns);
-            res = runCount( ns.c_str() , _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
-        }
+        long long res = runCount( ns.c_str() , _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
         if ( res == -1 ) {
             // namespace doesn't exist
             return 0;
