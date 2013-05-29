@@ -40,19 +40,18 @@ namespace mongo {
         struct LogOpUpdateDetails* loud
         ) 
     {
-        // if newObj has no _id field, it should inherit the existing value
-        BSONObj newObjWithId = inheritIdField(oldObj, newObj);
+        BSONObj newObjModified = newObj;
+        d->updateObject( pk, oldObj, newObjModified);
         if (loud && loud->logop) {
             OpLogHelpers::logUpdate(
                 loud->ns,
                 pk,
                 oldObj,
-                newObjWithId,
+                newObjModified,
                 loud->fromMigrate,
                 &cc().txn()
                 );
         }
-        d->updateObject( pk, oldObj, newObjWithId );
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }

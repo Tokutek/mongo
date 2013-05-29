@@ -169,8 +169,9 @@ namespace mongo {
             deleteFromIndexes(pk, obj);
         }
 
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
-            NamespaceDetails::updateObject(pk, oldObj, newObj);
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj) {
+            BSONObj newObjWithId = inheritIdField(oldObj, newObj);
+            NamespaceDetails::updateObject(pk, oldObj, newObjWithId);
         }
     };
 
@@ -504,11 +505,12 @@ namespace mongo {
             _lastDeletedPK = BSONObj();
         }
 
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
-            long long diff = newObj.objsize() - oldObj.objsize();
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj) {
+            BSONObj newObjWithId = inheritIdField(oldObj, newObj);
+            long long diff = newObjWithId.objsize() - oldObj.objsize();
             uassert( 10003 , "failing update: objects in a capped ns cannot grow", diff <= 0 );
 
-            NamespaceDetails::updateObject(pk, oldObj, newObj);
+            NamespaceDetails::updateObject(pk, oldObj, newObjWithId);
             if (diff < 0) {
                 _currentSize.addAndFetch(diff);
             }
@@ -924,7 +926,7 @@ namespace mongo {
         return contains;
     }
 
-    void NamespaceDetails::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj) {
+    void NamespaceDetails::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj) {
         TOKULOG(4) << "NamespaceDetails::updateObject pk "
             << pk << ", old " << oldObj << ", new " << newObj << endl;
 
