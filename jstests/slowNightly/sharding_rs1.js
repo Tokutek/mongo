@@ -1,7 +1,5 @@
 // tests sharding with replica sets
 
-assert(false, "this test fails, probably because splitVector is not accurate");
-
 s = new ShardingTest( "rs1" , 3 /* numShards */, 1 /* verboseLevel */, 2 /* numMongos */, { rs : true , chunksize : 1 } )
 
 s.adminCommand( { enablesharding : "test" } );

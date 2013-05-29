@@ -1,7 +1,5 @@
 // sharding_balance1.js
 
-assert(false, "this test fails, probably because splitVector is not accurate");
-
 s = new ShardingTest( "sharding_balance_randomorder1" , 2 , 2 , 1 , { chunksize : 1 } )
 
 s.adminCommand( { enablesharding : "test" } );

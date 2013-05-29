@@ -1,7 +1,5 @@
 // multcollections.js
 
-assert(false, "this test takes way too long to fail, probably because splitVector is not accurate");
-
 s = new ShardingTest( "multcollections" , 2 , 1 , 1 , { chunksize : 1 }  );
 
 s.adminCommand( { enablesharding : "test" } );
