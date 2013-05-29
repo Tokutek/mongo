@@ -106,7 +106,7 @@ env.StaticLibrary("coredb", [
         "client/authentication_table_server.cpp",
         "client/parallel.cpp",
         "db/client_transaction.cpp",
-        "db/toku_command_settings.cpp",
+        "db/opsettings.cpp",
         "db/commands.cpp",
         "db/commands/hashcmd.cpp",
         "db/commands/isself.cpp",

@@ -21,7 +21,7 @@
 
 #include "jsobj.h"
 #include "../util/mongoutils/str.h"
-#include "mongo/db/toku_command_settings.h"
+#include "mongo/db/opsettings.h"
 
 namespace mongo {
 
@@ -79,8 +79,8 @@ namespace mongo {
         /** @return true iff this command can run in a multi statement transaction */
         virtual bool canRunInMultiStmtTxn() const = 0;
 
-        virtual TokuCommandSettings getTokuCommandSettings() const {
-            TokuCommandSettings settings;
+        virtual OpSettings getOpSettings() const {
+            OpSettings settings;
             settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
             return settings;
         }
@@ -178,7 +178,7 @@ namespace mongo {
         virtual bool requiresSync() const { return true; }
         virtual bool needsTxn() const { return true; }
         virtual int txnFlags() const { return DB_SERIALIZABLE; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
         // These require some thought
         virtual bool logTheOp() = 0;
@@ -195,7 +195,7 @@ namespace mongo {
         virtual bool needsTxn() const { return true; }
         virtual int txnFlags() const { return DB_SERIALIZABLE; }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
     };
 
     /** A command that only reads data out of a Toku dictionary. */
@@ -208,7 +208,7 @@ namespace mongo {
         virtual bool needsTxn() const { return true; }
         virtual int txnFlags() const { return DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY; }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings().setBulkFetch(true); }
+        virtual OpSettings getOpSettings() const { return OpSettings().setBulkFetch(true); }
     };
 
     /** A command that doesn't read or write anything from Toku dictionaries, and just looks at some memory (like engine status) */
@@ -222,7 +222,7 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
     };
 
     /** deprecated in tokuds */
@@ -258,7 +258,7 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return false; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
         virtual void help( stringstream& help ) const;
         CmdShutdown() : Command("shutdown") {}
         bool run(const string& dbname, BSONObj& cmdObj, int options, string& errmsg, BSONObjBuilder& result, bool fromRepl);

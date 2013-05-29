@@ -345,9 +345,9 @@ namespace mongo {
             c.getAuthenticationInfo()->startRequest();
         }
 
-        // initialize the default TokuCommandSettings, 
-        TokuCommandSettings settings;
-        c.setTokuCommandSettings(settings);
+        // initialize the default OpSettings, 
+        OpSettings settings;
+        c.setOpSettings(settings);
         
         auto_ptr<CurOp> nestedOp;
         CurOp* currentOpP = c.curop();
@@ -567,9 +567,9 @@ namespace mongo {
         op.debug().query = query;
         op.setQuery(query);
 
-        TokuCommandSettings settings;
+        OpSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
-        cc().setTokuCommandSettings(settings);
+        cc().setOpSettings(settings);
 
         try {
             Client::ReadContext ctx(ns);
@@ -592,9 +592,9 @@ namespace mongo {
         op.debug().query = pattern;
         op.setQuery(pattern);
 
-        TokuCommandSettings settings;
+        OpSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
-        cc().setTokuCommandSettings(settings);
+        cc().setOpSettings(settings);
 
         Client::ReadContext ctx(ns);
         Client::Transaction transaction(DB_SERIALIZABLE);
@@ -809,9 +809,9 @@ namespace mongo {
 
         const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
 
-        TokuCommandSettings settings;
+        OpSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
-        cc().setTokuCommandSettings(settings);
+        cc().setOpSettings(settings);
 
         try {
             Client::ReadContext ctx(ns);

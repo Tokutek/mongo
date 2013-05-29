@@ -18,39 +18,39 @@
 
 #include "pch.h"
 
-#include "mongo/db/toku_command_settings.h"
+#include "mongo/db/opsettings.h"
 
 namespace mongo {
 
-    TokuCommandSettings::TokuCommandSettings()
+    OpSettings::OpSettings()
         : _queryCursorMode(DEFAULT_LOCK_CURSOR),
           _shouldBulkFetch(false),
           _shouldAppendPKForCapped(false)
     {}
 
-    TokuCommandSettings& TokuCommandSettings::setQueryCursorMode(QueryCursorMode mode) {
+    OpSettings& OpSettings::setQueryCursorMode(QueryCursorMode mode) {
         _queryCursorMode = mode;
         return *this;
     }
 
-    QueryCursorMode TokuCommandSettings::getQueryCursorMode() {
+    QueryCursorMode OpSettings::getQueryCursorMode() {
         return _queryCursorMode;
     }
 
-    bool TokuCommandSettings::shouldBulkFetch() {
+    bool OpSettings::shouldBulkFetch() {
         return _shouldBulkFetch;
     }
 
-    TokuCommandSettings& TokuCommandSettings::setBulkFetch(bool val) {
+    OpSettings& OpSettings::setBulkFetch(bool val) {
         _shouldBulkFetch = val;
         return *this;
     }
 
-    bool TokuCommandSettings::shouldCappedAppendPK() {
+    bool OpSettings::shouldCappedAppendPK() {
         return _shouldAppendPKForCapped;
     }
 
-    TokuCommandSettings& TokuCommandSettings::setCappedAppendPK(bool val) {
+    OpSettings& OpSettings::setCappedAppendPK(bool val) {
         _shouldAppendPKForCapped = val;
         return *this;
     }

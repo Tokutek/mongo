@@ -20,7 +20,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/namespace_details.h"
-#include "mongo/db/toku_command_settings.h"
+#include "mongo/db/opsettings.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
@@ -84,7 +84,7 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
 
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             string ns = dbname + "." + cmdObj.firstElement().valuestrsafe();

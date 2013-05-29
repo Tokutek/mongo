@@ -182,7 +182,7 @@ namespace mongo {
     }
 
     static int idx_cursor_flags() {
-        QueryCursorMode mode = cc().tokuCommandSettings().getQueryCursorMode();
+        QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
         switch ( mode ) {
             // All locks are grabbed up front, during initializeDBC().
             // These flags determine the type of lock. Serializable
@@ -373,7 +373,7 @@ namespace mongo {
     }
 
     int IndexCursor::getf_fetch_count() {
-        bool shouldBulkFetch = cc().tokuCommandSettings().shouldBulkFetch();
+        bool shouldBulkFetch = cc().opSettings().shouldBulkFetch();
         if ( shouldBulkFetch ) {
             // Read-only cursor may bulk fetch rows into a buffer, for speed.
             // The number of rows fetched is proportional to the number of
@@ -699,7 +699,7 @@ again:      while ( !allInclusive && ok() ) {
                 }
             }
         }
-        bool shouldAppendPK = _d->isCapped() && cc().tokuCommandSettings().shouldCappedAppendPK();
+        bool shouldAppendPK = _d->isCapped() && cc().opSettings().shouldCappedAppendPK();
         if (shouldAppendPK) {
             BSONObjBuilder b;
             b.appendElements(_currObj);

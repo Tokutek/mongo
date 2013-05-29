@@ -102,11 +102,11 @@ namespace mongo {
             uassert(16784, "oplog cursor reading data that is too old", !client_cursor->lastOpForSlaveTooOld());
 
             int queryOptions = client_cursor->queryOptions();
-            TokuCommandSettings settings;
+            OpSettings settings;
             settings.setBulkFetch(true);
             settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
             settings.setCappedAppendPK(queryOptions & QueryOption_AddHiddenPK);
-            cc().setTokuCommandSettings(settings);
+            cc().setOpSettings(settings);
 
             verify(client_cursor->transactions.get() != NULL);
             Client::WithTxnStack wts(client_cursor->transactions);
@@ -800,10 +800,10 @@ namespace mongo {
 
         bool found = false;
         {
-            TokuCommandSettings settings;
+            OpSettings settings;
             settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
             settings.setCappedAppendPK(pq.hasOption(QueryOption_AddHiddenPK));
-            cc().setTokuCommandSettings(settings);
+            cc().setOpSettings(settings);
             Client::ReadContext ctx(ns);
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             replVerifyReadsOk(&pq);
@@ -951,11 +951,11 @@ namespace mongo {
         // Tailable cursors need to read newly written entries from the tail
         // of the collection. They manually arbitrate with the collection over
         // what data is readable and when, so we choose read uncommited isolation.
-        TokuCommandSettings settings;
+        OpSettings settings;
         settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
         settings.setBulkFetch(true);
         settings.setCappedAppendPK(pq.hasOption(QueryOption_AddHiddenPK));
-        cc().setTokuCommandSettings(settings);
+        cc().setOpSettings(settings);
 
         bool hasRetried = false;
         while ( 1 ) {

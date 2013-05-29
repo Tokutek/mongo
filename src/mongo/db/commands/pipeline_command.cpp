@@ -43,7 +43,7 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
         virtual bool slaveOk() const;
         virtual void help(stringstream &help) const;
 

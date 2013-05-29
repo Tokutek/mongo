@@ -399,7 +399,7 @@ namespace mongo {
         virtual bool needsTxn() const { return true; }
         virtual int txnFlags() const { return DB_SERIALIZABLE; }
         virtual bool canRunInMultiStmtTxn() const { return false; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             BSONElement e = cmdObj.firstElement();
             result.append("was", cc().database()->profile);
@@ -682,7 +682,7 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return false; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
         virtual void help( stringstream& help ) const {
             help << "performs a checkpoint of all TokuDB dictionaries." << endl;
         }
@@ -1017,7 +1017,7 @@ namespace mongo {
         virtual bool needsTxn() const { return true; }
         virtual int txnFlags() const { return DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT; }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
 
         virtual void help( stringstream& help ) const { help << "list databases on this server"; }
         CmdListDatabases() : Command("listDatabases" , true ) {}
@@ -1716,8 +1716,8 @@ namespace mongo {
         }
 
         bool retval = false;
-        TokuCommandSettings settings = c->getTokuCommandSettings();
-        cc().setTokuCommandSettings(settings);
+        OpSettings settings = c->getOpSettings();
+        cc().setOpSettings(settings);
 
         if ( c->locktype() == Command::NONE ) {
             // not sure of the semantics of running this without having a lock held

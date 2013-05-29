@@ -50,7 +50,7 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
         virtual bool adminOnly() const { return true; }
         virtual void help(stringstream& h) const { h << url(); }
         virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {

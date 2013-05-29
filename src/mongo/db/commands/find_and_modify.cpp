@@ -46,7 +46,7 @@ namespace mongo {
         virtual bool requiresSync() const { return true; }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return DB_SERIALIZABLE; }
-        virtual TokuCommandSettings getTokuCommandSettings() const { return TokuCommandSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
         
         /* this will eventually replace run,  once sort is handled */
         bool runNoDirectClient( const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {

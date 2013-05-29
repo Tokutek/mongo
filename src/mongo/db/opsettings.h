@@ -26,19 +26,19 @@ namespace mongo {
         WRITE_LOCK_CURSOR // cursors are serializable and grab write locks (DB_RMW)
     } QueryCursorMode;
 
-    class TokuCommandSettings {
+    class OpSettings {
         QueryCursorMode _queryCursorMode; // default DEFAULT_LOCK_CURSOR
         bool _shouldBulkFetch; // default false
         bool _shouldAppendPKForCapped; // if true, cursor->current should append the pk before returning the row
       public:
-        TokuCommandSettings();
+        OpSettings();
 
-        TokuCommandSettings& setQueryCursorMode(QueryCursorMode mode);
+        OpSettings& setQueryCursorMode(QueryCursorMode mode);
         QueryCursorMode getQueryCursorMode();
         bool shouldBulkFetch();
-        TokuCommandSettings& setBulkFetch(bool val);
+        OpSettings& setBulkFetch(bool val);
         bool shouldCappedAppendPK();
-        TokuCommandSettings& setCappedAppendPK(bool val);
+        OpSettings& setCappedAppendPK(bool val);
     };
 
 } // namespace mongo

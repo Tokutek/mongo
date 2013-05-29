@@ -42,7 +42,7 @@
 #include "mongo/db/txn_context.h"
 //#include "mongo/db/storage/txn.h"
 #include "mongo/util/paths.h"
-#include "mongo/db/toku_command_settings.h"
+#include "mongo/db/opsettings.h"
 
 namespace mongo {
 
@@ -236,12 +236,12 @@ namespace mongo {
             _authConn = conn;
         }
 
-        TokuCommandSettings tokuCommandSettings() const {
-            return _tokuCommandSettings;
+        OpSettings opSettings() const {
+            return _opSettings;
         }
 
-        void setTokuCommandSettings (const TokuCommandSettings& settings) {
-            _tokuCommandSettings = settings;
+        void setOpSettings (const OpSettings& settings) {
+            _opSettings = settings;
         }
 
         /**
@@ -282,7 +282,7 @@ namespace mongo {
         BSONObj _handshake;
         BSONObj _remoteId;
         AbstractMessagingPort * const _mp;
-        TokuCommandSettings _tokuCommandSettings;
+        OpSettings _opSettings;
 
         // for CmdCopyDb and CmdCopyDbGetNonce
         shared_ptr< DBClientConnection > _authConn;

@@ -49,10 +49,10 @@ namespace mongo {
             limit  = -limit;
         }
 
-        TokuCommandSettings settings;
+        OpSettings settings;
         settings.setBulkFetch(true);
         settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
-        cc().setTokuCommandSettings(settings);
+        cc().setOpSettings(settings);
 
         Lock::assertAtLeastReadLocked(ns);
         Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
