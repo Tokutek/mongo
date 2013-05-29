@@ -17,7 +17,7 @@
 #include "mongo/pch.h"
 
 #include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_manager_global.h"
 #include "mongo/base/init.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/cursor.h"
@@ -2164,7 +2164,7 @@ namespace mongo {
     }
 
     void SystemUsersCollection::insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
-        uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), obj));
+        uassertStatusOK(getGlobalAuthorizationManager()->checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), obj));
         IndexedCollection::insertObject(obj, flags, indexBitChanged);
     }
     
@@ -2172,7 +2172,7 @@ namespace mongo {
                       const bool fromMigrate,
                       uint64_t flags, bool* indexBitChanged)
     {
-        uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), newObj));
+        uassertStatusOK(getGlobalAuthorizationManager()->checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), newObj));
         IndexedCollection::updateObject(pk, oldObj, newObj, fromMigrate, flags, indexBitChanged);
     }
 

@@ -51,6 +51,7 @@ target_link_libraries(authcore LINK_PUBLIC
 add_library(authservercommon STATIC
   auth_session_external_state_server_common
   auth_server_parameters
+  authorization_manager_global
   security_key
   )
 add_dependencies(authservercommon generate_error_codes generate_action_types)

@@ -21,13 +21,18 @@
 
 #include <boost/thread/thread.hpp>
 
+#include "mongo/base/init.h"
 #include "mongo/base/initializer.h"
+#include "mongo/base/status.h"
+#include "mongo/client/connpool.h"
+#include "mongo/db/auth/auth_global_external_state_s.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_manager_global.h"
+#include "mongo/db/dbwebserver.h"
 #include "mongo/db/initialize_server_global_state.h"
 #include "../util/startup_test.h"
-#include "../client/connpool.h"
 #include "../util/stringutils.h"
 #include "../util/version.h"
-#include "../db/dbwebserver.h"
 
 #include "mongo/db/lasterror.h"
 #include "mongo/plugins/loader.h"
@@ -553,6 +558,11 @@ namespace mongo {
     }
 }  // namespace mongo
 #endif
+
+MONGO_INITIALIZER(CreateAuthorizationManager)(InitializerContext* context) {
+    setGlobalAuthorizationManager(new AuthorizationManager(new AuthGlobalExternalStateMongos()));
+    return Status::OK();
+}
 
 int main(int argc, char* argv[], char** envp) {
     static StaticObserver staticObserver;
