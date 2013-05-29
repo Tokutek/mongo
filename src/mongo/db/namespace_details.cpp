@@ -170,8 +170,8 @@ namespace mongo {
         }
 
         void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj) {
-            BSONObj newObjWithId = inheritIdField(oldObj, newObj);
-            NamespaceDetails::updateObject(pk, oldObj, newObjWithId);
+            newObj = inheritIdField(oldObj, newObj);
+            NamespaceDetails::updateObject(pk, oldObj, newObj);
         }
     };
 
@@ -506,11 +506,11 @@ namespace mongo {
         }
 
         void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj) {
-            BSONObj newObjWithId = inheritIdField(oldObj, newObj);
-            long long diff = newObjWithId.objsize() - oldObj.objsize();
+            newObj = inheritIdField(oldObj, newObj);
+            long long diff = newObj.objsize() - oldObj.objsize();
             uassert( 10003 , "failing update: objects in a capped ns cannot grow", diff <= 0 );
 
-            NamespaceDetails::updateObject(pk, oldObj, newObjWithId);
+            NamespaceDetails::updateObject(pk, oldObj, newObj);
             if (diff < 0) {
                 _currentSize.addAndFetch(diff);
             }
