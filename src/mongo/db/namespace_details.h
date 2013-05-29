@@ -568,15 +568,19 @@ namespace mongo {
                 return NULL;
             }
 
-            NamespaceDetails *d = find_ns(ns);
-            if (d != NULL) {
-                return d;
+            {
+                // Try to find the ns in a shared lock. If it's there, we're done.
+                SimpleRWLock::Shared lk(_openRWLock);
+                NamespaceDetails *d = find_ns_locked(ns);
+                if (d != NULL) {
+                    return d;
+                }
             }
 
             // The ns doesn't exist, or it's not opened. Grab an exclusive lock
             // and do the open if we still can't find it.
             SimpleRWLock::Exclusive lk(_openRWLock);
-            d = find_ns_locked(ns);
+            NamespaceDetails *d = find_ns_locked(ns);
             return d != NULL ? d : open_ns(ns);
         }
 
