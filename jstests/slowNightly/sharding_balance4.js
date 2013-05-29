@@ -1,5 +1,7 @@
 // sharding_balance4.js
 
+assert(false, "this test hangs");
+
 // check that doing updates done during a migrate all go to the right place
 
 s = new ShardingTest( "slow_sharding_balance4" , 2 , 1 , 1 , { chunksize : 1 } )
