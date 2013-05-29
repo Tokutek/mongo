@@ -373,7 +373,7 @@ namespace mongo {
     }
 
     int IndexCursor::getf_fetch_count() {
-        bool shouldBulkFetch = cc().tokuCommandSettings().shouldBulkFetch() && !tailable();
+        bool shouldBulkFetch = cc().tokuCommandSettings().shouldBulkFetch();
         if ( shouldBulkFetch ) {
             // Read-only cursor may bulk fetch rows into a buffer, for speed.
             // The number of rows fetched is proportional to the number of
