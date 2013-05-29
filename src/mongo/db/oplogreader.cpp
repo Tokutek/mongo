@@ -192,4 +192,16 @@ namespace mongo {
         query.append("_id", q.done());
         tailingQuery(ns, query.done(), fields);
     }
+
+    shared_ptr<DBClientCursor> OplogReader::getRollbackCursor(GTID lastGTID) {
+        shared_ptr<DBClientCursor> retCursor;
+        BSONObjBuilder q;
+        addGTIDToBSON("$lte", lastGTID, q);
+        BSONObjBuilder query;
+        query.append("_id", q.done());
+        retCursor.reset(
+            _conn->query(rsoplog, Query(query.done()).sort(reverseNaturalObj), 0, 0, NULL, QueryOption_SlaveOk).release()
+            );
+        return retCursor;
+    }
 }

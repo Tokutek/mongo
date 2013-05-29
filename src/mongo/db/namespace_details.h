@@ -74,6 +74,10 @@ namespace mongo {
     // (Arguments should include db name)
     void renameNamespace( const char *from, const char *to, bool stayTemp);
 
+    // for updates. Need to expose this to update.cpp so we can write correct
+    // data to oplog
+    BSONObj inheritIdField(const BSONObj &oldObj, const BSONObj &newObj);
+
     // struct for storing the accumulated states of a NamespaceDetails
     // all values, except for nIndexes, are estiamtes
     // note that the id index is used as the main store.

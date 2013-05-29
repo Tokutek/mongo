@@ -22,6 +22,7 @@
 #include "mongo/db/repl/rs_sync.h"
 
 namespace mongo {
+    void incRBID();
     BackgroundSync* BackgroundSync::s_instance = 0;
     boost::mutex BackgroundSync::s_mutex;
 
@@ -60,7 +61,7 @@ namespace mongo {
 
     void BackgroundSync::shutdown() {
         // first get producer thread to exit
-        log() << "trying to shutdown bgsync" << endl;
+        log() << "trying to shutdown bgsync" << rsLog;
         {
             boost::unique_lock<boost::mutex> lock(_mutex);
             _opSyncShouldExit = true;
@@ -71,10 +72,10 @@ namespace mongo {
         // just sleep for periods of one second
         // until we see that we are no longer running 
         // the opSync thread
-        log() << "waiting for opSync thread to end" << endl;
+        log() << "waiting for opSync thread to end" << rsLog;
         while (_opSyncInProgress) {
             sleepsecs(1);
-            log() << "still waiting for opSync thread to end... " << endl;
+            log() << "still waiting for opSync thread to end... " << rsLog;
         }
 
         // at this point, the opSync thread should be done
@@ -87,12 +88,12 @@ namespace mongo {
             _queueCond.notify_all();
         }
         // same reasoning as with _opSyncInProgress above
-        log() << "waiting for applier thread to end" << endl;
+        log() << "waiting for applier thread to end" << rsLog;
         while (_applierInProgress) {
             sleepsecs(1);
-            log() << "still waiting for applier thread to end..." << endl;
+            log() << "still waiting for applier thread to end..." << rsLog;
         }
-        log() << "shutdown of bgsync complete" << endl;
+        log() << "shutdown of bgsync complete" << rsLog;
     }
 
     void BackgroundSync::applierThread() {
@@ -163,42 +164,42 @@ namespace mongo {
         uint32_t timeToSleep = 0;
 
         while (!_opSyncShouldExit) {
-            if (timeToSleep) {
+            try {
+                if (timeToSleep) {
+                    {
+                        boost::unique_lock<boost::mutex> lck(_mutex);
+                        _opSyncRunning = false;
+                        // notify other threads that we are not running
+                        _opSyncRunningCondVar.notify_all();
+                    }
+                    for (uint32_t i = 0; i < timeToSleep; i++) {
+                        sleepsecs(1);
+                        // get out if we need to
+                        if (_opSyncShouldExit) { break; }
+                    }
+                    timeToSleep = 0;
+                }
+                // get out if we need to
+                if (_opSyncShouldExit) { break; }
+
                 {
                     boost::unique_lock<boost::mutex> lck(_mutex);
                     _opSyncRunning = false;
-                    // notify other threads that we are not running
+
+                    while (!_opSyncShouldRun && !_opSyncShouldExit) {
+                        // notify other threads that we are not running
+                        _opSyncRunningCondVar.notify_all();
+                        // wait for permission that we can run
+                        _opSyncCanRunCondVar.wait(lck);
+                    }
+
+                    // notify other threads that we are running
                     _opSyncRunningCondVar.notify_all();
+                    _opSyncRunning = true;
                 }
-                for (uint32_t i = 0; i < timeToSleep; i++) {
-                    sleepsecs(1);
-                    // get out if we need to
-                    if (_opSyncShouldExit) { break; }
-                }
-                timeToSleep = 0;
-            }
-            // get out if we need to
-            if (_opSyncShouldExit) { break; }
+                // get out if we need to
+                if (_opSyncShouldExit) { break; }
 
-            {
-                boost::unique_lock<boost::mutex> lck(_mutex);
-                _opSyncRunning = false;
-
-                while (!_opSyncShouldRun && !_opSyncShouldExit) {
-                    // notify other threads that we are not running
-                    _opSyncRunningCondVar.notify_all();
-                    // wait for permission that we can run
-                    _opSyncCanRunCondVar.wait(lck);
-                }
-
-                // notify other threads that we are running
-                _opSyncRunningCondVar.notify_all();
-                _opSyncRunning = true;
-            }
-            // get out if we need to
-            if (_opSyncShouldExit) { break; }
-
-            try {
                 MemberState state = theReplSet->state();
                 if (state.fatal() || state.startup()) {
                     timeToSleep = 5;
@@ -264,8 +265,6 @@ namespace mongo {
             }
         }
 
-        // this oplog reader does not do a handshake because we don't want the server it's syncing
-        // from to track how far it has synced
         OplogReader r(true /* doHandshake */);
 
         // find a target to sync from the last op time written
@@ -289,11 +288,19 @@ namespace mongo {
             return 0;
         }
 
-        if (isRollbackRequired(r)) {
-            // for now, sleep 5 seconds and try again.
-            // If we are not fatal, then we will keep trying to sync
-            // from another machine
-            return 5;
+        try {
+            // this method may actually run rollback, yes, the name is bad
+            if (isRollbackRequired(r)) {
+                // sleep 2 seconds and try again. (The 2 is arbitrary).
+                // If we are not fatal, then we will keep trying to sync
+                // from another machine
+                return 2;
+            }
+        }
+        catch (RollbackOplogException& re){
+            // we attempted a rollback and failed, we must go fatal.
+            log() << "Caught a RollbackOplogException during rollback, going fatal" << rsLog;
+            theReplSet->fatal();
         }
 
         while (!_opSyncShouldExit) {
@@ -333,6 +340,7 @@ namespace mongo {
                 // This is the operation we have received from the target
                 // that we must put in our oplog with an applied field of false
                 BSONObj o = r.nextSafe().getOwned();
+                LOG(3) << "replicating " << o.toString(false, true) << " from " << _currentSyncTarget->fullName() << endl;
                 uint64_t ts = o["ts"]._numberLong();
 
                 // now that we have the element in o, let's check
@@ -461,6 +469,150 @@ namespace mongo {
         }
     }
 
+    void BackgroundSync::runRollback(OplogReader& r, uint64_t oplogTS) {
+        // starting from ourLast, we need to read the remote oplog
+        // backwards until we find an entry in the remote oplog
+        // that has the same GTID, timestamp, and hash as
+        // what we have in our oplog. If we don't find one that is within
+        // some reasonable timeframe, then we go fatal
+        GTID ourLast = theReplSet->gtidManager->getLiveState();
+        GTID idToRollbackTo;
+        uint64_t rollbackPointTS;
+        uint64_t rollbackPointHash;
+        incRBID();
+        try {
+            shared_ptr<DBClientCursor> rollbackCursor = r.getRollbackCursor(ourLast);
+            while (rollbackCursor->more()) {
+                BSONObj remoteObj = rollbackCursor->next();
+                GTID remoteGTID = getGTIDFromBSON("_id", remoteObj);
+                uint64_t remoteTS = remoteObj["ts"]._numberLong();
+                uint64_t remoteLastHash = remoteObj["h"].numberLong();
+                if (remoteTS + 1800*1000 < oplogTS) {
+                    log() << "Rollback takes us too far back, throwing exception. remoteTS: " << remoteTS << " oplogTS: " << oplogTS << rsLog;
+                    throw RollbackOplogException("replSet rollback too long a time period for a rollback (at least 30 minutes).");
+                    break;
+                }
+                //now try to find an entry in our oplog with that GTID
+                BSONObjBuilder localQuery;
+                BSONObj localObj;
+                addGTIDToBSON("_id", remoteGTID, localQuery);
+                bool foundLocally = false;
+                {
+                    Client::ReadContext ctx(rsoplog);
+                    Client::Transaction transaction(DB_SERIALIZABLE);
+                    foundLocally = Helpers::findOne( rsoplog, localQuery.done(), localObj);
+                }
+                if (foundLocally) {
+                    GTID localGTID = getGTIDFromBSON("_id", localObj);
+                    uint64_t localTS = localObj["ts"]._numberLong();
+                    uint64_t localLastHash = localObj["h"].numberLong();
+                    if (localLastHash == remoteLastHash &&
+                        localTS == remoteTS &&
+                        GTID::cmp(localGTID, remoteGTID) == 0
+                        )
+                    {
+                        idToRollbackTo = localGTID;
+                        rollbackPointTS = localTS;
+                        rollbackPointHash = localLastHash;
+                        log() << "found id to rollback to " << idToRollbackTo << rsLog;
+                        break;
+                    }
+                }
+            }
+            // At this point, either we have found the point to try to rollback to,
+            // or we have determined that we cannot rollback
+            if (idToRollbackTo.isInitial()) {
+                // we cannot rollback
+                throw RollbackOplogException("could not find ID to rollback to");
+            }
+        }
+        catch (DBException& e) {
+            log() << "Caught DBException during rollback " << e.toString() << rsLog;
+            throw RollbackOplogException("DBException while trying to find ID to rollback to: " + e.toString());
+        }
+        catch (std::exception& e2) {
+            log() << "Caught std::exception during rollback " << e2.what() << rsLog;
+            throw RollbackOplogException(str::stream() << "Exception while trying to find ID to rollback to: " << e2.what());
+        }
+
+        // proceed with the rollback to point idToRollbackTo
+        // probably ought to grab a global write lock while doing this
+        // I don't think we want oplog cursors reading from this machine
+        // while we are rolling back. Or at least do something to protect against this
+
+        // first, let's get all the operations that are being applied out of the way,
+        // we don't want to rollback an item in the oplog while simultaneously,
+        // the applier thread is applying it to the oplog
+        {
+            boost::unique_lock<boost::mutex> lock(_mutex);
+            while (_deque.size() > 0) {
+                log() << "waiting for applier to finish work before doing rollback " << rsLog;
+                _queueDone.wait(lock);
+            }
+            verifySettled();
+        }
+
+        // now let's tell the system we are going to rollback, to do so,
+        // abort live multi statement transactions, invalidate cursors, and
+        // change the state to RS_ROLLBACK
+        {
+            rwlock(multiStmtTransactionLock, true);
+            // so we know writes are not simultaneously occurring
+            Lock::GlobalWrite lk;
+            ClientCursor::invalidateAllCursors();
+            Client::abortLiveTransactions();
+            theReplSet->goToRollbackState();
+        }
+
+        try {
+            // now that we are settled, we have to take care of the GTIDManager
+            // and the repl info thread.
+            // We need to reset the state of the GTIDManager to the point
+            // we intend to rollback to, and we need to make sure that the repl info thread
+            // has captured this information.
+            theReplSet->gtidManager->resetAfterInitialSync(
+                idToRollbackTo,
+                rollbackPointTS,
+                rollbackPointHash
+                );
+            // now force an update of the repl info thread
+            theReplSet->forceUpdateReplInfo();
+
+            // at this point, everything should be settled, the applier should
+            // have nothing left (and remain that way, because this is the only
+            // thread that can put work on the applier). Now we can rollback
+            // the data.
+            while (true) {
+                BSONObj o;
+                {
+                    Lock::DBRead lk(rsoplog);
+                    Client::Transaction txn(DB_SERIALIZABLE);
+                    // if there is nothing in the oplog, break
+                    if( !Helpers::getLast(rsoplog, o) ) {
+                        break;
+                    }
+                }
+                GTID lastGTID = getGTIDFromBSON("_id", o);
+                // if we have rolled back enough, break from while loop
+                if (GTID::cmp(lastGTID, idToRollbackTo) <= 0) {
+                    dassert(GTID::cmp(lastGTID, idToRollbackTo) == 0);
+                    break;
+                }
+                rollbackTransactionFromOplog(o);
+            }
+            theReplSet->leaveRollbackState();
+        }
+        catch (DBException& e) {
+            log() << "Caught DBException during rollback " << e.toString() << rsLog;
+            throw RollbackOplogException("DBException while trying to run rollback: " + e.toString());
+        }
+        catch (std::exception& e2) {
+            log() << "Caught std::exception during rollback " << e2.what() << rsLog;
+            throw RollbackOplogException(str::stream() << "Exception while trying to run rollback: " << e2.what());
+        }
+        
+    }
+
     bool BackgroundSync::isRollbackRequired(OplogReader& r) {
         string hn = r.conn()->getServerAddress();
         if (!r.more()) {
@@ -471,24 +623,26 @@ namespace mongo {
             //  - remote oplog is empty for some weird reason
             // in either case, if it (strangely) happens, we'll just return
             // and our caller will simply try again after a short sleep.
-            log() << "replSet error empty query result from " << hn << " oplog" << rsLog;
-            return true;
+            log() << "replSet error empty query result from " << hn << " oplog, attempting rollback" << rsLog;
+             return true;
         }
 
         BSONObj o = r.nextSafe();
         uint64_t ts = o["ts"]._numberLong();
         uint64_t lastHash = o["h"].numberLong();
         GTID gtid = getGTIDFromBSON("_id", o);
-        
-        if( theReplSet->gtidManager->rollbackNeeded(gtid, ts, lastHash)) {
-            log() << "rollback needed! Our GTID" << 
-                theReplSet->gtidManager->getLiveState().toString() << 
-                " remote GTID: " << gtid.toString() << ". Going fatal." << rsLog;
-            theReplSet->goFatal();
-            return true;
+
+        if( !theReplSet->gtidManager->rollbackNeeded(gtid, ts, lastHash)) {
+            log() << "Rollback NOT needed! Our GTID" << gtid << endl;
+            return false;
         }
 
-        return false;
+        log() << "Rollback needed! Our GTID" <<
+            theReplSet->gtidManager->getLiveState().toString() <<
+            " remote GTID: " << gtid.toString() << ". Attempting rollback." << rsLog;
+
+        runRollback(r, ts);
+        return true;
     }
 
     Member* BackgroundSync::getSyncTarget() {
@@ -522,7 +676,7 @@ namespace mongo {
             lastLiveGTID.toString() << " " << 
             lastUnappliedGTID.toString() << " " << 
             minLiveGTID.toString() << " " <<
-            minUnappliedGTID.toString() << endl;
+            minUnappliedGTID.toString() << rsLog;
     }
 
     void BackgroundSync::stopOpSyncThread() {
