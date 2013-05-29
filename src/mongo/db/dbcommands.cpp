@@ -595,37 +595,6 @@ namespace mongo {
 
             result.append( "writeBacksQueued" , ! writeBackManager.queuesEmpty() );
 
-            // TODO: TokuDB durability stats?
-#if 0
-            if( cmdLine.dur ) {
-                result.append("dur", dur::stats.asObj());
-            }
-#endif
-
-            // TODO: TokuDB record stats?
-#if 0
-            {
-                BSONObjBuilder record( result.subobjStart( "recordStats" ) );
-                //Record::appendStats( record );
-
-                set<string> dbs;
-                {
-                    Lock::DBRead read( "local" );
-                    dbHolder().getAllShortNames( dbs );
-                }
-
-                for ( set<string>::iterator i = dbs.begin(); i != dbs.end(); ++i ) {
-                    string db = *i;
-                    Client::ReadContext ctx( db );
-                    BSONObjBuilder temp( record.subobjStart( db ) );
-                    //ctx.ctx().db()->recordStats().record( temp );
-                    temp.done();
-                }
-
-                record.done();
-            }
-#endif
-
             timeBuilder.appendNumber( "after dur" , Listener::getElapsedTimeMillis() - start );
 
             {
@@ -1289,47 +1258,6 @@ namespace mongo {
             return true;
         }
     } cmdDatasize;
-
-#if 0
-    namespace {
-        long long getIndexSizeForCollection(string db, string ns, BSONObjBuilder* details=NULL, int scale = 1 ) {
-            Lock::assertAtLeastReadLocked(ns);
-
-            NamespaceDetails * nsd = nsdetails( ns.c_str() );
-            if ( ! nsd )
-                return 0;
-
-            long long totalSize = 0;
-
-            NamespaceDetails::IndexIterator ii = nsd->ii();
-            while ( ii.more() ) {
-                IndexDetails& d = ii.next();
-                string collNS = d.indexNamespace();
-                NamespaceDetails * mine = nsdetails( collNS.c_str() );
-                long long datasize;
-                if ( ! mine ) {
-                    uint64_t size;
-                    if (!toku::env_get_db_data_size(d, &size)) {
-                        // neither mongo nor toku recognize the index
-                        log() << "error: have index ["  << collNS << "] but no NamespaceDetails" << endl;
-                        continue;
-                    } else {
-                        // mongo didn't recognize the index, but toku did
-                        datasize = size;
-                    }
-                } else {
-                    // valid mongo index, capture its size from the namespace details
-                    datasize = mine->stats.datasize;
-                }
-                totalSize += datasize;
-                if ( details )
-                    details->appendNumber( d.indexName() , datasize / scale );
-            }
-            return totalSize;
-        }
-    }
-#endif
-
 
     class CollectionStats : public QueryCommand {
     public:

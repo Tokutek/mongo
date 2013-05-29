@@ -511,13 +511,6 @@ namespace mongo {
         Database *database = ctx->db();
         verify( database->name == db );
 
-        // TokuDB: We need to watch out for this, too.
-#if 0
-        if( BackgroundOperation::inProgForDb(db) ) {
-            log() << "warning: bg op in prog during close db? " << db << endl;
-        }
-#endif
-
         /* important: kill all open cursors on the database */
         string prefix(db);
         prefix += '.';
@@ -987,7 +980,6 @@ namespace mongo {
                     readlocktry w(20000);
                     if( w.got() ) { 
                         log() << "shutdown: final commit..." << endl;
-                        //getDur().commitNow();
                         break;
                     }
                     if( --n <= 0 ) {
@@ -997,14 +989,10 @@ namespace mongo {
                     log() << "shutdown: waiting for write lock..." << endl;
                 }
             }
-            // TODO: What should tokudb do here?
-            //MemoryMappedFile::flushAll(true);
         }
 
         log() << "shutdown: closing all files..." << endl;
         stringstream ss3;
-        // TODO: What should tokudb do here?
-        //MemoryMappedFile::closeAllFiles( ss3 );
         log() << ss3.str() << endl;
 
         {
@@ -1119,12 +1107,6 @@ namespace mongo {
     void acquirePathLock(bool doingRepair) {
         string name = ( boost::filesystem::path( dbpath ) / "mongod.lock" ).native_file_string();
 
-        bool oldFile = false;
-
-        if ( boost::filesystem::exists( name ) && boost::filesystem::file_size( name ) > 0 ) {
-            oldFile = true;
-        }
-
 #ifdef _WIN32
         lockFileHandle = CreateFileA( name.c_str(), GENERIC_READ | GENERIC_WRITE,
             0 /* do not allow anyone else access */, NULL, 
@@ -1153,85 +1135,6 @@ namespace mongo {
         }
 #endif
 
-        if ( oldFile ) {
-            // we check this here because we want to see if we can get the lock
-            // if we can't, then its probably just another mongod running
-            
-#if 0
-            string errmsg;
-            if (doingRepair && dur::haveJournalFiles()) { // TODO: Get rid of this check for TokuDB - always require the journal
-                errmsg = "************** \n"
-                         "You specified --repair but there are dirty journal files. Please\n"
-                         "restart without --repair to allow the journal files to be replayed.\n"
-                         "If you wish to repair all databases, please shutdown cleanly and\n"
-                         "run with --repair again.\n"
-                         "**************";
-            }
-            else if (cmdLine.dur) {
-                if (!dur::haveJournalFiles(/*anyFiles=*/true)) {
-                    // Passing anyFiles=true as we are trying to protect against starting in an
-                    // unclean state with the journal directory unmounted. If there are any files,
-                    // even prealloc files, then it means that it is mounted so we can continue.
-                    // Previously there was an issue (SERVER-5056) where we would fail to start up
-                    // if killed during prealloc.
-                    
-                    vector<string> dbnames;
-                    getDatabaseNames( dbnames );
-                    
-                    if ( dbnames.size() == 0 ) {
-                        // this means that mongod crashed
-                        // between initial startup and when journaling was initialized
-                        // it is safe to continue
-                    }
-                    else {
-                        errmsg = str::stream()
-                            << "************** \n"
-                            << "old lock file: " << name << ".  probably means unclean shutdown,\n"
-                            << "but there are no journal files to recover.\n"
-                            << "this is likely human error or filesystem corruption.\n"
-                            << "please make sure that your journal directory is mounted.\n"
-                            << "found " << dbnames.size() << " dbs.\n"
-                            << "see: http://dochub.mongodb.org/core/repair for more information\n"
-                            << "*************";
-                    }
-
-
-                }
-            }
-            else {
-                if (!dur::haveJournalFiles() && !doingRepair) {
-                    errmsg = str::stream()
-                             << "************** \n"
-                             << "Unclean shutdown detected.\n"
-                             << "Please visit http://dochub.mongodb.org/core/repair for recovery instructions.\n"
-                             << "*************";
-                }
-            }
-
-            if (!errmsg.empty()) {
-                cout << errmsg << endl;
-#ifdef _WIN32
-                CloseHandle( lockFileHandle );
-#else
-                close ( lockFile );
-#endif
-                lockFile = 0;
-                uassert( 12596 , "old lock file" , 0 );
-            }
-#endif
-        }
-
-        // Not related to lock file, but this is where we handle unclean shutdown
-#if 0
-        if( !cmdLine.dur && dur::haveJournalFiles() ) {
-            cout << "**************" << endl;
-            cout << "Error: journal files are present in journal directory, yet starting without journaling enabled." << endl;
-            cout << "It is recommended that you start with journaling enabled so that recovery may occur." << endl;
-            cout << "**************" << endl;
-            uasserted(13597, "can't start without --journal enabled when journal/ files are present");
-        }
-#endif
-
 #ifdef _WIN32
         uassert( 13625, "Unable to truncate lock file", _chsize(lockFile, 0) == 0);
         writePid( lockFile );
@@ -1244,21 +1147,6 @@ namespace mongo {
 #endif
     }
 #else
-    void acquirePathLock(bool) {
-        // TODO - this is very bad that the code above not running here.
-
-        // Not related to lock file, but this is where we handle unclean shutdown
-#if 0
-        if( !cmdLine.dur && dur::haveJournalFiles() ) {
-            cout << "**************" << endl;
-            cout << "Error: journal files are present in journal directory, yet starting without --journal enabled." << endl;
-            cout << "It is recommended that you start with journaling enabled so that recovery may occur." << endl;
-            cout << "Alternatively (not recommended), you can backup everything, then delete the journal files, and run --repair" << endl;
-            cout << "**************" << endl;
-            uasserted(13618, "can't start without --journal enabled when journal/ files are present");
-        }
-#endif
-    }
 #endif
 
     // ----- BEGIN Diaglog -----

@@ -240,100 +240,6 @@ namespace mongo {
         server->run();
     }
 
-
-#if 0
-    bool doDBUpgrade( const string& dbName , string errmsg , DataFileHeader * h ) {
-        static DBDirectClient db;
-
-        if ( h->version == 4 && h->versionMinor == 4 ) {
-            verify( PDFILE_VERSION == 4 );
-            verify( PDFILE_VERSION_MINOR == 5 );
-
-            list<string> colls = db.getCollectionNames( dbName );
-            for ( list<string>::iterator i=colls.begin(); i!=colls.end(); i++) {
-                string c = *i;
-                log() << "\t upgrading collection:" << c << endl;
-                BSONObj out;
-                bool ok = db.runCommand( dbName , BSON( "reIndex" << c.substr( dbName.size() + 1 ) ) , out );
-                if ( ! ok ) {
-                    errmsg = "reindex failed";
-                    log() << "\t\t reindex failed: " << out << endl;
-                    return false;
-                }
-            }
-
-            h->versionMinor = 5;
-            return true;
-        }
-
-        // do this in the general case
-        return repairDatabase( dbName.c_str(), errmsg );
-    }
-#endif
-
-    // ran at startup.
-    static void repairDatabasesAndCheckVersion() {
-#if 0
-        //        LastError * le = lastError.get( true );
-        Client::GodScope gs;
-        LOG(1) << "enter repairDatabases (to check pdfile version #)" << endl;
-
-        //verify(checkNsFilesOnLoad);
-        checkNsFilesOnLoad = false; // we are mainly just checking the header - don't scan the whole .ns file for every db here.
-
-        Lock::GlobalWrite lk;
-        vector< string > dbNames;
-        getDatabaseNames( dbNames );
-        for ( vector< string >::iterator i = dbNames.begin(); i != dbNames.end(); ++i ) {
-            string dbName = *i;
-            LOG(1) << "\t" << dbName << endl;
-            Client::Context ctx( dbName );
-            MongoDataFile *p = cc().database()->getFile( 0 );
-            DataFileHeader *h = p->getHeader();
-            if ( !h->isCurrentVersion() || forceRepair ) {
-
-                if( h->version <= 0 ) {
-                    uasserted(14026,
-                      str::stream() << "db " << dbName << " appears corrupt pdfile version: " << h->version
-                                    << " info: " << h->versionMinor << ' ' << h->fileLength);
-                }
-
-                log() << "****" << endl;
-                log() << "****" << endl;
-                log() << "need to upgrade database " << dbName << " with pdfile version " << h->version << "." << h->versionMinor << ", "
-                      << "new version: " << PDFILE_VERSION << "." << PDFILE_VERSION_MINOR << endl;
-                if ( shouldRepairDatabases ) {
-                    // QUESTION: Repair even if file format is higher version than code?
-                    log() << "\t starting upgrade" << endl;
-                    string errmsg;
-                    verify( doDBUpgrade( dbName , errmsg , h ) );
-                }
-                else {
-                    log() << "\t Not upgrading, exiting" << endl;
-                    log() << "\t run --upgrade to upgrade dbs, then start again" << endl;
-                    log() << "****" << endl;
-                    dbexit( EXIT_NEED_UPGRADE );
-                    shouldRepairDatabases = 1;
-                    return;
-                }
-            }
-            else {
-                Database::closeDatabase( dbName.c_str(), dbpath );
-            }
-        }
-
-        LOG(1) << "done repairDatabases" << endl;
-
-        if ( shouldRepairDatabases ) {
-            log() << "finished checking dbs" << endl;
-            cc().shutdown();
-            dbexit( EXIT_CLEAN );
-        }
-
-        checkNsFilesOnLoad = true;
-#endif
-    }
-
     void clearTmpFiles() {
         boost::filesystem::path path( dbpath );
         for ( boost::filesystem::directory_iterator i( path );
@@ -385,53 +291,6 @@ namespace mongo {
         txn.commit();
     }
 
-    /**
-     * does background async flushes of mmapped files
-     */
-    class DataFileSync : public BackgroundJob {
-    public:
-        string name() const { return "DataFileSync"; }
-        void run() {
-            // TODO: TokuDB: Is this where we commit a big, minute-long transaction?
-#if 0
-            Client::initThread( name().c_str() );
-            if( cmdLine.syncdelay == 0 )
-                log() << "warning: --syncdelay 0 is not recommended and can have strange performance" << endl;
-            else if( cmdLine.syncdelay == 1 )
-                log() << "--syncdelay 1" << endl;
-            else if( cmdLine.syncdelay != 60 )
-                LOG(1) << "--syncdelay " << cmdLine.syncdelay << endl;
-            int time_flushing = 0;
-            while ( ! inShutdown() ) {
-                _diaglog.flush();
-                if ( cmdLine.syncdelay == 0 ) {
-                    // in case at some point we add an option to change at runtime
-                    sleepsecs(5);
-                    continue;
-                }
-
-                sleepmillis( (long long) std::max(0.0, (cmdLine.syncdelay * 1000) - time_flushing) );
-
-                if ( inShutdown() ) {
-                    // occasional issue trying to flush during shutdown when sleep interrupted
-                    break;
-                }
-
-                Date_t start = jsTime();
-                int numFiles = MemoryMappedFile::flushAll( true );
-                time_flushing = (int) (jsTime() - start);
-
-                globalFlushCounters.flushed(time_flushing);
-
-                if( logLevel >= 1 || time_flushing >= 10000 ) {
-                    log() << "flushing mmaps took " << time_flushing << "ms " << " for " << numFiles << " files" << endl;
-                }
-            }
-#endif
-        }
-
-    } dataFileSync;
-
     const char * jsInterruptCallback() {
         // should be safe to interrupt in js code, even if we have a write lock
         return killCurrentOp.checkForInterruptNoAssert();
@@ -444,8 +303,6 @@ namespace mongo {
     void _initAndListen(int listenPort ) {
 
         Client::initThread("initandlisten");
-
-        //Database::_openAllFiles = false;
 
         Logstream::get().addGlobalTee( new RamLog("global") );
 
@@ -477,13 +334,6 @@ namespace mongo {
             ss << " See http://dochub.mongodb.org/core/startingandstoppingmongo" << endl;
             ss << "*********************************************************************" << endl;
             uassert( 10296 ,  ss.str().c_str(), boost::filesystem::exists( dbpath ) );
-        }
-        {
-#if 0
-            stringstream ss;
-            ss << "repairpath (" << repairpath << ") does not exist";
-            uassert( 12590 ,  ss.str().c_str(), boost::filesystem::exists( repairpath ) );
-#endif
         }
 
         // TODO: Remove the repair parameter
@@ -519,13 +369,6 @@ namespace mongo {
             globalScriptEngine->setCheckInterruptCallback( jsInterruptCallback );
             globalScriptEngine->setGetInterruptSpecCallback( jsGetInterruptSpecCallback );
         }
-
-        repairDatabasesAndCheckVersion();
-
-        /* we didn't want to pre-open all files for the repair check above. for regular
-           operation we do for read/write lock concurrency reasons.
-        */
-        //Database::_openAllFiles = true;
 
         /* this is for security on certain platforms (nonce generation) */
         srand((unsigned) (curTimeMicros() ^ startupSrandTimer.micros()));
@@ -1035,14 +878,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             dbexit( EXIT_BADOPTIONS );
         }
 
-        // needs to be after things like --configsvr parsing, thus here.
-#if 0
-        if( repairpath.empty() )
-            repairpath = dbpath;
-#endif
-
         Module::configAll( params );
-        dataFileSync.go();
 
         if (params.count("command")) {
             vector<string> command = params["command"].as< vector<string> >();

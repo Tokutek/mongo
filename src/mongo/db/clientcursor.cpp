@@ -47,7 +47,6 @@ namespace mongo {
         return false;
     }
 
-
     CCById ClientCursor::clientCursorsById;
     boost::recursive_mutex& ClientCursor::ccmutex( *(new boost::recursive_mutex()) );
     long long ClientCursor::numberTimedOut = 0;
@@ -71,10 +70,6 @@ namespace mongo {
     }
 
     /* ------------------------------------------- */
-
-    /* must call this when a btree node is updated */
-    //void removedKey(const DiskLoc& btreeLoc, int keyPos) {
-    //}
 
     // ns is either a full namespace or "dbname." when invalidating for a whole db
     void ClientCursor::invalidate(const char *ns) {
@@ -114,26 +109,6 @@ namespace mongo {
                     i.advance();
                 }
             }
-
-            /*
-            note : we can't iterate byloc because clientcursors may exist with a loc of null in which case
-                   they are not in the map.  perhaps they should not exist though in the future?  something to
-                   change???
-
-            CCByLoc& bl = db->ccByLoc;
-            for ( CCByLoc::iterator i = bl.begin(); i != bl.end(); ++i ) {
-                ClientCursor *cc = i->second;
-                if ( strncmp(ns, cc->ns.c_str(), len) == 0 ) {
-                    verify( cc->_db == db );
-                    toDelete.push_back(i->second);
-                }
-            }*/
-
-            /*cout << "TEMP after invalidate " << endl;
-            for( auto i = clientCursorsById.begin(); i != clientCursorsById.end(); ++i ) {
-                cout << "  " << i->second->ns << endl;
-            }
-            cout << "TEMP after invalidate done" << endl;*/
         }
     }
 
@@ -228,7 +203,6 @@ namespace mongo {
         }
 
     }
-
 
     ClientCursor::~ClientCursor() {
         if( _pos == -2 ) {
@@ -421,47 +395,6 @@ namespace mongo {
         }
     };
 
-    /** called once a minute from killcursors thread */
-    void sayMemoryStatus() { 
-        // TODO: What should TokuDB do here?
-#if 0
-        static time_t last;
-        static Mem mlast;
-        try {
-            ProcessInfo p;
-            if ( !cmdLine.quiet && p.supported() ) {
-                Mem m;
-                m.res = p.getResidentSize();
-                m.virt = p.getVirtualMemorySize();
-                m.mapped = MemoryMappedFile::totalMappedLength() / (1024 * 1024);
-                time_t now = time(0);
-                if( now - last >= 300 || m.grew(mlast) ) { 
-                    log() << "mem (MB) res:" << m.res << " virt:" << m.virt;
-                    long long totalMapped = m.mapped;
-                    if (cmdLine.dur) {
-                        totalMapped *= 2;
-                        log() << " mapped (incl journal view):" << totalMapped;
-                    }
-                    else {
-                        log() << " mapped:" << totalMapped;
-                    }
-                    log() << " connections:" << connTicketHolder.used();
-                    if (theReplSet) {
-                        log() << " replication threads:" << 
-                            ReplSetImpl::replWriterThreadCount + 
-                            ReplSetImpl::replPrefetcherThreadCount;
-                    }
-                    last = now;
-                    mlast = m;
-                }
-            }
-        }
-        catch(const std::exception&) {
-            log() << "ProcessInfo exception" << endl;
-        }
-#endif
-    }
-
     /** thread for timing out old cursors */
     void ClientCursorMonitor::run() {
         Client::initThread("clientcursormon");
@@ -473,7 +406,7 @@ namespace mongo {
             ClientCursor::idleTimeReport( t.millisReset() );
             sleepsecs(Secs);
             if( ++n % (60/4) == 0 /*once a minute*/ ) { 
-                sayMemoryStatus();
+                // Used to print memory status here
             }
         }
         client.shutdown();
@@ -518,36 +451,6 @@ namespace mongo {
         return found;
 
     }
-
-#if 0
-    ClientCursor::YieldLock::YieldLock( ptr<ClientCursor> cc )
-        : _canYield(cc->_c->supportYields()) {
-     
-        if ( _canYield ) {
-            cc->prepareToYield( _data );
-            _unlock.reset(new dbtempreleasecond());
-        }
-
-    }
-    
-    ClientCursor::YieldLock::~YieldLock() {
-        if ( _unlock ) {
-            warning() << "ClientCursor::YieldLock not closed properly" << endl;
-            relock();
-        }
-    }
-    
-    bool ClientCursor::YieldLock::stillOk() {
-        if ( ! _canYield )
-            return true;
-        relock();
-        return ClientCursor::recoverFromYield( _data );
-    }
-    
-    void ClientCursor::YieldLock::relock() {
-        _unlock.reset();
-    }
-#endif
 
     ClientCursorMonitor clientCursorMonitor;
 
