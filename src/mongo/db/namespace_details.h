@@ -95,7 +95,7 @@ namespace mongo {
     */
     class NamespaceDetails : boost::noncopyable {
     public:
-        enum { NIndexesMax = 64 };
+        static const int NIndexesMax = 64;
 
         // Creates the appropriate NamespaceDetails implementation based on options.
         static shared_ptr<NamespaceDetails> make(const string &ns, const BSONObj &options);
