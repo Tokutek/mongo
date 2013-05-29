@@ -26,8 +26,6 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/update_internal.h"
 #include "mongo/db/oplog_helpers.h"
-#include "mongo/db/db_flags.h"
-
 
 namespace mongo {
 
@@ -97,7 +95,7 @@ namespace mongo {
         checkNoMods( newObj );
         TOKULOG(3) << "insertAndLog for upsert: " << newObj << endl;
 
-        insertOneObject(d, nsdt, newObj, overwrite ? ND_UNIQUE_CHECKS_OFF : 0);
+        insertOneObject(d, nsdt, newObj, overwrite ? NamespaceDetails::NO_UNIQUE_CHECKS : 0);
         if (logop) {
             OpLogHelpers::logInsert(ns, newObj, &cc().txn());
         }
@@ -237,7 +235,7 @@ namespace mongo {
                 checkNoMods( updateobj );
                 debug.upsert = true;
                 BSONObj objModified = updateobj;
-                insertOneObject( d, nsdt, objModified, upsert ? ND_UNIQUE_CHECKS_OFF : 0 );
+                insertOneObject( d, nsdt, objModified, upsert ? NamespaceDetails::NO_UNIQUE_CHECKS : 0 );
                 return UpdateResult( 0 , 0 , 1 , updateobj );
             }
         }

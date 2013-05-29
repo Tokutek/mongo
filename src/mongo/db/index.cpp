@@ -30,7 +30,6 @@
 #include "mongo/db/storage/key.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/scopeguard.h"
-#include "mongo/db/db_flags.h"
 
 namespace mongo {
 
@@ -167,7 +166,7 @@ namespace mongo {
     }
 
     void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, uint64_t flags) {
-        if (unique() && !(flags & ND_UNIQUE_CHECKS_OFF)) {
+        if (unique() && !(flags & NamespaceDetails::NO_UNIQUE_CHECKS)) {
             uniqueCheck(key, pk);
         }
 
@@ -179,7 +178,7 @@ namespace mongo {
         }
 
         // We already did the unique check above. We can just pass flags of zero.
-        const int put_flags = (flags & ND_LOCK_TREE_OFF) ? DB_PRELOCKED_WRITE : 0;
+        const int put_flags = (flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0;
         int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, put_flags);
         if (r != 0) {
             storage::handle_ydb_error(r);

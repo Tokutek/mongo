@@ -29,7 +29,6 @@
 #include "mongo/db/repl.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/oplog_helpers.h"
-#include "mongo/db/db_flags.h"
 
 namespace mongo {
 
@@ -231,7 +230,7 @@ namespace mongo {
                                 }
                             }
                             BSONObj row = rowBuilder.obj();
-                            d->insertObjectIntoCappedWithPK(pk, row, ND_LOCK_TREE_OFF);
+                            d->insertObjectIntoCappedWithPK(pk, row, NamespaceDetails::NO_LOCKTREE);
                         }
                         else {
                             insertObject(to_collection, js, 0, logForRepl);

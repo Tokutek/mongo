@@ -30,7 +30,6 @@
 #include "ops/delete.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/repl/bgsync.h"
-#include "mongo/db/db_flags.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/jsobjmanipulator.h"
 
@@ -95,7 +94,7 @@ namespace mongo {
         b.append("_id", "minLive");
         addGTIDToBSON("GTID", minLiveGTID, b);
         BSONObj bb = b.done();
-        uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
+        uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         replInfoDetails->insertObject(bb, flags);
 
         bufbuilder.reset();
@@ -173,7 +172,7 @@ namespace mongo {
 
     void writeEntryToOplog(BSONObj entry) {
         verify(rsOplogDetails);
-        uint64_t flags = (ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
+        uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         rsOplogDetails->insertObject(entry, flags);
     }
     // assumes oplog is read locked on entry

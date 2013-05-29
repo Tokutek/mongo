@@ -27,7 +27,6 @@
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
-#include "mongo/db/db_flags.h"
 
 namespace mongo {
 

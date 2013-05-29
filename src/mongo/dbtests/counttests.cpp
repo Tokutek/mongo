@@ -25,7 +25,6 @@
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
-#include "mongo/db/db_flags.h"
 
 #include "mongo/dbtests/dbtests.h"
 
@@ -70,7 +69,7 @@ namespace CountTests {
             insert( fromjson( s ) );
         }
         static void insert( const BSONObj &o ) {
-            insertObject( ns(), o, ND_UNIQUE_CHECKS_OFF );
+            insertObject( ns(), o, NamespaceDetails::NO_UNIQUE_CHECKS );
         }
         static BSONObj countCommand( const BSONObj &query ) {
             return BSON( "query" << query );

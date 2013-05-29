@@ -42,7 +42,6 @@
 #include "mongo/platform/atomic_word.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/db/oplog_helpers.h"
-#include "mongo/db/db_flags.h"
 #include "mongo/db/repl/rs_optime.h"
 #include "mongo/db/repl/rs.h"
 
@@ -470,7 +469,7 @@ namespace mongo {
             BSONObj pk;
             getPkForCapped(pk);
 
-            insertObjectIntoCapped(pk, obj, flags | ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF, false);
+            insertObjectIntoCapped(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
             OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, obj, &cc().txn());
 
             // If the collection is gorged, we need to do some trimming work.
@@ -486,7 +485,7 @@ namespace mongo {
             BSONObj pk;
             getPkForCapped(pk);
 
-            insertObjectIntoCapped(pk, obj, flags | ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF, false);
+            insertObjectIntoCapped(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
 
             // If the collection is gorged, we need to do some trimming work.
             noteInsertedObjectIntoCapped(obj, false);
@@ -883,7 +882,7 @@ namespace mongo {
     void NamespaceDetails::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
-        if ((flags & ND_UNIQUE_CHECKS_OFF) && _indexes.size() > 1) {
+        if ((flags & NamespaceDetails::NO_UNIQUE_CHECKS) && _indexes.size() > 1) {
             //wunimplemented("overwrite inserts on secondary keys right now don't work");
             //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
         }
@@ -939,7 +938,7 @@ namespace mongo {
 
             if (i == 0) {
                 // Overwrite oldObj with newObj using the given pk.
-                idx.insertPair(pk, NULL, newObj, ND_UNIQUE_CHECKS_OFF);
+                idx.insertPair(pk, NULL, newObj, NamespaceDetails::NO_UNIQUE_CHECKS);
             } else {
                 // Determine what keys need to be removed/added.
                 BSONObjSet oldKeys;
@@ -962,7 +961,7 @@ namespace mongo {
                     const BSONObj &k = *n;
                     if (idx.clustering()) {
                         // if clustering, overwrite every key with the new data
-                        idx.insertPair(k, &pk, newObj, ND_UNIQUE_CHECKS_OFF);
+                        idx.insertPair(k, &pk, newObj, NamespaceDetails::NO_UNIQUE_CHECKS);
                     }
                     else if (!orderedSetContains(oldKeys, k)) {
                         idx.insertPair(k, &pk, newObj, 0);

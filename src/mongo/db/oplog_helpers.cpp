@@ -23,7 +23,6 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
-#include "mongo/db/db_flags.h"
 #include "mongo/db/repl/rs.h"
 
 
@@ -206,7 +205,7 @@ namespace OpLogHelpers{
         NamespaceDetails* nsd = nsdetails(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         // overwrite set to true because we are running on a secondary
-        insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
+        insertOneObject(nsd, nsdt, row, NamespaceDetails::NO_UNIQUE_CHECKS);
     }
     static void runInsertFromOplog(const char* ns, BSONObj op) {
         BSONObj row = op[KEY_STR_ROW].Obj();
@@ -231,7 +230,7 @@ namespace OpLogHelpers{
                     collNsd->createIndex(row);
                 }
                 // overwrite set to true because we are running on a secondary
-                insertOneObject(nsd, nsdt, row, ND_UNIQUE_CHECKS_OFF);
+                insertOneObject(nsd, nsdt, row, NamespaceDetails::NO_UNIQUE_CHECKS);
             }
         }
         else {
@@ -257,7 +256,7 @@ namespace OpLogHelpers{
         nsd = nsdetails(ns);
         nsdt = &NamespaceDetailsTransient::get(ns);
         // overwrite set to true because we are running on a secondary
-        nsd->insertObjectIntoCappedWithPK(pk, row, ND_UNIQUE_CHECKS_OFF);
+        nsd->insertObjectIntoCappedWithPK(pk, row, NamespaceDetails::NO_UNIQUE_CHECKS);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }

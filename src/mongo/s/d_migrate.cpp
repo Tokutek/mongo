@@ -31,7 +31,6 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/dbhelpers.h"
-#include "mongo/db/db_flags.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/hasher.h"
@@ -428,7 +427,8 @@ namespace mongo {
             BSONObj logObj = b.obj();
 
             Client::ReadContext ctx(MIGRATE_LOG_NS);
-            insertOneObject(nsdetails(MIGRATE_LOG_NS), NULL, logObj, ND_UNIQUE_CHECKS_OFF | ND_LOCK_TREE_OFF);
+            insertOneObject(nsdetails(MIGRATE_LOG_NS), NULL, logObj,
+                            NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         }
 
         /**
