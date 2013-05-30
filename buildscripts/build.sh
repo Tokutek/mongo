@@ -197,6 +197,14 @@ function build_mongodb_src() {
 
         # run the build script
         $mongodbsrc/buildscripts/build.tokukv.sh
+
+        for tarball in $mongodbsrc/tokumx*.tgz
+        do
+            name=$(basename $tarball)
+            cp $tarball $name
+            md5sum $name >$name.md5
+            md5sum --check $name.md5
+        done
     fi
 }
 
