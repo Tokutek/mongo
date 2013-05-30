@@ -1,4 +1,5 @@
 // Copyright 2009.  10gen, Inc.
+// Copyright (C) 2013 Tokutek Inc.
 
 #include "mongo/util/stacktrace.h"
 

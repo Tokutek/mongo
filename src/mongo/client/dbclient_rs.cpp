@@ -1,6 +1,7 @@
 // dbclient.cpp - connect to a Mongo database as a database, from C++
 
 /*    Copyright 2009 10gen Inc.
+ *    Copyright (C) 2013 Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
