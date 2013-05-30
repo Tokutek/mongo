@@ -295,7 +295,7 @@ pushd $builddir
 rootdir=$PWD
 
 # build the fractal tree tarball
-tokufractaltree=tokufractaltreeindex-${ft_index_rev}${suffix}
+tokufractaltree=tokukv-${ft_index_rev}${suffix}
 tokuportability=tokuportability-${ft_index_rev}${suffix}
 tokufractaltreedir=$tokufractaltree-$system-$arch
 build_fractal_tree
