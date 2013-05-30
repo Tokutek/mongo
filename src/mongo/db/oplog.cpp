@@ -40,12 +40,10 @@ namespace mongo {
 
     // cached copies of these...so don't rename them, drop them, etc.!!!
     static NamespaceDetails *rsOplogDetails = NULL;
-    static NamespaceDetails *rsOplogRefsDetails = NULL;
     static NamespaceDetails *replInfoDetails = NULL;
     
     void deleteOplogFiles() {
         rsOplogDetails = NULL;
-        rsOplogRefsDetails = NULL;
         replInfoDetails = NULL;
         
         Client::Context ctx( rsoplog, dbpath, false);
@@ -55,7 +53,8 @@ namespace mongo {
         BSONObjBuilder out;
         string errmsg;
         dropCollection(rsoplog, errmsg, out);
-        dropCollection(rsOplogRefs, errmsg, out);
+        BSONObjBuilder out2;
+        string errmsg2;
         dropCollection(rsReplInfo, errmsg, out);
     }
 
@@ -65,11 +64,6 @@ namespace mongo {
             Client::Context ctx(logns , dbpath, false);
             rsOplogDetails = nsdetails(logns);
             massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
-        }
-        if (rsOplogRefsDetails == NULL) {
-            Client::Context ctx(rsOplogRefs , dbpath, false);
-            rsOplogRefsDetails = nsdetails(rsOplogRefs);
-            massert(16804, "local.oplog.refs missing. did you drop it? if so restart server", rsOplogRefsDetails);
         }
         if (replInfoDetails == NULL) {
             Client::Context ctx(rsReplInfo , dbpath, false);
@@ -116,23 +110,6 @@ namespace mongo {
         _logTransactionOps(gtid, timestamp, hash, opInfo);
     }
 
-    void logTransactionOpsRef(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid) {
-        Lock::DBRead lk1("local");
-        BSONObjBuilder b;
-        addGTIDToBSON("_id", gtid, b);
-        b.appendTimestamp("ts", timestamp);
-        b.append("h", (long long)hash);
-        b.append("a", true);
-        b.append("ref", oid);
-        BSONObj bb = b.done();
-        writeEntryToOplog(bb);
-    }
-
-    void insertOplogRefs(BSONObj o) {
-        Lock::DBRead lk("local");
-        rsOplogRefsDetails->insertObject(o, 0);
-    }
-
     void createOplog() {
         bool rs = !cmdLine._replSet.empty();
         verify(rs);
@@ -141,9 +118,8 @@ namespace mongo {
         const char * replInfoNS = rsReplInfo;
         Client::Context ctx(oplogNS);
         NamespaceDetails * oplogNSD = nsdetails(oplogNS);
-        NamespaceDetails * oplogRefsNSD = nsdetails(rsOplogRefs);        
         NamespaceDetails * replInfoNSD = nsdetails(replInfoNS);
-        if (oplogNSD || replInfoNSD || oplogRefsNSD) {
+        if (oplogNSD || replInfoNSD) {
             // TODO: (Zardosht), figure out if there are any checks to do here
             // not sure under what scenarios we can be here, so
             // making a printf to catch this so we can investigate
@@ -160,10 +136,7 @@ namespace mongo {
         // create the namespace
         string err;
         BSONObj o = b.done();
-        bool ret;
-        ret = userCreateNS(oplogNS, o, err, false);
-        verify(ret);
-        ret = userCreateNS(rsOplogRefs, o, err, false);
+        bool ret = userCreateNS(oplogNS, o, err, false);
         verify(ret);
         ret = userCreateNS(replInfoNS, o, err, false);
         verify(ret);
@@ -203,7 +176,6 @@ namespace mongo {
         uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         rsOplogDetails->insertObject(entry, flags);
     }
-
     // assumes oplog is read locked on entry
     void replicateTransactionToOplog(BSONObj& op) {
         // set the applied bool to false, to let the oplog know that
@@ -232,9 +204,6 @@ namespace mongo {
     void applyTransactionFromOplog(BSONObj entry) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         if (!transactionAlreadyApplied) {
-                                   
-            verify(!entry.hasElement("ref"));
-
             Client::Transaction transaction(DB_SERIALIZABLE);
             std::vector<BSONElement> ops = entry["ops"].Array();
             const size_t numOps = ops.size();
