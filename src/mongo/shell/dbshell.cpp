@@ -421,7 +421,7 @@ string finishCode( string code ) {
 namespace po = boost::program_options;
 
 void show_help_text( const char* name, po::options_description options ) {
-    cout << "MongoDB shell version: " << mongo::fullVersionString() << endl;
+    cout << "TokuMX mongo shell v" << mongo::fullVersionString() << endl;
     cout << "usage: " << name << " [options] [db address] [file names (ending in .js)]" << endl
          << "db address can be:" << endl
          << "  foo                   foo database on local machine" << endl
@@ -703,7 +703,7 @@ int _main( int argc, char* argv[] ) {
         files = params["files"].as< vector<string> >();
     }
     if ( params.count( "version" ) ) {
-        cout << "MongoDB shell version: " << mongo::fullVersionString() << endl;
+        cout << "TokuMX mongo shell v" << mongo::fullVersionString() << endl;
         return mongo::EXIT_CLEAN;
     }
     if ( params.count( "quiet" ) ) {
@@ -758,7 +758,7 @@ int _main( int argc, char* argv[] ) {
     }
 
     if ( ! mongo::cmdLine.quiet )
-        cout << "MongoDB shell version: " << mongo::fullVersionString() << endl;
+        cout << "TokuMX mongo shell v" << mongo::fullVersionString() << endl;
 
     mongo::StartupTest::runTests();
 
