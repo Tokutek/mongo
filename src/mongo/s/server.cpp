@@ -210,7 +210,7 @@ namespace mongo {
                     ( sizeof( int* ) == 4 ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() << " (--help for usage)" << endl;
             DEV log() << "_DEBUG build" << endl;
             printGitVersion();
-            printTokudbVersion();
+            printTokukvVersion();
             printSysInfo();
             printCommandLineOpts();
         }

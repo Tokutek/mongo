@@ -173,7 +173,7 @@ function build_mongodb_src() {
         github_download Tokutek/mongo $mongo $mongodbsrc
 
         # set defaults for build script
-        sed <$mongodbsrc/buildscripts/build.tokudb.sh.in \
+        sed <$mongodbsrc/buildscripts/build.tokukv.sh.in \
             -e "s^@makejobs@^$makejobs^" \
             -e "s^@cc@^$cc^" \
             -e "s^@cxx@^$cxx^" \
@@ -182,10 +182,10 @@ function build_mongodb_src() {
             -e "s^@force_toku_version@^$ft_index_rev^" \
             -e "s^@mongodbsrc@^$mongodbsrc^" \
             -e "s^@tokufractaltreesrc@^$tokufractaltreedir^" \
-            -e "s^@LIBTOKUDB_NAME@^${tokufractaltree}_static^" \
+            -e "s^@LIBTOKUFRACTALTREE_NAME@^${tokufractaltree}_static^" \
             -e "s^@LIBTOKUPORTABILITY_NAME@^${tokuportability}_static^" \
-            >$mongodbsrc/buildscripts/build.tokudb.sh
-        chmod +x $mongodbsrc/buildscripts/build.tokudb.sh
+            >$mongodbsrc/buildscripts/build.tokukv.sh
+        chmod +x $mongodbsrc/buildscripts/build.tokukv.sh
 
         # make the mongodb src tarball
         tar --create \
@@ -196,9 +196,9 @@ function build_mongodb_src() {
         md5sum --check $mongodbsrc.tar.gz.md5
 
         # run the build script
-        $mongodbsrc/buildscripts/build.tokudb.sh
+        $mongodbsrc/buildscripts/build.tokukv.sh
 
-        mongodbdir=mongodb-$mongodb_version-tokutek-$mongo_rev-tokudb-${ft_index_rev}${suffix}-$system-$arch
+        mongodbdir=mongodb-$mongodb_version-tokutek-$mongo_rev-tokukv-${ft_index_rev}${suffix}-$system-$arch
 
         if [ -f $mongodbsrc/mongodb*-debuginfo.tgz ]; then
             # copy the debuginfo tarball to a name of our choosing
@@ -315,7 +315,7 @@ if [ -z $mongo_rev ] ; then
     mongo_rev=$mongo
 fi
 
-builddir=build-mongodb-${mongo_rev}-tokudb-${ft_index_rev}${suffix}
+builddir=build-mongodb-${mongo_rev}-tokukv-${ft_index_rev}${suffix}
 if [ ! -d $builddir ] ; then mkdir $builddir; fi
 pushd $builddir
 

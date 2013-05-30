@@ -111,7 +111,7 @@ namespace mongo {
             result << "version"             << versionString
                    << "tokutekPatchVersion" << tokutekPatchVersionString
                    << "gitVersion"          << gitVersion()
-                   << "tokudbVersion"       << tokudbVersion()
+                   << "tokukvVersion"       << tokukvVersion()
                    << "sysInfo"             << sysInfo()
                    << "versionArray"        << versionArray
                    << "bits"                << ( sizeof( int* ) == 4 ? 32 : 64 );

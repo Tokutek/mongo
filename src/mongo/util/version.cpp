@@ -94,7 +94,7 @@ namespace mongo {
 
     string mongodVersion() {
         stringstream ss;
-        ss << "db version v" << fullVersionString() << ", tokudb version r" << tokudbVersion();
+        ss << "db version v" << fullVersionString() << ", tokukv version " << tokukvVersion();
         return ss.str();
     }
 
@@ -129,10 +129,10 @@ namespace mongo {
 
 #ifndef _SCONS
     // only works in scons
-    const char *tokudbVersion() { return "not-scons"; }
+    const char *tokukvVersion() { return "not-scons"; }
 #endif
 
-    void printTokudbVersion() { log() << "tokudb version: " << tokudbVersion() << endl; }
+    void printTokukvVersion() { log() << "tokukv version: " << tokukvVersion() << endl; }
 
 
     Tee * startupWarningsLog = new RamLog("startupWarnings"); //intentionally leaked

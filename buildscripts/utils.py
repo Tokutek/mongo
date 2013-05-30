@@ -69,10 +69,10 @@ def getGitVersion():
         return version
     return open( f , 'r' ).read().strip()
 
-def getTokudbVersion(tokudb_path):
-    config_h = os.path.join(tokudb_path, 'include', 'config.h')
-    if not os.path.isdir(tokudb_path) or not os.path.exists(config_h):
-        return "notokudbversion"
+def getTokukvVersion(tokukv_path):
+    config_h = os.path.join(tokukv_path, 'include', 'config.h')
+    if not os.path.isdir(tokukv_path) or not os.path.exists(config_h):
+        return "notokukvversion"
 
     f = open(config_h, 'r')
     try:
@@ -82,7 +82,7 @@ def getTokudbVersion(tokudb_path):
             if m is not None:
                 return m.group(1)
         else:
-            return "notokudbversion"
+            return "notokukvversion"
     finally:
         f.close()
 

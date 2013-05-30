@@ -798,23 +798,18 @@ if not use_system_version_of_library("boost"):
 env.Append( CPPPATH=['$EXTRACPPPATH'],
             LIBPATH=['$EXTRALIBPATH'] )
 
-# tokudb
-ltokudb = os.getenv('LIBTOKUDB_NAME', 'tokufractaltree_static')
-ltokuportability = os.getenv('LIBTOKUPORTABILITY_NAME', 'tokuportability_static')
-tokupath = os.getenv('TOKUDB_PATH', '$BUILD_DIR/third_party/tokudb')
-if os.getenv('TOKUDB_PATH') is None:
-    env.Append(TOKUDB_PATH='src/third_party/tokudb')
-else:
-    env.Append(TOKUDB_PATH=tokupath)
-env.Append(CPPPATH=['%s/include' % tokupath])
-env.Append(LIBPATH=['%s/lib' % tokupath])
-env.Append(LIBS=[ltokudb, ltokuportability, 'm', 'dl', 'z'])
 if has_option( 'force-git-version' ):
     env.Append(FORCEGITVERSION=get_option( 'force-git-version' ))
 if has_option( 'force-toku-version' ):
     env.Append(FORCETOKUVERSION=get_option( 'force-toku-version' ))
 
-env.Append(LINKFLAGS=["-Wl,-rpath,'$$ORIGIN/../lib64:$$$$ORIGIN/../lib64'"])
+if os.getenv('TOKUKV_PATH') is None:
+    env.Append(TOKUKV_PATH='src/third_party/tokukv')
+else:
+    env.Append(TOKUKV_PATH=tokupath)
+if FindFile('README-TOKUDB', env['TOKUKV_PATH']) is None:
+    print( 'tokukv not found in %s!' % env['TOKUKV_PATH'] )
+    Exit(1)
 
 # --- check system ---
 
@@ -870,7 +865,9 @@ def doConfigure(myenv):
     # 'jemalloc' needs to be the last library linked. Please, add new libraries before this
     # point.
     # TODO: make this easier once builds are incorporated with the fractal tree in github.
-    myenv.Append(LIBPATH=['%s/lib' % (os.getenv('TOKUDB_PATH', '$BUILD_DIR/third_party/tokudb'))])
+    tokukv_path = os.getenv('TOKUKV_PATH', 'src/third_party/tokukv')
+    tokulib = myenv.Dir('#%s' % tokukv_path).Dir('lib')
+    myenv.Append(LIBPATH=[tokulib])
     # This is a cheap way of always getting a static library.  We don't need PIC but there's
     # anly a static version of one with that name.
     myenv.Append(LIBS=['jemalloc_pic'])
@@ -985,8 +982,8 @@ def getCodeVersion():
         print( "can't find version # in code" )
         return None
     tokupatchver = allMatches[0]
-    ftver = utils.getTokudbVersion(env['TOKUDB_PATH'])
-    return mongodbver + "-tokutek-" + tokupatchver + "-tokudb-" + ftver
+    ftver = utils.getTokukvVersion(env['TOKUKV_PATH'])
+    return mongodbver + "-tokutek-" + tokupatchver + "-tokukv-" + ftver
 
 mongoCodeVersion = getCodeVersion()
 if mongoCodeVersion == None:

@@ -22,8 +22,8 @@ namespace mongo {
     std::string sysInfo();
     void printSysInfo();
 
-    const char *tokudbVersion();
-    void printTokudbVersion();
+    const char *tokukvVersion();
+    void printTokukvVersion();
 
     void show_warnings();
 
