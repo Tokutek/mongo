@@ -564,25 +564,26 @@ def installBinary( e, name, fix_rpath=True ):
     if (not has_option( "no-glibc-check" ) and linux and "s3dist" in COMMAND_LINE_TARGETS):
         e.AddPostAction( name, checkGlibc )
 
-    distName = e.Command('install_rpath/%s' % name, name, Copy('$TARGET', '$SOURCE'))[0]
     if fix_rpath:
-        e.AddPostAction(distName, "chrpath -r '$$ORIGIN/../lib64:$$$$ORIGIN/../lib64' $TARGET")
+        name = e.Command('install_rpath/%s' % name, name, Copy('$TARGET', '$SOURCE'))[0]
+        e.AddPostAction(name, "chrpath -r '$$ORIGIN/../lib64:$$$$ORIGIN/../lib64' $TARGET")
 
     if (solaris or linux) and (not has_option("nostrip")):
-        dbgname = e.Command('stripped/%s.dbg' % distName, distName, Copy('$TARGET', '$SOURCE'))[0]
+        basename = str(name).replace('install_rpath/', '')
+        dbgname = e.Command('stripped/%s.dbg' % basename, name, Copy('$TARGET', '$SOURCE'))[0]
         e.AddPostAction(dbgname, 'objcopy --only-keep-debug $TARGET')
         debuginfoBinaries.append(dbgname)
 
-        distName = e.Command('stripped/%s' % distName, [distName, dbgname], Copy('$TARGET', '$SOURCE'))[0]
-        e.AddPostAction(distName, 'strip $TARGET')
-        e.AddPostAction(distName, 'objcopy --add-gnu-debuglink=${TARGET}.dbg $TARGET')
+        name = e.Command('stripped/%s' % basename, [name, dbgname], Copy('$TARGET', '$SOURCE'))[0]
+        e.AddPostAction(name, 'strip $TARGET')
+        e.AddPostAction(name, 'objcopy --add-gnu-debuglink=${TARGET}.dbg $TARGET')
 
-    distBinaries.append(distName)
+    distBinaries.append(name)
 
     if not installSetup.binaries:
         return
 
-    inst = e.Install( "$INSTALL_DIR/bin", distName )
+    inst = e.Install( "$INSTALL_DIR/bin", name )
 
     if nix:
         e.AddPostAction( inst, 'chmod 755 $TARGET' )
@@ -656,19 +657,21 @@ env.Command(
      os.path.realpath('/usr/lib64/libstdc++.so.6')],
     ' '.join(['$PYTHON ${SOURCES[0]} -o $TARGET'] + toku_lib_transforms + module_banner_transforms + [
             '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=$SERVER_DIST_BASENAME/bin',
+            '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=$SERVER_DIST_BASENAME/bin',
             '--transform ${str(Dir(BUILD_DIR))}/mongo=$SERVER_DIST_BASENAME/bin',
             '--transform /lib64=$SERVER_DIST_BASENAME/lib64',
             '--transform /usr/lib64=$SERVER_DIST_BASENAME/lib64',
             '${TEMPFILE(SOURCES[1:])}']))
 
 if (solaris or linux) and (not has_option("nostrip")):
-    debugtgt = env.Command(
+    env.Command(
         '#/${SERVER_DEBUGINFO_ARCHIVE}',
         ['#buildscripts/make_archive.py',
          debuginfoBinaries],
         '$PYTHON ${SOURCES[0]} -o $TARGET '
         '--transform distsrc=${SERVER_DIST_BASENAME}-debuginfo '
         '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=${SERVER_DIST_BASENAME}-debuginfo/bin '
+        '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=${SERVER_DIST_BASENAME}-debuginfo/bin '
         '${TEMPFILE(SOURCES[1:])}')
 
 #final alias
