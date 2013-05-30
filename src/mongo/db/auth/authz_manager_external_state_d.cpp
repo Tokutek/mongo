@@ -14,20 +14,23 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mongo/db/auth/auth_global_external_state_d.h"
+#include "mongo/db/auth/authz_manager_external_state_d.h"
 
 #include "mongo/db/client.h"
-#include "mongo/db/dbhelpers.h"
+#include "mongo/db/collection.h"
+#include "mongo/db/instance.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/namespacestring.h"
+#include "mongo/db/storage/exception.h"
 
 namespace mongo {
 
-    AuthGlobalExternalStateMongod::AuthGlobalExternalStateMongod() {}
-    AuthGlobalExternalStateMongod::~AuthGlobalExternalStateMongod() {}
+    AuthzManagerExternalStateMongod::AuthzManagerExternalStateMongod() {}
+    AuthzManagerExternalStateMongod::~AuthzManagerExternalStateMongod() {}
 
-    bool AuthGlobalExternalStateMongod::_findUser(const string& usersNamespace,
-                                                  const BSONObj& query,
-                                                  BSONObj* result) const {
+    bool AuthzManagerExternalStateMongod::_findUser(const string& usersNamespace,
+                                                    const BSONObj& query,
+                                                    BSONObj* result) const {
         Client::GodScope gs;
         Client::ReadContext ctx(usersNamespace);
 

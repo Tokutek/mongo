@@ -16,28 +16,35 @@
 
 #pragma once
 
-#include <string>
-
 #include "mongo/base/disallow_copying.h"
 #include "mongo/base/status.h"
-#include "mongo/db/auth/auth_global_external_state.h"
+#include "mongo/db/auth/authz_session_external_state.h"
 
 namespace mongo {
 
     /**
-     * The implementation of AuthGlobalExternalState functionality for mongod.
+     * The implementation of AuthzSessionExternalState functionality common to mongod and mongos.
      */
-    class AuthGlobalExternalStateMongod : public AuthGlobalExternalState {
-        MONGO_DISALLOW_COPYING(AuthGlobalExternalStateMongod);
+    class AuthzSessionExternalStateServerCommon : public AuthzSessionExternalState {
+        MONGO_DISALLOW_COPYING(AuthzSessionExternalStateServerCommon);
 
     public:
-        AuthGlobalExternalStateMongod();
-        virtual ~AuthGlobalExternalStateMongod();
+        virtual ~AuthzSessionExternalStateServerCommon();
+
+        virtual bool shouldIgnoreAuthChecks() const;
 
     protected:
-        virtual bool _findUser(const string& usersNamespace,
-                               const BSONObj& query,
-                               BSONObj* result) const;
+        AuthzSessionExternalStateServerCommon();
+
+        // Checks whether or not localhost connections should be given full access and stores the
+        // result in _allowLocalhost.  Currently localhost connections are only given full access
+        // if there are no users in the admin database.
+        virtual void _checkShouldAllowLocalhost();
+
+    private:
+
+        bool _allowLocalhost;
+
     };
 
 } // namespace mongo
