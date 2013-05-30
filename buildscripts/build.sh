@@ -139,22 +139,24 @@ function build_fractal_tree() {
             make install -j$makejobs
         popd
 
-        pushd $tokufractaltreedir/examples
-            # test the examples
-            sed -ie "s/LIBTOKUDB = tokufractaltree/LIBTOKUDB = $tokufractaltree/" Makefile 
-            sed -ie "s/LIBTOKUPORTABILITY = tokuportability/LIBTOKUPORTABILITY = $tokuportability/" Makefile
-            if [ x"$(uname)" = x"Darwin" ] ; then
-                set +u
-                DYLD_LIBRARY_PATH=$PWD/../lib:$DYLD_LIBRARY_PATH make check CC=$ftcc
-                set -u
-                exitcode=$?
-            else
-                make check CC=$ftcc
-                exitcode=$?
-            fi
-            echo `date` make check examples $tokufractaltree $exitcode
-            make clean
-        popd
+        if [ $tokukv_check != 0 ] ; then
+            pushd $tokufractaltreedir/examples
+                # test the examples
+                sed -ie "s/LIBTOKUDB = tokufractaltree/LIBTOKUDB = $tokufractaltree/" Makefile 
+                sed -ie "s/LIBTOKUPORTABILITY = tokuportability/LIBTOKUPORTABILITY = $tokuportability/" Makefile
+                if [ x"$(uname)" = x"Darwin" ] ; then
+                    set +u
+                    DYLD_LIBRARY_PATH=$PWD/../lib:$DYLD_LIBRARY_PATH make check CC=$ftcc
+                    set -u
+                    exitcode=$?
+                else
+                    make check CC=$ftcc
+                    exitcode=$?
+                fi
+                echo `date` make check examples $tokufractaltree $exitcode
+                make clean
+            popd
+        fi
 
         # make tarballs
         tar --create \
@@ -227,6 +229,7 @@ github_use_ssh=0
 makejobs=$(get_ncpus)
 debugbuild=0
 staticft=1
+tokukv_check=0
 
 if [ $(uname -s) = Darwin ] ; then
     cc=cc
