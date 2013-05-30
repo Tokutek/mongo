@@ -1,20 +1,20 @@
-tokuds news
+tokumx news
 ===========
 
-tokuds 0.2.0
-------------
+tokumx 1.0.0-rc.0
+-----------------
 Release date: TBD
 
 General
 ~~~~~~~
 
-    - The major development in this release is the addition of sharding.
+    - The major developments in this release are replication and sharding.
 
 
 New features and improvements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    - Sharding is now supported for evaluation.
+    - Replication and sharding are now supported for evaluation.
 
     - Sharding on a hashed key is supported (backported from 2.4).
 
@@ -26,18 +26,18 @@ New features and improvements
           sh.shardCollection("test.foo",
                              {x: 1},
                              false, // unique
-                             false   // clustering
+                             false  // clustering
                              );
 
-    - The JS client driver now supports the clustering flag in
-      sh.shardCollection, which should only be used if you want to specify
-      that you want to shard on a NON-clustering index (set it to false).
-      See above.
+      - The JS client driver now supports the clustering flag in
+        sh.shardCollection, which should only be used if you want to
+        specify that you want to shard on a NON-clustering index (set it
+        to false).  See above.
 
     - "DDL" changes (create, drop, ensureIndex, dropIndexes, rename) are
       now supported inside multi-statement transactions, and are properly
       rolled back on rollbackTransaction, with the exception of rename
-      across databases.
+      across databases, and on capped collections.
 
     - The C++ client driver now supports clustering indexes.  This changes
       the function signature for DBClientWithCommands::ensureIndex, please
@@ -50,11 +50,27 @@ New features and improvements
 Limitations
 ~~~~~~~~~~~
 
+    - The format of the local.oplog.rs collection has changed and will
+      break any applications that were relying on it.
+
+    - On a replica set, large transactions can fail if a transaction is
+      too large (due to a limit on the size of a BSON object).  This
+      should not be a worry for existing applications, but some commands
+      (copydb, clone, cloneCollection), as well as updates that affect a
+      large number of documents (and specify {multi: true}).  This will be
+      fixed soon, but for now, avoid such operations if you are using
+      replication.
+
+    - The commands aggregate and mapReduce may have poor concurrency with
+      some workloads.  This will be fixed soon, and these commands should
+      be able to be run concurrently with each other and with other
+      operations.
+
     - Multi-statement transactions are not supported in a sharded cluster,
       and will be rejected by mongos.
 
 
-tokuds 0.1.0
+tokumx 0.1.0
 ------------
 Release date: 2013-04-15
 
@@ -89,7 +105,7 @@ New features and improvements
     - The system allocator has been changed fully to jemalloc.
 
 
-tokuds 0.0.4
+tokumx 0.0.4
 ------------
 Release date: 2013-04-08
 
@@ -109,7 +125,7 @@ Bug Fixes
       #6456)
 
 
-tokuds 0.0.2
+tokumx 0.0.2
 ------------
 Release date: 2013-03-14
 

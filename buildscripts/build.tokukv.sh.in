@@ -9,7 +9,7 @@ force_toku_version=@force_toku_version@
 
 mongodbsrc=@mongodbsrc@
 tokufractaltreesrc=@tokufractaltreesrc@
-LIBTOKUDB_NAME=@LIBTOKUDB_NAME@
+LIBTOKUFRACTALTREE_NAME=@LIBTOKUFRACTALTREE_NAME@
 LIBTOKUPORTABILITY_NAME=@LIBTOKUPORTABILITY_NAME@
 
 while [ $# -gt 0 ] ; do
@@ -33,12 +33,12 @@ if [ ! -d $mongodbsrc ] ; then
 fi
 tokufractaltreetarball=$PWD/$tokufractaltreesrc.tar.gz
 pushd $mongodbsrc
-    if [ ! -d src/third_party/tokudb/lib ] ; then
-        mkdir -p src/third_party/tokudb
+    if [ ! -d src/third_party/tokukv/lib ] ; then
+        mkdir -p src/third_party/tokukv
         tar --extract \
             --gzip \
             --strip-components 1 \
-            --directory src/third_party/tokudb/ \
+            --directory src/third_party/tokukv/ \
             --file $tokufractaltreetarball
     fi
 
@@ -54,7 +54,7 @@ pushd $mongodbsrc
         allocator_option="--allocator=system"
     fi
 
-    export LIBTOKUDB_NAME LIBTOKUPORTABILITY_NAME
+    export LIBTOKUFRACTALTREE_NAME LIBTOKUPORTABILITY_NAME
     scons \
         $build_type_options \
         $allocator_option \

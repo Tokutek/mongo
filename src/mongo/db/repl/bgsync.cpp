@@ -478,8 +478,8 @@ namespace mongo {
         // some reasonable timeframe, then we go fatal
         GTID ourLast = theReplSet->gtidManager->getLiveState();
         GTID idToRollbackTo;
-        uint64_t rollbackPointTS;
-        uint64_t rollbackPointHash;
+        uint64_t rollbackPointTS = 0;
+        uint64_t rollbackPointHash = 0;
         incRBID();
         try {
             shared_ptr<DBClientCursor> rollbackCursor = r.getRollbackCursor(ourLast);

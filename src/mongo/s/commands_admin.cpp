@@ -116,8 +116,8 @@ namespace mongo {
 
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
                 result.append( "host" , prettyHostName() );
-                result.append("version", versionString);
-                result.append("tokutekPatchVersion", tokutekPatchVersionString);
+                result.append("version", mongodbVersionString);
+                result.append("tokumxVersion", tokumxVersionString);
                 result.append("process","mongos");
                 result.append("uptime",(double) (time(0)-_started));
                 result.appendDate( "localTime" , jsTime() );

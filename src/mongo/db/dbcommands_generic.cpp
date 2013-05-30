@@ -108,10 +108,10 @@ namespace mongo {
             help << "{ buildinfo:1 }";
         }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
-            result << "version"             << versionString
-                   << "tokutekPatchVersion" << tokutekPatchVersionString
+            result << "version"             << mongodbVersionString
+                   << "tokumxVersion"       << tokumxVersionString
                    << "gitVersion"          << gitVersion()
-                   << "tokudbVersion"       << tokudbVersion()
+                   << "tokukvVersion"       << tokukvVersion()
                    << "sysInfo"             << sysInfo()
                    << "versionArray"        << versionArray
                    << "bits"                << ( sizeof( int* ) == 4 ? 32 : 64 );

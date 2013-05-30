@@ -26,7 +26,7 @@ buildinfo_template = '''
 
 namespace mongo {
     const char * gitVersion() { return "%(git_version)s"; }
-    const char *tokudbVersion() { return "%(tokudb_version)s"; }
+    const char *tokukvVersion() { return "%(tokukv_version)s"; }
     std::string sysInfo() { return "%(sys_info)s BOOST_LIB_VERSION=" BOOST_LIB_VERSION ; }
 }  // namespace mongo
 '''
@@ -39,12 +39,12 @@ def generate_buildinfo(env, target, source, **kw):
     if env["MONGO_MODULES"]:
         git_version += " modules: %s" % (", ".join(env["MONGO_MODULES"].keys()))
     if 'FORCETOKUVERSION' in env:
-        tokudb_version = env['FORCETOKUVERSION']
+        tokukv_version = env['FORCETOKUVERSION']
     else:
-        tokudb_version = buildscripts.utils.getTokudbVersion(env['TOKUDB_PATH'])
+        tokukv_version = buildscripts.utils.getTokukvVersion(env['TOKUKV_PATH'])
 
     contents = str(source[0]) % dict(git_version=git_version,
-                                     tokudb_version=tokudb_version,
+                                     tokukv_version=tokukv_version,
                                      sys_info=getSysInfo())
     out = open(str(target[0]), 'wb')
     try:
