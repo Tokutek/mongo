@@ -38,7 +38,7 @@ popd
 mkdir ft-index/dbg
 pushd ft-index/dbg
   CC=gcc47 CXX=g++47 cmake \
-      -D CMAKE_INSTALL_PREFIX=$BUILD_DIR/mongo/src/third_party/tokudb \
+      -D CMAKE_INSTALL_PREFIX=$BUILD_DIR/mongo/src/third_party/tokukv \
       -D CMAKE_BUILD_TYPE=Debug \
       -D BUILD_TESTING=OFF \
       -D USE_BDB=OFF \
