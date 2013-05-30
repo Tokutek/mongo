@@ -30,12 +30,16 @@ namespace mongo {
         CmdRepairDatabase() : DeprecatedCommand("repairDatabase") {}
     } cmdRepairDatabase;
 
+    class CompactCmd : public DeprecatedCommand {
+      public:
+        CompactCmd() : DeprecatedCommand("compact") {}
+    } compactCmd;
+
     class CollectionModCommand : public DeprecatedCommand {
       public:
         CollectionModCommand() : DeprecatedCommand("collMod") {}
     } collectionModCommand;
 
-    /* convertToCapped seems to use this */
     class CmdCloneCollectionAsCapped : public DeprecatedCommand {
       public:
         CmdCloneCollectionAsCapped() : DeprecatedCommand("cloneCollectionAsCapped") {}
@@ -51,7 +55,6 @@ namespace mongo {
         CmdConvertToCapped() : DeprecatedCommand("convertToCapped") {}
     } cmdConvertToCapped;
 
-    /* For testing only, not for general use */
     class GodInsert : public DeprecatedCommand {
       public:
         GodInsert() : DeprecatedCommand("godinsert") {}
@@ -67,6 +70,9 @@ namespace mongo {
         CleanCmd() : DeprecatedCommand("clean") {}
     } cleanCmd;
 
+    // We (probably) don't deprecate this fully because we want callers
+    // to always get back a successful result (and so they think the
+    // collection is in an okay condition).
     class ValidateCmd : public Command {
     public:
         ValidateCmd() : Command( "validate" ) {}

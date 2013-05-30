@@ -14,31 +14,6 @@ replTest.awaitReplication();
 
 assert.soon(function() { return conns[1].getDB("admin").isMaster().secondary; });
 
-join = startParallelShell( "db.getSisterDB('bar').runCommand({compact : 'foo'});", replTest.ports[1] );
-
-print("joining");
-join();
-
-print("check secondary becomes a secondary again");
-var secondarySoon = function() {
-    var x = 0;
-    assert.soon(function() {
-        var im = conns[1].getDB("admin").isMaster();
-        if (x++ % 5 == 0) printjson(im);
-        return im.secondary;
-    });
-};
-
-secondarySoon();
-
-print("make sure compact works on a secondary (SERVER-3923)");
-master.getDB("foo").bar.drop();
-replTest.awaitReplication();
-var result = conns[1].getDB("foo").runCommand({compact : "bar"});
-assert.eq(result.ok, 0, tojson(result));
-
-secondarySoon();
-
 print("use replSetMaintenance command to go in/out of maintence mode");
 
 print("primary cannot go into maintence mode");
