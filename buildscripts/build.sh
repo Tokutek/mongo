@@ -170,7 +170,7 @@ function build_fractal_tree() {
 
 # checkout the mongodb source from git, generate a build script, and make the mongodb source tarball
 function build_mongodb_src() {
-    mongodbsrc=tokumx-$mongo-mongodb-$mongodb_version-src
+    mongodbsrc=tokumx-$mongo-src
     if [ ! -d $mongodbsrc ] ; then
         github_download Tokutek/mongo $mongo $mongodbsrc
 
