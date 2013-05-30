@@ -37,7 +37,7 @@ namespace mongo {
     void disableLogTxnOpsForSharding(void);
     bool shouldLogTxnOpForSharding(const char *opstr, const char *ns, const BSONObj &obj);
     bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj);
-    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo));
+    void setLogTxnToOplog(void (*)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo));
     void setTxnGTIDManager(GTIDManager* m);
 
     class TxnCompleteHooks {
@@ -104,6 +104,42 @@ namespace mongo {
         set<string> _rollback;
     };
 
+    class TxnOplog : boost::noncopyable {
+    public:
+        TxnOplog(TxnOplog *parent);
+        ~TxnOplog();
+        
+        // Append an op to the txn's oplog list
+        void append(BSONObj o, bool maybe_spill);
+        
+        // Returns true if the TxnOplog does not contain any ops
+        bool empty() const;
+
+        // Commit a root txn
+        void rootCommit(GTID gtid, uint64_t timestamp, uint64_t hash);
+
+        // Commit a child txn
+        void childCommit();
+
+        // Abort a txn
+        void abort();
+
+    private:
+        // Spill the in memory ops to a collection
+        void spill();
+
+        // Get the OID assigned to this txn.  Assign one if not already assigned.
+        OID getOid();
+
+    private:
+        TxnOplog *_parent;
+        bool _spilled;
+        size_t _mem_size, _mem_limit;
+        vector<BSONObj> _m;
+        OID _oid;
+        long long _seq;
+    };
+
     // class to wrap operations surrounding a storage::Txn.
     // as of now, includes writing of operations to opLog
     // and the committing/aborting of storage::Txn
@@ -111,13 +147,8 @@ namespace mongo {
         storage::Txn _txn;
         TxnContext* _parent;
         bool _retired;
-        //
-        // a BSON Array that will hold all of the operations done by
-        // this transaction. If the array gets too large, its contents
-        // will spill into the localOpRef collection on commit,
-        //
-        BSONArrayBuilder _txnOps;
-        uint64_t _numOperations; //number of operations added to _txnOps
+
+        TxnOplog _txnOps;
 
         vector<BSONObj> _txnOpsForSharding;
 

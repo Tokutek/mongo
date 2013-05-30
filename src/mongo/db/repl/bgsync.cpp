@@ -344,6 +344,9 @@ namespace mongo {
                 LOG(3) << "replicating " << o.toString(false, true) << " from " << _currentSyncTarget->fullName() << endl;
                 uint64_t ts = o["ts"]._numberLong();
 
+                // TODO deref oplog refs
+                verify(!o.hasElement("ref"));
+
                 // now that we have the element in o, let's check
                 // if there a delay is required (via slaveDelay) before
                 // writing it to the oplog
