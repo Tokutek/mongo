@@ -168,7 +168,7 @@ function build_fractal_tree() {
 
 # checkout the mongodb source from git, generate a build script, and make the mongodb source tarball
 function build_mongodb_src() {
-    mongodbsrc=mongodb-$mongodb_version-tokutek-$mongo_rev-src
+    mongodbsrc=tokumx-$mongo_rev-mongodb-$mongodb_version-src
     if [ ! -d $mongodbsrc ] ; then
         github_download Tokutek/mongo $mongo $mongodbsrc
 
@@ -197,41 +197,6 @@ function build_mongodb_src() {
 
         # run the build script
         $mongodbsrc/buildscripts/build.tokukv.sh
-
-        mongodbdir=mongodb-$mongodb_version-tokutek-$mongo_rev-tokukv-${ft_index_rev}${suffix}-$system-$arch
-
-        if [ -f $mongodbsrc/mongodb*-debuginfo.tgz ]; then
-            # copy the debuginfo tarball to a name of our choosing
-            mkdir $mongodbdir-debuginfo
-            tar --extract \
-                --gzip \
-                --directory $mongodbdir-debuginfo \
-                --strip-components 1 \
-                --file $mongodbsrc/mongodb*-debuginfo.tgz
-            tar --create \
-                --gzip \
-                --file $mongodbdir-debuginfo.tar.gz \
-                $mongodbdir-debuginfo
-            md5sum $mongodbdir-debuginfo.tar.gz >$mongodbdir-debuginfo.tar.gz.md5
-            md5sum --check $mongodbdir-debuginfo.tar.gz.md5
-
-            # now remove it so the next file glob doesn't get confused
-            rm $mongodbsrc/mongodb*-debuginfo.tgz
-        fi
-
-        # copy the release tarball to a name of our choosing
-        mkdir $mongodbdir
-        tar --extract \
-            --gzip \
-            --directory $mongodbdir \
-            --strip-components 1 \
-            --file $mongodbsrc/mongodb*.tgz
-        tar --create \
-            --gzip \
-            --file $mongodbdir.tar.gz \
-            $mongodbdir
-        md5sum $mongodbdir.tar.gz >$mongodbdir.tar.gz.md5
-        md5sum --check $mongodbdir.tar.gz.md5
     fi
 }
 
