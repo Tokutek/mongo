@@ -251,11 +251,13 @@ namespace mongo {
                         _splitPoints.push_back(_lastSplitKey);
                         BSONObj modSplitKey = Helpers::modifiedRangeBound(_lastSplitKey, _idx.keyPattern(), -1);
                         _chunkMin.reset(modSplitKey, _idx.isIdIndex() ? NULL : &minKey);
-                        break;
+                        return;
                     }
                 }
                 skipped += docsize;
             }
+            // If we get all the way to the end, we can't split any more.
+            _doneFindingPoints = true;
         }
 
       public:
