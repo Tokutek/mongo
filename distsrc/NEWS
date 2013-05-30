@@ -49,6 +49,10 @@ New features and improvements
 Limitations
 ~~~~~~~~~~~
 
+    - This version of TokuMX targets compatibility with MongoDB 2.2.4.
+      Some features and bugfixes have been backported from the 2.4 series,
+      but most have not.
+
     - The format of the local.oplog.rs collection has changed and will
       break any applications that were relying on it.
 
@@ -70,6 +74,9 @@ Limitations
 
     - Calls to db.eval() are not properly profiled when profiling is
       enabled.  The cause for this is not understood.
+
+    - Geospatial and Full Text Search Indexes are not supported (the '2d'
+      and 'text' index types).
 
 
 tokumx 0.1.0
