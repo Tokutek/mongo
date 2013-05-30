@@ -1,6 +1,7 @@
 // @file util.cpp
 
 /*    Copyright 2009 10gen Inc.
+ *    Copyright 2013 Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -19,7 +20,6 @@
 #include "goodies.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/startup_test.h"
-#include "file_allocator.h"
 #include "optime.h"
 #include "time_support.h"
 #include "mongoutils/str.h"

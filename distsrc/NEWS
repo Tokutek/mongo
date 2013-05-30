@@ -36,8 +36,7 @@ New features and improvements
 
     - "DDL" changes (create, drop, ensureIndex, dropIndexes, rename) are
       now supported inside multi-statement transactions, and are properly
-      rolled back on rollbackTransaction, with the exception of rename
-      across databases, and on capped collections.
+      rolled back on rollbackTransaction.
 
     - The C++ client driver now supports clustering indexes.  This changes
       the function signature for DBClientWithCommands::ensureIndex, please
@@ -69,6 +68,8 @@ Limitations
     - Multi-statement transactions are not supported in a sharded cluster,
       and will be rejected by mongos.
 
+    - Calls to db.eval() are not properly profiled when profiling is enabled.
+      The cause for this is not understood.
 
 tokumx 0.1.0
 ------------

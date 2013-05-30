@@ -55,7 +55,6 @@
 
 #include "mongo/s/d_logic.h"
 
-#include "mongo/util/file_allocator.h"
 #include "mongo/util/goodies.h"
 #include "mongo/util/time_support.h"
 
@@ -1105,7 +1104,7 @@ namespace mongo {
 #endif
     }
 
-    void acquirePathLock(bool doingRepair) {
+    void acquirePathLock() {
         string name = ( boost::filesystem::path( dbpath ) / "mongod.lock" ).native_file_string();
 
 #ifdef _WIN32

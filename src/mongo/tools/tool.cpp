@@ -29,7 +29,6 @@
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/json.h"
 #include "mongo/db/storage/env.h"
-#include "mongo/util/file_allocator.h"
 #include "mongo/util/password.h"
 #include "mongo/util/version.h"
 

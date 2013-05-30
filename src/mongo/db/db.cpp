@@ -46,7 +46,6 @@
 #include "mongo/scripting/engine.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/task.h"
-#include "mongo/util/file_allocator.h"
 #include "mongo/util/net/message_server.h"
 #include "mongo/util/ramlog.h"
 #include "mongo/util/stacktrace.h"
@@ -241,17 +240,6 @@ namespace mongo {
         server->run();
     }
 
-    void clearTmpFiles() {
-        boost::filesystem::path path( dbpath );
-        for ( boost::filesystem::directory_iterator i( path );
-                i != boost::filesystem::directory_iterator(); ++i ) {
-            string fileName = boost::filesystem::path(*i).leaf();
-            if ( boost::filesystem::is_directory( *i ) &&
-                    fileName.length() && fileName[ 0 ] == '$' )
-                boost::filesystem::remove_all( *i );
-        }
-    }
-
     /**
      * Checks if this server was started without --replset but has a config in local.system.replset
      * (meaning that this is probably a replica set member started in stand-alone mode).
@@ -260,7 +248,7 @@ namespace mongo {
      *          --replset.
      */
     unsigned long long checkIfReplMissingFromCommandLine() {
-        Lock::GlobalWrite lk; // _openAllFiles is false at this point, so this is helpful for the query below to work as you can't open files when readlocked
+        Lock::GlobalWrite lk;
         if( !cmdLine.usingReplSets() ) {
             Client::GodScope gs;
             DBDirectClient c;
@@ -270,7 +258,7 @@ namespace mongo {
     }
 
     void clearTmpCollections() {
-        Lock::GlobalWrite lk; // _openAllFiles is false at this point, so this is helpful for the query below to work as you can't open files when readlocked
+        Lock::GlobalWrite lk;
         Client::Transaction txn(DB_SERIALIZABLE);
         Client::GodScope gs;
         vector< string > toDelete;
@@ -337,12 +325,7 @@ namespace mongo {
             uassert( 10296 ,  ss.str().c_str(), boost::filesystem::exists( dbpath ) );
         }
 
-        // TODO: Remove the repair parameter
-        const bool doing_repair = false;
-        acquirePathLock(doing_repair);
-        boost::filesystem::remove_all( dbpath + "/_tmp/" );
-
-        MONGO_ASSERT_ON_EXCEPTION_WITH_MSG( clearTmpFiles(), "clear tmp files" );
+        acquirePathLock();
 
         // the last thing we do before initializing storage is to install the
         // txn complete hooks, which live in namespace_details.cpp
