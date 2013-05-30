@@ -599,7 +599,7 @@ namespace mongo {
          */
         void State::_insertToInc( BSONObj& o ) {
             verify( _onDisk );
-            insertObject( _config.incLong.c_str() , o );
+            insertObject( _config.incLong.c_str() , o , 0 , false );
         }
 
         State::State( const Config& c ) : _config( c ), _size(0), _dupCount(0), _numEmits(0) {
