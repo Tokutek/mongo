@@ -872,6 +872,8 @@ def doConfigure(myenv):
     # anly a static version of one with that name.
     myenv.Append(LIBS=['jemalloc_pic'])
 
+    myenv.Append(RPATH=[Literal("'%s'" % p) for p in ['$$ORIGIN/../lib', '$$ORIGIN/../lib64']])
+
     # discover modules (subdirectories of db/modules/), and
     # load the (python) module for each module's build.py
     modules = moduleconfig.discover_modules('src/mongo/')
