@@ -1,7 +1,16 @@
+add_library(path STATIC
+  path
+  path_internal
+  )
+add_dependencies(path generate_error_codes generate_action_types)
+target_link_libraries(path LINK_PUBLIC
+  bson
+  db_common
+  )
+
 add_library(expressions STATIC
   expression
   expression_array
-  expression_internal
   expression_leaf
   expression_tree
   expression_parser
@@ -12,6 +21,7 @@ add_library(expressions STATIC
 add_dependencies(expressions generate_error_codes generate_action_types)
 target_link_libraries(expressions LINK_PUBLIC
   bson
+  path
   db_common
   ${PCRE_LIBRARIES}
   )

@@ -713,6 +713,15 @@ if (BUILD_TESTING)
     ${TOKUMX_SSL_LIBRARIES}
     )
 
+  add_executable(path_test db/matcher/path_test)
+  add_dependencies(path_test generate_error_codes generate_action_types)
+  link_recursive_deps(path_test
+    path
+    unittest_main
+    unittest_crutch
+    ${TOKUMX_SSL_LIBRARIES}
+    )
+
   foreach (prefix
       expression
       expression_parser
@@ -1142,6 +1151,7 @@ if (BUILD_TESTING)
   endforeach ()
 
   foreach (test
+      path_test
       expression_test
       expression_parser_test
       expression_geo_test
