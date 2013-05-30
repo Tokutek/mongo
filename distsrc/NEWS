@@ -68,8 +68,9 @@ Limitations
     - Multi-statement transactions are not supported in a sharded cluster,
       and will be rejected by mongos.
 
-    - Calls to db.eval() are not properly profiled when profiling is enabled.
-      The cause for this is not understood.
+    - Calls to db.eval() are not properly profiled when profiling is
+      enabled.  The cause for this is not understood.
+
 
 tokumx 0.1.0
 ------------
