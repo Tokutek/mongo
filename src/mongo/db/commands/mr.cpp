@@ -1006,7 +1006,7 @@ namespace mongo {
             */
             virtual bool slaveOk() const { return !replSet; }
 
-            virtual bool slaveOverrideOk() const { return true; }
+            virtual bool slaveOverrideOk() const { return false; }
 
             virtual void help( stringstream &help ) const {
                 help << "Run a map/reduce operation on the server.\n";
