@@ -36,7 +36,6 @@
 #include "mongo/unittest/unittest.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/mutex.h"
-#include "mongo/util/file_allocator.h"
 #include "mongo/util/version.h"
 
 namespace po = boost::program_options;

@@ -33,7 +33,6 @@
 #include "dbwebserver.h"
 #include "../util/mongoutils/html.h"
 #include "../util/mongoutils/checksum.h"
-#include "../util/file_allocator.h"
 #include "repl/rs.h"
 #include "../scripting/engine.h"
 
