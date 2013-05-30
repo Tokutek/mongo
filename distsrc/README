@@ -1,6 +1,6 @@
-MongoDB README
+TokuMX README
 
-Welcome to MongoDB!
+Welcome to TokuMX!
 
 COMPONENTS
 
@@ -40,13 +40,15 @@ DRIVERS
 DOCUMENTATION
 
   http://www.mongodb.org/
+  http://www.tokutek.com/
 
 MAIL LISTS AND IRC
 
   http://dochub.mongodb.org/core/community
 
+  #tokutek on irc.freenode.net
+  tokumx-user@googlegroups.com
+
 32 BIT BUILD NOTES
 
-  MongoDB uses memory mapped files.  If built as a 32 bit executable, you will
-  not be able to work with large (multi-gigabyte) databases.  However, 32 bit
-  builds work fine with small development databases.
+  TokuMX only supports 64-bit architectures.
