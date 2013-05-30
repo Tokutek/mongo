@@ -426,7 +426,7 @@ namespace mongo {
     }
 
     inline Nullstream &tokulog(int level=0) {
-        return tlog(LabeledLevel("tokudb", level));
+        return tlog(LabeledLevel("tokumx", level));
     }
 
     inline Nullstream& error() {
