@@ -95,7 +95,7 @@ namespace mongo {
 
     string mongodVersion() {
         stringstream ss;
-        ss << "db version v" << fullVersionString() << ", using TokuKV rev " << tokukvVersion();
+        ss << "TokuMX mongod server v" << fullVersionString() << ", using TokuKV rev " << tokukvVersion();
         return ss.str();
     }
 
@@ -150,7 +150,7 @@ namespace mongo {
             int bar = atoi( foo );
             if ( ( 2 * ( bar / 2 ) ) != bar ) {
                 log() << startupWarningsLog;
-                log() << "** NOTE: This is a development version (" << fullVersionString() << ") of MongoDB." << startupWarningsLog;
+                log() << "** NOTE: This is a development version (" << fullVersionString() << ") of TokuMX." << startupWarningsLog;
                 log() << "**       Not recommended for production." << startupWarningsLog;
                 warned = true;
             }
