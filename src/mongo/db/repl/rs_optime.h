@@ -23,5 +23,6 @@
 namespace mongo {
 
     const char rsoplog[] = "local.oplog.rs";
+    const char rsOplogRefs[] = "local.oplog.refs";
     const char rsReplInfo[] = "local.replInfo";
 }
