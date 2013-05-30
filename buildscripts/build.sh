@@ -280,7 +280,7 @@ if [ -z $mongo_rev ] ; then
     mongo_rev=$mongo
 fi
 
-builddir=build-mongodb-${mongo_rev}-tokukv-${ft_index_rev}${suffix}
+builddir=build-tokumx-${mongo_rev}-tokukv-${ft_index_rev}${suffix}
 if [ ! -d $builddir ] ; then mkdir $builddir; fi
 pushd $builddir
 
