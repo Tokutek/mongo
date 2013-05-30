@@ -182,8 +182,8 @@ function build_mongodb_src() {
             -e "s^@force_toku_version@^$ft_index_rev^" \
             -e "s^@mongodbsrc@^$mongodbsrc^" \
             -e "s^@tokufractaltreesrc@^$tokufractaltreedir^" \
-            -e "s^@LIBTOKUFRACTALTREE_NAME@^${tokufractaltree}_static^" \
-            -e "s^@LIBTOKUPORTABILITY_NAME@^${tokuportability}_static^" \
+            -e "s^@LIBTOKUFRACTALTREE_NAME@^${tokufractaltree}^" \
+            -e "s^@LIBTOKUPORTABILITY_NAME@^${tokuportability}^" \
             >$mongodbsrc/buildscripts/build.tokukv.sh
         chmod +x $mongodbsrc/buildscripts/build.tokukv.sh
 
