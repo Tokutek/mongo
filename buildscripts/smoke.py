@@ -190,6 +190,8 @@ class mongod(object):
             self.port += 1
             self.slave = True
         if os.path.exists(dir_name):
+            pass
+            """ Cleanbb is the most irritating script ever created.
             if 'slave' in self.kwargs:
                 argv = [utils.find_python(), "buildscripts/cleanbb.py", '--nokill', dir_name]
             else:
@@ -202,6 +204,7 @@ class mongod(object):
                     f.close()
             else:
                 call(argv)
+            """
         utils.ensureDir(dir_name)
         argv = [mongod_executable, "--port", str(self.port), "--dbpath", dir_name]
         if self.kwargs.get('small_oplog'):

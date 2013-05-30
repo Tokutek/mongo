@@ -355,21 +355,18 @@ namespace mongo {
                 findKey( _startKey );
             }
         } else {
-            // Don't prelock point ranges.
-            if ( _startKey != _endKey ) {
-                prelockRange( _startKey, _endKey );
-            }
-            // Seek to an initial key described by _startKey 
+            prelockRange( _startKey, _endKey );
             findKey( _startKey );
         }
         checkCurrentAgainstBounds();
     }
 
     int IndexCursor::getf_flags() {
-        // Disable prefetching when a limit exists, to prevent unnecessary
-        // IO and deserialization work. This will cause out-of-memory queries
-        // with non-trivial limits to slow down, however. Not sure if that's bad.
-        return _numWanted > 0 ? DBC_DISABLE_PREFETCHING : 0;
+        // Since all locktree locks are acquired on cursor creation,
+        // we should pass DB_PRELOCKED (see idx_cursor_flags()).
+        const int lockFlags = DB_PRELOCKED;
+        const int prefetchFlags = _numWanted > 0 ? DBC_DISABLE_PREFETCHING : 0;
+        return lockFlags | prefetchFlags;
     }
 
     int IndexCursor::getf_fetch_count() {
