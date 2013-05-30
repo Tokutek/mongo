@@ -42,12 +42,12 @@ namespace mongo {
      *      1.2.3-rc4-pre-
      * If you really need to do something else you'll need to fix _versionArray()
      */
-    const char versionString[] = "2.2.4";
-    const char tokutekPatchVersionString[] = "0.2.0-pre-";
+    const char mongodbVersionString[] = "2.2.4";
+    const char tokumxVersionString[] = "0.2.0-pre-";
 
     std::string fullVersionString() {
         stringstream ss;
-        ss << versionString << "-tokutek-" << tokutekPatchVersionString;
+        ss << tokumxVersionString << "-mongodb-" << mongodbVersionString;
         return ss.str();
     }
 
@@ -90,11 +90,11 @@ namespace mongo {
         return b.arr();
     }
 
-    const BSONArray versionArray = _versionArray(versionString);
+    const BSONArray versionArray = _versionArray(mongodbVersionString);
 
     string mongodVersion() {
         stringstream ss;
-        ss << "db version v" << fullVersionString() << ", tokukv version " << tokukvVersion();
+        ss << "db version v" << fullVersionString() << ", using TokuKV rev " << tokukvVersion();
         return ss.str();
     }
 
@@ -132,7 +132,7 @@ namespace mongo {
     const char *tokukvVersion() { return "not-scons"; }
 #endif
 
-    void printTokukvVersion() { log() << "tokukv version: " << tokukvVersion() << endl; }
+    void printTokukvVersion() { log() << "TokuKV version: " << tokukvVersion() << endl; }
 
 
     Tee * startupWarningsLog = new RamLog("startupWarnings"); //intentionally leaked
@@ -145,7 +145,7 @@ namespace mongo {
 
         bool warned = false;
         {
-            const char * foo = strchr( fullVersionString().c_str() , '.' ) + 1;
+            const char * foo = strchr( mongodbVersionString , '.' ) + 1;
             int bar = atoi( foo );
             if ( ( 2 * ( bar / 2 ) ) != bar ) {
                 log() << startupWarningsLog;
@@ -163,6 +163,7 @@ namespace mongo {
             warned = true;
         }
 
+#if 0 // unnecessary for toku
         if ( !ProcessInfo::blockCheckSupported() ) {
             log() << startupWarningsLog;
             log() << "** NOTE: your operating system version does not support the method that MongoDB" << startupWarningsLog;
@@ -170,6 +171,7 @@ namespace mongo {
             log() << "**       This may result in slower performance for certain use cases" << startupWarningsLog;
             warned = true;
         }
+#endif
 #ifdef __linux__
         if (boost::filesystem::exists("/proc/vz") && !boost::filesystem::exists("/proc/bc")) {
             log() << startupWarningsLog;
@@ -177,6 +179,7 @@ namespace mongo {
             warned = true;
         }
 
+#if 0 // unnecessary for toku
         if (boost::filesystem::exists("/sys/devices/system/node/node1")){
             // We are on a box with a NUMA enabled kernel and more than 1 numa node (they start at node0)
             // Now we look at the first line of /proc/self/numa_maps
@@ -233,6 +236,7 @@ namespace mongo {
                 log() << "**          http://www.kernel.org/doc/Documentation/sysctl/vm.txt" << startupWarningsLog;
             }
         }
+#endif
 #endif
 
 #if defined(RLIMIT_NPROC) && defined(RLIMIT_NOFILE)

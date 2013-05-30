@@ -9,8 +9,8 @@ namespace mongo {
     struct BSONArray;
 
     // mongo version
-    extern const char versionString[];
-    extern const char tokutekPatchVersionString[];
+    extern const char mongodbVersionString[];
+    extern const char tokumxVersionString[];
     extern const BSONArray versionArray;
     std::string fullVersionString();
     std::string mongodVersion();

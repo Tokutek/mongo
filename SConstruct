@@ -972,18 +972,17 @@ def getSystemInstallName():
 
 def getCodeVersion():
     fullSource = open( "src/mongo/util/version.cpp" , "r" ).read()
-    allMatches = re.findall( r"versionString.. = \"(.*?)\"" , fullSource );
+    allMatches = re.findall( r"mongodbVersionString.. = \"(.*?)\"" , fullSource );
     if len(allMatches) != 1:
         print( "can't find version # in code" )
         return None
     mongodbver = allMatches[0]
-    allMatches = re.findall( r"tokutekPatchVersionString.. = \"(.*?)\"" , fullSource );
+    allMatches = re.findall( r"tokumxVersionString.. = \"(.*?)\"" , fullSource );
     if len(allMatches) != 1:
         print( "can't find version # in code" )
         return None
-    tokupatchver = allMatches[0]
-    ftver = utils.getTokukvVersion(env['TOKUKV_PATH'])
-    return mongodbver + "-tokutek-" + tokupatchver + "-tokukv-" + ftver
+    tokumxver = allMatches[0]
+    return tokumxver + '-mongodb-' + mongodbver
 
 mongoCodeVersion = getCodeVersion()
 if mongoCodeVersion == None:
@@ -999,7 +998,7 @@ else:
     distName = utils.getGitBranchString("" , "-") + datetime.date.today().strftime("%Y-%m-%d")
 
 
-env['SERVER_DIST_BASENAME'] = 'mongodb-%s-%s' % (getSystemInstallName(), distName)
+env['SERVER_DIST_BASENAME'] = 'tokumx-%s-%s' % (distName, getSystemInstallName())
 
 distFile = "${SERVER_ARCHIVE}"
 debuginfoFile = "${SERVER_DEBUGINFO_ARCHIVE}"
