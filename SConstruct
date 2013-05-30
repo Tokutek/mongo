@@ -945,6 +945,8 @@ env.AlwaysBuild( "style" )
 
 def getSystemInstallName():
     n = platform + "-" + processor
+    if debugBuild:
+        n += "-debug"
     if static:
         n += "-static"
     if has_option("nostrip"):
