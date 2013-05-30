@@ -566,7 +566,7 @@ def installBinary( e, name, fix_rpath=True ):
 
     if fix_rpath:
         name = e.Command('install_rpath/%s' % name, name, Copy('$TARGET', '$SOURCE'))[0]
-        e.AddPostAction(name, "chrpath -r '$$ORIGIN/../lib64:$$$$ORIGIN/../lib64' $TARGET")
+        e.AddPostAction(name, "chrpath -r '$$ORIGIN/../lib64:$$$$ORIGIN/../lib64:$$ORIGIN/../lib:$$$$ORIGIN/../lib' $TARGET")
 
     if (solaris or linux) and (not has_option("nostrip")):
         basename = str(name).replace('install_rpath/', '')
@@ -664,6 +664,8 @@ env.Command(
             '--transform ${str(Dir(BUILD_DIR))}/mongo=$SERVER_DIST_BASENAME/bin',
             '--transform /lib64=$SERVER_DIST_BASENAME/lib64',
             '--transform /usr/lib64=$SERVER_DIST_BASENAME/lib64',
+            '--transform /lib=$SERVER_DIST_BASENAME/lib',
+            '--transform /usr/lib=$SERVER_DIST_BASENAME/lib',
             '${TEMPFILE(SOURCES[1:])}']))
 
 if (solaris or linux) and (not has_option("nostrip")):
