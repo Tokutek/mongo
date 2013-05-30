@@ -619,12 +619,15 @@ if installSetup.libraries:
     if has_option( "sharedclient" ):
         env.Install( "$INSTALL_DIR/$NIX_LIB_DIR",  '#${SHLIBPREFIX}mongoclient${SHLIBSUFFIX}')
 
+toku_readme_cmd = env.Command('distsrc/README-TOKUKV', tokusrc.File('README-TOKUDB'), 'sed -e s/TokuDB/TokuKV/g $SOURCE > $TARGET')
+toku_readme = env.File('distsrc/README-TOKUKV')
+
 # Stage the top-level mongodb banners
 distsrc = env.Dir('#distsrc')
 env.Append(MODULE_BANNERS = [distsrc.File('README'),
                              distsrc.File('THIRD-PARTY-NOTICES'),
                              distsrc.File('NEWS'),
-                             tokusrc.File('README-TOKUDB')])
+                             toku_readme])
 env.Append(TOKULIBS = [tokulib.File('lib%s.so' % libname) for libname in [ltokufractaltree, ltokuportability]])
 
 # If no module has introduced a file named LICENSE.txt, then inject the AGPL.
