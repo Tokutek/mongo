@@ -976,17 +976,12 @@ def getSystemInstallName():
 
 def getCodeVersion():
     fullSource = open( "src/mongo/util/version.cpp" , "r" ).read()
-    allMatches = re.findall( r"mongodbVersionString.. = \"(.*?)\"" , fullSource );
-    if len(allMatches) != 1:
-        print( "can't find version # in code" )
-        return None
-    mongodbver = allMatches[0]
     allMatches = re.findall( r"tokumxVersionString.. = \"(.*?)\"" , fullSource );
     if len(allMatches) != 1:
         print( "can't find version # in code" )
         return None
     tokumxver = allMatches[0]
-    return tokumxver + '-mongodb-' + mongodbver
+    return tokumxver
 
 mongoCodeVersion = getCodeVersion()
 if mongoCodeVersion == None:
