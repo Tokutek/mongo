@@ -1,5 +1,7 @@
 chunksize = 25
 
+assert(false, "this test hangs sometimes, see #115");
+
 s = new ShardingTest( "migrate_cursor1" , 2 , 1 , 1 , { chunksize : chunksize } );
 
 s.config.settings.update( { _id: "balancer" }, { $set : { stopped: true } } , true );
