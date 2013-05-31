@@ -91,12 +91,15 @@ namespace mongo {
     }
 
     static void insertAndLog(const char *ns, NamespaceDetails *d, NamespaceDetailsTransient *nsdt,
-            BSONObj &newObj, bool overwrite, bool logop, bool fromMigrate) {
+            BSONObj &newObj, bool logop, bool fromMigrate) {
 
         checkNoMods( newObj );
         TOKULOG(3) << "insertAndLog for upsert: " << newObj << endl;
 
-        insertOneObject(d, nsdt, newObj, overwrite ? NamespaceDetails::NO_UNIQUE_CHECKS : 0);
+        // We cannot pass NamespaceDetails::NO_UNIQUE_CHECKS because we still need to check secondary indexes.
+        // We know if we are in this function that we did a query for the object and it didn't exist yet, so the unique check on the PK won't fail.
+        // To prove this to yourself, look at the callers of insertAndLog and see that they return an UpdateResult that says the object didn't exist yet.
+        insertOneObject(d, nsdt, newObj);
         if (logop) {
             OpLogHelpers::logInsert(ns, newObj, &cc().txn());
         }
@@ -236,7 +239,7 @@ namespace mongo {
                 checkNoMods( updateobj );
                 debug.upsert = true;
                 BSONObj objModified = updateobj;
-                insertOneObject( d, nsdt, objModified, upsert ? NamespaceDetails::NO_UNIQUE_CHECKS : 0 );
+                insertOneObject( d, nsdt, objModified );
                 return UpdateResult( 0 , 0 , 1 , updateobj );
             }
         }
@@ -359,12 +362,12 @@ namespace mongo {
                 // upsert of an $operation. build a default object
                 BSONObj newObj = mods->createNewFromQuery( patternOrig );
                 debug.fastmodinsert = true;
-                insertAndLog( ns, d, nsdt, newObj, upsert, logop, fromMigrate );
+                insertAndLog( ns, d, nsdt, newObj, logop, fromMigrate );
                 return UpdateResult( 0 , 1 , 1 , newObj );
             }
             uassert( 10159 ,  "multi update only works with $ operators" , ! multi );
             debug.upsert = true;
-            insertAndLog( ns, d, nsdt, newObj, upsert, logop, fromMigrate );
+            insertAndLog( ns, d, nsdt, newObj, logop, fromMigrate );
             return UpdateResult( 0 , 0 , 1 , newObj );
         }
 
