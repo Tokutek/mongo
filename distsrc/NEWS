@@ -54,7 +54,11 @@ Limitations
       but most have not.
 
     - The format of the local.oplog.rs collection has changed and will
-      break any applications that were relying on it.
+      break any applications that were relying on it. Also, it is no longer
+      a capped collection, but rather, a normal collection. To have the oplog
+      trim data, set the command line variable expireOplogDays, which will
+      have a background thread delete data that the specified number of days
+      old.
 
     - On a replica set, large transactions can fail if a transaction is
       too large (due to a limit on the size of a BSON object).  This
@@ -63,6 +67,17 @@ Limitations
       large number of documents (and specify {multi: true}).  This will be
       fixed soon, but for now, avoid such operations if you are using
       replication.
+
+    - When performing an initial sync on a secondary, if the primary drops
+      any collection, the initial sync may fail. Try to avoid dropping collections
+      during initial syncs of secondaries.
+
+    - For the fastsync option to start a secondary to work, the machine must have
+      some data in the oplog associated with the state of the machine. If the oplog
+      is empty, then a full initial sync is performed.
+
+    - mongodump --oplog and mongorestore --oplogReplay are not supported
+      and cannot be used to create a secondary for a replica set.
 
     - The commands aggregate and mapReduce may have poor concurrency with
       some workloads.  This will be fixed soon, and these commands should
@@ -87,6 +102,8 @@ Limitations
       the old reIndex functionality, just drop and re-create the index
       manually.
 
+    - Only foreground indexing is supported. Background indexing is not.
+    We will add background indexing soon.
 
 tokumx 0.1.0
 ------------
