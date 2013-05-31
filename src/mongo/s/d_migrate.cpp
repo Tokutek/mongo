@@ -491,6 +491,7 @@ namespace mongo {
                 d = nsdetails(_ns.c_str());
                 if (d == NULL) {
                     errmsg = "ns not found, should be impossible";
+                    _txn.reset();
                     return false;
                 }
 
@@ -499,6 +500,7 @@ namespace mongo {
 
                 if ( idx == NULL ) {
                     errmsg = mongoutils::str::stream() << "can't find index for " << _shardKeyPattern << " in _migrateClone" << causedBy( errmsg );
+                    _txn.reset();
                     return false;
                 }
                 // Assume both min and max non-empty, append MinKey's to make them fit chosen index
