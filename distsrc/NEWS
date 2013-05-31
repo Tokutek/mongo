@@ -3,7 +3,7 @@ tokumx news
 
 tokumx 1.0.0-rc.0
 -----------------
-Release date: TBD
+Release date: 2013-05-31
 
 General
 ~~~~~~~
@@ -45,6 +45,11 @@ New features and improvements
     - The C++ client driver has a convenience class for multi-statement
       transactions: RemoteTransaction.  Please check its documentation.
 
+    - The local.oplog.rs collection is no longer capped, and instead can
+      be trimmed to keep N days' worth of data.  Use the command line flag
+      --expireOplogDays to configure this number of days (by default,
+      nothing is trimmed).
+
 
 Limitations
 ~~~~~~~~~~~
@@ -54,15 +59,28 @@ Limitations
       but most have not.
 
     - The format of the local.oplog.rs collection has changed and will
-      break any applications that were relying on it.
+      break any applications that were relying on it.  Also, it is no
+      longer capped (see above).
 
     - On a replica set, large transactions can fail if a transaction is
       too large (due to a limit on the size of a BSON object).  This
-      should not be a worry for existing applications, but some commands
-      (copydb, clone, cloneCollection), as well as updates that affect a
-      large number of documents (and specify {multi: true}).  This will be
-      fixed soon, but for now, avoid such operations if you are using
-      replication.
+      should not be a worry for most existing applications, but some
+      commands (copydb, clone, cloneCollection), as well as updates that
+      affect a large number of documents (and specify {multi: true}).
+      This will be fixed soon, but for now, avoid such operations if you
+      are using replication.
+
+    - When performing an initial sync on a secondary, if the primary drops
+      any collection, the initial sync may fail.  Try to avoid dropping
+      collections during initial syncs of secondaries.
+
+    - For the fastsync option, when starting a secondary, to work, the
+      machine must have some data in the oplog associated with the state
+      of the machine. If the oplog is empty, then a full initial sync is
+      performed.
+
+    - mongodump --oplog and mongorestore --oplogReplay are not supported
+      and cannot be used to create a secondary for a replica set.
 
     - The commands aggregate and mapReduce may have poor concurrency with
       some workloads.  This will be fixed soon, and these commands should
@@ -86,6 +104,9 @@ Limitations
       some other things), and this side effect no longer exists.  To get
       the old reIndex functionality, just drop and re-create the index
       manually.
+
+    - Only foreground indexing is supported. Background indexing is not.
+      We will add background indexing soon.
 
 
 tokumx 0.1.0

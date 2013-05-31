@@ -388,6 +388,7 @@ namespace mongo {
             bb.append("uptime", (unsigned)(time(0) - cmdLine.started));
             if (!_self->config().arbiterOnly) {
                 bb.appendDate("optimeDate", gtidManager->getCurrTimestamp());
+                bb.append("lastGTID", gtidManager->getLiveState().toString());
             }
 
             int maintenance = _maintenanceMode;
@@ -422,6 +423,7 @@ namespace mongo {
             bb.append("uptime", (unsigned) (m->hbinfo().upSince ? (time(0)-m->hbinfo().upSince) : 0));
             if (!m->config().arbiterOnly) {
                 bb.appendDate("optimeDate", m->hbinfo().opTime);
+                bb.append("lastGTID", m->hbinfo().gtid.toString());
             }
             bb.appendTimeT("lastHeartbeat", m->hbinfo().lastHeartbeat);
             bb.append("pingMs", m->hbinfo().ping);

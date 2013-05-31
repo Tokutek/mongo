@@ -1413,8 +1413,6 @@ namespace mongo {
                 if ( c.find( ".system.profile" ) != string::npos )
                     continue;
 
-                shared_ptr<Cursor> cursor;
-
                 NamespaceDetails * nsd = nsdetails( c.c_str() );
 
                 // debug SERVER-761
@@ -1427,24 +1425,16 @@ namespace mongo {
                     }
                 }
 
-                int idNum = nsd->findIdIndex();
                 if ( c.find( ".system." ) != string::npos ) {
                     continue;
-                }
-                else {
-                    verify(idNum >= 0);
-                    cursor.reset( new IndexCursor( nsd , nsd->idx( idNum ) , BSONObj() , BSONObj() , false , 1 ) );
                 }
 
                 md5_state_t st;
                 md5_init(&st);
 
-                long long n = 0;
-                while ( cursor->ok() ) {
-                    BSONObj c = cursor->current();
-                    md5_append( &st , (const md5_byte_t*)c.objdata() , c.objsize() );
-                    n++;
-                    cursor->advance();
+                for (shared_ptr<Cursor> cursor(BasicCursor::make(nsd)); cursor->ok(); cursor->advance()) {
+                    BSONObj curObj = cursor->current();
+                    md5_append( &st , (const md5_byte_t*)curObj.objdata() , curObj.objsize() );
                 }
                 md5digest d;
                 md5_finish(&st, d);

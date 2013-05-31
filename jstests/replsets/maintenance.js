@@ -52,5 +52,14 @@ assert.eq(lastDoc.code, 13436);
 result = conns[1].getDB("admin").runCommand({replSetMaintenance : 0});
 assert.eq(result.ok, 1, tojson(result));
 
+var secondarySoon = function() {
+    var x = 0;
+    assert.soon(function() {
+        var im = conns[1].getDB("admin").isMaster();
+                 if (x++ % 5 == 0) printjson(im);
+                 return im.secondary;
+             });
+}; 
+
 secondarySoon();
 

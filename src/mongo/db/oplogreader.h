@@ -85,6 +85,6 @@ namespace mongo {
         /** @return true iff connection was successful */ 
         bool commonConnect(const string& hostName);
         bool passthroughHandshake(const BSONObj& rid, const int f);
-        void tailingQuery(const char *ns, const BSONObj& query, const BSONObj* fields=0);
+        void tailingQuery(const char *ns, Query& query, const BSONObj* fields=0);
     };
 }
