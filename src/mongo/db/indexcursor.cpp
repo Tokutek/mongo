@@ -653,16 +653,15 @@ again:      while ( !allInclusive && ok() ) {
         } else {
             if ( tailable() ) {
                 if ( _currKey < _endKey ) {
+                    // Read the most up-to-date minUnsafeKey from the namespace
+                    _endKey = _d->minUnsafeKey();
                     _advance();
                 } else {
                     // reset _currKey, we may have accidentally
                     // gone past _endKey when we did our last advance
-                    // and saw something we are not allowed to see
+                    // and saw something we are not allowed to see.
                     _currKey = _endKey;
-                    // The cursor advanced reached the minimum safe bound.
-                    // Read a new safe bound from the namespace and reposition 
-                    // to the current key. checkCurrent() will mark the cursor as ok()
-                    // if the new current key is within bounds, and !ok() otherwise.
+                    // Read the most up-to-date minUnsafeKey from the namespace
                     _endKey = _d->minUnsafeKey();
                     findKey( _currKey.isEmpty() ? minKey : _currKey );
                 }
