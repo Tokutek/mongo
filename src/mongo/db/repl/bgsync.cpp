@@ -280,8 +280,8 @@ namespace mongo {
                 // if there is no one to sync from
                 return 1; //sleep one second
             }
-            r.tailingQueryGTE(rsoplog, lastGTIDFetched);
         }
+        r.tailingQueryGTE(rsoplog, lastGTIDFetched);
 
         // if target cut connections between connecting and querying (for
         // example, because it stepped down) we might not have a cursor
