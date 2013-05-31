@@ -1,4 +1,3 @@
-assert(false, "this test finds a deadlock, but that stops the tests from progressing");
 chunksize = 25
 
 s = new ShardingTest( "migrate_cursor1" , 2 , 1 , 1 , { chunksize : chunksize } );

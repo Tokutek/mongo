@@ -80,6 +80,13 @@ Limitations
     - Geospatial and Full Text Search Indexes are not supported (the '2d'
       and 'text' index types).
 
+    - The reIndex command no longer has the same effect it used to.  In
+      particular, one effect in vanilla MongoDB is that it recalculates
+      whether an index is "multi-key" (which affects query planning and
+      some other things), and this side effect no longer exists.  To get
+      the old reIndex functionality, just drop and re-create the index
+      manually.
+
 
 tokumx 0.1.0
 ------------
