@@ -220,7 +220,9 @@ namespace mongo {
             if( logLevel >= 1 || m.size() > 40 || cant || DEBUG_BUILD ) {
                 log() << "opening db: " << (path==dbpath?"":path) << ' ' << dbname << endl;
             }
-            massert(16802, "can't open database in a read lock. if db was just closed, consider retrying the query. might otherwise indicate an internal error", !cant);
+            if (cant) {
+                throw RetryWithWriteLock(mongoutils::str::stream() << "opening database for " << ns << ". if db was just closed, consider retrying the query. might otherwise indicate an internal error");
+            }
 
             db = new Database( dbname.c_str() , justCreated , path );
 
