@@ -417,7 +417,8 @@ namespace mongo {
                     // add split points, used for shard
                     BSONObj res;
                     BSONObj idKey = BSON( "_id" << 1 );
-                    if ( ! _db.runCommand( "admin" , BSON( "splitVector" << _config.finalLong << "keyPattern" << idKey << "maxChunkSizeBytes" << _config.splitInfo ) , res ) ) {
+                    string dbname = nsToDatabase(_config.finalLong);
+                    if ( ! _db.runCommand(dbname , BSON( "splitVector" << _config.finalLong << "keyPattern" << idKey << "maxChunkSizeBytes" << _config.splitInfo ) , res ) ) {
                         uasserted( 15921 ,  str::stream() << "splitVector failed: " << res );
                     }
                     if ( res.hasField( "splitKeys" ) )
