@@ -179,7 +179,7 @@ namespace mongo {
         return conn()->runCommand( "admin" , cmd.obj() , res );
     }
 
-    void OplogReader::tailingQuery(const char *ns, const BSONObj& query, const BSONObj* fields ) {
+    void OplogReader::tailingQuery(const char *ns, Query& query, const BSONObj* fields ) {
         verify( !haveCursor() );
         LOG(2) << "repl: " << ns << ".find(" << query.toString() << ')' << endl;
         cursor.reset( _conn->query( ns, query, 0, 0, fields, _tailingQueryOptions ).release() );
@@ -190,7 +190,7 @@ namespace mongo {
         addGTIDToBSON("$gte", gtid, q);
         BSONObjBuilder query;
         query.append("_id", q.done());
-        tailingQuery(ns, query.done(), fields);
+        tailingQuery(ns, Query(query.done()).hint(BSON("_id" << 1)), fields);
     }
 
     shared_ptr<DBClientCursor> OplogReader::getRollbackCursor(GTID lastGTID) {
