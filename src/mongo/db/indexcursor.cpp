@@ -256,8 +256,8 @@ namespace mongo {
     }
 
     void IndexCursor::setTailable() {
-        // tailable cursors may not be created over secondary indexes, which means
-        // this is a table scan cursor with trivial bounds.
+        // tailable cursors may not be created over secondary indexes,
+        // and they must intend to read to the end of the collection.
         verify( _d->isPKIndex(_idx) );
         verify( _endKey.isEmpty() || _endKey == maxKey );
         // mark the cursor as tailable and set the end key bound tothe minimum unsafe
@@ -265,6 +265,9 @@ namespace mongo {
         _tailable = true;
         _endKey = _d->minUnsafeKey();
         _endKeyInclusive = false;
+        // Tailable cursors _must_ use endKey/endKeyInclusive so the bounds we
+        // may or may not have gotten via the constructor is no longer valid.
+        _bounds.reset();
         checkCurrentAgainstBounds();
     }
 
