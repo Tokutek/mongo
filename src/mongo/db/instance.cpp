@@ -537,6 +537,7 @@ namespace mongo {
             return;
         }
 
+        Client::Context ctx(ns);
         Client::Transaction transaction(DB_SERIALIZABLE);
         UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
         lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
@@ -565,11 +566,11 @@ namespace mongo {
         cc().setOpSettings(settings);
 
         try {
-            Client::ReadContext ctx(ns);
+            Lock::DBRead lk(ns);
             lockedReceivedUpdate(ns, m, op, toupdate, query, flags);
         }
         catch (RetryWithWriteLock &e) {
-            Client::WriteContext ctx(ns);
+            Lock::DBWrite lk(ns);
             lockedReceivedUpdate(ns, m, op, toupdate, query, flags);
         }
     }
@@ -589,11 +590,10 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setOpSettings(settings);
 
-        Client::ReadContext ctx(ns);
-        Client::Transaction transaction(DB_SERIALIZABLE);
-
         bool justOne = flags & RemoveOption_JustOne;
         bool broadcast = flags & RemoveOption_Broadcast;
+
+        Lock::DBRead lk(ns);
 
         // writelock is used to synchronize stepdowns w/ writes
         uassert(10056, "not master", isMasterNs(ns));
@@ -603,6 +603,8 @@ namespace mongo {
             return;
         }
 
+        Client::Context ctx(ns);
+        Client::Transaction transaction(DB_SERIALIZABLE);
         long long n = deleteObjects(ns, pattern, justOne, true);
         lastError.getSafe()->recordDelete( n );
         transaction.commit();
@@ -779,6 +781,7 @@ namespace mongo {
             return;
         }
 
+        Client::Context ctx(ns);
         Client::Transaction transaction(DB_SERIALIZABLE);
         insertObjects(ns, objs, keepGoing, 0, true);
         globalOpCounters.incInsertInWriteLock(objs.size());
@@ -807,11 +810,11 @@ namespace mongo {
         cc().setOpSettings(settings);
 
         try {
-            Client::ReadContext ctx(ns);
+            Lock::DBRead lk(ns);
             lockedReceivedInsert(ns, m, objs, keepGoing);
         }
         catch (RetryWithWriteLock &e) {
-            Client::WriteContext ctx(ns);
+            Lock::DBWrite lk(ns);
             lockedReceivedInsert(ns, m, objs, keepGoing);
         }
     }
