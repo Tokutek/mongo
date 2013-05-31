@@ -259,7 +259,6 @@ namespace mongo {
         // tailable cursors may not be created over secondary indexes, which means
         // this is a table scan cursor with trivial bounds.
         verify( _d->isPKIndex(_idx) );
-        verify( _startKey.isEmpty() || _startKey == minKey );
         verify( _endKey.isEmpty() || _endKey == maxKey );
         // mark the cursor as tailable and set the end key bound tothe minimum unsafe
         // key to read from the namespace, non-inclusive.
