@@ -347,7 +347,9 @@ namespace mongo {
                     string err;
                     // Specifying { natural : 1 } creates a "natural order" collection,
                     // which does not automaticall add/index the _id field.
-                    if ( ! userCreateNS( _config.incLong.c_str() , BSON( "natural" << 1 << "temp" << true ) , err , false ) ) {
+                    // write create to oplog, because the ensureIndex that happens below will be logged as well
+                    // not ideal, but harmless to have just the create, ensureIndex, and drop of this temp collection logged
+                    if ( ! userCreateNS( _config.incLong.c_str() , BSON( "natural" << 1 << "temp" << true ) , err , true ) ) {
                         uasserted( 13631 , str::stream() << "userCreateNS failed for mr incLong ns: " << _config.incLong << " err: " << err );
                     }
                 }
@@ -1047,119 +1049,119 @@ namespace mongo {
 
                 BSONObjBuilder countsBuilder;
                 BSONObjBuilder timingBuilder;
-                State state( config );
-                if ( ! state.sourceExists() ) {
-                    errmsg = "ns doesn't exist";
-                    return false;
-                }
-
-                if (replSet && state.isOnDisk()) {
-                    // this means that it will be doing a write operation, make sure we are on Master
-                    // ideally this check should be in slaveOk(), but at that point config is not known
-                    if (!isMaster(dbname.c_str())) {
-                        errmsg = "not master";
-                        return false;
-                    }
-                }
-
-                if (state.isOnDisk() && !client.getAuthenticationInfo()->isAuthorized(dbname)) {
-                    errmsg = "read-only user cannot output mapReduce to collection, use inline instead";
-                    return false;
-                }
 
                 try {
                     Client::Transaction transaction(DB_TXN_SNAPSHOT);
-
-                    state.init();
-                    state.prepTempCollection();
-                    ProgressMeterHolder pm( op->setMessage( "m/r: (1/3) emit phase" , state.incomingDocuments() ) );
-
-                    wassert( config.limit < 0x4000000 ); // see case on next line to 32 bit unsigned
-                    long long mapTime = 0;
                     {
-                        Client::ReadContext ctx( config.ns );
-
-                        // obtain full cursor on data to apply mr to
-                        shared_ptr<Cursor> temp = NamespaceDetailsTransient::getCursor( config.ns.c_str(), config.filter, config.sort );
-                        uassert( 16052, str::stream() << "could not create cursor over " << config.ns << " for query : " << config.filter << " sort : " << config.sort, temp.get() );
-                        ClientCursor::Holder cursor(new ClientCursor(QueryOption_NoCursorTimeout,
-                                                                     temp,
-                                                                     config.ns.c_str()));
-                        uassert( 16053, str::stream() << "could not create client cursor over " << config.ns << " for query : " << config.filter << " sort : " << config.sort, cursor.get() );
-
-                        Timer mt;
-                        // go through each doc
-                        for ( ; cursor->ok() ; cursor->advance() ) {
-                            if ( ! cursor->currentMatches() ) {
-                                continue;
+                        State state( config );
+                        if ( ! state.sourceExists() ) {
+                            errmsg = "ns doesn't exist";
+                            return false;
+                        }
+                        
+                        if (replSet && state.isOnDisk()) {
+                            // this means that it will be doing a write operation, make sure we are on Master
+                            // ideally this check should be in slaveOk(), but at that point config is not known
+                            if (!isMaster(dbname.c_str())) {
+                                errmsg = "not master";
+                                return false;
                             }
+                        }
+                        
+                        if (state.isOnDisk() && !client.getAuthenticationInfo()->isAuthorized(dbname)) {
+                            errmsg = "read-only user cannot output mapReduce to collection, use inline instead";
+                            return false;
+                        }
+                        state.init();
+                        state.prepTempCollection();
+                        ProgressMeterHolder pm( op->setMessage( "m/r: (1/3) emit phase" , state.incomingDocuments() ) );
 
-                            // make sure we dont process duplicates in case data gets moved around during map
-                            // TODO This won't actually help when data gets moved, it's to handle multikeys.
-                            if ( cursor->currentIsDup() ) {
-                                continue;
+                        wassert( config.limit < 0x4000000 ); // see case on next line to 32 bit unsigned
+                        long long mapTime = 0;
+                        {
+                            Client::ReadContext ctx( config.ns );
+
+                            // obtain full cursor on data to apply mr to
+                            shared_ptr<Cursor> temp = NamespaceDetailsTransient::getCursor( config.ns.c_str(), config.filter, config.sort );
+                            uassert( 16052, str::stream() << "could not create cursor over " << config.ns << " for query : " << config.filter << " sort : " << config.sort, temp.get() );
+                            ClientCursor::Holder cursor(new ClientCursor(QueryOption_NoCursorTimeout,
+                                                                         temp,
+                                                                         config.ns.c_str()));
+                            uassert( 16053, str::stream() << "could not create client cursor over " << config.ns << " for query : " << config.filter << " sort : " << config.sort, cursor.get() );
+
+                            Timer mt;
+                            // go through each doc
+                            for ( ; cursor->ok() ; cursor->advance() ) {
+                                if ( ! cursor->currentMatches() ) {
+                                    continue;
+                                }
+
+                                // make sure we dont process duplicates in case data gets moved around during map
+                                // TODO This won't actually help when data gets moved, it's to handle multikeys.
+                                if ( cursor->currentIsDup() ) {
+                                    continue;
+                                }
+                                                            
+                                BSONObj o = cursor->current();
+
+                                // check to see if this is a new object we don't own yet
+                                // because of a chunk migration
+                                if ( chunkManager && ! chunkManager->belongsToMe( o ) )
+                                    continue;
+
+                                // do map
+                                if ( config.verbose ) mt.reset();
+                                config.mapper->map( o );
+                                if ( config.verbose ) mapTime += mt.micros();
+
+                                num++;
+                                pm.hit();
+
+                                if ( config.limit && num >= config.limit )
+                                    break;
                             }
-                                                        
-                            BSONObj o = cursor->current();
+                        }
+                        pm.finished();
 
-                            // check to see if this is a new object we don't own yet
-                            // because of a chunk migration
-                            if ( chunkManager && ! chunkManager->belongsToMe( o ) )
-                                continue;
+                        killCurrentOp.checkForInterrupt();
+                        // update counters
+                        countsBuilder.appendNumber( "input" , num );
+                        countsBuilder.appendNumber( "emit" , state.numEmits() );
+                        if ( state.numEmits() )
+                            shouldHaveData = true;
 
-                            // do map
-                            if ( config.verbose ) mt.reset();
-                            config.mapper->map( o );
-                            if ( config.verbose ) mapTime += mt.micros();
+                        timingBuilder.appendNumber( "mapTime" , mapTime / 1000 );
+                        timingBuilder.append( "emitLoop" , t.millis() );
 
-                            num++;
-                            pm.hit();
+                        op->setMessage( "m/r: (2/3) final reduce in memory" );
+                        Timer rt;
+                        // do reduce in memory
+                        // this will be the last reduce needed for inline mode
+                        state.reduceInMemory();
+                        // if not inline: dump the in memory map to inc collection, all data is on disk
+                        state.dumpToInc();
+                        // final reduce
+                        state.finalReduce( op , pm );
+                        inReduce += rt.micros();
+                        countsBuilder.appendNumber( "reduce" , state.numReduces() );
+                        timingBuilder.appendNumber( "reduceTime" , inReduce / 1000 );
+                        timingBuilder.append( "mode" , state.jsMode() ? "js" : "mixed" );
 
-                            if ( config.limit && num >= config.limit )
-                                break;
+                        long long finalCount = state.postProcessCollection(op, pm);
+                        state.appendResults( result );
+
+                        timingBuilder.appendNumber( "total" , t.millis() );
+                        result.appendNumber( "timeMillis" , t.millis() );
+                        countsBuilder.appendNumber( "output" , finalCount );
+                        if ( config.verbose ) result.append( "timing" , timingBuilder.obj() );
+                        result.append( "counts" , countsBuilder.obj() );
+
+                        if ( finalCount == 0 && shouldHaveData ) {
+                            result.append( "cmd" , cmd );
+                            errmsg = "there were emits but no data!";
+                            return false;
                         }
                     }
-                    pm.finished();
-
-                    killCurrentOp.checkForInterrupt();
-                    // update counters
-                    countsBuilder.appendNumber( "input" , num );
-                    countsBuilder.appendNumber( "emit" , state.numEmits() );
-                    if ( state.numEmits() )
-                        shouldHaveData = true;
-
-                    timingBuilder.appendNumber( "mapTime" , mapTime / 1000 );
-                    timingBuilder.append( "emitLoop" , t.millis() );
-
-                    op->setMessage( "m/r: (2/3) final reduce in memory" );
-                    Timer rt;
-                    // do reduce in memory
-                    // this will be the last reduce needed for inline mode
-                    state.reduceInMemory();
-                    // if not inline: dump the in memory map to inc collection, all data is on disk
-                    state.dumpToInc();
-                    // final reduce
-                    state.finalReduce( op , pm );
-                    inReduce += rt.micros();
-                    countsBuilder.appendNumber( "reduce" , state.numReduces() );
-                    timingBuilder.appendNumber( "reduceTime" , inReduce / 1000 );
-                    timingBuilder.append( "mode" , state.jsMode() ? "js" : "mixed" );
-
-                    long long finalCount = state.postProcessCollection(op, pm);
-                    state.appendResults( result );
-
-                    timingBuilder.appendNumber( "total" , t.millis() );
-                    result.appendNumber( "timeMillis" , t.millis() );
-                    countsBuilder.appendNumber( "output" , finalCount );
-                    if ( config.verbose ) result.append( "timing" , timingBuilder.obj() );
-                    result.append( "counts" , countsBuilder.obj() );
-
-                    if ( finalCount == 0 && shouldHaveData ) {
-                        result.append( "cmd" , cmd );
-                        errmsg = "there were emits but no data!";
-                        return false;
-                    }
-
                     transaction.commit();
                 }
                 catch( SendStaleConfigException& e ){
