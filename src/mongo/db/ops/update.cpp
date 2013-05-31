@@ -99,7 +99,7 @@ namespace mongo {
         // We cannot pass NamespaceDetails::NO_UNIQUE_CHECKS because we still need to check secondary indexes.
         // We know if we are in this function that we did a query for the object and it didn't exist yet, so the unique check on the PK won't fail.
         // To prove this to yourself, look at the callers of insertAndLog and see that they return an UpdateResult that says the object didn't exist yet.
-        insertOneObject(d, nsdt, newObj);
+        insertOneObject(d, nsdt, newObj, 0);
         if (logop) {
             OpLogHelpers::logInsert(ns, newObj, &cc().txn());
         }
@@ -239,7 +239,7 @@ namespace mongo {
                 checkNoMods( updateobj );
                 debug.upsert = true;
                 BSONObj objModified = updateobj;
-                insertOneObject( d, nsdt, objModified );
+                insertOneObject( d, nsdt, objModified, 0 );
                 return UpdateResult( 0 , 0 , 1 , updateobj );
             }
         }
