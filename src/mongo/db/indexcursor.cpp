@@ -265,6 +265,9 @@ namespace mongo {
         _tailable = true;
         _endKey = _d->minUnsafeKey();
         _endKeyInclusive = false;
+        // Tailable cursors _must_ use endKey/endKeyInclusive so the bounds we
+        // may or may not have gotten via the constructor is no longer valid.
+        _bounds.reset();
         checkCurrentAgainstBounds();
     }
 
