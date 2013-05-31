@@ -960,12 +960,12 @@ namespace mongo {
                 // Insert the keys that exist in newKeys but do not exist in oldKeys
                 for (BSONObjSet::iterator n = newKeys.begin(); n != newKeys.end(); n++) {
                     const BSONObj &k = *n;
-                    if (idx.clustering()) {
+                    if (!orderedSetContains(oldKeys, k)) {
+                        idx.insertPair(k, &pk, newObj, 0);
+                    }
+                    else if (idx.clustering()) {
                         // if clustering, overwrite every key with the new data
                         idx.insertPair(k, &pk, newObj, NamespaceDetails::NO_UNIQUE_CHECKS);
-                    }
-                    else if (!orderedSetContains(oldKeys, k)) {
-                        idx.insertPair(k, &pk, newObj, 0);
                     }
                 }
             }
