@@ -256,8 +256,8 @@ namespace mongo {
     }
 
     void IndexCursor::setTailable() {
-        // tailable cursors may not be created over secondary indexes, which means
-        // this is a table scan cursor with trivial bounds.
+        // tailable cursors may not be created over secondary indexes,
+        // and they must intend to read to the end of the collection.
         verify( _d->isPKIndex(_idx) );
         verify( _endKey.isEmpty() || _endKey == maxKey );
         // mark the cursor as tailable and set the end key bound tothe minimum unsafe
