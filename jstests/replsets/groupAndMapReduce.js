@@ -64,11 +64,15 @@ doTest = function( signal ) {
             print("Received exception: " + e);
         }
         
-        print("Calling inline mr() with slaveOk=true, must succeed"); 
+        print("Calling inline mr() with slaveOk=true, must fail"); 
         slave.slaveOk = true;
         map = function() { emit(this.a, 1); };
         reduce = function(key, vals) { var sum = 0; for (var i = 0; i < vals.length; ++i) { sum += vals[i]; } return sum; };
+        try {
         slave.getDB("foo").foo.mapReduce(map, reduce, {out: { "inline" : 1}});
+        } catch(e) {
+            print("Received exception: " + e);
+        }
 
         print("Calling mr() to collection with slaveOk=true, must fail");
         try {
