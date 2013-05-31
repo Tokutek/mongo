@@ -251,7 +251,7 @@ namespace mongo {
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
-        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
     };
 
