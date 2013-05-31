@@ -18,13 +18,13 @@
 
 #pragma once
 
+#include <boost/cstdint.hpp>
 #include <string.h> // strlen
 #include <string>
 #include <vector>
 
 #include "mongo/bson/bsontypes.h"
 #include "mongo/bson/oid.h"
-#include "mongo/platform/cstdint.h"
 #include "mongo/platform/float_utils.h"
 
 namespace mongo {
