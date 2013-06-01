@@ -98,12 +98,18 @@ namespace mongo {
     }
 
     void BackgroundSync::applierThread() {
-        _applierInProgress = true;
+        {
+            boost::unique_lock<boost::mutex> lock(_mutex);
+            _applierInProgress = true;
+        }
         Client::initThread("applier");
         replLocalAuth();
         applyOpsFromOplog();
         cc().shutdown();
-        _applierInProgress = false;
+        {
+            boost::unique_lock<boost::mutex> lock(_mutex);
+            _applierInProgress = false;
+        }
     }
 
     void BackgroundSync::applyOpsFromOplog() {
@@ -127,6 +133,7 @@ namespace mongo {
                 GTID currEntry = getGTIDFromOplogEntry(curr);
                 theReplSet->gtidManager->noteApplyingGTID(currEntry);
                 applyTransactionFromOplog(curr);
+                LOG(3) << "applied " << curr.toString(false, true) << endl;
 
                 {
                     boost::unique_lock<boost::mutex> lck(_mutex);
@@ -159,7 +166,10 @@ namespace mongo {
     }
     
     void BackgroundSync::producerThread() {
-        _opSyncInProgress = true;
+        {
+            boost::unique_lock<boost::mutex> lock(_mutex);
+            _opSyncInProgress = true;
+        }
         Client::initThread("rsBackgroundSync");
         replLocalAuth();
         uint32_t timeToSleep = 0;
@@ -221,8 +231,11 @@ namespace mongo {
         }
 
         cc().shutdown();
-        _opSyncRunning = false; // this is racy, but who cares, we are shutting down
-        _opSyncInProgress = false;
+        {
+            boost::unique_lock<boost::mutex> lock(_mutex);
+            _opSyncRunning = false;
+            _opSyncInProgress = false;
+        }
     }
 
     void BackgroundSync::handleSlaveDelay(uint64_t opTimestamp) {
@@ -656,6 +669,14 @@ namespace mongo {
     //
     // called with _mutex held
     void BackgroundSync::verifySettled() {
+        // if the background sync has yet to be fully started,
+        // no need to run this, we are still in initialization
+        // of the replset. This can happen if
+        // during initialization, after we start the manager, we
+        // get a new config before we have fully started replication
+        if (!_applierInProgress) {
+            return;
+        }
         verify(_deque.size() == 0);
         // do a sanity check on the GTID Manager
         GTID lastLiveGTID;
@@ -664,6 +685,9 @@ namespace mongo {
             &lastLiveGTID, 
             &lastUnappliedGTID
             );
+        log() << "last GTIDs: " << 
+            lastLiveGTID.toString() << " " << 
+            lastUnappliedGTID.toString() << " " << endl;
         verify(GTID::cmp(lastUnappliedGTID, lastLiveGTID) == 0);
 
         GTID minLiveGTID;
@@ -672,12 +696,10 @@ namespace mongo {
             &minLiveGTID, 
             &minUnappliedGTID
             );
-        verify(GTID::cmp(minUnappliedGTID, minLiveGTID) == 0);
-        log() << "GTIDs: " << 
-            lastLiveGTID.toString() << " " << 
-            lastUnappliedGTID.toString() << " " << 
+        log() << "min GTIDs: " << 
             minLiveGTID.toString() << " " <<
             minUnappliedGTID.toString() << rsLog;
+        verify(GTID::cmp(minUnappliedGTID, minLiveGTID) == 0);
     }
 
     void BackgroundSync::stopOpSyncThread() {
