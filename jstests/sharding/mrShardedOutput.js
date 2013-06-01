@@ -1,3 +1,6 @@
+var testFinished = false;
+assert.soon("testFinished", "test timeout", 30 * 60 * 1000, 1000);
+
 s = new ShardingTest( "mrShardedOutput" , 2 , 1 , 1 , { chunksize : 1 } );
 
 // reduce chunk size to split
@@ -116,3 +119,4 @@ for (var it = 0; it < numIterations; it++) {
 
 
 s.stop();
+testFinished = true;
