@@ -54,43 +54,36 @@ namespace mongo {
     Database::~Database() {
     }
 
-    Database::Database(const char *nm, bool& newDb, const string& _path )
+    Database::Database(const char *nm, const string& _path )
         : name(nm), path(_path), namespaceIndex( path, name ),
           profileName(name + ".system.profile")
     {
         try {
-            {
-                // check db name is valid
-                size_t L = strlen(nm);
-                uassert( 10028 ,  "db name is empty", L > 0 );
-                uassert( 10032 ,  "db name too long", L < 64 );
-                uassert( 10029 ,  "bad db name [1]", *nm != '.' );
-                uassert( 10030 ,  "bad db name [2]", nm[L-1] != '.' );
-                uassert( 10031 ,  "bad char(s) in db name", strchr(nm, ' ') == 0 );
+            // check db name is valid
+            size_t L = strlen(nm);
+            uassert( 10028 ,  "db name is empty", L > 0 );
+            uassert( 10032 ,  "db name too long", L < 64 );
+            uassert( 10029 ,  "bad db name [1]", *nm != '.' );
+            uassert( 10030 ,  "bad db name [2]", nm[L-1] != '.' );
+            uassert( 10031 ,  "bad char(s) in db name", strchr(nm, ' ') == 0 );
 #ifdef _WIN32
-                static const char* windowsReservedNames[] = {
-                    "con", "prn", "aux", "nul",
-                    "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
-                    "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"
-                };
-                for ( size_t i = 0; i < (sizeof(windowsReservedNames) / sizeof(char*)); ++i ) {
-                    if ( strcasecmp( nm, windowsReservedNames[i] ) == 0 ) {
-                        stringstream errorString;
-                        errorString << "db name \"" << nm << "\" is a reserved name";
-                        uassert( 16185 , errorString.str(), false );
-                    }
+            static const char* windowsReservedNames[] = {
+                "con", "prn", "aux", "nul",
+                "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+                "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"
+            };
+            for ( size_t i = 0; i < (sizeof(windowsReservedNames) / sizeof(char*)); ++i ) {
+                if ( strcasecmp( nm, windowsReservedNames[i] ) == 0 ) {
+                    stringstream errorString;
+                    errorString << "db name \"" << nm << "\" is a reserved name";
+                    uassert( 16185 , errorString.str(), false );
                 }
+            }
 #endif
-            }
             profile = cmdLine.defaultProfile;
-            // If already exists, open.  Otherwise behave as if empty until
-            // there's a write, then open.
+            // The underlying dbname.ns dictionary is opend if it exists,
+            // and created lazily on the next write.
             namespaceIndex.init();
-            if (namespaceIndex.allocated()) {
-                newDb = false;
-            } else {
-                newDb = true;
-            }
             magic = 781231;
         } catch(std::exception& e) {
             log() << "warning database " << path << " " << nm << " could not be opened" << endl;
@@ -198,37 +191,37 @@ namespace mongo {
         return true;
     }
 
-    Database* DatabaseHolder::getOrCreate( const string& ns , const string& path , bool& justCreated ) {
-        string dbname = _todb( ns );
+    Database* DatabaseHolder::getOrCreate( const string& ns , const string& path ) {
+        Lock::assertAtLeastReadLocked(ns);
         Database *db;
+
+        // Try first holding a shared lock
         {
-            SimpleMutex::scoped_lock lk(_m);
-            Lock::assertAtLeastReadLocked(ns);
-            DBs& m = _paths[path];
-            {
-                DBs::iterator i = m.find(dbname); 
-                if( i != m.end() ) {
-                    justCreated = false;
-                    return i->second;
+            SimpleRWLock::Shared lk(_rwlock);
+            db = _get(ns, path);
+            if (db != NULL) {
+                return db;
+            }
+        }
+
+        // If we didn't find it, take an exclusive lock and check
+        // again. If it's still not there, do the open.
+        {
+            SimpleRWLock::Exclusive lk(_rwlock);
+            db = _get(ns, path);
+            if (db == NULL) {
+                string dbname = _todb( ns );
+                DBs &m = _paths[path];
+                if( logLevel >= 1 || m.size() > 40 || DEBUG_BUILD ) {
+                    log() << "opening db: " << (path==dbpath?"":path) << ' ' << dbname << endl;
                 }
-            }
 
-            // todo: protect against getting sprayed with requests for different db names that DNE - 
-            //       that would make the DBs map very large.  not clear what to do to handle though, 
-            //       perhaps just log it, which is what we do here with the "> 40" : 
-            bool cant = !Lock::isWriteLocked(ns);
-            if( logLevel >= 1 || m.size() > 40 || cant || DEBUG_BUILD ) {
-                log() << "opening db: " << (path==dbpath?"":path) << ' ' << dbname << endl;
-            }
-            if (cant) {
-                throw RetryWithWriteLock(mongoutils::str::stream() << "opening database for " << ns << ". if db was just closed, consider retrying the query. might otherwise indicate an internal error");
-            }
+                db = new Database( dbname.c_str() , path );
 
-            db = new Database( dbname.c_str() , justCreated , path );
-
-            verify( m[dbname] == 0 );
-            m[dbname] = db;
-            _size++;
+                verify( m[dbname] == 0 );
+                m[dbname] = db;
+                _size++;
+            }
         }
 
         return db;

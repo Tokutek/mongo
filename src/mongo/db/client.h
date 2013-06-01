@@ -302,20 +302,6 @@ namespace mongo {
             ~GodScope();
         };
 
-        //static void assureDatabaseIsOpen(const string& ns, string path=dbpath);
-        
-        /** "read lock, and set my context, all in one operation" 
-         *  This handles (if not recursively locked) opening an unopened database.
-         */
-        class ReadContext : boost::noncopyable { 
-        public:
-            ReadContext(const string &ns, string path=dbpath, bool doauth=true);
-            Context& ctx() { return *c.get(); }
-        private:
-            scoped_ptr<Lock::DBRead> lk;
-            scoped_ptr<Context> c;
-        };
-
         /* Set database we want to use, then, restores when we finish (are out of scope)
            Note this is also helpful if an exception happens as the state if fixed up.
         */
@@ -338,9 +324,6 @@ namespace mongo {
             Database* db() const { return _db; }
             const char * ns() const { return _ns.c_str(); }
             bool equals( const string& ns , const string& path=dbpath ) const { return _ns == ns && _path == path; }
-
-            /** @return if the db was created by this Context */
-            bool justCreated() const { return _justCreated; }
 
             /** @return true iff the current Context is using db/path */
             bool inDB( const string& db , const string& path=dbpath ) const;
@@ -368,13 +351,23 @@ namespace mongo {
             Client * const _client;
             Context * const _oldContext;
             const string _path;
-            bool _justCreated;
             bool _doVersion;
             const string _ns;
             Database * _db;
             
             Timer _timer;
         }; // class Client::Context
+
+        /** "read lock, and set my context, all in one operation" 
+         */
+        class ReadContext : boost::noncopyable { 
+        public:
+            ReadContext(const string &ns, string path=dbpath, bool doauth=true);
+            Context& ctx() { return _c; }
+        private:
+            Lock::DBRead _lk;
+            Client::Context _c;
+        };
 
         class WriteContext : boost::noncopyable {
         public:

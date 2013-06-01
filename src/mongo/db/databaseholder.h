@@ -13,15 +13,14 @@ namespace mongo {
     class DatabaseHolder {
         typedef map<string,Database*> DBs;
         typedef map<string,DBs> Paths;
-        // todo: we want something faster than this if called a lot:
-        mutable SimpleMutex _m;
+        mutable SimpleRWLock _rwlock;
         Paths _paths;
         int _size;
     public:
-        DatabaseHolder() : _m("dbholder"),_size(0) { }
+        DatabaseHolder() : _rwlock("dbholderRWLock"),_size(0) { }
 
         bool __isLoaded( const string& ns , const string& path ) const {
-            SimpleMutex::scoped_lock lk(_m);
+            SimpleRWLock::Shared lk(_rwlock);
             Paths::const_iterator x = _paths.find( path );
             if ( x == _paths.end() )
                 return false;
@@ -39,24 +38,16 @@ namespace mongo {
             return __isLoaded(ns,path);
         }
 
-        Database * get( const string& ns , const string& path ) const {
-            SimpleMutex::scoped_lock lk(_m);
+        Database *get( const string& ns , const string& path ) const {
+            SimpleRWLock::Shared lk(_rwlock);
             Lock::assertAtLeastReadLocked(ns);
-            Paths::const_iterator x = _paths.find( path );
-            if ( x == _paths.end() )
-                return 0;
-            const DBs& m = x->second;
-            string db = _todb( ns );
-            DBs::const_iterator it = m.find(db);
-            if ( it != m.end() )
-                return it->second;
-            return 0;
+            return _get(ns, path);
         }
 
-        Database* getOrCreate( const string& ns , const string& path , bool& justCreated );
+        Database *getOrCreate( const string& ns , const string& path );
 
         void erase( const string& ns , const string& path ) {
-            SimpleMutex::scoped_lock lk(_m);
+            SimpleRWLock::Exclusive lk(_rwlock);
             verify( Lock::isW() );
             DBs& m = _paths[path];
             _size -= (int)m.erase( _todb( ns ) );
@@ -78,7 +69,7 @@ namespace mongo {
             if (inholderlock) {
                 _getAllShortNames(all);
             } else {
-                SimpleMutex::scoped_lock lk(_m);
+                SimpleRWLock::Shared lk(_rwlock);
                 _getAllShortNames(all);
             }
         }
@@ -91,6 +82,18 @@ namespace mongo {
                     all.insert( j->first );
                 }
             }
+        }
+
+        Database *_get( const string& ns , const string& path ) const {
+            Paths::const_iterator x = _paths.find( path );
+            if ( x == _paths.end() )
+                return 0;
+            const DBs& m = x->second;
+            string db = _todb( ns );
+            DBs::const_iterator it = m.find(db);
+            if ( it != m.end() )
+                return it->second;
+            return 0;
         }
                 
         static string _todb( const string& ns ) {

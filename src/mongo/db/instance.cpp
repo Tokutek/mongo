@@ -575,25 +575,6 @@ namespace mongo {
         }
     }
 
-    void lockedReceivedDelete(const char *ns, Message &m, const BSONObj &pattern, int flags) {
-        bool justOne = flags & RemoveOption_JustOne;
-        bool broadcast = flags & RemoveOption_Broadcast;
-
-        // writelock is used to synchronize stepdowns w/ writes
-        uassert(10056, "not master", isMasterNs(ns));
-
-        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-        if (!broadcast && handlePossibleShardedMessage(m, 0)) {
-            return;
-        }
-
-        Client::Context ctx(ns);
-        Client::Transaction transaction(DB_SERIALIZABLE);
-        long long n = deleteObjects(ns, pattern, justOne, true);
-        lastError.getSafe()->recordDelete( n );
-        transaction.commit();
-    }
-
     void receivedDelete(Message& m, CurOp& op) {
         DbMessage d(m);
         const char *ns = d.getns();
@@ -609,14 +590,24 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setOpSettings(settings);
 
-        try {
-            Lock::DBRead lk(ns);
-            lockedReceivedDelete(ns, m, pattern, flags);
+        bool justOne = flags & RemoveOption_JustOne;
+        bool broadcast = flags & RemoveOption_Broadcast;
+
+        Lock::DBRead lk(ns);
+
+        // writelock is used to synchronize stepdowns w/ writes
+        uassert(10056, "not master", isMasterNs(ns));
+
+        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+        if (!broadcast && handlePossibleShardedMessage(m, 0)) {
+            return;
         }
-        catch (RetryWithWriteLock) {
-            Lock::DBWrite lk(ns);
-            lockedReceivedDelete(ns, m, pattern, flags);
-        }
+
+        Client::Context ctx(ns);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        long long n = deleteObjects(ns, pattern, justOne, true);
+        lastError.getSafe()->recordDelete( n );
+        transaction.commit();
     }
 
     QueryResult* emptyMoreResult(long long);

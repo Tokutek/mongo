@@ -156,7 +156,6 @@ namespace mongo {
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( mongo::dbpath ), // is this right? could be a different db? may need a dassert for this
-        _justCreated(false),
         _doVersion( true ),
         _ns( ns ), 
         _db(db)
@@ -170,7 +169,6 @@ namespace mongo {
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( path ), 
-        _justCreated(false), // set for real in finishInit
         _doVersion(doVersion),
         _ns( ns ), 
         _db(0)
@@ -181,42 +179,9 @@ namespace mongo {
     /** "read lock, and set my context, all in one operation" 
      *  This handles (if not recursively locked) opening an unopened database.
      */
-    Client::ReadContext::ReadContext(const string& ns, string path, bool doauth) {
-        {
-            lk.reset( new Lock::DBRead(ns) );
-            Database *db = dbHolder().get(ns, path);
-            if ( db ) {
-                c.reset( new Context(path, ns, db, doauth) );
-                return;
-            }
-        }
-
-        // we usually don't get here, so doesn't matter how fast this part is
-        {
-            DEV log() << "_DEBUG ReadContext db wasn't open, will try to open " << ns << endl;
-            if( Lock::isW() ) { 
-                // write locked already, so we should have have failed to open the NS
-                DEV RARELY log() << "write locked on ReadContext construction " << ns << endl;
-                c.reset( new Context(ns, path, doauth) );
-            }
-            else if( !Lock::nested() ) { 
-                lk.reset(0);
-                {
-                    Lock::GlobalWrite w;
-                    Context c(ns, path, doauth);
-                }
-                // db could be closed at this interim point -- that is ok, we will throw, and don't mind throwing.
-                lk.reset( new Lock::DBRead(ns) );
-                c.reset( new Context(ns, path, doauth) );
-            }
-            else {
-                uasserted(16801, str::stream() << "can't open a database from a nested read lock " << ns); 
-            }
-        }
-
-        // todo: are receipts of thousands of queries for a nonexisting database a potential 
-        //       cause of bad performance due to the write lock acquisition above?  let's fix that.
-        //       it would be easy to first check that there is at least a .ns file, or something similar.
+    Client::ReadContext::ReadContext(const string& ns, string path, bool doauth)
+        : _lk( ns ) ,
+          _c( ns , path , doauth ) {
     }
 
     Client::WriteContext::WriteContext(const string& ns, string path , bool doauth ) 
@@ -249,7 +214,6 @@ namespace mongo {
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( path ), 
-        _justCreated(false),
         _doVersion( true ),
         _ns( ns ), 
         _db(db)
@@ -265,7 +229,7 @@ namespace mongo {
         dassert( Lock::isLocked() );
         int writeLocked = Lock::somethingWriteLocked();
 
-        _db = dbHolderUnchecked().getOrCreate( _ns , _path , _justCreated );
+        _db = dbHolderUnchecked().getOrCreate( _ns , _path );
         verify(_db);
         if( _doVersion ) checkNotStale();
         massert( 16107 , str::stream() << "Don't have a lock on: " << _ns , Lock::atLeastReadLocked( _ns ) );
