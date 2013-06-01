@@ -1,5 +1,4 @@
-var testFinished = false;
-assert.soon("testFinished", "test timeout", 30 * 60 * 1000, 1000);
+assert(false, "this test sometimes times out");
 
 chunksize = 25
 
@@ -70,4 +69,3 @@ assert.eq( numDocs , t.count() , "at end 2" )
 assert.eq( numDocs , primary.count() + secondary.count() , "at end 3" )
 
 s.stop()
-testFinished = true;
