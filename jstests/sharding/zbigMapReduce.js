@@ -1,5 +1,4 @@
-var testFinished = false;
-assert.soon("testFinished", "test timeout", 30 * 60 * 1000, 1000);
+assert(false, "this test sometimes times out");
 
 s = new ShardingTest( "bigMapReduce" , 2 , 1 , 1 , { rs: true, numReplicas: 2, chunksize : 1 } );
 
@@ -189,4 +188,3 @@ for (var i = 0; i < secondaries.length; ++i) {
 jsTestLog( "DONE" )
 
 s.stop()
-testFinished = true;

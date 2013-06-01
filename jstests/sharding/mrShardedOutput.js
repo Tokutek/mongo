@@ -1,5 +1,4 @@
-var testFinished = false;
-assert.soon("testFinished", "test timeout", 30 * 60 * 1000, 1000);
+assert(false, "this test sometimes times out");
 
 s = new ShardingTest( "mrShardedOutput" , 2 , 1 , 1 , { chunksize : 1 } );
 
@@ -119,4 +118,3 @@ for (var it = 0; it < numIterations; it++) {
 
 
 s.stop();
-testFinished = true;
