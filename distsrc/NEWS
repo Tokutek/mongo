@@ -108,6 +108,11 @@ Limitations
     - Only foreground indexing is supported. Background indexing is not.
       We will add background indexing soon.
 
+    - The mongorestore tool only works properly if it restores into a
+      running mongod.  Don't try to restore into a fresh data directory,
+      instead, start a mongod pointing to that directory, and then use
+      mongorestore.
+
 
 tokumx 0.1.0
 ------------
