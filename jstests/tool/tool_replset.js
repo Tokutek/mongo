@@ -63,6 +63,7 @@ assert.eq(x, docNum, "mongoimport should have successfully imported the collecti
 
 master.getDB("foo").getCollection("bar").drop();
 
+if (0) { // mongooplog has gone away, and the oplog format changed anyway
 // Test with mongooplog
 var doc = { _id : 5, x : 17 };
 master.getDB("local").oplog.rs.insert({ ts : new Timestamp(), "op" : "i", "ns" : "foo.bar",
@@ -75,5 +76,6 @@ runMongoProgram("mongooplog" , "--from", "127.0.0.1:" + replTest.ports[0],
                                "--host", replSetConnString);
 
 assert.eq(101, master.getDB("foo").getCollection("bar").count(), "after")
+}
 
 replTest.stopSet();
