@@ -1315,6 +1315,7 @@ namespace mongo {
         nsToDatabase( ns, cl );
         if (nsdetails(ns) != NULL) {
             // Namespace already exists
+            err = "collection already exists";
             return false;
         } else {
             // This creates the namespace as well as its _id index
