@@ -1312,6 +1312,15 @@ namespace mongo {
 
     // TODO: All global functions manipulating namespaces should be static in NamespaceDetails
 
+    static void checkConfigNS(const char *ns) {
+        if ( cmdLine.configsvr &&
+             !( mongoutils::str::startsWith( ns, "config." ) ||
+                mongoutils::str::startsWith( ns, "local." ) ||
+                mongoutils::str::startsWith( ns, "admin." ) ) ) {
+            uasserted(14037, "can't create user databases on a --configsvr instance");
+        }
+    }
+
     bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication) {
         const char *coll = strchr( ns, '.' ) + 1;
         massert( 16451 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns));
@@ -1321,22 +1330,32 @@ namespace mongo {
             // Namespace already exists
             err = "collection already exists";
             return false;
-        } else {
-            // This creates the namespace as well as its _id index
-            nsdetails_maybe_create(ns, options);
-            if ( logForReplication ) {
-                if ( options.getField( "create" ).eoo() ) {
-                    BSONObjBuilder b;
-                    b << "create" << coll;
-                    b.appendElements( options );
-                    options = b.obj();
-                }
-                string logNs = string( cl ) + ".$cmd";
-                OpLogHelpers::logCommand(logNs.c_str(), options, &cc().txn());
-            }
-            // TODO: Identify error paths for this function
-            return true;
         }
+
+        checkConfigNS(ns);
+
+        {
+            BSONElement e = options.getField("size");
+            if (e.isNumber()) {
+                long long size = e.numberLong();
+                uassert(10083, "create collection invalid size spec", size > 0);
+            }
+        }
+
+        // This creates the namespace as well as its _id index
+        nsdetails_maybe_create(ns, options);
+        if ( logForReplication ) {
+            if ( options.getField( "create" ).eoo() ) {
+                BSONObjBuilder b;
+                b << "create" << coll;
+                b.appendElements( options );
+                options = b.obj();
+            }
+            string logNs = string( cl ) + ".$cmd";
+            OpLogHelpers::logCommand(logNs.c_str(), options, &cc().txn());
+        }
+        // TODO: Identify error paths for this function
+        return true;
     }
 
     NamespaceDetails* getAndMaybeCreateNS(const char *ns, bool logop) {
