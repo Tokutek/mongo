@@ -533,6 +533,8 @@ namespace mongo {
                         b.appendNumber(key, (long long)value.as<long>());
                     else if (type == typeid(unsigned))
                         b.appendNumber(key, (long long)value.as<unsigned>());
+                    else if (type == typeid(unsigned long))
+                        b.appendNumber(key, (unsigned long)value.as<unsigned long>());
                     else if (type == typeid(unsigned long long))
                         b.appendNumber(key, (long long)value.as<unsigned long long>());
                     else if (type == typeid(vector<string>))
