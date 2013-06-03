@@ -1,6 +1,13 @@
 
-Building MongoDB
-================
+Building TokuMX
+===============
+
+TOKUKV
+---------------
+
+To build TokuMX, you must first build TokuKV and install it to src/third_party/tokukv (if you have TokuKV installed elsewhere, you can set the environment variable `TOKUKV_PATH` when running scons).
+
+For instructions on building TokuKV, see [Tokutek/ft-index](http://github.com/Tokutek/ft-index).  Make sure you configure with `-D CMAKE_INSTALL_PREFIX=/path/to/mongo/src/third_party/tokukv`.
 
 SCONS
 ---------------
@@ -19,7 +26,7 @@ To install
 
     $ scons --prefix=/opt/mongo install
 
-Please note that prebuilt binaries are available on [mongodb.org](http://www.mongodb.org/downloads) and may be the easiest way to get started.
+Please note that prebuilt binaries are available at [tokutek.com](http://www.tokutek.com/) and may be the easiest way to get started.
 
 SCONS TARGETS
 --------------
@@ -39,15 +46,7 @@ of GCC may not be happy.
 WINDOWS
 --------------
 
-See http://dochub.mongodb.org/core/buildingforwindows
-
-Build requirements:
-* vc++ express or visual studio
-* python 2.5 (for scons - 2.6 might be needed for some regression tests)
-* scons
-* boost 1.35 (or higher)
-
-Or download a prebuilt binary for Windows at www.mongodb.org.
+TokuMX is not supported on Windows, because TokuKV is not supported on Windows.
 
 UBUNTU
 --------------
