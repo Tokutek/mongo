@@ -1,5 +1,4 @@
 add_library(s_base STATIC
-  field_parser
   mongo_version_range
   type_changelog
   type_chunk

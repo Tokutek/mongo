@@ -397,7 +397,6 @@ if (BUILD_TESTING)
 
   foreach (test
       cmdline_test
-      field_ref_test
       index_set_test
       server_parameters_test
       )
@@ -412,9 +411,23 @@ if (BUILD_TESTING)
   endforeach ()
 
   target_link_whole_libraries(cmdline_test dbcmdline)
-  target_link_whole_libraries(field_ref_test db_common)
   target_link_whole_libraries(index_set_test bson index_set)
   target_link_whole_libraries(server_parameters_test server_parameters)
+
+  foreach (test
+      field_ref_test
+      field_parser_test
+      )
+    add_executable(${test} db/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME db_unittest_deps
+      db_common
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
 
   foreach (test
       atomic_word_test
@@ -447,7 +460,6 @@ if (BUILD_TESTING)
 
   foreach (test
       chunk_version_test
-      field_parser_test
       mongo_version_range_test
       type_changelog_test
       type_chunk_test
@@ -859,7 +871,6 @@ if (BUILD_TESTING)
       chunk_diff_test
       chunk_version_test
       collection_manager_test
-      field_parser_test
       metadata_loader_test
       mongo_version_range_test
       shard_conn_test
@@ -909,6 +920,7 @@ if (BUILD_TESTING)
   foreach (test
       cmdline_test
       field_ref_test
+      field_parser_test
       index_set_test
       server_parameters_test
       )

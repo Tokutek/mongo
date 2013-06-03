@@ -26,6 +26,7 @@ target_link_libraries(dbcmdline LINK_PUBLIC
 
 add_library(db_common STATIC
   field_ref
+  field_parser
   )
 target_link_libraries(db_common LINK_PUBLIC
   bson

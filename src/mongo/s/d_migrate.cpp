@@ -41,6 +41,7 @@
 #include "mongo/db/database.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/field_parser.h"
 #include "mongo/db/hasher.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/query_optimizer_internal.h"
