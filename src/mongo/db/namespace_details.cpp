@@ -401,15 +401,19 @@ namespace mongo {
         // run an insertion where the PK is specified
         // Can come from the applier thread on a slave or a cloner 
         virtual void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
-            // note that checkpk is on
-            _insertObject(pk, obj, flags, true);
-
             SimpleMutex::scoped_lock lk(_mutex);
             long long pkVal = pk[""].Long();
             if (pkVal >= _nextPK.load()) {
                 _nextPK = AtomicWord<long long>(pkVal + 1);
             }
+
+            // Must note the uncommitted PK before we do the actual insert,
+            // since we check the capped rollback data structure to see if
+            // any inserts have happened yet for this transaction (and that
+            // would erroneously be true if we did the insert here first).
             noteUncommittedPK(pk);
+            _insertObject(pk, obj, flags, true);
+
         }
 
         virtual void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
@@ -486,6 +490,18 @@ namespace mongo {
         }
 
     private:
+        // requires: _mutex is held
+        void noteUncommittedPK(const BSONObj &pk) {
+            CappedCollectionRollback &rollback = cc().txn().cappedRollback();
+            if (!rollback.hasNotedInsert(_ns)) {
+                // This transaction has not noted an insert yet, so we save this
+                // as a minimum uncommitted PK. The next insert by this txn won't be
+                // the minimum, and rollback.hasNotedInsert() will be true, so
+                // we won't save it.
+                _uncommittedMinPKs.insert(pk.getOwned());
+            }
+        }
+
         BSONObj getNextPK() {
             SimpleMutex::scoped_lock lk(_mutex);
             BSONObjBuilder b(32);
@@ -502,18 +518,6 @@ namespace mongo {
                 SimpleMutex::scoped_lock lk(_mutex);
                 const int n = _uncommittedMinPKs.erase(minPK);
                 verify(n == 1);
-            }
-        }
-
-        // requires: _mutex is held
-        void noteUncommittedPK(const BSONObj &pk) {
-            CappedCollectionRollback &rollback = cc().txn().cappedRollback();
-            if (!rollback.hasNotedInsert(_ns)) {
-                // This transaction has not noted an insert yet, so we save this
-                // as a minimum uncommitted PK. The next insert by this txn won't be
-                // the minimum, and rollback.hasNotedInsert() will be true, so
-                // we won't save it.
-                _uncommittedMinPKs.insert(pk.getOwned());
             }
         }
 
