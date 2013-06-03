@@ -218,7 +218,7 @@ namespace mongo {
         }
 
         Config::Config( const string& _dbname , const BSONObj& cmdObj ) :
-            outNonAtomic(false)
+            outNonAtomic(false) // TODO: This is unused.
         {
 
             dbname = _dbname;
@@ -468,9 +468,6 @@ namespace mongo {
             if ( _onDisk == false || _config.outType == Config::INMEMORY )
                 return numInMemKeys();
 
-            if (_config.outNonAtomic)
-                return postProcessCollectionNonAtomic(op, pm);
-            Lock::GlobalWrite lock; // TODO(erh): this is how it was, but seems it doesn't need to be global
             return postProcessCollectionNonAtomic(op, pm);
         }
 
@@ -500,15 +497,10 @@ namespace mongo {
         //
 
         static void upsert( const string& ns , const BSONObj& o, bool fromMigrate = false ) {
-            BSONElement e = o["_id"];
-            verify( e.type() );
-            BSONObj id = e.wrap();
-
             OpDebug debug;
-            Client::Context context(ns);
             updateObjects(ns.c_str(),
                           o,
-                          /*pattern=*/ id,
+                          /*pattern=*/ o["_id"].wrap(),
                           /*upsert=*/ true,
                           /*multi=*/ false,
                           /*logtheop=*/ true,
@@ -523,7 +515,6 @@ namespace mongo {
                 return _safeCount( _db, _config.finalLong );
 
             if ( _config.outType == Config::REPLACE || _safeCount( _db, _config.finalLong ) == 0 ) {
-                Lock::GlobalWrite lock; // TODO(erh): why global???
                 // replace: just rename from temp to final collection name, dropping previous collection
                 _db.dropCollection( _config.finalLong );
                 BSONObj info;
@@ -541,12 +532,14 @@ namespace mongo {
             else if ( _config.outType == Config::MERGE ) {
                 // merge: upsert new docs into old collection
                 op->setMessage( "m/r: merge post processing" , _safeCount( _db, _config.tempLong, BSONObj() ) );
-                auto_ptr<DBClientCursor> cursor = _db.query( _config.tempLong , BSONObj() );
-                while ( cursor->more() ) {
-                    Lock::DBWrite lock( _config.finalLong );
-                    BSONObj o = cursor->next();
-                    upsert( _config.finalLong , o );
-                    pm.hit();
+                {
+                    Client::ReadContext ctx( _config.finalLong );
+                    auto_ptr<DBClientCursor> cursor = _db.query( _config.tempLong , BSONObj() );
+                    while ( cursor->more() ) {
+                        BSONObj o = cursor->next();
+                        upsert( _config.finalLong , o );
+                        pm.hit();
+                    }
                 }
                 _db.dropCollection( _config.tempLong );
                 pm.finished();
@@ -554,31 +547,27 @@ namespace mongo {
             else if ( _config.outType == Config::REDUCE ) {
                 // reduce: apply reduce op on new result and existing one
                 BSONList values;
-
                 op->setMessage( "m/r: reduce post processing" , _safeCount( _db, _config.tempLong, BSONObj() ) );
-                auto_ptr<DBClientCursor> cursor = _db.query( _config.tempLong , BSONObj() );
-                while ( cursor->more() ) {
-                    Lock::GlobalWrite lock; // TODO(erh) why global?
-                    BSONObj temp = cursor->next();
-                    BSONObj old;
+                {
+                    Client::ReadContext ctx( _config.finalLong );
+                    auto_ptr<DBClientCursor> cursor = _db.query( _config.tempLong , BSONObj() );
+                    while ( cursor->more() ) {
+                        BSONObj temp = cursor->next();
+                        BSONObj old;
 
-                    bool found;
-                    {
-                        Client::Context tx( _config.finalLong );
-                        found = Helpers::findOne( _config.finalLong.c_str() , temp["_id"].wrap() , old , true );
+                        bool found = Helpers::findOne( _config.finalLong.c_str() , temp["_id"].wrap() , old , true );
+                        if ( found ) {
+                            // need to reduce
+                            values.clear();
+                            values.push_back( temp );
+                            values.push_back( old );
+                            upsert( _config.finalLong , _config.reducer->finalReduce( values , _config.finalizer.get() ) );
+                        }
+                        else {
+                            upsert( _config.finalLong , temp );
+                        }
+                        pm.hit();
                     }
-
-                    if ( found ) {
-                        // need to reduce
-                        values.clear();
-                        values.push_back( temp );
-                        values.push_back( old );
-                        upsert( _config.finalLong , _config.reducer->finalReduce( values , _config.finalizer.get() ) );
-                    }
-                    else {
-                        upsert( _config.finalLong , temp );
-                    }
-                    pm.hit();
                 }
                 _db.dropCollection( _config.tempLong );
                 pm.finished();
@@ -888,8 +877,7 @@ namespace mongo {
             if ( ! _onDisk )
                 return;
 
-            Lock::DBWrite kl(_config.incLong);
-            Client::Context ctx(_config.incLong);
+            Client::ReadContext ctx(_config.incLong);
 
             for ( InMemory::iterator i=_temp->begin(); i!=_temp->end(); i++ ) {
                 BSONList& all = i->second;
