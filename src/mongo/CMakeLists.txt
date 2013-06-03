@@ -478,6 +478,7 @@ if (BUILD_TESTING)
     link_recursive_deps(${test}
       COMBINED_LIBNAME sharding_unittest_deps
       s_base
+      db_common
       unittest_main
       unittest_crutch
       ${TOKUMX_SSL_LIBRARIES}
@@ -499,6 +500,7 @@ if (BUILD_TESTING)
       unittest_main
       mongocommon
       s_metadata
+      db_common
       ${TOKUMX_SSL_LIBRARIES}
       )
   endforeach ()
