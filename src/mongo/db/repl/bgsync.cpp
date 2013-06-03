@@ -721,15 +721,20 @@ namespace mongo {
 
     void BackgroundSync::startOpSyncThread() {
         boost::unique_lock<boost::mutex> lock(_mutex);
-        verifySettled();
+        // if we are shutting down, don't start replication
+        // otherwise, we will be stuck waiting on _opSyncRunning
+        // to go true, and it may never go true
+        if (!_opSyncShouldExit) {
+            verifySettled();
 
-        _opSyncShouldRun = true;
-        _opSyncCanRunCondVar.notify_all();
-        while (!_opSyncRunning) {
-            _opSyncRunningCondVar.wait(lock);
+            _opSyncShouldRun = true;
+            _opSyncCanRunCondVar.notify_all();
+            while (!_opSyncRunning) {
+                _opSyncRunningCondVar.wait(lock);
+            }
+            // sanity check that no one has changed this variable
+            verify(_opSyncShouldRun);
         }
-        // sanity check that no one has changed this variable
-        verify(_opSyncShouldRun);
     }
 
 } // namespace mongo
