@@ -736,7 +736,7 @@ namespace mongo {
                 
                 // note: the 1100 is beacuse of the waitForDifferent above
                 // should eventually clean this up a bit
-                //curop.setExpectedLatencyMs( 1100 + timer->millis() );
+                curop.setExpectedLatencyMs( 4000 + timer->millis() );
                 
                 continue;
             }
