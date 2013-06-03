@@ -43,8 +43,7 @@ namespace mongo {
     class TxnCompleteHooks {
     public:
         virtual ~TxnCompleteHooks() { }
-        virtual void noteTxnCompletedInserts(const string &ns,
-                                             const vector<BSONObj> &insertedPKs,
+        virtual void noteTxnCompletedInserts(const string &ns, const BSONObj &minPK,
                                              long long nDelta, long long sizeDelta,
                                              bool committed) {
             assertNotImplemented();
@@ -73,12 +72,14 @@ namespace mongo {
 
         void noteDelete(const string &ns, const BSONObj &pk, long long size);
 
+        bool hasNotedInsert(const string &ns);
+
     private:
         void _complete(const bool committed);
 
         struct Context {
             Context() : nDelta(0), sizeDelta(0) { }
-            vector<BSONObj> insertedPKs;
+            BSONObj minPK;
             long long nDelta;
             long long sizeDelta;
         };

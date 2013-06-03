@@ -239,7 +239,7 @@ namespace mongo {
         for (ContextMap::const_iterator it = _map.begin(); it != _map.end(); it++) {
             const string &ns = it->first;
             const Context &c = it->second;
-            _completeHooks->noteTxnCompletedInserts(ns, c.insertedPKs, c.nDelta, c.sizeDelta, committed);
+            _completeHooks->noteTxnCompletedInserts(ns, c.minPK, c.nDelta, c.sizeDelta, committed);
         }
     }
 
@@ -256,8 +256,11 @@ namespace mongo {
             const string &ns = it->first;
             const Context &c = it->second;
             Context &parentContext = parent._map[ns];
-            vector<BSONObj> &pks = parentContext.insertedPKs;
-            pks.insert(pks.end(), c.insertedPKs.begin(), c.insertedPKs.end());
+            if (parentContext.minPK.isEmpty()) {
+                parentContext.minPK = c.minPK;
+            } else if (!c.minPK.isEmpty()) {
+                dassert(parentContext.minPK <= c.minPK);
+            }
             parentContext.nDelta += c.nDelta;
             parentContext.sizeDelta += c.sizeDelta;
         }
@@ -265,7 +268,10 @@ namespace mongo {
 
     void CappedCollectionRollback::noteInsert(const string &ns, const BSONObj &pk, long long size) {
         Context &c = _map[ns];
-        c.insertedPKs.push_back(pk.getOwned());
+        if (c.minPK.isEmpty()) {
+            c.minPK = pk.getOwned();
+        }
+        dassert(c.minPK <= pk);
         c.nDelta++;
         c.sizeDelta += size;
     }
@@ -274,6 +280,11 @@ namespace mongo {
         Context &c = _map[ns];
         c.nDelta--;
         c.sizeDelta -= size;
+    }
+
+    bool CappedCollectionRollback::hasNotedInsert(const string &ns) {
+        const Context &c = _map[ns];
+        return !c.minPK.isEmpty();
     }
 
     /* --------------------------------------------------------------------- */

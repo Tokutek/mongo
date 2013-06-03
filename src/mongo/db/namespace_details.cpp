@@ -389,8 +389,8 @@ namespace mongo {
         BSONObj minUnsafeKey() {
             SimpleMutex::scoped_lock lk(_mutex);
 
-            const long long minUncommitted = _uncommittedPKs.size() > 0 ?
-                                             _uncommittedPKs.begin()->firstElement().Long() :
+            const long long minUncommitted = _uncommittedMinPKs.size() > 0 ?
+                                             _uncommittedMinPKs.begin()->firstElement().Long() :
                                              _nextPK.load();
             TOKULOG(2) << "minUnsafeKey: minUncommitted " << minUncommitted << endl;
             BSONObjBuilder b;
@@ -398,67 +398,18 @@ namespace mongo {
             return b.obj();
         }
 
-        void checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj, bool checkPk) {
-            dassert(!pk.isEmpty());
-            dassert(!obj.isEmpty());
-
-            // Start at 1 to skip the primary key index. We don't need to perform
-            // a unique check because we always generate a unique auto-increment pk.
-            int start = checkPk ? 0 : 1;
-            for (int i = start; i < nIndexes(); i++) {
-                IndexDetails &idx = *_indexes[i];
-                BSONObjSet keys;
-                idx.getKeysFromObject(obj, keys);
-                for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                    idx.uniqueCheck(*ki, &pk);
-                }
-            }
-        }
-
-        void getPkForCapped(BSONObj &pk) {
-            SimpleMutex::scoped_lock lk(_mutex);
-            BSONObjBuilder b(32);
-            b.append("", _nextPK.fetchAndAdd(1));
-            pk = b.obj();
-            _uncommittedPKs.insert(pk);
-        }
-
-        void insertObjectIntoCapped(BSONObj &pk, BSONObj &obj, uint64_t flags, bool checkPk) {
-            // Note the insert we're about to do.
-            CappedCollectionRollback &rollback = cc().txn().cappedRollback();
-            rollback.noteInsert(_ns, pk, obj.objsize());
-            _currentObjects.addAndFetch(1);
-            _currentSize.addAndFetch(obj.objsize());
-
-            checkUniqueIndexes(pk, obj, checkPk);
-
-            // The actual insert should not hold take any locks and does
-            // not need unique checks, since we generated a unique primary
-            // key and checked for uniquness constraints on secondaries above.
-            insertIntoIndexes(pk, obj, flags);
-        }
-
-        void noteInsertedObjectIntoCapped(const BSONObj &obj, bool logop) {
-            // If the collection is gorged, we need to do some trimming work.
-            long long n = _currentObjects.load();
-            long long size = _currentSize.load();
-            if (isGorged(n, size)) {
-                trim(obj.objsize(), logop);
-            }
-        }
-
         // run an insertion where the PK is specified
         // Can come from the applier thread on a slave or a cloner 
         virtual void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
             // note that checkpk is on
-            insertObjectIntoCapped(pk, obj, flags, true);
+            _insertObject(pk, obj, flags, true);
 
             SimpleMutex::scoped_lock lk(_mutex);
             long long pkVal = pk[""].Long();
             if (pkVal >= _nextPK.load()) {
                 _nextPK = AtomicWord<long long>(pkVal + 1);
             }
-            _uncommittedPKs.insert(pk.copy());
+            noteUncommittedPK(pk);
         }
 
         virtual void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
@@ -466,15 +417,12 @@ namespace mongo {
             uassert( 16774 , str::stream() << "document is larger than capped size "
                      << obj.objsize() << " > " << _maxSize, obj.objsize() <= _maxSize );
 
-            // Generate the next pk and insert it into the set, under the lock
-            BSONObj pk;
-            getPkForCapped(pk);
-
-            insertObjectIntoCapped(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
+            BSONObj pk = getNextPK();
+            _insertObject(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
             OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, obj, &cc().txn());
 
             // If the collection is gorged, we need to do some trimming work.
-            noteInsertedObjectIntoCapped(obj, true);
+            checkGorged(obj, true);
         }
 
         void insertObject(BSONObj &obj, uint64_t flags) {
@@ -482,14 +430,11 @@ namespace mongo {
             uassert( 16328 , str::stream() << "document is larger than capped size "
                      << obj.objsize() << " > " << _maxSize, obj.objsize() <= _maxSize );
 
-            // Generate the next pk and insert it into the set, under the lock
-            BSONObj pk;
-            getPkForCapped(pk);
-
-            insertObjectIntoCapped(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
+            BSONObj pk = getNextPK();
+            _insertObject(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
 
             // If the collection is gorged, we need to do some trimming work.
-            noteInsertedObjectIntoCapped(obj, false);
+            checkGorged(obj, false);
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj) {
@@ -499,7 +444,7 @@ namespace mongo {
 
         // run a deletion where the PK is specified
         // Can come from the applier thread on a slave
-        virtual void deleteObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj) {
+        virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj) {
             _deleteObject(pk, obj);
             // just make it easy and invalidate this
             _lastDeletedPK = BSONObj();
@@ -520,16 +465,16 @@ namespace mongo {
         // Note the commit of a transaction, which simple notes completion under the lock.
         // We don't need to do anything with nDelta and sizeDelta because those changes
         // are already applied to in-memory stats, and this transaction has committed.
-        void noteCommit(const vector <BSONObj> &pks, long long nDelta, long long sizeDelta) {
-            noteComplete(pks);
+        void noteCommit(const BSONObj &minPK, long long nDelta, long long sizeDelta) {
+            noteComplete(minPK);
         }
 
         // Note the abort of a transaction, noting completion and updating in-memory stats.
         //
         // The given deltas are signed values that represent changes to the collection.
         // We need to roll back those changes. Therefore, we subtract from the current value.
-        void noteAbort(const vector<BSONObj> &pks, long long nDelta, long long sizeDelta) {
-            noteComplete(pks);
+        void noteAbort(const BSONObj &minPK, long long nDelta, long long sizeDelta) {
+            noteComplete(minPK);
             _currentObjects.fetchAndSubtract(nDelta);
             _currentSize.fetchAndSubtract(sizeDelta);
 
@@ -541,13 +486,79 @@ namespace mongo {
         }
 
     private:
-        // Note the completion of a transaction by removing its inserted PKs from the set.
-        void noteComplete(const vector<BSONObj> &pks) {
+        BSONObj getNextPK() {
             SimpleMutex::scoped_lock lk(_mutex);
-            for (vector<BSONObj>::const_iterator it = pks.begin(); it != pks.end(); it++) {
-                const int n = _uncommittedPKs.erase(*it);
+            BSONObjBuilder b(32);
+            b.append("", _nextPK.fetchAndAdd(1));
+            BSONObj pk = b.obj();
+            noteUncommittedPK(pk);
+            return pk;
+        }
+
+        // Note the completion of a transaction by removing its
+        // minimum-PK-inserted (if there is one) from the set.
+        void noteComplete(const BSONObj &minPK) {
+            if (!minPK.isEmpty()) {
+                SimpleMutex::scoped_lock lk(_mutex);
+                const int n = _uncommittedMinPKs.erase(minPK);
                 verify(n == 1);
             }
+        }
+
+        // requires: _mutex is held
+        void noteUncommittedPK(const BSONObj &pk) {
+            CappedCollectionRollback &rollback = cc().txn().cappedRollback();
+            if (!rollback.hasNotedInsert(_ns)) {
+                // This transaction has not noted an insert yet, so we save this
+                // as a minimum uncommitted PK. The next insert by this txn won't be
+                // the minimum, and rollback.hasNotedInsert() will be true, so
+                // we won't save it.
+                _uncommittedMinPKs.insert(pk.getOwned());
+            }
+        }
+
+        void checkGorged(const BSONObj &obj, bool logop) {
+            // If the collection is gorged, we need to do some trimming work.
+            long long n = _currentObjects.load();
+            long long size = _currentSize.load();
+            if (isGorged(n, size)) {
+                trim(obj.objsize(), logop);
+            }
+        }
+
+        void checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj, bool checkPk) {
+            dassert(!pk.isEmpty());
+            dassert(!obj.isEmpty());
+
+            // Start at 1 to skip the primary key index. We don't need to perform
+            // a unique check because we always generate a unique auto-increment pk.
+            int start = checkPk ? 0 : 1;
+            for (int i = start; i < nIndexes(); i++) {
+                IndexDetails &idx = *_indexes[i];
+                BSONObjSet keys;
+                idx.getKeysFromObject(obj, keys);
+                for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
+                    idx.uniqueCheck(*ki, &pk);
+                }
+            }
+        }
+
+
+        // Checks unique indexes and does the actual inserts.
+        // Does not check if the collection became gorged.
+        void _insertObject(BSONObj &pk, BSONObj &obj, uint64_t flags, bool checkPk) {
+            // Note the insert we're about to do.
+            CappedCollectionRollback &rollback = cc().txn().cappedRollback();
+            rollback.noteInsert(_ns, pk, obj.objsize());
+            _currentObjects.addAndFetch(1);
+            _currentSize.addAndFetch(obj.objsize());
+
+            checkUniqueIndexes(pk, obj, checkPk);
+
+            // The actual insert should not hold take any locks and does
+            // not need unique checks, since we generated a unique primary
+            // key and checked for uniquness constraints on secondaries above.
+            insertIntoIndexes(pk, obj, flags);
         }
 
         bool isGorged(long long n, long long size) const {
@@ -565,8 +576,7 @@ namespace mongo {
             NaturalOrderCollection::deleteObject(pk, obj);
         }
 
-        void trim(int objsize, bool logop) 
-        {
+        void trim(int objsize, bool logop) {
             SimpleMutex::scoped_lock lk(_deleteMutex);
             long long n = _currentObjects.load();
             long long size = _currentSize.load();
@@ -621,9 +631,12 @@ namespace mongo {
         AtomicWord<long long> _currentObjects;
         AtomicWord<long long> _currentSize;
         BSONObj _lastDeletedPK;
-        // The set of uncommited primary keys for this capped collection.
-        // Tailable cursors must not read passed the minimum of this set.
-        BSONObjSet _uncommittedPKs;
+        // The set of minimum-uncommitted-PKs for this capped collection.
+        // Each transaction that has done inserts has the minimum PK it
+        // inserted in this set.
+        //
+        // Tailable cursors must not read at or past the smallest value in this set.
+        BSONObjSet _uncommittedMinPKs;
         SimpleMutex _mutex;
         SimpleMutex _deleteMutex;
     };
@@ -634,8 +647,7 @@ namespace mongo {
     // coredb/mongos/mongod etc.
     class TxnCompleteHooksImpl : public TxnCompleteHooks {
     public:
-        virtual void noteTxnCompletedInserts(const string &ns,
-                                             const vector<BSONObj> &insertedPKs,
+        virtual void noteTxnCompletedInserts(const string &ns, const BSONObj &minPK,
                                              long long nDelta, long long sizeDelta,
                                              bool committed) {
             Lock::DBRead lk(ns);
@@ -650,9 +662,9 @@ namespace mongo {
                 NamespaceDetails *d = ni->find_ns(ns.c_str());
                 if (d != NULL) {
                     if (committed) {
-                        d->noteCommit(insertedPKs, nDelta, sizeDelta);
+                        d->noteCommit(minPK, nDelta, sizeDelta);
                     } else {
-                        d->noteAbort(insertedPKs, nDelta, sizeDelta);
+                        d->noteAbort(minPK, nDelta, sizeDelta);
                     }
                 }
             }

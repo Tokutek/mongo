@@ -300,7 +300,7 @@ namespace OpLogHelpers{
         BSONObj row = op[KEY_STR_ROW].Obj();
         BSONObj pk = op[KEY_STR_PK].Obj();
 
-        nsd->deleteObjectIntoCappedWithPK(pk, row);
+        nsd->deleteObjectFromCappedWithPK(pk, row);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }

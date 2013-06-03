@@ -289,13 +289,13 @@ namespace mongo {
         virtual void createIndex(const BSONObj &info);
 
         // note the commit/abort of a transaction, given:
-        // pk: the set of primary keys inserted into this ns
+        // minPK: the minimal PK inserted
         // nDelta: the number of inserts minus the number of deletes
         // sizeDelta: the size of inserts minus the size of deletes
-        virtual void noteCommit(const vector<BSONObj> &pks, long long nDelta, long long sizeDelta) {
+        virtual void noteCommit(const BSONObj &minPK, long long nDelta, long long sizeDelta) {
             massert( 16756, "bug: noted a commit, but it wasn't implemented", false );
         }
-        virtual void noteAbort(const vector<BSONObj> &pks, long long nDelta, long long sizeDelta) {
+        virtual void noteAbort(const BSONObj &minPK, long long nDelta, long long sizeDelta) {
             massert( 16757, "bug: noted an abort, but it wasn't implemented", false );
         }
 
@@ -307,8 +307,8 @@ namespace mongo {
             massert( 16772, "bug: should not call insertObjectIntoCappedWithPK into non-capped collection", false );
         }
         
-        virtual void deleteObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj) {
-            massert( 16773, "bug: should not call deleteObjectIntoCappedWithPK into non-capped collection", false );
+        virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj) {
+            massert( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection", false );
         }
 
     protected:
