@@ -29,7 +29,7 @@ namespace mongo {
 
     Status AuthzManagerExternalState::getPrivilegeDocument(const std::string& dbname,
                                                            const UserName& userName,
-                                                           BSONObj* result) {
+                                                           BSONObj* result) const {
 
         if (dbname == StringData("$external", StringData::LiteralTag()) ||
             dbname == AuthorizationManager::SERVER_RESOURCE_NAME ||
@@ -58,7 +58,7 @@ namespace mongo {
             return Status::OK();
         }
 
-        std::string usersNamespace = dbname + ".system.users";
+        std::string usersNamespace = getSisterNS(dbname, "system.users");
 
         BSONObj userBSONObj;
         BSONObjBuilder queryBuilder;
@@ -84,7 +84,7 @@ namespace mongo {
     }
 
     bool AuthzManagerExternalState::hasPrivilegeDocument(const std::string& dbname) const {
-        std::string usersNamespace = dbname + ".system.users";
+        std::string usersNamespace = getSisterNS(dbname, "system.users");
 
         BSONObj userBSONObj;
         BSONObj query;

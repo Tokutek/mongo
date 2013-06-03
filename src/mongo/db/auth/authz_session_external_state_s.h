@@ -34,10 +34,6 @@ namespace mongo {
 
         virtual void startRequest();
 
-    protected:
-        virtual bool _findUser(const string& usersNamespace,
-                               const BSONObj& query,
-                               BSONObj* result) const;
     };
 
 } // namespace mongo

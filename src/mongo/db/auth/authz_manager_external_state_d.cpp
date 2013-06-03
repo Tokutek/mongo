@@ -31,10 +31,23 @@ namespace mongo {
     bool AuthzManagerExternalStateMongod::_findUser(const string& usersNamespace,
                                                     const BSONObj& query,
                                                     BSONObj* result) const {
-        Client::GodScope gs;
-        Client::ReadContext ctx(usersNamespace);
-
-        return Helpers::findOne(usersNamespace, query, *result);
+        bool ok = false;
+        try {
+            Client::GodScope gs;
+            LOCK_REASON(lockReason, "auth: looking up user");
+            Client::ReadContext ctx(usersNamespace, lockReason);
+            // we want all authentication stuff to happen on an alternate stack
+            Client::AlternateTransactionStack altStack;
+            Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+            BSONObj tmpresult;
+            ok = Collection::findOne(usersNamespace, query, result != NULL ? *result : tmpresult);
+            if (ok) {
+                txn.commit();
+            }
+        } catch (storage::LockException &e) {
+            LOG(1) << "Couldn't read from system.users because of " << e.what() << ", assuming it's empty." << endl;
+        }
+        return ok;
     }
 
 } // namespace mongo
