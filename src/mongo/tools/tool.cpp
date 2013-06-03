@@ -28,8 +28,11 @@
 #include "mongo/base/initializer.h"
 #include "mongo/client/dbclient_rs.h"
 #include "mongo/client/sasl_client_authenticate.h"
-#include "mongo/db/json.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_manager_global.h"
+#include "mongo/db/auth/authz_manager_external_state_mock.h"
 #include "mongo/db/collection.h"
+#include "mongo/db/json.h"
 #include "mongo/db/txn_complete_hooks.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/platform/posix_fadvise.h"
@@ -69,6 +72,8 @@ namespace mongo {
     }
     int Tool::main( int argc , char ** argv, char ** envp ) {
         static StaticObserver staticObserver;
+
+        setGlobalAuthorizationManager(new AuthorizationManager(new AuthzManagerExternalStateMock()));
 
         _name = argv[0];
 
