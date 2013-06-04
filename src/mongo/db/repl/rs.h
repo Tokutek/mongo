@@ -146,12 +146,8 @@ namespace mongo {
          */
         void percolate(const BSONObj& rid, const GTID& lastGTID);
         void associateSlave(const BSONObj& rid, const int memberId);
-<<<<<<< HEAD
         void updateSlave(const mongo::OID& id, const GTID& lastGTID);
-=======
-        void updateSlave(const mongo::OID& id, const OpTime& last);
         void clearCache();
->>>>>>> bd9e9d0... SERVER-9333 clear ghostcache at reconfig time
     };
 
     struct Target;
