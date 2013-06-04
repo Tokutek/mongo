@@ -84,7 +84,6 @@ scratch
 /mongostat
 /mongotop
 /mongooplog
-/mongoperf
 /bsondump
 
 /docgen

@@ -461,7 +461,6 @@ env.Install( '#/', [
         env.Program( "loadgen", "tools/loadgenerator.cpp", LIBS=tokulibs, LIBDEPS=["alltools", "docgenerator"] ),
         env.Program( "bsondump", "tools/bsondump.cpp", LIBS=tokulibs, LIBDEPS=["alltools"]),
         env.Program( "mongobridge", "tools/bridge.cpp", LIBS=tokulibs, LIBDEPS=["alltools"]),
-        env.Program( "mongoperf", "client/examples/mongoperf.cpp", LIBS=tokulibs, LIBDEPS=["alltools"] ),
         ] )
 
 # mongos
@@ -590,7 +589,7 @@ def installBinary( e, name, fix_rpath=True ):
     if nix:
         e.AddPostAction( inst, 'chmod 755 $TARGET' )
 
-for t in ["mongo" + x for x in normalTools] + ["mongofiles", "bsondump", "mongoperf" ]:
+for t in ["mongo" + x for x in normalTools] + ["mongofiles", "bsondump"]:
     installBinary( env, t )
     env.Alias("tools", '#/' + add_exe(t))
 

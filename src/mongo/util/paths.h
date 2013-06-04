@@ -101,8 +101,6 @@ namespace mongo {
 
     inline void flushMyDirectory(const boost::filesystem::path& file){
 #ifdef __linux__ // this isn't needed elsewhere
-        // if called without a fully qualified path it asserts; that makes mongoperf fail. so make a warning. need a better solution longer term.
-        // massert(13652, str::stream() << "Couldn't find parent dir for file: " << file.string(), );
         if( !file.has_branch_path() ) {
             log() << "warning flushMYDirectory couldn't find parent dir for file: " << file.string() << endl;
             return;

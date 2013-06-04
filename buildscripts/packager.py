@@ -905,7 +905,6 @@ fi
 #@@VERSION!=2.1.0@@%{_bindir}/mongofiles
 %{_bindir}/mongoimport
 #@@VERSION>=2.1.0@@%{_bindir}/mongooplog
-#@@VERSION>=2.1.0@@%{_bindir}/mongoperf
 %{_bindir}/mongorestore
 #@@VERSION>1.9@@%{_bindir}/mongotop
 %{_bindir}/mongostat
