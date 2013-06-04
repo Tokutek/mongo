@@ -120,10 +120,7 @@ namespace mongo {
         }
 
         // Dictionary key format:
-        // KeyV1Owned key [, BSONObj primary key]
-        //
-        // TODO: Use separate classes serializing and deserializing. Mixing them
-        // here muddies the waters, especially when performanc is a concern.
+        // { KeyV1 key [, BSONObj primary key] }
         class Key {
         public:
             // For serializing
@@ -135,10 +132,6 @@ namespace mongo {
                 }
                 _buf = _b.buf();
                 _size = _b.len();
-            }
-
-            DBT dbt() const {
-                return make_dbt(_buf, _size);
             }
 
             // For deserializing
@@ -153,6 +146,59 @@ namespace mongo {
                 storage::KeyV1 kv1(_buf);
                 const size_t keySize = kv1.dataSize();
                 _size = keySize + (hasPK ? BSONObj(_buf + keySize).objsize() : 0);
+            }
+
+            static int woCompare(const Key &key1, const Key &key2, const Ordering &ordering) {
+                // Interpret the beginning of the Key's buf as KeyV1. The size of the Key
+                // must be at least as big as the size of the KeyV1 (otherwise format error).
+                const KeyV1 k1(static_cast<const char *>(key1.buf()));
+                const KeyV1 k2(static_cast<const char *>(key2.buf()));
+                dassert((int) key1.size() >= k1.dataSize());
+                dassert((int) key2.size() >= k2.dataSize());
+
+                // Compare by the first key in KeyV1 format.
+                {
+                    const int c = k1.woCompare(k2, ordering);
+                    if (c < 0) {
+                        return -1;
+                    } else if (c > 0) {
+                        return 1;
+                    }
+                }
+
+                // Compare by the second key in BSON format, if it exists.
+                const int k1_size = k1.dataSize();
+                const int k2_size = k2.dataSize();
+                const int key1_bytes_left = key1.size() - k1_size;
+                const int key2_bytes_left = key2.size() - k2_size;
+                if (key1_bytes_left > 0 && key2_bytes_left > 0) {
+                    const BSONObj other_k1(static_cast<const char *>(key1.buf()) + k1_size);
+                    const BSONObj other_k2(static_cast<const char *>(key2.buf()) + k2_size);
+                    dassert(k1_size + other_k1.objsize() == (int) key1.size());
+                    dassert(k2_size + other_k2.objsize() == (int) key2.size());
+
+                    static const Ordering id_ordering = Ordering::make(BSON("_id" << 1));
+                    const int c = other_k1.woCompare(other_k2, id_ordering);
+                    if (c < 0) {
+                        return -1;
+                    } else if (c > 0) {
+                        return 1;
+                    }
+                } else {
+                    // The associated primary key must exist in both keys, or neither.
+                    dassert(key1_bytes_left == 0 && key2_bytes_left == 0);
+                }
+                return 0;
+            }
+
+            // The real comparison function is a function of two keys
+            // and an ordering, which is a bit more clear.
+            int woCompare(const Key &key, const Ordering &ordering) {
+                return woCompare(*this, key, ordering);
+            }
+
+            DBT dbt() const {
+                return make_dbt(_buf, _size);
             }
 
             // HACK This isn't so nice.

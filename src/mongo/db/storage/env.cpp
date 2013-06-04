@@ -48,50 +48,10 @@ namespace mongo {
 
         static int dbt_key_compare(DB *db, const DBT *dbt1, const DBT *dbt2) {
             try {
-                // Primary _id keys are represented by exactly one key.
-                // Secondary keys are represented by exactly two, the secondary
-                // key plus an associated _id key.
-                dassert(dbt1->size > 0);
-                dassert(dbt2->size > 0);
-                const KeyV1 key1(static_cast<char *>(dbt1->data));
-                const KeyV1 key2(static_cast<char *>(dbt2->data));
-                dassert((int) dbt1->size >= key1.dataSize());
-                dassert((int) dbt2->size >= key2.dataSize());
-
-                // Compare by the first key. The ordering comes from the key pattern.
-                {
-                    const Ordering &ordering(*reinterpret_cast<const Ordering *>(db->cmp_descriptor->dbt.data));
-                    const int c = key1.woCompare(key2, ordering);
-                    if (c < 0) {
-                        return -1;
-                    } else if (c > 0) {
-                        return 1;
-                    }
-                }
-
-                // Compare by the second key, stored as BSON, if it exists.
-                int key1_size = key1.dataSize();
-                int key2_size = key2.dataSize();
-                int dbt1_bytes_left = dbt1->size - key1_size;
-                int dbt2_bytes_left = dbt2->size - key2_size;
-                if (dbt1_bytes_left > 0 && dbt2_bytes_left > 0) {
-                    const BSONObj other_key1(static_cast<char *>(dbt1->data) + key1_size);
-                    const BSONObj other_key2(static_cast<char *>(dbt2->data) + key2_size);
-                    dassert(key1.dataSize() + other_key1.objsize() == (int) dbt1->size);
-                    dassert(key2.dataSize() + other_key2.objsize() == (int) dbt2->size);
-
-                    static const Ordering id_ordering = Ordering::make(BSON("_id" << 1));
-                    const int c = other_key1.woCompare(other_key2, id_ordering);
-                    if (c < 0) {
-                        return -1;
-                    } else if (c > 0) {
-                        return 1;
-                    }
-                } else {
-                    // The associated primary key must exist in both keys, or neither.
-                    dassert(dbt1_bytes_left == 0 && dbt2_bytes_left == 0);
-                }
-                return 0;
+                Key key1(dbt1);
+                Key key2(dbt2);
+                const Ordering &ordering(*reinterpret_cast<const Ordering *>(db->cmp_descriptor->dbt.data));
+                return key1.woCompare(key2, ordering);
             } catch (std::exception &e) {
                 // We don't have a way to return an error from a comparison (through the ydb), and the ydb isn't exception-safe.
                 // Of course, if a comparison throws, something is very wrong anyway.
