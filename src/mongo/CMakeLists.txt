@@ -878,6 +878,7 @@ if (BUILD_TESTING)
       principal_set_test
       privilege_set_test
       role_graph_test
+      authorization_manager_test
       authorization_session_test
       )
     add_mongo_test(db/auth ${test} ${test})
