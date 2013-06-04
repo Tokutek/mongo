@@ -153,10 +153,6 @@ namespace mongo {
                 }
             }
             b.append("inprog", vals);
-            if( lockedForWriting() ) {
-                b.append("fsyncLock", true);
-                b.append("info", "use db.fsyncUnlock() to terminate the fsync write/snapshot lock");
-            }
         }
 
         replyToQuery(0, m, dbresponse, b.obj());
@@ -181,27 +177,6 @@ namespace mongo {
                 log() << "going to kill op: " << e << endl;
                 obj = fromjson("{\"info\":\"attempting to kill op\"}");
                 killCurrentOp.kill( (unsigned) e.number() );
-            }
-        }
-        replyToQuery(0, m, dbresponse, obj);
-    }
-
-    bool _unlockFsync();
-    void unlockFsync(const char *ns, Message& m, DbResponse &dbresponse) {
-        BSONObj obj;
-        if ( ! cc().isAdmin() ) { // checks auth
-            obj = fromjson("{\"err\":\"unauthorized\"}");
-        }
-        else if (strncmp(ns, "admin.", 6) != 0 ) {
-            obj = fromjson("{\"err\":\"unauthorized - this command must be run against the admin DB\"}");
-        }
-        else {
-            log() << "command: unlock requested" << endl;
-            if( _unlockFsync() ) {
-                obj = fromjson("{ok:1,\"info\":\"unlock completed\"}");
-            }
-            else {
-                obj = fromjson("{ok:0,\"errmsg\":\"not locked\"}");
             }
         }
         replyToQuery(0, m, dbresponse, obj);
@@ -319,10 +294,6 @@ namespace mongo {
                     }
                     if( strstr(ns, "$cmd.sys.killop") ) {
                         killOp(m, dbresponse);
-                        return;
-                    }
-                    if( strstr(ns, "$cmd.sys.unlock") ) {
-                        unlockFsync(ns, m, dbresponse);
                         return;
                     }
                 }
@@ -455,9 +426,6 @@ namespace mongo {
             // performance profiling is on
             if ( Lock::isReadLocked() ) {
                 LOG(1) << "note: not profiling because recursive read lock" << endl;
-            }
-            else if ( lockedForWriting() ) {
-                LOG(1) << "note: not profiling because doing fsync+lock" << endl;
             }
             else {
                 Lock::DBWrite lk( currentOp.getNS() );

@@ -113,13 +113,6 @@ namespace mongo {
                 
                 LOG(3) << "TTLMonitor thread awake" << endl;
                 
-                if ( lockedForWriting() ) {
-                    // note: this is not perfect as you can go into fsync+lock between 
-                    // this and actually doing the delete later
-                    LOG(3) << " locked for writing" << endl;
-                    continue;
-                }
-
                 // if part of replSet but not in a readable state (e.g. during initial sync), skip.
                 if ( theReplSet && !theReplSet->state().readable() )
                     continue;

@@ -131,4 +131,9 @@ namespace mongo {
         CmdCloseAllDatabases() : DeprecatedCommand( "closeAllDatabases" ) {}
     } cmdCloseAllDatabases;
 
+    class FSyncCommand : public DeprecatedCommand {
+    public:
+        FSyncCommand() : DeprecatedCommand( "fsync" ) {}
+    } fsyncCmd;
+
 }// namespace mongo
