@@ -1106,42 +1106,6 @@ namespace QueryTests {
         }
     };
 
-    class FindingStart : public CollectionBase {
-    public:
-        FindingStart() : CollectionBase( "findingstart" ), _old( __findingStartInitialTimeout ) {
-            __findingStartInitialTimeout = 0;
-        }
-        ~FindingStart() {
-            __findingStartInitialTimeout = _old;
-        }
-
-        void run() {
-            BSONObj info;
-            ASSERT( client().runCommand( "unittests", BSON( "create" << "querytests.findingstart" << "capped" << true << "size" << 5000 << "autoIndexId" << false ), info ) );
-
-            int i = 0;
-            for( int oldCount = -1;
-                    count() != oldCount;
-                    oldCount = count(), client().insert( ns(), BSON( "ts" << i++ ) ) );
-
-            for( int k = 0; k < 5; ++k ) {
-                client().insert( ns(), BSON( "ts" << i++ ) );
-                int min = client().query( ns(), Query().sort( BSON( "$natural" << 1 ) ) )->next()[ "ts" ].numberInt();
-                for( int j = -1; j < i; ++j ) {
-                    auto_ptr< DBClientCursor > c = client().query( ns(), QUERY( "ts" << GTE << j ), 0, 0, 0, QueryOption_OplogReplay );
-                    ASSERT( c->more() );
-                    BSONObj next = c->next();
-                    ASSERT( !next[ "ts" ].eoo() );
-                    ASSERT_EQUALS( ( j > min ? j : min ), next[ "ts" ].numberInt() );
-                }
-                //cout << k << endl;
-            }
-        }
-
-    private:
-        int _old;
-    };
-
     class FindingStartPartiallyFull : public CollectionBase {
     public:
         FindingStartPartiallyFull() : CollectionBase( "findingstart" ), _old( __findingStartInitialTimeout ) {
@@ -1540,7 +1504,6 @@ namespace QueryTests {
         }
 
         void setupTests() {
-            add< FindingStart >();
             add< FindOneOr >();
             add< FindOneRequireIndex >();
             add< BoundedKey >();
