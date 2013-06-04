@@ -20,8 +20,6 @@
 #include "mongo/db/jsobj.h"
 #include <limits>
 
-#include <db.h>
-
 namespace mongo {
 
 
