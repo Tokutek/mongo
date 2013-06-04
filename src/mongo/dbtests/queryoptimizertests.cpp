@@ -1637,7 +1637,8 @@ namespace QueryOptimizerTests {
             add<QueryPlanTests::QueryBoundsExactOrderSuffix::RangeRange>();
             add<QueryPlanTests::QueryBoundsExactOrderSuffix::Unsatisfiable>();
             add<QueryPlanTests::QueryBoundsExactOrderSuffix::EqualityUnsatisfiable>();
-            add<QueryPlanTests::Special>();
+            // TokuMX: no geo
+            //add<QueryPlanTests::Special>();
             add<QueryPlanSetTests::ToString>();
             add<QueryPlanSetTests::NoIndexes>();
             add<QueryPlanSetTests::Optimal>();
@@ -1658,12 +1659,14 @@ namespace QueryOptimizerTests {
             add<QueryPlanSetTests::InQueryIntervals>();
             add<QueryPlanSetTests::EqualityThenIn>();
             add<QueryPlanSetTests::NotEqualityThenIn>();
-            add<QueryPlanSetTests::ExcludeSpecialPlanWhenBtreePlan>();
-            add<QueryPlanSetTests::ExcludeUnindexedPlanWhenSpecialPlan>();
+            // TokuMX: no geo
+            //add<QueryPlanSetTests::ExcludeSpecialPlanWhenBtreePlan>();
+            //add<QueryPlanSetTests::ExcludeUnindexedPlanWhenSpecialPlan>();
             add<QueryPlanSetTests::PossiblePlans>();
             add<QueryPlanSetTests::AvoidUnhelpfulRecordedPlan>();
             add<QueryPlanSetTests::AvoidDisallowedRecordedPlan>();
-            add<QueryPlanSetTests::AllowSpecial>();
+            // TokuMX: no geo
+            //add<QueryPlanSetTests::AllowSpecial>();
             add<MultiPlanScannerTests::ToString>();
             add<MultiPlanScannerTests::PossiblePlans>();
             add<BestGuess>();

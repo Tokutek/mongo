@@ -53,6 +53,8 @@ namespace DirectClientTests {
                 for( int j =0; j < pass*3; j++ )
                     client().insert(ns, BSON("x" << j));
 
+// TokuMX doesn't have this command
+#if 0
                 // test truncation of a capped collection
                 if( pass ) {
                     BSONObj info;
@@ -62,6 +64,7 @@ namespace DirectClientTests {
                     //cout << info.toString() << endl;
                     ASSERT(ok);
                 }
+#endif
 
                 ASSERT( client().dropCollection(ns) );
             }
@@ -80,7 +83,7 @@ namespace DirectClientTests {
             client().dropCollection(ns);
             client().insert(ns, objs);
             ASSERT_EQUALS(client().getLastErrorDetailed()["code"].numberInt(), 11000);
-            ASSERT_EQUALS((int)client().count(ns), 1);
+            ASSERT_EQUALS((int)client().count(ns), 0);  // TokuMX: all or nothing
 
             client().dropCollection(ns);
             client().insert(ns, objs, InsertOption_ContinueOnError);

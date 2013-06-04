@@ -3458,8 +3458,9 @@ namespace QueryOptimizerCursorTests {
             add<GetCursor::SimpleId>();
             add<GetCursor::OptimalIndex>();
             add<GetCursor::SimpleKeyMatch>();
-            add<GetCursor::Geo>();
-            add<GetCursor::GeoNumWanted>();
+            // TokuMX: no geo
+            //add<GetCursor::Geo>();
+            //add<GetCursor::GeoNumWanted>();
             add<GetCursor::PreventOutOfOrderPlan>();
             add<GetCursor::AllowOutOfOrderPlan>();
             add<GetCursor::BestSavedOutOfOrder>();

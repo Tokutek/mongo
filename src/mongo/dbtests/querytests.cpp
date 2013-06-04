@@ -274,11 +274,18 @@ namespace QueryTests {
             client().dropCollection( "unittests.querytests.EmptyTail" );
         }
         void run() {
+            // This test describes a change in behavior from vanilla mongodb to tokumx.
+            // Vanilla treats empty and nonexistent collections the same: it doesn't let you tail them.
+            // TokuMX will let you tail an empty collection properly.  We believe this to be an improvement, and this test verifies it.
             const char *ns = "unittests.querytests.EmptyTail";
-            client().createCollection( ns, 1900, true );
+            client().dropCollection( "unittests.querytests.EmptyTail" );
             auto_ptr< DBClientCursor > c = client().query( ns, Query().hint( BSON( "$natural" << 1 ) ), 2, 0, 0, QueryOption_CursorTailable );
             ASSERT_EQUALS( 0, c->getCursorId() );
             ASSERT( c->isDead() );
+            client().createCollection( ns, 1900, true );
+            c = client().query( ns, Query().hint( BSON( "$natural" << 1 ) ), 2, 0, 0, QueryOption_CursorTailable );
+            ASSERT( 0 != c->getCursorId() );
+            ASSERT( !c->isDead() );
             insert( ns, BSON( "a" << 0 ) );
             c = client().query( ns, QUERY( "a" << 1 ).hint( BSON( "$natural" << 1 ) ), 2, 0, 0, QueryOption_CursorTailable );
             ASSERT( 0 != c->getCursorId() );
@@ -292,6 +299,8 @@ namespace QueryTests {
             client().dropCollection( "unittests.querytests.TailableDelete" );
         }
         void run() {
+            // In vanilla mongo, the second two inserts would delete what the tailing cursor was pointing to, thus invalidating the cursor (somehow?).
+            // In TokuMX, we do not show this bad behavior.
             const char *ns = "unittests.querytests.TailableDelete";
             client().createCollection( ns, 8192, true, 2 );
             insert( ns, BSON( "a" << 0 ) );
@@ -302,8 +311,11 @@ namespace QueryTests {
             ASSERT( !c->more() );
             insert( ns, BSON( "a" << 2 ) );
             insert( ns, BSON( "a" << 3 ) );
+            ASSERT( c->more() );
+            c->next();
+            c->next();
             ASSERT( !c->more() );
-            ASSERT_EQUALS( 0, c->getCursorId() );
+            ASSERT( 0 != c->getCursorId() );
         }
     };
 
@@ -358,8 +370,6 @@ namespace QueryTests {
 		}
 
         void run() {
-            ASSERT("capped collection" == NULL);
-            #if 0
             const char *ns = "unittests.querytests.TailableQueryOnId";
             BSONObj info;
             client().runCommand( "unittests", BSON( "create" << "querytests.TailableQueryOnId" << "capped" << true << "size" << 8192 << "autoIndexId" << true ), info );
@@ -383,7 +393,6 @@ namespace QueryTests {
             ASSERT_EQUALS( 2, c2->next().getIntField( "a" ) );  // SERVER-645
             ASSERT( !c2->more() );
             ASSERT( !c2->isDead() );
-            #endif
         }
     };
 
@@ -393,8 +402,6 @@ namespace QueryTests {
             client().dropCollection( "unittests.querytests.OplogReplayMode" );
         }
         void run() {
-            ASSERT("QueryOption_OplogReplay" == NULL);
-            #if 0
             const char *ns = "unittests.querytests.OplogReplayMode";
             insert( ns, BSON( "ts" << 0 ) );
             insert( ns, BSON( "ts" << 1 ) );
@@ -409,7 +416,6 @@ namespace QueryTests {
             ASSERT( c->more() );
             ASSERT_EQUALS( 2, c->next().getIntField( "ts" ) );
             ASSERT( c->more() );
-            #endif
         }
     };
 
@@ -419,8 +425,6 @@ namespace QueryTests {
             client().dropCollection( "unittests.querytests.OplogReplaySlaveReadTill" );
         }
         void run() {
-            ASSERT("capped collection" == NULL);
-            #if 0
             const char *ns = "unittests.querytests.OplogReplaySlaveReadTill";
             Lock::DBWrite lk(ns);
             Client::Context ctx( ns );
@@ -444,8 +448,7 @@ namespace QueryTests {
             long long cursorId = c->getCursorId();
             
             ClientCursor::Pin clientCursor( cursorId );
-            ASSERT_EQUALS( three.millis, clientCursor.c()->getSlaveReadTill().asDate() );
-            #endif
+            //ASSERT_EQUALS( three.millis, clientCursor.c()->getSlaveReadTill().asDate() );
         }
     };
 
@@ -551,7 +554,7 @@ namespace QueryTests {
         static const char *idxNs() { return "unittests.system.indexes"; }
         void index() const { ASSERT( !client().findOne( idxNs(), BSON( "name" << NE << "_id_" ) ).isEmpty() ); }
         void noIndex() const {
-            BSONObj o = client().findOne( idxNs(), BSON( "name" << NE << "_id_" ) );
+            BSONObj o = client().findOne( idxNs(), BSON( "name" << BSON( "$not" << BSON( "$in" << BSONArrayBuilder().append("_id_").append("$_").arr() ) ) ) );
             if( !o.isEmpty() ) {
                 cout << o.toString() << endl;
                 ASSERT( false );
@@ -963,14 +966,16 @@ namespace QueryTests {
             _n = 0;
         }
         void run() {
-            ASSERT("capped collection" == NULL);
-            #if 0
             string err;
 
-            Client::WriteContext ctx( "unittests" );
-
-            // note that extents are always at least 4KB now - so this will get rounded up a bit.
-            ASSERT( userCreateNS( ns() , fromjson( "{ capped : true , size : 2000 }" ) , err , false ) );
+            {
+                Client::WriteContext ctx( "unittests" );
+                Client::Transaction txn(DB_SERIALIZABLE);
+                // note that extents are always at least 4KB now - so this will get rounded up a bit.
+                ASSERT( userCreateNS( ns() , fromjson( "{ capped : true , size : 2000 }" ) , err , false ) );
+                txn.commit();
+            }
+        
             for ( int i=0; i<200; i++ ) {
                 insertNext();
 //                cout << count() << endl;
@@ -997,14 +1002,16 @@ namespace QueryTests {
 
             while ( c->more() ) { c->next(); }
             ASSERT( c->isDead() );
-            #endif
         }
 
         void insertNext() {
-			BSONObjBuilder b;
-			b.appendOID("_id", 0, true);
-			b.append("i", _n++);
+            Client::ReadContext ctx("unittests");
+            Client::Transaction txn(DB_SERIALIZABLE);
+            BSONObjBuilder b;
+            b.appendOID("_id", 0, true);
+            b.append("i", _n++);
             insert( ns() , b.obj() );
+            txn.commit();
         }
 
         int _n;
@@ -1109,10 +1116,8 @@ namespace QueryTests {
         }
 
         void run() {
-            ASSERT("capped collections not implemented" == NULL);
-            #if 0
             BSONObj info;
-            ASSERT( client().runCommand( "unittests", BSON( "create" << "querytests.findingstart" << "capped" << true << "$nExtents" << 5 << "autoIndexId" << false ), info ) );
+            ASSERT( client().runCommand( "unittests", BSON( "create" << "querytests.findingstart" << "capped" << true << "size" << 5000 << "autoIndexId" << false ), info ) );
 
             int i = 0;
             for( int oldCount = -1;
@@ -1131,7 +1136,6 @@ namespace QueryTests {
                 }
                 //cout << k << endl;
             }
-            #endif
         }
 
     private:
@@ -1148,12 +1152,10 @@ namespace QueryTests {
         }
 
         void run() {
-            ASSERT("capped collection" == NULL);
-            #if 0
             unsigned startNumCursors = ClientCursor::numCursors();
 
             BSONObj info;
-            ASSERT( client().runCommand( "unittests", BSON( "create" << "querytests.findingstart" << "capped" << true << "$nExtents" << 5 << "autoIndexId" << false ), info ) );
+            ASSERT( client().runCommand( "unittests", BSON( "create" << "querytests.findingstart" << "capped" << true << "size" << 5000 << "autoIndexId" << false ), info ) );
 
             int i = 0;
             for( ; i < 150; client().insert( ns(), BSON( "ts" << i++ ) ) );
@@ -1171,7 +1173,6 @@ namespace QueryTests {
             }
 
             ASSERT_EQUALS( startNumCursors, ClientCursor::numCursors() );
-            #endif
         }
 
     private:
@@ -1187,8 +1188,6 @@ namespace QueryTests {
         FindingStartStale() : CollectionBase( "findingstart" ) {}
 
         void run() {
-            ASSERT("capped collection" == NULL);
-            #if 0
             unsigned startNumCursors = ClientCursor::numCursors();
 
             // Check OplogReplay mode with missing collection.
@@ -1196,7 +1195,7 @@ namespace QueryTests {
             ASSERT( !c0->more() );
 
             BSONObj info;
-            ASSERT( client().runCommand( "unittests", BSON( "create" << "querytests.findingstart" << "capped" << true << "$nExtents" << 5 << "autoIndexId" << false ), info ) );
+            ASSERT( client().runCommand( "unittests", BSON( "create" << "querytests.findingstart" << "capped" << true << "size" << 5000 << "autoIndexId" << false ), info ) );
             
             // Check OplogReplay mode with empty collection.
             auto_ptr< DBClientCursor > c = client().query( ns(), QUERY( "ts" << GTE << 50 ), 0, 0, 0, QueryOption_OplogReplay );
@@ -1210,7 +1209,6 @@ namespace QueryTests {
 
             // Check that no persistent cursors outlast our queries above.
             ASSERT_EQUALS( startNumCursors, ClientCursor::numCursors() );
-            #endif
         }
     };
 
@@ -1240,8 +1238,6 @@ namespace QueryTests {
     public:
         Exhaust() : CollectionInternalBase( "exhaust" ) {}
         void run() {
-            ASSERT("capped collection" == NULL);
-            #if 0
             BSONObj info;
             ASSERT( client().runCommand( "unittests",
                                         BSON( "create" << "querytests.exhaust" <<
@@ -1258,7 +1254,6 @@ namespace QueryTests {
             string exhaust = runQuery( message, queryMessage, *cc().curop(), result );
             ASSERT( exhaust.size() );
             ASSERT_EQUALS( string( ns() ), exhaust );
-            #endif
         }
     };
 
@@ -1582,7 +1577,8 @@ namespace QueryTests {
             add< EmbeddedArray >();
             add< DifferentNumbers >();
             add< SymbolStringSame >();
-            add< TailableCappedRaceCondition >();
+            // TokuMX does not have this race condition
+            //add< TailableCappedRaceCondition >();
             add< HelperTest >();
             add< HelperByIdTest >();
             add< FindingStartPartiallyFull >();
