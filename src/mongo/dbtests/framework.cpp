@@ -44,6 +44,8 @@ namespace mongo {
 
     CmdLine cmdLine;
 
+    extern TxnCompleteHooks _txnCompleteHooks;
+
     namespace dbtests {
 
         mutex globalCurrentTestNameMutex("globalCurrentTestNameMutex");
@@ -220,6 +222,7 @@ namespace mongo {
                 filter = params["filter"].as<string>();
             }
 
+            mongo::setTxnCompleteHooks(&mongo::_txnCompleteHooks);
             storage::startup();
 
             TestWatchDog twd;
