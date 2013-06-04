@@ -164,14 +164,9 @@ namespace mongo {
             insertIntoIndexes(pk, obj, flags);
         }
 
-        // deletes an object from this namespace, taking care of secondary indexes if they exist
-        void deleteObject(const BSONObj &pk, const BSONObj &obj) {
-            deleteFromIndexes(pk, obj);
-        }
-
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj) {
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags) {
             newObj = inheritIdField(oldObj, newObj);
-            NamespaceDetails::updateObject(pk, oldObj, newObj);
+            NamespaceDetails::updateObject(pk, oldObj, newObj, flags);
         }
     };
 
@@ -249,10 +244,6 @@ namespace mongo {
             BSONObjBuilder pk(64);
             pk.append("", _nextPK.fetchAndAdd(1));
             insertIntoIndexes(pk.obj(), obj, flags);
-        }
-
-        void deleteObject(const BSONObj &pk, const BSONObj &obj) {
-            deleteFromIndexes(pk, obj);
         }
 
     protected:
@@ -441,7 +432,7 @@ namespace mongo {
             checkGorged(obj, false);
         }
 
-        void deleteObject(const BSONObj &pk, const BSONObj &obj) {
+        void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             massert(16460, "bug: cannot remove from a capped collection, "
                     " should have been enforced higher in the stack", false);
         }
@@ -454,12 +445,12 @@ namespace mongo {
             _lastDeletedPK = BSONObj();
         }
 
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj) {
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags) {
             newObj = inheritIdField(oldObj, newObj);
             long long diff = newObj.objsize() - oldObj.objsize();
             uassert( 10003 , "failing update: objects in a capped ns cannot grow", diff <= 0 );
 
-            NamespaceDetails::updateObject(pk, oldObj, newObj);
+            NamespaceDetails::updateObject(pk, oldObj, newObj, flags);
             if (diff < 0) {
                 _currentSize.addAndFetch(diff);
             }
@@ -903,14 +894,14 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::deleteFromIndexes(const BSONObj &pk, const BSONObj &obj) {
+    void NamespaceDetails::deleteFromIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
         for (int i = 0; i < nIndexes(); i++) {
             IndexDetails &idx = *_indexes[i];
 
             if (i == 0) {
-                idx.deletePair(pk, NULL);
+                idx.deletePair(pk, NULL, flags);
             } else {
                 BSONObjSet keys;
                 idx.getKeysFromObject(obj, keys);
@@ -918,7 +909,7 @@ namespace mongo {
                     dassert(isMultikey(i)); // some prior insert should have marked it as multikey
                 }
                 for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                    idx.deletePair(*ki, &pk);
+                    idx.deletePair(*ki, &pk, flags);
                 }
             }
         }
@@ -937,7 +928,12 @@ namespace mongo {
         return contains;
     }
 
-    void NamespaceDetails::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj) {
+    // deletes an object from this namespace, taking care of secondary indexes if they exist
+    void NamespaceDetails::deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
+        deleteFromIndexes(pk, obj, flags);
+    }
+
+    void NamespaceDetails::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags) {
         TOKULOG(4) << "NamespaceDetails::updateObject pk "
             << pk << ", old " << oldObj << ", new " << newObj << endl;
 
@@ -950,7 +946,7 @@ namespace mongo {
 
             if (i == 0) {
                 // Overwrite oldObj with newObj using the given pk.
-                idx.insertPair(pk, NULL, newObj, NamespaceDetails::NO_UNIQUE_CHECKS);
+                idx.insertPair(pk, NULL, newObj, flags | NamespaceDetails::NO_UNIQUE_CHECKS);
             } else {
                 // Determine what keys need to be removed/added.
                 BSONObjSet oldKeys;
@@ -965,18 +961,18 @@ namespace mongo {
                 for (BSONObjSet::iterator o = oldKeys.begin(); o != oldKeys.end(); o++) {
                     const BSONObj &k = *o;
                     if (!orderedSetContains(newKeys, k)) {
-                        idx.deletePair(k, &pk);
+                        idx.deletePair(k, &pk, flags);
                     }
                 }
                 // Insert the keys that exist in newKeys but do not exist in oldKeys
                 for (BSONObjSet::iterator n = newKeys.begin(); n != newKeys.end(); n++) {
                     const BSONObj &k = *n;
                     if (!orderedSetContains(oldKeys, k)) {
-                        idx.insertPair(k, &pk, newObj, 0);
+                        idx.insertPair(k, &pk, newObj, flags);
                     }
                     else if (idx.clustering()) {
                         // if clustering, overwrite every key with the new data
-                        idx.insertPair(k, &pk, newObj, NamespaceDetails::NO_UNIQUE_CHECKS);
+                        idx.insertPair(k, &pk, newObj, flags | NamespaceDetails::NO_UNIQUE_CHECKS);
                     }
                 }
             }
@@ -1256,7 +1252,7 @@ namespace mongo {
         NamespaceDetails *d = nsdetails_maybe_create(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         BSONObj objMod = info;
-        insertOneObject(d, nsdt, objMod, 0);
+        insertOneObject(d, nsdt, objMod);
     }
 
     void NamespaceDetails::addDefaultIndexesToCatalog() {
@@ -1475,7 +1471,7 @@ namespace mongo {
         const char *system_ns = s.c_str();
         NamespaceDetails *d = nsdetails_maybe_create(system_ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(system_ns);
-        insertOneObject(d, nsdt, info, 0);
+        insertOneObject(d, nsdt, info);
     }
 
     void removeNamespaceFromCatalog(const string &ns) {

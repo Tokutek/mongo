@@ -145,7 +145,7 @@ namespace mongo {
         const BSONObj &info() const { return _info; }
 
         void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, uint64_t flags);
-        void deletePair(const BSONObj &key, const BSONObj *pk);
+        void deletePair(const BSONObj &key, const BSONObj *pk, uint64_t flags);
 
         enum toku_compression_method getCompressionMethod() const;
         uint32_t getPageSize() const;

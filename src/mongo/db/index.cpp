@@ -195,12 +195,12 @@ namespace mongo {
         TOKULOG(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
     }
 
-    void IndexDetails::deletePair(const BSONObj &key, const BSONObj *pk) {
+    void IndexDetails::deletePair(const BSONObj &key, const BSONObj *pk, uint64_t flags) {
         storage::Key skey(key, pk);
         DBT kdbt = skey.dbt();
 
-        const int flags = DB_DELETE_ANY;
-        int r = _db->del(_db, cc().txn().db_txn(), &kdbt, flags);
+        const int del_flags = ((flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0) | DB_DELETE_ANY;
+        int r = _db->del(_db, cc().txn().db_txn(), &kdbt, del_flags);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }

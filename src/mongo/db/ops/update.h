@@ -55,7 +55,8 @@ namespace mongo {
         const BSONObj &pk, 
         const BSONObj &oldObj, 
         const BSONObj &newObj, 
-        struct LogOpUpdateDetails* loud
+        struct LogOpUpdateDetails* loud,
+        uint64_t flags = 0
         );
 
     /* returns true if an existing object was updated, false if no existing object was found.

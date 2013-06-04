@@ -277,13 +277,13 @@ namespace mongo {
         }
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
-        virtual void insertObject(BSONObj &obj, uint64_t flags) = 0;
+        virtual void insertObject(BSONObj &obj, uint64_t flags = 0) = 0;
 
         // deletes an object from this namespace, taking care of secondary indexes if they exist
-        virtual void deleteObject(const BSONObj &pk, const BSONObj &obj) = 0;
+        virtual void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
 
         // update an object in the namespace by pk, replacing oldObj with newObj
-        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj);
+        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags = 0);
 
         // create a new index with the given info for this namespace.
         virtual void createIndex(const BSONObj &info);
@@ -318,7 +318,7 @@ namespace mongo {
         void buildIndex(shared_ptr<IndexDetails> &index);
 
         void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
-        void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj);
+        void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
 
         // uassert on duplicate key
         void checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj);

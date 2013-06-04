@@ -28,8 +28,8 @@
 
 namespace mongo {
 
-    void deleteOneObject(NamespaceDetails *d, NamespaceDetailsTransient *nsdt, const BSONObj &pk, const BSONObj &obj) {
-        d->deleteObject(pk, obj);
+    void deleteOneObject(NamespaceDetails *d, NamespaceDetailsTransient *nsdt, const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
+        d->deleteObject(pk, obj, flags);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }

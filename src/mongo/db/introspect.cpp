@@ -72,7 +72,7 @@ namespace mongo {
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         if (details) {
             // write: not replicated
-            insertOneObject(details, nsdt, p, 0);
+            insertOneObject(details, nsdt, p);
         }
     }
 
