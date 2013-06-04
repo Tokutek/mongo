@@ -98,6 +98,7 @@ scratch
 /libmongoclient.*
 /libmongotestfiles.*
 /libmongoshellfiles.*
+/sharedclient
 
 # plugins
 /plugins/
