@@ -643,8 +643,10 @@ again:      while ( !allInclusive && ok() ) {
         // Get a row from the bulk fetch buffer
         if ( ok() ) {
             getCurrentFromBuffer();
+            TOKULOG(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
+        } else {
+            TOKULOG(3) << "_advance exhausted" << endl;
         }
-        TOKULOG(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
     }
 
     bool IndexCursor::advance() {

@@ -878,24 +878,6 @@ namespace mongo {
         }
     }
 
-    // Temporarily factored out of insertIntoIndexes() for trickle-loaded index builds.
-    void NamespaceDetails::insertIntoOneIndex(const int i, const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
-        IndexDetails &idx = *_indexes[i];
-        if (i == 0) {
-            dassert(isPKIndex(idx));
-            idx.insertPair(pk, NULL, obj, flags);
-        } else {
-            BSONObjSet keys;
-            idx.getKeysFromObject(obj, keys);
-            if (keys.size() > 1) {
-                setIndexIsMultikey(_ns.c_str(), i);
-            }
-            for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                idx.insertPair(*ki, &pk, obj, flags);
-            }
-        }
-    }
-
     void NamespaceDetails::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
@@ -904,7 +886,20 @@ namespace mongo {
             //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
         }
         for (int i = 0; i < nIndexes(); i++) {
-            insertIntoOneIndex(i, pk, obj, flags);
+            IndexDetails &idx = *_indexes[i];
+            if (i == 0) {
+                dassert(isPKIndex(idx));
+                idx.insertPair(pk, NULL, obj, flags);
+            } else {
+                BSONObjSet keys;
+                idx.getKeysFromObject(obj, keys);
+                if (keys.size() > 1) {
+                    setIndexIsMultikey(_ns.c_str(), i);
+                }
+                for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
+                    idx.insertPair(*ki, &pk, obj, flags);
+                }
+            }
         }
     }
 
@@ -1006,6 +1001,46 @@ namespace mongo {
         NamespaceDetailsTransient::get(thisns).clearQueryCache();
     }
 
+    void NamespaceDetails::buildIndex(shared_ptr<IndexDetails> &index) {
+        _indexBuildInProgress = true;
+
+        IndexDetails::Builder builder(*index);
+
+        const int indexNum = idxNo(*index);
+        for ( scoped_ptr<Cursor> cursor(BasicCursor::make(this));
+              cursor->ok(); cursor->advance()) {
+            BSONObj pk = cursor->currPK();
+            BSONObj obj = cursor->current();
+            BSONObjSet keys;
+            index->getKeysFromObject(obj, keys);
+            if (keys.size() > 1) {
+                setIndexIsMultikey(_ns.c_str(), indexNum);
+            }
+            for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
+                builder.insertPair(*ki, &pk, obj);
+            }
+            killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
+        }
+
+        builder.done();
+
+        // If the index is unique, check all adjacent keys for a duplicate.
+        if (index->unique()) {
+            IndexCursor c(this, *index, minKey, maxKey, true, 1);
+            BSONObj prevKey = c.currKey().getOwned();
+            c.advance();
+            for ( ; c.ok(); c.advance()) {
+                BSONObj currKey = c.currKey(); 
+                if (currKey == prevKey) {
+                    index->uassertedDupKey(currKey);
+                }
+                prevKey = currKey;
+            }
+        }
+
+        _indexBuildInProgress = false;
+    }
+
     void NamespaceDetails::createIndex(const BSONObj &idx_info) {
         uassert(16449, "dropDups is not supported and is likely to remain unsupported for some time because it deletes arbitrary data",
                 !idx_info["dropDups"].trueValue());
@@ -1054,31 +1089,26 @@ namespace mongo {
             index->close();
             throw;
         }
-        _indexBuildInProgress = true;
         _indexes.push_back(index);
 
-        string thisns(index->parentNS());
-        uint64_t iter = 0;
-        const int i = idxNo(*index);
-        for (scoped_ptr<Cursor> cursor(BasicCursor::make(this)); cursor->ok(); cursor->advance(), iter++) {
-            if (iter % 1000 == 0) {
-                killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
-            }
-            insertIntoOneIndex(i, cursor->currPK(), cursor->current(), 0);
+        // Only secondary indexes need to be built.
+        const bool isSecondaryIndex = _nIndexes > 0;
+        if (isSecondaryIndex) {
+            buildIndex(index);
         }
         _nIndexes++;
-        _indexBuildInProgress = false;
 
         string idx_ns = idx_info["ns"].String();
         const char *ns = idx_ns.c_str();
 
         // The first index we create should be the pk index, when we first create the collection.
-        // Therefore the collection's NamespaceDetails should not already exist in the NamespaceIndex.
-        const bool may_overwrite = _nIndexes > 1;
+        // Therefore the collection's NamespaceDetails should not already exist in the NamespaceIndex
+        // unless we are building a secondary index (and therefore the collection already exists)
+        const bool may_overwrite = isSecondaryIndex;
         if (!may_overwrite) {
             massert(16435, "first index should be pk index", index->keyPattern() == _pk);
         }
-        nsindex(ns)->update_ns(ns, serialize(), may_overwrite);
+        nsindex(ns)->update_ns(ns, serialize(), isSecondaryIndex);
 
         NamespaceDetailsTransient::get(ns).addedIndex();
     }

@@ -270,12 +270,14 @@ namespace mongo {
          * @param heedMutex if true and have a write lock, won't kill op since it might be unsafe
          */
         void checkForInterrupt( bool heedMutex = true );
+        void checkForInterrupt( Client &c );
 
         /** @return "" if not interrupted.  otherwise, you should stop. */
         const char *checkForInterruptNoAssert();
 
     private:
         void interruptJs( AtomicUInt *op );
+        void _checkForInterrupt( Client &c, bool heedMutex );
         volatile bool _globalKill;
     } killCurrentOp;
 

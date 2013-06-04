@@ -163,7 +163,15 @@ namespace mongo {
         if (r != 0 && r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);
         }
-        uassert(ASSERT_ID_DUPKEY, mongoutils::str::stream() << "E11000 duplicate key error, " << key << " already exists in unique index", isUnique);
+        if (!isUnique) {
+            uassertedDupKey(key);
+        }
+    }
+
+    void IndexDetails::uassertedDupKey(const BSONObj &key) const {
+        uasserted(ASSERT_ID_DUPKEY, mongoutils::str::stream()
+                                    << "E11000 duplicate key error, " << key
+                                    << " already exists in unique index");
     }
 
     void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, uint64_t flags) {
@@ -327,5 +335,31 @@ namespace mongo {
         bson_stats->append("create time", create_date);
         bson_stats->append("last modify time", modify_date);
         */
+    }
+    
+    /* ---------------------------------------------------------------------- */
+
+    IndexDetails::Builder::Builder(IndexDetails &idx) :
+        _idx(idx), _loader(_idx._db) {
+    }
+
+    void IndexDetails::Builder::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val) {
+        storage::Key skey(key, pk);
+        DBT kdbt = skey.dbt();
+        DBT vdbt = storage::make_dbt(NULL, 0);
+        if (_idx.clustering()) {
+            vdbt = storage::make_dbt(val.objdata(), val.objsize());
+        }
+        const int r = _loader.put(&kdbt, &vdbt);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
+    }
+
+    void IndexDetails::Builder::done() {
+        const int r = _loader.close();
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
     }
 }

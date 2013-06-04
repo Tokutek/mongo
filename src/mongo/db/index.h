@@ -32,6 +32,7 @@
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/db/storage/txn.h"
+#include "mongo/db/storage/loader.h"
 
 namespace mongo {
 
@@ -154,6 +155,8 @@ namespace mongo {
         void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
         void optimize();
 
+        void uassertedDupKey(const BSONObj &key) const;
+
         template<class Callback>
         void getKeyAfterBytes(const storage::Key &startKey, uint64_t skipLen, Callback &cb) const;
 
@@ -164,19 +167,27 @@ namespace mongo {
             }
         };
 
+        class Builder {
+        public:
+            Builder(IndexDetails &idx);
+
+            void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val);
+
+            void done();
+
+        private:
+            IndexDetails &_idx;
+            storage::Loader _loader;
+        };
+
     private:
         // Open dictionary representing the index on disk.
         DB *_db;
 
+        void _build();
 
-        /* Info about the index. Stored on disk in the .ns file for this database
-         * as a NamespaceDetails object.
-         */
-        /* Currenty known format:
-             { name:"nameofindex", ns:"parentnsname", key: {keypattobject}
-               [, unique: <bool>, background: <bool>, v:<version>]
-             }
-        */
+        // Info about the index. Stored on disk in the database.ns dictionary
+        // for this database as a BSON object.
         const BSONObj _info;
 
         // Precomputed values from _info, for speed.

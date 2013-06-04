@@ -181,7 +181,14 @@ namespace mongo {
     }
 
     void KillCurrentOp::checkForInterrupt( bool heedMutex ) {
-        Client& c = cc();
+        return _checkForInterrupt( cc(), heedMutex );
+    }
+
+    void KillCurrentOp::checkForInterrupt( Client &c ) {
+        return _checkForInterrupt( c, false );
+    }
+
+    void KillCurrentOp::_checkForInterrupt( Client &c, bool heedMutex ) {
         if ( heedMutex && Lock::somethingWriteLocked() && c.hasWrittenThisPass() )
             return;
         if( _globalKill )

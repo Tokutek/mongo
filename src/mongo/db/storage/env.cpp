@@ -512,7 +512,7 @@ namespace mongo {
                     _do_assert(uasserted, 16760,
                                "Deadlock detected during lock acquisition. Try restarting the transaction.");
                 case DB_KEYEXIST:
-                    _do_assert(uasserted, 16769,
+                    _do_assert(uasserted, ASSERT_ID_DUPKEY,
                                "Duplicate key error.");
                 case DB_NOTFOUND:
                     _do_assert(uasserted, 16761,

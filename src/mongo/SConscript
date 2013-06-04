@@ -325,7 +325,10 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/pipeline/pipeline_d.cpp",
                     "db/pipeline/document_source_cursor.cpp",
                     "db/commands/txn_commands.cpp",
-                    "db/driverHelpers.cpp" ]
+                    "db/driverHelpers.cpp",
+
+                    # Most storage/ files are in coredb, but this is server-only.
+                    "db/storage/loader.cpp" ]
 
 env.Library( "dbcmdline", "db/cmdline.cpp" )
 
