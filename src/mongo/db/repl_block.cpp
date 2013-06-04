@@ -130,9 +130,9 @@ namespace mongo {
         }
 
         bool waitForReplication(const GTID& gtid, int w, int maxSecondsToWait) {
-            if ( w <= 1 || ! _isMaster() )
+            if ( w <= 1 ) {
                 return true;
-
+            }
             w--; // now this is the # of slaves i need
 
             boost::xtime xt;
@@ -141,9 +141,13 @@ namespace mongo {
             
             scoped_lock mylk(_mutex);
             while ( ! _replicatedToNum_slaves_locked( gtid, w ) ) {
-                if ( ! _threadsWaitingForReplication.timed_wait( mylk.boost() , xt ) )
+                if ( ! _threadsWaitingForReplication.timed_wait( mylk.boost() , xt ) ) {
+                    massert(16804,
+                            "waitForReplication called but not master anymore", _isMaster());
                     return false;
+                }
             }
+            massert( 16805, "waitForReplication called but not master anymore", _isMaster() );
             return true;
         }
 

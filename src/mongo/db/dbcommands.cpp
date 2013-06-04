@@ -222,6 +222,16 @@ namespace mongo {
 
                         // check this first for w=0 or w=1
                         if ( opReplicatedEnough( gtid, e ) ) {
+                            // before breaking, let's check that we are not master
+                            // originally done outside of if-clause in vanilla by
+                            // SERVER-9417. Moved here so that we don't have
+                            // race condition machine stepping down after the check
+                            // but before the call to opReplicatedEnough
+                            if ( !_isMaster() ) {
+                                errmsg = "not master";
+                                result.append( "wnote", "no longer primary" );
+                                return false;
+                            }
                             break;
                         }
 
