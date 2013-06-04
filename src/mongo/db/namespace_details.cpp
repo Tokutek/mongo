@@ -530,14 +530,15 @@ namespace mongo {
             int start = checkPk ? 0 : 1;
             for (int i = start; i < nIndexes(); i++) {
                 IndexDetails &idx = *_indexes[i];
-                BSONObjSet keys;
-                idx.getKeysFromObject(obj, keys);
-                for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                    idx.uniqueCheck(*ki, &pk);
+                if (idx.unique()) {
+                    BSONObjSet keys;
+                    idx.getKeysFromObject(obj, keys);
+                    for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
+                        idx.uniqueCheck(*ki, &pk);
+                    }
                 }
             }
         }
-
 
         // Checks unique indexes and does the actual inserts.
         // Does not check if the collection became gorged.
