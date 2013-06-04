@@ -130,12 +130,13 @@ namespace mongo {
 
             // write security will be enforced in DBDirectClient
             // TODO: should this be a db lock?
+            // TODO: What happens if isAuthorized is false and the js tries to create a collection?
+            //       We'll be in a global read lock, so wouldn't getting a write lock will massert?
             scoped_ptr<Lock::ScopedLock> lk( ai->isAuthorized( dbname.c_str() ) ? 
                                              static_cast<Lock::ScopedLock*>( new Lock::GlobalWrite() ) : 
                                              static_cast<Lock::ScopedLock*>( new Lock::GlobalRead() ) );
-            // If we create a context here, and the js we're running does fileops, we'll create too many txns.
-            //Client::Context ctx( dbname );
 
+            Client::Context ctx( dbname );
             return dbEval(dbname, cmdObj, result, errmsg);
         }
     } cmdeval;

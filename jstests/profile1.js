@@ -45,9 +45,12 @@ try {
     assert.eq(2, db.runCommand({profile: -1}).was, "B");
     assert.eq(1, db.system.profile.stats().capped, "C");
     
-    db.foo.findOne()
+    db.foo.findOne();
     
-    assert.eq( 4 , profileCursor().count() , "E2" );
+    // TokuMX reads 3 entries, not four, because the profiling entry
+    // for the count command itself is inserted after the cursor is
+    // created, thus it gets omitted by the snapshot read.
+    assert.eq( 3 , profileCursor().count() , "E2" );
     
     /* Make sure we can't drop if profiling is still on */
     assert.throws( function(z){ db.getCollection("system.profile").drop(); } )
