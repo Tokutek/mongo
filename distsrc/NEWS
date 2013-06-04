@@ -129,6 +129,15 @@ Limitations
       instead, start a mongod pointing to that directory, and then use
       mongorestore.
 
+    - Capped collection insert/update performance may be poor compared
+      to regular MongoDB if there are few or no secondary indexes.
+      Additionally, the constant-size-on-disk property held by regular
+      MongoDB is only loosely held by TokuMX, especially because
+      collections are compressed. In generaly, users are encouraged
+      to use regular collections instead of capped collections when
+      possible, especially when disk size properties were a motivating
+      factor. Time-to-live (TTL) collections may be a good alternative.
+
 
 tokumx 0.1.0
 ------------
