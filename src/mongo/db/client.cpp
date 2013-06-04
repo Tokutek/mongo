@@ -451,7 +451,7 @@ namespace mongo {
 
     } clientListPlugin;
 
-    int Client::recommendedYieldMicros( int * writers , int * readers, bool needExact ) {
+    void Client::getReaderWriterClientCount( int *readers , int *writers ) {
         int num = 0;
         int w = 0;
         int r = 0;
@@ -466,28 +466,13 @@ namespace mongo {
                     else
                         r++;
                 }
-                if (num > 100 && !needExact)
-                    break;
             }
         }
 
-        if ( writers )
-            *writers = w;
-        if ( readers )
-            *readers = r;
-
-        int time = r * 10; // we have to be nice to readers since they don't have priority
-        time += w; // writers are greedy, so we can be mean tot hem
-
-        time = min( time , 1000000 );
-
-        // if there has been a kill request for this op - we should yield to allow the op to stop
-        // This function returns empty string if we aren't interrupted
-        if ( *killCurrentOp.checkForInterruptNoAssert() ) {
-            return 100;
-        }
-
-        return time;
+        verify(writers);
+        verify(readers);
+        *writers = w;
+        *readers = r;
     }
 
     int Client::getActiveClientCount( int& writers, int& readers ) {

@@ -473,7 +473,7 @@ namespace mongo {
                 {
                     BSONObjBuilder ttt( t.subobjStart( "currentQueue" ) );
                     int w=0, r=0;
-                    Client::recommendedYieldMicros( &w , &r, true );
+                    Client::getReaderWriterClientCount( &r , &w );
                     ttt.append( "total" , w + r );
                     ttt.append( "readers" , r );
                     ttt.append( "writers" , w );
@@ -497,38 +497,6 @@ namespace mongo {
             timeBuilder.appendNumber( "after basic" , Listener::getElapsedTimeMillis() - start );
 
             {
-                BSONObjBuilder t( result.subobjStart( "mem" ) );
-
-                t.append("bits",  ( sizeof(int*) == 4 ? 32 : 64 ) );
-
-                ProcessInfo p;
-                int v = 0;
-                if ( p.supported() ) {
-                    t.appendNumber( "resident" , p.getResidentSize() );
-                    v = p.getVirtualMemorySize();
-                    t.appendNumber( "virtual" , v );
-                    //t.appendBool( "supported" , true );
-                }
-                else {
-                    result.append( "note" , "not all mem info support on this platform" );
-                    //t.appendBool( "supported" , false );
-                }
-                // TOKUDB: can't trust the number for mapped because it doesn't mean anything
-                t.appendBool( "supported" , false );
-                TOKULOG(1) << "TODO: report something about tokudb memory status in serverStatus" << endl;
-
-                timeBuilder.appendNumber( "middle of mem" , Listener::getElapsedTimeMillis() - start );
-
-                // TODO: What do we do here?
-                int m = 0; //(int) (MemoryMappedFile::totalMappedLength() / ( 1024 * 1024 ));
-                t.appendNumber( "mapped" , m );
-                
-                t.done();
-
-            }
-            timeBuilder.appendNumber( "after mem" , Listener::getElapsedTimeMillis() - start );
-
-            {
                 BSONObjBuilder bb( result.subobjStart( "connections" ) );
                 bb.append( "current" , connTicketHolder.used() );
                 bb.append( "available" , connTicketHolder.available() );
@@ -544,18 +512,6 @@ namespace mongo {
                 bb.done();
                 timeBuilder.appendNumber( "after extra info" , Listener::getElapsedTimeMillis() - start );
 
-            }
-
-            {
-                BSONObjBuilder bb( result.subobjStart( "indexCounters" ) );
-                globalIndexCounters.append( bb );
-                bb.done();
-            }
-
-            {
-                BSONObjBuilder bb( result.subobjStart( "backgroundFlushing" ) );
-                globalFlushCounters.append( bb );
-                bb.done();
             }
 
             {

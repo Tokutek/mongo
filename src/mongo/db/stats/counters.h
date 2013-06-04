@@ -19,10 +19,11 @@
 #pragma once
 
 #include "mongo/pch.h"
-#include "../jsobj.h"
-#include "../../util/net/message.h"
-#include "../../util/processinfo.h"
-#include "../../util/concurrency/spin_lock.h"
+
+#include "mongo/db/jsobj.h"
+#include "mongo/util/net/message.h"
+#include "mongo/util/processinfo.h"
+#include "mongo/util/concurrency/spin_lock.h"
 
 namespace mongo {
 
@@ -54,7 +55,6 @@ namespace mongo {
         const AtomicUInt * getGetMore() const { return &_getmore; }
         const AtomicUInt * getCommand() const { return &_command; }
 
-
     private:
 
         // todo: there will be a lot of cache line contention on these.  need to do something 
@@ -69,62 +69,6 @@ namespace mongo {
 
     extern OpCounters globalOpCounters;
     extern OpCounters replOpCounters;
-
-
-    class IndexCounters {
-    public:
-        IndexCounters();
-
-        // used without a mutex intentionally (can race)
-        void btree( char * node ) {
-            if ( ! _memSupported )
-                return;
-            ::abort();
-            //btree( Record::likelyInPhysicalMemory( node ) );
-        }
-
-        void btree( bool memHit ) {
-            if ( memHit )
-                _btreeMemHits++;
-            else
-                _btreeMemMisses++;
-            _btreeAccesses++;
-        }
-        void btreeHit() { _btreeMemHits++; _btreeAccesses++; }
-        void btreeMiss() { _btreeMemMisses++; _btreeAccesses++; }
-
-        void append( BSONObjBuilder& b );
-
-    private:
-        bool _memSupported;
-
-        int _resets;
-        long long _maxAllowed;
-
-        long long _btreeMemMisses;
-        long long _btreeMemHits;
-        long long _btreeAccesses;
-    };
-
-    extern IndexCounters globalIndexCounters;
-
-    class FlushCounters {
-    public:
-        FlushCounters();
-
-        void flushed(int ms);
-
-        void append( BSONObjBuilder& b );
-
-    private:
-        long long _total_time;
-        long long _flushes;
-        int _last_time;
-        Date_t _last;
-    };
-
-    extern FlushCounters globalFlushCounters;
-
 
     class GenericCounter {
     public:

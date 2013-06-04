@@ -41,7 +41,6 @@
 #include "mongo/db/lockstate.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
-//#include "mongo/db/storage/txn.h"
 #include "mongo/util/paths.h"
 #include "mongo/db/opsettings.h"
 
@@ -73,8 +72,7 @@ namespace mongo {
         static int getActiveClientCount( int& writers , int& readers );
         class Context;
         ~Client();
-        static int recommendedYieldMicros( int * writers = 0 , int * readers = 0,
-                                           bool needExact = false );
+        static void getReaderWriterClientCount( int *readers, int *writers );
         /** each thread which does db operations has a Client object in TLS.
          *  call this when your thread starts.
         */

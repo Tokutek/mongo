@@ -384,31 +384,15 @@ namespace mongo {
         }
     } cmdCursorInfo;
 
-    struct Mem { 
-        Mem() { res = virt = mapped = 0; }
-        long long res;
-        long long virt;
-        long long mapped;
-        bool grew(const Mem& r) { 
-            return (r.res && (((double)res)/r.res)>1.1 ) ||
-              (r.virt && (((double)virt)/r.virt)>1.1 ) ||
-              (r.mapped && (((double)mapped)/r.mapped)>1.1 );
-        }
-    };
-
     /** thread for timing out old cursors */
     void ClientCursorMonitor::run() {
         Client::initThread("clientcursormon");
         Client& client = cc();
         Timer t;
         const int Secs = 4;
-        unsigned n = 0;
         while ( ! inShutdown() ) {
             ClientCursor::idleTimeReport( t.millisReset() );
             sleepsecs(Secs);
-            if( ++n % (60/4) == 0 /*once a minute*/ ) { 
-                // Used to print memory status here
-            }
         }
         client.shutdown();
     }
