@@ -873,6 +873,9 @@ def main():
     parser.add_option('--quiet', dest='quiet', default=False,
                       action="store_true",
                       help='Generate a quieter report (use with --tests-log)')
+    parser.add_option('--shuffle', dest='shuffle', default=False,
+                      action="store_true",
+                      help='Shuffle tests instead of running them in alphabetical order')
 
     # Buildlogger invocation from command line
     parser.add_option('--buildlogger-builder', dest='buildlogger_builder', default=None,
@@ -940,6 +943,10 @@ def main():
                 f.close()
         else:
             call([utils.find_python(), "buildscripts/cleanbb.py", "--nokill", dbroot])
+
+    if options.shuffle:
+        import random
+        random.shuffle(tests)
 
     try:
         run_tests(tests)
