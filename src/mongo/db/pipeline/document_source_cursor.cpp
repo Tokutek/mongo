@@ -36,8 +36,7 @@ namespace mongo {
     }
 
     DocumentSourceCursor::CursorWithContext::~CursorWithContext() {
-        // Doesn't commit its transaction, will lead to inaccurate commit/abort counts but not a big deal since it's read-only.
-        // TODO: figure out if we were successful and commit in that case.
+        _txn.commit();
     }
 
     DocumentSourceCursor::~DocumentSourceCursor() {
