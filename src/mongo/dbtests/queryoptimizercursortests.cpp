@@ -1003,7 +1003,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 << "b" << 1 ) );
             
             {
-                // Create a btree cursor on an optimal a:1,b:1 plan.
+                // Create an index cursor on an optimal a:1,b:1 plan.
                 Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
                 Client::ReadContext ctx( ns() );
                 shared_ptr<Cursor> cursor = getCursor();

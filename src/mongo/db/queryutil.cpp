@@ -786,7 +786,7 @@ namespace mongo {
 
 
     /**
-     * Btree scanning for a multidimentional key range will yield a
+     * Index scanning for a multidimentional key range will yield a
      * multidimensional box.  The idea here is that if an 'other'
      * multidimensional box contains the current box we don't have to scan
      * the current box.  If the 'other' box contains the current box in

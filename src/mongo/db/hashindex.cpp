@@ -130,7 +130,7 @@ namespace mongo {
         inObj.done();
         BSONObj newQuery = newQueryBuilder.obj();
 
-        //Use the point-intervals of the new query to create a Btree cursor
+        //Use the point-intervals of the new query to create an index cursor
         FieldRangeSet newfrs( "" , newQuery , true, true );
         shared_ptr<FieldRangeVector> newVector(
                 new FieldRangeVector( newfrs , *_spec , 1 ) );

@@ -89,7 +89,7 @@ namespace mongo {
 
         /* The newCursor method works for suitable queries by generating a IndexCursor
          * using the hash of point-intervals parsed by FieldRangeSet.
-         * For unsuitable queries it just instantiates a btree cursor over the whole tree
+         * For unsuitable queries it just instantiates a cursor over the whole index.
          */
         shared_ptr<Cursor> newCursor( const BSONObj& query ,
                 const BSONObj& order , int numWanted ) const;

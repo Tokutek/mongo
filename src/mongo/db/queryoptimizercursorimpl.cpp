@@ -88,7 +88,7 @@ namespace mongo {
             }
             
             _c = queryPlan().newCursor();
-            // The basic and btree cursors used by this implementation do not supply their own
+            // The basic and index cursors used by this implementation do not supply their own
             // matchers, and a matcher from a query plan will be used instead.
             verify( !_c->matcher() );
 

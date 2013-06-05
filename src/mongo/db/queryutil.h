@@ -664,7 +664,6 @@ namespace mongo {
 
         /**
          * @return Suggested advance method through an ordered list of keys with lookup support
-         *      (generally a btree).
          *   -2 Iteration is complete, no need to advance further.
          *   -1 Advance to the next ordered key, without skipping.
          *  >=0 Skip parameter, let's call it 'r'.  If after() is true, skip past the key prefix

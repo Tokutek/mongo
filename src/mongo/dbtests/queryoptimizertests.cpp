@@ -1200,15 +1200,15 @@ namespace QueryOptimizerTests {
             }
         };
         
-        /** Exclude special plan candidate if there are btree plan candidates. SERVER-4531 */
-        class ExcludeSpecialPlanWhenBtreePlan : public Base {
+        /** Exclude special plan candidate if there are index plan candidates. SERVER-4531 */
+        class ExcludeSpecialPlanWhenIndexPlan : public Base {
         public:
             void run() {
                 Helpers::ensureIndex( ns(), BSON( "a" << "2d" ), false, "a_2d" );
                 Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
                 shared_ptr<QueryPlanSet> s =
                         makeQps( BSON( "a" << BSON_ARRAY( 0 << 0 ) << "b" << 1 ) );
-                // Two query plans, btree and collection scan.
+                // Two query plans, index and collection scan.
                 ASSERT_EQUALS( 2, s->nPlans() );
                 // Not the geo plan.
                 ASSERT( s->firstPlan()->special().empty() );
@@ -1660,7 +1660,7 @@ namespace QueryOptimizerTests {
             add<QueryPlanSetTests::EqualityThenIn>();
             add<QueryPlanSetTests::NotEqualityThenIn>();
             // TokuMX: no geo
-            //add<QueryPlanSetTests::ExcludeSpecialPlanWhenBtreePlan>();
+            //add<QueryPlanSetTests::ExcludeSpecialPlanWhenIndexPlan>();
             //add<QueryPlanSetTests::ExcludeUnindexedPlanWhenSpecialPlan>();
             add<QueryPlanSetTests::PossiblePlans>();
             add<QueryPlanSetTests::AvoidUnhelpfulRecordedPlan>();

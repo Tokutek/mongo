@@ -264,7 +264,6 @@ namespace mongo {
     };
     
     void IndexSpec::getKeys( const BSONObj &obj, BSONObjSet &keys ) const {
-        // TokuDB: Steal the btree key format
         KeyGenerator g( *this );
         g.getKeys( obj, keys );
     }

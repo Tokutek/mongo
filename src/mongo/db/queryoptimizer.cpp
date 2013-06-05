@@ -582,7 +582,7 @@ doneCheckOrder:
             return;
         }
         
-        // Only add a special plan if no standard btree plans have been added. SERVER-4531
+        // Only add a special plan if no standard index plans have been added. SERVER-4531
         if ( plans.empty() && specialPlan ) {
             _qps.setSinglePlan( specialPlan );
             return;
