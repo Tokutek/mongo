@@ -205,7 +205,8 @@ namespace OpLogHelpers{
         NamespaceDetails* nsd = nsdetails(ns);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         // overwrite set to true because we are running on a secondary
-        insertOneObject(nsd, nsdt, row, NamespaceDetails::NO_UNIQUE_CHECKS);
+        uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
+        insertOneObject(nsd, nsdt, row, flags);
     }
     static void runInsertFromOplog(const char* ns, BSONObj op) {
         BSONObj row = op[KEY_STR_ROW].Obj();
@@ -256,7 +257,8 @@ namespace OpLogHelpers{
         nsd = nsdetails(ns);
         nsdt = &NamespaceDetailsTransient::get(ns);
         // overwrite set to true because we are running on a secondary
-        nsd->insertObjectIntoCappedWithPK(pk, row, NamespaceDetails::NO_UNIQUE_CHECKS);
+        uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
+        nsd->insertObjectIntoCappedWithPK(pk, row, flags);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }
@@ -280,7 +282,8 @@ namespace OpLogHelpers{
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         BSONObj row = op[KEY_STR_ROW].Obj();
         BSONObj pk = row["_id"].wrap("");
-        deleteOneObject(nsd, nsdt, pk, row);
+        uint64_t flags = NamespaceDetails::NO_LOCKTREE;
+        deleteOneObject(nsd, nsdt, pk, row, flags);
     }
 
     static void runDeleteFromOplog(const char* ns, BSONObj op) {
@@ -300,7 +303,8 @@ namespace OpLogHelpers{
         BSONObj row = op[KEY_STR_ROW].Obj();
         BSONObj pk = op[KEY_STR_PK].Obj();
 
-        nsd->deleteObjectFromCappedWithPK(pk, row);
+        uint64_t flags = NamespaceDetails::NO_LOCKTREE;
+        nsd->deleteObjectFromCappedWithPK(pk, row, flags);
         if (nsdt != NULL) {
             nsdt->notifyOfWriteOp();
         }
@@ -334,14 +338,15 @@ namespace OpLogHelpers{
         // what is passed as the before image, and what is passed
         // as after. In normal replication, we replace oldRow with newRow.
         // In rollback, we replace newRow with oldRow
+        uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
         if (isRollback) {
             // if this is a rollback, then the newRow is what is in the
             // collections, that we want to replace with oldRow
-            updateOneObject(nsd, nsdt, pk, newRow, oldRow, NULL);
+            updateOneObject(nsd, nsdt, pk, newRow, oldRow, NULL, flags);
         }
         else {
             // normal replication case
-            updateOneObject(nsd, nsdt, pk, oldRow, newRow, NULL);
+            updateOneObject(nsd, nsdt, pk, oldRow, newRow, NULL, flags);
         }
     }
     static void runUpdateFromOplog(const char* ns, BSONObj op, bool isRollback) {

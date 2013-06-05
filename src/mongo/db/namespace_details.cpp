@@ -439,8 +439,8 @@ namespace mongo {
 
         // run a deletion where the PK is specified
         // Can come from the applier thread on a slave
-        virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj) {
-            _deleteObject(pk, obj);
+        virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+            _deleteObject(pk, obj, flags);
             // just make it easy and invalidate this
             _lastDeletedPK = BSONObj();
         }
@@ -561,7 +561,7 @@ namespace mongo {
             return (_maxObjects > 0 && n > _maxObjects) || (_maxSize > 0 && size > _maxSize);
         }
 
-        void _deleteObject(const BSONObj &pk, const BSONObj &obj) {
+        void _deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             // Note the delete we're about to do.
             size_t size = obj.objsize();
             CappedCollectionRollback &rollback = cc().txn().cappedRollback();
@@ -569,7 +569,7 @@ namespace mongo {
             _currentObjects.subtractAndFetch(1);
             _currentSize.subtractAndFetch(size);
 
-            NaturalOrderCollection::deleteObject(pk, obj);
+            NaturalOrderCollection::deleteObject(pk, obj, flags);
         }
 
         void trim(int objsize, bool logop) {
@@ -599,7 +599,7 @@ namespace mongo {
                     }
                     
                     // Delete the object, reload the current objects/size
-                    _deleteObject(oldestPK, oldestObj);
+                    _deleteObject(oldestPK, oldestObj, 0);
                     _lastDeletedPK = oldestPK.getOwned();
                     n = _currentObjects.load();
                     size = _currentSize.load();
@@ -617,7 +617,7 @@ namespace mongo {
             SimpleMutex::scoped_lock lk(_deleteMutex);
             scoped_ptr<Cursor> c( BasicCursor::make(this) );
             for ( ; c->ok() ; c->advance() ) {
-                _deleteObject(c->currPK(), c->current());
+                _deleteObject(c->currPK(), c->current(), 0);
             }
             _lastDeletedPK = BSONObj();
         }

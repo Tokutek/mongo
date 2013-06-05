@@ -307,7 +307,7 @@ namespace mongo {
             massert( 16772, "bug: should not call insertObjectIntoCappedWithPK into non-capped collection", false );
         }
         
-        virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj) {
+        virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
             massert( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection", false );
         }
 
