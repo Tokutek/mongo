@@ -146,6 +146,7 @@ namespace mongo {
                             "waitForReplication called but not master anymore", _isMaster());
                     return false;
                 }
+                massert( 16806, "waitForReplication called but not master anymore", _isMaster() );
             }
             massert( 16805, "waitForReplication called but not master anymore", _isMaster() );
             return true;
