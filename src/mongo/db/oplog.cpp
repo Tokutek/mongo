@@ -248,6 +248,7 @@ namespace mongo {
         verify(rsOplogDetails);
         // TODO: (add flags of prelocked)
         BSONObj pk = entry["_id"].wrap("");
-        rsOplogDetails->deleteObject(pk, entry);
+        uint64_t flags = (NamespaceDetails::NO_LOCKTREE);
+        rsOplogDetails->deleteObject(pk, entry, flags);
     }
 }

@@ -43,7 +43,13 @@ namespace mongo {
 
         // warning: isAuthorized uses the lockType() return values, and values are being passed 
         // around as ints so be careful as it isn't really typesafe and will need cleanup later
-        enum LockType { READ = -1 , NONE = 0 , WRITE = 1, OPLOCK = 2 };
+        //
+        // the above comment makes adding OPLOCK dangerous. Looking at the code,
+        // only isAuthorizedForLock in mongo/db/security.h and Top::_record in
+        // db/stats/top.cpp use locktypes as ints, and for both cases, having OPLOCK
+        // be -2 (as opposed to 2) works, as they both care whether the lock is WRITE
+        // or not
+        enum LockType { OPLOCK = -2, READ = -1 , NONE = 0 , WRITE = 1 };
 
         const string name;
 
