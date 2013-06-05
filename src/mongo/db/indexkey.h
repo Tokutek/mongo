@@ -26,9 +26,11 @@
 
 namespace mongo {
 
+    const int ParallelArraysCode = 10088;
+
     class Cursor;
     class IndexSpec;
-    class IndexType; // TODO: this name sucks TODO: TokuDB: So fix it, eventually.
+    class IndexType; // TODO: this name sucks
     class IndexPlugin;
     class IndexDetails;
 
