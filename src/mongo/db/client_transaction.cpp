@@ -133,5 +133,8 @@ namespace mongo {
     Client::AlternateTransactionStack::~AlternateTransactionStack() {
         cc().swapTransactionStack(_saved);
     }
+    shared_ptr<Client::TransactionStack> Client::AlternateTransactionStack::getSaved() const {
+        return _saved;
+    }
 
 } // namespace mongo

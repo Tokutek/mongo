@@ -1,7 +1,3 @@
-
-
-
-
 a = db.getSisterDB( "copydb-test-a" );
 b = db.getSisterDB( "copydb-test-b" );
 
