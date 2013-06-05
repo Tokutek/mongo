@@ -57,7 +57,7 @@ namespace mongo {
     class ReplSet;
 
     extern ReplSet *theReplSet;
-    extern RWLock multiStmtTransactionLock;
+    extern RWLockRecursive operationLock;
 
     TSP_DECLARE(Client, currentClient)
 

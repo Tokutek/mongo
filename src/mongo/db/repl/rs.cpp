@@ -196,8 +196,8 @@ namespace mongo {
     void ReplSetImpl::relinquish(bool startRepl) {
         {
             verify(lockedByMe());
-            // so no multi statement transactions are simultaneously occurring
-            rwlock(multiStmtTransactionLock, true);
+            // so no operations are simultaneously occurring
+            RWLockRecursive::Exclusive e(operationLock);
             // so we know writes are not simultaneously occurring
             Lock::GlobalWrite lk;
 

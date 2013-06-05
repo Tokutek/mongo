@@ -43,7 +43,7 @@ namespace mongo {
 
         // warning: isAuthorized uses the lockType() return values, and values are being passed 
         // around as ints so be careful as it isn't really typesafe and will need cleanup later
-        enum LockType { READ = -1 , NONE = 0 , WRITE = 1 };
+        enum LockType { READ = -1 , NONE = 0 , WRITE = 1, OPLOCK = 2 };
 
         const string name;
 

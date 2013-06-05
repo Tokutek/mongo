@@ -42,7 +42,7 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool logTheOp() { return false; } // the modifications will be logged directly
         virtual bool slaveOk() const { return false; }
-        virtual LockType locktype() const { return NONE; }
+        virtual LockType locktype() const { return OPLOCK; }
         virtual bool requiresSync() const { return true; }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return DB_SERIALIZABLE; }

@@ -122,7 +122,7 @@ namespace mongo {
 
     Command::LockType PipelineCommand::locktype() const {
         // Locks are managed manually, in particular by DocumentSourceCursor.
-        return NONE;
+        return OPLOCK;
     }
 
     bool PipelineCommand::slaveOk() const {

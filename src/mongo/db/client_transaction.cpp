@@ -27,19 +27,6 @@
 
 namespace mongo {
 
-    // global rw lock used during begin/rollback/commit of multi
-    // statement transactions. If a thread wants to examine
-    // all of the transactions in the system that are attached to clients,
-    // in addition to a GlobalWrite lock, a write lock of this is required.
-    // At the momeny (0.1.0), the only thread that needs to examine
-    // this information is replication when transitioning from a primary
-    // to a secondary. A reason this lock is introduced is that
-    // reusing DBRead locks is problematic (due to complications with
-    // fileops and capped collections during commit/rollback).
-    //
-    // This lock must be grabbed before any Global locks or DB locks
-    RWLock multiStmtTransactionLock("multiStmtTransaction");
-
     void Client::TransactionStack::beginTxn(int flags) {
         DEV { LOG(3) << "begin transaction(" << _txns.size() << ") " << flags << endl; }
         TxnContext *currentTxn = (hasLiveTxn()

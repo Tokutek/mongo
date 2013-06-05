@@ -113,7 +113,7 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << "Evaluate javascript at the server.\n" "http://dochub.mongodb.org/core/serversidecodeexecution";
         }
-        virtual LockType locktype() const { return NONE; }
+        virtual LockType locktype() const { return OPLOCK; }
         virtual bool requiresSync() const { return true; }
         CmdEval() : Command("eval", false, "$eval") { }
         virtual bool needsTxn() const { return false; }

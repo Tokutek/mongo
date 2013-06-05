@@ -41,6 +41,9 @@ namespace mongo {
     mongo::mutex& Client::clientsMutex = *(new mutex("clientsMutex"));
     set<Client*>& Client::clients = *(new set<Client*>); // always be in clientsMutex when manipulating this
 
+    RWLockRecursive operationLock("operationLock");
+
+
     TSP_DEFINE(Client, currentClient)
 
     /* each thread which does db operations has a Client object in TLS.

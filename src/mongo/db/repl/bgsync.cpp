@@ -570,8 +570,8 @@ namespace mongo {
         // abort live multi statement transactions, invalidate cursors, and
         // change the state to RS_ROLLBACK
         {
-            rwlock(multiStmtTransactionLock, true);
-            // so we know writes are not simultaneously occurring
+            // so we know nothing is simultaneously occurring
+            RWLockRecursive::Exclusive e(operationLock);
             Lock::GlobalWrite lk;
             ClientCursor::invalidateAllCursors();
             Client::abortLiveTransactions();

@@ -1005,7 +1005,7 @@ namespace mongo {
                 help << "http://dochub.mongodb.org/core/mapreduce";
             }
 
-            virtual LockType locktype() const { return NONE; }
+            virtual LockType locktype() const { return OPLOCK; }
             virtual bool requiresSync() const { return false; }
             virtual bool needsTxn() const { return false; }
             virtual int txnFlags() const { return noTxnFlags(); }

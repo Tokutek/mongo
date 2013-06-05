@@ -1526,6 +1526,47 @@ namespace mongo {
         return true;
     }
 
+    static bool runCommandWithNoDBLock(
+        Command* c ,
+        Client& client , int queryOptions ,
+        BSONObj& cmdObj ,
+        BSONObjBuilder& result,
+        bool fromRepl,
+        string dbname
+        )
+    {
+        bool retval = false;
+        // not sure of the semantics of running this without having a lock held
+        if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
+            return false;
+        }
+        verify(!c->lockGlobally());
+
+        // This assert means your command has LockType NONE but thinks it needs a transaction.
+        // You shouldn't be making a transaction without a lock to protect metadata, so your
+        // command is probably broken.
+        dassert(!c->needsTxn());
+        // logging requires a transaction
+        verify(!c->logTheOp());
+        
+        // we also trust that this won't crash
+        retval = true;
+
+        if ( c->requiresAuth() ) {
+            // test that the user at least as read permissions
+            if ( ! client.getAuthenticationInfo()->isAuthorizedReads( dbname ) ) {
+                result.append( "errmsg" , "need to login" );
+                retval = false;
+            }
+        }
+
+        if (retval) {
+            client.curop()->ensureStarted();
+            retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
+        }
+        return retval;
+    }
+
     /**
      * this handles
      - auth
@@ -1602,36 +1643,12 @@ namespace mongo {
         bool retval = false;
         OpSettings settings = c->getOpSettings();
         cc().setOpSettings(settings);
-
         if ( c->locktype() == Command::NONE ) {
-            // not sure of the semantics of running this without having a lock held
-            if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
-                return false;
-            }
-            verify(!c->lockGlobally());
-
-            // This assert means your command has LockType NONE but thinks it needs a transaction.
-            // You shouldn't be making a transaction without a lock to protect metadata, so your
-            // command is probably broken.
-            dassert(!c->needsTxn());
-            // logging requires a transaction
-            verify(!c->logTheOp());
-
-            // we also trust that this won't crash
-            retval = true;
-
-            if ( c->requiresAuth() ) {
-                // test that the user at least as read permissions
-                if ( ! client.getAuthenticationInfo()->isAuthorizedReads( dbname ) ) {
-                    result.append( "errmsg" , "need to login" );
-                    retval = false;
-                }
-            }
-
-            if (retval) {
-                client.curop()->ensureStarted();
-                retval = _execCommand(c, dbname , cmdObj , queryOptions, result , fromRepl );
-            }
+            retval = runCommandWithNoDBLock(c, client, queryOptions, cmdObj, result, fromRepl, dbname);
+        }
+        else if ( c->locktype() == Command::OPLOCK ) {
+            RWLockRecursive::Shared lk(operationLock);
+            retval = runCommandWithNoDBLock(c, client, queryOptions, cmdObj, result, fromRepl, dbname);            
         }
         else if( c->locktype() == Command::READ ) { 
             // read lock
