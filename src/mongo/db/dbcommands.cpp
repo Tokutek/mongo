@@ -1539,6 +1539,21 @@ namespace mongo {
             out->push_back(Privilege(dbname, actions));
         }
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
+            Timer timer;
+
+            set<string> desiredCollections;
+            if ( cmdObj["collections"].type() == Array ) {
+                BSONObjIterator i( cmdObj["collections"].Obj() );
+                while ( i.more() ) {
+                    BSONElement e = i.next();
+                    if ( e.type() != String ) {
+                        errmsg = "collections entries have to be strings";
+                        return false;
+                    }
+                    desiredCollections.insert( e.String() );
+                }
+            }
+
             list<string> colls;
             NamespaceIndex *ni = nsindex(dbname.c_str());
             if ( ni != NULL )
@@ -1553,25 +1568,28 @@ namespace mongo {
 
             BSONObjBuilder bb( result.subobjStart( "collections" ) );
             for ( list<string>::iterator i=colls.begin(); i != colls.end(); i++ ) {
-                string c = *i;
-                if ( nsToCollectionSubstring(c) == "system.profile" ) {
+                StringData ns(*i);
+                if (NamespaceString::isSystem(ns)) {
                     continue;
                 }
 
-                NamespaceDetails * nsd = nsdetails( c );
+                string coll = nsToCollection(ns);
+
+                if (desiredCollections.size() > 0 &&
+                    desiredCollections.count(coll) == 0) {
+                    continue;
+                }
+
+                NamespaceDetails * nsd = nsdetails(ns);
 
                 // debug SERVER-761
                 NamespaceDetails::IndexIterator ii = nsd->ii();
                 while( ii.more() ) {
                     const IndexDetails &idx = ii.next();
                     if ( !idx.info().isValid() ) {
-                        log() << "invalid index for ns: " << c << " " << idx.info();
+                        log() << "invalid index for ns: " << ns << " " << idx.info();
                         log() << endl;
                     }
-                }
-
-                if ( NamespaceString::isSystem(c) ) {
-                    continue;
                 }
 
                 md5_state_t st;
@@ -1585,7 +1603,7 @@ namespace mongo {
                 md5_finish(&st, d);
                 string hash = digestToString( d );
 
-                bb.append( c.c_str() + ( dbname.size() + 1 ) , hash );
+                bb.append( coll, hash );
 
                 md5_append( &globalState , (const md5_byte_t*)hash.c_str() , hash.size() );
             }
@@ -1596,7 +1614,7 @@ namespace mongo {
             string hash = digestToString( d );
 
             result.append( "md5" , hash );
-
+            result.appendNumber( "timeMillis", timer.millis() );
             return 1;
         }
 
