@@ -86,7 +86,6 @@ namespace mongo {
         bob.appendNumber( "nscannedAllPlans", clauseInfo.nscannedAllPlans() );
         bob.append( "scanAndOrder", _scanAndOrder );
         bob.append( "indexOnly", _indexOnly );
-        bob.appendNumber( "nYields", clauseInfo.nYields() );
         bob.appendNumber( "nChunkSkips", clauseInfo.nChunkSkips() );
         bob.appendNumber( "millis", clauseInfo.millis() );
         bob.append( "indexBounds", _indexBounds );
@@ -102,8 +101,7 @@ namespace mongo {
     ExplainClauseInfo::ExplainClauseInfo() :
     _n(),
     _nscannedObjects(),
-    _nChunkSkips(),
-    _nYields() {
+    _nChunkSkips() {
     }
     
     BSONObj ExplainClauseInfo::bson() const {

@@ -19,7 +19,6 @@
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/parallel.h"
-#include "mongo/db/db.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/matcher.h"
@@ -217,10 +216,7 @@ namespace mongo {
             _reduce( x , key , endSizeEstimate );
         }
 
-        Config::Config( const string& _dbname , const BSONObj& cmdObj ) :
-            outNonAtomic(false) // TODO: This is unused.
-        {
-
+        Config::Config( const string& _dbname , const BSONObj& cmdObj ) {
             dbname = _dbname;
             ns = dbname + "." + cmdObj.firstElement().valuestr();
 
@@ -267,12 +263,6 @@ namespace mongo {
 
                 if (o.hasElement("db")) {
                     outDB = o["db"].String();
-                }
-
-                if (o.hasElement("nonAtomic")) {
-                    outNonAtomic = o["nonAtomic"].Bool();
-                    if (outNonAtomic)
-                        uassert( 15895 , "nonAtomic option cannot be used with this output type", (outType == REDUCE || outType == MERGE) );
                 }
             }
             else {
@@ -468,7 +458,7 @@ namespace mongo {
             if ( _onDisk == false || _config.outType == Config::INMEMORY )
                 return numInMemKeys();
 
-            return postProcessCollectionNonAtomic(op, pm);
+            return _postProcessCollection(op, pm);
         }
 
         //
@@ -508,8 +498,7 @@ namespace mongo {
                           fromMigrate);
         }
 
-
-        long long State::postProcessCollectionNonAtomic(CurOp* op, ProgressMeterHolder& pm) {
+        long long State::_postProcessCollection(CurOp* op, ProgressMeterHolder& pm) {
 
             if ( _config.finalLong == _config.tempLong )
                 return _safeCount( _db, _config.finalLong );

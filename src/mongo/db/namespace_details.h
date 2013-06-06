@@ -75,10 +75,6 @@ namespace mongo {
     // (Arguments should include db name)
     void renameNamespace( const char *from, const char *to, bool stayTemp);
 
-    // for updates. Need to expose this to update.cpp so we can write correct
-    // data to oplog
-    BSONObj inheritIdField(const BSONObj &oldObj, const BSONObj &newObj);
-
     // struct for storing the accumulated states of a NamespaceDetails
     // all values, except for nIndexes, are estiamtes
     // note that the id index is used as the main store.
@@ -415,10 +411,6 @@ namespace mongo {
          *
          * @param singlePlanSummary - Query plan summary information that may be provided when a
          * cursor running a single plan is returned.
-         *
-         * The returned cursor may @throw inside of advance() or recoverFromYield() in certain error
-         * cases, for example if a capped overrun occurred during a yield.  This indicates that the
-         * cursor was unable to perform a complete scan.
          *
          * This is a work in progress.  Partial list of features not yet implemented through this
          * interface:

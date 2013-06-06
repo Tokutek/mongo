@@ -79,7 +79,6 @@ namespace mongo {
         void lockedOther( const string& db , int type , WrapperForRWLock* lock );
         void lockedOther( int type );  // "same lock as last time" case 
         void unlockedOther();
-        bool _batchWriter;
 
         LockStat* getRelevantLockStat();
         void recordLockTime() { _scopedLk->recordTime(); }
@@ -99,9 +98,8 @@ namespace mongo {
         string _otherName;             // which database are we locking and working with (besides local/admin) 
         WrapperForRWLock* _otherLock;  // so we don't have to check the map too often (the map has a mutex)
 
-        // for temprelease
         // for the nonrecursive case. otherwise there would be many
-        // the first lock goes here, which is ok since we can't yield recursive locks
+        // the first lock goes here
         Lock::ScopedLock* _scopedLk;   
         
         bool _lockPending;

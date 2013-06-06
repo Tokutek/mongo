@@ -21,7 +21,6 @@
 #include "pch.h"
 #include "mongo/client/dbclientcursor.h"
 
-#include "mongo/db/db.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/json.h"
 #include "mongo/db/lasterror.h"

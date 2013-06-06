@@ -17,18 +17,20 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
 #include <boost/checked_delete.hpp>
-#include <db.h>
 
 #include "mongo/db/namespace.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/index.h"
+#include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/background.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/storage/key.h"
+#include "mongo/db/storage/env.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/scopeguard.h"
 
@@ -244,9 +246,7 @@ namespace mongo {
         int retval = 0;
         uint64_t iter = *(uint64_t *)extra;
         try {
-            if ((iter % 1000) == 0) {                
-                killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
-            }
+            killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
         } catch (DBException &e) {
             retval = 1;
         }

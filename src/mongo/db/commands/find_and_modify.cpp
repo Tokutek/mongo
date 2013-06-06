@@ -160,8 +160,6 @@ namespace mongo {
                 BSONObjBuilder b( queryOriginal.objsize() + 10 );
                 b.append( doc["_id"] );
 
-                bool addedAtomic = false;
-
                 BSONObjIterator i( queryOriginal );
                 while ( i.more() ) {
                     const BSONElement& elem = i.next();
@@ -174,11 +172,6 @@ namespace mongo {
                     if ( ! hasPositionalUpdate ) {
                         // if there is a dotted field, accept we may need more query parts
                         continue;
-                    }
-
-                    if ( ! addedAtomic ) {
-                        b.appendBool( "$atomic" , true );
-                        addedAtomic = true;
                     }
 
                     b.append( elem );

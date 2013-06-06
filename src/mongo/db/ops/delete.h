@@ -24,6 +24,9 @@
 
 namespace mongo {
 
+    class NamespaceDetails;
+    class NamespaceDetailsTransient;
+
     void deleteOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt,
                          const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
 

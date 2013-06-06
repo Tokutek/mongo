@@ -20,6 +20,8 @@
 #pragma once
 
 #include "mongo/db/instance.h"
+#include "mongo/db/database.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/unittest/unittest.h"
 
 using namespace mongo;

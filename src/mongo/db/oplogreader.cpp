@@ -1,22 +1,21 @@
 /** @file oplogreader.cpp */
 #include "pch.h"
 
-
+#include "pcrecpp.h"
 #include <boost/thread/thread.hpp>
 
-#include "jsobj.h"
-#include "repl.h"
-#include "../util/net/message.h"
-#include "../util/background.h"
-#include "../client/connpool.h"
-#include "db.h"
-#include "commands.h"
-#include "security.h"
-#include "repl/rs.h"
-#include "repl/connections.h"
-#include "pcrecpp.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/repl.h"
+#include "mongo/util/net/message.h"
+#include "mongo/util/background.h"
+#include "mongo/client/connpool.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/security.h"
+#include "mongo/db/repl/rs.h"
+#include "mongo/db/repl/connections.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/relock.h"
 
 namespace mongo {
     BSONObj userReplQuery = fromjson("{\"user\":\"repl\"}");

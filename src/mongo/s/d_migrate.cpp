@@ -31,6 +31,7 @@
 #include <boost/thread/thread.hpp>
 
 #include "mongo/pch.h"
+#include "mongo/db/database.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
@@ -44,6 +45,7 @@
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/txn_context.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
 

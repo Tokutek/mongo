@@ -24,8 +24,7 @@
 #pragma once
 
 #include "mongo/pch.h"
-#include "client.h"
-#include "db.h"
+#include "mongo/db/client.h"
 
 namespace mongo {
 

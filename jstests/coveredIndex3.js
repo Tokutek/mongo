@@ -1,4 +1,4 @@
-// Check proper covered index handling when query and processGetMore yield.
+// Check proper covered index handling when query and processGetMore run.
 // SERVER-4975
 
 if ( 0 ) { // SERVER-4975
@@ -19,7 +19,6 @@ function doTest( batchSize ) {
                            }'
                            );
 
-    // Frequent writes cause the find operation to yield.
     p2 = startParallelShell(
                             'for( i = 0; i < 1800; ++i ) { \
                             db.jstests_coveredIndex3_other.save( {} ); \

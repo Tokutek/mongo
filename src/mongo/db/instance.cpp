@@ -29,7 +29,7 @@
 
 #include "mongo/bson/util/atomic_int.h"
 
-#include "mongo/db/db.h"
+#include "mongo/db/databaseholder.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/dbmessage.h"
@@ -892,7 +892,6 @@ namespace mongo {
         verify( dbResponse.response );
         dbResponse.response->concat(); // can get rid of this if we make response handling smarter
         response = *dbResponse.response;
-        //getDur().commitIfNeeded();
         return true;
     }
 
@@ -901,7 +900,6 @@ namespace mongo {
             lastError.startRequest( toSend, lastError._get() );
         DbResponse dbResponse;
         assembleResponse( toSend, dbResponse , _clientHost );
-        //getDur().commitIfNeeded();
     }
 
     auto_ptr<DBClientCursor> DBDirectClient::query(const string &ns, Query query, int nToReturn , int nToSkip ,

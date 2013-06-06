@@ -1,8 +1,8 @@
 load( "jstests/libs/slow_weekly_util.js" )
-testServer = new SlowWeeklyMongod( "query_yield1" )
+testServer = new SlowWeeklyMongod( "query1" )
 db = testServer.getDB( "test" );
 
-t = db.query_yield1;
+t = db.query1;
 t.drop()
 
 N = 20000;
@@ -41,7 +41,7 @@ while ( true ){
 
 assert.eq( 0, db.currentOp().inprog.length , "setup broken" );
 
-join = startParallelShell( "print( 0 == db.query_yield1.find( function(){ var x=this.n; for ( var i=0; i<500; i++ ){ x = x * 2; } return false; } ).itcount() ); " )
+join = startParallelShell( "print( 0 == db.query1.find( function(){ var x=this.n; for ( var i=0; i<500; i++ ){ x = x * 2; } return false; } ).itcount() ); " )
 
 assert.soon( 
     function(){

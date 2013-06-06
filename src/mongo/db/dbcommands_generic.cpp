@@ -28,7 +28,6 @@
 #include "mongo/db/repl_block.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/db.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/db/security.h"

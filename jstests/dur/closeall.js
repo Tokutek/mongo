@@ -1,5 +1,4 @@
 // testing closealldatabases concurrency
-// this is also a test of recoverFromYield() as that will get exercised by the update
 
 function f(variant, quickCommits, paranoid) {
     var path = "/data/db/closeall";

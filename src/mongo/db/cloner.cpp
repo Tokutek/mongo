@@ -25,11 +25,12 @@
 #include "mongo/db/cloner.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/db.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/oplog_helpers.h"
+#include "mongo/db/database.h"
+//#include "mongo/db/namespace_details.h"
 
 namespace mongo {
 
@@ -37,15 +38,6 @@ namespace mongo {
 
     bool replAuthenticate(DBClientBase *);
 
-    /** Selectively release the mutex based on a parameter. */
-    class dbtempreleaseif {
-    public:
-        dbtempreleaseif( bool release ) : 
-            _impl( release ? new dbtemprelease() : 0 ) {}
-    private:
-        shared_ptr< dbtemprelease > _impl;
-    };
-    
     void mayInterrupt( bool mayBeInterrupted ) {
         if ( mayBeInterrupted ) {
             killCurrentOp.checkForInterrupt( false );   
@@ -192,7 +184,6 @@ namespace mongo {
         void operator()(DBClientCursorBatchIterator &i) {
             const string to_dbname = nsToDatabase(to_collection);
             while (i.moreInCurrentBatch()) {
-                // yield some
                 if (n % 128 == 127) {
                     time_t now = time(0);
                     if (now - lastLog >= 60) { 
@@ -907,7 +898,7 @@ namespace mongo {
         virtual bool slaveOk() const {
             return false;
         }
-        virtual LockType locktype() const { return WRITE; }
+        virtual LockType locktype() const { return NONE; }
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
@@ -937,15 +928,12 @@ namespace mongo {
             cc().setAuthConn(newConn);
             
             BSONObj ret;
-            {
-                dbtemprelease t;
-                if (!cc().authConn()->connect(fromhost, errmsg)) {
-                    return false;
-                }
-                if( !cc().authConn()->runCommand("admin", BSON("getnonce" << 1), ret)) {
-                    errmsg = "couldn't get nonce " + ret.toString();
-                    return false;
-                }
+            if (!cc().authConn()->connect(fromhost, errmsg)) {
+                return false;
+            }
+            if (!cc().authConn()->runCommand("admin", BSON("getnonce" << 1), ret)) {
+                errmsg = "couldn't get nonce " + ret.toString();
+                return false;
             }
             result.appendElements( ret );
             return true;

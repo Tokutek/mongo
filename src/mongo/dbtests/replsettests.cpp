@@ -20,7 +20,6 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/repl.h"
-#include "mongo/db/db.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/json.h"
 #include "mongo/db/oplog.h"

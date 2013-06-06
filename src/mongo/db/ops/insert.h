@@ -18,11 +18,13 @@
 
 #pragma once
 
-#include "pch.h"
-
+#include "mongo/pch.h"
 #include "mongo/bson/bsonobj.h"
 
 namespace mongo {
+
+    class NamespaceDetails;
+    class NamespaceDetailsTransient;
 
     // Insert an object into the given namespace. May modify the object (ie: maybe add _id field). Does not log.
     void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, BSONObj &obj, uint64_t flags = 0);

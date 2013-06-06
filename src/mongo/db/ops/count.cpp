@@ -17,12 +17,13 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "count.h"
-
-#include "../client.h"
-#include "../clientcursor.h"
-#include "../namespace.h"
-#include "../queryutil.h"
+#include "mongo/db/ops/count.h"
+#include "mongo/db/client.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/namespace.h"
+#include "mongo/db/namespace_details.h"
+#include "mongo/db/queryutil.h"
+#include "mongo/db/queryoptimizercursor.h"
 #include "mongo/client/dbclientinterface.h"
 
 namespace mongo {

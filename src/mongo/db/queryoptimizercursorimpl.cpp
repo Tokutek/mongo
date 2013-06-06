@@ -20,6 +20,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/queryoptimizercursorimpl.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cursor.h"
@@ -621,9 +622,7 @@ namespace mongo {
             return shared_ptr<Cursor>( BasicCursor::make(d) );
         }
         if ( _planPolicy.permitOptimalIdPlan() && isSimpleIdQuery( _query ) ) {
-            Database *database = cc().database();
-            verify( database );
-            NamespaceDetails *d = database->namespaceIndex.details( _ns );
+            NamespaceDetails *d = nsdetails( _ns );
             if ( d ) {
                 int idxNo = d->findIdIndex();
                 if ( idxNo >= 0 ) {

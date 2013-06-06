@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include "db.h"
-#include "dbhelpers.h"
-#include "json.h"
-#include "repl.h"
-#include "cmdline.h"
-#include "repl/rs.h"
+#include "mongo/db/database.h"
+#include "mongo/db/dbhelpers.h"
+#include "mongo/db/json.h"
+#include "mongo/db/repl.h"
+#include "mongo/db/cmdline.h"
+#include "mongo/db/repl/rs.h"
 
 namespace mongo {
 

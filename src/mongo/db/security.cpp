@@ -17,14 +17,13 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-#include "security.h"
-#include "security_common.h"
-#include "instance.h"
-#include "client.h"
-#include "curop.h"
-#include "db.h"
-#include "dbhelpers.h"
+#include "mongo/pch.h"
+#include "mongo/db/security.h"
+#include "mongo/db/security_common.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/client.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/dbhelpers.h"
 
 // this is the _mongod only_ implementation of security.h
 

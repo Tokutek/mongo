@@ -20,15 +20,14 @@
 
 // security.cpp
 
-#include "pch.h"
-#include "security.h"
-#include "../util/md5.hpp"
-#include "json.h"
-#include "db.h"
-#include "dbhelpers.h"
-#include "commands.h"
-#include "jsobj.h"
-#include "client.h"
+#include "mongo/pch.h"
+#include "mongo/db/security.h"
+#include "mongo/util/md5.hpp"
+#include "mongo/db/json.h"
+#include "mongo/db/dbhelpers.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/client.h"
 
 namespace mongo {
 

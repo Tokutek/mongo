@@ -22,10 +22,11 @@
 
 #include <db.h>
 
-#include "jsobj.h"
-#include "commands.h"
-#include "client.h"
-#include "replutil.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/client.h"
+#include "mongo/db/replutil.h"
+#include "mongo/db/namespacestring.h"
 
 namespace mongo {
 

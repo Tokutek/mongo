@@ -627,7 +627,6 @@ namespace mongo {
     
     /**
      * Run a query with a cursor provided by the query optimizer, or FindingStartCursor.
-     * @yields the db lock.
      * @returns true if client cursor was saved, false if the query has completed.
      */
     bool queryWithQueryOptimizer( int queryOptions, const string& ns,
@@ -861,7 +860,6 @@ namespace mongo {
      * Run a query -- includes checking for and running a Command.
      * @return points to ns if exhaust mode. 0=normal mode
      * @locks the db mutex for reading (and potentially for writing temporarily to create a new db).
-     * @yields the db mutex periodically after acquiring it.
      * @asserts on scan and order memory exhaustion and other cases.
      */
     string runQuery(Message& m, QueryMessage& q, CurOp& curop, Message &result) {

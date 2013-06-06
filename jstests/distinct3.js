@@ -1,4 +1,4 @@
-// Yield and delete test case for query optimizer cursor.  SERVER-4401
+// delete test case for query optimizer cursor.  SERVER-4401
 
 t = db.jstests_distinct3;
 t.drop();
@@ -16,7 +16,7 @@ for( i = 0; i < 1000; ++i ) {
 }
 db.getLastError();
 
-// Attempt to remove the last match for the {a:1} index scan while distinct is yielding.
+// Attempt to remove the last match for the {a:1} index scan while distinct is running.
 p = startParallelShell( 'for( i = 0; i < 2500; ++i ) {                             ' +
                         '    db.jstests_distinct3.remove( { a:49 } );              ' +
                         '    for( j = 0; j < 20; ++j ) {                           ' +

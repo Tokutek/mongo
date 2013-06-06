@@ -1,6 +1,6 @@
 t = db.cursora
 
-function run( n , atomic ){
+function run( n ) {
     if( !isNumber(n) ) {
 	print("n:");
 	printjson(n);
@@ -12,8 +12,8 @@ function run( n , atomic ){
         t.insert( { _id : i } )
     db.getLastError()
 
-    print("cursora.js startParallelShell n:"+n+" atomic:"+atomic)
-    join = startParallelShell( "sleep(50); db.cursora.remove( {"  + ( atomic ? "$atomic:true" : "" ) + "} ); db.getLastError();" );
+    print("cursora.js startParallelShell n:" + n);
+    join = startParallelShell( "sleep(50); db.cursora.remove({}); db.getLastError();" );
 
     var start = null;
     var ex = null;
@@ -35,13 +35,11 @@ function run( n , atomic ){
 
     //print( "cursora.js num: " + num + " time:" + ( end.getTime() - start.getTime() ) )
     assert.eq( 0 , t.count() , "after remove: " + tojson( ex ) )
-    // assert.lt( 0 , ex.nYields , "not enough yields : " + tojson( ex ) ); // TODO make this more reliable so cen re-enable assert
     if ( n == num )
         print( "cursora.js warning: shouldn't have counted all  n: " + n + " num: " + num );
 }
 
 run( 1500 )
 run( 5000 )
-run( 1500 , true )
-run( 5000 , true )
+run( 15000 )
 print("cursora.js SUCCESS")

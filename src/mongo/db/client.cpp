@@ -21,20 +21,20 @@
    to an open socket (or logical connection if pooling on sockets) from a client.
 */
 
-#include "pch.h"
-#include "db.h"
-#include "client.h"
-#include "curop.h"
-#include "json.h"
-#include "security.h"
-#include "commands.h"
-#include "instance.h"
-#include "../s/d_logic.h"
-#include "dbwebserver.h"
-#include "../util/mongoutils/html.h"
-#include "../util/mongoutils/checksum.h"
-#include "repl/rs.h"
-#include "../scripting/engine.h"
+#include "mongo/pch.h"
+#include "mongo/db/client.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/databaseholder.h"
+#include "mongo/db/json.h"
+#include "mongo/db/security.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/dbwebserver.h"
+#include "mongo/db/repl/rs.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/scripting/engine.h"
+#include "mongo/util/mongoutils/html.h"
+#include "mongo/util/mongoutils/checksum.h"
 
 namespace mongo {
   

@@ -15,10 +15,7 @@ checkFields( {
             lookedAt:0,
             matchesPerfd:0,
             objectsLoaded:0,
-            pointsLoaded:0,
-            pointsSavedForYield:0,
-            pointsChangedOnYield:0,
-            pointsRemovedOnYield:0
+            pointsLoaded:0
             },
             t.find( { loc:[ 1, 5 ] } ).explain( true ) );
 
@@ -29,9 +26,6 @@ checkFields( {
             matchesPerfd:0,
             objectsLoaded:1,
             pointsLoaded:1,
-            pointsSavedForYield:0,
-            pointsChangedOnYield:0,
-            pointsRemovedOnYield:0
             },
             t.find( { loc:[ 1, 5 ] } ).explain( true ) );
 
@@ -41,9 +35,6 @@ checkFields( {
             lookedAt:2,
             matchesPerfd:0,
             objectsLoaded:2,
-            pointsLoaded:2,
-            pointsSavedForYield:0,
-            pointsChangedOnYield:0,
-            pointsRemovedOnYield:0
+            pointsLoaded:2
             },
             t.find( { loc:[ 1, 5 ] } ).limit( 1 ).explain( true ) );

@@ -22,6 +22,7 @@
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"

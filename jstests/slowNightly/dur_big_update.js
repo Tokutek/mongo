@@ -1,8 +1,8 @@
-// @file dur_big_atomic_update.js
+// @file dur_big_update.js
 //
-// this tests writing 1GB in an atomic update to make sure we commit periodically
+// this tests writing 1GB in an update to make sure we commit periodically
 
-var path = "/data/db/dur_big_atomic_update";
+var path = "/data/db/dur_big_update";
 
 conn = startMongodEmpty("--port", 30001, "--dbpath", path, "--dur", "--durOptions", 8);
 d = conn.getDB("test");
@@ -17,7 +17,7 @@ while (big_string.length < 1024*1024) {
     big_string += big_string;
 }
 
-d.foo.update({$atomic:1}, {$set: {big_string: big_string}}, false, /*multi*/true);
+d.foo.update({}, {$set: {big_string: big_string}}, false, /*multi*/true);
 err = d.getLastErrorObj();
 
 assert(err.err == null);
@@ -45,4 +45,4 @@ d.dropDatabase();
 
 stopMongod(30001);
 
-print("dur big atomic update SUCCESS");
+print("dur big tomic update SUCCESS");

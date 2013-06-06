@@ -23,18 +23,20 @@
    Cursor -- and its derived classes -- are our internal cursors.
 */
 
-#include "pch.h"
-#include "clientcursor.h"
-#include "introspect.h"
+#include "mongo/pch.h"
+
 #include <time.h>
-#include "db.h"
-#include "commands.h"
-#include "repl_block.h"
-#include "../util/processinfo.h"
-#include "../util/timer.h"
+
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/database.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/introspect.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/repl_block.h"
 #include "mongo/db/scanandorder.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/util/processinfo.h"
+#include "mongo/util/timer.h"
 
 namespace mongo {
 

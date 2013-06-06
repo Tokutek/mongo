@@ -36,8 +36,6 @@
 // no top level read locks
 // system.profile writing
 // oplog now
-// yielding
-// commitIfNeeded
 
 #define MONGOD_CONCURRENCY_LEVEL_GLOBAL 0
 #define MONGOD_CONCURRENCY_LEVEL_DB 1
@@ -116,7 +114,6 @@ namespace mongo {
         
         void lock_w() { 
             verify( threadState() == 0 );
-            //getDur().commitIfNeeded();
             lockState().lockedStart( 'w' );
             q.lock_w(); 
         }
@@ -134,7 +131,6 @@ namespace mongo {
                 log() << "can't lock_W, threadState=" << (int) ls.threadState() << endl;
                 fassert(16114,false);
             }
-            //getDur().commitIfNeeded(); // check before locking - will use an R lock for the commit if need to do one, which is better than W
             ls.lockedStart( 'W' );
             {
                 q.lock_W();
@@ -276,28 +272,6 @@ namespace mongo {
         return DB_LEVEL_LOCKING_ENABLED;
     }
 
-    RWLockRecursive &Lock::ParallelBatchWriterMode::_batchLock = *(new RWLockRecursive("special"));
-    void Lock::ParallelBatchWriterMode::iAmABatchParticipant() {
-        lockState()._batchWriter = true;
-    }
-
-    Lock::ParallelBatchWriterSupport::ParallelBatchWriterSupport() {
-        relock();
-    }
-
-    void Lock::ParallelBatchWriterSupport::tempRelease() {
-        _lk.reset( 0 );
-    }
-
-    void Lock::ParallelBatchWriterSupport::relock() {
-        LockState& ls = lockState();
-        if ( ! ls._batchWriter ) {
-            AcquiringParallelWriter a(ls);
-            _lk.reset( new RWLockRecursive::Shared(ParallelBatchWriterMode::_batchLock) );
-        }
-    }
-
-
     Lock::ScopedLock::ScopedLock( char type ) 
         : _type(type), _stat(0) {
         LockState& ls = lockState();
@@ -318,13 +292,6 @@ namespace mongo {
         return acquisitionTime;
     }
 
-    void Lock::ScopedLock::tempRelease() {
-        long long micros = _timer.micros();
-        _tempRelease();
-        _pbws_lk.tempRelease();
-        _recordTime( micros ); // might as well do after we unlock
-    }
-
     void Lock::ScopedLock::_recordTime( long long micros ) {
         if ( _stat )
             _stat->recordLockTimeMicros( _type , micros );
@@ -339,84 +306,6 @@ namespace mongo {
         _timer.reset();
     }
     
-    void Lock::ScopedLock::relock() {
-        _pbws_lk.relock();
-        _relock();
-        resetTime();
-    }
-
-
-
-    Lock::TempRelease::TempRelease() : cant( Lock::nested() )
-    {
-        if( cant )
-            return;
-
-        LockState& ls = lockState();
-        
-        fassert( 16116, ls.recursiveCount() == 1 );
-        fassert( 16117, ls.threadState() != 0 );    
-        
-        scopedLk = ls.leaveScopedLock();
-        fassert( 16118, scopedLk );
-        scopedLk->tempRelease();
-    }
-    Lock::TempRelease::~TempRelease()
-    {
-        if( cant )
-            return;
-        
-        LockState& ls = lockState();
-
-        fassert( 16119, scopedLk );
-        fassert( 16120 , ls.threadState() == 0 );
-
-        ls.enterScopedLock( scopedLk );
-        scopedLk->relock();
-    }
-
-    void Lock::GlobalWrite::_tempRelease() { 
-        fassert(16121, !noop);
-        char ts = threadState();
-        fassert(16122, ts != 'R'); // indicates downgraded; not allowed with temprelease
-        fassert(16123, ts == 'W');
-        qlk.unlock_W();
-    }
-    void Lock::GlobalWrite::_relock() { 
-        fassert(16125, !noop);
-        char ts = threadState();
-        fassert(16126, ts == 0);
-        Acquiring a(this,lockState());
-        qlk.lock_W();
-    }
-
-    void Lock::GlobalRead::_tempRelease() { 
-        fassert(16127, !noop);
-        char ts = threadState();
-        fassert(16128, ts == 'R');
-        qlk.unlock_R();
-    }
-    void Lock::GlobalRead::_relock() { 
-        fassert(16129, !noop);
-        char ts = threadState();
-        fassert(16130, ts == 0);
-        Acquiring a(this,lockState());
-        qlk.lock_R();
-    }
-
-    void Lock::DBWrite::_tempRelease() { 
-        unlockDB();
-    }
-    void Lock::DBWrite::_relock() { 
-        lockDB(_what);
-    }
-    void Lock::DBRead::_tempRelease() {
-        unlockDB();
-    }
-    void Lock::DBRead::_relock() { 
-        lockDB(_what);
-    }
-
     Lock::GlobalWrite::GlobalWrite(bool sg, int timeoutms)
         : ScopedLock('W') {
         char ts = threadState();
@@ -528,7 +417,6 @@ namespace mongo {
 
         // we do checks first, as on assert destructor won't be called so don't want to be half finished with our work.
         if( ls.otherCount() ) { 
-            // nested. if/when we do temprelease with DBWrite we will need to increment here
             // (so we can not release or assert if nested).
             massert(16106, str::stream() << "internal error tried to lock two databases at the same time. old:" << ls.otherName() << " new:" << db , db == ls.otherName() );
             return;
@@ -720,8 +608,7 @@ namespace mongo {
 
         // we do checks first, as on assert destructor won't be called so don't want to be half finished with our work.
         if( ls.otherCount() ) { 
-            // nested. prev could be read or write. if/when we do temprelease with DBRead/DBWrite we will need to increment/decrement here
-            // (so we can not release or assert if nested).  temprelease we should avoid if we can though, it's a bit of an anti-pattern.
+            // (so we can not release or assert if nested).
             massert(16099, str::stream() << "internal error tried to lock two databases at the same time. old:" << ls.otherName() << " new:" << db, db == ls.otherName() );
             return;
         }
@@ -789,7 +676,6 @@ namespace mongo {
     writelocktry::~writelocktry() { 
     }
 
-    // note: the 'already' concept here might be a bad idea as a temprelease wouldn't notice it is nested then
     readlocktry::readlocktry( int tryms ) :
         _got( false ),
         _dbrlock( NULL )

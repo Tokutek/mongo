@@ -9,9 +9,6 @@ s1 = startParallelShell( "t = db.jstests_slowNightly_explain1; for( var i = 0; i
 // Query repeatedly.
 s2 = startParallelShell( "t = db.jstests_slowNightly_explain1; for( var i = 0; i < 500; ++i ) { try { z = t.find( {x:{$gt:0},y:1} ).sort({x:1}).explain(); } catch( e ) {} }" );
 
-// Put pressure on s2 to yield more often.
-s3 = startParallelShell( "t = db.jstests_slowNightly_explain1; for( var i = 0; i < 200; ++i ) { t.validate({scandata:true}); }" );
-
 s1();
 s2();
 s3();

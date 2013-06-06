@@ -59,7 +59,6 @@ var eg2result = {
                                 "nscanned" : 3,
                                 "scanAndOrder" : false,
                                 "indexOnly" : false,
-                                "nYields" : 0,
                                 "nChunkSkips" : 0,
                                 "indexBounds" : {
 
@@ -168,7 +167,6 @@ var ed1result = {
                                 "nscanned" : 21,
                                 "scanAndOrder" : false,
                                 "indexOnly" : false,
-                                "nYields" : 0,
                                 "nChunkSkips" : 0,
                                 "indexBounds" : {
 
@@ -215,7 +213,6 @@ var ed2result = {
                                 "nscanned" : 21,
                                 "scanAndOrder" : false,
                                 "indexOnly" : false,
-                                "nYields" : 0,
                                 "nChunkSkips" : 0,
                                 "indexBounds" : {
 
@@ -277,7 +274,6 @@ var ed3result = {
                                 "nscanned" : 21,
                                 "scanAndOrder" : false,
                                 "indexOnly" : false,
-                                "nYields" : 0,
                                 "nChunkSkips" : 0,
                                 "indexBounds" : {
 
@@ -342,7 +338,6 @@ var edi1result = {
                                 "nscanned" : 11,
                                 "scanAndOrder" : false,
                                 "indexOnly" : false,
-                                "nYields" : 0,
                                 "nChunkSkips" : 0,
                                 "indexBounds" : {
                                         "d" : [
@@ -413,7 +408,6 @@ var edi2result = {
                 "nscanned" : 21,
                 "scanAndOrder" : false,
                 "indexOnly" : false,
-                "nYields" : 0,
                 "nChunkSkips" : 0,
                 "indexBounds" : {
                     "d" : [
@@ -506,7 +500,6 @@ var edi3result = {
                                 "nscanned" : 11,
                                 "scanAndOrder" : false,
                                 "indexOnly" : false,
-                                "nYields" : 0,
                                 "nChunkSkips" : 0,
                                 "indexBounds" : {
                                         "d" : [

@@ -1,4 +1,4 @@
-// Test dropping during an $or distinct yield SERVER-3555
+// Test dropping during an $or distinct query SERVER-3555
 
 t = db.jstests_orn;
 t.drop();

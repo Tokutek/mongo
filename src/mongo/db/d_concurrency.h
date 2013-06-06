@@ -56,40 +56,6 @@ namespace mongo {
 
         class ScopedLock;
 
-        // note: avoid TempRelease when possible. not a good thing.
-        struct TempRelease {
-            TempRelease(); 
-            ~TempRelease();
-            const bool cant; // true if couldn't because of recursive locking
-            ScopedLock *scopedLk;
-        };
-
-        /** turn on "parallel batch writer mode".  blocks all other threads. this mode is off
-            by default. note only one thread creates a ParallelBatchWriterMode object; the rest just
-            call iAmABatchParticipant().  Note that this lock is not released on a temprelease, just
-            the normal lock things below.
-            */
-        class ParallelBatchWriterMode : boost::noncopyable {
-            RWLockRecursive::Exclusive _lk;
-        public:
-            ParallelBatchWriterMode() : _lk(_batchLock) {}
-            static void iAmABatchParticipant();
-            static RWLockRecursive &_batchLock;
-        };
-
-    private:
-        class ParallelBatchWriterSupport : boost::noncopyable {
-        public:
-            ParallelBatchWriterSupport();
-
-        private:
-            void tempRelease();
-            void relock();
-
-            scoped_ptr<RWLockRecursive::Shared> _lk;
-            friend class ScopedLock;
-        };
-
     public:
         class ScopedLock : boost::noncopyable {
         public:
@@ -107,17 +73,6 @@ namespace mongo {
             explicit ScopedLock( char type ); 
 
         private:
-            friend struct TempRelease;
-            void tempRelease(); // TempRelease class calls these
-            void relock();
-
-        protected:
-            virtual void _tempRelease() = 0;
-            virtual void _relock() = 0;
-
-        private:
-            ParallelBatchWriterSupport _pbws_lk;
-
             void _recordTime( long long micros );
             Timer _timer;
             char _type;      // 'r','w','R','W'
@@ -129,9 +84,6 @@ namespace mongo {
         
         class GlobalWrite : public ScopedLock {
             bool noop;
-        protected:
-            void _tempRelease();
-            void _relock();
         public:
             // stopGreed is removed and does NOT work
             // timeoutms is only for writelocktry -- deprecated -- do not use
@@ -143,9 +95,6 @@ namespace mongo {
         class GlobalRead : public ScopedLock { // recursive is ok
         public:
             bool noop;
-        protected:
-            void _tempRelease();
-            void _relock();
         public:
             // timeoutms is only for readlocktry -- deprecated -- do not use
             GlobalRead( int timeoutms = -1 ); 
@@ -167,10 +116,6 @@ namespace mongo {
             void lockOther(const string& db);
             void lockDB(const string& ns);
             void unlockDB();
-
-        protected:
-            void _tempRelease();
-            void _relock();
 
         public:
             DBWrite(const StringData& dbOrNs);
@@ -199,10 +144,6 @@ namespace mongo {
             void lockTop(LockState&);
             void lockNestable(Nestable db);
             void lockOther(const string& db);
-
-        protected:
-            void _tempRelease();
-            void _relock();
 
         public:
             void lockDB(const string& ns);

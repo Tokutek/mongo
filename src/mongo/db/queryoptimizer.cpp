@@ -19,8 +19,8 @@
 
 #include "mongo/pch.h"
 #include "mongo/server.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/queryoptimizer.h"
-#include "mongo/db/db.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/dbhelpers.h"

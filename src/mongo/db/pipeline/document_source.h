@@ -99,8 +99,6 @@ namespace mongo {
          * Inform the source that it is no longer needed and may release its resources.  After
          * dispose() is called the source must still be able to handle iteration requests, but may
          * become eof().
-         * NOTE: For proper mutex yielding, dispose() must be called on any DocumentSource that will
-         * not be advanced until eof(), see SERVER-6123.
          */
         virtual void dispose();
 
@@ -461,16 +459,6 @@ namespace mongo {
         const ShardChunkManager* chunkMgr() { return _cursorWithContext->_chunkMgr.get(); }
 
         bool canUseCoveredIndex();
-
-        /*
-          Yield the cursor sometimes.
-
-          If the state of the world changed during the yield such that we
-          are unable to continue execution of the query, this will release the
-          client cursor, and throw an error.  NOTE This differs from the
-          behavior of most other operations, see SERVER-2454.
-         */
-        void yieldSometimes();
     };
 
 

@@ -28,7 +28,6 @@
 #include "mongo/db/cmdline.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/d_globals.h"
-#include "mongo/db/db.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/dbwebserver.h"
 #include "mongo/db/instance.h"

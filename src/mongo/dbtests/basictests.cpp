@@ -21,7 +21,6 @@
 #include "pch.h"
 
 #include "dbtests.h"
-#include "mongo/db/db.h"
 #include "mongo/util/base64.h"
 #include "mongo/util/array.h"
 #include "mongo/util/text.h"

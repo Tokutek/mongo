@@ -14,8 +14,7 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef MONGO_DB_STORAGE_LOADER_H
-#define MONGO_DB_STORAGE_LOADER_H
+#pragma once
 
 #include "mongo/pch.h"
 #include "mongo/db/client.h"
@@ -55,6 +54,4 @@ namespace mongo {
     } // namespace storage
 
 } // namespace mongo
-
-#endif // MONGO_DB_STORAGE_LOADER_H
 

@@ -16,12 +16,13 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
-#include "request.h"
-#include "client_info.h"
-#include "../db/dbhelpers.h"
-#include "../db/matcher.h"
-#include "../db/commands.h"
+#include "mongo/pch.h"
+#include "mongo/s/request.h"
+#include "mongo/s/client_info.h"
+#include "mongo/db/dbhelpers.h"
+#include "mongo/db/matcher.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/namespacestring.h"
 
 /*
   most a pile of hacks to make linking nicer

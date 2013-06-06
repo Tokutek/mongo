@@ -19,11 +19,10 @@
  */
 
 #include "pch.h"
-#include "../db/db.h"
-#include "../db/instance.h"
-#include "../db/json.h"
-#include "../db/lasterror.h"
-#include "../util/timer.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/json.h"
+#include "mongo/db/lasterror.h"
+#include "mongo/util/timer.h"
 #include "dbtests.h"
 
 namespace DirectClientTests {

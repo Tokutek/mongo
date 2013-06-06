@@ -143,7 +143,7 @@ assert.eq( am.lotOfIndexes.getIndexes().length , as.lotOfIndexes.getIndexes().le
 
 // multi-update with $inc
 
-am.mu1.update( { _id : 1 , $atomic : 1 } , { $inc : { x : 1 } } , true , true )
+am.mu1.update( { _id : 1 } , { $inc : { x : 1 } } , true , true )
 x = { _id : 1 , x : 1 }
 assert.eq( x , am.mu1.findOne() , "mu1" );
 assert.soon( function(){ z = as.mu1.findOne(); printjson( z ); return friendlyEqual( x , z ); } , "mu2" )

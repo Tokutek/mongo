@@ -195,9 +195,6 @@ namespace mongo {
                    INMEMORY // only store in memory, limited in size
                  } outType;
 
-            // if true, no lock during output operation
-            bool outNonAtomic;
-
             // true when called from mongos to do phase-1 of M/R
             bool shardedFirstPass;
 
@@ -259,7 +256,7 @@ namespace mongo {
                @return number objects in collection
              */
             long long postProcessCollection( CurOp* op , ProgressMeterHolder& pm );
-            long long postProcessCollectionNonAtomic( CurOp* op , ProgressMeterHolder& pm );
+            long long _postProcessCollection( CurOp* op , ProgressMeterHolder& pm );
 
             /**
              * if INMEMORY will append

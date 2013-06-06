@@ -26,7 +26,8 @@
 #include <boost/filesystem/operations.hpp>
 
 #include "mongo/db/cursor.h"
-#include "mongo/db/db.h"
+#include "mongo/db/database.h"
+#include "mongo/db/databaseholder.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"

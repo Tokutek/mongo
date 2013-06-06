@@ -37,7 +37,6 @@ function checkFields( matches, sort, limit ) {
     checkPlanFields( explain, matches, matches > 0 ? 1 : 0 );
     checkField( explain, "scanAndOrder", sort );
     checkField( explain, "millis" );
-    checkField( explain, "nYields" );
     checkField( explain, "nChunkSkips", 0 );
     checkField( explain, "isMultiKey", false );
     checkField( explain, "indexOnly", false );

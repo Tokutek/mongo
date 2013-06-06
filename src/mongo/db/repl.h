@@ -28,13 +28,12 @@
 
 #pragma once
 
-#include "db.h"
-#include "dbhelpers.h"
-#include "../util/optime.h"
-#include "oplog.h"
-#include "../util/concurrency/thread_pool.h"
-#include "oplogreader.h"
-#include "cloner.h"
+#include "mongo/db/dbhelpers.h"
+#include "mongo/util/optime.h"
+#include "mongo/db/oplog.h"
+#include "mongo/util/concurrency/thread_pool.h"
+#include "mongo/db/oplogreader.h"
+#include "mongo/db/cloner.h"
 
 namespace mongo {
 

@@ -9,10 +9,10 @@ var start;
 var insertTime;
 
 load( "jstests/libs/slow_weekly_util.js" );
-testServer = new SlowWeeklyMongod( "query_yield2" );
+testServer = new SlowWeeklyMongod( "query2" );
 db = testServer.getDB( "test" );
 
-t = db.query_yield2;
+t = db.query2;
 t.drop();
 
 N = 200;
@@ -20,7 +20,7 @@ i = 0;
 
 q = function() { var x=this.n; for ( var i=0; i<25000; i++ ) { x = x * 2; } return false; }
 
-print( "Shell ==== Creating test.query_yield2 collection ..." );
+print( "Shell ==== Creating test.query2 collection ..." );
 print( "Shell ==== Adding documents until a time-wasting query takes over 2 seconds to complete" );
 while ( true ){
     function fill() {
@@ -59,12 +59,12 @@ print( tojson( currentOp ) );
 len = currentOp.inprog.length;
 if ( len ) {
     print( "Shell ==== This test is broken: db.currentOp().inprog.length is " + len );
-    throw "query_yield2.js test is broken";
+    throw "query2.js test is broken";
 }
 print( "Shell ==== The test is working so far: db.currentOp().inprog.length is " + len );
 
-print( "Shell ==== Starting parallel shell to test if slow query will yield to write" );
-join = startParallelShell( "print( 0 == db.query_yield2.find( function(){ var x=this.n; for ( var i=0; i<50000; i++ ){ x = x * 2; } return false; } ).itcount() ); " )
+print( "Shell ==== Starting parallel shell to test if slow query will allow write to happen." );
+join = startParallelShell( "print( 0 == db.query2.find( function(){ var x=this.n; for ( var i=0; i<50000; i++ ){ x = x * 2; } return false; } ).itcount() ); " )
 
 print( "Shell ==== Waiting until db.currentOp().inprog becomes non-empty" );
 assert.soon( 
@@ -76,7 +76,7 @@ assert.soon(
             print( "Shell ==== Dump of db.currentOp:" );
             print( tojson( currentOp ) );
             print( "Shell ==== Checking if this currentOp is the query we are waiting for" );
-            if ( currentOp.inprog[0].ns == "test.query_yield2" && currentOp.inprog[0].query["$where"] ) {
+            if ( currentOp.inprog[0].ns == "test.query2" && currentOp.inprog[0].query["$where"] ) {
                 print( "Shell ==== Yes, we found the query we are waiting for" );
                 return true;
             }

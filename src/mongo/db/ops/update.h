@@ -25,6 +25,9 @@
 
 namespace mongo {
 
+    class NamespaceDetails;
+    class NamespaceDetailsTransient;
+
     // ---------- public -------------
 
     struct UpdateResult {
@@ -42,7 +45,6 @@ namespace mongo {
             }
         }
     };
-
     
     struct LogOpUpdateDetails {
         bool logop;

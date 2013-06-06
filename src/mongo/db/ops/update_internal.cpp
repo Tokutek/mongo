@@ -833,7 +833,7 @@ namespace mongo {
             BSONObjIteratorSorted i( query );
             while ( i.more() ) {
                 BSONElement e = i.next();
-                if ( e.fieldName()[0] == '$' ) // for $atomic and anything else we add
+                if ( e.fieldName()[0] == '$' ) // for any operators we add
                     continue;
 
                 if ( e.type() == Object && e.embeddedObject().firstElementFieldName()[0] == '$' ) {

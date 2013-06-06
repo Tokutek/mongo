@@ -14,8 +14,7 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef MONGO_DB_STORAGE_KEY_H
-#define MONGO_DB_STORAGE_KEY_H
+#pragma once
 
 #include "mongo/pch.h"
 
@@ -262,4 +261,3 @@ namespace mongo {
 
 } // namespace mongo
 
-#endif // MONGO_DB_STORAGE_KEY_H

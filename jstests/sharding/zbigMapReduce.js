@@ -92,11 +92,6 @@ for (iter = 0; iter < 5; iter++) {
     assert.eq(res.result.db, outDbStr, "Wrong db " + res.result.db);
 }
 
-jsTest.log( "Verifying nonatomic M/R throws..." )
-
-// check nonAtomic output
-assert.throws(function() { db.foo.mapReduce(map, reduce,{out: {replace: "big_out", nonAtomic: true}})});
-
 jsTest.log( )
 
 // add docs with dup "i"
@@ -140,7 +135,7 @@ assert.eq( 51200 , out.counts.output , "Received wrong result" );
 jsTestLog( "Test C" )
 
 // do 2nd half of docs
-out = db.foo.mapReduce(map2, reduce2,{ query: {i : {$gte: 51200}}, out: {merge: outcol, nonAtomic: true}});
+out = db.foo.mapReduce(map2, reduce2,{ query: {i : {$gte: 51200}}, out: {merge: outcol}});
 printjson(out);
 assert.eq( 51200 , out.counts.emit , "Received wrong result" );
 assert.eq( 51200 , out.counts.output , "Received wrong result" );
@@ -168,7 +163,7 @@ assert.eq( 51200 , out.counts.output , "Received wrong result" );
 jsTestLog( "Test F" )
 
 // do 2nd half of docs
-out = db.foo.mapReduce(map2, reduce2,{ query: {i : {$gte: 51200}}, out: {reduce: outcol, nonAtomic: true}});
+out = db.foo.mapReduce(map2, reduce2,{ query: {i : {$gte: 51200}}, out: {reduce: outcol}});
 printjson(out);
 assert.eq( 51200 , out.counts.emit , "Received wrong result" );
 assert.eq( 51200 , out.counts.output , "Received wrong result" );

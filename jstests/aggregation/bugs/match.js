@@ -164,16 +164,15 @@ function checkMatchResults( indexed ) {
         assertResults( null, { a:{ $type:type } } );
     }
 
-    // $atomic does not affect results.
     t.remove();
     t.save( { _id:0, a:1 } );
     t.save( { _id:1, a:2 } );
     t.save( { _id:2, a:3 } );
-    assertResults( [ { _id:0, a:1 } ], { a:1, $atomic:true } );
-    assertResults( [ { _id:1, a:2 } ], { a:2, $atomic:true } );
-    assertResults( [ { _id:1, a:2 }, { _id:2, a:3 } ], { a:{ $gt:1 }, $atomic:true } );
-    assertResults( [ { _id:0, a:1 }, { _id:1, a:2 } ], { a:{ $lte:2 }, $atomic:true } );
-    assertResults( [ { _id:0, a:1 }, { _id:2, a:3 } ], { a:{ $in:[ 1, 3 ] }, $atomic:true } );
+    assertResults( [ { _id:0, a:1 } ], { a:1 } );
+    assertResults( [ { _id:1, a:2 } ], { a:2 } );
+    assertResults( [ { _id:1, a:2 }, { _id:2, a:3 } ], { a:{ $gt:1 }} );
+    assertResults( [ { _id:0, a:1 }, { _id:1, a:2 } ], { a:{ $lte:2 }} );
+    assertResults( [ { _id:0, a:1 }, { _id:2, a:3 } ], { a:{ $in:[ 1, 3 ] }} );
 
     // $and
     assertResults( [ { _id:1, a:2 } ], { $and:[ { a:2 }, { _id:1 } ] } );

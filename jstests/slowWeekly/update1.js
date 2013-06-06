@@ -1,9 +1,9 @@
 
 load( "jstests/libs/slow_weekly_util.js" )
-testServer = new SlowWeeklyMongod( "update_yield1" )
+testServer = new SlowWeeklyMongod( "update1" )
 db = testServer.getDB( "test" );
 
-t = db.update_yield1;
+t = db.update1;
 t.drop()
 
 N = 10000;
@@ -39,7 +39,7 @@ while ( true ){
 
 // --- test 1
 
-join = startParallelShell( "db.update_yield1.update( {} , { $inc : { n : 1 } } , false , true ); db.getLastError()" );
+join = startParallelShell( "db.update1.update( {} , { $inc : { n : 1 } } , false , true ); db.getLastError()" );
 
 assert.soon( 
     function(){
@@ -68,7 +68,7 @@ assert.eq( 0 , x.inprog.length , "weird 2" );
 
 // --- test 2
 
-join = startParallelShell( "db.update_yield1.update( { $atomic : true } , { $inc : { n : 1 } } , false , true ); db.getLastError()" );
+join = startParallelShell( "db.update1.update( {} , { $inc : { n : 1 } } , false , true ); db.getLastError()" );
 
 sleep(1000); // wait for shell startup ops to finish
 
@@ -86,8 +86,6 @@ while ( 1 ) {
 
     assert( x.inprog.length == 1 && x.inprog[0].op == "update" , tojson( x ) );
     
-    assert( x.inprog[0].numYields == 0 , tojson( x ) );
-
     sleep( 100 );
 }
 

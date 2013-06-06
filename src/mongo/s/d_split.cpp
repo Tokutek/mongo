@@ -28,6 +28,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/client/dbclientcursor.h"
 
 #include "mongo/client/connpool.h"

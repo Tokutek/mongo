@@ -109,26 +109,17 @@ namespace ThreadedTests {
                 if( i % 7 == 0 ) {
                     Lock::GlobalRead r; // nested test
                     Lock::GlobalRead r2;
-                    if( sometimes ) {
-                        Lock::TempRelease t;
-                    }
                 }
                 else if( i % 7 == 1 ) {
                     Lock::GlobalRead r;
                     ASSERT( Lock::isReadLocked() );
                     ASSERT( Lock::isLocked() );
-                    if( sometimes ) {
-                        Lock::TempRelease t;
-                    }
                 }
                 else if( i % 7 == 4 && 
                          tnumber == 1 /*only one upgrader legal*/ ) {
                     Lock::GlobalWrite w;
                     ASSERT( Lock::isW() );
                     ASSERT( Lock::isW() );
-                    if( i % 7 == 2 ) {
-                        Lock::TempRelease t;
-                    }
                     if( sometimes ) { 
                         w.downgrade();
                         w.upgrade();
@@ -138,28 +129,16 @@ namespace ThreadedTests {
                     Lock::GlobalWrite w;
                     ASSERT( Lock::isW() );
                     ASSERT( Lock::isW() );
-                    if( sometimes ) {
-                        Lock::TempRelease t;
-                    }
                 }
                 else if( i % 7 == 3 ) {
                     Lock::GlobalWrite w;
-                    {
-                        Lock::TempRelease t;
-                    }
                     Lock::GlobalRead r;
                     ASSERT( Lock::isW() );
                     ASSERT( Lock::isW() );
-                    if( sometimes ) {
-                        Lock::TempRelease t;
-                    }
                 }
                 else if( i % 7 == 5 ) {
                     {
                         Lock::DBRead r("foo");
-                        if( sometimes ) {
-                            Lock::TempRelease t;
-                        }
                     }
                     {
                         Lock::DBRead r("bar");
@@ -177,9 +156,6 @@ namespace ThreadedTests {
                             ASSERT( Lock::nested() );
                             ASSERT( Lock::isLocked() == what && Lock::atLeastReadLocked("foo") );
                             Lock::DBRead r3("local");
-                            if( sometimes ) {
-                                Lock::TempRelease t;
-                            }
                             ASSERT( Lock::isLocked() == what && Lock::atLeastReadLocked("foo") );
                             ASSERT( Lock::isLocked() == what && Lock::atLeastReadLocked("local") );
                         }
@@ -188,33 +164,24 @@ namespace ThreadedTests {
                             { 
                                 Lock::DBRead x("local"); 
                                 //Lock::DBRead y("q");
-                                if( sometimes ) {
-                                    Lock::TempRelease t; // we don't temprelease (cant=true) here thus this is just a check that nothing weird happens...
-                                }
                             }
                             { 
                                 Lock::DBWrite x("local"); 
-                                if( sometimes ) {
-                                    Lock::TempRelease t;
-                                }
                             }
                         } else if( q == 1 ) {
                             { Lock::DBRead  x("admin"); }
                             { Lock::DBWrite x("admin"); }
                         } else if( q == 2 ) { 
                             /*Lock::DBWrite x("foo");
-                            Lock::DBWrite y("admin");
-                            { Lock::TempRelease t; }*/
+                            Lock::DBWrite y("admin");*/
                         }
                         else if( q == 3 ) {
                             Lock::DBWrite x("foo");
                             Lock::DBRead y("admin");
-                            { Lock::TempRelease t; }
                         } 
                         else if( q == 4 ) { 
                             Lock::DBRead x("foo2");
                             Lock::DBRead y("admin");
-                            { Lock::TempRelease t; }
                         }
                         else if ( q > 4 && q < 8 ) {
                             static const char * const dbnames[] = {
@@ -233,14 +200,8 @@ namespace ThreadedTests {
                         }
                         else { 
                             Lock::DBWrite w("foo");
-                            {
-                                Lock::TempRelease t;
-                            }
                             Lock::DBRead r2("foo");
                             Lock::DBRead r3("local");
-                            if( sometimes ) {
-                                Lock::TempRelease t;
-                            }
                         }
                     }
                     else { 

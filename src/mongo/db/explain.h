@@ -105,7 +105,6 @@ namespace mongo {
         long long nscannedObjectsAllPlans() const { return _nscannedObjects; }
         long long nscannedAllPlans() const;
         long long nChunkSkips() const { return _nChunkSkips; }
-        int nYields() const { return _nYields; }
         int millis() const { return _timer.duration(); }
 
     private:
@@ -119,7 +118,6 @@ namespace mongo {
         long long _n;
         long long _nscannedObjects;
         long long _nChunkSkips;
-        int _nYields;
         DurationTimer _timer;
     };
     
