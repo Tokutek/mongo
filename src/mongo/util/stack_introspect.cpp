@@ -73,6 +73,11 @@ namespace mongo {
                 return false;
             }
 
+            if ( name.find( "Matcher2" ) != string::npos ) {
+                // SERVER-9778
+                return false;
+            }
+
             return method == clazz;
         }
         
