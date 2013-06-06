@@ -138,6 +138,7 @@ Limitations
       possible, especially when disk size properties were a motivating
       factor. Time-to-live (TTL) collections may be a good alternative.
 
+    - listDatabases command and "show dbs" do not show database statistics
 
 tokumx 0.1.0
 ------------
