@@ -275,10 +275,40 @@ namespace mongo {
         /** @return "" if not interrupted.  otherwise, you should stop. */
         const char *checkForInterruptNoAssert();
 
+        // increments _killForTransition, thereby making
+        // checkForInterrupt uassert and kill operations
+        void killForTransition() {
+            boost::unique_lock<boost::mutex> lock(_transitionLock);
+            dassert(_killForTransition >= 0);
+            _killForTransition++;
+        }
+        // decrements _killForTransition, thereby reallowing
+        // operations to complete successfully
+        void transitionComplete() {
+            boost::unique_lock<boost::mutex> lock(_transitionLock);
+            dassert(_killForTransition >= 0);
+            _killForTransition--;
+        }
+
     private:
         void interruptJs( AtomicUInt *op );
         void _checkForInterrupt( Client &c, bool heedMutex );
         volatile bool _globalKill;
+        // number of threads that want operations killed
+        // because there will be a state transition
+        volatile uint32_t _killForTransition;
+        // protects _killForTransition variable
+        boost::mutex _transitionLock;
     } killCurrentOp;
+
+    class NoteStateTransition {
+        public:
+            NoteStateTransition() {
+                killCurrentOp.killForTransition();
+            }
+            ~NoteStateTransition() {
+                killCurrentOp.transitionComplete();
+            }
+    };
 
 }

@@ -191,6 +191,9 @@ namespace mongo {
     void KillCurrentOp::_checkForInterrupt( Client &c, bool heedMutex ) {
         if ( heedMutex && Lock::somethingWriteLocked() && c.hasWrittenThisPass() )
             return;
+        if (_killForTransition > 0) {
+            uasserted(16809, "interrupted due to state transition");
+        }
         if( _globalKill )
             uasserted(11600,"interrupted at shutdown");
         if( c.curop()->killed() ) {
@@ -200,6 +203,9 @@ namespace mongo {
     
     const char * KillCurrentOp::checkForInterruptNoAssert() {
         Client& c = cc();
+        if (_killForTransition > 0) {
+            return "interrupted due to state transition";
+        }
         if( _globalKill )
             return "interrupted at shutdown";
         if( c.curop()->killed() )

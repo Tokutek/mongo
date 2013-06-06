@@ -109,6 +109,9 @@ namespace mongo {
         verify( iAmPotentiallyHot() );
 
         RSBase::lock rslk(this);
+        // will get running operations to interrupt so
+        // acquisition of global lock will be faster
+        NoteStateTransition nst;
         Lock::GlobalWrite lk;
 
         gtidManager->verifyReadyToBecomePrimary();
@@ -196,6 +199,9 @@ namespace mongo {
     void ReplSetImpl::relinquish(bool startRepl) {
         {
             verify(lockedByMe());
+            // will get running operations to interrupt so
+            // acquisition of global lock will be faster
+            NoteStateTransition nst;
             // so no operations are simultaneously occurring
             RWLockRecursive::Exclusive e(operationLock);
             // so we know writes are not simultaneously occurring
