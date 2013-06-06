@@ -317,7 +317,7 @@ namespace mongo {
                                        QueryOption_AddHiddenPK | QueryOption_SlaveOk;
                 c = conn->query(from_collection, query, 0, 0, 0, queryFlags);
             }
-            uassert( 16807, "socket error for mapping query", c.get() );
+            uassert( 16808, "socket error for mapping query", c.get() );
 
             // - f( i ); must be called with the original stack, not the one created by the cursor
             while ( c->more() ) {
