@@ -1217,7 +1217,7 @@ namespace JSTests {
             virtual BSONObj bson() const {
                 BSONObjBuilder b;
                 double d;
-                ASSERT(Status::OK() == parseNumberFromString( "0.7", &d ));
+                ASSERT_OK(parseNumberFromString( "0.7", &d ));
                 b.append( "a", d );
                 return b.obj();
             }
@@ -1230,7 +1230,7 @@ namespace JSTests {
             virtual BSONObj bson() const {
                 BSONObjBuilder b;
                 double d;
-                ASSERT(Status::OK() == parseNumberFromString( "-4.4433e-2", &d ));
+                ASSERT_OK(parseNumberFromString( "-4.4433e-2", &d ));
                 b.append( "a", d );
                 return b.obj();
             }
