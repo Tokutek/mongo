@@ -80,7 +80,7 @@ namespace mongo {
        prusage_t prusage;
     };
 
-    ProcessInfo::ProcessInfo(pid_t pid) : _pid(pid) { }
+    ProcessInfo::ProcessInfo(ProcessId pid) : _pid(pid) { }
     ProcessInfo::~ProcessInfo() { }
 
     bool ProcessInfo::supported() {
