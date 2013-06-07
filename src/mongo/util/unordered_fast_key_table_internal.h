@@ -153,7 +153,7 @@ namespace mongo {
             // no space left in map
             _grow();
         }
-        msgasserted( 16471, "UnorderedFastKeyTable couldn't add entry after growing many times" );
+        msgasserted( 16846, "UnorderedFastKeyTable couldn't add entry after growing many times" );
     }
 
     template< typename K_L, typename K_S, typename V, typename H, typename E, typename C, typename C_LS >
