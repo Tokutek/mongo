@@ -46,7 +46,7 @@ namespace mongo {
         }
 
         Loader::~Loader() {
-            if (!_closed) {
+            if (!_closed && _loader != NULL) {
                 int r = _loader->abort(_loader);
                 if (r != 0) {
                     problem() << "storage::~Loader, failed to close DB_LOADER, error: "
