@@ -139,6 +139,8 @@ namespace mongo {
 
         WriteBackCommand() : InformationCommand("writebacklisten") {}
 
+        virtual LockType lockType() const { return OPLOCK; }
+
         void help(stringstream& h) const { h<<"internal"; }
 
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {

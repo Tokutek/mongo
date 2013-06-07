@@ -249,7 +249,7 @@ namespace mongo {
         }
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
-        virtual LockType locktype() const { return NONE; }
+        virtual LockType locktype() const { return OPLOCK; }
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
@@ -746,7 +746,7 @@ namespace mongo {
 
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
-        virtual LockType locktype() const { return NONE; }
+        virtual LockType locktype() const { return OPLOCK; }
         // this makes so little sense...
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }
