@@ -31,8 +31,7 @@ namespace mongo {
     */
     class Database {
     public:
-        // you probably need to be in dbHolderMutex when constructing this
-        Database(const char *nm, const string& _path = dbpath);
+        Database(const char *name, const string &path = dbpath);
 
         /* you must use this to close - there is essential code in this method that is not in the ~Database destructor.
            thus the destructor is private.  this could be cleaned up one day...
@@ -42,9 +41,17 @@ namespace mongo {
         /**
          * tries to make sure that this hasn't been deleted
          */
-        bool isOk() const { return magic == 781231; }
+        bool isOk() const { return _magic == 781231; }
 
-        bool isEmpty() { return ! namespaceIndex.allocated(); }
+        bool isEmpty() { return !_nsIndex.allocated(); }
+
+        int profile() const { return _profile; }
+
+        const string &profileName() const { return _profileName; }
+
+        const string &name() const { return _name; }
+
+        const string &path() const { return _path; }
 
         /**
          * @return true if success.  false if bad level or error creating profile ns
@@ -56,22 +63,24 @@ namespace mongo {
          *         ns=foo.bar, db=foo returns true
          */
         bool ownsNS( const string& ns ) const {
-            if ( ! startsWith( ns , name ) )
+            if ( ! startsWith( ns , _name ) )
                 return false;
-            return ns[name.size()] == '.';
+            return ns[_name.size()] == '.';
         }
 
-        // TODO: Make all of these private
-        const string name; // "alleyinsider"
-        const string path;
-
-        NamespaceIndex namespaceIndex;
-        int profile; // 0=off.
-        const string profileName; // "alleyinsider.system.profile"
-        int magic; // used for making sure the object is still loaded in memory
-
     private:
+        const string _name;
+        const string _path;
+
+        NamespaceIndex _nsIndex;
+        int _profile; // 0=off.
+        const string _profileName; // "alleyinsider.system.profile"
+        int _magic; // used for making sure the object is still loaded in memory
+
         ~Database(); // closes files and other cleanup see below.
+
+        friend class NamespaceIndex;
+        friend NamespaceIndex *nsindex(const char *);
     };
 
 } // namespace mongo

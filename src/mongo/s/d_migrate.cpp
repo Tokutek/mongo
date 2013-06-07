@@ -1385,7 +1385,7 @@ namespace mongo {
                 // 0. copy system.namespaces entry if collection doesn't already exist
                 Client::WriteContext ctx( ns );
                 Client::Transaction txn(DB_SERIALIZABLE);
-                const string &dbname = cc().database()->name;
+                const string &dbname = cc().database()->name();
 
                 // Only copy if ns doesn't already exist
                 if ( ! nsdetails( ns.c_str() ) ) {

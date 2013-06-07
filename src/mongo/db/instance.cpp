@@ -502,23 +502,23 @@ namespace mongo {
     /* db - database name
        path - db directory
     */
-    /*static*/ void Database::closeDatabase( const char *db, const string& path ) {
+    void Database::closeDatabase( const char *name, const string& path ) {
         verify( Lock::isW() );
 
         Client::Context * ctx = cc().getContext();
         verify( ctx );
-        verify( ctx->inDB( db , path ) );
+        verify( ctx->inDB( name , path ) );
         Database *database = ctx->db();
-        verify( database->name == db );
+        verify( database->name() == name );
 
         /* important: kill all open cursors on the database */
-        string prefix(db);
+        string prefix(name);
         prefix += '.';
         ClientCursor::invalidate(prefix.c_str());
 
         NamespaceDetailsTransient::clearForPrefix( prefix.c_str() );
 
-        dbHolderW().erase( db, path );
+        dbHolderW().erase( name, path );
         ctx->_clear();
         delete database; // closes files
     }
@@ -969,36 +969,11 @@ namespace mongo {
         log() << "shutdown: going to close sockets..." << endl;
         boost::thread close_socket_thread( boost::bind(MessagingPort::closeAllSockets, 0) );
 
-        // TODO: (figure out what this code is doing and what should happen)
-        // originally this was done when journaling was on
-        if( true ) {
-            log() << "shutdown: lock for final commit..." << endl;
-            {
-                int n = 10;
-                while( 1 ) {
-                    // we may already be in a read lock from earlier in the call stack, so do read lock here 
-                    // to be consistent with that.
-                    readlocktry w(20000);
-                    if( w.got() ) { 
-                        log() << "shutdown: final commit..." << endl;
-                        break;
-                    }
-                    if( --n <= 0 ) {
-                        log() << "shutdown: couldn't acquire write lock, aborting" << endl;
-                        mongoAbort("couldn't acquire write lock");
-                    }
-                    log() << "shutdown: waiting for write lock..." << endl;
-                }
-            }
-        }
-
-        log() << "shutdown: closing all files..." << endl;
-        stringstream ss3;
-        log() << ss3.str() << endl;
-
         {
             Lock::GlobalWrite lk;
+            log() << "shutdown: going to close databases..." << endl;
             dbHolderW().closeDatabases(dbpath);
+            log() << "shutdown: going to shutdown TokuKV..." << endl;
             storage::shutdown();
         }
 

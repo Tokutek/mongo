@@ -11,4 +11,3 @@ s2 = startParallelShell( "t = db.jstests_slowNightly_explain1; for( var i = 0; i
 
 s1();
 s2();
-s3();

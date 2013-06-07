@@ -30,7 +30,7 @@
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/database.h"
-//#include "mongo/db/namespace_details.h"
+#include "mongo/db/namespace_details.h"
 
 namespace mongo {
 
@@ -57,10 +57,10 @@ namespace mongo {
         string& errmsg
         ) 
     {
-        string todb = cc().database()->name;
+        string todb = cc().database()->name();
         bool same = masterSameProcess(masterHost);
         if ( same ) {
-            if ( fromDB == todb && cc().database()->path == dbpath ) {
+            if ( fromDB == todb && cc().database()->path() == dbpath ) {
                 // guard against an "infinite" loop
                 // if you are replicating, the local.sources config may be wrong if you get this
                 errmsg = "can't clone from self (localhost).";
@@ -376,7 +376,7 @@ namespace mongo {
     {
         {
             // config
-            string temp = cc().getContext()->db()->name + ".system.namespaces";
+            string temp = cc().database()->name() + ".system.namespaces";
             BSONObj config = conn->findOne( temp , BSON( "name" << ns ) );
             if ( config["options"].isABSONObj() ) {
                 if ( !userCreateNS(
@@ -435,7 +435,7 @@ namespace mongo {
         }
         massert( 10289 ,  "useReplAuth is not written to replication log", !opts.useReplAuth || !opts.logForRepl );
 
-        string todb = cc().database()->name;
+        string todb = cc().database()->name();
         verify(conn.get());
 
         /* todo: we can put these releases inside dbclient or a dbclient specialization.

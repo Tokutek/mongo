@@ -245,14 +245,14 @@ namespace mongo {
         if (lockState <= 0 && str::endsWith(_ns, ".system.users"))
             lockState = 1; // we don't want read-only users to be able to read system.users SERVER-4692
 
-        if ( _client->_ai.isAuthorizedForLock( _db->name , lockState ) )
+        if ( _client->_ai.isAuthorizedForLock( _db->name() , lockState ) )
             return;
 
         // before we assert, do a little cleanup
         _client->_context = _oldContext; // note: _oldContext may be null
 
         stringstream ss;
-        ss << "unauthorized db:" << _db->name << " ns:" << _ns << " lock type:" << lockState << " client:" << _client->clientAddress();
+        ss << "unauthorized db:" << _db->name() << " ns:" << _ns << " lock type:" << lockState << " client:" << _client->clientAddress();
         uasserted( 10057 , ss.str() );
     }
     

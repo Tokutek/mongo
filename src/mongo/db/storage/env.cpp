@@ -361,6 +361,7 @@ namespace mongo {
             for (uint64_t i = 0; i < num_rows; i++) {
                 TOKU_ENGINE_STATUS_ROW row = &mystat[i];
                 switch (row->type) {
+                case FS_STATE:
                 case UINT64:
                     status.appendNumber( row->keyname, (long long) row->value.num );
                     break;

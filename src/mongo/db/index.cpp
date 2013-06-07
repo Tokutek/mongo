@@ -262,7 +262,7 @@ namespace mongo {
         uint64_t iter = 0;
         r = _db->hot_optimize(_db, hot_opt_callback, &iter);
         if (r != 0) {
-            uassert(16450, mongoutils::str::stream() << "reIndex query killed ", false);
+            uassert(16810, mongoutils::str::stream() << "reIndex query killed ", false);
         }
     }
 

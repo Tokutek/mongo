@@ -55,14 +55,14 @@ namespace mongo {
         DEV {
             char buf[256];
             nsToDatabase(ns, buf);
-            if ( database->name != buf ) {
+            if ( database->name() != buf ) {
                 out() << "ERROR: attempt to write to wrong database\n";
                 out() << " ns:" << ns << '\n';
-                out() << " database->name:" << database->name << endl;
-                verify( database->name == buf );
+                out() << " database->name:" << database->name() << endl;
+                verify( database->name() == buf );
             }
         }
-        return &database->namespaceIndex;
+        return &database->_nsIndex;
     }
 
     NamespaceDetails *nsdetails(const char *ns) {
@@ -1032,7 +1032,7 @@ namespace mongo {
                 if (currKey == prevKey) {
                     index->uassertedDupKey(currKey);
                 }
-                prevKey = currKey;
+                prevKey = currKey.getOwned();
             }
         }
 
@@ -1404,7 +1404,7 @@ namespace mongo {
         Lock::assertWriteLocked(name);
         Database *d = cc().database();
         verify(d != NULL);
-        verify(d->name == name);
+        verify(d->name() == name);
 
         // Disable dropDatabase in a multi-statement transaction until
         // we have the time/patience to test/debug it.
@@ -1412,8 +1412,8 @@ namespace mongo {
             uasserted(16777, "Cannot dropDatabase in a multi-statement transaction.");
         }
 
-        d->namespaceIndex.drop();
-        Database::closeDatabase(d->name.c_str(), d->path);
+        nsindex(name.c_str())->drop();
+        Database::closeDatabase(d->name().c_str(), d->path());
     }
 
     void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system) {
@@ -1426,10 +1426,10 @@ namespace mongo {
 
         // Check that we are allowed to drop the namespace.
         NamespaceString s(name);
-        verify(s.db == cc().database()->name);
+        verify(s.db == cc().database()->name());
         if (s.isSystem()) {
             if (s.coll == "system.profile") {
-                uassert(10087, "turn off profiling before dropping system.profile collection", cc().database()->profile == 0);
+                uassert(10087, "turn off profiling before dropping system.profile collection", cc().database()->profile() == 0);
             } else if (!can_drop_system) {
                 uasserted(12502, "can't drop system ns");
             }
@@ -1478,13 +1478,13 @@ namespace mongo {
 
     void removeNamespaceFromCatalog(const string &ns) {
         if (!mongoutils::str::contains(ns, ".system.namespaces")) {
-            string system_namespaces = cc().database()->name + ".system.namespaces";
+            string system_namespaces = cc().database()->name() + ".system.namespaces";
             _deleteObjects(system_namespaces.c_str(), BSON("name" << ns), false, false);
         }
     }
 
     int removeFromSysIndexes(const char *ns, const char *name) {
-        string system_indexes = cc().database()->name + ".system.indexes";
+        string system_indexes = cc().database()->name() + ".system.indexes";
         BSONObj obj = BSON("ns" << ns << "name" << name);
         TOKULOG(2) << "removeFromSysIndexes removing " << obj << endl;
         return (int) _deleteObjects(system_indexes.c_str(), obj, false, false);

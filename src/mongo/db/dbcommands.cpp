@@ -413,7 +413,7 @@ namespace mongo {
         virtual OpSettings getOpSettings() const { return OpSettings(); }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             BSONElement e = cmdObj.firstElement();
-            result.append("was", cc().database()->profile);
+            result.append("was", cc().database()->profile());
             result.append("slowms", cmdLine.slowMS );
 
             int p = (int) e.number();
@@ -1296,9 +1296,10 @@ namespace mongo {
             }
 
             list<string> collections;
-            Database* d = cc().database();
-            if ( d )
-                d->namespaceIndex.getNamespaces( collections );
+            NamespaceIndex *ni = nsindex(dbname.c_str());
+            if ( ni != NULL ) {
+                ni->getNamespaces( collections );
+            }
 
             uint64_t ncollections = 0;
             uint64_t objects = 0;
@@ -1363,9 +1364,9 @@ namespace mongo {
         DBHashCmd() : QueryCommand( "dbHash", false, "dbhash" ) {}
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             list<string> colls;
-            Database* db = cc().database();
-            if ( db )
-                db->namespaceIndex.getNamespaces( colls );
+            NamespaceIndex *ni = nsindex(dbname.c_str());
+            if ( ni != NULL )
+                ni->getNamespaces( colls );
             colls.sort();
 
             result.appendNumber( "numCollections" , (long long)colls.size() );

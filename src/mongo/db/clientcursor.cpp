@@ -87,7 +87,7 @@ namespace mongo {
             //cout << "\nTEMP invalidate " << ns << endl;
             Database *db = cc().database();
             verify(db);
-            verify( str::startsWith(ns, db->name) );
+            verify( str::startsWith(ns, db->name()) );
 
             for( LockedIterator i; i.ok(); ) {
                 ClientCursor *cc = i.current();
@@ -182,7 +182,7 @@ namespace mongo {
         Lock::assertAtLeastReadLocked(ns);
 
         verify( _db );
-        verify( str::startsWith(_ns, _db->name) );
+        verify( str::startsWith(_ns, _db->name()) );
         if( queryOptions & QueryOption_NoCursorTimeout )
             noTimeout();
         recursive_scoped_lock lock(ccmutex);

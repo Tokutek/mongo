@@ -35,7 +35,7 @@ namespace mongo {
 
     void assertDbAtLeastReadLocked(const Database *db) { 
         if( db ) { 
-            Lock::assertAtLeastReadLocked(db->name);
+            Lock::assertAtLeastReadLocked(db->name());
         }
         else {
             verify( Lock::isLocked() );
@@ -44,7 +44,7 @@ namespace mongo {
 
     void assertDbWriteLocked(const Database *db) { 
         if( db ) { 
-            Lock::assertWriteLocked(db->name);
+            Lock::assertWriteLocked(db->name());
         }
         else {
             verify( Lock::isW() );
@@ -54,18 +54,18 @@ namespace mongo {
     Database::~Database() {
     }
 
-    Database::Database(const char *nm, const string& _path )
-        : name(nm), path(_path), namespaceIndex( path, name ),
-          profileName(name + ".system.profile")
+    Database::Database(const char *name, const string &path)
+        : _name(name), _path(path), _nsIndex( _path, _name ),
+          _profileName(_name + ".system.profile")
     {
         try {
             // check db name is valid
-            size_t L = strlen(nm);
+            size_t L = strlen(name);
             uassert( 10028 ,  "db name is empty", L > 0 );
             uassert( 10032 ,  "db name too long", L < 64 );
-            uassert( 10029 ,  "bad db name [1]", *nm != '.' );
-            uassert( 10030 ,  "bad db name [2]", nm[L-1] != '.' );
-            uassert( 10031 ,  "bad char(s) in db name", strchr(nm, ' ') == 0 );
+            uassert( 10029 ,  "bad db name [1]", *name != '.' );
+            uassert( 10030 ,  "bad db name [2]", name[L-1] != '.' );
+            uassert( 10031 ,  "bad char(s) in db name", strchr(name, ' ') == 0 );
 #ifdef _WIN32
             static const char* windowsReservedNames[] = {
                 "con", "prn", "aux", "nul",
@@ -73,20 +73,20 @@ namespace mongo {
                 "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"
             };
             for ( size_t i = 0; i < (sizeof(windowsReservedNames) / sizeof(char*)); ++i ) {
-                if ( strcasecmp( nm, windowsReservedNames[i] ) == 0 ) {
+                if ( strcasecmp( name, windowsReservedNames[i] ) == 0 ) {
                     stringstream errorString;
-                    errorString << "db name \"" << nm << "\" is a reserved name";
+                    errorString << "db name \"" << name << "\" is a reserved name";
                     uassert( 16185 , errorString.str(), false );
                 }
             }
 #endif
-            profile = cmdLine.defaultProfile;
+            _profile = cmdLine.defaultProfile;
             // The underlying dbname.ns dictionary is opend if it exists,
             // and created lazily on the next write.
-            namespaceIndex.init();
-            magic = 781231;
-        } catch(std::exception& e) {
-            log() << "warning database " << path << " " << nm << " could not be opened" << endl;
+            _nsIndex.init();
+            _magic = 781231;
+        } catch (std::exception &e) {
+            log() << "warning database " << _path << " " << _name << " could not be opened" << endl;
             DBException* dbe = dynamic_cast<DBException*>(&e);
             if ( dbe != 0 ) {
                 log() << "DBException " << dbe->getCode() << ": " << e.what() << endl;
@@ -100,7 +100,7 @@ namespace mongo {
 
 
     bool Database::setProfilingLevel( int newLevel , string& errmsg ) {
-        if ( profile == newLevel )
+        if ( _profile == newLevel )
             return true;
 
         if ( newLevel < 0 || newLevel > 2 ) {
@@ -109,7 +109,7 @@ namespace mongo {
         }
 
         if ( newLevel == 0 ) {
-            profile = 0;
+            _profile = 0;
             return true;
         }
 
@@ -118,7 +118,7 @@ namespace mongo {
         if (!getOrCreateProfileCollection(this, true))
             return false;
 
-        profile = newLevel;
+        _profile = newLevel;
         return true;
     }
 
@@ -129,11 +129,11 @@ namespace mongo {
             while (!dbs.empty()) {
                 DBs::iterator it = dbs.begin();
                 Database *db = it->second;
-                dassert(db->name == it->first);
+                dassert(db->name() == it->first);
                 // This erases dbs[db->name] for us, can't lift it out yet until we understand the callers of closeDatabase().
                 // That's why we have a weird loop here.
-                Client::WriteContext ctx(db->name);
-                db->closeDatabase(db->name.c_str(), path);
+                Client::WriteContext ctx(db->name());
+                db->closeDatabase(db->name().c_str(), path);
             }
             _paths.erase(pi);
         }
@@ -149,7 +149,7 @@ namespace mongo {
 
         set<string> dbs;
         for (DBs::const_iterator it = m.begin(); it != m.end(); ++it) {
-            wassert(it->second->path == path);
+            wassert(it->second->path() == path);
             dbs.insert(it->first);
         }
 
