@@ -249,33 +249,26 @@ namespace mongo {
             return;
         }
 
+        if ( GTID::cmp(slave->lastGTID, lastGTID) > 0 ) {
+            return;
+        }
+
         try {
-            // haveCursor() does not necessarily tell us if we have a non-dead cursor, so we check
-            // tailCheck() as well; see SERVER-8420
-            slave->reader.tailCheck();
-            if (!slave->reader.haveCursor()) {
+            if (!slave->reader.haveConnection()) {
                 if (!slave->reader.connect(id, slave->slave->id(), target->fullName())) {
                     // error message logged in OplogReader::connect
                     return;
                 }
-                slave->reader.ghostQueryGTE(rsoplog, lastGTID);
             }
-
-            LOG(1) << "replSet last: " << slave->lastGTID.toString() << " to " << lastGTID.toString() << rsLog;
-            if ( GTID::cmp(slave->lastGTID, lastGTID) > 0 ) {
-                return;
+            bool ret = slave->reader.propogateSlaveLocation(lastGTID);
+            if (ret) {
+                slave->lastGTID = lastGTID;
+                LOG(2) << "now last is " << slave->lastGTID.toString() << rsLog;
             }
-
-            while ( GTID::cmp(slave->lastGTID, lastGTID) <= 0 ) {
-                if (!slave->reader.more()) {
-                    // we'll be back
-                    return;
-                }
-
-                BSONObj o = slave->reader.nextSafe();
-                slave->lastGTID = getGTIDFromBSON("_id", o);
+            else {
+                LOG(0) << "failed to percolate to with new location" << lastGTID.toString() << rsLog;
+                slave->reader.resetConnection();
             }
-            LOG(2) << "now last is " << slave->lastGTID.toString() << rsLog;
         }
         catch (DBException& e) {
             // we'll be back

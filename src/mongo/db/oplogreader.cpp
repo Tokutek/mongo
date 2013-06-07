@@ -203,4 +203,16 @@ namespace mongo {
             );
         return retCursor;
     }
+
+    bool OplogReader::propogateSlaveLocation(GTID lastGTID){
+        BSONObjBuilder cmd;
+        cmd.append("updateSlave", 1);
+        addGTIDToBSON("gtid", lastGTID, cmd);
+        BSONObj ret;
+        return _conn->runCommand(
+            "local",
+            cmd.done(),
+            ret
+            );
+    }
 }

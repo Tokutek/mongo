@@ -47,6 +47,9 @@ namespace mongo {
         }
 
         bool haveCursor() { return cursor.get() != 0; }
+        bool haveConnection() { return _conn.get() != 0; }
+
+        bool propogateSlaveLocation(GTID lastGTID);
 
         void tailingQueryGTE(const char *ns, GTID gtid, const BSONObj* fields=0);
 

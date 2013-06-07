@@ -221,4 +221,26 @@ namespace mongo {
     unsigned getSlaveCount() {
         return slaveTracking.getSlaveCount();
     }
+
+    
+    class CmdUpdateSlave : public Command {
+    public:
+        CmdUpdateSlave() : Command("updateSlave") {}
+        virtual bool slaveOk() const { return true; }
+        virtual LockType locktype() const { return NONE; }
+        virtual bool requiresSync() const { return false; }
+        virtual bool needsTxn() const { return false; }
+        virtual int txnFlags() const { return noTxnFlags(); }
+        virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual void help( stringstream& help ) const {
+            help << "internal." << endl;
+        }
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            GTID value = getGTIDFromBSON("gtid", cmdObj);
+            updateSlaveLocation( *cc().curop(), "local.oplog.rs", value);
+            return true;
+        }
+    } cmdUpdateSlave;
+
 }
