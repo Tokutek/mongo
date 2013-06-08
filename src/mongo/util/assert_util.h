@@ -29,7 +29,6 @@
 namespace mongo {
 
     enum CommonErrorCodes {
-        DatabaseDifferCaseCode = 13297 ,
         SendStaleConfigCode = 13388 ,
         RecvStaleConfigCode = 9996
     };

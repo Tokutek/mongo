@@ -1,4 +1,7 @@
-// Check db name duplication constraint SERVER-2111
+// Orignally tested: "Check db name duplication constraint SERVER-2111"
+//
+// TokuMX has no such constraint, so we test that you can indeed have
+// two databases whose names differ only in case.
 a = db.getSisterDB( "dbcasetest_dbnamea" )
 b = db.getSisterDB( "dbcasetest_dbnameA" )
 
@@ -12,7 +15,6 @@ assert.eq( 0 , z.code || 0 , "A : " + tojson(z) )
 b.foo.save( { x : 1 } )
 z = db.getLastErrorObj();
 assert.eq( 0 , z.code || 0 , "B : " + tojson(z) )
-//assert.eq( 13297 , z.code || 0 , "B : " + tojson(z) )
 
 assert.neq( -1, db.getMongo().getDBNames().indexOf( a.getName() ) );
 assert.neq( -1, db.getMongo().getDBNames().indexOf( b.getName() ) );
