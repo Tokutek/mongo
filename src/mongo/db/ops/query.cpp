@@ -120,7 +120,6 @@ namespace mongo {
 
             start = client_cursor->pos();
             Cursor *c = client_cursor->c();
-            BSONObj last;
 
             // This manager may be stale, but it's the state of chunking when the cursor was created.
             ShardChunkManagerPtr manager = client_cursor->getChunkManager();
@@ -173,7 +172,7 @@ namespace mongo {
                         // in replication. Note that if this cursor is not
                         // doing replication, this is pointless
                         if ( client_cursor->queryOptions() & QueryOption_OplogReplay ) {
-                            last = c->current();
+                            client_cursor->storeOpForSlave( c->current() );
                         }
                         n++;
 
@@ -190,9 +189,6 @@ namespace mongo {
             }
             
             if ( client_cursor ) {
-                if ( client_cursor->queryOptions() & QueryOption_OplogReplay ) {
-                    client_cursor->storeOpForSlave( last );
-                }
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
             } else {
                 // We're done with this transaction, commit it and release it back to the Client.
@@ -676,7 +672,6 @@ namespace mongo {
         // be stale.
         bool opChecked = false;
         bool slaveLocationUpdated = false;
-        BSONObj last;
         for ( ; cursor->ok(); cursor->advance() ) {
 
             if ( pq.getMaxScan() && cursor->nscanned() > pq.getMaxScan() ) {
@@ -690,13 +685,12 @@ namespace mongo {
             // Note slave's position in the oplog.
             if ( pq.hasOption( QueryOption_OplogReplay ) ) {
                 BSONObj current = cursor->current();
-                last = current;
+                ccPointer->storeOpForSlave(current);
                 
                 // the first row returned is equal to the last element that
                 // the slave has synced up to, so we might as well update
                 // the slave location
                 if (!slaveLocationUpdated) {
-                    ccPointer->storeOpForSlave(current);
                     ccPointer->updateSlaveLocation(curop);
                     slaveLocationUpdated = true;
                 }
@@ -762,10 +756,6 @@ namespace mongo {
             ccPointer->setPos( nReturned );
             ccPointer->pq = pq_shared;
             ccPointer->fields = pq.getFieldPtr();
-
-            if (pq.hasOption( QueryOption_OplogReplay )) {
-                ccPointer->storeOpForSlave(last);
-            }
             // Clones the transaction and hand's off responsibility
             // of its completion to the client cursor's destructor.
             cc().swapTransactionStack(ccPointer->transactions);
