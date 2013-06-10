@@ -1024,7 +1024,7 @@ namespace mongo {
 
         // If the index is unique, check all adjacent keys for a duplicate.
         if (index->unique()) {
-            IndexCursor c(this, *index, minKey, maxKey, true, 1);
+            IndexScanCursor c(this, *index, 1);
             BSONObj prevKey = c.currKey().getOwned();
             c.advance();
             for ( ; c.ok(); c.advance()) {
