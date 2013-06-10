@@ -271,11 +271,24 @@ namespace mongo {
         checkCurrentAgainstBounds();
     }
 
+    bool IndexCursor::forward() const {
+        return _direction > 0;
+    }
+
     void IndexCursor::prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
         const bool isSecondary = !_d->isPKIndex(_idx);
 
-        storage::Key sKey(startKey, isSecondary ? &minKey : NULL);
-        storage::Key eKey(endKey, isSecondary ? &maxKey : NULL);
+        // The ydb requires that we only lock ranges such that the left
+        // endpoint is less than or equal to the right endpoint.
+        // Reverse cursors describe the start and end key as the two
+        // keys where they start and end iteration, which is backwards
+        // in the key space (because they iterate in reverse).
+        const BSONObj &leftKey = forward() ? startKey : endKey; 
+        const BSONObj &rightKey = forward() ? endKey : startKey; 
+        dassert(leftKey <= rightKey);
+
+        storage::Key sKey(leftKey, isSecondary ? &minKey : NULL);
+        storage::Key eKey(rightKey, isSecondary ? &maxKey : NULL);
         DBT start = sKey.dbt();
         DBT end = eKey.dbt();
 
@@ -397,7 +410,7 @@ namespace mongo {
 
     void IndexCursor::findKey(const BSONObj &key) {
         const bool isSecondary = !_d->isPKIndex(_idx);
-        const BSONObj &pk = _direction > 0 ? minKey : maxKey;
+        const BSONObj &pk = forward() ? minKey : maxKey;
         setPosition(key, isSecondary ? pk : BSONObj());
     };
 
@@ -427,7 +440,7 @@ namespace mongo {
         const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
         DBC *cursor = _cursor.dbc();
-        if ( _direction > 0 ) {
+        if ( forward() ) {
             r = cursor->c_getf_set_range(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         } else {
             r = cursor->c_getf_set_range_reverse(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
@@ -479,10 +492,10 @@ namespace mongo {
             } else {
                 if ( _ordering.descending( 1 << i ) ) {
                     // Descending sort order, so min key skips forward.
-                    _direction > 0 ? b.appendMinKey( "" ) : b.appendMaxKey( "" );
+                    forward() ? b.appendMinKey( "" ) : b.appendMaxKey( "" );
                 } else {
                     // Regular ascending order. Max key skips forward.
-                    _direction > 0 ? b.appendMaxKey( "" ) : b.appendMinKey( "" );
+                    forward() ? b.appendMaxKey( "" ) : b.appendMinKey( "" );
                 }
             }
         }
@@ -490,7 +503,7 @@ namespace mongo {
         // This differs from findKey in that we set PK to max to move forward and min
         // to move backward, resulting in a "skip" of the key prefix, not a "find".
         const bool isSecondary = !_d->isPKIndex(_idx);
-        const BSONObj &pk = _direction > 0 ? maxKey : minKey;
+        const BSONObj &pk = forward() ? maxKey : minKey;
         setPosition( b.done(), isSecondary ? pk : BSONObj() );
     }
 
@@ -617,7 +630,7 @@ again:      while ( !allInclusive && ok() ) {
         const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
         DBC *cursor = _cursor.dbc();
-        if ( _direction > 0 ) {
+        if ( forward() ) {
             r = cursor->c_getf_next(cursor, getf_flags(), cursor_getf, &extra);
         } else {
             r = cursor->c_getf_prev(cursor, getf_flags(), cursor_getf, &extra);
