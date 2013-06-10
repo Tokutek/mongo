@@ -121,12 +121,14 @@ doTest = function( signal ) {
     lastOplogOp = master.getDB("local").oplog.rs.find().sort({$natural : -1}).limit(1).next();
     assert.eq(lastOplogOp['_id'], lastGTID);
 
-    ts.forEach( function(z){ assert.eq( 2 , z.getIndexKeys().length , "A " + z.getMongo() ); } )
+	// This part of the test is not valid with tokumx, getLastError does not wait for the 
+	// data to be applied to collections in tokumx, it simply writes it to the oplog
+    //ts.forEach( function(z){ assert.eq( 2 , z.getIndexKeys().length , "A " + z.getMongo() ); } )
 
-    t.reIndex()
+    //t.reIndex()
 
-    db.getLastError( 3 , 30000 )
-    ts.forEach( function(z){ assert.eq( 2 , z.getIndexKeys().length , "A " + z.getMongo() ); } )
+    //db.getLastError( 3 , 30000 )
+    //ts.forEach( function(z){ assert.eq( 2 , z.getIndexKeys().length , "A " + z.getMongo() ); } )
 
     // Shut down the set and finish the test.
     replTest.stopSet( signal );
