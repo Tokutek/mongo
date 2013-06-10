@@ -266,7 +266,6 @@ namespace mongo {
 
         /** Initialize the internal DBC */
         void initializeDBC();
-        bool forward() const;
         void _prelockCompoundBounds(const int currentRange, vector<const FieldInterval *> &combo,
                                     BufBuilder &startKeyBuilder, BufBuilder &endKeyBuilder);
         void prelockBounds();
