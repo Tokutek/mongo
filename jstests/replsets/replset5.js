@@ -45,6 +45,7 @@ doTest = function (signal) {
         print("\WARNING getLastError timed out and should not have.\nThis machine seems extremely slow. Stopping test without failing it\n")
         return;
     }
+    lastGTID = result.lastGTID;
 
     var slaves = replTest.liveNodes.slaves;
     slaves[0].setSlaveOk();
@@ -52,14 +53,14 @@ doTest = function (signal) {
 
     print("replset5.js Testing slave counts");
 
-    var slave0count = slaves[0].getDB(testDB).foo.count();
-    assert(slave0count == docNum, "Slave 0 has " + slave0count + " of " + docNum + " documents!");
+    var slave0last = slaves[0].getDB("local").oplog.rs.find().sort({$natural : -1}).limit(1).next();
+    assert.eq(slave0last['_id'], lastGTID);
 
-    var slave1count = slaves[1].getDB(testDB).foo.count();
-    assert(slave1count == docNum, "Slave 1 has " + slave1count + " of " + docNum + " documents!");
+    var slave1last = slaves[1].getDB("local").oplog.rs.find().sort({$natural : -1}).limit(1).next();
+    assert.eq(slave1last['_id'], lastGTID);
 
-    var master1count = master.getDB(testDB).foo.count();
-    assert(master1count == docNum, "Master has " + master1count + " of " + docNum + " documents!");
+    var masterlast = master.getDB("local").oplog.rs.find().sort({$natural : -1}).limit(1).next();
+    assert.eq(masterlast['_id'], lastGTID);
 
     print("replset5.js reconfigure with hidden=1");
     config = master.getDB("local").system.replset.findOne();
