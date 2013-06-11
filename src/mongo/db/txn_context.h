@@ -142,6 +142,12 @@ namespace mongo {
         bool isLive() const { return _txn.isLive(); }
         /** @return true iff this transaction is read only */
         bool readOnly() const { return (_txn.flags() & DB_TXN_READ_ONLY) != 0; }
+        /** @return true iff this transaction has serializable isolation.
+         *          note that a child transaction always inherits isolation. */
+        bool serializable() const {
+            return (_txn.flags() & DB_SERIALIZABLE) != 0 ||
+                   (_parent != NULL && _parent->serializable());
+        }
         // log an operations, represented in op, to _txnOps
         // if and when the root transaction commits, the operation
         // will be added to the opLog

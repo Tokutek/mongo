@@ -264,8 +264,10 @@ namespace mongo {
         void initializeDBC();
         void _prelockCompoundBounds(const int currentRange, vector<const FieldInterval *> &combo,
                                     BufBuilder &startKeyBuilder, BufBuilder &endKeyBuilder);
-        void prelockBounds();
-        void prelockRange(const BSONObj &startKey, const BSONObj &endKey);
+        void _prelockBounds();
+        void _prelockRange(const BSONObj &startKey, const BSONObj &endKey);
+        void prelock();
+
         /** Get the current key/pk/obj from the row buffer and set _currKey/PK/Obj */
         void getCurrentFromBuffer();
         /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */

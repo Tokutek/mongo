@@ -1166,6 +1166,15 @@ namespace mongo {
         }
         return b.obj();
     }
+
+    bool FieldRangeVector::containsOnlyPointIntervals() const {
+        for( vector<FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {
+            if (!i->isPointIntervalSet()) {
+                return false;
+            }
+        }
+        return true;
+    }
     
     FieldRange *FieldRangeSet::__universalRange = 0;
     const FieldRange &FieldRangeSet::universalRange() const {

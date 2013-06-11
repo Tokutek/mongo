@@ -275,7 +275,7 @@ namespace mongo {
         return _direction > 0;
     }
 
-    void IndexCursor::prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
+    void IndexCursor::_prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
         const bool isSecondary = !_d->isPKIndex(_idx);
 
         // The ydb requires that we only lock ranges such that the left
@@ -315,7 +315,7 @@ namespace mongo {
                 startKey.appendAs( (*i)->_lower._bound, "" );
                 endKey.appendAs( (*i)->_upper._bound, "" );
             }
-            prelockRange( startKey.done(), endKey.done() );
+            _prelockRange( startKey.done(), endKey.done() );
         } else {
             const vector<FieldInterval> &intervals = ranges[currentRange].intervals();
             for ( vector<FieldInterval>::const_iterator i = intervals.begin();
@@ -328,7 +328,7 @@ namespace mongo {
         }
     }
 
-    void IndexCursor::prelockBounds() {
+    void IndexCursor::_prelockBounds() {
         BufBuilder startKeyBuilder(512);
         BufBuilder endKeyBuilder(512);
 
@@ -346,7 +346,7 @@ namespace mongo {
                   i != intervals.end(); i++ ) {
                 startKey.appendAs( i->_lower._bound, "" );
                 endKey.appendAs( i->_upper._bound, "" );
-                prelockRange( startKey.done(), endKey.done() );
+                _prelockRange( startKey.done(), endKey.done() );
             }
         } else {
             // When there's more than one field range, we need to prelock combinations
@@ -358,9 +358,45 @@ namespace mongo {
         }
     }
 
+    // The ydb prelocking API serves two purposes: to enable prefetching
+    // and acquire row locks. Row locks are acquired by serializable
+    // transactions, serializable cursors, and RMW (write) cursors.
+    //
+    // If row locks are to be acquired, we _must_ prelock here, since we
+    // pass DB_PRELOCKED to cursor operations.
+    //
+    // We would ideally use the ydb prelocking API to prelock each interval
+    // as we iterated (via advance()), because there may be multiple intervals
+    // and we can only lock/prefetch one at a time. Or, there could be separate
+    // ydb APIs for prefetching and locking, which means we could take row locks
+    // here if necessary and enable prefetching as we advance.
+    //
+    // Until that happens, we'll only enable prefetching if we think its worth it.
+    // For simple start/end key cursors, it's always worth it, because it's
+    // just one call to prelock. For bounds-based cursors, it is _probably_
+    // worth it as long as the bounds vector doesn't soley contain point
+    // intervals ($in, $or with equality). Most secondary indexes have
+    // cardinality such that points (excluding appended PK) all fit in a
+    // single basement node (64k of data, about), so prefetching wouldn't
+    // have done anything. For non-points, we can't make any guess as to
+    // how much data is in that range.
+    void IndexCursor::prelock() {
+        if (cc().txn().serializable() ||
+            cc().opSettings().getQueryCursorMode() != DEFAULT_LOCK_CURSOR ||
+            _bounds == NULL || !_bounds->containsOnlyPointIntervals()) {
+            if ( _bounds != NULL ) {
+                _prelockBounds();
+            } else {
+                _prelockRange( _startKey, _endKey );
+            }
+        }
+    }
+
     void IndexCursor::initializeDBC() {
+        // We need to prelock first, then position the cursor.
+        prelock();
+
         if ( _bounds != NULL ) {
-            prelockBounds();
             const int r = skipToNextKey( _startKey );
             if ( r == -1 ) {
                 // The bounds iterator suggests _bounds->startKey() is within
@@ -371,7 +407,6 @@ namespace mongo {
                 findKey( _startKey );
             }
         } else {
-            prelockRange( _startKey, _endKey );
             findKey( _startKey );
         }
         checkCurrentAgainstBounds();
@@ -401,9 +436,6 @@ namespace mongo {
                     return 2 << (_getf_iteration < 20 ? _getf_iteration : 20);
             }
         } else {
-            // Cursors that are not read only may not buffer rows, because they
-            // may perform a write some time in the future and possibly invalidate
-            // buffered data.
             return 1;
         }
     }
