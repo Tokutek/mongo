@@ -672,6 +672,8 @@ namespace mongo {
         // be stale.
         bool opChecked = false;
         bool slaveLocationUpdated = false;
+        BSONObj last;
+        bool lastBSONObjSet = false;
         for ( ; cursor->ok(); cursor->advance() ) {
 
             if ( pq.getMaxScan() && cursor->nscanned() > pq.getMaxScan() ) {
@@ -685,7 +687,8 @@ namespace mongo {
             // Note slave's position in the oplog.
             if ( pq.hasOption( QueryOption_OplogReplay ) ) {
                 BSONObj current = cursor->current();
-                ccPointer->storeOpForSlave(current);
+                last = current.copy();
+                lastBSONObjSet = true;
                 
                 // the first row returned is equal to the last element that
                 // the slave has synced up to, so we might as well update
@@ -756,6 +759,9 @@ namespace mongo {
             ccPointer->setPos( nReturned );
             ccPointer->pq = pq_shared;
             ccPointer->fields = pq.getFieldPtr();
+            if (pq.hasOption( QueryOption_OplogReplay ) && lastBSONObjSet) {
+                ccPointer->storeOpForSlave(last);
+            }
             // Clones the transaction and hand's off responsibility
             // of its completion to the client cursor's destructor.
             cc().swapTransactionStack(ccPointer->transactions);
