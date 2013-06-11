@@ -280,44 +280,11 @@ namespace mongo {
         f._mayBeInterrupted = mayBeInterrupted;
         f._isCapped = isCapped;
 
+        int options = QueryOption_NoCursorTimeout | QueryOption_AddHiddenPK |
+            ( slaveOk ? QueryOption_SlaveOk : 0 );
+
         mayInterrupt( mayBeInterrupted );
-
-        // This class is to handle when we're copying databases locally.
-        // It isn't useful otherwise.
-        //
-        //     Why we need an alternate transaction stack:
-        //
-        // DBClientBase's query will probably go into the getMore() state,
-        // pinning the current transaction stack to the cursor and setting
-        // our transaction stack to NULL. We need the cursor to get created
-        // in a scope where there's a custom txn stack which can get attached
-        // to the cursor once getMore() is called. Once we do inserts, we can
-        // temporarily switch the current txn stack to the original before
-        // going back to the "cursors" stack.
-        {
-            Client::AlternateTransactionStack altStack;
-            Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            auto_ptr<DBClientCursor> c;
-            {
-                // We want this particular cursor to not take any locktree locks.
-                OpSettings settings = cc().opSettings();
-                settings.setBulkFetch(true);
-                settings.setQueryCursorMode(READ_LOCK_CURSOR);
-                Client::WithOpSettings wos(settings);
-                const int queryFlags = QueryOption_NoCursorTimeout |
-                                       QueryOption_AddHiddenPK | QueryOption_SlaveOk;
-                c = conn->query(from_collection, query, 0, 0, 0, queryFlags);
-            }
-            uassert( 16808, "socket error for mapping query", c.get() );
-
-            // - f( i ); must be called with the original stack, not the one created by the cursor
-            while ( c->more() ) {
-                shared_ptr<Client::TransactionStack> originalStack = altStack.getSaved();
-                Client::WithTxnStack wts(originalStack);
-                DBClientCursorBatchIterator i( *c );
-                f( i );
-            }
-        }
+        conn->query(boost::function<void(DBClientCursorBatchIterator &)>(f), from_collection, query, 0, options);
 
         for ( list<BSONObj>::iterator i = storedForLater.begin(); i!=storedForLater.end(); i++ ) {
             BSONObj js = *i;
@@ -711,7 +678,6 @@ namespace mongo {
         virtual bool needsTxn() const { return true; }
         virtual int txnFlags() const { return DB_SERIALIZABLE; }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual OpSettings getOpSettings() const { return OpSettings().setBulkFetch(true); }
         virtual bool requiresSync() const { return true; }
         virtual void help( stringstream &help ) const {
             help << "clone this database from an instance of the db on another host\n";
@@ -805,7 +771,6 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual OpSettings getOpSettings() const { return OpSettings().setBulkFetch(true); }
         virtual bool requiresSync() const { return true; }
         CmdCloneCollection() : Command("cloneCollection") { }
         virtual void help( stringstream &help ) const {
@@ -956,7 +921,6 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual OpSettings getOpSettings() const { return OpSettings().setBulkFetch(true); }
         virtual bool requiresSync() const { return true; }
         virtual void help( stringstream &help ) const {
             help << "copy a database from another host to this host\n";

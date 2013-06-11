@@ -174,7 +174,6 @@ namespace mongo {
           public:
             AlternateTransactionStack();
             ~AlternateTransactionStack();
-            shared_ptr<TransactionStack> getSaved() const;
         };
 
         /**
@@ -268,13 +267,6 @@ namespace mongo {
             void release() {
                 _released = true;
             }
-        };
-
-        class WithOpSettings : boost::noncopyable {
-            OpSettings _saved;
-          public:
-            WithOpSettings(OpSettings &settings);
-            ~WithOpSettings();
         };
 
     private:
@@ -404,13 +396,6 @@ namespace mongo {
         if (!_released) {
             cc().swapTransactionStack(_stack);
         }
-    }
-
-    inline Client::WithOpSettings::WithOpSettings(OpSettings &settings) : _saved(settings) {
-        cc().setOpSettings(settings);
-    }
-    inline Client::WithOpSettings::~WithOpSettings() {
-        cc().setOpSettings(_saved);
     }
 
     inline Client::GodScope::GodScope() {
