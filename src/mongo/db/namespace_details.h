@@ -88,7 +88,7 @@ namespace mongo {
     };
 
     /* NamespaceDetails : this is the "header" for a namespace that has all its details.
-       It is stored in the NamespaceIndex (a TokuDB dictionary named foo.ns, for Database foo).
+       It is stored in the NamespaceIndex (a TokuMX dictionary named foo.ns, for Database foo).
     */
     class NamespaceDetails : boost::noncopyable {
     public:
@@ -498,7 +498,7 @@ namespace mongo {
             _qcWriteCount = 0;
         }
         /* you must notify the cache if you are doing writes, as query plan utility will change */
-        // TODO: TokuDB: John does not understand why 100+ writes necessarily means
+        // TODO: TokuMX: John does not understand why 100+ writes necessarily means
         // the query strategy changes. We need to figure this out eventually.
         void notifyOfWriteOp() {
             if ( _qcCache.empty() )
@@ -634,7 +634,7 @@ namespace mongo {
             verify(idxNo >= 0 && idxNo < (int) _indexes.size());
             return *_indexes[idxNo];
         }
-        unimplemented("more than NIndexesMax indexes"); // TokuDB: Make sure we handle the case where idxNo >= NindexesMax 
+        unimplemented("more than NIndexesMax indexes"); // TokuMX: Make sure we handle the case where idxNo >= NindexesMax 
     }
 
     inline int NamespaceDetails::idxNo(const IndexDetails& idx) const {

@@ -27,7 +27,7 @@ namespace mongo {
     /**
      * Database represents an set of namespaces. It has an index mapping
      * namespace name to NamespaceDetails object, if it exists and is open.
-     * The database is represented on disk as a TokuDB dictionary named dbname.ns
+     * The database is represented on disk as a TokuMX dictionary named dbname.ns
     */
     class Database {
     public:

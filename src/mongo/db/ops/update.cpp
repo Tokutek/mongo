@@ -312,7 +312,7 @@ namespace mongo {
                         currentObj = currentObj.copy();
 
                         // Advance past the document to be modified. This used to be because of SERVER-5198,
-                        // but TokuDB does it because we want to avoid needing to do manual deduplication
+                        // but TokuMX does it because we want to avoid needing to do manual deduplication
                         // of this PK on the next iteration if the current update modifies the next
                         // entry in the index. For example, an index scan over a:1 with mod {$inc: {a:1}}
                         // would cause every other key read to be a duplicate if we didn't advance here.

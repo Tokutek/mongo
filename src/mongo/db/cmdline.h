@@ -113,7 +113,7 @@ namespace mongo {
         SSLManager* sslServerManager; // currently leaks on close
 #endif
         
-        // TokuDB variables
+        // TokuMX variables
         bool directio;
         bool gdb;
         uint64_t cacheSize;

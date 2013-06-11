@@ -39,7 +39,7 @@ namespace mongo {
 
         // count of all objects
         if ( query.isEmpty() ) {
-            // TODO: TokuDB: call this with in-memory stats once we maintain them
+            // TODO: TokuMX: call this with in-memory stats once we maintain them
             //return applySkipLimit( d->stats.nrecords , cmd );
         }
 

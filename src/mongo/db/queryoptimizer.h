@@ -82,7 +82,7 @@ namespace mongo {
                 
         /** @return a new cursor based on this QueryPlan's index and FieldRangeSet. */
         //shared_ptr<Cursor> newCursor( const DiskLoc &startLoc = DiskLoc() ) const;
-        // XXX TokuDB: We removed the diskloc parameter
+        // XXX TokuMX: We removed the diskloc parameter
         shared_ptr<Cursor> newCursor() const;
         /** @return a new reverse cursor if this is an unindexed plan. */
         shared_ptr<Cursor> newReverseCursor() const;

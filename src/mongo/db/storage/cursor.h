@@ -25,7 +25,7 @@ namespace mongo {
 
     namespace storage {
 
-        // RAII wrapper for a TokuDB DBC
+        // RAII wrapper for a TokuMX DBC
         class Cursor {
         public:
             Cursor(DB *db, const int flags = 0);

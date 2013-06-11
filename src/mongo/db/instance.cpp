@@ -663,7 +663,7 @@ namespace mongo {
                 // It is theoretically possible that one day, the cursor will still
                 // return no new data because all new GTIDs in between these
                 // two values aborted, but that is not possible right now. Any GTID
-                // assigned is done so with the intent to commit, and tokudb
+                // assigned is done so with the intent to commit, and tokumx
                 // aborts if a coommit is not successful.
                 if (str::startsWith(ns, "local.oplog.") && theReplSet){
                     isOplog = true;
@@ -841,7 +841,7 @@ namespace mongo {
 
     void getDatabaseNames( vector< string > &names) {
         verify(Lock::isRW());
-        // create a cursor on the tokudb directory and search for <database>.ns keys
+        // create a cursor on the tokumx directory and search for <database>.ns keys
         storage::DirectoryCursor c(storage::env, cc().txn().db_txn());
         getDatabaseNamesExtra extra(names);
         int r = 0;

@@ -199,7 +199,7 @@ namespace mongo {
         void doRemove() {
             ShardForceVersionOkModeBlock sf;
             {
-                // TODO: TokuDB: No need for a removesaver, we have transactions.
+                // TODO: TokuMX: No need for a removesaver, we have transactions.
 #if 0
                 RemoveSaver rs("moveChunk",ns,"post-cleanup");
 #endif
@@ -1664,7 +1664,7 @@ namespace mongo {
                     log() << "migrate commit flushed to journal for '" << ns << "' " << min << " -> " << max << migrateLog;
                 }
 #endif
-                // TODO: TokuDB What do we have to do here?
+                // TODO: TokuMX What do we have to do here?
             }
 
             return true;

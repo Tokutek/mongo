@@ -598,11 +598,11 @@ namespace mongo {
         CmdEngineStatus() : InformationCommand("engineStatus") {}
 
         virtual void help( stringstream& help ) const {
-            help << "returns TokuDB engine statistics";
+            help << "returns TokuMX engine statistics";
         }
 
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            // Get engine status from TokuDB.
+            // Get engine status from TokuMX.
             // Status is system-wide, so we ignore the dbname and fromRepl bit.
             storage::get_status(result);
             return true;
@@ -620,7 +620,7 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
         virtual void help( stringstream& help ) const {
-            help << "performs a checkpoint of all TokuDB dictionaries." << endl;
+            help << "performs a checkpoint of all TokuMX dictionaries." << endl;
         }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             storage::checkpoint();
@@ -787,7 +787,7 @@ namespace mongo {
             string toDeleteNs = dbname + '.' + e.valuestr();
             NamespaceDetails *d = nsdetails(toDeleteNs.c_str());
             tlog() << "CMD: reIndex " << toDeleteNs << endl;
-            // Tokudb: Do we care?
+            // TokuMX: Do we care?
             //BackgroundOperation::assertNoBgOpInProgForNs(toDeleteNs.c_str());
 
             if ( ! d ) {

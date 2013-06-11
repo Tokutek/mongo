@@ -85,7 +85,7 @@ namespace mongo {
 
         QueryOption_AllSupported = QueryOption_CursorTailable | QueryOption_SlaveOk | QueryOption_OplogReplay | QueryOption_NoCursorTimeout | QueryOption_AwaitData | QueryOption_Exhaust | QueryOption_PartialResults,
 
-        // TokuDB related options, starting at 24, so if MongoDB adds options in subsequent versions,
+        // TokuMX related options, starting at 24, so if MongoDB adds options in subsequent versions,
         // we (hopefully) don't have conflicts
 
         // Option to add the hidden primary key for system collections and capped collections

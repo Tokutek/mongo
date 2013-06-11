@@ -98,7 +98,7 @@ namespace mongo {
             }
 
             env->set_errcall(env, tokudb_print_error);
-            env->set_errpfx(env, "TokuDB");
+            env->set_errpfx(env, "TokuMX");
 
             const uint64_t cachesize = (cmdLine.cacheSize > 0
                                         ? cmdLine.cacheSize
@@ -314,7 +314,7 @@ namespace mongo {
 
         void db_rename(const string &oldIdxNS, const string &newIdxNS) {
             int r = env->dbrename(env, cc().txn().db_txn(), oldIdxNS.c_str(), NULL, newIdxNS.c_str(), 0);
-            massert(16463, str::stream() << "tokudb dictionary rename failed: old " << oldIdxNS
+            massert(16463, str::stream() << "tokumx dictionary rename failed: old " << oldIdxNS
                            << ", new " << newIdxNS << ", r = " << r,
                            r == 0);
         }

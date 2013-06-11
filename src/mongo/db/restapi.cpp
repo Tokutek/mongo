@@ -289,7 +289,7 @@ namespace mongo {
             if ( replAllDead ) {
                 ss << "\n<b>replication replAllDead=" << replAllDead << "</b>\n";
             }
-            // TokuDB: Do we care?
+            // TokuMX: Do we care?
             //BackgroundOperation::dump(ss);
             ss << "</pre>\n";
         }
