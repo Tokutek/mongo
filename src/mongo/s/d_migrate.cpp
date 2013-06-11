@@ -563,18 +563,17 @@ namespace mongo {
         bool isActive() const { return _getActive(); }
         
         void doRemove( OldDataCleanup& cleanup ) {
-            int it = 0;
-            while ( true ) { 
-                if ( it > 20 && it % 10 == 0 ) log() << "doRemote iteration " << it << " for: " << cleanup << endl;
-                {
-                    scoped_lock ll(_workLock);
-                    if ( ! _active ) {
-                        Client::ReadContext ctx(cleanup.ns);
-                        Client::Transaction txn(DB_SERIALIZABLE);
-                        cleanup.doRemove();
-                        txn.commit();
-                        return;
-                    }
+            for (int it = 0; true; it++) {
+                if ( it > 20 && it % 10 == 0 ) {
+                    log() << "doRemote iteration " << it << " for: " << cleanup << endl;
+                }
+                scoped_lock ll(_workLock);
+                if ( ! _active ) {
+                    Client::ReadContext ctx(cleanup.ns);
+                    Client::Transaction txn(DB_SERIALIZABLE);
+                    cleanup.doRemove();
+                    txn.commit();
+                    return;
                 }
                 sleepmillis( 1000 );
             }
