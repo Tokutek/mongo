@@ -277,6 +277,7 @@ namespace mongo {
                   _memoryUsed(0),
                   _workLock("MigrateFromStatus::workLock"),
                   _migrateLogDetails(NULL),
+                  _migrateLogRefDetails(NULL),
                   _nextMigrateLogId(0),
                   _snapshotTaken(false) {}
 
@@ -345,6 +346,7 @@ namespace mongo {
                 dropCollection(MIGRATE_LOG_NS, err, res, false);
                 _nextMigrateLogId.store(0);
                 _nextIdToTransfer = 0;
+                _nextRefSeqToTransfer = 0;
                 _migrateLogDetails = getAndMaybeCreateNS(MIGRATE_LOG_NS, false);
                 verify(_migrateLogDetails != NULL);
                 txn.commit();
@@ -352,6 +354,23 @@ namespace mongo {
             catch (DBException &e) {
                 stringstream ss;
                 ss << "Error clearing " << MIGRATE_LOG_NS << " to prepare for chunk migration."
+                   << " err: " << err
+                   << " res: " << res.obj()
+                   << " exc: " << e.what();
+                problem() << ss.str() << endl;
+                throw e;
+            }
+            try {
+                Client::WriteContext ctx(MIGRATE_LOG_REF_NS);
+                Client::Transaction txn(DB_SERIALIZABLE);
+                dropCollection(MIGRATE_LOG_REF_NS, err, res, false);
+                _migrateLogRefDetails = getAndMaybeCreateNS(MIGRATE_LOG_REF_NS, false);
+                verify(_migrateLogRefDetails != NULL);
+                txn.commit();
+            }
+            catch (DBException &e) {
+                stringstream ss;
+                ss << "Error clearing " << MIGRATE_LOG_REF_NS << " to prepare for chunk migration."
                    << " err: " << err
                    << " res: " << res.obj()
                    << " exc: " << e.what();
@@ -417,20 +436,19 @@ namespace mongo {
             return should;
         }
 
-        void writeOpsToMigrateLog(const vector<BSONObj> &objs) {
-            BSONObjBuilder b;
+        void startObjForMigrateLog(BSONObjBuilder &b) {
             b << "_id" << _nextMigrateLogId.fetchAndAdd(1);
-            {
-                BSONArrayBuilder arr(b.subarrayStart("a"));
-                for (vector<BSONObj>::const_iterator it = objs.begin(); it != objs.end(); ++it) {
-                    arr.append(*it);
-                }
-                arr.done();
-            }
-            BSONObj logObj = b.obj();
+        }
 
+        void writeObjToMigrateLog(BSONObj &obj) {
             Client::ReadContext ctx(MIGRATE_LOG_NS);
-            insertOneObject(nsdetails(MIGRATE_LOG_NS), NULL, logObj,
+            insertOneObject(_migrateLogDetails, NULL, obj,
+                            NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
+        }
+
+        void writeObjToMigrateLogRef(BSONObj &obj) {
+            Client::ReadContext ctx(MIGRATE_LOG_REF_NS);
+            insertOneObject(_migrateLogRefDetails, NULL, obj,
                             NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         }
 
@@ -455,11 +473,33 @@ namespace mongo {
                 auto_ptr<DBClientCursor> cur(conn.query(MIGRATE_LOG_NS, QUERY("_id" << GTE << _nextIdToTransfer << LT << nextMigrateLogId)));
                 while (cur->more()) {
                     BSONObj obj = cur->next();
-                    if (arr.len() + obj.objsize() > maxSize) {
-                        break;
+                    BSONElement refOID = obj["refOID"];
+                    if (refOID.ok()) {
+                        auto_ptr<DBClientCursor> refcur(conn.query(MIGRATE_LOG_REF_NS, QUERY("_id.oid" << refOID.OID() << "_id.seq" << GTE << _nextRefSeqToTransfer)));
+                        bool didBreak = false;
+                        while (refcur->more()) {
+                            BSONObj refObj = refcur->next();
+                            if (arr.len() + refObj.objsize() > maxSize) {
+                                didBreak = true;
+                                break;
+                            }
+                            _nextRefSeqToTransfer = refObj["_id"]["seq"].numberLong() + 1;
+                            arr.append(refObj);
+                        }
+                        if (!didBreak) {
+                            // Exhausted that ref object naturally.
+                            _nextIdToTransfer = obj["_id"].numberLong() + 1;
+                            _nextRefSeqToTransfer = 0;
+                        }
                     }
-                    _nextIdToTransfer = obj["_id"].numberLong() + 1;
-                    arr.append(obj);
+                    else {
+                        if (arr.len() + obj.objsize() > maxSize) {
+                            break;
+                        }
+                        _nextIdToTransfer = obj["_id"].numberLong() + 1;
+                        _nextRefSeqToTransfer = 0;
+                        arr.append(obj);
+                    }
                 }
             }
 
@@ -486,7 +526,9 @@ namespace mongo {
                 Client::WriteContext ctx(_ns);
                 enableLogTxnOpsForSharding(mongo::shouldLogOpForSharding,
                                            mongo::shouldLogUpdateOpForSharding,
-                                           mongo::writeOpsToMigrateLog);
+                                           mongo::startObjForMigrateLog,
+                                           mongo::writeObjToMigrateLog,
+                                           mongo::writeObjToMigrateLogRef);
                 _snapshotTaken = true;
                 _txn.reset(new Client::Transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY));
 
@@ -607,9 +649,12 @@ namespace mongo {
                                         // for now, this means migrate or removing old chunk data
 
         static const char MIGRATE_LOG_NS[];
+        static const char MIGRATE_LOG_REF_NS[];
         NamespaceDetails *_migrateLogDetails;
+        NamespaceDetails *_migrateLogRefDetails;
         AtomicWord<long long> _nextMigrateLogId;
         long long _nextIdToTransfer;
+        long long _nextRefSeqToTransfer;
 
         bool _snapshotTaken;
         scoped_ptr<Client::Transaction> _txn;
@@ -622,6 +667,7 @@ namespace mongo {
     } migrateFromStatus;
 
     const char MigrateFromStatus::MIGRATE_LOG_NS[] = "local.migratelog.sh";
+    const char MigrateFromStatus::MIGRATE_LOG_REF_NS[] = "local.migratelogref.sh";
 
     struct MigrateStatusHolder {
         MigrateStatusHolder( string ns ,
@@ -704,8 +750,16 @@ namespace mongo {
         return migrateFromStatus.shouldLogUpdateOp(opstr, ns, oldObj, newObj);
     }
 
-    void writeOpsToMigrateLog(const vector<BSONObj> &objs) {
-        migrateFromStatus.writeOpsToMigrateLog(objs);
+    void startObjForMigrateLog(BSONObjBuilder &b) {
+        migrateFromStatus.startObjForMigrateLog(b);
+    }
+
+    void writeObjToMigrateLog(BSONObj &obj) {
+        migrateFromStatus.writeObjToMigrateLog(obj);
+    }
+
+    void writeObjToMigrateLogRef(BSONObj &obj) {
+        migrateFromStatus.writeObjToMigrateLogRef(obj);
     }
 
     class TransferModsCommand : public ChunkCommandHelper {
