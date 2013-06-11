@@ -51,6 +51,9 @@ namespace mongo {
         virtual void noteTxnAbortedFileOps(const set<string> &namespaces) {
             assertNotImplemented();
         }
+        virtual void noteTxnCompletedCursors(const set<long long> &cursorIds) {
+            assertNotImplemented();
+        }
     private:
         void assertNotImplemented() {
             msgasserted(16778, "bug: TxnCompleteHooks not set");
@@ -62,10 +65,13 @@ namespace mongo {
     // Class to handle rollback of in-memory stats for capped collections.
     class CappedCollectionRollback {
     public:
+        // Called after txn commit.
         void commit();
 
+        // Called after txn abort.
         void abort();
 
+        // Called after commit or abort if a parent exists.
         void transfer(CappedCollectionRollback &parent);
 
         void noteInsert(const string &ns, const BSONObj &pk, long long size);
@@ -92,9 +98,10 @@ namespace mongo {
     // sync with whatever is on disk in the nsdb.
     class NamespaceIndexRollback {
     public:
+        // Called after txn commit.
         void commit();
 
-        // Must be called before the actual transaction aborts.
+        // Called before txn abort.
         void preAbort();
 
         void transfer(NamespaceIndexRollback &parent);
@@ -102,7 +109,21 @@ namespace mongo {
         void noteNs(const char *ns);
 
     private:
-        set<string> _rollback;
+        set<string> _namespaces;
+    };
+
+    // Handles killing cursors for multi-statement transactions, before they
+    // commit or abort.
+    class ClientCursorRollback {
+    public:
+        // Called before txn commit or abort, even if a parent exists (ie: no transfer)
+        void preComplete();
+
+        void noteClientCursor(long long id);
+
+    private:
+        void _complete();
+        set<long long> _cursorIds;
     };
 
     // class to wrap operations surrounding a storage::Txn.
@@ -130,6 +151,7 @@ namespace mongo {
 
         CappedCollectionRollback _cappedRollback;
         NamespaceIndexRollback _nsIndexRollback;
+        ClientCursorRollback _clientCursorRollback;
 
     public:
         TxnContext(TxnContext *parent, int txnFlags);
@@ -145,8 +167,7 @@ namespace mongo {
         /** @return true iff this transaction has serializable isolation.
          *          note that a child transaction always inherits isolation. */
         bool serializable() const {
-            return (_txn.flags() & DB_SERIALIZABLE) != 0 ||
-                   (_parent != NULL && _parent->serializable());
+            return (_txn.flags() & DB_SERIALIZABLE) != 0;
         }
         // log an operations, represented in op, to _txnOps
         // if and when the root transaction commits, the operation
@@ -162,6 +183,10 @@ namespace mongo {
 
         NamespaceIndexRollback &nsIndexRollback() {
             return _nsIndexRollback;
+        }
+
+        ClientCursorRollback &clientCursorRollback() {
+            return _clientCursorRollback;
         }
 
     private:

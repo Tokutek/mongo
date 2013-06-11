@@ -158,7 +158,10 @@ namespace mongo {
                 writeTxnOpsToMigrateLog();
             }
         }
+
+        _clientCursorRollback.preComplete();
         _txn.commit(flags);
+
         // if the commit of this transaction got a GTID, then notify 
         // the GTIDManager that the commit is now done.
         if (gotGTID && !_initiatingRS) {
@@ -182,7 +185,7 @@ namespace mongo {
     }
 
     void TxnContext::abort() {
-        // The nsindex must rollback before abort.
+        _clientCursorRollback.preComplete();
         _nsIndexRollback.preAbort();
         _txn.abort();
         _cappedRollback.abort();
@@ -234,6 +237,8 @@ namespace mongo {
         dassert(_writeOpsToMigrateLog != NULL);
         _writeOpsToMigrateLog(_txnOpsForSharding);
     }
+
+    /* --------------------------------------------------------------------- */
 
     void CappedCollectionRollback::_complete(const bool committed) {
         for (ContextMap::const_iterator it = _map.begin(); it != _map.end(); it++) {
@@ -294,20 +299,30 @@ namespace mongo {
     }
 
     void NamespaceIndexRollback::preAbort() {
-        _completeHooks->noteTxnAbortedFileOps(_rollback);
+        _completeHooks->noteTxnAbortedFileOps(_namespaces);
     }
 
     void NamespaceIndexRollback::transfer(NamespaceIndexRollback &parent) {
         TOKULOG(1) << "NamespaceIndexRollback::transfer processing "
-                   << parent._rollback.size() << " roll items." << endl;
+                   << parent._namespaces.size() << " roll items." << endl;
 
         // Promote rollback entries to parent.
-        set<string> &rollback = parent._rollback;
-        rollback.insert(_rollback.begin(), _rollback.end());
+        set<string> &rollback = parent._namespaces;
+        rollback.insert(_namespaces.begin(), _namespaces.end());
     }
 
     void NamespaceIndexRollback::noteNs(const char *ns) {
-        _rollback.insert(ns);
+        _namespaces.insert(ns);
+    }
+
+    /* --------------------------------------------------------------------- */
+
+    void ClientCursorRollback::preComplete() {
+        _completeHooks->noteTxnCompletedCursors(_cursorIds);
+    }
+
+    void ClientCursorRollback::noteClientCursor(long long id) {
+        _cursorIds.insert(id);
     }
 
 } // namespace mongo

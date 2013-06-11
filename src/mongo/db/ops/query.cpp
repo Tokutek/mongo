@@ -109,8 +109,20 @@ namespace mongo {
             settings.setCappedAppendPK(queryOptions & QueryOption_AddHiddenPK);
             cc().setOpSettings(settings);
 
-            verify(client_cursor->transactions.get() != NULL);
-            Client::WithTxnStack wts(client_cursor->transactions);
+            // Check if the cursor is part of a multi-statement transaction. If it is
+            // and this is not the right client (meaning the current transaction stack
+            // does not match that in the cursor), it will uassert. If the cursor is
+            // not part of a multi-statement transaction, then we need to use the stack
+            // in the cursor for this scope.
+            const bool cursorPartOfMultiStatementTxn = client_cursor->checkMultiStatementTxn();
+            scoped_ptr<Client::WithTxnStack> wts;
+            if (!cursorPartOfMultiStatementTxn) {
+                // For simplicity, prevent multi-statement transactions from
+                // reading cursors it didn't create.
+                uassert(16813, "Cannot getMore() on a cursor not created by this multi-statement transaction",
+                           !cc().hasTxn());
+                wts.reset(new Client::WithTxnStack(client_cursor->transactions)); 
+            }
 
             if (pass == 0) {
                 client_cursor->updateSlaveLocation( curop );
@@ -190,10 +202,11 @@ namespace mongo {
             
             if ( client_cursor ) {
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
-            } else {
-                // We're done with this transaction, commit it and release it back to the Client.
+            } else if (!cursorPartOfMultiStatementTxn) {
+                // This cursor is done and it wasn't part of a multi-statement
+                // transaction. We can commit the transaction now.
                 cc().commitTopTxn();
-                wts.release();
+                wts->release();
             }
         }
 
@@ -631,7 +644,7 @@ namespace mongo {
                                   const shared_ptr<ParsedQuery> &pq_shared,
                                   const ConfigVersion &shardingVersionAtStart,
                                   const bool getCachedExplainPlan,
-                                  Client::Transaction &txn,
+                                  const bool inMultiStatementTxn,
                                   Message &result ) {
 
         const ParsedQuery &pq( *pq_shared );
@@ -742,7 +755,7 @@ namespace mongo {
         if ( saveClientCursor ) {
             // Create a new ClientCursor, with a default timeout.
             ccPointer.reset( new ClientCursor( queryOptions, cursor, ns,
-                                              jsobj.getOwned() ) );
+                                               jsobj.getOwned(), inMultiStatementTxn ) );
             cursorid = ccPointer->cursorid();
             DEV tlog(2) << "query has more, cursorid: " << cursorid << endl;
             
@@ -762,9 +775,13 @@ namespace mongo {
             if (pq.hasOption( QueryOption_OplogReplay ) && lastBSONObjSet) {
                 ccPointer->storeOpForSlave(last);
             }
-            // Clones the transaction and hand's off responsibility
-            // of its completion to the client cursor's destructor.
-            cc().swapTransactionStack(ccPointer->transactions);
+            if (!inMultiStatementTxn) {
+                // This cursor is not part of a multi-statement transaction, so
+                // we pass off the current client's transaction stack to the
+                // cursor so that it may be live as long as the cursor.
+                cc().swapTransactionStack(ccPointer->transactions);
+                verify(!cc().hasTxn());
+            }
             ccPointer.release();
         }
 
@@ -957,10 +974,20 @@ namespace mongo {
             try {
                 const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
 
+                // If our caller has a transaction, it's multi-statement.
+                const bool inMultiStatementTxn = cc().hasTxn();
+                if (tailable) {
+                    // Because it's easier to disable this. It shouldn't be happening in a normal system.
+                    uassert(16812, "May not perform a tailable query in a multi-statement transaction.",
+                                   !inMultiStatementTxn);
+                }
+
+                const int txnFlags = (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY;
                 Client::ReadContext ctx(ns);
-                Client::Transaction transaction((tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY);    
+                scoped_ptr<Client::Transaction> transaction(!inMultiStatementTxn ?
+                                                            new Client::Transaction(txnFlags) : NULL);
+
                 const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
-                        
                 replVerifyReadsOk(&pq);
                         
                 if ( pq.hasOption( QueryOption_CursorTailable ) ) {
@@ -981,10 +1008,11 @@ namespace mongo {
                 const bool getCachedExplainPlan = ! hasRetried && explain && ! pq.hasIndexSpecifier();
                 const bool savedCursor = queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query,
                                                                   order, pq_shared, shardingVersionAtStart,
-                                                                  getCachedExplainPlan, transaction, result );
-                // Did not save the cursor, so we can commit the transaction now.
-                if (!savedCursor) {
-                    transaction.commit();
+                                                                  getCachedExplainPlan, inMultiStatementTxn,
+                                                                  result );
+                // Did not save the cursor, so we can commit the transaction now if it exists.
+                if (transaction.get() != NULL && !savedCursor) {
+                    transaction->commit();
                 }
                 return curop.debug().exhaust ? ns : "";
             }

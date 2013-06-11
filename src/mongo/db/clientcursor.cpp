@@ -172,12 +172,14 @@ namespace mongo {
         _i = clientCursorsById.upper_bound( id );
     }
     
-    ClientCursor::ClientCursor(int queryOptions, const shared_ptr<Cursor>& c, const string& ns, BSONObj query ) :
+    ClientCursor::ClientCursor(int queryOptions, const shared_ptr<Cursor>& c, const string& ns,
+                               BSONObj query, const bool inMultiStatementTxn ) :
         _ns(ns), _db( cc().database() ),
         _c(c), _pos(0),
         _query(query),  _queryOptions(queryOptions),
         _slaveReadTillTS(0),
-        _idleAgeMillis(0), _pinValue(0) {
+        _idleAgeMillis(0), _pinValue(0),
+        _partOfMultiStatementTxn(inMultiStatementTxn) {
 
         Lock::assertAtLeastReadLocked(ns);
 
@@ -188,6 +190,14 @@ namespace mongo {
         recursive_scoped_lock lock(ccmutex);
         _cursorid = allocCursorId_inlock();
         clientCursorsById.insert( make_pair(_cursorid, this) );
+
+        if (_partOfMultiStatementTxn) {
+            transactions = cc().txnStack();
+            // This cursor is now part of a multi-statement transaction and must be
+            // closed before that txn commits or aborts. Note it in the rollback.
+            ClientCursorRollback &rollback = cc().txn().clientCursorRollback();
+            rollback.noteClientCursor(_cursorid);
+        }
 
         if ( ! _c->modifiedKeys() ) {
             // store index information so we can decide if we can
@@ -437,6 +447,15 @@ namespace mongo {
         }
         return found;
 
+    }
+
+    bool ClientCursor::checkMultiStatementTxn() {
+        verify(transactions.get() != NULL);
+        if (_partOfMultiStatementTxn) {
+            uassert(16811, "Cannot use a client cursor belonging to a different multi-statement transaction",
+                       cc().txnStack() == transactions);
+        }
+        return _partOfMultiStatementTxn;
     }
 
     ClientCursorMonitor clientCursorMonitor;

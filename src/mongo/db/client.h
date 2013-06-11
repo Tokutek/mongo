@@ -201,6 +201,10 @@ namespace mongo {
             return _transactions->hasLiveTxn();
         }
 
+        const shared_ptr<TransactionStack> &txnStack() const {
+            return _transactions;
+        }
+
         void commitTopTxn() {
             _transactions->commitTxn();
         }
@@ -383,7 +387,6 @@ namespace mongo {
             Lock::DBWrite _lk;
             Context _c;
         };
-
 
     }; // class Client
 

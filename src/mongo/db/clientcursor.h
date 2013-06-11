@@ -160,7 +160,8 @@ namespace mongo {
             CCById::const_iterator _i;
         };
         
-        ClientCursor(int queryOptions, const shared_ptr<Cursor>& c, const string& ns, BSONObj query = BSONObj() );
+        ClientCursor(int queryOptions, const shared_ptr<Cursor>& c, const string& ns,
+                     BSONObj query = BSONObj(), const bool inMultiStatementTxn = false );
 
         ~ClientCursor();
 
@@ -252,7 +253,7 @@ namespace mongo {
             }
             return it->second;
         }
-        
+
     public:
         static ClientCursor* find(CursorId id, bool warn = true) {
             recursive_scoped_lock lock(ccmutex);
@@ -301,6 +302,15 @@ namespace mongo {
         // declare it first.
         shared_ptr<Client::TransactionStack> transactions; // the transaction this cursor is under,
                                                            // only set to support getMore() 
+        
+        // True if the above transaction stack is multi-statement. If it is,
+        // then this caller must be the owner of that multi-statement txn,
+        // otherwise uassert.
+        //
+        // If the above transaction stack is not multi-statement, return false.
+        // It will be necessary to use WithTxnStack(transactions) in order to
+        // use this cursor again.
+        bool checkMultiStatementTxn();
 
     private: // methods
 
@@ -335,6 +345,7 @@ namespace mongo {
         unsigned _pinValue;
 
         ShardChunkManagerPtr _chunkManager;
+        bool _partOfMultiStatementTxn;
 
     public:
         shared_ptr<ParsedQuery> pq;

@@ -694,6 +694,13 @@ namespace mongo {
                 }
             }
         }
+
+        virtual void noteTxnCompletedCursors(const set<long long> &cursorIds) {
+            for (set<CursorId>::const_iterator i = cursorIds.begin(); i != cursorIds.end(); ++i) {
+                ClientCursor::erase(*i);
+            }
+        }
+
     } _txnCompleteHooks;
 
     /* ------------------------------------------------------------------------- */
