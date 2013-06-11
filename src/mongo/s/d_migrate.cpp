@@ -569,7 +569,10 @@ namespace mongo {
                 {
                     scoped_lock ll(_workLock);
                     if ( ! _active ) {
+                        Client::ReadContext ctx(cleanup.ns);
+                        Client::Transaction txn(DB_SERIALIZABLE);
                         cleanup.doRemove();
+                        txn.commit();
                         return;
                     }
                 }
@@ -677,12 +680,7 @@ namespace mongo {
             }
         }
 
-        {
-            Client::ReadContext ctx(cleanup.ns);
-            Client::Transaction txn(DB_SERIALIZABLE);
-            migrateFromStatus.doRemove( cleanup );
-            txn.commit();
-        }
+        migrateFromStatus.doRemove( cleanup );
 
         cc().shutdown();
     }
