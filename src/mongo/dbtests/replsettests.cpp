@@ -114,7 +114,6 @@ namespace ReplSetTests {
     public:
         Base() {
             cmdLine._replSet = "foo";
-            cmdLine.oplogSize = 5;
             createOplog();
             setup();
         }

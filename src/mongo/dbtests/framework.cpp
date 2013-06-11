@@ -200,7 +200,6 @@ namespace mongo {
             string dbpathString = p.native_directory_string();
             dbpath = dbpathString.c_str();
 
-            cmdLine.oplogSize = 10 * 1024 * 1024;
             Client::initThread("testsuite");
             acquirePathLock();
 

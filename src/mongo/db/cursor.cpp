@@ -24,7 +24,7 @@
 namespace mongo {
 
     const BSONObj &IndexScanCursor::startKey(const BSONObj &keyPattern, const int direction) {
-        // Scans intuitively end at minKey, but may need to be reversed to maxKey.
+        // Scans intuitively start at minKey, but may need to be reversed to maxKey.
         return reverseMinMaxBoundsOrder(Ordering::make(keyPattern), direction) ? maxKey : minKey;
     }
 

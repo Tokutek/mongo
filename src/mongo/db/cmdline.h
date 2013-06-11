@@ -88,7 +88,6 @@ namespace mongo {
 
         bool objcheck;         // --objcheck
 
-        long long oplogSize;   // --oplogSize
         int defaultProfile;    // --profile
         int slowMS;            // --time in ms that is "slow"
         int defaultLocalThresholdMillis;    // --localThreshold in ms to consider a node local
@@ -154,7 +153,7 @@ namespace mongo {
         configsvr(false), quota(false), quotaFiles(8), cpu(false),
         logFlushPeriod(100), // 0 means fsync every transaction, 100 means fsync log once every 100 ms
         expireOplogDays(0), // default of 0 means never purge entries from oplog
-        objcheck(false), oplogSize(0), defaultProfile(0),
+        objcheck(false), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
         directio(false), cacheSize(0), checkpointPeriod(60), cleanerPeriod(2),

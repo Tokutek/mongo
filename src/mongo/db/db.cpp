@@ -521,7 +521,7 @@ static int mongoDbMain(int argc, char* argv[]) {
 #endif
 
     replication_options.add_options()
-    ("oplogSize", po::value<int>(), "size to use (in MB) for replication op log. default is 5% of disk space (i.e. large is good)")
+    ("oplogSize", po::value<int>(), "DEPRECATED")
     ;
 
     ms_options.add_options()
@@ -806,18 +806,7 @@ static int mongoDbMain(int argc, char* argv[]) {
             out() << " nssize is a deprecated parameter" << endl;
         }
         if (params.count("oplogSize")) {
-            long long x = params["oplogSize"].as<int>();
-            if (x <= 0) {
-                out() << "bad --oplogSize arg" << endl;
-                dbexit( EXIT_BADOPTIONS );
-            }
-            // note a small size such as x==1 is ok for an arbiter.
-            if( x > 1000 && sizeof(void*) == 4 ) {
-                out() << "--oplogSize of " << x << "MB is too big for 32 bit version. Use 64 bit build instead." << endl;
-                dbexit( EXIT_BADOPTIONS );
-            }
-            cmdLine.oplogSize = x * 1024 * 1024;
-            verify(cmdLine.oplogSize > 0);
+            out() << " oplogSize is a deprecated parameter" << endl;
         }
         if (params.count("cacheSize")) {
             long x = params["cacheSize"].as<uint64_t>();
