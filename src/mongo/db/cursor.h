@@ -259,6 +259,18 @@ namespace mongo {
     protected:
         bool forward() const;
 
+        // True if intuitive bounds-ordering for minKey and MaxKey is reverse for
+        // this cursor, based on an index ordering and cursor direction.
+        //
+        // Example: intuitively, { min, max } describes the bounds for an index scan.
+        // But we need to possibly reverse those bounds to { max, min }. Here are
+        // the possible outcomes for ordering/direction combinations:
+        // - Descending/forward, return true (reverse to { max, min })
+        // - Ascending/reverse, return true.
+        // - Descending/reverse, return false (stay with { min, max })
+        // - Ascending/forward, return false.
+        static bool reverseMinMaxBoundsOrder(const Ordering &ordering, const int direction);
+
     private:
         /** Initialize the internal DBC */
         void initializeDBC();
@@ -335,6 +347,9 @@ namespace mongo {
     public:
         IndexScanCursor( NamespaceDetails *d, const IndexDetails &idx,
                          int direction, int numWanted = 0);
+    private:
+        static const BSONObj &startKey(const BSONObj &keyPattern, const int direction);
+        static const BSONObj &endKey(const BSONObj &keyPattern, const int direction);
     };
 
     /**

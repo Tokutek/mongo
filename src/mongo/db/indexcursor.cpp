@@ -275,6 +275,16 @@ namespace mongo {
         return _direction > 0;
     }
 
+    bool IndexCursor::reverseMinMaxBoundsOrder(const Ordering &ordering, const int direction) {
+        // Only the first field's direction matters, because this function is only called
+        // to possibly reverse bounds ordering with min/max key, which is single field.
+        const bool ascending = !ordering.descending(1);
+        const bool forward = direction > 0;
+        // We need to reverse the order if exactly one of the query or the index are descending.  If
+        // both are descending, the normal order is fine.
+        return ascending != forward;
+    }
+
     void IndexCursor::_prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
         const bool isSecondary = !_d->isPKIndex(_idx);
 
