@@ -44,8 +44,9 @@ add_library(coredb STATIC
   commands/isself
   commands/mr_common
   commands/rename_collection_common
-  commands/parameters
   commands/server_status
+  commands/parameters
+  commands/user_management_commands.cpp
   pipeline/pipeline
   dbcommands_generic
   dbpath
