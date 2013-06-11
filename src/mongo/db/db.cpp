@@ -485,6 +485,8 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("diaglog", po::value<int>(), "0=off 1=W 2=R 3=both 7=W+some reads")
     ("directio", "use direct I/O in tokumx")
     ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
+    ("logDir", po::value<string>(), "directory to store transaction log files (default is --dbpath)")
+    ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
     ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
@@ -710,6 +712,26 @@ static int mongoDbMain(int argc, char* argv[]) {
             if (cmdLine.fsRedzone < 1 || cmdLine.fsRedzone > 99) {
                 out() << "--fsRedzone must be between 1 and 99." << endl;
                 dbexit( EXIT_BADOPTIONS );
+            }
+        }
+        if (params.count("logDir")) {
+            cmdLine.logDir = params["logDir"].as<string>();
+            if ( cmdLine.logDir[0] != '/' ) {
+                // we need to change dbpath if we fork since we change
+                // cwd to "/"
+                // fork only exists on *nix
+                // so '/' is safe
+                cmdLine.logDir = cmdLine.cwd + "/" + cmdLine.logDir;
+            }
+        }
+        if (params.count("tmpDir")) {
+            cmdLine.tmpDir = params["tmpDir"].as<string>();
+            if ( cmdLine.tmpDir[0] != '/' ) {
+                // we need to change dbpath if we fork since we change
+                // cwd to "/"
+                // fork only exists on *nix
+                // so '/' is safe
+                cmdLine.tmpDir = cmdLine.cwd + "/" + cmdLine.tmpDir;
             }
         }
         if (params.count("nohints")) {

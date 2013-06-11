@@ -139,6 +139,24 @@ namespace mongo {
             }
             TOKULOG(1) << "filesystem redzone set to " << redzone_threshold << " percent." << endl;
 
+            const char *logDir = cmdLine.logDir.c_str();
+            if (!mongoutils::str::equals(logDir, "")) {
+                r = env->set_lg_dir(env, logDir);
+                if (r != 0) {
+                    handle_ydb_error_fatal(r);
+                }
+                TOKULOG(1) << "transaction log directory set to " << logDir << endl;
+            }
+
+            const char *tmpDir = cmdLine.tmpDir.c_str();
+            if (!mongoutils::str::equals(tmpDir, "")) {
+                r = env->set_tmp_dir(env, tmpDir);
+                if (r != 0) {
+                    handle_ydb_error_fatal(r);
+                }
+                TOKULOG(1) << "temporary bulk loader directory set to " << tmpDir << endl;
+            }
+
             const int env_flags = DB_INIT_LOCK|DB_INIT_MPOOL|DB_INIT_TXN|DB_CREATE|DB_PRIVATE|DB_INIT_LOG|DB_RECOVER;
             const int env_mode = S_IRWXU|S_IRGRP|S_IROTH|S_IXGRP|S_IXOTH;
             r = env->open(env, dbpath.c_str(), env_flags, env_mode);
