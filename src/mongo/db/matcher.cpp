@@ -552,6 +552,16 @@ namespace mongo {
         
         if ( e.type() == Array ) {
             _hasArray = true;
+        } else if (str::equals(fn, "$atomic") || str::equals(fn, "$isolated")) {
+            // TokuMX does not support the $atomic clause (all operations are atomic
+            // by virtue of running in their own transaction), but we need to keep
+            // this early-return for compatibility reasons. Consider the following
+            // statement:
+            //    db.foo.remove({'$atomic:true'})
+            // This means remove '{}' with options '{$atomic:true}' and without this
+            // early return, we would interpet it as remove '{$atomic:true}' with
+            // options {}, which is incorrect.
+            return;
         }
         
         // normal, simple case e.g. { a : "foo" }
