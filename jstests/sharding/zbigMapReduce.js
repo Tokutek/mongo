@@ -1,5 +1,3 @@
-assert(false, "this test sometimes times out");
-
 s = new ShardingTest( "bigMapReduce" , 2 , 1 , 1 , { rs: true, numReplicas: 2, chunksize : 1 } );
 
 // reduce chunk size to split
