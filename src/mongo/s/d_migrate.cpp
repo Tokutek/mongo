@@ -1134,9 +1134,12 @@ namespace mongo {
                 // could be ongoing
                 {
                     BSONObj res;
+                    // This timeout (330 seconds) is bigger than on vanilla mongodb, since the
+                    // transferMods we have to do even though we think we're in a steady state could
+                    // be much larger than in vanilla.
                     scoped_ptr<ScopedDbConnection> connTo(
                             ScopedDbConnection::getScopedDbConnection( toShard.getConnString(),
-                                                                       35.0 ) );
+                                                                       330.0 ) );
 
                     bool ok;
 
@@ -1746,9 +1749,10 @@ namespace mongo {
             
             Timer t;
             // we wait for the commit to succeed before giving up
-            while ( t.seconds() <= 30 ) {
+            // This timeout is longer than for vanilla mongodb since we may have a large transactions in the queue for transferMods.
+            for (int i = 0; t.seconds() <= 300; ++i) {
                 log() << "Waiting for commit to finish" << endl;
-                sleepmillis(1);
+                sleepmillis( 1 << std::min( i , 10 ) );
                 if ( state == DONE )
                     return true;
             }
