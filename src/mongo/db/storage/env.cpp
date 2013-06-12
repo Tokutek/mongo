@@ -89,7 +89,12 @@ namespace mongo {
 
             db_env_set_direct_io(cmdLine.directio);
 
-            int r = db_env_create(&env, 0);
+            int r = db_env_set_toku_product_name("tokumx");
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
+
+            r = db_env_create(&env, 0);
             if (r == TOKUDB_HUGE_PAGES_ENABLED) {
                 LOG(LL_ERROR) << "Huge pages are enabled, please disable them to continue (echo never > /sys/kernel/mm/transparent_hugepages/enabled)" << endl;
             }
