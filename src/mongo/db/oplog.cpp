@@ -131,9 +131,6 @@ namespace mongo {
         /* create an oplog collection, if it doesn't yet exist. */
         BSONObjBuilder b;
 
-        log() << "******" << endl;
-        log() << "creating replication oplog." << endl;
-        log() << "TODO: FIGURE OUT SIZE!!!." << endl;
         // create the namespace
         string err;
         BSONObj o = b.done();
@@ -141,7 +138,6 @@ namespace mongo {
         verify(ret);
         ret = userCreateNS(replInfoNS, o, err, false);
         verify(ret);
-        log() << "******" << endl;
     }
 
     GTID getGTIDFromOplogEntry(BSONObj o) {

@@ -39,7 +39,9 @@ namespace mongo {
     static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) = NULL;
     static bool (*_shouldLogOpForSharding)(const char *, const char *, const BSONObj &) = NULL;
     static bool (*_shouldLogUpdateOpForSharding)(const char *, const char *, const BSONObj &, const BSONObj &) = NULL;
-    static void (*_writeOpsToMigrateLog)(const vector<BSONObj> &) = NULL;
+    static void (*_startObjForMigrateLog)(BSONObjBuilder &b) = NULL;
+    static void (*_writeObjToMigrateLog)(BSONObj &) = NULL;
+    static void (*_writeObjToMigrateLogRef)(BSONObj &) = NULL;
 
     static GTIDManager* txnGTIDManager = NULL;
 
@@ -67,18 +69,24 @@ namespace mongo {
 
     void enableLogTxnOpsForSharding(bool (*shouldLogOp)(const char *, const char *, const BSONObj &),
                                     bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &),
-                                    void (*writeOps)(const vector<BSONObj> &)) {
+                                    void (*startObj)(BSONObjBuilder &b),
+                                    void (*writeObj)(BSONObj &),
+                                    void (*writeObjToRef)(BSONObj &)) {
         _logTxnOpsForSharding = true;
         _shouldLogOpForSharding = shouldLogOp;
         _shouldLogUpdateOpForSharding = shouldLogUpdateOp;
-        _writeOpsToMigrateLog = writeOps;
+        _startObjForMigrateLog = startObj;
+        _writeObjToMigrateLog = writeObj;
+        _writeObjToMigrateLogRef = writeObjToRef;
     }
 
     void disableLogTxnOpsForSharding(void) {
         _logTxnOpsForSharding = false;
         _shouldLogOpForSharding = NULL;
         _shouldLogUpdateOpForSharding = NULL;
-        _writeOpsToMigrateLog = NULL;
+        _startObjForMigrateLog = NULL;
+        _writeObjToMigrateLog = NULL;
+        _writeObjToMigrateLogRef = NULL;
     }
 
     bool logTxnOpsForSharding() {
@@ -101,11 +109,118 @@ namespace mongo {
         return _shouldLogUpdateOpForSharding(opstr, ns, oldObj, newObj);
     }
 
+    SpillableVector::SpillableVector(void (*writeObjToRef)(BSONObj &), size_t maxSize, SpillableVector *parent)
+            : _writeObjToRef(writeObjToRef),
+              _vec(),
+              _curSize(0),
+              _maxSize(maxSize),
+              _parent(parent),
+              _oid(_parent == NULL ? OID::gen() : _parent->_oid),
+              _curObjInited(false),
+              _buf(),
+              _seq(0),
+              _curSeqNo(_parent == NULL ? &_seq : _parent->_curSeqNo),
+              _curObjBuilder(),
+              _curArrayBuilder()
+    {}
+
+    void SpillableVector::append(const BSONObj &o) {
+        BSONObj obj = o.getOwned();
+        bool wasSpilling = spilling();
+        _curSize += obj.objsize();
+        if (!wasSpilling && spilling()) {
+            spillAllObjects();
+        }
+        if (spilling()) {
+            spillOneObject(obj);
+        }
+        else {
+            _vec.push_back(obj.getOwned());
+        }
+    }
+
+    void SpillableVector::getObjectsOrRef(BSONObjBuilder &b) {
+        finish();
+        dassert(_parent == NULL);
+        if (spilling()) {
+            b.append("refOID", _oid);
+        }
+        else {
+            b.append("a", _vec);
+        }
+    }
+
+    void SpillableVector::transfer() {
+        finish();
+        dassert(_parent != NULL);
+        if (!spilling()) {
+            // If your parent is spilling, or is about to start spilling, we'll take care of
+            // spilling these in a moment.
+            _parent->_vec.insert(_parent->_vec.end(), _vec.begin(), _vec.end());
+        }
+        _parent->_curSize += _curSize;
+        if (_parent->spilling()) {
+            // If your parent wasn't spilling before, this will spill their objects and yours in the
+            // right order.  If they were already spilling, this will just spill your objects now.
+            _parent->spillAllObjects();
+        }
+    }
+
+    void SpillableVector::finish() {
+        if (spilling()) {
+            spillCurObj();
+        }
+    }
+
+    void SpillableVector::initCurObj() {
+        _curObjBuilder.reset(new BSONObjBuilder(_buf));
+        _curObjBuilder->append("_id", BSON("oid" << _oid << "seq" << (*_curSeqNo)++));
+        _curArrayBuilder.reset(new BSONArrayBuilder(_curObjBuilder->subarrayStart("a")));
+    }
+
+    void SpillableVector::spillCurObj() {
+        if (_curArrayBuilder->arrSize() == 0) {
+            return;
+        }
+        _curArrayBuilder->doneFast();
+        BSONObj curObj = _curObjBuilder->done();
+        _writeObjToRef(curObj);
+    }
+
+    void SpillableVector::spillOneObject(BSONObj obj) {
+        if (!_curObjInited) {
+            initCurObj();
+            _curObjInited = true;
+        }
+        if (_curObjBuilder->len() + obj.objsize() >= (long long) _maxSize) {
+            spillCurObj();
+            _buf.reset();
+            initCurObj();
+        }
+        _curArrayBuilder->append(obj);
+    }
+
+    void SpillableVector::spillAllObjects() {
+        if (_parent != NULL) {
+            // Your parent must spill anything they have before you do, to get the sequence numbers
+            // right.
+            _parent->spillAllObjects();
+        }
+        for (vector<BSONObj>::iterator it = _vec.begin(); it != _vec.end(); ++it) {
+            spillOneObject(*it);
+        }
+        _vec.clear();
+    }
+
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
             : _txn((parent == NULL) ? NULL : &parent->_txn, txnFlags), 
               _parent(parent),
               _retired(false),
               _numOperations(0),
+              _txnOpsForSharding(_writeObjToMigrateLogRef,
+                                 // transferMods has a maxSize of 1MB, we leave a few hundred bytes for metadata.
+                                 1024 * 1024 - 512,
+                                 parent == NULL ? NULL : &parent->_txnOpsForSharding),
               _initiatingRS(false)
     {
     }
@@ -200,7 +315,7 @@ namespace mongo {
 
     void TxnContext::logOpForSharding(BSONObj op) {
         dassert(logTxnOpsForSharding());
-        _txnOpsForSharding.push_back(op);
+        _txnOpsForSharding.append(op);
     }
 
     bool TxnContext::hasParent() {
@@ -228,14 +343,18 @@ namespace mongo {
     }
 
     void TxnContext::transferOpsForShardingToParent() {
-        _parent->_txnOpsForSharding.insert(_parent->_txnOpsForSharding.end(),
-                                           _txnOpsForSharding.begin(), _txnOpsForSharding.end());
+        _txnOpsForSharding.transfer();
     }
 
     void TxnContext::writeTxnOpsToMigrateLog() {
         dassert(logTxnOpsForSharding());
-        dassert(_writeOpsToMigrateLog != NULL);
-        _writeOpsToMigrateLog(_txnOpsForSharding);
+        dassert(_startObjForMigrateLog != NULL);
+        dassert(_writeObjToMigrateLog != NULL);
+        BSONObjBuilder b;
+        _startObjForMigrateLog(b);
+        _txnOpsForSharding.getObjectsOrRef(b);
+        BSONObj obj = b.done();
+        _writeObjToMigrateLog(obj);
     }
 
     /* --------------------------------------------------------------------- */

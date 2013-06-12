@@ -33,7 +33,9 @@ namespace mongo {
     bool logTxnOpsForReplication();
     void enableLogTxnOpsForSharding(bool (*shouldLogOp)(const char *, const char *, const BSONObj &),
                                     bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &),
-                                    void (*writeOps)(const vector<BSONObj> &));
+                                    void (*startObj)(BSONObjBuilder &),
+                                    void (*writeObj)(BSONObj &),
+                                    void (*writeObjToRef)(BSONObj &));
     void disableLogTxnOpsForSharding(void);
     bool shouldLogTxnOpForSharding(const char *opstr, const char *ns, const BSONObj &obj);
     bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj);
@@ -126,6 +128,69 @@ namespace mongo {
         set<long long> _cursorIds;
     };
 
+    /**
+       SpillableVector holds a vector of BSONObjs, and if that vector gets too big (>= maxSize), it
+       starts spilling those objects to a backing collection, to be referenced later.
+
+       SpillableVector labels each of the spilled entries with an OID and a sequence number in the
+       _id field.  Each entry in the collection is of the form (where n is from a sequence of
+       integers starting with 0 for each new OID):
+
+           {
+             _id: {"oid": ObjectID("..."),
+                   "seq": n},
+               a: [
+                    ..., // user objects are here
+                  ]
+           }
+
+       SpillableVector supports getObjectsOrRef(), which appends to a given BSONObjBuilder either a
+       reference to the OID used to spill objects, or a BSONArray containing the spilled objects.
+
+       SpillableVector also supports transfer(), which appends its objects to a parent
+       SpillableVector.
+    */
+    class SpillableVector : boost::noncopyable {
+        void (*_writeObjToRef)(BSONObj &);
+        vector<BSONObj> _vec;
+        size_t _curSize;
+        const size_t _maxSize;
+        SpillableVector *_parent;
+        OID _oid;
+
+        bool _curObjInited;
+        BufBuilder _buf;
+        long long _seq;
+        long long *_curSeqNo;
+        scoped_ptr<BSONObjBuilder> _curObjBuilder;
+        scoped_ptr<BSONArrayBuilder> _curArrayBuilder;
+      public:
+        SpillableVector(void (*writeObjToRef)(BSONObj &), size_t maxSize, SpillableVector *parent);
+
+        /** @return true iff there have been no objects appended yet. */
+        bool empty() const {
+            bool isEmpty = _curSize == 0;
+            if (isEmpty) {
+                dassert(_vec.empty());
+            }
+            return isEmpty;
+        }
+
+        void append(const BSONObj &o);
+        void getObjectsOrRef(BSONObjBuilder &b);
+        void transfer();
+
+      private:
+        bool spilling() const {
+            return _curSize >= _maxSize;
+        }
+        void initCurObj();
+        void finish();
+        void spillCurObj();
+        void spillOneObject(BSONObj obj);
+        void spillAllObjects();
+    };
+
     // class to wrap operations surrounding a storage::Txn.
     // as of now, includes writing of operations to opLog
     // and the committing/aborting of storage::Txn
@@ -141,7 +206,7 @@ namespace mongo {
         BSONArrayBuilder _txnOps;
         uint64_t _numOperations; //number of operations added to _txnOps
 
-        vector<BSONObj> _txnOpsForSharding;
+        SpillableVector _txnOpsForSharding;
 
         // this is a hack. During rs initiation, where we log a comment
         // to the opLog, we don't have a gtidManager available yet. We
