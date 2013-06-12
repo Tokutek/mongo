@@ -2,9 +2,7 @@
 // Tests what happens when a replica set primary goes down with pooled connections.
 //
 
-// Helper for running arbitrary commands
-
-var options = {separateConfig : true, sync : true};
+var options = {separateConfig : true, sync : true, mongosOptions : { verbose : 2 }};
 
 var st = new ShardingTest({shards : {rs0 : {nodes : 2}}, mongos : 1, other : options});
 
