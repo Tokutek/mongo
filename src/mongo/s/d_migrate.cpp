@@ -561,23 +561,12 @@ namespace mongo {
                 Client::WithTxnStack wts(_txnStack);
                 Client::ReadContext ctx(_ns);
 
-                int allocSize = BSONObjMaxUserSize;
-                // TODO(leif): maybe reimplement this calculation?
-#if 0
-                {
-                    Client::ReadContext ctx( _ns );
-                    NamespaceDetails *d = nsdetails( _ns.c_str() );
-                    verify( d );
-                    scoped_spinlock lk( _trackerLocks );
-                    allocSize = std::min(BSONObjMaxUserSize, (int)((12 + d->averageObjectSize()) * _clonePKs.size()));
-                }
-#endif
-                BSONArrayBuilder a(allocSize);
+                BSONArrayBuilder a(result.subarrayStart("objects"));
 
                 bool empty = true;
                 for (; _cc->ok(); _cc->advance()) {
                     BSONObj obj = _cc->current();
-                    if (a.len() + obj.objsize() + 1024 > BSONObjMaxUserSize) {
+                    if (result.len() + obj.objsize() + 1024 >= BSONObjMaxUserSize) {
                         // have to do another batch after this
                         break;
                     }
@@ -585,7 +574,7 @@ namespace mongo {
                     empty = false;
                 }
 
-                result.appendArray( "objects" , a.arr() );
+                a.doneFast();
 
                 if (empty) {
                     _cc.reset();
