@@ -85,7 +85,7 @@ namespace mongo {
         // If a txn is completing, the cursors it created
         // must be killed before it can commit or abort.
         virtual void noteTxnCompletedCursors(const set<long long> &cursorIds) {
-            for (set<CursorId>::const_iterator i = cursorIds.begin(); i != cursorIds.end(); ++i) {
+            for (set<long long>::const_iterator i = cursorIds.begin(); i != cursorIds.end(); ++i) {
                 ClientCursor::erase(*i);
             }
         }
