@@ -107,7 +107,13 @@ namespace DocumentSourceTests {
         public:
             Base() :
                 CollectionBase(),
+                txn(DB_SERIALIZABLE),
                 _ctx( ExpressionContext::create( &InterruptStatusMongod::status ) ) {
+            }
+            ~Base() {
+                _source.reset();
+                _ctx.reset();
+                txn.commit();
             }
         protected:
             void createSource() {
@@ -115,12 +121,13 @@ namespace DocumentSourceTests {
                         ( new DocumentSourceCursor::CursorWithContext( ns ) );
                 boost::shared_ptr<Cursor> cursor = Helpers::findTableScan( ns, BSONObj() );
                 cursorWithContext->_cursor.reset
-                        ( new ClientCursor( QueryOption_NoCursorTimeout, cursor, ns ) );
+                        ( new ClientCursor( QueryOption_NoCursorTimeout, cursor, ns, BSONObj(), true ) );
                 _source = DocumentSourceCursor::create( cursorWithContext, _ctx );
             }
             intrusive_ptr<ExpressionContext> ctx() { return _ctx; }
             DocumentSourceCursor* source() { return _source.get(); }
         private:
+            Client::Transaction txn;
             intrusive_ptr<ExpressionContext> _ctx;
             intrusive_ptr<DocumentSourceCursor> _source;
         };
@@ -129,7 +136,6 @@ namespace DocumentSourceTests {
         class Create : public Base {
         public:
             void run() {
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 // The CursorWithContext creates a read lock.
                 ASSERT( Lock::isReadLocked() );
@@ -155,7 +161,6 @@ namespace DocumentSourceTests {
         public:
             void run() {
                 client.insert( ns, BSON( "a" << 1 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 // The CursorWithContext creates a read lock.
                 ASSERT( Lock::isReadLocked() );
@@ -176,7 +181,6 @@ namespace DocumentSourceTests {
         class Dispose : public Base {
         public:
             void run() {
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 // The CursorWithContext creates a read lock.
                 ASSERT( Lock::isReadLocked() );
@@ -195,7 +199,6 @@ namespace DocumentSourceTests {
                 client.insert( ns, BSON( "a" << 1 ) );
                 client.insert( ns, BSON( "a" << 2 ) );
                 client.insert( ns, BSON( "a" << 3 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 ASSERT( !source()->eof() );
                 // The result is as expected.
@@ -295,7 +298,6 @@ namespace DocumentSourceTests {
             void run() {
                 client.insert( ns, BSON( "a" << 1 ) );
                 client.insert( ns, BSON( "a" << 2 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 // The source holds a read lock.
                 ASSERT( Lock::isReadLocked() );
@@ -318,7 +320,6 @@ namespace DocumentSourceTests {
             void run() {
                 client.insert( ns, BSON( "a" << 1 ) );
                 client.insert( ns, BSON( "a" << 1 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
 
                 // Create a DocumentSourceMatch.
@@ -415,7 +416,6 @@ namespace DocumentSourceTests {
             void run() {
                 // Insert a single document for $group to iterate over.
                 client.insert( ns, doc() );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createGroup( spec() );
                 // A group result is available.
@@ -593,7 +593,6 @@ namespace DocumentSourceTests {
             }
             void runSharded( bool sharded ) {
                 populateData();
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createGroup( groupSpec() );
 
@@ -674,7 +673,6 @@ namespace DocumentSourceTests {
         public:
             void run() {
                 client.insert( ns, BSONObj() );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createGroup( BSON( "_id" << 1 ) );
                 ASSERT( !group()->eof() );
@@ -687,7 +685,6 @@ namespace DocumentSourceTests {
             void run() {
                 client.insert( ns, BSON( "_id" << 0 ) );
                 client.insert( ns, BSON( "_id" << 1 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createGroup( BSON( "_id" << "$_id" ) );
                 ASSERT( group()->advance() );
@@ -701,7 +698,6 @@ namespace DocumentSourceTests {
         public:
             void run() {
                 client.insert( ns, BSONObj() );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createGroup( BSON( "_id" << 1 ) );
                 ASSERT_EQUALS( 1, group()->getCurrent()->getValue( "_id" )->getInt() );
@@ -931,7 +927,6 @@ namespace DocumentSourceTests {
         public:
             void run() {
                 client.insert( ns, BSON( "_id" << 0 << "a" << 1 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createProject();
                 // A result is available, so not eof().
@@ -945,7 +940,6 @@ namespace DocumentSourceTests {
             void run() {
                 client.insert( ns, BSON( "_id" << 0 << "a" << 1 ) );
                 client.insert( ns, BSON( "_id" << 1 << "a" << 2 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createProject();
                 // Another result is available, so advance() succeeds.
@@ -959,7 +953,6 @@ namespace DocumentSourceTests {
         public:
             void run() {
                 client.insert( ns, BSON( "_id" << 0 << "a" << 1 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createProject();
                 // The first result exists and is as expected.
@@ -973,7 +966,6 @@ namespace DocumentSourceTests {
         public:
             void run() {
                 client.insert( ns, fromjson( "{_id:0,a:1,b:1,c:{d:1}}" ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createProject( BSON( "a" << true << "c" << BSON( "d" << true ) ) );
                 // The first result exists and is as expected.
@@ -1043,7 +1035,6 @@ namespace DocumentSourceTests {
             void run() {
                 client.insert( ns, BSON( "a" << 1 << "b" << 2 ) );
                 client.insert( ns, BSON( "a" << 3 << "b" << 4 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createProject();
                 ASSERT( !project()->eof() );
@@ -1123,7 +1114,6 @@ namespace DocumentSourceTests {
         public:
             void run() {
                 client.insert( ns, BSON( "_id" << 0 << "a" << 1 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createSort();
                 // A result is available, so not eof().
@@ -1137,7 +1127,6 @@ namespace DocumentSourceTests {
             void run() {
                 client.insert( ns, BSON( "_id" << 0 << "a" << 1 ) );
                 client.insert( ns, BSON( "_id" << 1 << "a" << 2 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createSort();
                 // Another result is available, so advance() succeeds.
@@ -1151,7 +1140,6 @@ namespace DocumentSourceTests {
         public:
             void run() {
                 client.insert( ns, BSON( "_id" << 0 << "a" << 1 ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createSort();
                 // The first result exists and is as expected.
@@ -1165,7 +1153,6 @@ namespace DocumentSourceTests {
             virtual ~CheckResultsBase() {}
             void run() {
                 populateData();
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createSort( sortSpec() );
                 
@@ -1229,7 +1216,6 @@ namespace DocumentSourceTests {
             }
             void run() {
                 populateData();
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createSort( sortSpec() );
                 ASSERT_THROWS( exhaust(), UserException );
@@ -1470,7 +1456,6 @@ namespace DocumentSourceTests {
         public:
             void run() {
                 client.insert( ns, BSON( "_id" << 0 << "a" << BSON_ARRAY( 1 ) ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createUnwind();
                 // A result is available, so not eof().
@@ -1483,7 +1468,6 @@ namespace DocumentSourceTests {
         public:
             void run() {
                 client.insert( ns, BSON( "_id" << 0 << "a" << BSON_ARRAY( 1 << 2 ) ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createUnwind();
                 // Another result is available, so advance() succeeds.
@@ -1497,7 +1481,6 @@ namespace DocumentSourceTests {
         public:
             void run() {
                 client.insert( ns, BSON( "_id" << 0 << "a" << BSON_ARRAY( 1 ) ) );
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createUnwind();
                 // The first result exists and is as expected.
@@ -1511,7 +1494,6 @@ namespace DocumentSourceTests {
             virtual ~CheckResultsBase() {}
             void run() {
                 populateData();
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createUnwind( unwindFieldPath() );
 
@@ -1563,7 +1545,6 @@ namespace DocumentSourceTests {
             virtual ~UnexpectedTypeBase() {}
             void run() {
                 populateData();
-                Client::Transaction txn(DB_SERIALIZABLE);
                 createSource();
                 createUnwind();
                 // A UserException is thrown during iteration.
