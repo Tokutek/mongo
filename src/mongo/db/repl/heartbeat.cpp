@@ -139,7 +139,7 @@ namespace mongo {
     } cmdReplSetHeartbeat;
 
     bool requestHeartbeat(string setName, string from, string memberFullName, BSONObj& result,
-                          int myCfgVersion, int& theirCfgVersion, bool checkEmpty) {
+                          int myCfgVersion, bool checkEmpty) {
         if( replSetBlind ) {
             return false;
         }

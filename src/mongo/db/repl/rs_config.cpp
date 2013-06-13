@@ -628,11 +628,9 @@ namespace mongo {
             else {
                 /* first, make sure other node is configured to be a replset. just to be safe. */
                 string setname = cmdLine.ourSetName();
-                BSONObj cmd = BSON( "replSetHeartbeat" << setname );
-                int theirVersion;
                 BSONObj info;
                 log() << "trying to contact " << h.toString() << rsLog;
-                bool ok = requestHeartbeat(setname, "", h.toString(), info, -2, theirVersion);
+                bool ok = requestHeartbeat(setname, "", h.toString(), info, -2);
                 if( info["rs"].trueValue() ) {
                     // yes, it is a replicate set, although perhaps not yet initialized
                 }
