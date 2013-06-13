@@ -493,6 +493,7 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("journalCommitInterval", po::value<uint32_t>(), "how often to fsync recovery log (same as logFlushPeriod)")
     ("logFlushPeriod", po::value<uint32_t>(), "how often to fsync recovery log")
     ("expireOplogDays", po::value<uint32_t>(), "how many days of oplog data to keep")
+    ("expireOplogHours", po::value<uint32_t>(), "how many hours, in addition to expireOplogDays, of oplog data to keep")
     ("journalOptions", po::value<int>(), "DEPRECATED")
     ("jsonp","allow JSONP access via http (has security implications)")
     ("lockTimeout", po::value<uint64_t>(), "tokumx row lock wait timeout (in ms), 0 means wait as long as necessary")
@@ -689,6 +690,9 @@ static int mongoDbMain(int argc, char* argv[]) {
         }
         if( params.count("expireOplogDays") ) {
             cmdLine.expireOplogDays = params["expireOplogDays"].as<uint32_t>();
+        }
+        if( params.count("expireOplogHours") ) {
+            cmdLine.expireOplogHours = params["expireOplogHours"].as<uint32_t>();
         }
         if (params.count("journalOptions")) {
             out() << "journalOptions deprecated" <<endl;

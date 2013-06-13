@@ -19,13 +19,12 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/oplog.h"
+#include "mongo/db/cmdline.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/stats/counters.h"
-#include "mongo/util/file.h"
-#include "mongo/util/startup_test.h"
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/update.h"
@@ -366,5 +365,12 @@ namespace mongo {
         BSONObj pk = entry["_id"].wrap("");
         uint64_t flags = (NamespaceDetails::NO_LOCKTREE);
         rsOplogDetails->deleteObject(pk, entry, flags);
+    }
+
+    uint64_t expireOplogMilliseconds() {
+        const uint32_t days = cmdLine.expireOplogDays;
+        const uint32_t hours = days * 24 + cmdLine.expireOplogHours;
+        const uint64_t millisPerHour = 3600 * 1000;
+        return hours * millisPerHour;
     }
 }

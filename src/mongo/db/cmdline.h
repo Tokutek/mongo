@@ -83,7 +83,8 @@ namespace mongo {
         bool cpu;              // --cpu show cpu time periodically
 
         uint32_t logFlushPeriod; // group/batch commit interval ms
-        uint32_t expireOplogDays; // number of days before an oplog entry is eligible for removal
+        uint32_t expireOplogDays;  // number of days before an oplog entry is eligible for removal
+        uint32_t expireOplogHours; // number of hours, in addition to days above.
 
 
         bool objcheck;         // --objcheck
@@ -155,7 +156,7 @@ namespace mongo {
         noTableScan(false),
         configsvr(false), quota(false), quotaFiles(8), cpu(false),
         logFlushPeriod(100), // 0 means fsync every transaction, 100 means fsync log once every 100 ms
-        expireOplogDays(0), // default of 0 means never purge entries from oplog
+        expireOplogDays(0), expireOplogHours(0), // default of 0 means never purge entries from oplog
         objcheck(false), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),

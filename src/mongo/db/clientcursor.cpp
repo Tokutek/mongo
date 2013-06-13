@@ -41,8 +41,9 @@
 namespace mongo {
 
     bool opForSlaveTooOld(uint64_t ts) {
-        if (ts && cmdLine.expireOplogDays) {
-            uint64_t minTime = curTimeMillis64() - (cmdLine.expireOplogDays*24*3600*1000);            
+        const uint64_t expireMillis = expireOplogMilliseconds();
+        if (ts && expireMillis) {
+            const uint64_t minTime = curTimeMillis64() - expireMillis;
             if (ts < minTime) {
                 return true;
             }

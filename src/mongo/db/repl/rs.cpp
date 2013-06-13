@@ -1024,13 +1024,11 @@ namespace mongo {
         GTID lastTimeRead;
         Client::initThread("purgeOplog");
         while (_replBackgroundShouldRun) {
-            if (cmdLine.expireOplogDays) {
-                // 24*3600*1000 is number of milliseconds in a day
-                // the age allowed for an oplog entry, in milliseconds,
-                // is the number of days specified in the command line, in milliseconds, plus
-                // a slack period of one hour.
-                uint64_t ageAllowed = (cmdLine.expireOplogDays * 24*3600*1000) + (3600*1000);
-                uint64_t minTime = curTimeMillis64() - ageAllowed;
+            const uint64_t expireMillis = expireOplogMilliseconds();
+            if (expireMillis) {
+                // Allow an additional slack period of one hour.
+                const uint64_t ageAllowed = expireMillis + (3600 * 1000);
+                const uint64_t minTime = curTimeMillis64() - ageAllowed;
                 // now get the minimum entry in the oplog, if it has timestamp
                 // less than minTime, delete it, otherwise, 
                 BSONObj result;
@@ -1039,7 +1037,7 @@ namespace mongo {
                 // do a possible deletion from the oplog, if we find an entry
                 // old enough. If not, we will sleep
                 try {
-                    Lock::DBRead lk(rsoplog);
+                    Client::ReadContext ctx(rsoplog);
                     Client::Transaction transaction(DB_SERIALIZABLE);
                     if (lastTimeRead.isInitial()) {
                         ret = Helpers::getFirst(rsoplog, result);
@@ -1049,7 +1047,6 @@ namespace mongo {
                         addGTIDToBSON("$gt", lastTimeRead, q);
                         BSONObjBuilder query;
                         query.append("_id", q.done());
-                        BSONObj result;
                         ret = Helpers::findOne(rsoplog, query.done(), result, false);
                     }
                     if (ret) {
