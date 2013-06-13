@@ -232,14 +232,7 @@ namespace mongo {
                 log() << "replSet created this configuration for initiation : " << configObj.toString() << rsLog;
             }
             else {
-                configObj = cmdObj["replSetInitiate"].Obj();
-                if (!configObj.hasField("protocolVersion")) {
-                    // hack for compatibility with existing apps
-                    BSONObjBuilder b;
-                    b.appendElements(configObj);
-                    b.append("protocolVersion", ReplSetConfig::CURRENT_PROTOCOL_VERSION);
-                    configObj = b.obj();
-                }
+                configObj = ReplSetConfig::addProtocolVersionIfMissing(cmdObj["replSetInitiate"].Obj());
             }
 
             bool parsed = false;

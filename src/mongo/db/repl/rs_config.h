@@ -148,6 +148,7 @@ namespace mongo {
         static const int MAX_SUPPORTED_PROTOCOL_VERSION;
         static const int MIN_SUPPORTED_PROTOCOL_VERSION;
         static bool checkProtocolVersion(int pv, string &errmsg);
+        static BSONObj addProtocolVersionIfMissing(const BSONObj &obj);
         int protocolVersion;
 
         /**

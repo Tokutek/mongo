@@ -165,9 +165,14 @@ namespace mongo {
                 return false;
             }
 
+            // We might want to add the protocol version of theReplSet->config() if it exists,
+            // instead of just blindly adding our compiled-in CURRENT_PROTOCOL_VERSION.  But for
+            // TokuMX 1.0 it doesn't matter.
+            BSONObj configObj = ReplSetConfig::addProtocolVersionIfMissing(cmdObj["replSetReconfig"].Obj());
+
             bool force = cmdObj.hasField("force") && cmdObj["force"].trueValue();
             if( force && !theReplSet ) {
-                replSettings.reconfig = cmdObj["replSetReconfig"].Obj().getOwned();
+                replSettings.reconfig = configObj.getOwned();
                 result.append("msg", "will try this config momentarily, try running rs.conf() again in a few seconds");
                 return true;
             }
@@ -194,7 +199,7 @@ namespace mongo {
             }
 
             try {
-                ReplSetConfig newConfig(cmdObj["replSetReconfig"].Obj(), force);
+                ReplSetConfig newConfig(configObj, force);
 
                 log() << "replSet replSetReconfig config object parses ok, " << newConfig.members.size() << " members specified" << rsLog;
 

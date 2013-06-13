@@ -196,6 +196,16 @@ namespace mongo {
         return true;
     }
 
+    BSONObj ReplSetConfig::addProtocolVersionIfMissing(const BSONObj &config) {
+        if (config["protocolVersion"].ok()) {
+            return config;
+        }
+        BSONObjBuilder b;
+        b.appendElements(config);
+        b.append("protocolVersion", CURRENT_PROTOCOL_VERSION);
+        return b.obj();
+    }
+
     static inline void mchk(bool expr) {
         uassert(13126, "bad Member config", expr);
     }
