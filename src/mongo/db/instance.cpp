@@ -871,9 +871,12 @@ namespace mongo {
             // we have a local database.  return true if oplog isn't empty
             {
                 Lock::DBRead lk(rsoplog);
+                Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
                 BSONObj o;
-                if( Helpers::getFirst(rsoplog, o) )
+                if (Helpers::getFirst(rsoplog, o)) {
+                    txn.commit();
                     return true;
+                }
             }
         }
         return false;
