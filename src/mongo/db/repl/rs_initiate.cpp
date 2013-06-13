@@ -77,11 +77,14 @@ namespace mongo {
                 try {
                     ok = requestHeartbeat(cfg._id, "", i->h.toString(), res, -1, initial/*check if empty*/);
                     if (ok) {
-                        int theirVersion = res["v"].Int();
-                        if( theirVersion >= cfg.version ) {
-                            stringstream ss;
-                            ss << "replSet member " << i->h.toString() << " has too new a config version (" << theirVersion << ") to reconfigure";
-                            uasserted(13259, ss.str());
+                        BSONElement vElt = res["v"];
+                        if (vElt.ok()) {
+                            int theirVersion = res["v"].Int();
+                            if( theirVersion >= cfg.version ) {
+                                stringstream ss;
+                                ss << "replSet member " << i->h.toString() << " has too new a config version (" << theirVersion << ") to reconfigure";
+                                uasserted(13259, ss.str());
+                            }
                         }
                     }
                 }
