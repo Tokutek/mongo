@@ -387,16 +387,15 @@ namespace mongo {
                 }
 
                 {
-                    Client::Transaction transaction(DB_SERIALIZABLE);
-                    
-                    if (o.hasElement("ref")) {
-                        OID oid = o["ref"].OID();
-                        LOG(3) << "producer ref " << oid << endl;
-                        copyOplogRefsRange(r, oid);
-                    }
-                
                     Timer timer;
                     {
+                        Client::Transaction transaction(DB_SERIALIZABLE);
+                        if (o.hasElement("ref")) {
+                            OID oid = o["ref"].OID();
+                            LOG(3) << "producer ref " << oid << endl;
+                            copyOplogRefsRange(r, oid);
+                        }
+
                         Client::ReadContext ctx(rsoplog);
                         replicateTransactionToOplog(o);                    
                         // we are operating as a secondary. We don't have to fsync
