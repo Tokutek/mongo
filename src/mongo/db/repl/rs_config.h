@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "mongo/db/gtid.h"
 #include "mongo/db/repl/health.h"
 #include "mongo/util/concurrency/list.h"
 #include "mongo/util/concurrency/race.h"

@@ -19,7 +19,9 @@
 #pragma once
 
 #include <map>
-#include "../security_common.h"
+
+#include "mongo/db/repl/rs.h"
+#include "mongo/db/security_common.h"
 
 namespace mongo {
 

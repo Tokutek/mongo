@@ -18,6 +18,10 @@
 
 #pragma once
 
+#include "pch.h"
+
+#include "mongo/db/jsobj.h"
+
 namespace mongo {
 
     /* throws */
