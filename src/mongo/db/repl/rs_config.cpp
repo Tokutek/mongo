@@ -518,7 +518,7 @@ namespace mongo {
 
         {
             uassert(16815, "no protocol version provided in config " + o.toString(), o["protocolVersion"].ok());
-            int pv = o["protocolVersion"].Int();
+            int pv = o["protocolVersion"].numberInt();
             string pverr;
             if (!checkProtocolVersion(pv, pverr)) {
                 uasserted(16816, pverr);
