@@ -388,12 +388,14 @@ namespace mongo {
 
                 {
                     Timer timer;
+                    bool bigTxn = false;
                     {
                         Client::Transaction transaction(DB_SERIALIZABLE);
                         if (o.hasElement("ref")) {
                             OID oid = o["ref"].OID();
                             LOG(3) << "producer ref " << oid << endl;
                             copyOplogRefsRange(r, oid);
+                            bigTxn = true;
                         }
 
                         Client::ReadContext ctx(rsoplog);
@@ -422,6 +424,14 @@ namespace mongo {
                         // logic will need to be redone
                         if (_deque.size() > 20000) {
                             _queueCond.wait(lock);
+                        }
+                        if (bigTxn) {
+                            // if we have a large transaction, we don't want
+                            // to let it pile up. We want to process it immedietely
+                            // before processing anything else.
+                            while (_deque.size() > 0) {
+                                _queueDone.wait(lock);
+                            }
                         }
                     }
                 }
