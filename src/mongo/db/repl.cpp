@@ -201,6 +201,8 @@ namespace mongo {
             replSet = true;
             setLogTxnOpsForReplication(true);
             setLogTxnToOplog(logTransactionOps);
+            setLogTxnRefToOplog(logTransactionOpsRef);
+            setLogOpsToOplogRef(logOpsToOplogRef);
             ReplSetCmdline *replSetCmdline = new ReplSetCmdline(cmdLine._replSet);
             boost::thread t( boost::bind( &startReplSets, replSetCmdline) );
 

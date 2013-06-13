@@ -83,7 +83,9 @@ namespace mongo {
         }
         BSONObj nextSafe() { return cursor->nextSafe(); }
         BSONObj next() { return cursor->next(); }
-        
+
+        shared_ptr<DBClientCursor> getOplogRefsCursor(OID &oid);
+
     private:
         /** @return true iff connection was successful */ 
         bool commonConnect(const string& hostName);

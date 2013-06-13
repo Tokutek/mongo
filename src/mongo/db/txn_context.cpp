@@ -23,6 +23,7 @@
 #include "mongo/db/repl.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/util/stacktrace.h"
 
 #include "mongo/s/d_logic.h"
 
@@ -37,6 +38,8 @@ namespace mongo {
     static bool _logTxnOpsForReplication = false;
     static bool _logTxnOpsForSharding = false;
     static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) = NULL;
+    static void (*_logTxnOpsRef)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid) = NULL;
+    static void (*_logOpsToOplogRef)(BSONObj o) = NULL;
     static bool (*_shouldLogOpForSharding)(const char *, const char *, const BSONObj &) = NULL;
     static bool (*_shouldLogUpdateOpForSharding)(const char *, const char *, const BSONObj &, const BSONObj &) = NULL;
     static void (*_startObjForMigrateLog)(BSONObjBuilder &b) = NULL;
@@ -57,6 +60,14 @@ namespace mongo {
 
     void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo)) {
         _logTxnToOplog = f;
+    }
+
+    void setLogTxnRefToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid)) {
+        _logTxnOpsRef = f;
+    }
+
+    void setLogOpsToOplogRef(void (*f)(BSONObj o)) {
+        _logOpsToOplogRef = f;
     }
 
     void setTxnGTIDManager(GTIDManager* m) {
@@ -216,7 +227,7 @@ namespace mongo {
             : _txn((parent == NULL) ? NULL : &parent->_txn, txnFlags), 
               _parent(parent),
               _retired(false),
-              _numOperations(0),
+              _txnOps(parent == NULL ? NULL : &parent->_txnOps),
               _txnOpsForSharding(_writeObjToMigrateLogRef,
                                  // transferMods has a maxSize of 1MB, we leave a few hundred bytes for metadata.
                                  1024 * 1024 - 512,
@@ -234,21 +245,29 @@ namespace mongo {
     void TxnContext::commit(int flags) {
         bool gotGTID = false;
         GTID gtid;
-        uint64_t timestamp = 0;
-        uint64_t hash = 0;
         // do this in case we are writing the first entry
         // we put something in that can be distinguished from
         // an initialized GTID that has never been touched
         gtid.inc_primary(); 
         // handle work related to logging of transaction for replication
-        if (_numOperations > 0) {
+        // this piece must be done before the _txn.commit
+        try {
             if (hasParent()) {
-                // In this case, what transaction we are committing has a parent
-                // and therefore we must transfer the opLog information from 
-                // this transaction to the parent
-                transferOpsToParent();
+                // This does something
+                // a bit dangerous in that it may spill parent's stuff
+                // with this child transaction that is committing. If something
+                // goes wrong and this child transaction aborts, we will miss
+                // some ops
+                //
+                // This ought to be ok, because we are in this try/catch block
+                // where if something goes wrong, we will crash the server.
+                // NOTHING better go wrong here, unless under bad rare
+                // circumstances
+                _txnOps.finishChildCommit();
             }
-            else {
+            else if (!_txnOps.empty()) {
+                uint64_t timestamp = 0;
+                uint64_t hash = 0;
                 if (!_initiatingRS) {
                     dassert(txnGTIDManager);
                     txnGTIDManager->getGTIDForPrimary(&gtid, &timestamp, &hash);
@@ -261,31 +280,39 @@ namespace mongo {
                 // In this case, the transaction we are committing has
                 // no parent, so we must write the transaction's 
                 // logged operations to the opLog, as part of this transaction
-                writeOpsToOplog(gtid, timestamp, hash);
+                dassert(logTxnOpsForReplication());
+                dassert(_logTxnToOplog);
+                _txnOps.rootCommit(gtid, timestamp, hash);
+            }
+            // handle work related to logging of transaction for chunk migrations
+            if (!_txnOpsForSharding.empty()) {
+                if (hasParent()) {
+                    transferOpsForShardingToParent();
+                }
+                else {
+                    writeTxnOpsToMigrateLog();
+                }
+            }
+
+            _clientCursorRollback.preComplete();
+            _txn.commit(flags);
+
+            // if the commit of this transaction got a GTID, then notify 
+            // the GTIDManager that the commit is now done.
+            if (gotGTID && !_initiatingRS) {
+                dassert(txnGTIDManager);
+                // save the GTID for the client so that
+                // getLastError will know what GTID slaves
+                // need to be caught up to.
+                cc().setLastOp(gtid);
+                txnGTIDManager->noteLiveGTIDDone(gtid);
             }
         }
-        // handle work related to logging of transaction for chunk migrations
-        if (!_txnOpsForSharding.empty()) {
-            if (hasParent()) {
-                transferOpsForShardingToParent();
-            }
-            else {
-                writeTxnOpsToMigrateLog();
-            }
-        }
-
-        _clientCursorRollback.preComplete();
-        _txn.commit(flags);
-
-        // if the commit of this transaction got a GTID, then notify 
-        // the GTIDManager that the commit is now done.
-        if (gotGTID && !_initiatingRS) {
-            dassert(txnGTIDManager);
-            // save the GTID for the client so that
-            // getLastError will know what GTID slaves
-            // need to be caught up to.
-            cc().setLastOp(gtid);
-            txnGTIDManager->noteLiveGTIDDone(gtid);
+        catch (std::exception &e) {
+            log() << "exception during critical section of txn commit, aborting system: " << e.what() << endl;
+            printStackTrace();
+            logflush();
+            ::abort();
         }
 
         // These rollback items must be processed after the ydb transaction completes.
@@ -302,6 +329,7 @@ namespace mongo {
     void TxnContext::abort() {
         _clientCursorRollback.preComplete();
         _nsIndexRollback.preAbort();
+        _txnOps.abort();
         _txn.abort();
         _cappedRollback.abort();
         _retired = true;
@@ -309,8 +337,7 @@ namespace mongo {
 
     void TxnContext::logOpForReplication(BSONObj op) {
         dassert(logTxnOpsForReplication());
-        _txnOps.append(op);
-        _numOperations++;
+        _txnOps.appendOp(op);
     }
 
     void TxnContext::logOpForSharding(BSONObj op) {
@@ -324,22 +351,6 @@ namespace mongo {
 
     void TxnContext::txnIntiatingRs() {
         _initiatingRS = true;
-    }
-
-    void TxnContext::transferOpsToParent() {
-        BSONArray array = _txnOps.arr();
-        BSONObjIterator iter(array);
-        while (iter.more()) {
-            BSONElement curr = iter.next();
-            _parent->logOpForReplication(curr.Obj());
-        }
-    }
-
-    void TxnContext::writeOpsToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {
-        dassert(logTxnOpsForReplication());
-        dassert(_logTxnToOplog);
-        BSONArray array = _txnOps.arr();
-        _logTxnToOplog(gtid, timestamp, hash, array);
     }
 
     void TxnContext::transferOpsForShardingToParent() {
@@ -442,6 +453,141 @@ namespace mongo {
 
     void ClientCursorRollback::noteClientCursor(long long id) {
         _cursorIds.insert(id);
+    }
+
+    TxnOplog::TxnOplog(TxnOplog *parent) : _parent(parent), _spilled(false), _mem_size(0), _mem_limit(cmdLine.txnMemLimit) {
+        // This is initialized to 1 so that the query in applyRefOp in
+        // oplog.cpp can
+        _seq = 1;
+        if (_parent) { // child inherits the parents seq number and spilled state
+            _seq = _parent->_seq + 1;
+        }
+    }
+
+    TxnOplog::~TxnOplog() {
+    }
+
+    void TxnOplog::appendOp(BSONObj o) {
+        _seq++;
+        _m.push_back(o);
+        _mem_size += o.objsize();
+        if (_mem_size > _mem_limit) {
+            spill();
+            _spilled = true;
+        }
+    }
+
+    bool TxnOplog::empty() const {
+        return !_spilled && (_m.size() == 0);
+    }
+
+    void TxnOplog::spill() {
+        // it is possible to have spill called when there
+        // is nothing to actually spill. For instance, when
+        // the root commits and we have already spilled,
+        // we call spill to write out any remaining ops, of which
+        // there may be none
+        if (_m.size() > 0) {
+            if (!_oid.isSet()) {
+                _oid = getOid();
+            }
+            BSONObjBuilder b;
+
+            // build the _id
+            BSONObjBuilder b_id;
+            b_id.append("oid", _oid);
+            // probably not necessary to increment _seq, but safe to do
+            b_id.append("seq", ++_seq);
+            b.append("_id", b_id.obj());
+
+            // build the ops array
+            BSONArrayBuilder b_a;
+            while (_m.size() > 0) {
+                BSONObj o = _m.front();
+                b_a.append(o);
+                _m.pop_front();
+                _mem_size -= o.objsize();
+            }
+            b.append("ops", b_a.arr());
+
+            verify(_m.size() == 0);
+            verify(_mem_size == 0);
+
+            // insert it
+            dassert(_logOpsToOplogRef);
+            _logOpsToOplogRef(b.obj());
+        }
+        else {
+            // just a sanity check
+            verify(_oid.isSet());
+        }
+    }
+
+    OID TxnOplog::getOid() {
+        if (!_oid.isSet()) {
+            if (!_parent) {
+                _oid = OID::gen();
+            } else {
+                _oid = _parent->getOid();
+            }
+        }
+        return _oid;
+    }
+
+    void TxnOplog::writeOpsDirectlyToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {
+        dassert(logTxnOpsForReplication());
+        dassert(_logTxnToOplog);
+        // build array of in memory ops
+        BSONArrayBuilder b;
+        for (deque<BSONObj>::iterator it = _m.begin(); it != _m.end(); it++) {
+            b.append(*it);
+        }
+        BSONArray a = b.arr();
+        // log ops
+        _logTxnToOplog(gtid, timestamp, hash, a);
+    }
+
+    void TxnOplog::writeTxnRefToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {
+        dassert(logTxnOpsForReplication());
+        dassert(_logTxnOpsRef);
+        // log ref
+        _logTxnOpsRef(gtid, timestamp, hash, _oid);
+    }
+
+    void TxnOplog::rootCommit(GTID gtid, uint64_t timestamp, uint64_t hash) {
+        if (_spilled) {
+            // spill in memory ops if any
+            spill();
+            // log ref
+            writeTxnRefToOplog(gtid, timestamp, hash);
+        } else {
+            writeOpsDirectlyToOplog(gtid, timestamp, hash);
+        }
+    }
+
+    void TxnOplog::finishChildCommit() {
+        // parent inherits the childs seq number and spilled state
+        verify(_seq > _parent->_seq);
+        // the first thing we want to do, is if child has spilled,
+        // we must get the parent to spill.
+        // The parent will have a _seq that is smaller than
+        // any seq we used, so the data that is spilled will be
+        // correctly positioned behind all of the work we have done
+        // in the oplog.refs collection. For that reason, this must be
+        // done BEFORE we set the parent's _seq to our _seq + 1
+        if (_spilled) {
+            _parent->spill();
+            _parent->_spilled = _spilled;
+        }
+        _parent->_seq = _seq+1;
+        // move to parent
+        for (deque<BSONObj>::iterator it = _m.begin(); it != _m.end(); it++) {
+            _parent->appendOp(*it);
+        }
+    }
+
+    void TxnOplog::abort() {
+        // nothing to do on abort
     }
 
 } // namespace mongo

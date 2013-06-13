@@ -228,7 +228,10 @@ namespace mongo {
                 // transactions.
                 ClientCursor::invalidateAllCursors();
                 Client::abortLiveTransactions();
-
+                // note the transition is complete, otherwise 
+                // replication, which will start, may not work because
+                // queries done during replication will be interrupted
+                nst.noteTransitionComplete();
                 if (startRepl) {
                     startReplication();
                 }

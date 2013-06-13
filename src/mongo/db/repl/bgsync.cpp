@@ -369,36 +369,45 @@ namespace mongo {
                         }
                     }
                 }
-                
-                Timer timer;
+
                 {
-                    Client::ReadContext ctx(rsoplog);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    replicateTransactionToOplog(o);                    
-                    // we are operating as a secondary. We don't have to fsync
-                    transaction.commit(DB_TXN_NOSYNC);
-                }
-                {
-                    GTID currEntry = getGTIDFromOplogEntry(o);
-                    uint64_t lastHash = o["h"].numberLong();
-                    boost::unique_lock<boost::mutex> lock(_mutex);
-                    // update counters
-                    theReplSet->gtidManager->noteGTIDAdded(currEntry, ts, lastHash);
-                    _queueCounter.waitTime += timer.millis();
-                    // notify applier thread that data exists
-                    if (_deque.size() == 0) {
-                        _queueCond.notify_all();
+                    
+                    if (o.hasElement("ref")) {
+                        OID oid = o["ref"].OID();
+                        LOG(3) << "producer ref " << oid << endl;
+                        copyOplogRefsRange(r, oid);
                     }
-                    _deque.push_back(o);
-                    // this is a flow control mechanism, with bad numbers
-                    // hard coded for now just to get something going.
-                    // If the opSync thread notices that we have over 20000
-                    // transactions in the queue, it waits until we get below
-                    // 10000. This is where we wait if we get too high
-                    // Once we have spilling of transactions working, this
-                    // logic will need to be redone
-                    if (_deque.size() > 20000) {
-                        _queueCond.wait(lock);
+                
+                    Timer timer;
+                    {
+                        Client::ReadContext ctx(rsoplog);
+                        replicateTransactionToOplog(o);                    
+                        // we are operating as a secondary. We don't have to fsync
+                        transaction.commit(DB_TXN_NOSYNC);
+                    }
+                    {
+                        GTID currEntry = getGTIDFromOplogEntry(o);
+                        uint64_t lastHash = o["h"].numberLong();
+                        boost::unique_lock<boost::mutex> lock(_mutex);
+                        // update counters
+                        theReplSet->gtidManager->noteGTIDAdded(currEntry, ts, lastHash);
+                        _queueCounter.waitTime += timer.millis();
+                        // notify applier thread that data exists
+                        if (_deque.size() == 0) {
+                            _queueCond.notify_all();
+                        }
+                        _deque.push_back(o);
+                        // this is a flow control mechanism, with bad numbers
+                        // hard coded for now just to get something going.
+                        // If the opSync thread notices that we have over 20000
+                        // transactions in the queue, it waits until we get below
+                        // 10000. This is where we wait if we get too high
+                        // Once we have spilling of transactions working, this
+                        // logic will need to be redone
+                        if (_deque.size() > 20000) {
+                            _queueCond.wait(lock);
+                        }
                     }
                 }
             } // end while
@@ -420,6 +429,16 @@ namespace mongo {
             // looping back is ok because this is a tailable cursor
         }
         return 0;
+    }
+
+    void BackgroundSync::copyOplogRefsRange(OplogReader &r, OID oid) {
+        shared_ptr<DBClientCursor> c = r.getOplogRefsCursor(oid);
+        Client::ReadContext ctx(rsOplogRefs);
+        while (c->more()) {
+            BSONObj b = c->next();
+            LOG(6) << "copyOplogRefsRange " << b << endl;
+            writeEntryToOplogRefs(b);
+        }
     }
 
     bool BackgroundSync::isStale(OplogReader& r, BSONObj& remoteOldestOp) {

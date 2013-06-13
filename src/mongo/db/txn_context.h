@@ -39,7 +39,9 @@ namespace mongo {
     void disableLogTxnOpsForSharding(void);
     bool shouldLogTxnOpForSharding(const char *opstr, const char *ns, const BSONObj &obj);
     bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj);
-    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo));
+    void setLogTxnToOplog(void (*)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo));
+    void setLogTxnRefToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid));
+    void setLogOpsToOplogRef(void (*f)(BSONObj o));
     void setTxnGTIDManager(GTIDManager* m);
 
     class TxnCompleteHooks {
@@ -191,6 +193,65 @@ namespace mongo {
         void spillAllObjects();
     };
 
+    // Each TxnOplog gathers a transaction's operations that need to be put in the oplog
+    // when the root transaction commits.  These operations should be maintained in memory
+    // unless the size of the list becomes big.  When this happens, the operations are 
+    // spilled into the oplog.refs collection indexed by an OID assigned to the root 
+    // transaction and a sequence number.  This allows a query by OID to find the operations
+    // in insertion order.
+    //
+    // The documents spilled to the oplog.refs contain an array of operations. The mem_limit
+    // parameter limits the size of this array.  We want to pack as many documents into the
+    // array and not exceed the limit.
+    //
+    // TODO The current algorithm is defeated by child transactions that only add one operation.
+    // Since spills happen when child transactions commit, all of the child transactions operations
+    // will be spilled.  If there is only one, then the size of the entries in the oplog.refs 
+    // collection will be small.  Need a new algorithm to fix this problem.
+    class TxnOplog : boost::noncopyable {
+    public:
+        TxnOplog(TxnOplog *parent);
+        ~TxnOplog();
+        
+        // Append an op to the txn's oplog list
+        void appendOp(BSONObj o);
+        
+        // Returns true if the TxnOplog does not contain any ops
+        bool empty() const;
+
+        // Commit a root txn
+        void rootCommit(GTID gtid, uint64_t timestamp, uint64_t hash);
+
+        // Commit a child txn
+        void finishChildCommit();
+
+        // Abort a txn
+        void abort();
+
+    private:
+        // Spill memory ops to a document in a collection
+        void spill();
+
+        // Get the OID assigned to this txn.  Assign one if not already assigned.
+        OID getOid();
+
+        // writes operations directly to the oplog with a BSONArray
+        void writeOpsDirectlyToOplog(GTID gtid, uint64_t timestamp, uint64_t hash);
+
+        // writes a reference to the operations that exist in oplog.refs to the oplog
+        void writeTxnRefToOplog(GTID gtid, uint64_t timestamp, uint64_t hash);
+
+    private:
+        TxnOplog *_parent;
+        // bool that states if THIS TxnOplog has spilled. It does
+        // not reflect the state of the parent.
+        bool _spilled;
+        size_t _mem_size, _mem_limit;
+        deque<BSONObj> _m;
+        OID _oid;
+        long long _seq;
+    };
+
     // class to wrap operations surrounding a storage::Txn.
     // as of now, includes writing of operations to opLog
     // and the committing/aborting of storage::Txn
@@ -198,13 +259,8 @@ namespace mongo {
         storage::Txn _txn;
         TxnContext* _parent;
         bool _retired;
-        //
-        // a BSON Array that will hold all of the operations done by
-        // this transaction. If the array gets too large, its contents
-        // will spill into the localOpRef collection on commit,
-        //
-        BSONArrayBuilder _txnOps;
-        uint64_t _numOperations; //number of operations added to _txnOps
+
+        TxnOplog _txnOps;
 
         SpillableVector _txnOpsForSharding;
 
@@ -257,7 +313,6 @@ namespace mongo {
     private:
         // transfer operations in _txnOps to _parent->_txnOps
         void transferOpsToParent();
-        void writeOpsToOplog(GTID gtid, uint64_t timestamp, uint64_t hash);
         void transferOpsForShardingToParent();
         void writeTxnOpsToMigrateLog();
     };

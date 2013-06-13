@@ -476,6 +476,13 @@ namespace mongo {
                                         false //logForRepl
                                         );
 
+                    // copy entire oplog.refs (probably overkill)
+                    cloneCollectionData(conn,
+                                        rsOplogRefs,
+                                        q,
+                                        true, //copyIndexes
+                                        false //logForRepl
+                                        );
                     cloneTransaction.commit(0);
                 }
 

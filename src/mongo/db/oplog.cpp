@@ -41,10 +41,12 @@ namespace mongo {
 
     // cached copies of these...so don't rename them, drop them, etc.!!!
     static NamespaceDetails *rsOplogDetails = NULL;
+    static NamespaceDetails *rsOplogRefsDetails = NULL;
     static NamespaceDetails *replInfoDetails = NULL;
     
     void deleteOplogFiles() {
         rsOplogDetails = NULL;
+        rsOplogRefsDetails = NULL;
         replInfoDetails = NULL;
         
         Client::Context ctx( rsoplog, dbpath, false);
@@ -54,8 +56,7 @@ namespace mongo {
         BSONObjBuilder out;
         string errmsg;
         dropCollection(rsoplog, errmsg, out);
-        BSONObjBuilder out2;
-        string errmsg2;
+        dropCollection(rsOplogRefs, errmsg, out);
         dropCollection(rsReplInfo, errmsg, out);
     }
 
@@ -65,6 +66,11 @@ namespace mongo {
             Client::Context ctx(logns , dbpath, false);
             rsOplogDetails = nsdetails(logns);
             massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
+        }
+        if (rsOplogRefsDetails == NULL) {
+            Client::Context ctx(rsOplogRefs , dbpath, false);
+            rsOplogRefsDetails = nsdetails(rsOplogRefs);
+            massert(16814, "local.oplog.refs missing. did you drop it? if so restart server", rsOplogRefsDetails);
         }
         if (replInfoDetails == NULL) {
             Client::Context ctx(rsReplInfo , dbpath, false);
@@ -111,6 +117,23 @@ namespace mongo {
         _logTransactionOps(gtid, timestamp, hash, opInfo);
     }
 
+    void logTransactionOpsRef(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid) {
+        Lock::DBRead lk1("local");
+        BSONObjBuilder b;
+        addGTIDToBSON("_id", gtid, b);
+        b.appendTimestamp("ts", timestamp);
+        b.append("h", (long long)hash);
+        b.append("a", true);
+        b.append("ref", oid);
+        BSONObj bb = b.done();
+        writeEntryToOplog(bb);
+    }
+
+    void logOpsToOplogRef(BSONObj o) {
+        Lock::DBRead lk("local");
+        writeEntryToOplogRefs(o);
+    }
+
     void createOplog() {
         bool rs = !cmdLine._replSet.empty();
         verify(rs);
@@ -119,8 +142,9 @@ namespace mongo {
         const char * replInfoNS = rsReplInfo;
         Client::Context ctx(oplogNS);
         NamespaceDetails * oplogNSD = nsdetails(oplogNS);
+        NamespaceDetails * oplogRefsNSD = nsdetails(rsOplogRefs);        
         NamespaceDetails * replInfoNSD = nsdetails(replInfoNS);
-        if (oplogNSD || replInfoNSD) {
+        if (oplogNSD || replInfoNSD || oplogRefsNSD) {
             // TODO: (Zardosht), figure out if there are any checks to do here
             // not sure under what scenarios we can be here, so
             // making a printf to catch this so we can investigate
@@ -134,7 +158,10 @@ namespace mongo {
         // create the namespace
         string err;
         BSONObj o = b.done();
-        bool ret = userCreateNS(oplogNS, o, err, false);
+        bool ret;
+        ret = userCreateNS(oplogNS, o, err, false);
+        verify(ret);
+        ret = userCreateNS(rsOplogRefs, o, err, false);
         verify(ret);
         ret = userCreateNS(replInfoNS, o, err, false);
         verify(ret);
@@ -173,6 +200,13 @@ namespace mongo {
         uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         rsOplogDetails->insertObject(entry, flags);
     }
+
+    void writeEntryToOplogRefs(BSONObj o) {
+        verify(rsOplogRefsDetails);
+        uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
+        rsOplogRefsDetails->insertObject(o, flags);
+    }
+
     // assumes oplog is read locked on entry
     void replicateTransactionToOplog(BSONObj& op) {
         // set the applied bool to false, to let the oplog know that
@@ -192,6 +226,40 @@ namespace mongo {
         }
     }
 
+    // apply all operations in the array
+    void applyOps(std::vector<BSONElement> ops) {
+        const size_t numOps = ops.size();
+        for(size_t i = 0; i < numOps; ++i) {
+            BSONElement* curr = &ops[i];
+            OpLogHelpers::applyOperationFromOplog(curr->Obj());
+        }
+    }
+
+    // find all oplog entries for a given OID in the oplog.refs collection and apply them
+    // TODO this should be a range query on oplog.refs where _id.oid == oid and applyOps to
+    // each entry found.  The locking of the query interleaved with the locking in the applyOps
+    // did not work, so it a sequence of point queries.  
+    // TODO verify that the query plan is a indexed lookup.
+    // TODO verify that the query plan does not fetch too many docs and then only process one of them.
+    void applyRefOp(BSONObj entry) {
+        OID oid = entry["ref"].OID();
+        LOG(3) << "apply ref " << entry << " oid " << oid << endl;
+        long long seq = 0; // note that 0 is smaller than any of the seq numbers
+        while (1) {
+            BSONObj entry;
+            {
+                Client::ReadContext ctx(rsOplogRefs);
+                if (!Helpers::findOne(rsOplogRefs, BSON("_id.oid" << oid << "_id.seq" << BSON("$gt" << seq)), entry, false)) {
+                    break;
+                }
+            }
+            BSONElement e = entry.getFieldDotted("_id.seq");
+            seq = e.Long();
+            LOG(3) << "apply " << entry << " seq=" << seq << endl;
+            applyOps(entry["ops"].Array());
+        }
+    }
+    
     // takes an entry that was written _logTransactionOps
     // and applies them to collections
     //
@@ -202,12 +270,12 @@ namespace mongo {
         bool transactionAlreadyApplied = entry["a"].Bool();
         if (!transactionAlreadyApplied) {
             Client::Transaction transaction(DB_SERIALIZABLE);
-            std::vector<BSONElement> ops = entry["ops"].Array();
-            const size_t numOps = ops.size();
-
-            for(size_t i = 0; i < numOps; ++i) {
-                BSONElement* curr = &ops[i];
-                OpLogHelpers::applyOperationFromOplog(curr->Obj());
+            if (entry.hasElement("ref")) {
+                applyRefOp(entry);
+            } else if (entry.hasElement("ops")) {
+                applyOps(entry["ops"].Array());
+            } else {
+                verify(0);
             }
             // set the applied bool to false, to let the oplog know that
             // this entry has not been applied to collections
@@ -220,18 +288,46 @@ namespace mongo {
             transaction.commit(DB_TXN_NOSYNC);
         }
     }
+    
+    // apply all operations in the array
+    void rollbackOps(std::vector<BSONElement> ops) {
+        const size_t numOps = ops.size();
+        for(size_t i = 0; i < numOps; ++i) {
+            // note that we have to rollback the transaction backwards
+            BSONElement* curr = &ops[numOps - i - 1];
+            OpLogHelpers::rollbackOperationFromOplog(curr->Obj());
+        }
+    }
+
+    void rollbackRefOp(BSONObj entry) {
+        OID oid = entry["ref"].OID();
+        LOG(3) << "rollback ref " << entry << " oid " << oid << endl;
+        long long seq = LLONG_MAX;
+        while (1) {
+            BSONObj entry;
+            {
+                Client::ReadContext ctx(rsOplogRefs);
+                if (!Helpers::findOne(rsOplogRefs, BSON("_id.oid" << oid << "_id.seq" << BSON("$lt" << seq)), entry, false)) {
+                    break;
+                }
+            }
+            BSONElement e = entry.getFieldDotted("_id.seq");
+            seq = e.Long();
+            LOG(3) << "apply " << entry << " seq=" << seq << endl;
+            rollbackOps(entry["ops"].Array());
+        }
+    }
 
     void rollbackTransactionFromOplog(BSONObj entry) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         Client::Transaction transaction(DB_SERIALIZABLE);
         if (transactionAlreadyApplied) {
-            std::vector<BSONElement> ops = entry["ops"].Array();
-            const size_t numOps = ops.size();
-
-            for(size_t i = 0; i < numOps; ++i) {
-                // note that we have to rollback the transaction backwards
-                BSONElement* curr = &ops[numOps - i - 1];
-                OpLogHelpers::rollbackOperationFromOplog(curr->Obj());
+            if (entry.hasElement("ref")) {
+                rollbackRefOp(entry);
+            } else if (entry.hasElement("ops")) {
+                rollbackOps(entry["ops"].Array());
+            } else {
+                verify(0);
             }
         }
         {
@@ -243,7 +339,18 @@ namespace mongo {
     
     void purgeEntryFromOplog(BSONObj entry) {
         verify(rsOplogDetails);
-        // TODO: (add flags of prelocked)
+        if (entry.hasElement("ref")) {
+            OID oid = entry["ref"].OID();
+            Helpers::removeRange(
+                rsOplogRefs,
+                BSON("_id" << BSON("oid" << oid << "seq" << minKey)),
+                BSON("_id" << BSON("oid" << oid << "seq" << maxKey)),
+                BSON("_id" << 1),
+                true,
+                false
+                );
+        }
+
         BSONObj pk = entry["_id"].wrap("");
         uint64_t flags = (NamespaceDetails::NO_LOCKTREE);
         rsOplogDetails->deleteObject(pk, entry, flags);

@@ -515,6 +515,7 @@ static int mongoDbMain(int argc, char* argv[]) {
     ("smallfiles", "DEPRECATED")
     ("syncdelay",po::value<double>(&cmdLine.syncdelay)->default_value(60), "seconds between disk syncs (0=never, but not recommended)")
     ("sysinfo", "print some diagnostic system information")
+    ("txnMemLimit", po::value<uint64_t>(), "limit of the size of a transaction's  operation")
     ("upgrade", "upgrade db if needed")
     ;
 
@@ -732,6 +733,13 @@ static int mongoDbMain(int argc, char* argv[]) {
                 // fork only exists on *nix
                 // so '/' is safe
                 cmdLine.tmpDir = cmdLine.cwd + "/" + cmdLine.tmpDir;
+            }
+        }
+        if (params.count("txnMemLimit")) {
+            cmdLine.txnMemLimit = params["txnMemLimit"].as<uint64_t>();
+            if( cmdLine.txnMemLimit > 1ULL<<21 ) {
+                out() << "--txnMemLimit cannot be greater than 2MB" << endl;
+                dbexit( EXIT_BADOPTIONS );
             }
         }
         if (params.count("nohints")) {

@@ -238,11 +238,6 @@ namespace mongo {
             try {
                 vote = yea(whoid);
                 dassert( hopeful->id() == whoid );
-                // Not sure where the right place to put this lock is. 
-                // Maybe this belongs at the top of the function?
-                boost::unique_lock<boost::mutex> lock(rs.stateChangeMutex);
-                RSBase::lock lk(&rs);
-                rs.relinquish();
                 log() << "replSet info voting yea for " <<  hopeful->fullName() << " (" << whoid << ')' << rsLog;
             }
             catch(VoteException&) {

@@ -55,7 +55,7 @@ ReplSetTest = function( opts ){
 
     this.startPort = opts.startPort || 31000;
 
-    this.nodeOptions = {}    
+    this.nodeOptions = {}
     if( isObject( this.numNodes ) ){
         var len = 0
         for( var i in this.numNodes ){
@@ -88,6 +88,7 @@ ReplSetTest = function( opts ){
 
     this.nodes = []
     this.initLiveNodes()
+    this.txnMemLimit = opts.txnMemLimit || 1000000;
     
     Object.extend( this, ReplSetTest.Health )
     Object.extend( this, ReplSetTest.State )
@@ -600,6 +601,7 @@ ReplSetTest.prototype.start = function( n , options , restart , wait ){
                  smallfiles : "",
                  rest : "",
                  replSet : this.useSeedList ? this.getURL() : this.name,
+                 txnMemLimit : this.txnMemLimit,
                  dbpath : "$set-$node" }
     
     defaults = Object.merge( defaults, ReplSetTest.nodeOptions || {} )

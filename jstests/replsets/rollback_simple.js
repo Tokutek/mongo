@@ -122,6 +122,12 @@ function doItemsToRollBack(db) {
     db.kap.insert({ foo: 2 })
     db.kap2.insert({ foo: 2 })
 
+	db.runCommand("beginTransaction");
+	t.insert({q:3});
+    t.update({ q: 3 }, { q: 4, rb: true });
+	db.runCommand("commitTransaction");
+	
+
     // create a collection (need to roll back the whole thing)
     //db.newcoll.insert({ a: true });
 
@@ -144,14 +150,14 @@ function verify(db) {
     assert(t.find({ q: 4 }).count() == 0);
 }
 
-doTest = function (signal) {
+doTest = function (signal, txnMemLimit, startPort) {
 
 	var num = 3;
 	var host = getHostName();
 	var name = "tags";
 	var timeout = 60000;
 
-	var replTest = new ReplSetTest( {name: name, nodes: num, startPort:31000} );
+	var replTest = new ReplSetTest( {name: name, nodes: num, startPort:startPort, txnMemLimit: txnMemLimit} );
 	var conns = replTest.startSet();
 	var port = replTest.ports;
 	var config = {_id : name, members :
@@ -234,4 +240,6 @@ var reconnect = function(a,b) {
 
 print("rollback2.js");
 
-doTest( 15 );
+doTest( 15, 1000000, 31000 );
+doTest( 15, 0, 41000 );
+

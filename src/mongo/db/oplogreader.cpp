@@ -215,4 +215,10 @@ namespace mongo {
             ret
             );
     }
+
+    shared_ptr<DBClientCursor> OplogReader::getOplogRefsCursor(OID &oid) {
+        shared_ptr<DBClientCursor> retCursor;
+        retCursor.reset(_conn->query(rsOplogRefs, QUERY("_id.oid" << oid)).release());
+        return retCursor;
+    }
 }

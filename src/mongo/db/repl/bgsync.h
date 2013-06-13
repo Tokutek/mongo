@@ -148,6 +148,9 @@ namespace mongo {
         // rslock is necessary.
         void startOpSyncThread();
 
+        // Copy a range of documents to the local oplog.refs collection
+        void copyOplogRefsRange(OplogReader &r, OID oid);
+
     };
 
 

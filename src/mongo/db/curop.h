@@ -302,13 +302,24 @@ namespace mongo {
     } killCurrentOp;
 
     class NoteStateTransition {
+        bool _noted;
         public:
             NoteStateTransition() {
                 killCurrentOp.killForTransition();
+                _noted = true;
             }
             ~NoteStateTransition() {
-                killCurrentOp.transitionComplete();
+                if (_noted) {
+                    killCurrentOp.transitionComplete();
+                }
+                _noted = false;
             }
+            void noteTransitionComplete() {
+                verify(_noted);
+                killCurrentOp.transitionComplete();
+                _noted = false;
+            }
+            
     };
 
 }
