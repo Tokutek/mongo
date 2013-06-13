@@ -85,8 +85,11 @@ namespace mongo {
                     mp->tag |= 1;
             }
 
-            if( cmdObj["pv"].Int() != 1 ) {
-                errmsg = "incompatible replset protocol version";
+            if (!ReplSetConfig::checkProtocolVersion(cmdObj["pv"].Int(), errmsg)) {
+                // You and I are not allowed to talk to each other at all.  This doesn't reflect the
+                // protocol version of this replica set, this is just the version this particular
+                // mongod speaks.
+                result.append("protocolVersionMismatch", true);
                 return false;
             }
             {
@@ -134,6 +137,7 @@ namespace mongo {
             result.append("v", v);
             if( v > cmdObj["v"].Int() )
                 result << "config" << theReplSet->config().asBson();
+            result.append("pv", theReplSet->config().protocolVersion);
 
             return true;
         }
@@ -147,7 +151,7 @@ namespace mongo {
 
         BSONObj cmd = BSON( "replSetHeartbeat" << setName <<
                             "v" << myCfgVersion <<
-                            "pv" << 1 <<
+                            "pv" << ReplSetConfig::CURRENT_PROTOCOL_VERSION <<
                             "checkEmpty" << checkEmpty <<
                             "from" << from );
 

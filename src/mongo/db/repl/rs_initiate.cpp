@@ -94,6 +94,9 @@ namespace mongo {
                 catch(...) {
                     log() << "replSet cmufcc error exception in requestHeartbeat?" << rsLog;
                 }
+                if (res.getBoolField("protocolVersionMismatch")) {
+                    uasserted(16817, "member " + i->h.toString() + " has a protocol version that is incompatible with ours: " + res.toString());
+                }
                 if( res.getBoolField("mismatch") )
                     uasserted(13145, "set name does not match the set name host " + i->h.toString() + " expects");
                 if( *res.getStringField("set") ) {
@@ -218,6 +221,7 @@ namespace mongo {
 
                 bob b;
                 b.append("_id", name);
+                b.append("protocolVersion", ReplSetConfig::CURRENT_PROTOCOL_VERSION);
                 bob members;
                 members.append("0", BSON( "_id" << 0 << "host" << HostAndPort::me().toString() ));
                 result.append("me", HostAndPort::me().toString());

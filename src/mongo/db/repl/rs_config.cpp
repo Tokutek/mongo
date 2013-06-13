@@ -114,7 +114,7 @@ namespace mongo {
 
     bo ReplSetConfig::asBson() const {
         bob b;
-        b.append("_id", _id).append("version", version);
+        b.append("_id", _id).append("version", version).append("protocolVersion", protocolVersion);
 
         BSONArrayBuilder a;
         for( unsigned i = 0; i < members.size(); i++ )
@@ -153,6 +153,47 @@ namespace mongo {
         }
 
         return b.obj();
+    }
+
+    enum {
+        // We should maintain a list of protocol versions used by MongoDB.
+        PV_MONGODB_2_2 = 1,
+
+        // Hack to get PV_MONGODB_CURRENT easily.
+        PV_MONGODB_NEXT,
+        PV_MONGODB_CURRENT = PV_MONGODB_NEXT - 1,
+
+        // MongoDB is currently (still) at 1, but we'll give them 6 bits of head room.
+        // Add new versions here, and a comment about the changes made would be good too.
+        PV_TOKUMX_1_0 = 65,  // First release of TokuMX.
+
+        // Hack to get PV_TOKUMX_CURRENT easily.
+        PV_TOKUMX_NEXT,
+        PV_TOKUMX_CURRENT = PV_TOKUMX_NEXT - 1
+    };
+    const int ReplSetConfig::CURRENT_PROTOCOL_VERSION = PV_TOKUMX_CURRENT;
+    const int ReplSetConfig::MAX_SUPPORTED_PROTOCOL_VERSION = PV_TOKUMX_CURRENT;
+    const int ReplSetConfig::MIN_SUPPORTED_PROTOCOL_VERSION = PV_TOKUMX_1_0;
+
+    BOOST_STATIC_ASSERT(ReplSetConfig::MIN_SUPPORTED_PROTOCOL_VERSION > PV_MONGODB_CURRENT);
+    BOOST_STATIC_ASSERT(ReplSetConfig::MIN_SUPPORTED_PROTOCOL_VERSION <= ReplSetConfig::MAX_SUPPORTED_PROTOCOL_VERSION);
+    BOOST_STATIC_ASSERT(ReplSetConfig::CURRENT_PROTOCOL_VERSION <= ReplSetConfig::MAX_SUPPORTED_PROTOCOL_VERSION);
+    BOOST_STATIC_ASSERT(ReplSetConfig::CURRENT_PROTOCOL_VERSION >= ReplSetConfig::MIN_SUPPORTED_PROTOCOL_VERSION);
+
+    bool ReplSetConfig::checkProtocolVersion(int pv, string &errmsg) {
+        if (pv > MAX_SUPPORTED_PROTOCOL_VERSION) {
+            stringstream ss;
+            ss << "Replication protocol version " << pv << " is too new.  Max supported version is " << MAX_SUPPORTED_PROTOCOL_VERSION;
+            errmsg += ss.str();
+            return false;
+        }
+        if (pv < MIN_SUPPORTED_PROTOCOL_VERSION) {
+            stringstream ss;
+            ss << "Replication protocol version " << pv << " is too old.  Min supported version is " << MIN_SUPPORTED_PROTOCOL_VERSION;
+            errmsg += ss.str();
+            return false;
+        }
+        return true;
     }
 
     static inline void mchk(bool expr) {
@@ -471,9 +512,19 @@ namespace mongo {
     }
 
     void ReplSetConfig::from(BSONObj o) {
-        static const string legal[] = {"_id","version", "members","settings"};
-        static const set<string> legals(legal, legal + 4);
+        static const string legal[] = {"_id","version", "protocolVersion", "members","settings"};
+        static const set<string> legals(legal, legal + 5);
         assertOnlyHas(o, legals);
+
+        {
+            uassert(16815, "no protocol version provided in config " + o.toString(), o["protocolVersion"].ok());
+            int pv = o["protocolVersion"].Int();
+            string pverr;
+            if (!checkProtocolVersion(pv, pverr)) {
+                uasserted(16816, pverr);
+            }
+            protocolVersion = pv;
+        }
 
         md5 = o.md5();
         _id = o["_id"].String();
@@ -596,7 +647,7 @@ namespace mongo {
     }
 
     ReplSetConfig::ReplSetConfig() :
-        version(EMPTYCONFIG),_ok(false),_majority(-1)
+        version(EMPTYCONFIG),protocolVersion(CURRENT_PROTOCOL_VERSION),_ok(false),_majority(-1)
     {}
 
     ReplSetConfig::ReplSetConfig(BSONObj cfg, bool force) :

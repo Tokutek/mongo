@@ -144,6 +144,12 @@ namespace mongo {
 
         BSONObj asBson() const;
 
+        static const int CURRENT_PROTOCOL_VERSION;
+        static const int MAX_SUPPORTED_PROTOCOL_VERSION;
+        static const int MIN_SUPPORTED_PROTOCOL_VERSION;
+        static bool checkProtocolVersion(int pv, string &errmsg);
+        int protocolVersion;
+
         /**
          * Getter and setter for _majority. This is almost always
          * members.size()/2+1, but can be the number of non-arbiter members if
