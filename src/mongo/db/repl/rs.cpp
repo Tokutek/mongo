@@ -1041,7 +1041,8 @@ namespace mongo {
     void replLocalAuth() {
         if (!AuthorizationManager::isAuthEnabled())
             return;
-        cc().getAuthorizationSession()->grantInternalAuthorization("_repl");
+        cc().getAuthorizationSession()->grantInternalAuthorization(
+                UserName("_repl", "local"));
     }
 
     // for testing only

@@ -152,6 +152,10 @@ namespace {
         ("sslOnNormalPorts" , "use ssl on configured ports" )
         ("sslPEMKeyFile" , po::value<string>(&cmdLine.sslPEMKeyFile), "PEM file for ssl" )
         ("sslPEMKeyPassword" , new PasswordValue(&cmdLine.sslPEMKeyPassword) , "PEM file password" )
+        ("sslClusterFile", po::value<string>(&cmdLine.sslClusterFile), 
+         "Key file for internal SSL authentication" )
+        ("sslClusterPassword", new PasswordValue(&cmdLine.sslClusterPassword), 
+         "Internal authentication key file password" )
         ("sslCAFile", po::value<std::string>(&cmdLine.sslCAFile), 
          "Certificate Authority file for SSL")
         ("sslCRLFile", po::value<std::string>(&cmdLine.sslCRLFile),
@@ -508,6 +512,8 @@ namespace {
         }
         else if (cmdLine.sslPEMKeyFile.size() || 
                  cmdLine.sslPEMKeyPassword.size() ||
+                 cmdLine.sslClusterFile.size() ||
+                 cmdLine.sslClusterPassword.size() ||
                  cmdLine.sslCAFile.size() ||
                  cmdLine.sslCRLFile.size() ||
                  cmdLine.sslWeakCertificateValidation ||
