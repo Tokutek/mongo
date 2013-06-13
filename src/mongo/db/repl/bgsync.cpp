@@ -132,13 +132,30 @@ namespace mongo {
                 }
                 GTID currEntry = getGTIDFromOplogEntry(curr);
                 theReplSet->gtidManager->noteApplyingGTID(currEntry);
-                applyTransactionFromOplog(curr);
+                // we must do applyTransactionFromOplog in a loop
+                // because once we have called noteApplyingGTID, we must
+                // continue until we are successful in applying the transaction.
+                uint32_t numTries = 0;
+                while (1) {
+                    try {
+                        numTries++;
+                        applyTransactionFromOplog(curr);
+                        break;
+                    }
+                    catch (std::exception &e) {
+                        log() << "exception during applying transaction from oplog: " << e.what() << endl;
+                        if (numTries > 100) {
+                            // something is really wrong if we fail 100 times, let's abort
+                            ::abort();
+                        }
+                        sleepsecs(1);
+                    }
+                }
                 LOG(3) << "applied " << curr.toString(false, true) << endl;
+                theReplSet->gtidManager->noteGTIDApplied(currEntry);
 
                 {
                     boost::unique_lock<boost::mutex> lck(_mutex);
-                    // I don't recall if noteGTIDApplied needs to be called within _mutex
-                    theReplSet->gtidManager->noteGTIDApplied(currEntry);
                     dassert(_deque.size() > 0);
                     _deque.pop_front();
                     

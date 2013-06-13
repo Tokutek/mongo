@@ -284,8 +284,20 @@ namespace mongo {
                 Lock::DBRead lk1("local");
                 writeEntryToOplog(entry);
             }
-            // we are operating as a secondary. We don't have to fsync
-            transaction.commit(DB_TXN_NOSYNC);
+            // If this code fails, it is impossible to recover from
+            // because we don't know if the transaction successfully committed
+            // so we might as well crash
+            // There is currently no known way this code can throw an exception
+            try {
+                // we are operating as a secondary. We don't have to fsync
+                transaction.commit(DB_TXN_NOSYNC);
+            }
+            catch (std::exception &e) {
+                log() << "exception during commit of applyTransactionFromOplog, aborting system: " << e.what() << endl;
+                printStackTrace();
+                logflush();
+                ::abort();
+            }
         }
     }
     

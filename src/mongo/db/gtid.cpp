@@ -18,6 +18,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/util/time_support.h"
+#include "mongo/util/stacktrace.h"
 
 namespace mongo {
 
@@ -191,36 +192,52 @@ namespace mongo {
     // called when a secondary takes an unapplied GTID it has read in the oplog
     // and starts to apply it
     void GTIDManager::noteApplyingGTID(const GTID& gtid) {
-        boost::unique_lock<boost::mutex> lock(_lock);
-        dassert(GTID::cmp(gtid, _minUnappliedGTID) >= 0);
-        dassert(GTID::cmp(gtid, _lastUnappliedGTID) > 0);
-        if (_unappliedGTIDs.size() == 0) {
-            _minUnappliedGTID = gtid;
-        }
+        try {
+            boost::unique_lock<boost::mutex> lock(_lock);
+            dassert(GTID::cmp(gtid, _minUnappliedGTID) >= 0);
+            dassert(GTID::cmp(gtid, _lastUnappliedGTID) > 0);
+            if (_unappliedGTIDs.size() == 0) {
+                _minUnappliedGTID = gtid;
+            }
 
-        _unappliedGTIDs.insert(gtid);        
-        _lastUnappliedGTID = gtid;
+            _unappliedGTIDs.insert(gtid);
+            _lastUnappliedGTID = gtid;
+        }
+        catch (std::exception &e) {
+            log() << "exception during noteApplyingGTID, aborting system: " << e.what() << endl;
+            printStackTrace();
+            logflush();
+            ::abort();
+        }
     }
 
     // called when a GTID has finished being applied, which means
     // we can remove it from the unappliedGTIDs set
     void GTIDManager::noteGTIDApplied(const GTID& gtid) {
-        boost::unique_lock<boost::mutex> lock(_lock);
-        dassert(GTID::cmp(gtid, _minUnappliedGTID) >= 0);
-        dassert(_unappliedGTIDs.size() > 0);
-        // remove from list of GTIDs
-        _unappliedGTIDs.erase(gtid);
-        // if what we are removing is currently the minumum live GTID
-        // we need to update the minimum live GTID
-        if (GTID::cmp(_minUnappliedGTID, gtid) == 0) {
-            if (_unappliedGTIDs.size() == 0) {
-                _minUnappliedGTID = _lastUnappliedGTID;
-                _minUnappliedGTID.inc();
+        try {
+            boost::unique_lock<boost::mutex> lock(_lock);
+            dassert(GTID::cmp(gtid, _minUnappliedGTID) >= 0);
+            dassert(_unappliedGTIDs.size() > 0);
+            // remove from list of GTIDs
+            _unappliedGTIDs.erase(gtid);
+            // if what we are removing is currently the minumum live GTID
+            // we need to update the minimum live GTID
+            if (GTID::cmp(_minUnappliedGTID, gtid) == 0) {
+                if (_unappliedGTIDs.size() == 0) {
+                    _minUnappliedGTID = _lastUnappliedGTID;
+                    _minUnappliedGTID.inc();
+                }
+                else {
+                    // get the minumum from _liveGTIDs and set it to _minLiveGTIDs
+                    _minUnappliedGTID = *(_unappliedGTIDs.begin());
+                }
             }
-            else {
-                // get the minumum from _liveGTIDs and set it to _minLiveGTIDs
-                _minUnappliedGTID = *(_unappliedGTIDs.begin());
-            }
+        }
+        catch (std::exception &e) {
+            log() << "exception during noteApplyingGTID, aborting system: " << e.what() << endl;
+            printStackTrace();
+            logflush();
+            ::abort();
         }
     }
 
