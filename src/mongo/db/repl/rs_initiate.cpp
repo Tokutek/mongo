@@ -233,6 +233,13 @@ namespace mongo {
             }
             else {
                 configObj = cmdObj["replSetInitiate"].Obj();
+                if (!configObj.hasField("protocolVersion")) {
+                    // hack for compatibility with existing apps
+                    BSONObjBuilder b;
+                    b.appendElements(configObj);
+                    b.append("protocolVersion", ReplSetConfig::CURRENT_PROTOCOL_VERSION);
+                    configObj = b.obj();
+                }
             }
 
             bool parsed = false;
