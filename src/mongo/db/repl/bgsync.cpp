@@ -135,8 +135,7 @@ namespace mongo {
                 // we must do applyTransactionFromOplog in a loop
                 // because once we have called noteApplyingGTID, we must
                 // continue until we are successful in applying the transaction.
-                uint32_t numTries = 0;
-                while (1) {
+                for (uint32_t numTries = 0; numTries <= 100; numTries++) {
                     try {
                         numTries++;
                         applyTransactionFromOplog(curr);
@@ -144,7 +143,7 @@ namespace mongo {
                     }
                     catch (std::exception &e) {
                         log() << "exception during applying transaction from oplog: " << e.what() << endl;
-                        if (numTries > 100) {
+                        if (numTries == 100) {
                             // something is really wrong if we fail 100 times, let's abort
                             ::abort();
                         }

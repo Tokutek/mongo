@@ -205,8 +205,9 @@ namespace mongo {
         }
         catch (std::exception &e) {
             log() << "exception during noteApplyingGTID, aborting system: " << e.what() << endl;
-            printStackTrace();
-            logflush();
+            stringstream ss;
+            printStackTrace(ss);
+            log() << ss.str() << endl;
             ::abort();
         }
     }
@@ -235,8 +236,9 @@ namespace mongo {
         }
         catch (std::exception &e) {
             log() << "exception during noteApplyingGTID, aborting system: " << e.what() << endl;
-            printStackTrace();
-            logflush();
+            stringstream ss;
+            printStackTrace(ss);
+            log() << ss.str() << endl;
             ::abort();
         }
     }
