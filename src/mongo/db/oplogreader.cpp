@@ -218,7 +218,8 @@ namespace mongo {
 
     shared_ptr<DBClientCursor> OplogReader::getOplogRefsCursor(OID &oid) {
         shared_ptr<DBClientCursor> retCursor;
-        retCursor.reset(_conn->query(rsOplogRefs, QUERY("_id.oid" << oid)).release());
+        // this maps to {_id : {$gt : { oid : oid , seq : 0 }}}
+        retCursor.reset(_conn->query(rsOplogRefs, QUERY("_id" << BSON("$gt" << BSON("oid" << oid << "seq" << 0)) ).hint(BSON("_id" << 1))).release());
         return retCursor;
     }
 }
