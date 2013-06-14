@@ -30,6 +30,7 @@ namespace SpillableVectorTests {
             push(new_vec);
         }
 
+      public:
         class WithSpillableVector : boost::noncopyable {
             Base &_b;
           public:
@@ -152,18 +153,113 @@ namespace SpillableVectorTests {
     bool ParentSpillsFirst::parentCheckComplete = false;
 
     class ParentForcesChildSpill : Base {
+        static int lastI;
       public:
+        static void callback(BSONObj &o) {
+            ASSERT_TRUE(o["a"].ok());
+            vector<BSONElement> arr = o["a"].Array();
+            for (vector<BSONElement>::const_iterator it = arr.begin(); it != arr.end(); ++it) {
+                BSONObj obj = it->Obj();
+                ASSERT_TRUE(obj["i"].ok());
+                int i = obj["i"].numberInt();
+                ASSERT_LESS_THAN(lastI, i);
+                lastI = i;
+            }
+        }
         void run() {
-            FAIL("need to implement this test");
+            lastI = -1;
+            WithSpillableVector parent(this, callback, 100);
+            for (int i = 0; i < 50; ++i) {
+                top()->append(BSON("i" << i));
+            }
+            {
+                WithSpillableVector child(this, callback, 100);
+                top()->append(BSON("i" << 100));
+                ASSERT_GREATER_THAN(100, lastI);
+                top()->transfer();
+            }
+            BSONObjBuilder b;
+            top()->getObjectsOrRef(b);
+            ASSERT_EQUALS(100, lastI);
         }
     };
+    int ParentForcesChildSpill::lastI = -1;
 
     class ConcurrentVectorsGetDifferentOids {
         Base b1;
         Base b2;
+        static OID oid1, oid2;
       public:
+        static void callback1(BSONObj &o) {
+            ASSERT_TRUE(o["_id"].ok());
+            BSONObj idObj = o["_id"].Obj();
+            ASSERT_TRUE(idObj["oid"].ok());
+            OID oid = idObj["oid"].OID();
+            static OID nullOID;
+            if (oid1 == nullOID) {
+                oid1 = oid;
+            }
+            else {
+                ASSERT_EQUALS(oid1, oid);
+            }
+            ASSERT_NOT_EQUALS(oid2, oid);
+        }
+        static void callback2(BSONObj &o) {
+            ASSERT_TRUE(o["_id"].ok());
+            BSONObj idObj = o["_id"].Obj();
+            ASSERT_TRUE(idObj["oid"].ok());
+            OID oid = idObj["oid"].OID();
+            static OID nullOID;
+            if (oid2 == nullOID) {
+                oid2 = oid;
+            }
+            else {
+                ASSERT_EQUALS(oid2, oid);
+            }
+            ASSERT_NOT_EQUALS(oid1, oid);
+        }
         void run() {
-            FAIL("need to implement this test");
+            Base::WithSpillableVector v1(&b1, callback1, 1);
+            Base::WithSpillableVector v2(&b2, callback2, 1);
+            for (int i = 0; i < 10; ++i) {
+                b1.top()->append(BSON("i" << i));
+                b2.top()->append(BSON("i" << i));
+            }
+        }
+    };
+    OID ConcurrentVectorsGetDifferentOids::oid1;
+    OID ConcurrentVectorsGetDifferentOids::oid2;
+
+    class ChildAbort : Base {
+      public:
+        static void callback(BSONObj &) {
+            FAIL("shouldn't call callback when we're in memory");
+        }
+        void run() {
+            WithSpillableVector v(this, callback, 1<<10);
+            for (int i = 0; i < 10; ++i) {
+                top()->append(BSON("i" << i));
+            }
+            {
+                WithSpillableVector v(this, callback, 1<<10);
+                for (int i = 0; i < 10; ++i) {
+                    top()->append(BSON("j" << i));
+                }
+            }
+            BSONObjBuilder b;
+            top()->getObjectsOrRef(b);
+            BSONObj obj = b.done();
+            BSONElement arrElt = obj["a"];
+            ASSERT_TRUE(arrElt.ok());
+            vector<BSONElement> arr = arrElt.Array();
+            ASSERT_EQUALS(10, arr.size());
+            int i = 0;
+            for (vector<BSONElement>::const_iterator it = arr.begin(); it != arr.end(); ++it, ++i) {
+                BSONObj o = it->Obj();
+                ASSERT_FALSE(o.hasField("j"));
+                ASSERT_TRUE(o.hasField("i"));
+                ASSERT_EQUALS(i, o["i"].numberLong());
+            }
         }
     };
 
@@ -176,6 +272,7 @@ namespace SpillableVectorTests {
             add<ParentSpillsFirst>();
             add<ParentForcesChildSpill>();
             add<ConcurrentVectorsGetDifferentOids>();
+            add<ChildAbort>();
         }
     } all;
 
