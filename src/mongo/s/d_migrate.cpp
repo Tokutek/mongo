@@ -44,6 +44,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/repl.h"
+#include "mongo/db/repl/rs.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/insert.h"
