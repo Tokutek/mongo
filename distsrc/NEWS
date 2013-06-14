@@ -45,6 +45,12 @@ Bug fixes
     - Calls to db.eval() are now properly profiled. (#16)
 
 
+Miscellaneous
+~~~~~~~~~~~~~
+
+    - The mongoperf tool has been deprecated. (#174)
+
+
 tokumx 1.0.0-rc.0
 -----------------
 Release date: 2013-06-03
