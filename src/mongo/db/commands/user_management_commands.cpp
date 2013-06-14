@@ -66,6 +66,7 @@ namespace mongo {
                  BSONObjBuilder& result,
                  bool fromRepl) {
             std::string userName;
+            std::string clearTextPassword;
             std::string password;
             std::string userSource; // TODO: remove this.
             bool readOnly; // TODO: remove this.
@@ -95,13 +96,14 @@ namespace mongo {
                 return false;
             }
 
-            status = bsonExtractStringFieldWithDefault(cmdObj, "pwd", "", &password);
+            status = bsonExtractStringFieldWithDefault(cmdObj, "pwd", "", &clearTextPassword);
             if (!status.isOK()) {
                 addStatus(Status(ErrorCodes::UserModificationFailed,
                                  "Invalid \"pwd\" string"),
                           result);
                 return false;
             }
+            password = DBClientWithCommands::createPasswordDigest(userName, clearTextPassword);
 
             status = bsonExtractStringFieldWithDefault(cmdObj, "userSource", "", &userSource);
             if (!status.isOK()) {
@@ -142,7 +144,6 @@ namespace mongo {
             BSONObjBuilder userObjBuilder;
             userObjBuilder.append("user", userName);
             if (cmdObj.hasField("pwd")) {
-                // TODO: hash password once we're receiving plaintext passwords here.
                 userObjBuilder.append("pwd", password);
             }
 
