@@ -72,7 +72,7 @@ namespace SpillableVectorTests {
         static void callback(BSONObj &o) {
             ASSERT_TRUE(o["a"].ok());
             vector<BSONElement> vec = o["a"].Array();
-            ASSERT_EQUALS(50, vec.size());
+            ASSERT_EQUALS(50, (int) vec.size());
             calls++;
         }
         void run() {
@@ -111,7 +111,7 @@ namespace SpillableVectorTests {
                 // We are going backwards, so this must be the parent object.
                 ASSERT_TRUE(o["a"].ok());
                 vector<BSONElement> arr = o["a"].Array();
-                ASSERT_EQUALS(1, arr.size());
+                ASSERT_EQUALS(1, (int) arr.size());
                 BSONObj obj = arr[0].Obj();
                 ASSERT_TRUE(obj["i"].ok());
                 ASSERT_EQUALS(0, obj["i"].numberInt());
@@ -252,7 +252,7 @@ namespace SpillableVectorTests {
             BSONElement arrElt = obj["a"];
             ASSERT_TRUE(arrElt.ok());
             vector<BSONElement> arr = arrElt.Array();
-            ASSERT_EQUALS(10, arr.size());
+            ASSERT_EQUALS(10, (int) arr.size());
             int i = 0;
             for (vector<BSONElement>::const_iterator it = arr.begin(); it != arr.end(); ++it, ++i) {
                 BSONObj o = it->Obj();
