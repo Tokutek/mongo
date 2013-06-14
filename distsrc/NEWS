@@ -3,18 +3,46 @@ tokumx news
 
 tokumx 1.0.0
 ------------
-Release date: TBD
+Release date: 2013-06-19
 
 General
 ~~~~~~~
 
-    - 
+    - This release is focused on bug fixes since 1.0.0-rc.0.
+
+    - The file names used by TokuMX have been changed, so upgrading from a
+      prior version (even 1.0.0-rc.0) is not possible.  Please do a dump
+      and restore to upgrade.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The parameters --logDir and --tmpDir now allow finer control of
+      where TokuMX puts its files.  See the users' guide for details.
+
+    - Building an index on a non-empty collection now uses a faster bulk
+      loader to do the initial index build.
 
 
 Bug fixes
 ~~~~~~~~~
 
-    - 
+    - Large transactions no longer fail during replication or chunk
+      migrations. (#93, #100)
+
+    - Fixed a deadlock that could occur during rapid chunk
+      migrations. (#115)
+
+    - Fixed a few miscellaneous bugs in replication and sharding. (#232,
+      #228, #225)
+
+    - Properly ignore the $atomic flag for queries. (#230)
+
+    - The bug causing large multi-field $in queries to run slowly has been
+      fixed. (#212)
+
+    - Calls to db.eval() are now properly profiled. (#16)
 
 
 tokumx 1.0.0-rc.0
