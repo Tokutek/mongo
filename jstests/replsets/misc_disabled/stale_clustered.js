@@ -1,8 +1,6 @@
 // this tests that slaveOk'd queries in sharded setups get correctly routed when
 // a slave goes into RECOVERING state, and don't break
 
-assert(false, "this fails because the oplog isn't capped, and it uses ReplSetTest.overflow()");
-
 function prt(s) {
     print("\nstale_clustered.js " + s);
     print();
