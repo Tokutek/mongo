@@ -1021,20 +1021,26 @@ namespace mongo {
         shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
         // Ensure we initialize the spec in case the collection is empty.
         // This also causes an error to be thrown if we're trying to create an invalid index on an empty collection.
+        const bool isSecondaryIndex = _nIndexes > 0;
         try {
             index->getSpec();
+            _indexes.push_back(index);
+
+            // Only secondary indexes need to be built.
+            if (isSecondaryIndex) {
+                try {
+                    buildIndex(index);
+                }
+                catch (DBException) {
+                    _indexes.pop_back();
+                    throw;
+                }
+            }
         }
         catch (DBException &) {
             // Can't let the IndexDetails destructor get called on its own any more, see IndexDetails::close for why.
             index->close();
             throw;
-        }
-        _indexes.push_back(index);
-
-        // Only secondary indexes need to be built.
-        const bool isSecondaryIndex = _nIndexes > 0;
-        if (isSecondaryIndex) {
-            buildIndex(index);
         }
         _nIndexes++;
 
