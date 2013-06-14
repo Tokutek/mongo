@@ -214,15 +214,32 @@ namespace mongo {
         writeEntryToOplog(op);
     }
 
-    // assumes oplog is read locked on entry
-    void replicateTransactionToOplogToFillGap(BSONObj& op) {
-        GTID currEntry = getGTIDFromOplogEntry(op);
-
-        // try inserting it into the oplog, if it does not
-        // already exist
-        if (!gtidExistsInOplog(currEntry)) {
-            replicateTransactionToOplog(op);
+    // Copy a range of documents to the local oplog.refs collection
+    static void copyOplogRefsRange(OplogReader &r, OID oid) {
+        shared_ptr<DBClientCursor> c = r.getOplogRefsCursor(oid);
+        Client::ReadContext ctx(rsOplogRefs);
+        while (c->more()) {
+            BSONObj b = c->next();
+            BSONElement eOID = b.getFieldDotted("_id.oid");
+            if (oid != eOID.OID()) {
+                break;
+            }
+            LOG(6) << "copyOplogRefsRange " << b << endl;
+            writeEntryToOplogRefs(b);
         }
+    }
+
+    void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn) {
+        *bigTxn = false;
+        if (o.hasElement("ref")) {
+            OID oid = o["ref"].OID();
+            LOG(3) << "oplog ref " << oid << endl;
+            copyOplogRefsRange(r, oid);
+            *bigTxn = true;
+        }
+
+        Client::ReadContext ctx(rsoplog);
+        replicateTransactionToOplog(o);
     }
 
     // apply all operations in the array
@@ -254,6 +271,10 @@ namespace mongo {
             }
             BSONElement e = entry.getFieldDotted("_id.seq");
             seq = e.Long();
+            BSONElement eOID = entry.getFieldDotted("_id.oid");
+            if (oid != eOID.OID()) {
+                break;
+            }
             LOG(3) << "apply " << entry << " seq=" << seq << endl;
             applyOps(entry["ops"].Array());
         }
@@ -324,6 +345,10 @@ namespace mongo {
             }
             BSONElement e = entry.getFieldDotted("_id.seq");
             seq = e.Long();
+            BSONElement eOID = entry.getFieldDotted("_id.oid");
+            if (oid != eOID.OID()) {
+                break;
+            }
             LOG(3) << "apply " << entry << " seq=" << seq << endl;
             rollbackOps(entry["ops"].Array());
         }

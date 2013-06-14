@@ -28,6 +28,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/util/optime.h"
 #include "mongo/util/timer.h"
+#include "mongo/db/oplogreader.h"
 
 namespace mongo {
 
@@ -47,8 +48,7 @@ namespace mongo {
     bool gtidExistsInOplog(GTID gtid);
     void writeEntryToOplog(BSONObj entry);
     void writeEntryToOplogRefs(BSONObj entry);
-    void replicateTransactionToOplog(BSONObj& op);
-    void replicateTransactionToOplogToFillGap(BSONObj& op);
+    void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn);
     void applyTransactionFromOplog(BSONObj entry);
     void rollbackTransactionFromOplog(BSONObj entry);
     void purgeEntryFromOplog(BSONObj entry);
