@@ -303,7 +303,12 @@ namespace mongo {
                 }
                 BSONObj op = r->nextSafe().getOwned();
                 currEntry = getGTIDFromOplogEntry(op);
-                replicateTransactionToOplogToFillGap(op);
+                // try inserting it into the oplog, if it does not
+                // already exist
+                if (!gtidExistsInOplog(currEntry)) {
+                    bool bigTxn;
+                    replicateFullTransactionToOplog(op, *r, &bigTxn);
+                }
             }
         }
         catchupTransaction.commit(0);
