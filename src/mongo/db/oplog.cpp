@@ -318,7 +318,7 @@ namespace mongo {
             BSONObj entry;
             {
                 Client::ReadContext ctx(rsOplogRefs);
-                if (!Helpers::findOne(rsOplogRefs, BSON("_id.oid" << oid << "_id.seq" << BSON("$lt" << seq)), entry, false)) {
+                if (!Helpers::findOne(rsOplogRefs, BSON("_id" << BSON("$lt" << BSON("oid" << oid << "seq" << seq))), entry, true)) {
                     break;
                 }
             }
