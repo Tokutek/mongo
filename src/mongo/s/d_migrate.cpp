@@ -470,12 +470,12 @@ namespace mongo {
 
             if (nextMigrateLogId > _nextIdToTransfer) {
                 DBDirectClient conn;
-                auto_ptr<DBClientCursor> cur(conn.query(MIGRATE_LOG_NS, QUERY("_id" << GTE << _nextIdToTransfer << LT << nextMigrateLogId)));
+                auto_ptr<DBClientCursor> cur(conn.query(MIGRATE_LOG_NS, QUERY("_id" << GTE << _nextIdToTransfer << LT << nextMigrateLogId).hint(BSON("_id" << 1))));
                 while (cur->more()) {
                     BSONObj obj = cur->next();
                     BSONElement refOID = obj["refOID"];
                     if (refOID.ok()) {
-                        auto_ptr<DBClientCursor> refcur(conn.query(MIGRATE_LOG_REF_NS, QUERY("_id.oid" << refOID.OID() << "_id.seq" << GTE << _nextRefSeqToTransfer)));
+                        auto_ptr<DBClientCursor> refcur(conn.query(MIGRATE_LOG_REF_NS, QUERY("_id.oid" << refOID.OID() << "_id.seq" << GTE << _nextRefSeqToTransfer).hint(BSON("_id" << 1))));
                         bool didBreak = false;
                         while (refcur->more()) {
                             BSONObj refObj = refcur->next();
