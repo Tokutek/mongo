@@ -36,8 +36,8 @@ namespace {
             _client.insert(_ns, BSON( "test" << "test"));
             // Cannot mix fsync + j, will make command fail
             string gleString = _client.getLastError(true, true, 10, 10);
-            // In TokuMX this is actually ok.
-            ASSERT_EQUALS(gleString, "");
+            // In TokuMX this doesn't make sense, you specified w but it's not a repl set
+            ASSERT_EQUALS(gleString, "norepl");
         }
     };
 
