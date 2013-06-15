@@ -331,7 +331,7 @@ namespace mongo {
         // indexStats is an array of length nIndexes
         void fillIndexStats(std::vector<IndexStats> &indexStats) const;
 
-        const StringData _ns;
+        const string _ns;
         // The options used to create this namespace details. We serialize
         // this (among other things) to disk on close (see serialize())
         const BSONObj _options;

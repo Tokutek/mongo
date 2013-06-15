@@ -414,7 +414,7 @@ namespace mongo {
 
             BSONObj pk = getNextPK();
             _insertObject(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
-            OpLogHelpers::logInsertForCapped(_ns.rawData(), pk, obj, &cc().txn());
+            OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, obj, &cc().txn());
 
             // If the collection is gorged, we need to do some trimming work.
             checkGorged(obj, true);
@@ -484,7 +484,7 @@ namespace mongo {
         // requires: _mutex is held
         void noteUncommittedPK(const BSONObj &pk) {
             CappedCollectionRollback &rollback = cc().txn().cappedRollback();
-            if (!rollback.hasNotedInsert(_ns.rawData())) {
+            if (!rollback.hasNotedInsert(_ns)) {
                 // This transaction has not noted an insert yet, so we save this
                 // as a minimum uncommitted PK. The next insert by this txn won't be
                 // the minimum, and rollback.hasNotedInsert() will be true, so
@@ -545,7 +545,7 @@ namespace mongo {
         void _insertObject(BSONObj &pk, BSONObj &obj, uint64_t flags, bool checkPk) {
             // Note the insert we're about to do.
             CappedCollectionRollback &rollback = cc().txn().cappedRollback();
-            rollback.noteInsert(_ns.rawData(), pk, obj.objsize());
+            rollback.noteInsert(_ns, pk, obj.objsize());
             _currentObjects.addAndFetch(1);
             _currentSize.addAndFetch(obj.objsize());
 
@@ -565,7 +565,7 @@ namespace mongo {
             // Note the delete we're about to do.
             size_t size = obj.objsize();
             CappedCollectionRollback &rollback = cc().txn().cappedRollback();
-            rollback.noteDelete(_ns.rawData(), pk, size);
+            rollback.noteDelete(_ns, pk, size);
             _currentObjects.subtractAndFetch(1);
             _currentSize.subtractAndFetch(size);
 
@@ -595,7 +595,7 @@ namespace mongo {
                     trimmedBytes += oldestPK.objsize();
                     
                     if (logop) {
-                        OpLogHelpers::logDeleteForCapped(_ns.rawData(), oldestPK, oldestObj, &cc().txn());
+                        OpLogHelpers::logDeleteForCapped(_ns.c_str(), oldestPK, oldestObj, &cc().txn());
                     }
                     
                     // Delete the object, reload the current objects/size
@@ -681,7 +681,7 @@ namespace mongo {
 
     // Construct a brand new NamespaceDetails with a certain primary key and set of options.
     NamespaceDetails::NamespaceDetails(const StringData &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
-        _ns(ns),
+        _ns(ns.toString()),
         _options(options.copy()),
         _pk(pkIndexPattern.copy()),
         _indexBuildInProgress(false),
@@ -763,7 +763,7 @@ namespace mongo {
             IndexDetails *index = it->get();
             indexes_array.append(index->info());
         }
-        return serialize(_ns.rawData(), _options, _pk, _multiKeyIndexBits, indexes_array.arr());
+        return serialize(_ns.c_str(), _options, _pk, _multiKeyIndexBits, indexes_array.arr());
     }
 
     struct findByPKCallbackExtra {
@@ -828,7 +828,7 @@ namespace mongo {
                 BSONObjSet keys;
                 idx.getKeysFromObject(obj, keys);
                 if (keys.size() > 1) {
-                    setIndexIsMultikey(_ns.rawData(), i);
+                    setIndexIsMultikey(_ns.c_str(), i);
                 }
                 for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
                     idx.insertPair(*ki, &pk, obj, flags);
@@ -897,7 +897,7 @@ namespace mongo {
                 idx.getKeysFromObject(oldObj, oldKeys);
                 idx.getKeysFromObject(newObj, newKeys);
                 if (newKeys.size() > 1) {
-                    setIndexIsMultikey(_ns.rawData(), i);
+                    setIndexIsMultikey(_ns.c_str(), i);
                 }
 
                 // Delete the keys that exist in oldKeys but do not exist in newKeys
@@ -953,7 +953,7 @@ namespace mongo {
             BSONObjSet keys;
             index->getKeysFromObject(obj, keys);
             if (keys.size() > 1) {
-                setIndexIsMultikey(_ns.rawData(), indexNum);
+                setIndexIsMultikey(_ns.c_str(), indexNum);
             }
             for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
                 builder.insertPair(*ki, &pk, obj);
@@ -1015,7 +1015,7 @@ namespace mongo {
         // Note this ns in the rollback so if this transaction aborts, we'll
         // close this ns, forcing the next user to reload in-memory metadata.
         NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(_ns.rawData());
+        rollback.noteNs(_ns.c_str());
 
         shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
         // Ensure we initialize the spec in case the collection is empty.
@@ -1069,7 +1069,7 @@ namespace mongo {
         // Note this ns in the rollback so if this transaction aborts, we'll
         // close this ns, forcing the next user to reload in-memory metadata.
         NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(_ns.rawData());
+        rollback.noteNs(_ns.c_str());
 
         NamespaceDetails *d = nsdetails(ns);
         ClientCursor::invalidate(ns);
