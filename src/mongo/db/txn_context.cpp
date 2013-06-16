@@ -429,20 +429,24 @@ namespace mongo {
     }
 
     void NamespaceIndexRollback::preAbort() {
-        _completeHooks->noteTxnAbortedFileOps(_namespaces);
+        _completeHooks->noteTxnAbortedFileOps(_namespaces, _dbs);
     }
 
     void NamespaceIndexRollback::transfer(NamespaceIndexRollback &parent) {
         TOKULOG(1) << "NamespaceIndexRollback::transfer processing "
-                   << parent._namespaces.size() << " roll items." << endl;
+                   << _namespaces.size() + _dbs.size() << " roll items." << endl;
 
         // Promote rollback entries to parent.
-        set<string> &rollback = parent._namespaces;
-        rollback.insert(_namespaces.begin(), _namespaces.end());
+        parent._namespaces.insert(_namespaces.begin(), _namespaces.end());
+        parent._dbs.insert(_dbs.begin(), _dbs.end());
     }
 
     void NamespaceIndexRollback::noteNs(const char *ns) {
         _namespaces.insert(ns);
+    }
+
+    void NamespaceIndexRollback::noteCreate(const string &dbname) {
+        _dbs.insert(dbname);
     }
 
     /* --------------------------------------------------------------------- */

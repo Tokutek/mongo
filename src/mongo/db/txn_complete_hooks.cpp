@@ -54,7 +54,7 @@ namespace mongo {
             }
         }
 
-        virtual void noteTxnAbortedFileOps(const set<string> &namespaces) {
+        virtual void noteTxnAbortedFileOps(const set<string> &namespaces, const set<string> &dbs) {
             for (set<string>::const_iterator i = namespaces.begin(); i != namespaces.end(); i++) {
                 const char *ns = i->c_str();
 
@@ -78,6 +78,23 @@ namespace mongo {
                     scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                                     new Client::Context(ns) : NULL);
                     (void) nsindex(ns)->close_ns(ns);
+                }
+            }
+
+            for (set<string>::const_iterator it = dbs.begin(); it != dbs.end(); ++it) {
+                const string &db = *it;
+
+                // The same locking rules above apply here.
+                verify(!Lock::isReadLocked());
+                if (Lock::somethingWriteLocked()) {
+                    verify(Lock::isWriteLocked(db));
+                }
+
+                Lock::DBWrite lk(db);
+                if (dbHolder().__isLoaded(db, dbpath)) {
+                    scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
+                                                    new Client::Context(db) : NULL);
+                    nsindex(db.c_str())->rollbackCreate();
                 }
             }
         }
