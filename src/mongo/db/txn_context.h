@@ -52,7 +52,7 @@ namespace mongo {
                                              bool committed) {
             assertNotImplemented();
         }
-        virtual void noteTxnAbortedFileOps(const set<string> &namespaces) {
+        virtual void noteTxnAbortedFileOps(const set<string> &namespaces, const set<string> &dbs) {
             assertNotImplemented();
         }
         virtual void noteTxnCompletedCursors(const set<long long> &cursorIds) {
@@ -112,7 +112,10 @@ namespace mongo {
 
         void noteNs(const char *ns);
 
+        void noteCreate(const string &dbname);
+
     private:
+        set<string> _dbs;
         set<string> _namespaces;
     };
 

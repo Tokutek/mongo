@@ -74,11 +74,28 @@ namespace mongo {
                 // We would create it, but we're not write locked. Retry.
                 throw RetryWithWriteLock("creating new database " + _database);
             }
+            NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+            rollback.noteCreate(_database);
             // Try opening again with may_create = true
             r = storage::db_open(&_nsdb, nsdbname, info, true);
         } else if (r != 0) {
             storage::handle_ydb_error_fatal(r);
         }
+    }
+
+    void NamespaceIndex::rollbackCreate() {
+        if (!allocated()) {
+            return;
+        }
+        // If we are rolling back the database creation, then any collections in that database were
+        // created in this transaction.  Since we roll back collection creates before dictionary
+        // creates, we would have already rolled back the collection creation, which does close_ns,
+        // which removes the NamespaceDetails from the map.  So this must be empty.
+        verify(_namespaces.empty());
+
+        // Closing the DB before the transaction aborts will allow the abort to do the dbremove for us.
+        storage::db_close(_nsdb);
+        _nsdb = NULL;
     }
 
     struct getNamespacesExtra {
