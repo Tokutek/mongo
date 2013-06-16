@@ -593,6 +593,8 @@ namespace mongo {
         // drop all collections and the nsindex, we're removing this database
         void drop();
 
+        void rollbackCreate();
+
         typedef std::map<Namespace, shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
 
     private:
