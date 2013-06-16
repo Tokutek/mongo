@@ -67,7 +67,7 @@ namespace mongo {
     void setTxnCompleteHooks(TxnCompleteHooks *hooks);
 
     // Class to handle rollback of in-memory stats for capped collections.
-    class CappedCollectionRollback {
+    class CappedCollectionRollback : boost::noncopyable {
     public:
         // Called after txn commit.
         void commit();
@@ -100,7 +100,7 @@ namespace mongo {
     // Class to handle rollback of in-memory modifications to the namespace index
     // On abort, we simply reload the map entry for each ns touched, bringing it in
     // sync with whatever is on disk in the nsdb.
-    class NamespaceIndexRollback {
+    class NamespaceIndexRollback : boost::noncopyable {
     public:
         // Called after txn commit.
         void commit();
@@ -121,7 +121,7 @@ namespace mongo {
 
     // Handles killing cursors for multi-statement transactions, before they
     // commit or abort.
-    class ClientCursorRollback {
+    class ClientCursorRollback : boost::noncopyable {
     public:
         // Called before txn commit or abort, even if a parent exists (ie: no transfer)
         void preComplete();
