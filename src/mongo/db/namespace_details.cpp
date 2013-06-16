@@ -697,7 +697,16 @@ namespace mongo {
         BSONObj info = indexInfo(pkIndexPattern, true, true);
         createIndex(info);
 
-        addNewNamespaceToCatalog(ns, !options.isEmpty() ? &options : NULL);
+        try {
+            // If this throws, it's safe to call close() because we just created the index.
+            // Therefore we have a write lock, and nobody else could have any uncommitted
+            // modifications to this index, so close() should succeed, and #29 is irrelevant.
+            addNewNamespaceToCatalog(ns, !options.isEmpty() ? &options : NULL);
+        }
+        catch (...) {
+            close();
+            throw;
+        }
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const string &ns, const BSONObj &options) {
         if (isOplog(ns)) {
