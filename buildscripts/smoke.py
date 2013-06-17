@@ -518,6 +518,9 @@ def runTest(test, testnum):
     else:
         keyFileData = None
 
+    mongo_test_filename = os.path.basename(path)
+    if 'sharedclient' in path:
+        mongo_test_filename += "-sharedclient"
 
     # sys.stdout.write() is more atomic than print, so using it prevents
     # lines being interrupted by, e.g., child processes
@@ -531,7 +534,7 @@ def runTest(test, testnum):
         tlog = None
 
     vlog.write(" *******************************************\n")
-    vlog.write("         Test : %s ...\n" % os.path.basename(path))
+    vlog.write("         Test : %s ...\n" % mongo_test_filename)
     vlog.flush()
 
     # FIXME: we don't handle the case where the subprocess
@@ -568,7 +571,7 @@ def runTest(test, testnum):
     tempfile = SpooledTemporaryFile(max_size=16*1024*1024)
 
     try:
-        os.environ['MONGO_TEST_FILENAME'] = os.path.basename(path)
+        os.environ['MONGO_TEST_FILENAME'] = mongo_test_filename
         t1 = time.time()
         r = call(buildlogger(argv), cwd=test_path,
                  # the dbtests know how to format their own output nicely
