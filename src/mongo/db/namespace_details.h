@@ -218,10 +218,6 @@ namespace mongo {
             return idx;
         }
 
-        int averageObjectSize() const {
-            return 10; // TODO: Return something meaningful based on in-memory stats
-        }
-
         bool indexBuildInProgress() const {
             return _indexBuildInProgress;
         }
@@ -270,7 +266,7 @@ namespace mongo {
 
         // finds an object by _id field
         virtual bool findById(const BSONObj &query, BSONObj &result) const {
-            massert(16461, "findById shouldn't be called unless it is implemented.", false);
+            msgasserted( 16461, "findById shouldn't be called unless it is implemented." );
         }
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
@@ -290,22 +286,22 @@ namespace mongo {
         // nDelta: the number of inserts minus the number of deletes
         // sizeDelta: the size of inserts minus the size of deletes
         virtual void noteCommit(const BSONObj &minPK, long long nDelta, long long sizeDelta) {
-            massert( 16756, "bug: noted a commit, but it wasn't implemented", false );
+            msgasserted( 16756, "bug: noted a commit, but it wasn't implemented" );
         }
         virtual void noteAbort(const BSONObj &minPK, long long nDelta, long long sizeDelta) {
-            massert( 16757, "bug: noted an abort, but it wasn't implemented", false );
+            msgasserted( 16757, "bug: noted an abort, but it wasn't implemented" );
         }
 
         virtual void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
-            massert( 16775, "bug: should not call insertObjectIntoCappedAndLogOps into non-capped collection", false );
+            msgasserted( 16775, "bug: should not call insertObjectIntoCappedAndLogOps into non-capped collection" );
         }
 
         virtual void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
-            massert( 16772, "bug: should not call insertObjectIntoCappedWithPK into non-capped collection", false );
+            msgasserted( 16772, "bug: should not call insertObjectIntoCappedWithPK into non-capped collection" );
         }
         
         virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
-            massert( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection", false );
+            msgasserted( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection" );
         }
 
     protected:
@@ -322,7 +318,7 @@ namespace mongo {
 
         // remove everything from a collection
         virtual void empty() {
-            massert( 16758, "bug: tried to empty a collection, but it wasn't implemented", false );
+            msgasserted( 16758, "bug: tried to empty a collection, but it wasn't implemented" );
         }
 
         // generate an index info BSON for this namespace, with the same options

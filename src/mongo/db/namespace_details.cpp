@@ -273,7 +273,7 @@ namespace mongo {
         }
 
         void createIndex(const BSONObj &info) {
-            massert(16464, "bug: system collections should not be indexed.", false);
+            msgasserted(16464, "bug: system collections should not be indexed." );
         }
 
     private:
@@ -324,7 +324,8 @@ namespace mongo {
     // work is done under the _deleteMutex.
     class CappedCollection : public NaturalOrderCollection {
     public:
-        CappedCollection(const StringData &ns, const BSONObj &options) :
+        CappedCollection(const StringData &ns, const BSONObj &options,
+                         const bool mayIndexId = true) :
             NaturalOrderCollection(ns, options),
             _maxSize(options["size"].numberLong()),
             _maxObjects(options["max"].numberLong()),
@@ -334,10 +335,12 @@ namespace mongo {
             _deleteMutex("cappedDeleteMutex") {
 
             // Create an _id index if "autoIndexId" is missing or it exists as true.
-            const BSONElement e = options["autoIndexId"];
-            if (!e.ok() || e.trueValue()) {
-                BSONObj info = indexInfo(fromjson("{\"_id\":1}"), true, false);
-                createIndex(info);
+            if (mayIndexId) {
+                const BSONElement e = options["autoIndexId"];
+                if (!e.ok() || e.trueValue()) {
+                    BSONObj info = indexInfo(fromjson("{\"_id\":1}"), true, false);
+                    createIndex(info);
+                }
             }
         }
         CappedCollection(const BSONObj &serialized) :
@@ -398,7 +401,7 @@ namespace mongo {
 
         // run an insertion where the PK is specified
         // Can come from the applier thread on a slave or a cloner 
-        virtual void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
             SimpleMutex::scoped_lock lk(_mutex);
             long long pkVal = pk[""].Long();
             if (pkVal >= _nextPK.load()) {
@@ -410,43 +413,34 @@ namespace mongo {
             // any inserts have happened yet for this transaction (and that
             // would erroneously be true if we did the insert here first).
             noteUncommittedPK(pk);
-            _insertObject(pk, obj, flags, true);
+            checkUniqueAndInsert(pk, obj, flags, true);
 
         }
 
-        virtual void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
+        void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
             obj = addIdField(obj);
             uassert( 16774 , str::stream() << "document is larger than capped size "
                      << obj.objsize() << " > " << _maxSize, obj.objsize() <= _maxSize );
 
-            BSONObj pk = getNextPK();
-            _insertObject(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
+            const BSONObj pk = getNextPK();
+            checkUniqueAndInsert(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
             OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, obj, &cc().txn());
-
-            // If the collection is gorged, we need to do some trimming work.
             checkGorged(obj, true);
         }
 
         void insertObject(BSONObj &obj, uint64_t flags) {
             obj = addIdField(obj);
-            uassert( 16328 , str::stream() << "document is larger than capped size "
-                     << obj.objsize() << " > " << _maxSize, obj.objsize() <= _maxSize );
-
-            BSONObj pk = getNextPK();
-            _insertObject(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
-
-            // If the collection is gorged, we need to do some trimming work.
-            checkGorged(obj, false);
+            _insertObject(obj, flags);
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
-            massert(16460, "bug: cannot remove from a capped collection, "
-                    " should have been enforced higher in the stack", false);
+            msgasserted(16460, "bug: cannot remove from a capped collection, "
+                               " should have been enforced higher in the stack" );
         }
 
         // run a deletion where the PK is specified
         // Can come from the applier thread on a slave
-        virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
             _deleteObject(pk, obj, flags);
             // just make it easy and invalidate this
             _lastDeletedPK = BSONObj();
@@ -464,6 +458,15 @@ namespace mongo {
         }
 
     protected:
+        void _insertObject(const BSONObj &obj, uint64_t flags) {
+            uassert( 16328 , str::stream() << "document is larger than capped size "
+                     << obj.objsize() << " > " << _maxSize, obj.objsize() <= _maxSize );
+
+            const BSONObj pk = getNextPK();
+            checkUniqueAndInsert(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
+            checkGorged(obj, false);
+        }
+
         // Note the commit of a transaction, which simple notes completion under the lock.
         // We don't need to do anything with nDelta and sizeDelta because those changes
         // are already applied to in-memory stats, and this transaction has committed.
@@ -549,7 +552,7 @@ namespace mongo {
 
         // Checks unique indexes and does the actual inserts.
         // Does not check if the collection became gorged.
-        void _insertObject(BSONObj &pk, BSONObj &obj, uint64_t flags, bool checkPk) {
+        void checkUniqueAndInsert(const BSONObj &pk, const BSONObj &obj, uint64_t flags, bool checkPk) {
             // Note the insert we're about to do.
             CappedCollectionRollback &rollback = cc().txn().cappedRollback();
             rollback.noteInsert(_ns, pk, obj.objsize());
@@ -620,7 +623,7 @@ namespace mongo {
         }
 
         // Remove everything from this capped collection
-        virtual void empty() {
+        void empty() {
             SimpleMutex::scoped_lock lk(_deleteMutex);
             scoped_ptr<Cursor> c( BasicCursor::make(this) );
             for ( ; c->ok() ; c->advance() ) {
@@ -642,6 +645,43 @@ namespace mongo {
         BSONObjSet _uncommittedMinPKs;
         SimpleMutex _mutex;
         SimpleMutex _deleteMutex;
+    };
+
+    // Profile collections are non-replicated capped collections that
+    // cannot be updated and do not add the _id field on insert.
+    class ProfileCollection : public CappedCollection {
+    public:
+        ProfileCollection(const StringData &ns, const BSONObj &options) :
+            // Never automatically index the _id field
+            CappedCollection(ns, options, false) {
+        }
+        ProfileCollection(const BSONObj &serialized) :
+            CappedCollection(serialized) {
+        }
+
+        void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+            msgasserted( 16847, "bug: The profile collection should not have replicated inserts." );
+        }
+
+        void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
+            msgasserted( 16848, "bug: The profile collection should not not log inserts." );
+        }
+
+        void insertObject(BSONObj &obj, uint64_t flags) {
+            _insertObject(obj, flags);
+        }
+
+        void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+            msgasserted( 16849, "bug: The profile collection should not have replicated deletes." );
+        }
+
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags) {
+            msgasserted( 16850, "bug: The profile collection should not be updated." );
+        }
+
+        void createIndex(const BSONObj &idx_info) {
+            uassert(16851, "Cannot have an _id index on the system profile collection", !idx_info["key"]["_id"].ok());
+        }
     };
 
     /* ------------------------------------------------------------------------- */
@@ -681,8 +721,10 @@ namespace mongo {
     static bool isSystemCatalog(const StringData &ns) {
         return ns.find(".system.indexes") != string::npos || ns.find(".system.namespaces") != string::npos;
     }
-
-    static bool isOplog(const StringData &ns) {
+    static bool isProfileCollection(const StringData &ns) {
+        return ns.find(".system.profile") != string::npos;
+    }
+    static bool isOplogCollection(const StringData &ns) {
         return ns == rsoplog;
     }
 
@@ -715,10 +757,15 @@ namespace mongo {
         }
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const StringData &ns, const BSONObj &options) {
-        if (isOplog(ns)) {
+        if (isOplogCollection(ns)) {
             return shared_ptr<NamespaceDetails>(new OplogCollection(ns, options));
         } else if (isSystemCatalog(ns)) {
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(ns, options));
+        } else if (isProfileCollection(ns)) {
+            // TokuMX doesn't _necessarily_ need the profile to be capped, but vanilla does.
+            // We enforce the restriction because it's easier to implement. See SERVER-6937.
+            uassert( 16852, "System profile must be a capped collection.", options["capped"].trueValue() );
+            return shared_ptr<NamespaceDetails>(new ProfileCollection(ns, options));
         } else if (options["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(ns, options));
         } else if (options["natural"].trueValue()) {
@@ -744,10 +791,13 @@ namespace mongo {
         }
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
-        if (isOplog(serialized["ns"].String())) {
+        const string ns = serialized["ns"].String();
+        if (isOplogCollection(ns)) {
             return shared_ptr<NamespaceDetails>(new OplogCollection(serialized));
-        } else if (isSystemCatalog(serialized["ns"].String())) {
+        } else if (isSystemCatalog(ns)) {
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(serialized));
+        } else if (isProfileCollection(ns)) {
+            return shared_ptr<NamespaceDetails>(new ProfileCollection(serialized));
         } else if (serialized["options"]["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(serialized));
         } else if (serialized["options"]["natural"].trueValue()) {

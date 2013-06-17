@@ -34,7 +34,6 @@
 #include "mongo/util/timer.h"
 
 namespace mongo {
-    extern int __findingStartInitialTimeout;
     void assembleRequest( const string &ns, BSONObj query, int nToReturn, int nToSkip,
                          const BSONObj *fieldsToReturn, int queryOptions, Message &toSend );
 }
@@ -1108,11 +1107,9 @@ namespace QueryTests {
 
     class FindingStartPartiallyFull : public CollectionBase {
     public:
-        FindingStartPartiallyFull() : CollectionBase( "findingstart" ), _old( __findingStartInitialTimeout ) {
-            __findingStartInitialTimeout = 0;
+        FindingStartPartiallyFull() : CollectionBase( "findingstart" )  {
         }
         ~FindingStartPartiallyFull() {
-            __findingStartInitialTimeout = _old;
         }
 
         void run() {
@@ -1138,9 +1135,6 @@ namespace QueryTests {
 
             ASSERT_EQUALS( startNumCursors, ClientCursor::numCursors() );
         }
-
-    private:
-        int _old;
     };
     
     /**

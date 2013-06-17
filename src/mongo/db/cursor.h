@@ -259,6 +259,13 @@ namespace mongo {
     protected:
         bool forward() const;
 
+        // Optionally pre-acquire row locks for this cursor. cursor_flags() and
+        // getf_flags() should be the correct flags to pass to the ydb, given the
+        // implementation of prelock() (ie: DB_PRELOCKED if locks were grabbed).
+        virtual void prelock();
+        virtual int cursor_flags();
+        virtual int getf_flags();
+
         // True if intuitive bounds-ordering for minKey and MaxKey is reverse for
         // this cursor, based on an index ordering and cursor direction.
         //
@@ -278,7 +285,6 @@ namespace mongo {
                                     BufBuilder &startKeyBuilder, BufBuilder &endKeyBuilder);
         void _prelockBounds();
         void _prelockRange(const BSONObj &startKey, const BSONObj &endKey);
-        void prelock();
 
         /** Get the current key/pk/obj from the row buffer and set _currKey/PK/Obj */
         void getCurrentFromBuffer();
@@ -296,8 +302,6 @@ namespace mongo {
             }
         };
         static int cursor_getf(const DBT *key, const DBT *val, void *extra);
-        int cursor_flags();
-        int getf_flags();
         /** determine how many rows the next getf should bulk fetch */
         int getf_fetch_count();
         /** pull more rows from the DBC into the RowBuffer */
