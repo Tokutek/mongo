@@ -617,7 +617,8 @@ for x in normalTools:
 env.Install( '#/', [
         env.Program( "mongofiles", "tools/files.cpp", LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools", "gridfs"] ),
         env.Program( "bsondump", "tools/bsondump.cpp", LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools"]),
-        env.Program( "mongobridge", "tools/bridge.cpp", LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools"]),
+        env.Program( "mongobridge", "tools/bridge.cpp", LIBS=env['LIBS'] + tokulibs,
+                     LIBDEPS=["serveronly", "coreserver", "coredb"] ),
         ] )
 
 # mongos

@@ -16,19 +16,17 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "db/json.h"
-#include "mongo/base/initializer.h"
-#include "mongo/client/dbclientcursor.h"
-
-#include "tool.h"
-
-#include <fstream>
-#include <iostream>
+#include "mongo/pch.h"
 
 #include <boost/filesystem/convenience.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/program_options.hpp>
+#include <fstream>
+#include <iostream>
+
+#include "mongo/client/dbclientcursor.h"
+#include "mongo/db/json.h"
+#include "mongo/tools/tool.h"
 
 using namespace mongo;
 
@@ -245,8 +243,4 @@ public:
     }
 };
 
-int main( int argc , char ** argv, char** envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    Export e;
-    return e.main( argc , argv );
-}
+REGISTER_MONGO_TOOL(Export);

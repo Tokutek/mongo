@@ -27,13 +27,11 @@
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
-#include "mongo/tools/tool.h"
-
 #include "mongo/base/error_codes.h"
-#include "mongo/base/initializer.h"
 #include "mongo/base/string_data.h"
 #include "mongo/client/connpool.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/tools/tool.h"
 #include "mongo/util/password.h"
 #include "mongo/util/timer.h"
 
@@ -276,6 +274,11 @@ class VanillaOplogPlayer : boost::noncopyable {
     }
 };
 
+class OplogTool;
+namespace proc_mgmt {
+    extern OplogTool *theTool;
+}
+
 class OplogTool : public Tool {
     static const char *_tsFilename;
     bool _logAtExit;
@@ -408,6 +411,9 @@ public:
     }
 
     int run() {
+        proc_mgmt::theTool = this;
+        running = true;
+
         if (!hasParam("from")) {
             log() << "need to specify --from" << endl;
             return -1;
@@ -594,11 +600,8 @@ namespace proc_mgmt {
 
 }
 
-int main( int argc , char** argv, char **envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    OplogTool t;
-    t.running = true;
-    proc_mgmt::theTool = &t;
+MONGO_INITIALIZER(setupMongo2TokuSignalHandler)(
+        ::mongo::InitializerContext* context) {
     signal(SIGILL, proc_mgmt::fatal_handler);
     signal(SIGABRT, proc_mgmt::fatal_handler);
     signal(SIGFPE, proc_mgmt::fatal_handler);
@@ -611,5 +614,6 @@ int main( int argc , char** argv, char **envp ) {
     signal(SIGTERM, proc_mgmt::exit_handler);
     signal(SIGUSR1, SIG_IGN);
     signal(SIGUSR2, SIG_IGN);
-    return t.main( argc , argv );
 }
+
+REGISTER_MONGO_TOOL(OplogTool);

@@ -532,10 +532,6 @@ public:
     }
 };
 
-int main( int argc , char ** argv, char** envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    Import import;
-    return import.main( argc , argv );
-}
-
 const int Import::BUF_SIZE(1024 * 1024 * 16);
+
+REGISTER_MONGO_TOOL(Import);

@@ -16,18 +16,17 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "client/gridfs.h"
-#include "mongo/base/initializer.h"
-#include "mongo/client/dbclientcursor.h"
+#include "mongo/pch.h"
 
-#include "tool.h"
-#include "pcrecpp.h"
-
-#include <fstream>
-#include <iostream>
 
 #include <boost/program_options.hpp>
+#include <fstream>
+#include <iostream>
+#include <pcrecpp.h>
+
+#include "mongo/client/dbclientcursor.h"
+#include "mongo/client/gridfs.h"
+#include "mongo/tools/tool.h"
 
 using namespace mongo;
 
@@ -162,8 +161,4 @@ public:
     }
 };
 
-int main( int argc , char ** argv, char** envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    Files f;
-    return f.main( argc , argv );
-}
+REGISTER_MONGO_TOOL(Files);

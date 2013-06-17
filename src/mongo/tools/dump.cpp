@@ -26,7 +26,6 @@
 #include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/convenience.hpp>
 
-#include "mongo/base/initializer.h"
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/tools/tool.h"
@@ -390,8 +389,4 @@ public:
     BSONObj _query;
 };
 
-int main( int argc , char ** argv, char ** envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    Dump d;
-    return d.main( argc , argv );
-}
+REGISTER_MONGO_TOOL(Dump);

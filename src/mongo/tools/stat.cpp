@@ -24,7 +24,6 @@
 #include <fstream>
 #include <iostream>
 
-#include "mongo/base/initializer.h"
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/json.h"
@@ -569,11 +568,5 @@ namespace mongo {
             BSONObj data;
         };
     };
-
-}
-
-int main( int argc , char ** argv, char ** envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    mongo::Stat stat;
-    return stat.main( argc , argv );
+    REGISTER_MONGO_TOOL(Stat);
 }

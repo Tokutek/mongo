@@ -28,13 +28,12 @@
 #include <fstream>
 #include <set>
 
-#include "mongo/base/initializer.h"
+#include "mongo/client/dbclientcursor.h"
+#include "mongo/client/remote_loader.h"
+#include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/tools/tool.h"
 #include "mongo/util/stringutils.h"
-#include "mongo/db/json.h"
-#include "mongo/client/dbclientcursor.h"
-#include "mongo/client/remote_loader.h"
 
 using namespace mongo;
 
@@ -516,8 +515,4 @@ private:
     }
 };
 
-int main( int argc , char ** argv, char ** envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    Restore restore;
-    return restore.main( argc , argv );
-}
+REGISTER_MONGO_TOOL(Restore);

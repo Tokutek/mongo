@@ -643,7 +643,6 @@ foreach (tool
     mongotop
     mongo2toku
     mongofiles
-    mongobridge
     bsondump
     )
   add_dependencies(${tool} generate_error_codes generate_action_types install_tdb_h)
@@ -658,6 +657,19 @@ foreach (tool
     ${TOKUMX_SSL_LIBRARIES}
     )
 endforeach ()
+add_dependencies(mongobridge generate_error_codes generate_action_types install_tdb_h)
+if (NOT APPLE)
+  target_link_whole_libraries(mongobridge
+    jemalloc
+    )
+endif ()
+link_recursive_deps(mongobridge
+  COMBINED_LIBNAME mongobridge_deps
+  serveronly
+  coreserver
+  coredb
+  ${TOKUMX_SSL_LIBRARIES}
+  )
 install_executables(tokumx_tools
   mongodump
   mongorestore

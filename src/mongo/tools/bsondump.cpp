@@ -142,8 +142,4 @@ public:
     }
 };
 
-int main( int argc , char ** argv, char **envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    BSONDump dump;
-    return dump.main( argc , argv );
-}
+REGISTER_MONGO_TOOL(BSONDump);

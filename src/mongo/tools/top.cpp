@@ -16,16 +16,15 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
-#include "mongo/base/initializer.h"
-#include "db/json.h"
-#include "../util/text.h"
-#include "tool.h"
-#include "stat_util.h"
+#include <boost/program_options.hpp>
 #include <fstream>
 #include <iostream>
-#include <boost/program_options.hpp>
+
+#include "mongo/db/json.h"
+#include "mongo/tools/tool.h"
+#include "mongo/tools/stat_util.h"
 
 namespace po = boost::program_options;
 
@@ -189,11 +188,6 @@ namespace mongo {
         int _sleep;
     };
 
-}
+    REGISTER_MONGO_TOOL(TopTool);
 
-int main( int argc , char ** argv, char ** envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    mongo::TopTool top;
-    return top.main( argc , argv );
 }
-
