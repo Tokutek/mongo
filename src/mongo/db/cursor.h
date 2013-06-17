@@ -285,9 +285,21 @@ namespace mongo {
         /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */
         void _advance();
 
+        /** ydb cursor callback + flags */
+        struct cursor_getf_extra {
+            RowBuffer *buffer;
+            int rows_fetched;
+            int rows_to_fetch;
+            std::exception *ex;
+            cursor_getf_extra(RowBuffer *buf, int n_to_fetch) :
+                buffer(buf), rows_fetched(0), rows_to_fetch(n_to_fetch), ex(NULL) {
+            }
+        };
+        static int cursor_getf(const DBT *key, const DBT *val, void *extra);
+        int cursor_flags();
+        int getf_flags();
         /** determine how many rows the next getf should bulk fetch */
         int getf_fetch_count();
-        int getf_flags();
         /** pull more rows from the DBC into the RowBuffer */
         bool fetchMoreRows();
         /** find by key where the PK used for search is determined by _direction */

@@ -187,6 +187,7 @@ namespace mongo {
         DB *_db;
 
         void _build();
+        static int hot_opt_callback(void *extra, float progress);
 
         // Info about the index. Stored on disk in the database.ns dictionary
         // for this database as a BSON object.

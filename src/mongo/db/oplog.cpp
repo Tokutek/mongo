@@ -36,8 +36,6 @@
 
 namespace mongo {
 
-    int __findingStartInitialTimeout = 5; // configurable for testing
-
     // cached copies of these...so don't rename them, drop them, etc.!!!
     static NamespaceDetails *rsOplogDetails = NULL;
     static NamespaceDetails *rsOplogRefsDetails = NULL;

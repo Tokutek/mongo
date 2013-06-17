@@ -347,6 +347,14 @@ namespace mongo {
 
         unsigned long long _multiKeyIndexBits;
 
+    private:
+        struct findByPKCallbackExtra {
+            BSONObj &obj;
+            std::exception *ex;
+            findByPKCallbackExtra(BSONObj &o) : obj(o), ex(NULL) { }
+        };
+        static int findByPKCallback(const DBT *key, const DBT *value, void *extra);
+
         friend class NamespaceIndex;
         friend class EmptyCapped; // for empty() only
     }; // NamespaceDetails

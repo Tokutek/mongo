@@ -150,39 +150,29 @@ namespace mongo {
 
     /* ---------------------------------------------------------------------- */
 
-    struct cursor_getf_extra {
-        RowBuffer *buffer;
-        int rows_fetched;
-        int rows_to_fetch;
-        cursor_getf_extra(RowBuffer *buf, int n_to_fetch) :
-            buffer(buf), rows_fetched(0), rows_to_fetch(n_to_fetch) {
-        }
-    };
+    int IndexCursor::cursor_getf(const DBT *key, const DBT *val, void *extra) {
+        struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
+        try {
+            if (key != NULL) {
+                RowBuffer *buffer = info->buffer;
+                storage::Key sKey(key);
+                buffer->append(sKey, val->size > 0 ?
+                        BSONObj(static_cast<const char *>(val->data)) : BSONObj());
 
-    // ydb layer cursor callback
-    static int cursor_getf(const DBT *key, const DBT *val, void *extra) {
-        int r = 0;
-
-        // the cursor callback is called even if the desired
-        // key is not found. in that case, key == NULL
-        if (key) {
-            struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
-            RowBuffer *buffer = info->buffer;
-            storage::Key sKey(key);
-            buffer->append(sKey, val->size > 0 ?
-                    BSONObj(static_cast<const char *>(val->data)) : BSONObj());
-
-            // request more bulk fetching if we are allowed to fetch more rows
-            // and the row buffer is not too full.
-            if (++info->rows_fetched < info->rows_to_fetch && !buffer->isGorged()) {
-                r = TOKUDB_CURSOR_CONTINUE;
+                // request more bulk fetching if we are allowed to fetch more rows
+                // and the row buffer is not too full.
+                if (++info->rows_fetched < info->rows_to_fetch && !buffer->isGorged()) {
+                    return TOKUDB_CURSOR_CONTINUE;
+                }
             }
+            return 0;
+        } catch (std::exception &e) {
+            info->ex = &e;
         }
-
-        return r;
+        return -1;
     }
 
-    static int idx_cursor_flags() {
+    int IndexCursor::cursor_flags() {
         QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
         switch ( mode ) {
             // All locks are grabbed up front, during initializeDBC().
@@ -214,7 +204,7 @@ namespace mongo {
         _bounds(),
         _nscanned(0),
         _numWanted(numWanted),
-        _cursor(_idx, idx_cursor_flags()),
+        _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
         _getf_iteration(0)
@@ -238,7 +228,7 @@ namespace mongo {
         _bounds(bounds),
         _nscanned(0),
         _numWanted(numWanted),
-        _cursor(_idx, idx_cursor_flags()),
+        _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
         _getf_iteration(0)
@@ -424,7 +414,7 @@ namespace mongo {
 
     int IndexCursor::getf_flags() {
         // Since all locktree locks are acquired on cursor creation,
-        // we should pass DB_PRELOCKED (see idx_cursor_flags()).
+        // we should pass DB_PRELOCKED (see cursor_flags()).
         const int lockFlags = DB_PRELOCKED;
         const int prefetchFlags = _numWanted > 0 ? DBC_DISABLE_PREFETCHING : 0;
         return lockFlags | prefetchFlags;
@@ -486,6 +476,9 @@ namespace mongo {
             r = cursor->c_getf_set_range(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         } else {
             r = cursor->c_getf_set_range_reverse(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
+        }
+        if ( extra.ex != NULL ) {
+            throw *extra.ex;
         }
         if ( r != 0 && r != DB_NOTFOUND ) {
             storage::handle_ydb_error(r);
@@ -641,23 +634,15 @@ again:      while ( !allInclusive && ok() ) {
         return false;
     }
 
-    // Return a value in the set {-1, 0, 1} to represent the sign of parameter i.
-    int sgn( int i ) {
-        if ( i == 0 ) {
-            return 0;
-        } else {
-            return i > 0 ? 1 : -1;
-        }
-    }
-
     // Check if the current key is beyond endKey.
     void IndexCursor::checkEnd() {
         if ( !ok() ) {
             return;
         }
         if ( !_endKey.isEmpty() ) {
-            const int c = sgn( _endKey.woCompare( _currKey, _ordering ) );
-            if ( (c != 0 && c != _direction) || (c == 0 && !_endKeyInclusive) ) {
+            const int cmp = _endKey.woCompare( _currKey, _ordering );
+            const int sign = cmp == 0 ? 0 : (cmp > 0 ? 1 : -1);
+            if ( (sign != 0 && sign != _direction) || (sign == 0 && !_endKeyInclusive) ) {
                 _ok = false;
                 TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
             }
@@ -676,6 +661,9 @@ again:      while ( !allInclusive && ok() ) {
             r = cursor->c_getf_next(cursor, getf_flags(), cursor_getf, &extra);
         } else {
             r = cursor->c_getf_prev(cursor, getf_flags(), cursor_getf, &extra);
+        }
+        if ( extra.ex != NULL ) {
+            throw *extra.ex;
         }
         if ( r != 0 && r != DB_NOTFOUND ) {
             storage::handle_ydb_error(r);

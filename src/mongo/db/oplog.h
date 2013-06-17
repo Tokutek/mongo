@@ -61,8 +61,6 @@ namespace mongo {
           { msg : "text", ... }
     */
 
-    extern int __findingStartInitialTimeout; // configurable for testing
-
     class QueryPlan;
     
     class Sync {

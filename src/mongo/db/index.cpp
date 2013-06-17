@@ -242,7 +242,7 @@ namespace mongo {
         }
     }
 
-    static int hot_opt_callback(void *extra, float progress) {
+    int IndexDetails::hot_opt_callback(void *extra, float progress) {
         int retval = 0;
         uint64_t iter = *(uint64_t *)extra;
         try {

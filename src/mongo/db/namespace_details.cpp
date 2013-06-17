@@ -191,21 +191,6 @@ namespace mongo {
         }
     };
 
-    struct getfExtra {
-        getfExtra(BSONObj &k) : key(k) {
-        }
-        BSONObj &key;
-    };
-
-    static int getfCallback(const DBT *key, const DBT *value, void *extra) {
-        struct getfExtra *info = reinterpret_cast<struct getfExtra *>(extra);
-        if (key) {
-            const storage::Key sKey(key);
-            info->key = sKey.key().getOwned();
-        }
-        return 0;
-    }
-
     class NaturalOrderCollection : public NamespaceDetails {
     public:
         NaturalOrderCollection(const StringData &ns, const BSONObj &options) :
@@ -217,7 +202,6 @@ namespace mongo {
             _nextPK(0) {
 
             // the next PK, if it exists, is the last key + 1
-            int r;
             IndexDetails &pkIdx = getPKIndex();
             Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             {
@@ -225,8 +209,11 @@ namespace mongo {
                 DBC *cursor = c.dbc();
 
                 BSONObj key = BSONObj();
-                struct getfExtra extra(key);
-                r = cursor->c_getf_last(cursor, 0, getfCallback, &extra);
+                struct getfLastExtra extra(key);
+                const int r = cursor->c_getf_last(cursor, 0, getfLastCallback, &extra);
+                if (extra.ex != NULL) {
+                    throw *extra.ex;
+                }
                 if (r != 0 && r != DB_NOTFOUND) {
                     storage::handle_ydb_error(r);
                 }
@@ -247,6 +234,27 @@ namespace mongo {
 
     protected:
         AtomicWord<long long> _nextPK;
+
+    private:
+        struct getfLastExtra {
+            BSONObj &key;
+            std::exception *ex;
+            getfLastExtra(BSONObj &k) : key(k), ex(NULL) { }
+        };
+
+        static int getfLastCallback(const DBT *key, const DBT *value, void *extra) {
+            struct getfLastExtra *info = reinterpret_cast<struct getfLastExtra *>(extra);
+            try {
+                if (key != NULL) {
+                    const storage::Key sKey(key);
+                    info->key = sKey.key().getOwned();
+                }
+                return 0;
+            } catch (std::exception &e) {
+                info->ex = &e;
+            }
+            return -1;
+        }
     };
 
     class SystemCatalogCollection : public NaturalOrderCollection {
@@ -774,23 +782,22 @@ namespace mongo {
         return serialize(_ns, _options, _pk, _multiKeyIndexBits, indexes_array.arr());
     }
 
-    struct findByPKCallbackExtra {
-        BSONObj &obj;
-
-        findByPKCallbackExtra(BSONObj &o) : obj(o) { }
-    };
-
-    static int findByPKCallback(const DBT *key, const DBT *value, void *extra) {
-        if (key != NULL) {
-            struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
-            BSONObj obj(reinterpret_cast<char *>(value->data));
-            info->obj = obj.getOwned();
+    int NamespaceDetails::findByPKCallback(const DBT *key, const DBT *value, void *extra) {
+        struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
+        try {
+            if (key != NULL) {
+                struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
+                BSONObj obj(reinterpret_cast<char *>(value->data));
+                info->obj = obj.getOwned();
+            }
+            return 0;
+        } catch (std::exception &e) {
+            info->ex = &e;
         }
-        return 0;
+        return -1;
     }
 
     bool NamespaceDetails::findByPK(const BSONObj &key, BSONObj &result) const {
-        int r;
 
         // get a cursor over the primary key index
         IndexDetails &pkIdx = getPKIndex();
@@ -807,7 +814,10 @@ namespace mongo {
         // Try to find it.
         BSONObj obj = BSONObj();
         struct findByPKCallbackExtra extra(obj);
-        r = cursor->c_getf_set(cursor, 0, &key_dbt, findByPKCallback, &extra);
+        const int r = cursor->c_getf_set(cursor, 0, &key_dbt, findByPKCallback, &extra);
+        if (extra.ex != NULL) {
+            throw *extra.ex;
+        }
         if (r != 0 && r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);
         }
