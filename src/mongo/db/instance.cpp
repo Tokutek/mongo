@@ -502,7 +502,8 @@ namespace mongo {
     /* db - database name
        path - db directory
     */
-    void Database::closeDatabase( const char *name, const string& path ) {
+    // Why is this in instance.cpp?
+    void Database::closeDatabase( const StringData &name, const StringData &path ) {
         verify( Lock::isW() );
 
         Client::Context * ctx = cc().getContext();
@@ -512,11 +513,10 @@ namespace mongo {
         verify( database->name() == name );
 
         /* important: kill all open cursors on the database */
-        string prefix(name);
-        prefix += '.';
-        ClientCursor::invalidate(prefix.c_str());
+        string prefix(name.toString() + ".");
+        ClientCursor::invalidate(prefix);
 
-        NamespaceDetailsTransient::clearForPrefix( prefix.c_str() );
+        NamespaceDetailsTransient::clearForPrefix( prefix );
 
         dbHolderW().erase( name, path );
         ctx->_clear();

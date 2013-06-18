@@ -31,12 +31,12 @@ namespace mongo {
     */
     class Database {
     public:
-        Database(const char *name, const string &path = dbpath);
+        Database(const StringData &name, const StringData &path = dbpath);
 
         /* you must use this to close - there is essential code in this method that is not in the ~Database destructor.
            thus the destructor is private.  this could be cleaned up one day...
         */
-        static void closeDatabase( const char *db, const string& path );
+        static void closeDatabase( const StringData &db, const StringData& path );
 
         /**
          * tries to make sure that this hasn't been deleted
@@ -62,8 +62,8 @@ namespace mongo {
          * @return true if ns is part of the database
          *         ns=foo.bar, db=foo returns true
          */
-        bool ownsNS( const string& ns ) const {
-            if ( ! startsWith( ns , _name ) )
+        bool ownsNS( const StringData& ns ) const {
+            if (!ns.startsWith(_name))
                 return false;
             return ns[_name.size()] == '.';
         }

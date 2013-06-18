@@ -328,7 +328,7 @@ namespace mongo {
             bool equals( const string& ns , const string& path=dbpath ) const { return _ns == ns && _path == path; }
 
             /** @return true iff the current Context is using db/path */
-            bool inDB( const string& db , const string& path=dbpath ) const;
+            bool inDB( const StringData& db , const StringData& path=dbpath ) const;
 
             void _clear() { // this is sort of an "early destruct" indication, _ns can never be uncleared
                 const_cast<string&>(_ns).clear();

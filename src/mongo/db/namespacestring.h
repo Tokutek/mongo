@@ -107,6 +107,18 @@ namespace mongo {
 #endif
             return good == db.size();
         }
+        /** Implementation of the above, but with StringData. */
+        static bool validDBName(const StringData &db) {
+            if (db.size() == 0 || db.size() > 64) {
+                return false;
+            }
+#ifdef _WIN32
+# error "TokuMX doesn't support windows."
+#else
+            size_t good = db.cspn("/\\. \"");
+#endif
+            return good == db.size();
+        }
 
         /**
          * samples:

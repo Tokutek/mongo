@@ -263,14 +263,14 @@ namespace mongo {
         _client->_context = _oldContext; // note: _oldContext may be null
     }
 
-    bool Client::Context::inDB( const string& db , const string& path ) const {
+    bool Client::Context::inDB( const StringData& db , const StringData& path ) const {
         if ( _path != path )
             return false;
 
         if ( db == _ns )
             return true;
 
-        string::size_type idx = _ns.find( db );
+        size_t idx = _ns.find( db.toString() );
         if ( idx != 0 )
             return false;
 
