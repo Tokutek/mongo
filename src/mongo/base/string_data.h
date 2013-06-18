@@ -100,6 +100,10 @@ namespace mongo {
         size_t find( const StringData& needle ) const;
         size_t rfind( char c, size_t fromPos = string::npos ) const;
 
+        // See strspn and strcspn.
+        size_t spn(const char *accept) const;
+        size_t cspn(const char *reject) const;
+
         /**
          * Returns true if 'prefix' is a substring of this instance, anchored at position 0.
          */

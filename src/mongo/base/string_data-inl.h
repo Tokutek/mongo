@@ -102,6 +102,29 @@ namespace mongo {
         return string::npos;
     }
 
+    // Could probably be better but there's "strnspn" or "strncspn" and we don't use it much.
+    inline size_t StringData::spn(const char *accept) const {
+        size_t mx = size();
+        size_t x;
+        for (x = 0; x < mx; ++x) {
+            if (strchr(accept, _data[x]) == 0) {
+                break;
+            }
+        }
+        return x;
+    }
+
+    inline size_t StringData::cspn(const char *reject) const {
+        size_t mx = size();
+        size_t x;
+        for (x = 0; x < mx; ++x) {
+            if (strchr(reject, _data[x]) != 0) {
+                break;
+            }
+        }
+        return x;
+    }
+
     inline StringData StringData::substr( size_t pos, size_t n ) const {
         if ( pos > size() )
             throw std::out_of_range( "out of range" );
