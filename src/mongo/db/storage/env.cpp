@@ -498,7 +498,6 @@ namespace mongo {
             }
             switch (error) {
                 case DB_LOCK_NOTGRANTED:
-                    //uasserted(16759, "Lock not granted. Try restarting the transaction.");
                     _do_assert(uasserted, 16759,
                                "Lock not granted. Try restarting the transaction.");
                 case DB_LOCK_DEADLOCK:
