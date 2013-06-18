@@ -198,8 +198,8 @@ namespace mongo {
         DB_TXN *db_txn = cc().hasTxn() ? cc().txn().db_txn() : NULL;
         int r = _nsdb->getf_set(_nsdb, db_txn, 0, &ndbt, getf_serialized, &serialized);
         if (r == 0) {
-            verify(!_namespaces[ns]);
             shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized );
+            verify(!_namespaces[ns]);
             _namespaces[ns] = details;
             return details.get();
         } else if (r != DB_NOTFOUND) {
