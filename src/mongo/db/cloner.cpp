@@ -18,6 +18,7 @@
 */
 
 #include "mongo/pch.h"
+#include "mongo/base/string_data.h"
 #include "mongo/bson/util/builder.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/client/remote_transaction.h"
@@ -594,10 +595,10 @@ namespace mongo {
             return true;
         }
       private:
-        bool checkCollection(const string &dbname, const string &collname, string &errmsg) {
-            const string ns = (mongoutils::str::startsWith(collname, dbname + ".")
-                               ? collname
-                               : dbname + "." + collname);
+        bool checkCollection(const StringData &dbname, const StringData &collname, string &errmsg) {
+            const string ns = collname.startsWith(dbname.toString() + ".")
+                              ? collname.toString()
+                              : dbname.toString() + "." + collname.toString();
             NamespaceDetails *d = nsdetails(ns.c_str());
             if (d == NULL) {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped";
