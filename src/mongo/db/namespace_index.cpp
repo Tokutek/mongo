@@ -288,7 +288,7 @@ namespace mongo {
         NamespaceDetails *sysNsd = nsdetails(systemNamespacesNs);
         for (scoped_ptr<Cursor> c(BasicCursor::make(sysNsd)); c->ok(); c->advance()) {
             const BSONObj nsObj = c->current();
-            const StringData ns = nsObj["name"].String();
+            const StringData ns = nsObj["name"].Stringdata();
             if (!ns.startsWith(_database)) {
                 // Not part of this database, skip.
                 continue;

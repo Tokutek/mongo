@@ -994,7 +994,7 @@ namespace mongo {
         uassert(12588, "cannot add index with a background operation in progress", !_indexBuildInProgress);
         uassert(12523, "no index name specified", idx_info["name"].ok());
 
-        const StringData &name = idx_info["name"].String();
+        const StringData &name = idx_info["name"].Stringdata();
         if (findIndexByName(name) >= 0) {
             // index already exists.
             uasserted(16753, mongoutils::str::stream() << "index with name " << name << " already exists");
@@ -1051,7 +1051,7 @@ namespace mongo {
         }
         _nIndexes++;
 
-        const StringData &idx_ns = idx_info["ns"].String();
+        const StringData &idx_ns = idx_info["ns"].Stringdata();
 
         // The first index we create should be the pk index, when we first create the collection.
         // Therefore the collection's NamespaceDetails should not already exist in the NamespaceIndex
@@ -1195,7 +1195,7 @@ namespace mongo {
     }
 
     static void addIndexToCatalog(const BSONObj &info) {
-        const StringData &indexns = info["ns"].String();
+        const StringData &indexns = info["ns"].Stringdata();
         if (indexns.find(".system.indexes") != string::npos) {
             // system.indexes holds all the others, so it is not explicitly listed in the catalog.
             return;
