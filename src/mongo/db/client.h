@@ -310,22 +310,22 @@ namespace mongo {
         class Context : boost::noncopyable {
         public:
             /** this is probably what you want */
-            Context(const string& ns, const std::string& path=dbpath, bool doauth=true, bool doVersion=true );
+            Context(const StringData &ns, const StringData &path=dbpath, bool doauth=true, bool doVersion=true );
 
             /** note: this does not call finishInit -- i.e., does not call 
                       shardVersionOk() for example. 
                 see also: reset().
             */
-            Context( const std::string& ns , Database * db, bool doauth=true );
+            Context( const StringData &ns , Database * db, bool doauth=true );
 
             // used by ReadContext
-            Context(const string& path, const string& ns, Database *db, bool doauth);
+            Context(const StringData &path, const StringData &ns, Database *db, bool doauth);
 
             ~Context();
             Client* getClient() const { return _client; }
             Database* db() const { return _db; }
             const char * ns() const { return _ns.c_str(); }
-            bool equals( const string& ns , const string& path=dbpath ) const { return _ns == ns && _path == path; }
+            bool equals( const StringData &ns , const StringData &path=dbpath ) const { return _ns == ns && _path == path; }
 
             /** @return true iff the current Context is using db/path */
             bool inDB( const StringData& db , const StringData& path=dbpath ) const;
@@ -364,7 +364,7 @@ namespace mongo {
          */
         class ReadContext : boost::noncopyable { 
         public:
-            ReadContext(const string &ns, const std::string& path=dbpath, bool doauth=true);
+            ReadContext(const StringData &ns, const StringData &path=dbpath, bool doauth=true);
             Context& ctx() { return _c; }
         private:
             Lock::DBRead _lk;
@@ -373,7 +373,7 @@ namespace mongo {
 
         class WriteContext : boost::noncopyable {
         public:
-            WriteContext(const string& ns, const std::string& path=dbpath, bool doauth=true );
+            WriteContext(const StringData &ns, const StringData &path=dbpath, bool doauth=true );
             Context& ctx() { return _c; }
         private:
             Lock::DBWrite _lk;
