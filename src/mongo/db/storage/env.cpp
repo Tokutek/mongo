@@ -117,7 +117,7 @@ namespace mongo {
             TOKULOG(1) << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
 
             // Use 10% the size of the cachetable for lock tree memory
-            const int32_t lock_memory = cachesize / 10;
+            const uint64_t lock_memory = cachesize / 10;
             r = env->set_lk_max_memory(env, lock_memory);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
