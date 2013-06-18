@@ -441,12 +441,12 @@ namespace mongo {
         parent._dbs.insert(_dbs.begin(), _dbs.end());
     }
 
-    void NamespaceIndexRollback::noteNs(const char *ns) {
-        _namespaces.insert(ns);
+    void NamespaceIndexRollback::noteNs(const StringData& ns) {
+        _namespaces.insert(ns.toString());
     }
 
-    void NamespaceIndexRollback::noteCreate(const string &dbname) {
-        _dbs.insert(dbname);
+    void NamespaceIndexRollback::noteCreate(const StringData& dbname) {
+        _dbs.insert(dbname.toString());
     }
 
     /* --------------------------------------------------------------------- */

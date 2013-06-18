@@ -27,13 +27,17 @@
 
 namespace mongo {
 
-    NamespaceIndex::NamespaceIndex(const string &dir, const string &database) :
-        _nsdb(NULL), _namespaces(),
-        _dir(dir), _database(database), _openRWLock("nsOpenRWLock") {
-    }
+    NamespaceIndex::NamespaceIndex(const string &dir, const StringData& database) :
+            _nsdb(NULL),
+            _namespaces(),
+            _dir(dir),
+            _nsdbFilename(database.toString() + ".ns"),
+            _database(database.toString()),
+            _openRWLock("nsOpenRWLock")
+    {}
 
     NamespaceIndex::~NamespaceIndex() {
-        for (NamespaceDetailsMap::iterator it = _namespaces.begin(); it != _namespaces.end(); ++it) {
+        for (NamespaceDetailsMap::const_iterator it = _namespaces.begin(); it != _namespaces.end(); ++it) {
             shared_ptr<NamespaceDetails> d = it->second;
             try {
                 d->close();
@@ -60,12 +64,11 @@ namespace mongo {
     }
 
     NOINLINE_DECL void NamespaceIndex::_init(bool may_create) {
-        string nsdbname(_database + ".ns");
         BSONObj info = BSON("key" << fromjson("{\"ns\":1}" ));
 
         // Try first without the create flag, because we're not sure if we
         // have a write lock just yet. It won't matter if the nsdb exists.
-        int r = storage::db_open(&_nsdb, nsdbname, info, false);
+        int r = storage::db_open(&_nsdb, _nsdbFilename, info, false);
         if (r == ENOENT) {
             if (!may_create) {
                 // didn't find on disk and we can't create it
@@ -77,7 +80,7 @@ namespace mongo {
             NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
             rollback.noteCreate(_database);
             // Try opening again with may_create = true
-            r = storage::db_open(&_nsdb, nsdbname, info, true);
+            r = storage::db_open(&_nsdb, _nsdbFilename, info, true);
         } else if (r != 0) {
             storage::handle_ydb_error_fatal(r);
         }
@@ -152,15 +155,14 @@ namespace mongo {
             throw RetryWithWriteLock();
         }
 
-        Namespace n(ns);
-        NamespaceDetailsMap::iterator it = _namespaces.find(n);
+        NamespaceDetailsMap::const_iterator it = _namespaces.find(ns);
         if (it != _namespaces.end()) {
             // Might not be in the _namespaces map if the ns exists but is closed.
             // Note this ns in the rollback, since we are about to modify its entry.
             NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-            rollback.noteNs(ns.rawData());
+            rollback.noteNs(ns);
             shared_ptr<NamespaceDetails> d = it->second;
-            _namespaces.erase(it);
+            _namespaces.erase(ns);
             d->close();
         }
 
@@ -196,11 +198,9 @@ namespace mongo {
         DB_TXN *db_txn = cc().hasTxn() ? cc().txn().db_txn() : NULL;
         int r = _nsdb->getf_set(_nsdb, db_txn, 0, &ndbt, getf_serialized, &serialized);
         if (r == 0) {
-            Namespace n(ns);
-            NamespaceDetailsMap::iterator it = _namespaces.find(n);
+            verify(!_namespaces[ns]);
             shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized );
-            std::pair<NamespaceDetailsMap::iterator, bool> ret = _namespaces.insert(make_pair(n, details));
-            verify(ret.second == true);
+            _namespaces[ns] = details;
             return details.get();
         } else if (r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);
@@ -217,11 +217,10 @@ namespace mongo {
         }
 
         // Find and erase the old entry, if it exists.
-        Namespace n(ns);
-        NamespaceDetailsMap::iterator it = _namespaces.find(n);
+        NamespaceDetailsMap::const_iterator it = _namespaces.find(ns);
         if (it != _namespaces.end()) {
             shared_ptr<NamespaceDetails> d = it->second;
-            _namespaces.erase(it);
+            _namespaces.erase(ns);
             d->close();
             return true;
         }
@@ -238,12 +237,10 @@ namespace mongo {
 
         // Note this ns in the rollback, since we are about to modify its entry.
         NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(ns.rawData());
+        rollback.noteNs(ns);
 
-        Namespace n(ns);
-        std::pair<NamespaceDetailsMap::iterator, bool> ret;
-        ret = _namespaces.insert(make_pair(n, details));
-        dassert(ret.second == true);
+        verify(!_namespaces[ns]);
+        _namespaces[ns] = details;
     }
 
     void NamespaceIndex::update_ns(const StringData& ns, const BSONObj &serialized, bool overwrite) {
@@ -258,7 +255,7 @@ namespace mongo {
         // _namespaces directly. But we know this operation is part of
         // a scheme to create this namespace or change something about it.
         NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(ns.rawData());
+        rollback.noteNs(ns);
 
         BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
@@ -287,25 +284,25 @@ namespace mongo {
         // - We'll look at the entire system.namespaces collection just for one database.
         // - Code is duplicated to handle dropping system system collections in stages.
         vector<string> sysIndexesEntries;
-        NamespaceDetails *sysNsd = nsdetails((_database + ".system.namespaces").c_str());
+        const string systemNamespacesNs(_database + ".system.namespaces");
+        NamespaceDetails *sysNsd = nsdetails(systemNamespacesNs);
         for (scoped_ptr<Cursor> c(BasicCursor::make(sysNsd)); c->ok(); c->advance()) {
             const BSONObj nsObj = c->current();
-            const string ns = nsObj["name"].String();
-            if (!str::startsWith(ns, _database)) {
+            const StringData ns = nsObj["name"].String();
+            if (!ns.startsWith(_database)) {
                 // Not part of this database, skip.
                 continue;
             }
-            if (str::contains(ns, ".system.indexes")) {
+            if (ns.find(".system.indexes") != string::npos) {
                 // Save .system.indexes collection for last, because dropCollection deletes from it.
-                sysIndexesEntries.push_back(ns);
+                sysIndexesEntries.push_back(ns.toString());
             } else {
                 dropCollection(ns, errmsg, result, true);
             }
         }
         if (sysNsd != NULL) {
             // The .system.namespaces collection does not include itself.
-            const string ns(_database + ".system.namespaces");
-            dropCollection(ns, errmsg, result, true);
+            dropCollection(systemNamespacesNs, errmsg, result, true);
         }
         // Now drop the system.indexes entries.
         for (vector<string>::const_iterator it = sysIndexesEntries.begin(); it != sysIndexesEntries.end(); it++) {
@@ -318,7 +315,7 @@ namespace mongo {
 
         storage::db_close(_nsdb);
         _nsdb = NULL;
-        storage::db_remove(_database + ".ns");
+        storage::db_remove(_nsdbFilename);
     }
 
 } // namespace mongo

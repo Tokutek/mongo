@@ -76,15 +76,17 @@ namespace mongo {
          * @return offset into keyPattern for key
                    -1 if doesn't exist
          */
-        int keyPatternOffset( const string& key ) const;
-        bool inKeyPattern( const string& key ) const { return keyPatternOffset( key ) >= 0; }
+        int keyPatternOffset( const StringData& key ) const;
+        bool inKeyPattern( const StringData& key ) const { return keyPatternOffset( key ) >= 0; }
 
         /* true if the specified key is in the index */
         bool hasKey(const BSONObj& key);
 
-        static string indexNamespace(const string &ns, const string &idxName) {
+        static string indexNamespace(const StringData& ns, const StringData& idxName) {
             dassert(ns != "" && idxName != "");
-            return ns + ".$" + idxName;
+            stringstream ss;
+            ss << ns.toString() << ".$" << idxName.toString();
+            return ss.str();
         }
 
         // returns name of this index's storage area

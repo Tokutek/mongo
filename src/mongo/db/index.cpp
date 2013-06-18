@@ -66,7 +66,7 @@ namespace mongo {
         }
     }
 
-    int IndexDetails::keyPatternOffset( const string& key ) const {
+    int IndexDetails::keyPatternOffset( const StringData& key ) const {
         BSONObjIterator i( keyPattern() );
         int n = 0;
         while ( i.more() ) {
@@ -99,8 +99,8 @@ namespace mongo {
                 LOG(2) << "IndexDetails::kill(): couldn't drop ns " << ns << endl;
             }
 
-            if (!mongoutils::str::endsWith(pns.c_str(), ".system.indexes")) {
-                int n = removeFromSysIndexes(pns.c_str(), indexName().c_str());
+            if (!StringData(pns).endsWith(".system.indexes")) {
+                int n = removeFromSysIndexes(pns, indexName());
                 wassert( n == 1 );
             }
         }
@@ -115,7 +115,7 @@ namespace mongo {
 
     const IndexSpec& IndexDetails::getSpec() const {
         SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
-        return NamespaceDetailsTransient::get_inlock( info()["ns"].valuestr() ).getIndexSpec( this );
+        return NamespaceDetailsTransient::get_inlock( info()["ns"].String() ).getIndexSpec( this );
     }
 
     void IndexDetails::uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const {

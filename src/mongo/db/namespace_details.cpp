@@ -81,7 +81,6 @@ namespace mongo {
                 throw RetryWithWriteLock();
             }
 
-            Namespace ns_s(ns);
             shared_ptr<NamespaceDetails> new_details( NamespaceDetails::make(ns, options) );
             ni->add_ns(ns, new_details);
 
@@ -758,7 +757,7 @@ namespace mongo {
     }
 
     // Serialize the information necessary to re-open this NamespaceDetails later.
-    BSONObj NamespaceDetails::serialize(const char *ns, const BSONObj &options, const BSONObj &pk,
+    BSONObj NamespaceDetails::serialize(const StringData& ns, const BSONObj &options, const BSONObj &pk,
             unsigned long long multiKeyIndexBits, const BSONArray &indexes_array) {
         return BSON("ns" << ns <<
                     "options" << options <<
@@ -772,7 +771,7 @@ namespace mongo {
             IndexDetails *index = it->get();
             indexes_array.append(index->info());
         }
-        return serialize(_ns.c_str(), _options, _pk, _multiKeyIndexBits, indexes_array.arr());
+        return serialize(_ns, _options, _pk, _multiKeyIndexBits, indexes_array.arr());
     }
 
     struct findByPKCallbackExtra {
@@ -931,8 +930,8 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::setIndexIsMultikey(const char *thisns, int i) {
-        dassert(string(thisns) == _ns);
+    void NamespaceDetails::setIndexIsMultikey(const StringData& thisns, int i) {
+        dassert(thisns == _ns);
         dassert(i < NIndexesMax);
         unsigned long long x = ((unsigned long long) 1) << i;
         if (_multiKeyIndexBits & x) {
@@ -962,7 +961,7 @@ namespace mongo {
             BSONObjSet keys;
             index->getKeysFromObject(obj, keys);
             if (keys.size() > 1) {
-                setIndexIsMultikey(_ns.c_str(), indexNum);
+                setIndexIsMultikey(_ns, indexNum);
             }
             for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
                 builder.insertPair(*ki, &pk, obj);
@@ -995,8 +994,8 @@ namespace mongo {
         uassert(12588, "cannot add index with a background operation in progress", !_indexBuildInProgress);
         uassert(12523, "no index name specified", idx_info["name"].ok());
 
-        const string &name = idx_info["name"].String();
-        if (findIndexByName(name.c_str()) >= 0) {
+        const StringData &name = idx_info["name"].String();
+        if (findIndexByName(name) >= 0) {
             // index already exists.
             uasserted(16753, mongoutils::str::stream() << "index with name " << name << " already exists");
         }
@@ -1024,7 +1023,7 @@ namespace mongo {
         // Note this ns in the rollback so if this transaction aborts, we'll
         // close this ns, forcing the next user to reload in-memory metadata.
         NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(_ns.c_str());
+        rollback.noteNs(_ns);
 
         shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
         // Ensure we initialize the spec in case the collection is empty.
@@ -1052,8 +1051,7 @@ namespace mongo {
         }
         _nIndexes++;
 
-        string idx_ns = idx_info["ns"].String();
-        const char *ns = idx_ns.c_str();
+        const StringData &idx_ns = idx_info["ns"].String();
 
         // The first index we create should be the pk index, when we first create the collection.
         // Therefore the collection's NamespaceDetails should not already exist in the NamespaceIndex
@@ -1062,28 +1060,28 @@ namespace mongo {
         if (!may_overwrite) {
             massert(16435, "first index should be pk index", index->keyPattern() == _pk);
         }
-        nsindex(ns)->update_ns(ns, serialize(), isSecondaryIndex);
+        nsindex(idx_ns)->update_ns(idx_ns, serialize(), isSecondaryIndex);
 
-        NamespaceDetailsTransient::get(ns).addedIndex();
+        NamespaceDetailsTransient::get(idx_ns).addedIndex();
     }
 
     // Normally, we cannot drop the _id_ index.
     // The parameters mayDeleteIdIndex is here for the case where we call dropIndexes
     // through dropCollection, in which case we are dropping an entire collection,
     // hence the _id_ index will have to go.
-    bool NamespaceDetails::dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex) {
+    bool NamespaceDetails::dropIndexes(const StringData& ns, const StringData& name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex) {
         Lock::assertWriteLocked(ns);
         TOKULOG(1) << "dropIndexes " << name << endl;
 
         // Note this ns in the rollback so if this transaction aborts, we'll
         // close this ns, forcing the next user to reload in-memory metadata.
         NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(_ns.c_str());
+        rollback.noteNs(_ns);
 
         NamespaceDetails *d = nsdetails(ns);
         ClientCursor::invalidate(ns);
 
-        if (mongoutils::str::equals(name, "*")) {
+        if (name == "*") {
             result.append("nIndexesWas", (double) _nIndexes);
             // This is O(n^2), not great, but you can have at most 64 indexes anyway.
             for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ) {
@@ -1197,8 +1195,8 @@ namespace mongo {
     }
 
     static void addIndexToCatalog(const BSONObj &info) {
-        string indexns = info["ns"].String();
-        if (mongoutils::str::contains(indexns, ".system.indexes")) {
+        const StringData &indexns = info["ns"].String();
+        if (indexns.find(".system.indexes") != string::npos) {
             // system.indexes holds all the others, so it is not explicitly listed in the catalog.
             return;
         }
@@ -1206,7 +1204,7 @@ namespace mongo {
         StringData database = nsToDatabaseSubstring(indexns);
         string ns = database.toString() + ".system.indexes";
         NamespaceDetails *d = nsdetails_maybe_create(ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns.c_str());
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         BSONObj objMod = info;
         insertOneObject(d, nsdt, objMod);
     }
@@ -1223,8 +1221,8 @@ namespace mongo {
 
     SimpleMutex NamespaceDetailsTransient::_qcMutex("qc");
     SimpleMutex NamespaceDetailsTransient::_isMutex("is");
-    map< string, shared_ptr< NamespaceDetailsTransient > > NamespaceDetailsTransient::_nsdMap;
-    typedef map< string, shared_ptr< NamespaceDetailsTransient > >::iterator ouriter;
+    StringMap<shared_ptr<NamespaceDetailsTransient> > NamespaceDetailsTransient::_nsdMap;
+    typedef StringMap<shared_ptr<NamespaceDetailsTransient> >::const_iterator ouriter;
 
     void NamespaceDetailsTransient::reset() {
         // TODO(leif): why is this here?
@@ -1234,7 +1232,7 @@ namespace mongo {
         _indexSpecs.clear();
     }
 
-    /*static*/ NOINLINE_DECL NamespaceDetailsTransient& NamespaceDetailsTransient::make_inlock(const char *ns) {
+    /*static*/ NOINLINE_DECL NamespaceDetailsTransient& NamespaceDetailsTransient::make_inlock(const StringData& ns) {
         shared_ptr< NamespaceDetailsTransient > &t = _nsdMap[ ns ];
         verify( t.get() == 0 );
         if( _nsdMap.size() % 20000 == 10000 ) { 
@@ -1246,19 +1244,19 @@ namespace mongo {
         return *t;
     }
 
-    NamespaceDetailsTransient::NamespaceDetailsTransient(const char *ns) : 
-        _ns(ns), _keysComputed(false), _qcWriteCount() {
+    NamespaceDetailsTransient::NamespaceDetailsTransient(const StringData& ns) : 
+            _ns(ns.toString()), _keysComputed(false), _qcWriteCount() {
     }
 
     NamespaceDetailsTransient::~NamespaceDetailsTransient() { 
     }
 
-    void NamespaceDetailsTransient::clearForPrefix(const char *prefix) {
+    void NamespaceDetailsTransient::clearForPrefix(const StringData& prefix) {
         SimpleMutex::scoped_lock lk(_qcMutex);
         vector< string > found;
         for( ouriter i = _nsdMap.begin(); i != _nsdMap.end(); ++i ) {
-            if ( strncmp( i->first.c_str(), prefix, strlen( prefix ) ) == 0 ) {
-                found.push_back( i->first );
+            if (StringData(i->first).startsWith(prefix)) {
+                found.push_back(i->first);
                 Lock::assertWriteLocked(i->first);
             }
         }
@@ -1267,11 +1265,11 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetailsTransient::eraseForPrefix(const char *prefix) {
+    void NamespaceDetailsTransient::eraseForPrefix(const StringData& prefix) {
         SimpleMutex::scoped_lock lk(_qcMutex);
         vector< string > found;
         for( ouriter i = _nsdMap.begin(); i != _nsdMap.end(); ++i ) {
-            if ( strncmp( i->first.c_str(), prefix, strlen( prefix ) ) == 0 ) {
+            if (StringData(i->first).startsWith(prefix)) {
                 found.push_back( i->first );
                 Lock::assertWriteLocked(i->first);
             }
@@ -1352,7 +1350,7 @@ namespace mongo {
         return details;
     }
 
-    void dropDatabase(const string &name) {
+    void dropDatabase(const StringData& name) {
         TOKULOG(1) << "dropDatabase " << name << endl;
         Lock::assertWriteLocked(name);
         Database *d = cc().database();
@@ -1369,19 +1367,19 @@ namespace mongo {
         Database::closeDatabase(d->name().c_str(), d->path());
     }
 
-    void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system) {
+    void dropCollection(const StringData& name, string &errmsg, BSONObjBuilder &result, bool can_drop_system) {
         TOKULOG(1) << "dropCollection " << name << endl;
-        const char *ns = name.c_str();
-        NamespaceDetails *d = nsdetails(ns);
+        NamespaceDetails *d = nsdetails(name);
         if (d == NULL) {
             return;
         }
 
         // Check that we are allowed to drop the namespace.
-        NamespaceString s(name);
-        verify(s.db == cc().database()->name());
-        if (s.isSystem()) {
-            if (s.coll == "system.profile") {
+        StringData database = nsToDatabaseSubstring(name);
+        verify(database == cc().database()->name());
+        StringData coll = name.substr(name.find('.') + 1);
+        if (coll.startsWith("system.")) {
+            if (coll == "system.profile") {
                 uassert(10087, "turn off profiling before dropping system.profile collection", cc().database()->profile() == 0);
             } else if (!can_drop_system) {
                 uasserted(12502, "can't drop system ns");
@@ -1389,17 +1387,17 @@ namespace mongo {
         }
 
         // Invalidate cursors and query cache, then drop all of the indexes.
-        ClientCursor::invalidate(ns);
-        NamespaceDetailsTransient::eraseForPrefix(ns);
+        ClientCursor::invalidate(name.rawData());
+        NamespaceDetailsTransient::eraseForPrefix(name);
 
         LOG(1) << "\t dropIndexes done" << endl;
-        d->dropIndexes(ns, "*", errmsg, result, true);
+        d->dropIndexes(name, "*", errmsg, result, true);
         verify(d->nIndexes() == 0);
         removeNamespaceFromCatalog(name);
 
         // If everything succeeds, kill the namespace from the nsindex.
         Top::global.collectionDropped(name);
-        nsindex(ns)->kill_ns(ns);
+        nsindex(name)->kill_ns(name);
         result.append("ns", name);
     }
 
@@ -1423,7 +1421,7 @@ namespace mongo {
         StringData database = nsToDatabaseSubstring(ns);
         string system_ns = database.toString() + ".system.namespaces";
         NamespaceDetails *d = nsdetails_maybe_create(system_ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(system_ns.c_str());
+        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(system_ns);
         insertOneObject(d, nsdt, info);
     }
 
@@ -1434,14 +1432,14 @@ namespace mongo {
         }
     }
 
-    int removeFromSysIndexes(const char *ns, const char *name) {
+    int removeFromSysIndexes(const StringData& ns, const StringData& name) {
         string system_indexes = cc().database()->name() + ".system.indexes";
         BSONObj obj = BSON("ns" << ns << "name" << name);
         TOKULOG(2) << "removeFromSysIndexes removing " << obj << endl;
         return (int) _deleteObjects(system_indexes.c_str(), obj, false, false);
     }
 
-    static BSONObj replaceNSField(const BSONObj &obj, const char *to) {
+    static BSONObj replaceNSField(const BSONObj &obj, const StringData &to) {
         BSONObjBuilder b;
         BSONObjIterator i( obj );
         while ( i.more() ) {
@@ -1455,7 +1453,7 @@ namespace mongo {
         return b.obj();
     }
 
-    void renameNamespace(const char *from, const char *to, bool stayTemp) {
+    void renameNamespace(const StringData& from, const StringData& to, bool stayTemp) {
         Lock::assertWriteLocked(from);
         verify( nsdetails(from) != NULL );
         verify( nsdetails(to) == NULL );
@@ -1465,10 +1463,9 @@ namespace mongo {
         ClientCursor::invalidate( from );
         NamespaceDetailsTransient::eraseForPrefix( from );
 
-        char database[MaxDatabaseNameLen];
-        nsToDatabase(from, database);
-        string sysIndexes = string(database) + ".system.indexes";
-        string sysNamespaces = string(database) + ".system.namespaces";
+        StringData database = nsToDatabaseSubstring(from);
+        string sysIndexes = database.toString() + ".system.indexes";
+        string sysNamespaces = database.toString() + ".system.namespaces";
 
         // Generate the serialized form of the namespace, and then close it.
         // This will close the underlying dictionaries and allow us to
@@ -1543,7 +1540,7 @@ namespace mongo {
         }
     }
 
-    bool legalClientSystemNS( const string& ns , bool write ) {
+    bool legalClientSystemNS( const StringData& ns , bool write ) {
         if( ns == "local.system.replset" ) return true;
 
         if ( ns.find( ".system.users" ) != string::npos )

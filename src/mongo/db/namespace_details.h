@@ -37,6 +37,7 @@
 #include "mongo/db/relock.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/concurrency/simplerwlock.h"
+#include "mongo/util/string_map.h"
 
 namespace mongo {
 
@@ -50,7 +51,7 @@ namespace mongo {
         For example <dbname>.system.users is ok for regular clients to update.
         @param write used when .system.js
     */
-    bool legalClientSystemNS( const string& ns , bool write );
+    bool legalClientSystemNS( const StringData& ns , bool write );
 
     bool userCreateNS(const StringData& ns, BSONObj options, string& err, bool logForReplication);
 
@@ -58,9 +59,9 @@ namespace mongo {
     // such as insert, some updates, and create index
     NamespaceDetails* getAndMaybeCreateNS(const StringData& ns, bool logop);
 
-    void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system = false);
+    void dropCollection(const StringData &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system = false);
 
-    void dropDatabase(const string &db);
+    void dropDatabase(const StringData &db);
 
     /**
      * Record that a new namespace exists in <dbname>.system.namespaces.
@@ -69,11 +70,11 @@ namespace mongo {
 
     void removeNamespaceFromCatalog(const StringData& name);
 
-    int removeFromSysIndexes(const char *ns, const char *name);
+    int removeFromSysIndexes(const StringData& ns, const StringData& name);
 
     // Rename a namespace within current 'client' db.
     // (Arguments should include db name)
-    void renameNamespace( const char *from, const char *to, bool stayTemp);
+    void renameNamespace( const StringData& from, const StringData& to, bool stayTemp);
 
     // struct for storing the accumulated states of a NamespaceDetails
     // all values, except for nIndexes, are estiamtes
@@ -158,9 +159,9 @@ namespace mongo {
             const unsigned long long mask = 1ULL << i;
             return (_multiKeyIndexBits & mask) != 0;
         }
-        void setIndexIsMultikey(const char *thisns, int i);
+        void setIndexIsMultikey(const StringData& thisns, int i);
 
-        bool dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex);
+        bool dropIndexes(const StringData& ns, const StringData& name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex);
 
         /**
          * Record that a new index exists in <dbname>.system.indexes.
@@ -170,12 +171,12 @@ namespace mongo {
         void addDefaultIndexesToCatalog();
 
         // @return offset in indexes[]
-        int findIndexByName(const char *name) const;
+        int findIndexByName(const StringData& name) const;
 
         // @return offset in indexes[]
         int findIndexByKeyPattern(const BSONObj& keyPattern) const;
 
-        void findIndexByType( const string& name , vector<int> &matches ) const {
+        void findIndexByType( const StringData& name , vector<int> &matches ) const {
             for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
                 const IndexDetails *index = it->get();
                 if (index->getSpec().getTypeName() == name) {
@@ -226,7 +227,7 @@ namespace mongo {
         }
 
         // @return a BSON representation of this NamespaceDetail's state
-        static BSONObj serialize(const char *ns, const BSONObj &options,
+        static BSONObj serialize(const StringData& ns, const BSONObj &options,
                                  const BSONObj &pk, unsigned long long multiKeyIndexBits,
                                  const BSONArray &indexes_array);
         BSONObj serialize() const;
@@ -370,9 +371,9 @@ namespace mongo {
     class NamespaceDetailsTransient : boost::noncopyable {
         const string _ns;
         void reset();
-        static std::map< string, shared_ptr< NamespaceDetailsTransient > > _nsdMap;
+        static StringMap<shared_ptr<NamespaceDetailsTransient> > _nsdMap;
 
-        NamespaceDetailsTransient(const char *ns);
+        NamespaceDetailsTransient(const StringData& ns);
     public:
         ~NamespaceDetailsTransient();
         void addedIndex() { reset(); }
@@ -380,8 +381,8 @@ namespace mongo {
         /* Drop cached information on all namespaces beginning with the specified prefix.
            Can be useful as index namespaces share the same start as the regular collection.
            SLOW - sequential scan of all NamespaceDetailsTransient objects */
-        static void clearForPrefix(const char *prefix);
-        static void eraseForPrefix(const char *prefix);
+        static void clearForPrefix(const StringData& prefix);
+        static void eraseForPrefix(const StringData& prefix);
 
         /**
          * @return a cursor interface to the query optimizer.  The implementation may utilize a
@@ -436,7 +437,7 @@ namespace mongo {
          * for checking this if they are not sure an index for a sort exists, and defaulting to a non-sort if
          * no suitable indices exist.
          */
-        static shared_ptr<Cursor> bestGuessCursor( const char *ns, const BSONObj &query, const BSONObj &sort );
+        static shared_ptr<Cursor> bestGuessCursor( const StringData& ns, const BSONObj &query, const BSONObj &sort );
 
         /* indexKeys() cache ---------------------------------------------------- */
         /* assumed to be in write lock for this */
@@ -475,7 +476,7 @@ namespace mongo {
     private:
         int _qcWriteCount;
         map<QueryPattern,CachedQueryPlan> _qcCache;
-        static NamespaceDetailsTransient& make_inlock(const char *ns);
+        static NamespaceDetailsTransient& make_inlock(const StringData& ns);
     public:
         static SimpleMutex _qcMutex;
 
@@ -485,9 +486,9 @@ namespace mongo {
            Creates a NamespaceDetailsTransient before returning if one DNE. 
            todo: avoid creating too many on erroneous ns queries.
            */
-        static NamespaceDetailsTransient& get_inlock(const char *ns);
+        static NamespaceDetailsTransient& get_inlock(const StringData& ns);
 
-        static NamespaceDetailsTransient& get(const char *ns) {
+        static NamespaceDetailsTransient& get(const StringData& ns) {
             // todo : _qcMutex will create bottlenecks in our parallelism
             SimpleMutex::scoped_lock lk(_qcMutex);
             return get_inlock(ns);
@@ -517,8 +518,8 @@ namespace mongo {
 
     }; /* NamespaceDetailsTransient */
 
-    inline NamespaceDetailsTransient& NamespaceDetailsTransient::get_inlock(const char *ns) {
-        std::map< string, shared_ptr< NamespaceDetailsTransient > >::iterator i = _nsdMap.find(ns);
+    inline NamespaceDetailsTransient& NamespaceDetailsTransient::get_inlock(const StringData& ns) {
+        StringMap<shared_ptr<NamespaceDetailsTransient> >::const_iterator i = _nsdMap.find(ns);
         if( i != _nsdMap.end() && 
             i->second.get() ) { // could be null ptr from clearForPrefix
             return *i->second;
@@ -530,7 +531,7 @@ namespace mongo {
      * (Additional info in system.* collections.) */
     class NamespaceIndex {
     public:
-        NamespaceIndex(const string &dir, const string &database);
+        NamespaceIndex(const string &dir, const StringData& database);
 
         ~NamespaceIndex();
 
@@ -596,7 +597,7 @@ namespace mongo {
 
         void rollbackCreate();
 
-        typedef std::map<Namespace, shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
+        typedef StringMap<shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
 
     private:
         void _init(bool may_create);
@@ -604,8 +605,7 @@ namespace mongo {
         // @return NamespaceDetails object is the ns is currently open, NULL otherwise.
         // requires: openRWLock is locked, either shared or exclusively.
         NamespaceDetails *find_ns_locked(const StringData& ns) {
-            Namespace n(ns);
-            NamespaceDetailsMap::iterator it = _namespaces.find(n);
+            NamespaceDetailsMap::const_iterator it = _namespaces.find(ns);
             if (it != _namespaces.end()) {
                 verify(it->second.get() != NULL);
                 return it->second.get();
@@ -619,8 +619,9 @@ namespace mongo {
 
         DB *_nsdb;
         NamespaceDetailsMap _namespaces;
-        string _dir;
-        string _database;
+        const string _dir;
+        const string _nsdbFilename;
+        const string _database;
         // This rwlock serializes _nsdb/_namespaces opens and lookups in a DBRead lock.
         // It isn't necessary to hold this rwlock in a a DBWrite lock.
         SimpleRWLock _openRWLock;
@@ -678,10 +679,10 @@ namespace mongo {
     }
 
     // @return offset in indexes[]
-    inline int NamespaceDetails::findIndexByName(const char *name) const {
+    inline int NamespaceDetails::findIndexByName(const StringData& name) const {
         for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             const IndexDetails *index = it->get();
-            if (mongoutils::str::equals(index->indexName().c_str(), name)) {
+            if (index->indexName() == name) {
                 return it - _indexes.begin();
             }
         }

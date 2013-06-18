@@ -110,9 +110,9 @@ namespace mongo {
 
         void transfer(NamespaceIndexRollback &parent);
 
-        void noteNs(const char *ns);
+        void noteNs(const StringData& ns);
 
-        void noteCreate(const string &dbname);
+        void noteCreate(const StringData& dbname);
 
     private:
         set<string> _dbs;

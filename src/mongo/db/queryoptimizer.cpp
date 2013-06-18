@@ -1544,13 +1544,15 @@ doneCheckOrder:
         return id;
     }
     
-    shared_ptr<Cursor> NamespaceDetailsTransient::bestGuessCursor( const char *ns,
+    shared_ptr<Cursor> NamespaceDetailsTransient::bestGuessCursor( const StringData& ns,
                                                                   const BSONObj &query,
                                                                   const BSONObj &sort ) {
-        auto_ptr<FieldRangeSetPair> frsp( new FieldRangeSetPair( ns, query, true ) );
+        // TODO: make FieldRangeSet and QueryPlanSet understand StringData
+        string ns_s = ns.toString();
+        auto_ptr<FieldRangeSetPair> frsp( new FieldRangeSetPair( ns_s.c_str(), query, true ) );
         auto_ptr<FieldRangeSetPair> origFrsp( new FieldRangeSetPair( *frsp ) );
 
-        scoped_ptr<QueryPlanSet> qps( QueryPlanSet::make( ns, frsp, origFrsp, query, sort,
+        scoped_ptr<QueryPlanSet> qps( QueryPlanSet::make( ns_s.c_str(), frsp, origFrsp, query, sort,
                                                          shared_ptr<const ParsedQuery>(), BSONObj(),
                                                          QueryPlanGenerator::UseIfInOrder,
                                                          BSONObj(), BSONObj(), true ) );

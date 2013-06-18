@@ -76,19 +76,17 @@ namespace mongo {
     /* ------------------------------------------- */
 
     // ns is either a full namespace or "dbname." when invalidating for a whole db
-    void ClientCursor::invalidate(const char *ns) {
+    void ClientCursor::invalidate(const StringData &ns) {
         Lock::assertWriteLocked(ns);
-        int len = strlen(ns);
-        const char* dot = strchr(ns, '.');
-        verify( len > 0 && dot);
-
-        bool isDB = (dot == &ns[len-1]); // first (and only) dot is the last char
+        size_t dotpos = ns.find('.');
+        verify(dotpos != string::npos);
+        bool isDB = (dotpos + 1) == ns.size(); // first (and only) dot is the last char
 
         {
             //cout << "\nTEMP invalidate " << ns << endl;
             Database *db = cc().database();
             verify(db);
-            verify( str::startsWith(ns, db->name()) );
+            verify( ns.startsWith(db->name()) );
 
             for( LockedIterator i; i.ok(); ) {
                 ClientCursor *cc = i.current();
@@ -97,11 +95,11 @@ namespace mongo {
                 if ( cc->_db == db ) {
                     if (isDB) {
                         // already checked that db matched above
-                        dassert( str::startsWith(cc->_ns.c_str(), ns) );
+                        dassert( StringData(cc->_ns).startsWith(ns) );
                         shouldDelete = true;
                     }
                     else {
-                        if ( str::equals(cc->_ns.c_str(), ns) )
+                        if ( ns == cc->_ns )
                             shouldDelete = true;
                     }
                 }
