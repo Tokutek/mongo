@@ -167,6 +167,7 @@ namespace mongo {
 
         _area._entries[pos].used = false;
         _area._entries[pos].data.second = V();
+        _size--;
         return 1;
     }
 
