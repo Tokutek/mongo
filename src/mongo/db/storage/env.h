@@ -27,6 +27,7 @@ namespace mongo {
 
         extern DB_ENV *env;
 
+        static const int ENOENT_ASSERT_ID = 16847;
         static const int DICTIONARY_TOO_NEW_ASSERT_ID = 16768;
 
         void startup(void);

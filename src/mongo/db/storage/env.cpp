@@ -18,6 +18,7 @@
 
 #include "mongo/pch.h"
 
+#include <errno.h>
 #include <string>
 
 #include <db.h>
@@ -481,6 +482,14 @@ namespace mongo {
                }                                   \
             } while (0)
 
+            switch (error) {
+                case ENOENT:
+                    _do_assert(uasserted, ENOENT_ASSERT_ID,
+                               "Error 2 (No such file or directory) from the ydb layer.  The collection may have been dropped.");
+                default:
+                    // fall through
+                    ;
+            }
             if (error > 0) {
                 msgasserted(16770, str::stream() << "Got generic error "
                                    << error << " (" << strerror(error) << ")"

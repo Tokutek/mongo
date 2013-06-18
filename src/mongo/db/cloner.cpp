@@ -599,7 +599,19 @@ namespace mongo {
             const string ns = collname.startsWith(dbname.toString() + ".")
                               ? collname.toString()
                               : dbname.toString() + "." + collname.toString();
-            NamespaceDetails *d = nsdetails(ns.c_str());
+            NamespaceDetails *d = NULL;
+            try {
+                d = nsdetails(ns);
+            }
+            catch (DBException &e) {
+                if (e.getCode() == storage::ENOENT_ASSERT_ID) {
+                    errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped";
+                    return false;
+                }
+                else {
+                    throw;
+                }
+            }
             if (d == NULL) {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped";
                 return false;
