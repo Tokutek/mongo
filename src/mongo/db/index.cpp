@@ -21,7 +21,6 @@
 
 #include <boost/checked_delete.hpp>
 
-#include "mongo/db/namespace.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/index.h"
 #include "mongo/db/curop.h"

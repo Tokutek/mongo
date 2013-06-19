@@ -19,11 +19,10 @@
 
 #pragma once
 
-#include "jsobj.h"
-#include "namespace.h"
-#include "../util/net/message.h"
-#include "../client/constants.h"
-#include "instance.h"
+#include "mongo/client/constants.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/instance.h"
+#include "mongo/util/net/message.h"
 
 namespace mongo {
 
@@ -130,9 +129,13 @@ namespace mongo {
         const char * getns() const {
             return data;
         }
-        void getns(Namespace& ns) const {
+#if 0
+        void getns(string &ns) const {
+            // Namespace name must be the first part of the message.
+            // It also must be null terminated in order for this string constructor to work.
             ns = data;
         }
+#endif
 
         const char * afterNS() const {
             return data + strlen( data ) + 1;

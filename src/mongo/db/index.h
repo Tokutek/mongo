@@ -27,7 +27,6 @@
 #include "mongo/db/client.h"
 #include "mongo/db/indexkey.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/namespace.h"
 #include "mongo/db/storage/cursor.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/key.h"

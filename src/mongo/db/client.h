@@ -29,20 +29,19 @@
 
 #include <stack>
 
-#include "security.h"
-#include "namespace.h"
-#include "lasterror.h"
-#include "stats/top.h"
-#include "../db/client_common.h"
-#include "../util/concurrency/threadlocal.h"
-#include "../util/net/message_port.h"
-#include "../util/concurrency/rwlock.h"
-#include "d_concurrency.h"
+#include "mongo/db/security.h"
+#include "mongo/db/lasterror.h"
+#include "mongo/db/stats/top.h"
+#include "mongo/db/client_common.h"
+#include "mongo/db/d_concurrency.h"
 #include "mongo/db/lockstate.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
-#include "mongo/util/paths.h"
 #include "mongo/db/opsettings.h"
+#include "mongo/util/paths.h"
+#include "mongo/util/concurrency/threadlocal.h"
+#include "mongo/util/net/message_port.h"
+#include "mongo/util/concurrency/rwlock.h"
 
 namespace mongo {
 

@@ -33,10 +33,7 @@ namespace mongo {
         _active = false;
         _reset();
         _op = 0;
-        // These addresses should never be written to again.  The zeroes are
-        // placed here as a precaution because currentOp may be accessed
-        // without the db mutex.
-        memset(_ns, 0, sizeof(_ns));
+        _ns.clear();
     }
 
     void CurOp::_reset() {
@@ -55,7 +52,7 @@ namespace mongo {
         _reset();
         _start = 0;
         _opNum = _nextOpNum++;
-        _ns[0] = 0;
+        _ns.clear();
         _debug.reset();
         _query.reset();
         _active = true; // this should be last for ui clarity
@@ -110,10 +107,7 @@ namespace mongo {
 
     void CurOp::enter( Client::Context * context ) {
         ensureStarted();
-
-        strncpy( _ns, context->ns(), Namespace::MaxNsLen);
-        _ns[Namespace::MaxNsLen] = 0;
-
+        _ns = context->ns();
         _dbprofile = std::max( context->_db ? context->_db->profile() : 0 , _dbprofile );
     }
     

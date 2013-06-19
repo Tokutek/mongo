@@ -378,7 +378,7 @@ namespace mongo {
 
                     BSONObj indexToInsert = b.obj();
 
-                    string sysIndexes( Namespace( _config.tempLong.c_str() ).getSisterNS( "system.indexes" ) );
+                    string sysIndexes = cc().database()->name() + ".system.indexes";
                     Client::WriteContext ctx( sysIndexes.c_str() );
                     insert( sysIndexes.c_str() , indexToInsert );
                 }

@@ -25,7 +25,6 @@
 #include "mongo/client/syncclusterconnection.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/json.h"
-#include "mongo/db/namespace.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/s/util.h"
 #include "mongo/util/md5.hpp"
@@ -1062,7 +1061,7 @@ namespace mongo {
 
     
     auto_ptr<DBClientCursor> DBClientWithCommands::getIndexes( const string &ns ) {
-        return query( Namespace( ns.c_str() ).getSisterNS( "system.indexes" ).c_str() , BSON( "ns" << ns ) );
+        return query( getSisterNS( ns, "system.indexes" ) , BSON( "ns" << ns ) );
     }
 
     void DBClientWithCommands::dropIndex( const string& ns , BSONObj keys ) {
@@ -1100,7 +1099,7 @@ namespace mongo {
 
         for ( list<BSONObj>::iterator i=all.begin(); i!=all.end(); i++ ) {
             BSONObj o = *i;
-            insert( Namespace( ns.c_str() ).getSisterNS( "system.indexes" ).c_str() , o );
+            insert( getSisterNS( ns, "system.indexes" ), o );
         }
 
     }
@@ -1164,7 +1163,7 @@ namespace mongo {
         if ( cache )
             _seenIndexes.insert( cacheKey );
 
-        insert( Namespace( ns.c_str() ).getSisterNS( "system.indexes"  ).c_str() , toSave.obj() );
+        insert( getSisterNS( ns, "system.indexes" ).c_str() , toSave.obj() );
         return 1;
     }
 

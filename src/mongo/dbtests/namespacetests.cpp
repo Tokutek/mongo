@@ -19,7 +19,6 @@
  */
 
 #include "mongo/pch.h"
-#include "mongo/db/namespace.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/json.h"
 #include "mongo/db/queryutil.h"

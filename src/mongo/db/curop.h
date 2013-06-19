@@ -20,13 +20,12 @@
 
 #pragma once
 
-#include "namespace.h"
-#include "client.h"
-#include "../bson/util/atomic_int.h"
-#include "../util/concurrency/spin_lock.h"
-#include "../util/time_support.h"
-#include "../util/net/hostandport.h"
-#include "../util/progress_meter.h"
+#include "mongo/db/client.h"
+#include "mongo/bson/util/atomic_int.h"
+#include "mongo/util/concurrency/spin_lock.h"
+#include "mongo/util/time_support.h"
+#include "mongo/util/net/hostandport.h"
+#include "mongo/util/progress_meter.h"
 
 namespace mongo {
 
@@ -51,7 +50,7 @@ namespace mongo {
         // basic options
         int op;
         bool iscommand;
-        Namespace ns;
+        string ns;
         BSONObj query;
         BSONObj updateobj;
         
@@ -167,7 +166,7 @@ namespace mongo {
         void markCommand() { _command = true; }
         OpDebug& debug()           { return _debug; }
         int profileLevel() const   { return _dbprofile; }
-        const char * getNS() const { return _ns; }
+        const char * getNS() const { return _ns.c_str(); }
 
         bool shouldDBProfile( int ms ) const {
             if ( _dbprofile <= 0 )
@@ -236,7 +235,7 @@ namespace mongo {
         bool _command;
         int _dbprofile;                  // 0=off, 1=slow, 2=all
         AtomicUInt _opNum;               // todo: simple being "unsigned" may make more sense here
-        char _ns[Namespace::MaxNsLen+2];
+        string _ns;
         HostAndPort _remote;             // CAREFUL here with thread safety
         CachedBSONObj _query;            // CachedBSONObj is thread safe
         OpDebug _debug;

@@ -31,7 +31,6 @@
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/index.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/namespace.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/querypattern.h"
 #include "mongo/db/relock.h"

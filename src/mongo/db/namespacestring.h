@@ -95,19 +95,6 @@ namespace mongo {
          * @param db - a possible database name
          * @return if db is an allowed database name
          */
-        static bool validDBName( const string& db ) {
-            if ( db.size() == 0 || db.size() > 64 )
-                return false;
-#ifdef _WIN32
-            // We prohibit all FAT32-disallowed characters on Windows
-            size_t good = strcspn( db.c_str() , "/\\. \"*<>:|?" );
-#else
-            // For non-Windows platforms we are much more lenient
-            size_t good = strcspn( db.c_str() , "/\\. \"" );
-#endif
-            return good == db.size();
-        }
-        /** Implementation of the above, but with StringData. */
         static bool validDBName(const StringData &db) {
             if (db.size() == 0 || db.size() > 64) {
                 return false;
@@ -145,7 +132,7 @@ namespace mongo {
     };
 
     // "database.a.b.c" -> "database"
-    inline StringData nsToDatabaseSubstring( const StringData& ns ) {
+    inline StringData nsToDatabaseSubstring( const StringData &ns ) {
         size_t i = ns.find( '.' );
         if ( i == string::npos ) {
             massert(10078, "nsToDatabase: ns too long", ns.size() < MaxDatabaseNameLen );
@@ -162,8 +149,31 @@ namespace mongo {
     }
 
     // TODO: make this return a StringData
-    inline string nsToDatabase(const StringData& ns) {
+    inline string nsToDatabase(const StringData &ns) {
         return nsToDatabaseSubstring( ns ).toString();
+    }
+
+    inline bool isValidNS( const string &ns ) {
+        // TODO: should check for invalid characters
+
+        size_t idx = ns.find( '.' );
+        if ( idx == string::npos )
+            return false;
+
+        if ( idx == ns.size() - 1 )
+            return false;
+
+        return true;
+    }
+
+    // TODO: Possibly make this less inefficient.
+    inline string getSisterNS(const StringData &ns, const StringData &local) {
+        verify( local.size() > 0 && local[0] != '.' );
+        string old(ns.toString());
+        if (old.find( "." ) != string::npos) {
+            old = old.substr( 0, old.find( "." ) );
+        }
+        return old + "." + local.toString();
     }
 
 }

@@ -535,10 +535,7 @@ namespace mongo {
         // to connect to a machine even though the machine is shutting
         // down. We should find a way for the oplog to veto
         // that machine, but can't find method to do it now
-        if (exceptionInfo.code == 11600 && 
-            mongoutils::str::equals(ns.toString().c_str(), "local.oplog.rs")
-            )
-        {
+        if (exceptionInfo.code == 11600 && ns == "local.oplog.rs" ) {
             return true;
         }
         return false;
@@ -553,7 +550,7 @@ namespace mongo {
             s << "command ";
         else
             s << opToString( op ) << ' ';
-        s << ns.toString();
+        s << ns;
 
         if ( ! query.isEmpty() ) {
             if ( iscommand )
@@ -607,7 +604,7 @@ namespace mongo {
 #define OPDEBUG_APPEND_BOOL(x) if( x ) b.appendBool( #x , (x) )
     void OpDebug::append( const CurOp& curop, BSONObjBuilder& b ) const {
         b.append( "op" , iscommand ? "command" : opToString( op ) );
-        b.append( "ns" , ns.toString() );
+        b.append( "ns" , ns );
         if ( ! query.isEmpty() )
             b.append( iscommand ? "command" : "query" , query );
         else if ( ! iscommand && curop.haveQuery() )

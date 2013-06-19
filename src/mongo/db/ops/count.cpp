@@ -20,7 +20,6 @@
 #include "mongo/db/ops/count.h"
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/namespace.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/queryoptimizercursor.h"
