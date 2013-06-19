@@ -291,7 +291,9 @@ doneCheckOrder:
 
         if ( willScanTable() ) {
             checkTableScanAllowed();
-            return Helpers::findTableScan( _frs.ns(), _order);
+            const int direction = _order.getField("$natural").number() >= 0 ? 1 : -1;
+            NamespaceDetails *d = nsdetails( _frs.ns() );
+            return shared_ptr<Cursor>( BasicCursor::make( d, direction ) );
         }
                 
         if ( _startOrEndSpec ) {
@@ -308,10 +310,10 @@ doneCheckOrder:
 
     shared_ptr<Cursor> QueryPlan::newReverseCursor() const {
         if ( willScanTable() ) {
-            int orderSpec = _order.getIntField( "$natural" );
-            if ( orderSpec == INT_MIN )
-                orderSpec = 1;
-            return Helpers::findTableScan( _frs.ns(), BSON( "$natural" << -orderSpec ) );
+            const int orderSpec = _order.getIntField( "$natural" );
+            const int direction = orderSpec == INT_MIN ? -1 : -orderSpec;
+            NamespaceDetails *d = nsdetails( _frs.ns() );
+            return shared_ptr<Cursor>( BasicCursor::make( d, direction ) );
         }
         massert( 10364 ,  "newReverseCursor() not implemented for indexed plans", false );
         return shared_ptr<Cursor>();

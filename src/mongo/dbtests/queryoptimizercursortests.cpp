@@ -25,11 +25,11 @@
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/ops/insert.h"
 #include "mongo/db/json.h"
 #include "mongo/dbtests/dbtests.h"
 
 namespace mongo {
-    void __forceLinkGeoPlugin();
     shared_ptr<Cursor> newQueryOptimizerCursor( const char *ns, const BSONObj &query,
                                                const BSONObj &order = BSONObj(),
                                                const QueryPlanSelectionPolicy &planPolicy =
@@ -46,9 +46,37 @@ namespace QueryOptimizerCursorTests {
         BSONObjBuilder result;
         dropCollection( ns, errmsg, result );
     }
+
+    void ensureIndex(const char *ns, BSONObj keyPattern, bool unique, const char *name) {
+        NamespaceDetails *d = nsdetails(ns);
+        if( d == 0 )
+            return;
+
+        {
+            NamespaceDetails::IndexIterator i = d->ii();
+            while( i.more() ) {
+                if( i.next().keyPattern().woCompare(keyPattern) == 0 )
+                    return;
+            }
+        }
+
+        if( d->nIndexes() >= NamespaceDetails::NIndexesMax ) {
+            problem() << "Helper::ensureIndex fails, MaxIndexes exceeded " << ns << '\n';
+            return;
+        }
+
+        string system_indexes = cc().database()->name() + ".system.indexes";
+
+        BSONObjBuilder b;
+        b.append("name", name);
+        b.append("ns", ns);
+        b.append("key", keyPattern);
+        b.appendBool("unique", unique);
+        BSONObj o = b.done();
+
+        insertObject(system_indexes.c_str(), o, 0, true);
+    }
         
-    using boost::shared_ptr;
-    
     namespace CachedMatchCounter {
         
         using mongo::CachedMatchCounter;
@@ -1687,7 +1715,7 @@ namespace QueryOptimizerCursorTests {
                 // Best plan selected by query.
                 nPlans( 1 );
                 nPlans( 1 );
-                Helpers::ensureIndex( ns(), BSON( "c" << 1 ), false, "c_1" );
+                ensureIndex( ns(), BSON( "c" << 1 ), false, "c_1" );
                 // Best plan cleared when new index added.
                 nPlans( 3 );
                 runQuery();

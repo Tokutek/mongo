@@ -110,11 +110,11 @@ namespace mongo {
             int n = 0;
             list<BSONObj> src;
             {
-                Client::ReadContext ctx( "local.sources", dbpath, authed );
-                shared_ptr<Cursor> c = Helpers::findTableScan("local.sources", BSONObj());
-                while ( c->ok() ) {
-                    src.push_back(c->current());
-                    c->advance();
+                const char *ns = "local.sources";
+                Client::ReadContext ctx( ns, dbpath, authed );
+                NamespaceDetails *d = nsdetails( ns );
+                for (shared_ptr<Cursor> c( BasicCursor::make( d ) ); c->ok(); c->advance()) {
+                    src.push_back(c->current().copy());
                 }
             }
 

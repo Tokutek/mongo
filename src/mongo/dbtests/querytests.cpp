@@ -21,7 +21,6 @@
 
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/scanandorder.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/json.h"
@@ -40,6 +39,11 @@ namespace mongo {
 
 namespace QueryTests {
 
+    bool findById(const char *ns, const BSONObj &query, BSONObj &result) {
+        NamespaceDetails *d = nsdetails(ns);
+        return d != NULL ? d->findById(query, result) : false;
+    }
+
     class Base {
         Client::Transaction _transaction;
         Lock::GlobalWrite lk;
@@ -50,8 +54,7 @@ namespace QueryTests {
         }
         ~Base() {
             try {
-                boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() );
-                for(; c->ok(); c->advance() ) {
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) ); c->ok(); c->advance() ) {
                     deleteOneObject( nsdetails(ns()), &NamespaceDetailsTransient::get(ns()), c->currPK(), c->current() );
                 }
                 _transaction.commit();
@@ -94,10 +97,9 @@ namespace QueryTests {
             BSONObj query = fromjson( "{$or:[{b:2},{c:3}]}" );
             BSONObj ret;
             // Check findOne() returning object.
-            ASSERT( Helpers::findOne( ns(), query, ret, true ) );
+            NamespaceDetails *d = nsdetails( ns() );
+            ASSERT( d->findOne( query, ret, true ) );
             ASSERT_EQUALS( string( "b" ), ret.firstElement().fieldName() );
-            // Cross check with other (redundant) findOne() returning object.
-            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, true ) );
         }
     };
     
@@ -107,22 +109,17 @@ namespace QueryTests {
             insert( BSON( "b" << 2 << "_id" << 0 ) );
             BSONObj query = fromjson( "{b:2}" );
             BSONObj ret;
+            NamespaceDetails *d = nsdetails( ns() );
 
             // Check findOne() returning object, allowing unindexed scan.
-            ASSERT( Helpers::findOne( ns(), query, ret, false ) );
-            // Check other findOne() returning object, allowing unindexed scan.
-            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, false ) );
+            ASSERT( d->findOne( query, ret, false ) );
             
             // Check findOne() returning object, requiring indexed scan without index.
-            ASSERT_THROWS( Helpers::findOne( ns(), query, ret, true ), MsgAssertionException );
-            // Check other findOne() returning object, requiring indexed scan without index.
-            ASSERT_THROWS( Helpers::findOne( ns(), query, true ), MsgAssertionException );
+            ASSERT_THROWS( d->findOne( query, ret, true ), MsgAssertionException );
 
             addIndex( BSON( "b" << 1 ) );
             // Check findOne() returning object, requiring indexed scan with index.
-            ASSERT( Helpers::findOne( ns(), query, ret, false ) );
-            // Check other findOne() returning object, requiring indexed scan with index.
-            ASSERT_EQUALS( ret, Helpers::findOne( ns(), query, false ) );
+            ASSERT( d->findOne( query, ret, false ) );
         }
     };
     
@@ -360,13 +357,13 @@ namespace QueryTests {
             client().dropCollection( "unittests.querytests.TailableQueryOnId" );
         }
 
-		void insertA(const char* ns, int a) {
-			BSONObjBuilder b;
-			b.appendOID("_id", 0, true);
-			b.appendOID("value", 0, true);
-			b.append("a", a);
-			insert(ns, b.obj());
-		}
+                void insertA(const char* ns, int a) {
+                        BSONObjBuilder b;
+                        b.appendOID("_id", 0, true);
+                        b.appendOID("value", 0, true);
+                        b.append("a", a);
+                        insert(ns, b.obj());
+                }
 
         void run() {
             const char *ns = "unittests.querytests.TailableQueryOnId";
@@ -1033,13 +1030,14 @@ namespace QueryTests {
             ASSERT_EQUALS( 50 , count() );
 
             BSONObj res;
-            ASSERT( Helpers::findOne( ns() , BSON( "_id" << 20 ) , res , true ) );
+            NamespaceDetails *d = nsdetails( ns() );
+            ASSERT( d->findOne( BSON( "_id" << 20 ) , res , true ) );
             ASSERT_EQUALS( 40 , res["x"].numberInt() );
 
-            ASSERT( Helpers::findById( ns() , BSON( "_id" << 20 ) , res ) );
+            ASSERT( findById( ns() , BSON( "_id" << 20 ) , res ) );
             ASSERT_EQUALS( 40 , res["x"].numberInt() );
 
-            ASSERT( ! Helpers::findById( ns() , BSON( "_id" << 200 ) , res ) );
+            ASSERT( ! findById( ns() , BSON( "_id" << 200 ) , res ) );
 
             unsigned long long slow , fast;
 
@@ -1048,14 +1046,14 @@ namespace QueryTests {
             {
                 Timer t;
                 for ( int i=0; i<n; i++ ) {
-                    ASSERT( Helpers::findOne( ns() , BSON( "_id" << 20 ) , res , true ) );
+                    ASSERT( d->findOne( BSON( "_id" << 20 ) , res , true ) );
                 }
                 slow = t.micros();
             }
             {
                 Timer t;
                 for ( int i=0; i<n; i++ ) {
-                    ASSERT( Helpers::findById( ns() , BSON( "_id" << 20 ) , res ) );
+                    ASSERT( findById( ns() , BSON( "_id" << 20 ) , res ) );
                 }
                 fast = t.micros();
             }
@@ -1084,7 +1082,7 @@ namespace QueryTests {
 
             BSONObj res;
             for ( int i=0; i<1000; i++ ) {
-                bool found = Helpers::findById( ns() , BSON( "_id" << i ) , res );
+                bool found = findById( ns() , BSON( "_id" << i ) , res );
                 ASSERT_EQUALS( i % 2 , int(found) );
             }
             transaction.commit();

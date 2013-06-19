@@ -51,6 +51,7 @@ namespace mongo {
         const char* ns;
         bool fromMigrate;
     };
+
     void updateOneObject(
         NamespaceDetails *d, 
         NamespaceDetailsTransient *nsdt, 
@@ -74,17 +75,5 @@ namespace mongo {
                                OpDebug& debug,
                                bool fromMigrate = false,
                                const QueryPlanSelectionPolicy& planPolicy = QueryPlanSelectionPolicy::any());
-
-    UpdateResult _updateObjects(bool su,
-                                const char* ns,
-                                const BSONObj& updateobj,
-                                const BSONObj& pattern,
-                                bool upsert,
-                                bool multi,
-                                bool logop,
-                                OpDebug& debug,
-                                bool fromMigrate = false,
-                                const QueryPlanSelectionPolicy& planPolicy = QueryPlanSelectionPolicy::any());
-
 
 }  // namespace mongo

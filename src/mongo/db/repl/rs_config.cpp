@@ -73,7 +73,7 @@ namespace mongo {
                 cc().txn().txnIntiatingRs();
             }
             BSONObj o = asBson();
-            Helpers::putSingletonGod(rsConfigNs.c_str(), o, false/*logop=false; local db so would work regardless...*/);
+            Helpers::putSingleton(rsConfigNs.c_str(), o);
             if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
                 OpLogHelpers::logComment(comment, &cc().txn());
             }

@@ -378,7 +378,7 @@ namespace mongo {
 
                     BSONObj indexToInsert = b.obj();
 
-                    string sysIndexes = cc().database()->name() + ".system.indexes";
+                    string sysIndexes = getSisterNS( _config.tempLong, "system.indexes" );
                     Client::WriteContext ctx( sysIndexes.c_str() );
                     insert( sysIndexes.c_str() , indexToInsert );
                 }
@@ -544,7 +544,8 @@ namespace mongo {
                         BSONObj temp = cursor->next();
                         BSONObj old;
 
-                        bool found = Helpers::findOne( _config.finalLong.c_str() , temp["_id"].wrap() , old , true );
+                        NamespaceDetails *d = nsdetails( _config.finalLong.c_str() );
+                        const bool found = d != NULL && d->findOne( temp["_id"].wrap() , old , true );
                         if ( found ) {
                             // need to reduce
                             values.clear();

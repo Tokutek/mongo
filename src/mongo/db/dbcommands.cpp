@@ -1159,7 +1159,8 @@ namespace mongo {
                     return 1;
                 }
 #endif
-                c = Helpers::findTableScan( ns.c_str() , BSONObj() );
+                NamespaceDetails *d = nsdetails( ns.c_str() );
+                c.reset( BasicCursor::make( d ) );
             }
             else if ( min.isEmpty() || max.isEmpty() ) {
                 errmsg = "only one of min or max specified";

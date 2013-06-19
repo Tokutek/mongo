@@ -39,8 +39,8 @@ namespace CountTests {
         }
         ~Base() {
             try {
-                boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() );
-                for(; c->ok(); c->advance() ) {
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) );
+                     c->ok(); c->advance() ) {
                     deleteOneObject( nsdetails(ns()) , &NamespaceDetailsTransient::get(ns()), c->currPK(), c->current() );
                 }
                 _transaction.commit();

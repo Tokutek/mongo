@@ -28,76 +28,17 @@
 
 namespace mongo {
 
-    extern const BSONObj reverseNaturalObj; // {"$natural": -1 }
-
-    class Cursor;
-    class CoveredIndexMatcher;
-
     /**
        all helpers assume locking is handled above them
      */
     namespace Helpers {
 
-        /* ensure the specified index exists.
+        // TODO: Last thing to go for mongod helpers
 
-           @param keyPattern key pattern, e.g., { ts : 1 }
-           @param name index name, e.g., "name_1"
-
-           This method can be a little (not much) cpu-slow, so you may wish to use
-             OCCASIONALLY ensureIndex(...);
-
-           Note: use ensureHaveIdIndex() for the _id index: it is faster.
-           Note: does nothing if collection does not yet exist.
-        */
-        void ensureIndex(const char *ns, BSONObj keyPattern, bool unique, const char *name);
-
-        /* fetch a single object from collection ns that matches query.
-           set your db SavedContext first.
-
-           @param query - the query to perform.  note this is the low level portion of query so "orderby : ..."
-                          won't work.
-
-           @param requireIndex if true, assert if no index for the query.  a way to guard against
-           writing a slow query.
-
-           @return true if object found
-        */
-        bool findOne(const char *ns, const BSONObj &query, BSONObj& result, bool requireIndex = false);
-        BSONObj findOne(const char *ns, const BSONObj &query, bool requireIndex);
-
-        // Replacement for DataFileMgr::findTableScan
-        shared_ptr<Cursor> findTableScan(const char *ns, const BSONObj &order);
-
-        /**
-         * have to be locked already
-         */
-        vector<BSONObj> findAll( const string& ns , const BSONObj& query );
-
-        /**
-         * @param foundIndex if passed in will be set to 1 if ns and index found
-         * @return true if object found
-         */
-        bool findById( const char *ns, BSONObj query, BSONObj& result ); 
-
-        /** Get/put the first (or last) object from a collection.  Generally only useful if the collection
-            only ever has a single object -- which is a "singleton collection".
-
-            You do not need to set the database (Context) before calling.
-
-            @return true if object exists.
-        */
-        bool getSingleton(const char *ns, BSONObj& result);
         void putSingleton(const char *ns, BSONObj obj);
-        void putSingletonGod(const char *ns, BSONObj obj, bool logTheOp);
-        bool getFirst(const char *ns, BSONObj& result);
-        bool getLast(const char *ns, BSONObj& result); // get last object int he collection; e.g. {$natural : -1}
 
-        /** You do not need to set the database before calling.
-            @return true if collection is empty.
-        */
-        bool isEmpty(const char *ns, bool doAuth=true);
+        // TODO: The stuff below is only needed for sharding.
 
-        // TODO: this should be somewhere else probably
         /* Takes object o, and returns a new object with the
          * same field elements but the names stripped out.  Also,
          * fills in "key" with an ascending keyPattern that matches o
@@ -151,13 +92,6 @@ namespace mongo {
                                       bool maxInclusive = false , 
                                       /* RemoveCallback * callback = 0, */
                                       bool fromMigrate = false );
-
-        /**
-         * Remove all documents from a collection.
-         * You do not need to set the database before calling.
-         * Does not oplog the operation.
-         */
-        void emptyCollection(const char *ns);
 
     };
 

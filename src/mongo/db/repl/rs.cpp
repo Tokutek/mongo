@@ -19,7 +19,6 @@
 #include "../cmdline.h"
 #include "../../util/net/sock.h"
 #include "../client.h"
-#include "../dbhelpers.h"
 #include "../../s/d_logic.h"
 #include "rs.h"
 #include "connections.h"
@@ -476,8 +475,8 @@ namespace mongo {
     void ReplSetImpl::loadGTIDManager() {
         Lock::DBWrite lk(rsoplog);
         Client::Transaction txn(DB_SERIALIZABLE);
-        BSONObj o;
-        if( Helpers::getLast(rsoplog, o) ) {
+        const BSONObj o = getLastEntryInOplog();
+        if (!o.isEmpty()) {
             GTID lastGTID = getGTIDFromBSON("_id", o);
             uint64_t lastTime = o["ts"]._numberLong();
             uint64_t lastHash = o["h"].numberLong();
@@ -544,9 +543,8 @@ namespace mongo {
                 {
                     Client::ReadContext ctx(rsoplog);
                     Client::Transaction transaction(0);
-                    BSONObj o;
-                    bool ret= Helpers::getLast(rsoplog, o);
-                    verify(ret);
+                    BSONObj o = getLastEntryInOplog();
+                    verify(!o.isEmpty());
                     GTID lastGTID = getGTIDFromBSON("_id", o);
                     uint64_t lastTime = o["ts"]._numberLong();
                     uint64_t lastHash = o["h"].numberLong();
@@ -1042,15 +1040,18 @@ namespace mongo {
                 try {
                     Client::ReadContext ctx(rsoplog);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    if (lastTimeRead.isInitial()) {
-                        ret = Helpers::getFirst(rsoplog, result);
-                    }
-                    else {
-                        BSONObjBuilder q;
-                        addGTIDToBSON("$gt", lastTimeRead, q);
-                        BSONObjBuilder query;
-                        query.append("_id", q.done());
-                        ret = Helpers::findOne(rsoplog, query.done(), result, false);
+                    NamespaceDetails *d = nsdetails(rsoplog);
+                    if (d != NULL) {
+                        if (lastTimeRead.isInitial()) {
+                            ret = d->findOne(BSONObj(), result);
+                        }
+                        else {
+                            BSONObjBuilder q;
+                            addGTIDToBSON("$gt", lastTimeRead, q);
+                            BSONObjBuilder query;
+                            query.append("_id", q.done());
+                            ret = d->findOne(query.done(), result, false);
+                        }
                     }
                     if (ret) {
                         lastTimeRead = getGTIDFromBSON("_id", result);                    

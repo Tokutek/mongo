@@ -188,8 +188,8 @@ namespace mongo {
                    it is ok if the initiating member has *other* data than that.
                    */
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                BSONObj o;
-                if( Helpers::getFirst(rsoplog, o) ) {
+                BSONObj o = getLastEntryInOplog();
+                if( !o.isEmpty() ) {
                     errmsg = rsoplog + string(" is not empty on the initiating member.  cannot initiate.");
                     return false;
                 }

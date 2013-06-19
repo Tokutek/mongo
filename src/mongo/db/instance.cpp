@@ -870,10 +870,11 @@ namespace mongo {
                 return true;
             // we have a local database.  return true if oplog isn't empty
             {
-                Lock::DBRead lk(rsoplog);
+                Client::ReadContext ctx(rsoplog);
                 Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
+                NamespaceDetails *d = nsdetails(rsoplog);
                 BSONObj o;
-                if (Helpers::getFirst(rsoplog, o)) {
+                if (d != NULL && d->findOne(BSONObj(), o)) {
                     txn.commit();
                     return true;
                 }

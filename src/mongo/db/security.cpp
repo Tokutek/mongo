@@ -21,9 +21,9 @@
 #include "mongo/db/security.h"
 #include "mongo/db/security_common.h"
 #include "mongo/db/instance.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/client.h"
 #include "mongo/db/curop.h"
-#include "mongo/db/dbhelpers.h"
 
 // this is the _mongod only_ implementation of security.h
 
@@ -89,7 +89,8 @@ namespace mongo {
             Client::ReadContext ctx("admin.system.users");
             Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             BSONObj result;
-            if( Helpers::getSingleton("admin.system.users", result) ) {
+            NamespaceDetails *d = nsdetails("admin.system.users");
+            if( d != NULL && d->findOne(BSONObj(), result) ) {
                 _isLocalHostAndLocalHostIsAuthorizedForAll = false;
             }
             else if ( ! _warned ) {
@@ -135,7 +136,8 @@ namespace mongo {
                 BSONObjBuilder b;
                 b << "user" << user;
                 BSONObj query = b.done();
-                if( !Helpers::findOne(systemUsers.c_str(), query, userObj) ) {
+                NamespaceDetails *d = nsdetails(systemUsers.c_str());
+                if( d == NULL || !d->findOne(query, userObj) ) {
                     log() << "auth: couldn't find user " << user << ", " << systemUsers << endl;
                     return false;
                 }

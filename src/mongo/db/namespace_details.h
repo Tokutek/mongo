@@ -232,6 +232,9 @@ namespace mongo {
         // Run optimize on each index.
         void optimize();
 
+        // Find the first object that matches the query. Force index if requireIndex is true.
+        bool findOne(const BSONObj &query, BSONObj &result, const bool requireIndex = false) const;
+
         // Find by primary key (single element bson object, no field name).
         bool findByPK(const BSONObj &pk, BSONObj &result) const;
 
@@ -280,6 +283,9 @@ namespace mongo {
         // create a new index with the given info for this namespace.
         virtual void createIndex(const BSONObj &info);
 
+        // remove everything from a collection
+        virtual void empty();
+
         // note the commit/abort of a transaction, given:
         // minPK: the minimal PK inserted
         // nDelta: the number of inserts minus the number of deletes
@@ -314,11 +320,6 @@ namespace mongo {
 
         // uassert on duplicate key
         void checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj);
-
-        // remove everything from a collection
-        virtual void empty() {
-            msgasserted( 16758, "bug: tried to empty a collection, but it wasn't implemented" );
-        }
 
         // generate an index info BSON for this namespace, with the same options
         BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) const;

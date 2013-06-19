@@ -323,9 +323,9 @@ namespace CursorTests {
                 Base() :
                     _transaction(DB_SERIALIZABLE),
                     _ctx( ns() ),
-                    _cursor( Helpers::findTableScan( ns(), BSONObj() ) ) {
-                        ASSERT( _cursor );
-                        _clientCursor.reset( new ClientCursor( 0, _cursor, ns() ) );
+                    _cursor( BasicCursor::make( nsdetails(ns()) ) ) {
+                    ASSERT( _cursor );
+                    _clientCursor.reset( new ClientCursor( 0, _cursor, ns() ) );
                 }
                 ~Base() {
                     _transaction.commit();

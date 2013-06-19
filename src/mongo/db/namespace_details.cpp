@@ -847,6 +847,19 @@ namespace mongo {
         return -1;
     }
 
+    bool NamespaceDetails::findOne(const BSONObj &query, BSONObj &result, const bool requireIndex) const {
+        for (shared_ptr<Cursor> c( NamespaceDetailsTransient::getCursor(_ns, query, BSONObj(),
+                                       requireIndex ? QueryPlanSelectionPolicy::indexOnly() :
+                                                      QueryPlanSelectionPolicy::any() ) );
+             c->ok(); c->advance()) {
+            if ( c->currentMatches() && !c->getsetdup( c->currPK() ) ) {
+                result = c->current().copy();
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool NamespaceDetails::findByPK(const BSONObj &key, BSONObj &result) const {
 
         // get a cursor over the primary key index
@@ -1046,6 +1059,12 @@ namespace mongo {
         }
 
         _indexBuildInProgress = false;
+    }
+
+    void NamespaceDetails::empty() {
+        for ( shared_ptr<Cursor> c( BasicCursor::make(this) ); c->ok() ; c->advance() ) {
+            deleteObject(c->currPK(), c->current(), 0);
+        }
     }
 
     void NamespaceDetails::createIndex(const BSONObj &idx_info) {
@@ -1537,7 +1556,18 @@ namespace mongo {
         // Rename each index in system.indexes and system.namespaces
         {
             BSONObj nsQuery = BSON( "ns" << from );
-            vector<BSONObj> indexSpecs = Helpers::findAll( sysIndexes.c_str(), nsQuery );
+            vector<BSONObj> indexSpecs;
+            {
+                // TODO: find method in namespace details?
+                // Find all entries in sysIndexes for the from ns
+                Client::Context ctx( sysIndexes );
+                for ( shared_ptr<Cursor> c( NamespaceDetailsTransient::getCursor( sysIndexes, nsQuery ) );
+                      c->ok(); c->advance() ) {
+                    if (c->currentMatches()) {
+                        indexSpecs.push_back( c->current().copy() );
+                    }
+                }
+            }
             for ( vector<BSONObj>::const_iterator it = indexSpecs.begin() ; it != indexSpecs.end(); it++) {
                 BSONObj oldIndexSpec = *it;
                 string idxName = oldIndexSpec["name"].String();
@@ -1561,7 +1591,8 @@ namespace mongo {
         BSONObj newSpec;
         {
             BSONObj oldSpec;
-            verify( Helpers::findOne( sysNamespaces.c_str(), BSON( "name" << from ), oldSpec ) );
+            NamespaceDetails *d = nsdetails( sysNamespaces.c_str() );
+            verify( d != NULL && d->findOne( BSON( "name" << from ), oldSpec ) );
             BSONObjBuilder b;
             BSONObjIterator i( oldSpec.getObjectField( "options" ) );
             while ( i.more() ) {

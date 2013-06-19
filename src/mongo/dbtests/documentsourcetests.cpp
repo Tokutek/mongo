@@ -119,7 +119,7 @@ namespace DocumentSourceTests {
             void createSource() {
                 boost::shared_ptr<DocumentSourceCursor::CursorWithContext> cursorWithContext
                         ( new DocumentSourceCursor::CursorWithContext( ns ) );
-                boost::shared_ptr<Cursor> cursor = Helpers::findTableScan( ns, BSONObj() );
+                boost::shared_ptr<Cursor> cursor( BasicCursor::make( nsdetails(ns) ) );
                 cursorWithContext->_cursor.reset
                         ( new ClientCursor( QueryOption_NoCursorTimeout, cursor, ns, BSONObj(), true ) );
                 _source = DocumentSourceCursor::create( cursorWithContext, _ctx );

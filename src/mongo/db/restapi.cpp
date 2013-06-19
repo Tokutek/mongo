@@ -262,7 +262,9 @@ namespace mongo {
         readlocktry rl(/*"admin.system.users", */10000);
         uassert( 16173 , "couldn't get read lock to get admin auth credentials" , rl.got() );
         Client::Context cx( "admin.system.users", dbpath, false );
-        return ! Helpers::isEmpty("admin.system.users", false);
+        BSONObj o;
+        NamespaceDetails *d = nsdetails( "admin.system.users" );
+        return d != NULL && d->findOne(BSONObj(), o);
     }
 
     BSONObj RestAdminAccess::getAdminUser( const string& username ) const {
@@ -272,7 +274,8 @@ namespace mongo {
         uassert( 16174 , "couldn't get read lock to check admin user" , rl.got() );
         Client::Context cx( "admin.system.users" );
         BSONObj user;
-        if ( Helpers::findOne( "admin.system.users" , BSON( "user" << username ) , user ) )
+        NamespaceDetails *d = nsdetails( "admin.system.users" );
+        if ( d != NULL && d->findOne( BSON( "user" << username ) , user ) )
             return user.copy();
         return BSONObj();
     }

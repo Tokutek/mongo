@@ -14,10 +14,13 @@
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/connections.h"
 #include "mongo/db/instance.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/relock.h"
 
 namespace mongo {
+    const BSONObj reverseNaturalObj = BSON( "$natural" << -1 );
+
     BSONObj userReplQuery = fromjson("{\"user\":\"repl\"}");
 
     // copied (only the) comment from mongodb 2.6
@@ -46,10 +49,12 @@ namespace mongo {
         else {
             BSONObj user;
             {
-                Client::ReadContext ctxt("local.");
-                if( !Helpers::findOne("local.system.users", userReplQuery, user) ||
-                        // try the first user in local
-                        !Helpers::getSingleton("local.system.users", user) ) {
+                const char *ns = "local.system.users";
+                Client::ReadContext ctx(ns);
+                NamespaceDetails *d = nsdetails(ns);
+                if( d == NULL || !d->findOne(userReplQuery, user) ||
+                                 // try the first user in local
+                                 !d->findOne(BSONObj(), user) ) {
                     log() << "replauthenticate: no user in local.system.users to use for authentication\n";
                     return false;
                 }
@@ -75,13 +80,14 @@ namespace mongo {
     void getMe(BSONObj& me) {
         string myname = getHostName();
         Client::Transaction transaction(0);            
+        NamespaceDetails *d = nsdetails("local.me");
         // local.me is an identifier for a server for getLastError w:2+
-        if ( ! Helpers::getSingleton( "local.me" , me ) ||
-             ! me.hasField("host") ||
+        if ( d == NULL || !d->findOne( BSONObj(), me ) ||
+                          !me.hasField("host") ||
              me["host"].String() != myname ) {
         
             // clean out local.me
-            Helpers::emptyCollection("local.me");
+            d->empty();
         
             // repopulate
             BSONObjBuilder b;
@@ -96,11 +102,11 @@ namespace mongo {
     bool replHandshake(DBClientConnection *conn) {
         BSONObj me;
         try {
-            Lock::DBRead lk("local");
+            Client::ReadContext ctx("local");
             getMe(me);
         }
         catch (RetryWithWriteLock &e) {
-            Lock::DBWrite lk("local");
+            Client::WriteContext ctx("local");
             getMe(me);
         }
 

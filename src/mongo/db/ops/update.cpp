@@ -177,8 +177,7 @@ namespace mongo {
         return UpdateResult( 1 , 0 , 1 , BSONObj() );
     }
 
-    UpdateResult _updateObjects( bool su,
-                                 const char* ns,
+    UpdateResult _updateObjects( const char* ns,
                                  const BSONObj& updateobj,
                                  const BSONObj& patternOrig,
                                  bool upsert,
@@ -400,7 +399,7 @@ namespace mongo {
 
         validateUpdate( ns , updateobj , patternOrig );
 
-        UpdateResult ur = _updateObjects(false, ns, updateobj, patternOrig,
+        UpdateResult ur = _updateObjects(ns, updateobj, patternOrig,
                                          upsert, multi, logop,
                                          debug, fromMigrate, planPolicy );
         debug.nupdated = ur.num;
