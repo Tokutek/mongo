@@ -15,16 +15,19 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
-
 #include "mongo/util/text.h"
-#include "mongo/util/mongoutils/str.h"
+
+#include <boost/integer_traits.hpp>
 #include <boost/smart_ptr/scoped_array.hpp>
+#include <errno.h>
 #include <sstream>
 
 #ifdef _WIN32
 #include <io.h>
 #endif
+
+#include "mongo/platform/basic.h"
+#include "mongo/util/mongoutils/str.h"
 
 using namespace std;
 
