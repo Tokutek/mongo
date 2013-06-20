@@ -36,13 +36,13 @@ namespace mongo {
         };
 
         class SystemException : public Exception {
-            static mongoutils::str::stream& errprefix(int code) {
-                return mongoutils::str::stream() << "Error " << code << "(" << strerror(code) << ") from the ydb layer. ";
+            static std::string errprefix(int code, const std::string& msg) {
+                return mongoutils::str::stream() << "Error " << code << " (" << strerror(code) << ") from the ydb layer. " << msg;
             }
           public:
             SystemException(const mongo::ExceptionInfo &ei) : Exception(ei) {}
-            SystemException(const char *msg, int err, int code) : Exception(errprefix(err) << msg, code) {}
-            SystemException(const std::string &msg, int err, int code) : Exception(errprefix(err) << msg, code) {}
+            SystemException(const char *msg, int err, int code) : Exception(errprefix(err, msg), code) {}
+            SystemException(const std::string &msg, int err, int code) : Exception(errprefix(err, msg), code) {}
             virtual ~SystemException() throw() {}
 
             class Enoent;
