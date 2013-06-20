@@ -1032,28 +1032,29 @@ namespace mongo {
                 const uint64_t minTime = curTimeMillis64() - ageAllowed;
                 // now get the minimum entry in the oplog, if it has timestamp
                 // less than minTime, delete it, otherwise, 
-                BSONObj result;
-                bool ret;
                 uint64_t millisToWait = 0;
                 // do a possible deletion from the oplog, if we find an entry
                 // old enough. If not, we will sleep
                 try {
+                    BSONObj result;
+                    bool found = false;
+
                     Client::ReadContext ctx(rsoplog);
                     Client::Transaction transaction(DB_SERIALIZABLE);
                     NamespaceDetails *d = nsdetails(rsoplog);
                     if (d != NULL) {
                         if (lastTimeRead.isInitial()) {
-                            ret = d->findOne(BSONObj(), result);
+                            found = d->findOne(BSONObj(), result);
                         }
                         else {
                             BSONObjBuilder q;
                             addGTIDToBSON("$gt", lastTimeRead, q);
                             BSONObjBuilder query;
                             query.append("_id", q.done());
-                            ret = d->findOne(query.done(), result, false);
+                            found = d->findOne(query.done(), result, false);
                         }
                     }
-                    if (ret) {
+                    if (found) {
                         lastTimeRead = getGTIDFromBSON("_id", result);                    
                         uint64_t ts = result["ts"]._numberLong();
                         if (ts < minTime) {
