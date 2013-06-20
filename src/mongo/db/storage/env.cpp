@@ -469,7 +469,7 @@ namespace mongo {
             TOKULOG(1) << "cleaner iterations set to " << num_iterations << "." << endl;
         }
 
-        static void _handle_ydb_error(int error) {
+        void handle_ydb_error(int error) {
             switch (error) {
                 case ENOENT:
                     throw SystemException::Enoent();
@@ -509,20 +509,16 @@ namespace mongo {
             }
         }
 
-        void handle_ydb_error(int error) {
-            _handle_ydb_error(error);
-        }
-
         void handle_ydb_error_fatal(int error) {
             try {
-                _handle_ydb_error(error);
-                msgasserted(16853, mongoutils::str::stream() << "No exception thrown but one should have been thrown for error " << error);
+                handle_ydb_error(error);
             }
             catch (Exception &e) {
                 problem() << "fatal error " << e.getCode() << ": " << e.what() << endl;
                 problem() << e << endl;
                 fassertFailed(e.getCode());
             }
+            msgasserted(16853, mongoutils::str::stream() << "No storage exception thrown but one should have been thrown for error " << error);
         }
     
     } // namespace storage

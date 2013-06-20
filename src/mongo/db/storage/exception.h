@@ -20,8 +20,6 @@
 
 #include <errno.h>
 
-#include <db.h>
-
 #include "mongo/util/assert_util.h"
 #include "mongo/util/mongoutils/str.h"
 
