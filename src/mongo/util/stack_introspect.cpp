@@ -18,21 +18,20 @@
 
 #include "mongo/util/stack_introspect.h"
 
+#if !defined(_WIN32)
+
 #include <cstdlib>
+#include <cxxabi.h>
 #include <iostream>
-#include <string>
 #include <map>
+#include <string>
 #include <vector>
 
+#include "mongo/platform/backtrace.h"
 #include "mongo/util/concurrency/mutex.h"
 #include "mongo/util/text.h"
 
 using namespace std;
-
-#ifdef MONGO_HAVE_EXECINFO_BACKTRACE
-
-#include <execinfo.h>
-#include <cxxabi.h>
 
 namespace mongo {
     
@@ -98,7 +97,7 @@ namespace mongo {
     
     bool inConstructorChain( bool printOffending ){
         void* b[maxBackTraceFrames];
-        int size = ::backtrace( b, maxBackTraceFrames );
+        int size = backtrace( b, maxBackTraceFrames );
 
         char** strings = 0;
         
@@ -114,7 +113,7 @@ namespace mongo {
             }
 
             if ( ! strings ) 
-                strings = ::backtrace_symbols( b, size );
+                strings = backtrace_symbols( b, size );
 
             string symbol = strings[i];
 
@@ -168,5 +167,4 @@ namespace mongo {
     bool inConstructorChainSupported() { return false; }
 }
 
-#endif  // defined(MONGO_HAVE_EXECINFO_BACKTRACE)
-
+#endif  // #if !defined(_WIN32)
