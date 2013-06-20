@@ -23,7 +23,7 @@
 #include <boost/thread/thread.hpp>
 
 #include "mongo/client/dbclientcursor.h"
-
+#include "mongo/db/storage/exception.h"
 
 namespace mongo {
 
@@ -644,6 +644,10 @@ namespace mongo {
                         // are required for a lock to be held.
                         warning() << "lock forcing " << lockName << " inconsistent" << endl;
                     }
+                    catch (storage::RetryableException) {
+                        conn.done();
+                        return false;
+                    }
                     catch( std::exception& e ) {
                         conn.done();
                         throw LockException( str::stream() << "exception forcing distributed lock "
@@ -687,6 +691,10 @@ namespace mongo {
                         // NOT ok to continue since our lock isn't held by all servers, so isn't valid.
                         warning() << "inconsistent state re-entering lock, lock " << lockName << " not held" << endl;
                         *other = o; other->getOwned(); conn.done();
+                        return false;
+                    }
+                    catch (storage::RetryableException) {
+                        conn.done();
                         return false;
                     }
                     catch( std::exception& e ) {
@@ -801,6 +809,10 @@ namespace mongo {
                     // in which case we won't need to protect anything since we won't have the lock.
 
                 }
+                catch (storage::RetryableException) {
+                    conn.done();
+                    return false;
+                }
                 catch( std::exception& e ) {
                     conn.done();
                     throw LockException( str::stream() << "distributed lock " << lockName
@@ -834,6 +846,10 @@ namespace mongo {
 
                 gotLock = false;
             }
+        }
+        catch (storage::RetryableException) {
+            conn.done();
+            return false;
         }
         catch( std::exception& e ) {
             conn.done();
@@ -877,6 +893,10 @@ namespace mongo {
                     gotLock = true;
                 }
 
+            }
+            catch (storage::RetryableException) {
+                conn.done();
+                return false;
             }
             catch( std::exception& e ) {
                 conn.done();
