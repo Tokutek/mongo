@@ -589,7 +589,7 @@ namespace mongo {
                     errmsg = "each collection name must be a string";
                     return false;
                 }
-                if (!checkCollection(dbname, e.String(), errmsg)) {
+                if (!checkCollection(dbname, e.Stringdata(), errmsg)) {
                     return false;
                 }
             }
