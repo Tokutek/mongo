@@ -56,6 +56,7 @@
 #include "mongo/util/log.h"
 #include "mongo/util/net/message.h"
 #include "mongo/util/net/message_server.h"
+#include "mongo/util/net/ssl_manager.h"
 #include "mongo/util/ntservice.h"
 #include "mongo/util/options_parser/environment.h"
 #include "mongo/util/options_parser/option_section.h"
@@ -546,6 +547,15 @@ MONGO_INITIALIZER(CreateAuthorizationManager)(InitializerContext* context) {
     setGlobalAuthorizationManager(new AuthorizationManager(new AuthzManagerExternalStateMongos()));
     return Status::OK();
 }
+
+#ifdef MONGO_SSL
+MONGO_INITIALIZER_GENERAL(setSSLManagerType, 
+                          MONGO_NO_PREREQUISITES, 
+                          ("SSLManager"))(InitializerContext* context) {
+    isSSLServer = true;
+    return Status::OK();
+}
+#endif
 
 int main(int argc, char* argv[], char** envp) {
     static StaticObserver staticObserver;

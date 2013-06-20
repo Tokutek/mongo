@@ -70,6 +70,7 @@
 #include "mongo/util/concurrency/thread_name.h"
 #include "mongo/util/exception_filter_win32.h"
 #include "mongo/util/net/message_server.h"
+#include "mongo/util/net/ssl_manager.h"
 #include "mongo/util/ntservice.h"
 #include "mongo/util/options_parser/environment.h"
 #include "mongo/util/options_parser/option_section.h"
@@ -1297,6 +1298,15 @@ MONGO_INITIALIZER(CreateAuthorizationManager)(InitializerContext* context) {
     setGlobalAuthorizationManager(new AuthorizationManager(new AuthzManagerExternalStateMongod()));
     return Status::OK();
 }
+
+#ifdef MONGO_SSL
+MONGO_INITIALIZER_GENERAL(setSSLManagerType, 
+                          MONGO_NO_PREREQUISITES, 
+                          ("SSLManager"))(InitializerContext* context) {
+    isSSLServer = true;
+    return Status::OK();
+}
+#endif
 
 static int mongoDbMain(int argc, char* argv[], char **envp) {
     static StaticObserver staticObserver;

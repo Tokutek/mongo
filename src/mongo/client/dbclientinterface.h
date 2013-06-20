@@ -1023,7 +1023,7 @@ namespace mongo {
          * has already been communicated automatically as part of the connect call.
          * Returns false on failure and set "errmsg".
          */
-        bool _authMongoX509(const string&dbname,
+        bool _authX509(const string&dbname,
                             const string &username,
                             string& errmsg);
 

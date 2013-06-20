@@ -45,9 +45,10 @@ namespace mongo {
             return false;
         }
 
-        if (internalSecurity.pwd.length() > 0) {
+        if (isInternalAuthSet()) { 
             return authenticateInternalUser(conn); 
         }
+
         BSONObj user;
         {
             StringData ns("local.system.users");

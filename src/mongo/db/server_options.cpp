@@ -113,6 +113,12 @@ namespace mongo {
         if (!ret.isOK()) {
             return ret;
         }
+        ret = options->addOption(OD("clusterAuthMode", "clusterAuthMode", moe::String,
+                    "Authentication mode used for cluster authentication. Alternatives are "
+                    "(keyfile|sendKeyfile|sendX509|x509)", true));
+        if (!ret.isOK()) {
+            return ret;
+        }
 #ifndef _WIN32
         ret = options->addOption(OD("nounixsocket", "nounixsocket", moe::Switch,
                     "disable listening on unix sockets", true));

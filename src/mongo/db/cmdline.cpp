@@ -454,6 +454,9 @@ namespace {
                 }
             }
         }
+        if (!params.count("clusterAuthMode")){
+            cmdLine.clusterAuthMode = "keyfile";
+        }
 
 #ifdef MONGO_SSL
 
@@ -508,6 +511,25 @@ namespace {
                  cmdLine.sslWeakCertificateValidation ||
                  cmdLine.sslFIPSMode) {
             return Status(ErrorCodes::BadValue, "need to enable sslOnNormalPorts");
+        }
+        if (cmdLine.clusterAuthMode == "sendKeyfile" || 
+            cmdLine.clusterAuthMode == "sendX509" || 
+            cmdLine.clusterAuthMode == "x509") {
+            if (!cmdLine.sslOnNormalPorts){
+                return Status(ErrorCodes::BadValue, "need to enable sslOnNormalPorts");
+            }
+        }
+        else if (params.count("clusterAuthMode") && cmdLine.clusterAuthMode != "keyfile") {
+            StringBuilder sb;
+            sb << "unsupported value for clusterAuthMode " << cmdLine.clusterAuthMode;
+            return Status(ErrorCodes::BadValue, sb.str());
+        }
+#else // ifdef MONGO_SSL
+        // Keyfile is currently the only supported value if not using SSL 
+        if (params.count("clusterAuthMode") && cmdLine.clusterAuthMode != "keyfile") {
+            StringBuilder sb;
+            sb << "unsupported value for clusterAuthMode " << cmdLine.clusterAuthMode;
+            return Status(ErrorCodes::BadValue, sb.str());
         }
 #endif
 
