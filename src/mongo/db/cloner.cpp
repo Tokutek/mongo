@@ -32,6 +32,7 @@
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/database.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/storage/exception.h"
 
 namespace mongo {
 
@@ -599,18 +600,12 @@ namespace mongo {
             const string ns = collname.startsWith(dbname.toString() + ".")
                               ? collname.toString()
                               : dbname.toString() + "." + collname.toString();
-            NamespaceDetails *d = NULL;
+            NamespaceDetails *d;
             try {
                 d = nsdetails(ns);
             }
-            catch (DBException &e) {
-                if (e.getCode() == storage::ENOENT_ASSERT_ID) {
-                    errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped";
-                    return false;
-                }
-                else {
-                    throw;
-                }
+            catch (storage::SystemException::Enoent &e) {
+                d = NULL;
             }
             if (d == NULL) {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped";
@@ -619,14 +614,9 @@ namespace mongo {
             try {
                 shared_ptr<Cursor> c(BasicCursor::make(d));
             }
-            catch (DBException &e) {
-                if (e.getCode() == storage::DICTIONARY_TOO_NEW_ASSERT_ID) {
-                    errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped and re-created";
-                    return false;
-                }
-                else {
-                    throw;
-                }
+            catch (storage::RetryableException::MvccDictionaryTooNew &e) {
+                errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped and re-created";
+                return false;
             }
             return true;
         }
