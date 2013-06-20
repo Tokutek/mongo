@@ -33,6 +33,7 @@
 
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/storage/exception.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
@@ -468,72 +469,56 @@ namespace mongo {
             TOKULOG(1) << "cleaner iterations set to " << num_iterations << "." << endl;
         }
 
-        static void _handle_ydb_error(int error, bool fatal) {
-#define _do_assert(_how, _code, _message)          \
-            do {                                   \
-               if (!fatal) {                       \
-                   _how(_code, _message);          \
-               } else {                            \
-                   problem() << "fatal error "     \
-                             << _code << ": "      \
-                             << _message << endl;  \
-                   verify(error == 0);             \
-               }                                   \
-            } while (0)
-
+        void handle_ydb_error(int error) {
+            switch (error) {
+                case ENOENT:
+                    throw SystemException::Enoent();
+                default:
+                    // fall through
+                    ;
+            }
             if (error > 0) {
-                msgasserted(16770, str::stream() << "Got generic error "
-                                   << error << " (" << strerror(error) << ")"
-                                   << " from the ydb layer. You may have hit a bug."
-                                   << " Check the error log for more details.");
+                throw SystemException("You may have hit a bug. Check the error log for more details.", error, 16770);
             }
             switch (error) {
                 case DB_LOCK_NOTGRANTED:
-                    //uasserted(16759, "Lock not granted. Try restarting the transaction.");
-                    _do_assert(uasserted, 16759,
-                               "Lock not granted. Try restarting the transaction.");
+                    throw LockException("Lock not granted. Try restarting the transaction.", 16759);
                 case DB_LOCK_DEADLOCK:
-                    _do_assert(uasserted, 16760,
-                               "Deadlock detected during lock acquisition. Try restarting the transaction.");
+                    throw LockException("Deadlock detected during lock acquisition. Try restarting the transaction.", 16760);
                 case DB_KEYEXIST:
-                    _do_assert(uasserted, ASSERT_ID_DUPKEY,
-                               "Duplicate key error.");
+                    throw Exception("Duplicate key error.", ASSERT_ID_DUPKEY);
                 case DB_NOTFOUND:
-                    _do_assert(uasserted, 16761,
-                               "Index key not found.");
+                    throw Exception("Index key not found.", 16761);
                 case DB_RUNRECOVERY:
-                    _do_assert(msgasserted, 16762,
-                               "Automatic environment recovery failed. There may be data corruption.");
+                    throw DataCorruptionException("Automatic environment recovery failed.", 16762);
                 case DB_BADFORMAT:
-                    _do_assert(msgasserted, 16763,
-                               "File-format error when reading dictionary from disk. There may be data corruption.");
+                    throw DataCorruptionException("File-format error when reading dictionary from disk.", 16763);
                 case TOKUDB_BAD_CHECKSUM:
-                    _do_assert(msgasserted, 16764,
-                               "Checksum mismatch when reading dictionary from disk. There may be data corruption.");
+                    throw DataCorruptionException("Checksum mismatch when reading dictionary from disk.", 16764);
                 case TOKUDB_NEEDS_REPAIR:
-                    _do_assert(msgasserted, 16765,
-                               "Repair requested when reading dictionary from disk. There may be data corruption.");
+                    throw DataCorruptionException("Repair requested when reading dictionary from disk.", 16765);
                 case TOKUDB_DICTIONARY_NO_HEADER:
-                    _do_assert(msgasserted, 16766,
-                               "No header found when reading dictionary from disk. There may be data corruption.");
+                    throw DataCorruptionException("No header found when reading dictionary from disk.", 16766);
                 case TOKUDB_MVCC_DICTIONARY_TOO_NEW:
-                    _do_assert(uasserted, DICTIONARY_TOO_NEW_ASSERT_ID,
-                               "Accessed dictionary created after this transaction began. Try restarting the transaction.");
+                    throw RetryableException::MvccDictionaryTooNew();
                 default: 
                 {
                     string s = str::stream() << "Unhandled ydb error: " << error;
-                    _do_assert(msgasserted, 16767, s);
+                    throw Exception(s, 16767);
                 }
             }
-#undef _do_assert
-        }
-
-        void handle_ydb_error(int error) {
-            _handle_ydb_error(error, false);
         }
 
         void handle_ydb_error_fatal(int error) {
-            _handle_ydb_error(error, true);
+            try {
+                handle_ydb_error(error);
+            }
+            catch (Exception &e) {
+                problem() << "fatal error " << e.getCode() << ": " << e.what() << endl;
+                problem() << e << endl;
+                fassertFailed(e.getCode());
+            }
+            msgasserted(16853, mongoutils::str::stream() << "No storage exception thrown but one should have been thrown for error " << error);
         }
     
     } // namespace storage
