@@ -319,7 +319,7 @@ namespace mongo {
         if ( allowCovered ) {
             const Projection::KeyOnly *keyFieldsOnly = _cursor->keyFieldsOnly();
             if ( keyFieldsOnly ) {
-                return keyFieldsOnly->hydrate( _cursor->currKey() );
+                return keyFieldsOnly->hydrate( _cursor->currKey(), _cursor->currPK() );
             }
         }
         BSONObj ret = _cursor->current();

@@ -344,7 +344,8 @@ namespace mongo {
         uasserted( 16354, "Positional operator does not match the query specifier." );
     }
 
-    Projection::KeyOnly* Projection::checkKey( const BSONObj& keyPattern ) const {
+    Projection::KeyOnly *Projection::checkKey( const BSONObj &keyPattern,
+                                               const BSONObj &pkPattern ) const {
         if ( _include ) {
             // if we default to including then we can't
             // use an index because we don't know what we're missing
@@ -354,17 +355,27 @@ namespace mongo {
         if ( _hasNonSimple )
             return 0;
 
-        if ( _includeID && keyPattern["_id"].eoo() )
+        const bool pkHasIdField = pkPattern["_id"].ok();
+        if ( _includeID && keyPattern["_id"].eoo() && ! pkHasIdField ) {
+            // Requesting to include the _id, but neither the key nor the pk have it.
             return 0;
+        }
 
-        // at this point we know its all { x : 1 } style
+        // at this point we know its all { x : 1 } style,
+        // and if the _id was requested, then one of the
+        // key or primary key has it.
 
         auto_ptr<KeyOnly> p( new KeyOnly() );
 
         int got = 0;
+        bool idCoveredByKey = false;
         BSONObjIterator i( keyPattern );
         while ( i.more() ) {
             BSONElement k = i.next();
+
+            if ( mongoutils::str::equals( k.fieldName(), "_id" ) ) {
+                idCoveredByKey = true;
+            }
 
             if ( _source[k.fieldName()].type() ) {
 
@@ -382,8 +393,9 @@ namespace mongo {
                     got++;
                 }
             }
-            else if ( mongoutils::str::equals( "_id" , k.fieldName() ) && _includeID ) {
+            else if ( _includeID && mongoutils::str::equals( "_id" , k.fieldName()) ) {
                 p->addYes( "_id" );
+                got++;
             }
             else {
                 p->addNo();
@@ -391,17 +403,25 @@ namespace mongo {
 
         }
 
+        if ( _includeID && ! idCoveredByKey && pkHasIdField ) {
+            // The _id field can be covered by the PK, and it isn't
+            // already covered by the key. Note that and we'll add
+            // the _id field during hydrate() later.
+            p->includeIDFromPK();
+            got++;
+        }
+        
         int need = _source.nFields();
-        if ( ! _includeID )
+        if ( _includeID && _source["_id"].eoo() ) {
+            need++;
+        } else if ( ! _includeID && _source["_id"].ok() ) {
             need--;
-
-        if ( got == need )
-            return p.release();
-
-        return 0;
+        }
+        dassert(got <= need);
+        return got == need ? p.release() : NULL;
     }
 
-    BSONObj Projection::KeyOnly::hydrate( const BSONObj& key ) const {
+    BSONObj Projection::KeyOnly::hydrate( const BSONObj &key, const BSONObj &pk ) const {
         verify( _include.size() == _names.size() );
 
         BSONObjBuilder b( key.objsize() + _stringSize + 16 );
@@ -415,6 +435,13 @@ namespace mongo {
                 b.appendAs( e , _names[n] );
             }
             n++;
+        }
+
+        // This will be true if we need to include the _id field
+        // and it isn't covered by the key by itself. We'll take
+        // it from the PK in that case.
+        if ( _includeIDFromPK ) {
+            b.appendAs( pk.firstElement(), "_id" );
         }
 
         return b.obj();

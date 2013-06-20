@@ -593,7 +593,7 @@ namespace QueryOptimizerTests {
                                                           BSON( "a" << 1 ), BSONObj(),
                                                           parsedQuery ) );
                 ASSERT( p2->keyFieldsOnly() );
-                ASSERT_EQUALS( BSON( "a" << 4 ), p2->keyFieldsOnly()->hydrate( BSON( "" << 4 ) ) );
+                ASSERT_EQUALS( BSON( "a" << 4 ), p2->keyFieldsOnly()->hydrate( BSON( "" << 4 ), BSONObj() ) );
                 
                 // Fields supplied, but index is multikey.
                 DBDirectClient client;

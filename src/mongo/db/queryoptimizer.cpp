@@ -149,6 +149,8 @@ namespace mongo {
         }
 
         _index = &_d->idx(_idxNo);
+        const BSONObj &pkPattern = _d->pkPattern();
+        const BSONObj &keyPattern = _index->keyPattern();
 
         // If the parsing or index indicates this is a special query, don't continue the processing
         if ( _special.size() ||
@@ -264,7 +266,7 @@ doneCheckOrder:
         }
 
         if ( _parsedQuery && _parsedQuery->getFields() && !_d->isMultikey( _idxNo ) ) { // Does not check modifiedKeys()
-            _keyFieldsOnly.reset( _parsedQuery->getFields()->checkKey( _index->keyPattern() ) );
+            _keyFieldsOnly.reset( _parsedQuery->getFields()->checkKey( keyPattern, pkPattern ) );
         }
     }
 

@@ -102,7 +102,7 @@ namespace mongo {
             BSONObj documentObj;
             if (canUseCoveredIndex()) {
                 // Can't have a Chunk Manager if we are here
-                documentObj = cursor()->c()->keyFieldsOnly()->hydrate(cursor()->currKey());
+                documentObj = cursor()->c()->keyFieldsOnly()->hydrate(cursor()->currKey(), cursor()->currPK());
             }
             else {
                 documentObj = cursor()->current();

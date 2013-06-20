@@ -317,7 +317,7 @@ namespace mongo {
     void ClientCursor::fillQueryResultFromObj( BufBuilder &b, const MatchDetails* details ) const {
         const Projection::KeyOnly *keyFieldsOnly = c()->keyFieldsOnly();
         if ( keyFieldsOnly ) {
-            mongo::fillQueryResultFromObj( b, 0, keyFieldsOnly->hydrate( c()->currKey() ), details );
+            mongo::fillQueryResultFromObj( b, 0, keyFieldsOnly->hydrate( c()->currKey(), c()->currPK() ), details );
         }
         else {
             mongo::fillQueryResultFromObj( b, fields.get(), c()->current(), details );

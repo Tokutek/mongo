@@ -217,6 +217,11 @@ namespace mongo {
             return idx;
         }
 
+        // Key pattern for the primary key. For typical collections, this is { _id: 1 }.
+        const BSONObj &pkPattern() const {
+            return _pk;
+        }
+
         bool indexBuildInProgress() const {
             return _indexBuildInProgress;
         }

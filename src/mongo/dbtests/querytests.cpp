@@ -1360,20 +1360,26 @@ namespace QueryTests {
                 Projection m;
                 m.init( BSON( "a" << 1 ) );
 
-                scoped_ptr<Projection::KeyOnly> x( m.checkKey( BSON( "a" << 1 ) ) );
+                scoped_ptr<Projection::KeyOnly> x( m.checkKey( BSON( "a" << 1 ), BSONObj() ) );
                 ASSERT( ! x );
 
-                x.reset( m.checkKey( BSON( "a" << 1  << "_id" << 1 ) ) );
+                x.reset( m.checkKey( BSON( "a" << 1 ), BSON( "_id" << 1 ) ) );
+                ASSERT( x );
+
+                ASSERT_EQUALS( BSON( "a" << 1 << "_id" << 20 ) ,
+                               x->hydrate( BSON( "" << 1 ), BSON( "" << 20) ) );
+
+                x.reset( m.checkKey( BSON( "a" << 1  << "_id" << 1 ), BSONObj() ) );
                 ASSERT( x );
 
                 ASSERT_EQUALS( BSON( "a" << 5 << "_id" << 17 ) ,
-                               x->hydrate( BSON( "" << 5 << "" << 17 ) ) );
+                               x->hydrate( BSON( "" << 5 << "" << 17 ), BSONObj() ) );
 
-                x.reset( m.checkKey( BSON( "a" << 1 << "x" << 1 << "_id" << 1 ) ) );
+                x.reset( m.checkKey( BSON( "a" << 1 << "x" << 1 << "_id" << 1 ), BSONObj() ) );
                 ASSERT( x );
 
                 ASSERT_EQUALS( BSON( "a" << 5 << "_id" << 17 ) ,
-                               x->hydrate( BSON( "" << 5 << "" << 123 << "" << 17 ) ) );
+                               x->hydrate( BSON( "" << 5 << "" << 123 << "" << 17 ), BSONObj() ) );
 
             }
         };
@@ -1385,17 +1391,23 @@ namespace QueryTests {
                 Projection m;
                 m.init( BSON( "a" << 1 << "_id" << 0 ) );
 
-                scoped_ptr<Projection::KeyOnly> x( m.checkKey( BSON( "a" << 1 ) ) );
+                scoped_ptr<Projection::KeyOnly> x( m.checkKey( BSON( "a" << 1 ), BSONObj() ) );
                 ASSERT( x );
 
                 ASSERT_EQUALS( BSON( "a" << 17 ) ,
-                               x->hydrate( BSON( "" << 17 ) ) );
+                               x->hydrate( BSON( "" << 17 ), BSONObj() ) );
 
-                x.reset( m.checkKey( BSON( "x" << 1 << "a" << 1 << "_id" << 1 ) ) );
+                x.reset( m.checkKey( BSON( "a" << 1 ), BSON( "_id" << 1 ) ) );
+                ASSERT( x );
+
+                ASSERT_EQUALS( BSON( "a" << 17 ) ,
+                               x->hydrate( BSON( "" << 17 ), BSON( "" << 100 ) ) );
+
+                x.reset( m.checkKey( BSON( "x" << 1 << "a" << 1 << "_id" << 1 ), BSON( "_id" << 1 ) ) );
                 ASSERT( x );
 
                 ASSERT_EQUALS( BSON( "a" << 123 ) ,
-                               x->hydrate( BSON( "" << 5 << "" << 123 << "" << 17 ) ) );
+                               x->hydrate( BSON( "" << 5 << "" << 123 << "" << 17 ), BSON( "" << 101 ) ) );
 
             }
         };
@@ -1409,7 +1421,10 @@ namespace QueryTests {
                     Projection m;
                     m.init( BSON( "a" << 1 << "_id" << 0 ) );
 
-                    scoped_ptr<Projection::KeyOnly> x( m.checkKey( BSON( "a" << 1 << "x.a" << 1 ) ) );
+                    scoped_ptr<Projection::KeyOnly> x( m.checkKey( BSON( "a" << 1 << "x.a" << 1 ), BSONObj() ) );
+                    ASSERT( x );
+
+                    x.reset( m.checkKey( BSON( "a" << 1 << "x.a" << 1 ), BSON( "_id" << 1 ) ) );
                     ASSERT( x );
                 }
 
@@ -1419,7 +1434,10 @@ namespace QueryTests {
                     Projection m;
                     m.init( BSON( "x.a" << 1 << "_id" << 0 ) );
 
-                    scoped_ptr<Projection::KeyOnly> x( m.checkKey( BSON( "a" << 1 << "x.a" << 1 ) ) );
+                    scoped_ptr<Projection::KeyOnly> x( m.checkKey( BSON( "a" << 1 << "x.a" << 1 ), BSONObj() ) );
+                    ASSERT( ! x );
+
+                    x.reset( m.checkKey( BSON( "a" << 1 << "x.a" << 1 ), BSON( "_id" << 1 ) ) );
                     ASSERT( ! x );
                 }
 

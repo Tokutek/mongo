@@ -1611,7 +1611,7 @@ namespace QueryOptimizerCursorTests {
                 if ( c->indexKeyPattern() == BSON( "a" << 1 ) ) {
                     foundA = true;
                     ASSERT( c->keyFieldsOnly() );
-                    ASSERT_EQUALS( BSON( "a" << 1 ), c->keyFieldsOnly()->hydrate( c->currKey() ) );
+                    ASSERT_EQUALS( BSON( "a" << 1 ), c->keyFieldsOnly()->hydrate( c->currKey(), c->currPK() ) );
                 }
                 if ( c->indexKeyPattern() == BSON( "b" << 1 ) ) {
                     foundB = true;
@@ -1649,8 +1649,8 @@ namespace QueryOptimizerCursorTests {
                 if ( c->indexKeyPattern() == BSON( "a" << 1 ) ) {
                     foundA = true;
                     ASSERT( c->keyFieldsOnly() );
-                    ASSERT( BSON( "a" << 1 ) == c->keyFieldsOnly()->hydrate( c->currKey() ) ||
-                           BSON( "a" << 2 ) == c->keyFieldsOnly()->hydrate( c->currKey() ) );
+                    ASSERT( BSON( "a" << 1 ) == c->keyFieldsOnly()->hydrate( c->currKey(), c->currPK() ) ||
+                           BSON( "a" << 2 ) == c->keyFieldsOnly()->hydrate( c->currKey(), c->currPK() ) );
                 }
                 if ( c->indexKeyPattern() == BSON( "b" << 1 ) ) {
                     foundB = true;
