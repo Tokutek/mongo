@@ -87,7 +87,9 @@ namespace mongo {
              me["host"].String() != myname ) {
         
             // clean out local.me
-            d->empty();
+            if (d != NULL) {
+                d->empty();
+            }
         
             // repopulate
             BSONObjBuilder b;

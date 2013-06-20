@@ -194,17 +194,18 @@ namespace mongo {
      */
     class IndexCursor : public Cursor {
     public:
-        // If numWanted is > 0, there exists a limit clause, so don't prefetch.
 
         // Create a cursor over a specific start, end key range.
-        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
-                     const BSONObj &startKey, const BSONObj &endKey,
-                     bool endKeyInclusive, int direction, int numWanted = 0);
+        static shared_ptr<IndexCursor> make( NamespaceDetails *d, const IndexDetails &idx,
+                                             const BSONObj &startKey, const BSONObj &endKey,
+                                             bool endKeyInclusive, int direction,
+                                             int numWanted = 0);
 
         // Create a cursor over a set of one or more field ranges.
-        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
-                     const shared_ptr< FieldRangeVector > &bounds,
-                     int singleIntervalLimit, int direction, int numWanted = 0);
+        static shared_ptr<IndexCursor> make( NamespaceDetails *d, const IndexDetails &idx,
+                                             const shared_ptr< FieldRangeVector > &bounds,
+                                             int singleIntervalLimit, int direction,
+                                             int numWanted = 0);
 
         virtual ~IndexCursor();
 
@@ -278,7 +279,16 @@ namespace mongo {
         // - Ascending/forward, return false.
         static bool reverseMinMaxBoundsOrder(const Ordering &ordering, const int direction);
 
+        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+                     const BSONObj &startKey, const BSONObj &endKey,
+                     bool endKeyInclusive, int direction, int numWanted = 0);
+
+        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+                     const shared_ptr< FieldRangeVector > &bounds,
+                     int singleIntervalLimit, int direction, int numWanted = 0);
+
     private:
+
         /** Initialize the internal DBC */
         void initializeDBC();
         void _prelockCompoundBounds(const int currentRange, vector<const FieldInterval *> &combo,
@@ -373,7 +383,7 @@ namespace mongo {
      */
     class BasicCursor : public IndexScanCursor {
     public:
-        static Cursor *make( NamespaceDetails *d, int direction = 1 );
+        static shared_ptr<Cursor> make( NamespaceDetails *d, int direction = 1 );
 
         BSONObj currKey() const { return BSONObj(); }
         virtual BSONObj indexKeyPattern() const { return BSONObj(); }

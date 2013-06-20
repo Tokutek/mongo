@@ -44,7 +44,7 @@ namespace mongo {
         string dbname = indexNamespace();
         TOKULOG(1) << "Opening IndexDetails " << dbname << endl;
         // Open the dictionary. Creates it if necessary.
-        int r = storage::db_open(&_db, dbname, info, may_create);
+        const int r = storage::db_open(&_db, dbname, info, may_create);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }

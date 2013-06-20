@@ -1160,7 +1160,7 @@ namespace mongo {
                 }
 #endif
                 NamespaceDetails *d = nsdetails( ns.c_str() );
-                c.reset( BasicCursor::make( d ) );
+                c =  BasicCursor::make( d );
             }
             else if ( min.isEmpty() || max.isEmpty() ) {
                 errmsg = "only one of min or max specified";
@@ -1182,7 +1182,7 @@ namespace mongo {
                 min = Helpers::modifiedRangeBound( min , idx->keyPattern() , -1 );
                 max = Helpers::modifiedRangeBound( max , idx->keyPattern() , -1 );
 
-                c.reset( new IndexCursor( d, *idx, min, max, false, 1 ) );
+                c = IndexCursor::make( d, *idx, min, max, false, 1 );
             }
 
             //long long avgObjSize = d->stats.datasize / d->stats.nrecords;

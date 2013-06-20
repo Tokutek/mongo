@@ -361,7 +361,7 @@ namespace mongo {
             long long n = 0;
             long long size = 0;
             Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            for (scoped_ptr<Cursor> c( BasicCursor::make(this) ); c->ok(); n++, c->advance()) {
+            for (shared_ptr<Cursor> c( BasicCursor::make(this) ); c->ok(); n++, c->advance()) {
                 size += c->current().objsize();
             }
             txn.commit();
@@ -598,10 +598,11 @@ namespace mongo {
                                            _lastDeletedPK.firstElement().Long() : 0;
                 // TODO: Disable prelocking on this cursor, or somehow prevent waiting 
                 //       on row locks we can't get immediately.
-                for ( IndexCursor c(this, getPKIndex(), BSON("" << startKey), maxKey, true, 1);
-                      c.ok(); c.advance() ) {
-                    BSONObj oldestPK = c.currPK();
-                    BSONObj oldestObj = c.current();
+                for ( shared_ptr<Cursor> c(IndexCursor::make(this, getPKIndex(),
+                                           BSON("" << startKey), maxKey, true, 1) );
+                      c->ok(); c->advance() ) {
+                    BSONObj oldestPK = c->currPK();
+                    BSONObj oldestObj = c->current();
                     trimmedBytes += oldestPK.objsize();
                     
                     if (logop) {
@@ -625,7 +626,7 @@ namespace mongo {
         // Remove everything from this capped collection
         void empty() {
             SimpleMutex::scoped_lock lk(_deleteMutex);
-            scoped_ptr<Cursor> c( BasicCursor::make(this) );
+            shared_ptr<Cursor> c( BasicCursor::make(this) );
             for ( ; c->ok() ; c->advance() ) {
                 _deleteObject(c->currPK(), c->current(), 0);
             }
@@ -1027,7 +1028,7 @@ namespace mongo {
         IndexDetails::Builder builder(*index);
 
         const int indexNum = idxNo(*index);
-        for ( scoped_ptr<Cursor> cursor(BasicCursor::make(this));
+        for ( shared_ptr<Cursor> cursor(BasicCursor::make(this));
               cursor->ok(); cursor->advance()) {
             BSONObj pk = cursor->currPK();
             BSONObj obj = cursor->current();

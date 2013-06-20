@@ -129,13 +129,6 @@ namespace mongo {
         const char * getns() const {
             return data;
         }
-#if 0
-        void getns(string &ns) const {
-            // Namespace name must be the first part of the message.
-            // It also must be null terminated in order for this string constructor to work.
-            ns = data;
-        }
-#endif
 
         const char * afterNS() const {
             return data + strlen( data ) + 1;

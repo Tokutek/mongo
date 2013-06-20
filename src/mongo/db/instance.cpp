@@ -523,11 +523,8 @@ namespace mongo {
         delete database; // closes files
     }
 
-    static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &toupdate, const BSONObj &query, int flags) {
-        bool upsert = flags & UpdateOption_Upsert;
-        bool multi = flags & UpdateOption_Multi;
-        bool broadcast = flags & UpdateOption_Broadcast;
-
+    static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &toupdate, const BSONObj &query,
+                                     const bool upsert, const bool multi, const bool broadcast) {
         // void ReplSetImpl::relinquish() uses big write lock so 
         // this is thus synchronized given our lock above.
         uassert(10054,  "not master", isMasterNs(ns));
@@ -561,17 +558,22 @@ namespace mongo {
         op.debug().query = query;
         op.setQuery(query);
 
+        const bool upsert = flags & UpdateOption_Upsert;
+        const bool multi = flags & UpdateOption_Multi;
+        const bool broadcast = flags & UpdateOption_Broadcast;
+
         OpSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+        settings.setJustOne(!multi);
         cc().setOpSettings(settings);
 
         try {
             Lock::DBRead lk(ns);
-            lockedReceivedUpdate(ns, m, op, toupdate, query, flags);
+            lockedReceivedUpdate(ns, m, op, toupdate, query, upsert, multi, broadcast);
         }
         catch (RetryWithWriteLock &e) {
             Lock::DBWrite lk(ns);
-            lockedReceivedUpdate(ns, m, op, toupdate, query, flags);
+            lockedReceivedUpdate(ns, m, op, toupdate, query, upsert, multi, broadcast);
         }
     }
 
@@ -586,12 +588,13 @@ namespace mongo {
         op.debug().query = pattern;
         op.setQuery(pattern);
 
+        const bool justOne = flags & RemoveOption_JustOne;
+        const bool broadcast = flags & RemoveOption_Broadcast;
+
         OpSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+        settings.setJustOne(justOne);
         cc().setOpSettings(settings);
-
-        bool justOne = flags & RemoveOption_JustOne;
-        bool broadcast = flags & RemoveOption_Broadcast;
 
         Lock::DBRead lk(ns);
 
@@ -773,7 +776,7 @@ namespace mongo {
         return ok;
     }
 
-    static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, bool keepGoing) {
+    static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, const bool keepGoing) {
         // writelock is used to synchronize stepdowns w/ writes
         uassert(10058, "not master", isMasterNs(ns));
 

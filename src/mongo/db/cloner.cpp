@@ -617,7 +617,7 @@ namespace mongo {
                 return false;
             }
             try {
-                scoped_ptr<Cursor> _c(BasicCursor::make(d));
+                shared_ptr<Cursor> c(BasicCursor::make(d));
             }
             catch (DBException &e) {
                 if (e.getCode() == storage::DICTIONARY_TOO_NEW_ASSERT_ID) {

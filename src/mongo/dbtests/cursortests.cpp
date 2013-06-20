@@ -75,7 +75,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext tc(ns);
                 {
-                    scoped_ptr<IndexCursor> _c( new IndexCursor( nsdetails( ns ), nsdetails( ns )->idx(1), frv, 0, 1 ) );
+                    shared_ptr<IndexCursor> _c( IndexCursor::make( nsdetails( ns ), nsdetails( ns )->idx(1), frv, 0, 1 ) );
                     IndexCursor &c = *_c.get();
                     ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
                     double expected[] = { 1, 2, 4, 5, 6 };
@@ -107,7 +107,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext tc(ns);
                 {
-                    scoped_ptr<IndexCursor> _c( new IndexCursor(nsdetails( ns ), nsdetails( ns )->idx(1), frv, 0, 1 ) );
+                    shared_ptr<IndexCursor> _c( IndexCursor::make(nsdetails( ns ), nsdetails( ns )->idx(1), frv, 0, 1 ) );
                     IndexCursor &c = *_c.get();
                     ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
                     double expected[] = { 0, 1, 2, 109 };
@@ -137,7 +137,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns );
                 {
-                    scoped_ptr<IndexCursor> _c( new IndexCursor( nsdetails( ns ), nsdetails( ns )->idx(1), frv, 0, -1 ) );
+                    shared_ptr<IndexCursor> _c( IndexCursor::make( nsdetails( ns ), nsdetails( ns )->idx(1), frv, 0, -1 ) );
                     IndexCursor& c = *_c.get();
                     ASSERT_EQUALS( "IndexCursor a_1 reverse multi", c.toString() );
                     double expected[] = { 6, 5, 4, 2, 1 };
@@ -181,7 +181,7 @@ namespace CursorTests {
                     NamespaceDetails *d = nsdetails(ns());
                     int i = d->findIndexByKeyPattern(idx());
                     verify(i >= 0);
-                    scoped_ptr<IndexCursor> c( new IndexCursor( d, d->idx( i ), frv, 0, direction() ) );
+                    shared_ptr<IndexCursor> c( IndexCursor::make( d, d->idx( i ), frv, 0, direction() ) );
                     Matcher m( spec );
                     int count = 0;
                     while( c->ok() ) {
@@ -294,7 +294,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns() );
                 {
-                    scoped_ptr<IndexCursor> c( new IndexCursor( nsdetails( ns() ), nsdetails( ns() )->idx(1), frv, 0, 1 ) );
+                    shared_ptr<IndexCursor> c( IndexCursor::make( nsdetails( ns() ), nsdetails( ns() )->idx(1), frv, 0, 1 ) );
                     long long initialNscanned = c->nscanned();
                     ASSERT( initialNscanned < 200 );
                     ASSERT( c->ok() );

@@ -150,41 +150,58 @@ namespace mongo {
 
     /* ---------------------------------------------------------------------- */
 
-    int IndexCursor::cursor_getf(const DBT *key, const DBT *val, void *extra) {
-        struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
-        try {
-            if (key != NULL) {
-                RowBuffer *buffer = info->buffer;
-                storage::Key sKey(key);
-                buffer->append(sKey, val->size > 0 ?
-                        BSONObj(static_cast<const char *>(val->data)) : BSONObj());
-
-                // request more bulk fetching if we are allowed to fetch more rows
-                // and the row buffer is not too full.
-                if (++info->rows_fetched < info->rows_to_fetch && !buffer->isGorged()) {
-                    return TOKUDB_CURSOR_CONTINUE;
-                }
-            }
-            return 0;
-        } catch (std::exception &e) {
-            info->ex = &e;
+    // Cursor for findOne queries, justOne deletes, !multi updates, etc.
+    // Skip prelocking, get row locks on getf if necessary, and don't prefetch.
+    class FindOneCursor : public IndexCursor {
+    public:
+        FindOneCursor( NamespaceDetails *d, const IndexDetails &idx,
+                       const BSONObj &startKey, const BSONObj &endKey,
+                       bool endKeyInclusive, int direction ) :
+            IndexCursor( d, idx, startKey, endKey, endKeyInclusive, direction, 1 ) {
         }
-        return -1;
+        FindOneCursor( NamespaceDetails *d, const IndexDetails &idx,
+                       const shared_ptr< FieldRangeVector > &bounds,
+                       int singleIntervalLimit, int direction ) :
+            IndexCursor( d, idx, bounds, singleIntervalLimit, direction, 1 ) {
+        }
+        void prelock() {
+        }
+        int cursor_flags() {
+            return 0;
+        }
+        int getf_flags() {
+            const int idxCursorFlags = IndexCursor::cursor_flags();
+            return idxCursorFlags | DBC_DISABLE_PREFETCHING;
+        }
+    };
+
+    /* ---------------------------------------------------------------------- */
+
+    shared_ptr<IndexCursor> IndexCursor::make( NamespaceDetails *d, const IndexDetails &idx,
+                                               const BSONObj &startKey, const BSONObj &endKey,
+                                               bool endKeyInclusive, int direction,
+                                               int numWanted ) {
+        if (cc().opSettings().getJustOne() || numWanted == 1) {
+            return shared_ptr<IndexCursor>( new FindOneCursor( d, idx, startKey, endKey,
+                                                               endKeyInclusive, direction ) );
+        } else {
+            return shared_ptr<IndexCursor>( new IndexCursor( d, idx, startKey, endKey,
+                                                             endKeyInclusive, direction,
+                                                             numWanted ) );
+        }
     }
 
-    int IndexCursor::cursor_flags() {
-        QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
-        switch ( mode ) {
-            // All locks are grabbed up front, during initializeDBC().
-            // These flags determine the type of lock. Serializable
-            // gets you a read lock. Both serializable and rmw gets
-            // you a write lock.
-            case WRITE_LOCK_CURSOR:
-                return DB_SERIALIZABLE | DB_RMW;
-            case READ_LOCK_CURSOR:
-                return DB_SERIALIZABLE;
-            default:
-                return 0;
+    shared_ptr<IndexCursor> IndexCursor::make( NamespaceDetails *d, const IndexDetails &idx,
+                                               const shared_ptr< FieldRangeVector > &bounds,
+                                               int singleIntervalLimit, int direction,
+                                               int numWanted ) {
+        if (cc().opSettings().getJustOne() || numWanted == 1) {
+            return shared_ptr<IndexCursor>( new FindOneCursor( d, idx, bounds,
+                                                               singleIntervalLimit, direction ) );
+        } else {
+            return shared_ptr<IndexCursor>( new IndexCursor( d, idx, bounds,
+                                                             singleIntervalLimit, direction,
+                                                             numWanted ) );
         }
     }
 
@@ -243,6 +260,28 @@ namespace mongo {
     }
 
     IndexCursor::~IndexCursor() {
+    }
+
+    int IndexCursor::cursor_getf(const DBT *key, const DBT *val, void *extra) {
+        struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
+        try {
+            if (key != NULL) {
+                RowBuffer *buffer = info->buffer;
+                storage::Key sKey(key);
+                buffer->append(sKey, val->size > 0 ?
+                        BSONObj(static_cast<const char *>(val->data)) : BSONObj());
+
+                // request more bulk fetching if we are allowed to fetch more rows
+                // and the row buffer is not too full.
+                if (++info->rows_fetched < info->rows_to_fetch && !buffer->isGorged()) {
+                    return TOKUDB_CURSOR_CONTINUE;
+                }
+            }
+            return 0;
+        } catch (std::exception &e) {
+            info->ex = &e;
+        }
+        return -1;
     }
 
     void IndexCursor::setTailable() {
@@ -410,6 +449,22 @@ namespace mongo {
             findKey( _startKey );
         }
         checkCurrentAgainstBounds();
+    }
+
+    int IndexCursor::cursor_flags() {
+        QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
+        switch ( mode ) {
+            // All locks are grabbed up front, during initializeDBC().
+            // These flags determine the type of lock. Serializable
+            // gets you a read lock. Both serializable and rmw gets
+            // you a write lock.
+            case WRITE_LOCK_CURSOR:
+                return DB_SERIALIZABLE | DB_RMW;
+            case READ_LOCK_CURSOR:
+                return DB_SERIALIZABLE;
+            default:
+                return 0;
+        }
     }
 
     int IndexCursor::getf_flags() {

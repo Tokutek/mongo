@@ -41,11 +41,11 @@ namespace mongo {
                      true, direction, numWanted ) {
     }
 
-    Cursor *BasicCursor::make( NamespaceDetails *d, int direction ) {
+    shared_ptr<Cursor> BasicCursor::make( NamespaceDetails *d, int direction ) {
         if ( d != NULL ) {
-            return new BasicCursor(d, direction);
+            return shared_ptr<Cursor>(new BasicCursor(d, direction));
         } else {
-            return new DummyCursor(direction);
+            return shared_ptr<Cursor>(new DummyCursor(direction));
         }
     }
 

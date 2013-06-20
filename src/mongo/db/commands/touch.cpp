@@ -86,8 +86,8 @@ namespace mongo {
             for (int i = 0; i < nsd->nIndexes(); i++) {
                 IndexDetails &idx = nsd->idx(i);
                 if ((nsd->isPKIndex(idx) && touch_data) || (!nsd->isPKIndex(idx) && touch_indexes)) {
-                    for (IndexCursor c(nsd, idx, minKey, maxKey, true, 1); c.ok(); c.advance()) {
-                        c.current();
+                    for (shared_ptr<Cursor> c(IndexCursor::make(nsd, idx, minKey, maxKey, true, 1)); c->ok(); c->advance()) {
+                        c->current();
                     }
                 }
             }

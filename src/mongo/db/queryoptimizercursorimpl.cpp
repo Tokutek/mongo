@@ -628,7 +628,7 @@ namespace mongo {
                 if ( idxNo >= 0 ) {
                     IndexDetails& i = d->idx( idxNo );
                     BSONObj key = i.getKeyFromQuery( _query );
-                    return shared_ptr<Cursor>( new IndexCursor( d, i, key, key, true, 1, numWanted ) );
+                    return shared_ptr<Cursor>( IndexCursor::make( d, i, key, key, true, 1, numWanted ) );
                 }
             }
         }

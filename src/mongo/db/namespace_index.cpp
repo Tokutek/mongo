@@ -162,7 +162,8 @@ namespace mongo {
             NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
             rollback.noteNs(ns);
             shared_ptr<NamespaceDetails> d = it->second;
-            _namespaces.erase(ns);
+            const int r = _namespaces.erase(ns);
+            verify(r == 1);
             d->close();
         }
 
@@ -286,7 +287,7 @@ namespace mongo {
         vector<string> sysIndexesEntries;
         const string systemNamespacesNs(_database + ".system.namespaces");
         NamespaceDetails *sysNsd = nsdetails(systemNamespacesNs);
-        for (scoped_ptr<Cursor> c(BasicCursor::make(sysNsd)); c->ok(); c->advance()) {
+        for (shared_ptr<Cursor> c(BasicCursor::make(sysNsd)); c->ok(); c->advance()) {
             const BSONObj nsObj = c->current();
             const StringData ns = nsObj["name"].Stringdata();
             if (!ns.startsWith(_database)) {
