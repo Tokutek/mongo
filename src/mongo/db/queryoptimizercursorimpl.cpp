@@ -27,6 +27,7 @@
 #include "mongo/db/explain.h"
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/db/storage/exception.h"
 
 namespace mongo {
     
@@ -549,15 +550,10 @@ namespace mongo {
                                        requireOrder, singlePlanSummary );
             return generator.generate();
         }
-        catch ( DBException& e ) {
-            if (e.getCode() == storage::DICTIONARY_TOO_NEW_ASSERT_ID) {
-                shared_ptr<Cursor> ret;
-                ret.reset(new DummyCursor(1));
-                return ret;
-            }
-            else {
-                throw;
-            }
+        catch (storage::RetryableException::MvccDictionaryTooNew &e) {
+            shared_ptr<Cursor> ret;
+            ret.reset(new DummyCursor(1));
+            return ret;
         }
     }
     

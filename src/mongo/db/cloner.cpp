@@ -31,6 +31,7 @@
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/database.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/storage/exception.h"
 
 namespace mongo {
 
@@ -598,7 +599,13 @@ namespace mongo {
             const string ns = (mongoutils::str::startsWith(collname, dbname + ".")
                                ? collname
                                : dbname + "." + collname);
-            NamespaceDetails *d = nsdetails(ns.c_str());
+            NamespaceDetails *d;
+            try {
+                d = nsdetails(ns.c_str());
+            }
+            catch (storage::SystemException::Enoent &e) {
+                d = NULL;
+            }
             if (d == NULL) {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped";
                 return false;
@@ -606,14 +613,9 @@ namespace mongo {
             try {
                 scoped_ptr<Cursor> _c(BasicCursor::make(d));
             }
-            catch (DBException &e) {
-                if (e.getCode() == storage::DICTIONARY_TOO_NEW_ASSERT_ID) {
-                    errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped and re-created";
-                    return false;
-                }
-                else {
-                    throw;
-                }
+            catch (storage::RetryableException::MvccDictionaryTooNew &e) {
+                errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped and re-created";
+                return false;
             }
             return true;
         }
