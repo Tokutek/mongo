@@ -151,10 +151,18 @@ namespace mongo {
         uint32_t getPageSize() const;
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
-        void uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const;
-        void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
         void optimize();
 
+        struct UniqueCheckExtra {
+            const BSONObj &newkey;
+            const Ordering &ordering;
+            bool &isUnique;
+            std::exception *ex;
+            UniqueCheckExtra(const BSONObj &k, const Ordering &o, bool &u)
+                    : newkey(k), ordering(o), isUnique(u), ex(NULL) {}
+        };
+        static int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra);
+        void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
         void uassertedDupKey(const BSONObj &key) const;
 
         template<class Callback>
