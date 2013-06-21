@@ -117,29 +117,21 @@ namespace mongo {
         return NamespaceDetailsTransient::get_inlock( info()["ns"].String() ).getIndexSpec( this );
     }
 
-    void IndexDetails::uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const {
-        const Ordering &ordering(*reinterpret_cast<const Ordering *>(_db->cmp_descriptor->dbt.data));
-        const int c = newkey.woCompare(oldkey, ordering);
-        if (c == 0) {
-            isUnique = false;
+    int IndexDetails::uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
+        UniqueCheckExtra *info = static_cast<UniqueCheckExtra *>(extra);
+        try {
+            if (key != NULL) {
+                const storage::Key sKey(key);
+                const int c = info->newkey.woCompare(sKey.key(), info->ordering);
+                if (c == 0) {
+                    info->isUnique = false;
+                }
+            }
+            return 0;
+        } catch (std::exception &e) {
+            info->ex = &e;
         }
-    }
-
-    struct UniqueCheckExtra {
-        const IndexDetails &d;
-        const BSONObj &newkey;
-        bool &isUnique;
-        UniqueCheckExtra(const IndexDetails &_d, const BSONObj &_newkey, bool &_isUnique)
-                : d(_d), newkey(_newkey), isUnique(_isUnique) {}
-    };
-
-    int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
-        if (key != NULL) {
-            const storage::Key sKey(key);
-            UniqueCheckExtra *e = static_cast<UniqueCheckExtra *>(extra);
-            e->d.uniqueCheckCallback(e->newkey, sKey.key(), e->isUnique);
-        }
-        return 0;
+        return -1;
     }
 
     void IndexDetails::uniqueCheck(const BSONObj &key, const BSONObj *pk) const {
@@ -155,12 +147,18 @@ namespace mongo {
         IndexDetails::Cursor c(*this, DB_SERIALIZABLE);
         DBC *cursor = c.dbc();
 
-        storage::Key skey(key, pk != NULL ? &minKey : NULL);
+        const bool hasPK = pk != NULL;
+        storage::Key skey(key, hasPK ? &minKey : NULL);
         DBT kdbt = skey.dbt();
 
         bool isUnique = true;
-        UniqueCheckExtra extra(*this, key, isUnique);
-        int r = cursor->c_getf_set_range(cursor, 0, &kdbt, mongo::uniqueCheckCallback, &extra);
+        const Ordering &ordering(*reinterpret_cast<const Ordering *>(_db->cmp_descriptor->dbt.data));
+        UniqueCheckExtra extra(key, ordering, isUnique);
+        // If the key has a PK, we need to set range in order to find the first
+        // key greater than { key, minKey }. If there is no pk then there's
+        // just one component to the key, so we can just getf_set to that point.
+        const int r = hasPK ? cursor->c_getf_set_range(cursor, 0, &kdbt, uniqueCheckCallback, &extra) :
+                              cursor->c_getf_set(cursor, 0, &kdbt, uniqueCheckCallback, &extra);
         if (r != 0 && r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);
         }
