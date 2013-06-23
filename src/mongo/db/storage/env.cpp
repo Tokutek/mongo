@@ -97,9 +97,6 @@ namespace mongo {
             }
 
             r = db_env_create(&env, 0);
-            if (r == TOKUDB_HUGE_PAGES_ENABLED) {
-                LOG(LL_ERROR) << "Huge pages are enabled, please disable them to continue (echo never > /sys/kernel/mm/transparent_hugepages/enabled)" << endl;
-            }
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
@@ -502,11 +499,33 @@ namespace mongo {
                     throw DataCorruptionException("No header found when reading dictionary from disk.", 16766);
                 case TOKUDB_MVCC_DICTIONARY_TOO_NEW:
                     throw RetryableException::MvccDictionaryTooNew();
-                default: 
-                {
-                    string s = str::stream() << "Unhandled ydb error: " << error;
-                    throw Exception(s, 16767);
-                }
+                case TOKUDB_HUGE_PAGES_ENABLED:
+                    LOG(LL_ERROR) << endl << endl
+                                  << "************************************************************" << endl
+                                  /*
+                                  << "                                                            " << endl
+                                  << "                        @@@@@@@@@@@                         " << endl
+                                  << "                      @@'         '@@                       " << endl
+                                  << "                     @@    _     _  @@                      " << endl
+                                  << "                     |    (.)   (.)  |                      " << endl
+                                  << "                     |             ` |                      " << endl
+                                  << "                     |        >    ' |                      " << endl
+                                  << "                     |     .----.    |                      " << endl
+                                  << "                     ..   |.----.|  ..                      " << endl
+                                  << "                      ..  '      ' ..                       " << endl
+                                  << "                        .._______,.                         " << endl
+                                  << "                                                            " << endl
+                                  */
+                                  << " TokuMX will not run with transparent huge pages enabled.   " << endl
+                                  << " Please disable them to continue.                           " << endl
+                                  << " (echo never > /sys/kernel/mm/transparent_hugepage/enabled) " << endl
+                                  << "                                                            " << endl
+                                  << " The assertion failure you are about to see is intentional. " << endl
+                                  << "************************************************************" << endl
+                                  << endl;
+                    verify(false);
+                default:
+                    throw Exception(str::stream() << "Unhandled ydb error: " << error, 16767);
             }
         }
 
