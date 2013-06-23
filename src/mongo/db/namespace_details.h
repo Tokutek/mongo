@@ -487,31 +487,40 @@ namespace mongo {
         map<QueryPattern,CachedQueryPlan> _qcCache;
         static NamespaceDetailsTransient& make_inlock(const StringData& ns);
     public:
-        static SimpleMutex _qcMutex;
+        static SimpleRWLock _qcRWLock;
 
-        /* you must be in the qcMutex when calling this.
-           A NamespaceDetailsTransient object will not go out of scope on you if you are
+        /* A NamespaceDetailsTransient object will not go out of scope on you if you are
            d.dbMutex.atLeastReadLocked(), so you do't have to stay locked.
            Creates a NamespaceDetailsTransient before returning if one DNE. 
            todo: avoid creating too many on erroneous ns queries.
            */
-        static NamespaceDetailsTransient& get_inlock(const StringData& ns);
-
-        static NamespaceDetailsTransient& get(const StringData& ns) {
-            // todo : _qcMutex will create bottlenecks in our parallelism
-            SimpleMutex::scoped_lock lk(_qcMutex);
+        static NamespaceDetailsTransient *_get(const StringData& ns);
+        static NamespaceDetailsTransient &get_inlock(const StringData& ns);
+        static NamespaceDetailsTransient &get(const StringData& ns) {
+            {
+                // Common path - try finding it with a shared lock.
+                SimpleRWLock::Shared lk(_qcRWLock);
+                NamespaceDetailsTransient *nsdt = _get(ns);
+                if (nsdt != NULL) {
+                    return *nsdt;
+                }
+            }
+            // Try finding it again in an exclusive lock, creating if necessary.
+            SimpleRWLock::Exclusive lk(_qcRWLock);
             return get_inlock(ns);
         }
 
         void clearQueryCache() {
-            SimpleMutex::scoped_lock lk(_qcMutex);
+            SimpleRWLock::Exclusive lk(_qcRWLock);
             _qcCache.clear();
             _qcWriteCount = 0;
         }
+
         /* you must notify the cache if you are doing writes, as query plan utility will change */
-        // TODO: TokuMX: John does not understand why 100+ writes necessarily means
-        // the query strategy changes. We need to figure this out eventually.
         void notifyOfWriteOp() {
+            // Is there a problem calling empty() on a std::map without a lock?
+            // What if other threads are doing deletes/inserts and a RB tree
+            // child pointer changes to null or something?
             if ( _qcCache.empty() )
                 return;
             if ( ++_qcWriteCount >= 100 )
@@ -527,13 +536,16 @@ namespace mongo {
 
     }; /* NamespaceDetailsTransient */
 
-    inline NamespaceDetailsTransient& NamespaceDetailsTransient::get_inlock(const StringData& ns) {
+    // does not create. must be at least shared locked.
+    inline NamespaceDetailsTransient *NamespaceDetailsTransient::_get(const StringData& ns) {
         StringMap<shared_ptr<NamespaceDetailsTransient> >::const_iterator i = _nsdMap.find(ns);
-        if( i != _nsdMap.end() && 
-            i->second.get() ) { // could be null ptr from clearForPrefix
-            return *i->second;
-        }
-        return make_inlock(ns);
+        return i != _nsdMap.end() ? i->second.get() : NULL;
+    }
+
+    // creates if necessary. must be exclusive locked.
+    inline NamespaceDetailsTransient& NamespaceDetailsTransient::get_inlock(const StringData& ns) {
+        NamespaceDetailsTransient *nsdt = _get(ns);
+        return nsdt != NULL ? *nsdt : make_inlock(ns);
     }
 
     /* NamespaceIndex is the the "system catalog" if you will: at least the core parts.

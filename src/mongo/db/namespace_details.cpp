@@ -1299,7 +1299,7 @@ namespace mongo {
 
     /* ------------------------------------------------------------------------- */
 
-    SimpleMutex NamespaceDetailsTransient::_qcMutex("qc");
+    SimpleRWLock NamespaceDetailsTransient::_qcRWLock("qc");
     SimpleMutex NamespaceDetailsTransient::_isMutex("is");
     StringMap<shared_ptr<NamespaceDetailsTransient> > NamespaceDetailsTransient::_nsdMap;
     typedef StringMap<shared_ptr<NamespaceDetailsTransient> >::const_iterator ouriter;
@@ -1332,7 +1332,7 @@ namespace mongo {
     }
 
     void NamespaceDetailsTransient::clearForPrefix(const StringData& prefix) {
-        SimpleMutex::scoped_lock lk(_qcMutex);
+        SimpleRWLock::Exclusive lk(_qcRWLock);
         vector< string > found;
         for( ouriter i = _nsdMap.begin(); i != _nsdMap.end(); ++i ) {
             if (StringData(i->first).startsWith(prefix)) {
@@ -1346,7 +1346,7 @@ namespace mongo {
     }
 
     void NamespaceDetailsTransient::eraseForPrefix(const StringData& prefix) {
-        SimpleMutex::scoped_lock lk(_qcMutex);
+        SimpleRWLock::Exclusive lk(_qcRWLock);
         vector< string > found;
         for( ouriter i = _nsdMap.begin(); i != _nsdMap.end(); ++i ) {
             if (StringData(i->first).startsWith(prefix)) {

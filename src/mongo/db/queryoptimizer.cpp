@@ -335,7 +335,7 @@ doneCheckOrder:
             return;
         }
 
-        SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
+        SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
         QueryPattern queryPattern = _frs.pattern( _order );
         CachedQueryPlan queryPlanToCache( indexKey(), nScanned, candidatePlans );
         NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get_inlock( ns() );
@@ -1583,7 +1583,7 @@ doneCheckOrder:
     }
     
     void QueryUtilIndexed::clearIndexesForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
-        SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
+        SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
         NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get_inlock( frsp.ns() );
         CachedQueryPlan noCachedPlan;
         nsdt.registerCachedQueryPlanForPattern( frsp._singleKey.pattern( order ), noCachedPlan );
@@ -1591,8 +1591,8 @@ doneCheckOrder:
     }
     
     CachedQueryPlan QueryUtilIndexed::bestIndexForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
-        SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
-        NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get_inlock( frsp.ns() );
+        NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get( frsp.ns() );
+        SimpleRWLock::Shared lk(NamespaceDetailsTransient::_qcRWLock);
         // TODO Maybe it would make sense to return the index with the lowest
         // nscanned if there are two possibilities.
         {

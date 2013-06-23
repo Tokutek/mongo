@@ -113,7 +113,7 @@ namespace mongo {
     }
 
     const IndexSpec& IndexDetails::getSpec() const {
-        SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
+        SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
         return NamespaceDetailsTransient::get_inlock( info()["ns"].String() ).getIndexSpec( this );
     }
 

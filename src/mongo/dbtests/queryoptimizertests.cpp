@@ -1609,7 +1609,7 @@ namespace QueryOptimizerTests {
 
             FieldRangeSet frs( "ns", BSON( "a" << 1 ), true, true );
             {
-                SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
+                SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
                 NamespaceDetailsTransient::get_inlock( ns() ).
                         registerCachedQueryPlanForPattern( frs.pattern( BSON( "b" << 1 ) ),
                                                           CachedQueryPlan( BSON( "a" << 1 ), 0,
