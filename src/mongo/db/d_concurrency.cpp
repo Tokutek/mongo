@@ -62,13 +62,6 @@ namespace mongo {
     	virtual ~DBTryLockTimeoutException() throw() { }
     };
 
-#if 0
-    namespace dur {
-        void assertNothingSpooled();
-        void releasingWriteLock();
-    }
-#endif
-
     // e.g. externalobjsortmutex uses hlmutex as it can be locked for very long times
     // todo : report HLMutex status in db.currentOp() output
     // perhaps move this elsewhere as this could be used in mongos and this file is for mongod
