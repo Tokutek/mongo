@@ -1056,10 +1056,6 @@ namespace mongo {
         catch (...) { }
 #endif
 
-        // block the dur thread from doing any work for the rest of the run
-        LOG(2) << "shutdown: groupCommitMutex" << endl;
-        //SimpleMutex::scoped_lock lk(dur::commitJob.groupCommitMutex);
-
 #ifdef _WIN32
         // Windows Service Controller wants to be told when we are down,
         //  so don't call ::_exit() yet, or say "really exiting now"
