@@ -231,7 +231,7 @@ namespace mongo {
             // options here before db_create + db->open.
             int readPageSize = 65536;
             int pageSize = 4*1024*1024;
-            TOKU_COMPRESSION_METHOD compression = TOKU_DEFAULT_COMPRESSION_METHOD;
+            TOKU_COMPRESSION_METHOD compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
             BSONObj key_pattern = info["key"].Obj();
             
             BSONElement e;
