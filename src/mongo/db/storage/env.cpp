@@ -501,7 +501,6 @@ namespace mongo {
                 case TOKUDB_HUGE_PAGES_ENABLED:
                     LOG(LL_ERROR) << endl << endl
                                   << "************************************************************" << endl
-                                  /*
                                   << "                                                            " << endl
                                   << "                        @@@@@@@@@@@                         " << endl
                                   << "                      @@'         '@@                       " << endl
@@ -514,7 +513,6 @@ namespace mongo {
                                   << "                      ..  '      ' ..                       " << endl
                                   << "                        .._______,.                         " << endl
                                   << "                                                            " << endl
-                                  */
                                   << " TokuMX will not run with transparent huge pages enabled.   " << endl
                                   << " Please disable them to continue.                           " << endl
                                   << " (echo never > /sys/kernel/mm/transparent_hugepage/enabled) " << endl
