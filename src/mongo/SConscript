@@ -636,33 +636,34 @@ module_banner_transforms = ["--transform %s=$SERVER_DIST_BASENAME" % d for d in 
 toku_lib_dirs = set([Dir('#').rel_path(f.get_dir()) for f in env['TOKULIBS']])
 toku_lib_transforms = ["--transform %s=$SERVER_DIST_BASENAME/lib64" % d for d in toku_lib_dirs]
 
-env.Command(
-    '#/${SERVER_ARCHIVE}',
-    ['#buildscripts/make_archive.py'] + env["MODULE_BANNERS"] + env['TOKULIBS'] + distBinaries +
-    ['/lib64/libgcc_s.so.1',
-     '/usr/lib64/libstdc++.so.6',
-     os.path.realpath('/lib64/libgcc_s.so.1'),
-     os.path.realpath('/usr/lib64/libstdc++.so.6')],
-    ' '.join(['$PYTHON ${SOURCES[0]} -o $TARGET'] + toku_lib_transforms + module_banner_transforms + [
-            '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=$SERVER_DIST_BASENAME/bin',
-            '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=$SERVER_DIST_BASENAME/bin',
-            '--transform ${str(Dir(BUILD_DIR))}/mongo=$SERVER_DIST_BASENAME/bin',
-            '--transform /lib64=$SERVER_DIST_BASENAME/lib64',
-            '--transform /usr/lib64=$SERVER_DIST_BASENAME/lib64',
-            '--transform /lib=$SERVER_DIST_BASENAME/lib',
-            '--transform /usr/lib=$SERVER_DIST_BASENAME/lib',
-            '${TEMPFILE(SOURCES[1:])}']))
-
-if (solaris or linux) and (not has_option("nostrip")):
+if not has_option("skip-tarballs"):
     env.Command(
-        '#/${SERVER_DEBUGINFO_ARCHIVE}',
-        ['#buildscripts/make_archive.py',
-         debuginfoBinaries],
-        '$PYTHON ${SOURCES[0]} -o $TARGET '
-        '--transform distsrc=${SERVER_DIST_BASENAME}-debuginfo '
-        '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=${SERVER_DIST_BASENAME}-debuginfo/bin '
-        '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=${SERVER_DIST_BASENAME}-debuginfo/bin '
-        '${TEMPFILE(SOURCES[1:])}')
+        '#/${SERVER_ARCHIVE}',
+        ['#buildscripts/make_archive.py'] + env["MODULE_BANNERS"] + env['TOKULIBS'] + distBinaries +
+        ['/lib64/libgcc_s.so.1',
+         '/usr/lib64/libstdc++.so.6',
+         os.path.realpath('/lib64/libgcc_s.so.1'),
+         os.path.realpath('/usr/lib64/libstdc++.so.6')],
+        ' '.join(['$PYTHON ${SOURCES[0]} -o $TARGET'] + toku_lib_transforms + module_banner_transforms + [
+                '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=$SERVER_DIST_BASENAME/bin',
+                '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=$SERVER_DIST_BASENAME/bin',
+                '--transform ${str(Dir(BUILD_DIR))}/mongo=$SERVER_DIST_BASENAME/bin',
+                '--transform /lib64=$SERVER_DIST_BASENAME/lib64',
+                '--transform /usr/lib64=$SERVER_DIST_BASENAME/lib64',
+                '--transform /lib=$SERVER_DIST_BASENAME/lib',
+                '--transform /usr/lib=$SERVER_DIST_BASENAME/lib',
+                '${TEMPFILE(SOURCES[1:])}']))
+    
+    if (solaris or linux) and (not has_option("nostrip")):
+        env.Command(
+            '#/${SERVER_DEBUGINFO_ARCHIVE}',
+            ['#buildscripts/make_archive.py',
+             debuginfoBinaries],
+            '$PYTHON ${SOURCES[0]} -o $TARGET '
+            '--transform distsrc=${SERVER_DIST_BASENAME}-debuginfo '
+            '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=${SERVER_DIST_BASENAME}-debuginfo/bin '
+            '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=${SERVER_DIST_BASENAME}-debuginfo/bin '
+            '${TEMPFILE(SOURCES[1:])}')
 
 #final alias
 env.Alias( "install", "$INSTALL_DIR" )
