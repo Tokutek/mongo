@@ -29,7 +29,7 @@ assert.eq(1, stats.indexDetails.length);
 assert.eq("_id_", stats.indexDetails[0].name);
 assert.eq(4194304, stats.indexDetails[0].pageSize);
 assert.eq(65536, stats.indexDetails[0].readPageSize);
-assert.eq("default", stats.indexDetails[0].compression);
+assert.eq("zlib", stats.indexDetails[0].compression);
 
 // verify that after we add an index with a custom pageSize, readPageSize, and compression,
 // we see those values in stats
