@@ -709,6 +709,11 @@ namespace mongo {
          */
         void next();
 
+        /**
+         * Rests the iterator to point to the first element (if there is a tag).
+         */
+        void reset();
+
         //
         // Getters
         //
@@ -749,7 +754,7 @@ namespace mongo {
 
         // Important: do not re-order _tags & _tagIterator
         BSONArray _tags;
-        BSONArrayIteratorSorted _tagIterator;
+        scoped_ptr<BSONArrayIteratorSorted> _tagIterator;
     };
 
     struct MONGO_CLIENT_API ReadPreferenceSetting {
