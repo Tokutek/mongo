@@ -156,13 +156,9 @@ src/mongo/base/error_codes.cpp
 src/mongo/base/error_codes.h
 src/mongo/db/auth/action_type.cpp
 src/mongo/db/auth/action_type.h
-src/third_party/js-1.7/jscpucfg
-src/third_party/js-1.7/jskwgen
 src/mongo/buildinfo.cpp
 src/mongo/shell/mongo-server.cpp
 src/mongo/shell/mongo.cpp
-src/third_party/js-1.7/jsautocfg.h
-src/third_party/js-1.7/jsautokw.h
 src/third_party/v8/src/experimental-libraries.cc
 src/third_party/v8/src/libraries.cc
 
