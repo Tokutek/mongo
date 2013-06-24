@@ -150,6 +150,7 @@ add_option( "mute" , "do not display commandlines for compiling and linking, to 
 add_option( "prefix" , "installation prefix" , 1 , False, default=DEFAULT_INSTALL_DIR )
 add_option( "distname" , "dist name (0.8.0)" , 1 , False )
 add_option( "distmod", "additional piece for full dist name" , 1 , False )
+add_option( "skip-tarballs", "do not create targets for tarballs (testing only)" , 0 , False )
 add_option( "force-git-version", "force the git version if building a tarball" , 1, False )
 add_option( "force-toku-version", "force the toku version if building a tarball" , 1, False )
 add_option( "nostrip", "do not strip installed binaries" , 0 , False )
