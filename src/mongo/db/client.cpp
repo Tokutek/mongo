@@ -36,8 +36,6 @@
 #include "mongo/util/mongoutils/html.h"
 #include "mongo/util/mongoutils/checksum.h"
 
-compilation error
-
 namespace mongo {
   
     mongo::mutex& Client::clientsMutex = *(new mutex("clientsMutex"));
