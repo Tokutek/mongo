@@ -63,6 +63,11 @@ namespace mongo {
             BSONObj pk = ccc->currPK().copy();
             BSONObj obj = ccc->current().copy();
 
+            // Because the query optimizer cursor implementation records cursor
+            // matches on advance(), we must advance here before deleting, otherwise
+            // the cursor would appear to always point to something that doesn't
+            // match the query, ruining it's chances of getting chosen later for
+            // a similar query.
             while ( ccc->ok() && ccc->currPK() == pk ) {
                 ccc->advance();
             }
