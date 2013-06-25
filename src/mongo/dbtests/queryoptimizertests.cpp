@@ -61,11 +61,6 @@ namespace QueryOptimizerTests {
             }
         }
 
-        if( d->nIndexes() >= NamespaceDetails::NIndexesMax ) {
-            problem() << "Helper::ensureIndex fails, MaxIndexes exceeded " << ns << '\n';
-            return;
-        }
-
         string system_indexes = cc().database()->name() + ".system.indexes";
 
         BSONObjBuilder b;

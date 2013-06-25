@@ -1086,8 +1086,6 @@ namespace mongo {
         }
 
         if (nIndexes() >= NIndexesMax ) {
-            // calling BSONObj::str() (with NOINLINE) ensures the symbol exists in gdb.
-            // don't modify that line without putting a call to str() elsewhere.
             string s = (mongoutils::str::stream() <<
                         "add index fails, too many indexes for " << name <<
                         " key:" << keyPattern.toString());

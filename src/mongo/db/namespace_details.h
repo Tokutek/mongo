@@ -651,11 +651,9 @@ namespace mongo {
     NamespaceDetails *nsdetails_maybe_create(const StringData& ns, BSONObj options = BSONObj());
 
     inline IndexDetails& NamespaceDetails::idx(int idxNo) const {
-        if ( idxNo < NIndexesMax ) {
-            verify(idxNo >= 0 && idxNo < (int) _indexes.size());
-            return *_indexes[idxNo];
-        }
-        unimplemented("more than NIndexesMax indexes"); // TokuMX: Make sure we handle the case where idxNo >= NindexesMax 
+        verify( idxNo < NIndexesMax );
+        verify( idxNo >= 0 && idxNo < (int) _indexes.size() );
+        return *_indexes[idxNo];
     }
 
     inline int NamespaceDetails::idxNo(const IndexDetails& idx) const {
@@ -665,7 +663,7 @@ namespace mongo {
                 return it - _indexes.begin();
             }
         }
-        massert( 10349 , "E12000 idxNo fails", false);
+        msgasserted( 10349 , "E12000 idxNo fails" );
         return -1;
     }
 
