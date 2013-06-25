@@ -980,7 +980,7 @@ namespace mongo {
             Lock::GlobalWrite lk;
             log() << "shutdown: going to close databases..." << endl;
             dbHolderW().closeDatabases(dbpath);
-            log() << "shutdown: going to shutdown TokuKV..." << endl;
+            log() << "shutdown: going to shutdown TokuMX..." << endl;
             storage::shutdown();
         }
 
