@@ -19,6 +19,8 @@
 
 #include "mongo/pch.h"
 
+#include <iomanip>
+
 #include "mongo/db/jsobj.h"
 #include "mongo/util/log.h"
 
