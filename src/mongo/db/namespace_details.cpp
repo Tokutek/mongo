@@ -1403,6 +1403,7 @@ namespace mongo {
         resetTransient();
     }
 
+<<<<<<< HEAD
     void NamespaceDetails::checkIndexUniqueness(const IndexDetails &idx) {
         IndexScanCursor c(this, idx, 1);
         BSONObj prevKey = c.currKey().getOwned();
@@ -1414,6 +1415,29 @@ namespace mongo {
             }
             prevKey = currKey.getOwned();
         }
+=======
+
+    /**
+     * keeping things in sync this way is a bit of a hack
+     * and the fact that we have to pass in ns again
+     * should be changed, just not sure to what
+     */
+    void NamespaceDetails::syncUserFlags( const string& ns ) {
+        Lock::assertWriteLocked( ns );
+        
+        string system_namespaces = nsToDatabaseSubstring(ns).toString() + ".system.namespaces";
+
+        BSONObj oldEntry;
+        verify( Helpers::findOne( system_namespaces , BSON( "name" << ns ) , oldEntry ) );
+        BSONObj newEntry = applyUpdateOperators( oldEntry , BSON( "$set" << BSON( "options.flags" << userFlags() ) ) );
+        
+        verify( 1 == deleteObjects( system_namespaces.c_str() , oldEntry , true , false , true ) );
+        theDataFileMgr.insert( system_namespaces.c_str(),
+                               newEntry.objdata(),
+                               newEntry.objsize(),
+                               false,
+                               true );
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
     }
 
     void NamespaceDetails::empty() {

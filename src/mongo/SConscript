@@ -460,6 +460,11 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/client.cpp",
                     "db/client_load.cpp",
                     "db/database.cpp",
+<<<<<<< HEAD
+=======
+                    "db/background.cpp",
+                    "db/pdfile.cpp",
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
                     "db/cursor.cpp",
                     "db/query_optimizer.cpp",
                     "db/query_optimizer_internal.cpp",

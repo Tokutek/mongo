@@ -219,7 +219,11 @@ public:
               error() << "Cannot dump "  << name << ". Collection has '/' or null in the collection name." << endl;
               continue;
             }
+<<<<<<< HEAD
             
+=======
+
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
             if (nsToCollectionSubstring(name) == "system.indexes") {
               // Create system.indexes.bson for compatibility with pre 2.2 mongorestore
               writeCollectionFile( name.c_str() , outdir / ( filename + ".bson" ) );

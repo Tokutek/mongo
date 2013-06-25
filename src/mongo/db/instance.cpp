@@ -533,9 +533,14 @@ namespace mongo {
         // this is thus synchronized given our lock above.
         uassert(10054,  "not master", isMasterNs(ns));
 
+<<<<<<< HEAD
         // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
         if (!broadcast && handlePossibleShardedMessage(m, 0)) {
             return;
+=======
+        if( BackgroundOperation::inProgForDb(db) ) {
+            log() << "warning: bg op in prog during close db? " << db << endl;
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
         }
 
         Client::Context ctx(ns);
@@ -887,10 +892,18 @@ namespace mongo {
         const char *ns = d.getns();
         op.debug().ns = ns;
 
+<<<<<<< HEAD
         StringData coll = nsToCollectionSubstring(ns);
         // Auth checking for index writes happens later.
         if (coll != "system.indexes") {
             Status status = cc().getAuthorizationManager()->checkAuthForInsert(ns);
+=======
+        bool isIndexWrite = nsToCollectionSubstring(ns) == "system.indexes";
+
+        // Auth checking for index writes happens further down in this function.
+        if (!isIndexWrite) {
+            Status status = cc().getAuthorizationSession()->checkAuthForInsert(ns);
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
             uassert(16544, status.reason(), status.isOK());
         }
 

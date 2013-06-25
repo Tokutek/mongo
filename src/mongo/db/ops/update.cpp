@@ -302,6 +302,72 @@ namespace mongo {
                                                                   false /* not an insertion */ );
                     updateUsingMods( d, currPK, currentObj, *mss, useMods->isIndexed() > 0, logDetails );
 
+<<<<<<< HEAD
+=======
+                    bool willAdvanceCursor = multi && c->ok() && ( modsIsIndexed || ! mss->canApplyInPlace() );
+
+                    if ( willAdvanceCursor ) {
+                        if ( cc.get() ) {
+                            cc->setDoingDeletes( true );
+                        }
+                        c->prepareToTouchEarlierIterate();
+                    }
+
+                    // If we've made it this far, "ns" must contain a valid collection name, and so
+                    // is of the form "db.collection".  Therefore, the following expression must
+                    // always be valid.  "system.users" updates must never be done in place, in
+                    // order to ensure that they are validated inside DataFileMgr::updateRecord(.).
+                    bool isSystemUsersMod = nsToCollectionSubstring(ns) == "system.users";
+
+                    BSONObj newObj;
+                    if ( !mss->isUpdateIndexed() && mss->canApplyInPlace() && !isSystemUsersMod ) {
+                        mss->applyModsInPlace( true );// const_cast<BSONObj&>(onDisk) );
+
+                        DEBUGUPDATE( "\t\t\t doing in place update" );
+                        if ( !multi )
+                            debug.fastmod = true;
+
+                        if ( modsIsIndexed ) {
+                            seenObjects.insert( loc );
+                        }
+                        newObj = loc.obj();
+                        d->paddingFits();
+                    }
+                    else {
+                        newObj = mss->createNewFromMods();
+                        checkTooLarge(newObj);
+                        DiskLoc newLoc = theDataFileMgr.updateRecord(ns,
+                                                                     d,
+                                                                     nsdt,
+                                                                     r,
+                                                                     loc,
+                                                                     newObj.objdata(),
+                                                                     newObj.objsize(),
+                                                                     debug);
+
+                        if ( newLoc != loc || modsIsIndexed ){
+                            // log() << "Moved obj " << newLoc.obj()["_id"] << " from " << loc << " to " << newLoc << endl;
+                            // object moved, need to make sure we don' get again
+                            seenObjects.insert( newLoc );
+                        }
+
+                    }
+
+                    if ( logop ) {
+                        DEV verify( mods->size() );
+                        BSONObj logObj = mss->getOpLogRewrite();
+                        DEBUGUPDATE( "\t rewrite update: " << logObj );
+
+                        // It is possible that the entire mod set was a no-op over this
+                        // document.  We would have an empty log record in that case. If we
+                        // call logOp, with an empty record, that would be replicated as "clear
+                        // this record", which is not what we want. Therefore, to get a no-op
+                        // in the replica, we simply don't log.
+                        if ( logObj.nFields() ) {
+                            logOp("u", ns, logObj , &pattern, 0, fromMigrate, &newObj );
+                        }
+                    }
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
                     numModded++;
                     if ( ! multi )
                         return UpdateResult( 1 , 1 , numModded , BSONObj() );

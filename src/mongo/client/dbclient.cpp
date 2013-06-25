@@ -452,17 +452,27 @@ namespace mongo {
     }
 
     unsigned long long DBClientWithCommands::count(const string &myns, const BSONObj& query, int options, int limit, int skip ) {
+<<<<<<< HEAD
         std::string dbstr = nsToDatabase(myns);
         BSONObj cmd = _countCmd( myns , query , options , limit , skip );
         BSONObj res;
         if( !runCommand(dbstr.c_str(), cmd, res, options) )
+=======
+        BSONObj cmd = _countCmd( myns , query , options , limit , skip );
+        BSONObj res;
+        if( !runCommand(nsToDatabase(myns), cmd, res, options) )
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
             uasserted(11010,string("count fails:") + res.toString());
         return res["n"].numberLong();
     }
 
     BSONObj DBClientWithCommands::_countCmd(const string &myns, const BSONObj& query, int options, int limit, int skip ) {
         BSONObjBuilder b;
+<<<<<<< HEAD
         b.append( "count" , nsToCollectionSubstring(myns) );
+=======
+        b.append( "count" , ns.coll() );
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
         b.append( "query" , query );
         if ( limit )
             b.append( "limit" , limit );
@@ -1190,7 +1200,11 @@ namespace mongo {
     void DBClientWithCommands::dropIndex( const string& ns , const string& indexName ) {
         BSONObj info;
         if ( ! runCommand( nsToDatabase( ns ) ,
+<<<<<<< HEAD
                            BSON( "deleteIndexes" << nsToCollectionSubstring( ns ) << "index" << indexName ) ,
+=======
+                           BSON( "deleteIndexes" << nsToCollectionSubstring(ns) << "index" << indexName ) ,
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
                            info ) ) {
             LOG(_logLevel) << "dropIndex failed: " << info << endl;
             uassert( 10007 ,  "dropIndex failed" , 0 );
@@ -1200,9 +1214,18 @@ namespace mongo {
 
     void DBClientWithCommands::dropIndexes( const string& ns ) {
         BSONObj info;
+<<<<<<< HEAD
         uassert( 10008 ,  "dropIndexes failed" , runCommand( nsToDatabase( ns ) ,
                  BSON( "deleteIndexes" << nsToCollectionSubstring( ns ) << "index" << "*") ,
                  info ) );
+=======
+        uassert( 10008,
+                 "dropIndexes failed",
+                 runCommand( nsToDatabase( ns ),
+                             BSON( "deleteIndexes" << nsToCollectionSubstring(ns) << "index" << "*"),
+                             info )
+                 );
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
         resetIndexCache();
     }
 

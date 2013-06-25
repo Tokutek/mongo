@@ -35,7 +35,11 @@ namespace rename_collection {
         ActionSet sourceActions;
         ActionSet targetActions;
 
+<<<<<<< HEAD
         if (nsToDatabaseSubstring(sourceNS) == nsToDatabaseSubstring(targetNS)) {
+=======
+        if (sourceNS.db() == targetNS.db()) {
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
             sourceActions.addAction(ActionType::renameCollectionSameDB);
             targetActions.addAction(ActionType::renameCollectionSameDB);
         } else {

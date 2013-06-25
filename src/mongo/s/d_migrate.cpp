@@ -1583,8 +1583,13 @@ namespace mongo {
                 const string &dbname = cc().database()->name();
 
                 // Only copy if ns doesn't already exist
+<<<<<<< HEAD
                 if (!nsdetails(ns)) {
                     string system_namespaces = dbname + ".system.namespaces";
+=======
+                if ( ! nsdetails( ns ) ) {
+                    string system_namespaces = nsToDatabase(ns) + ".system.namespaces";
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
                     BSONObj entry = conn->findOne( system_namespaces, BSON( "name" << ns ) );
                     if ( entry["options"].isABSONObj() ) {
                         string errmsg;

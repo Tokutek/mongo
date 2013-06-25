@@ -246,9 +246,14 @@ public:
         }
 
         _curns = ns.c_str();
+<<<<<<< HEAD
         NamespaceString nss(_curns);
         _curdb = nss.db;
         _curcoll = nss.coll;
+=======
+        _curdb = nsToDatabase(_curns);
+        _curcoll = nsToCollectionSubstring(_curns).toString();
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
 
         // If drop is not used, warn if the collection exists.
         if (!_drop) {
@@ -303,16 +308,52 @@ public:
     }
 
     virtual void gotObject( const BSONObj& obj ) {
+<<<<<<< HEAD
         StringData collstr = nsToCollectionSubstring(_curns);
         massert( 16910, "Shouldn't be inserting into system.indexes directly",
                         collstr != "system.indexes" );
         if (_drop && collstr == "system.users" && _users.count(obj["user"].String())) {
+=======
+        if (_curns == OPLOG_SENTINEL) { // intentional ptr compare
+            if (obj["op"].valuestr()[0] == 'n') // skip no-ops
+                return;
+            
+            // exclude operations that don't meet (timestamp) criteria
+            if ( _opmatcher.get() && ! _opmatcher->matches ( obj ) ) {
+                _oplogEntrySkips++;
+                return;
+            }
+
+            string db = obj["ns"].valuestr();
+            db = db.substr(0, db.find('.'));
+
+            BSONObj cmd = BSON( "applyOps" << BSON_ARRAY( obj ) );
+            BSONObj out;
+            conn().runCommand(db, cmd, out);
+            _oplogEntryApplies++;
+
+            // wait for ops to propagate to "w" nodes (doesn't warn if w used without replset)
+            if ( _w > 0 ) {
+                string err = conn().getLastError(db, false, false, _w);
+                if (!err.empty()) {
+                    error() << "Error while replaying oplog: " << err;
+                }
+            }
+        }
+        else if (nsToCollectionSubstring(_curns) == "system.indexes") {
+            createIndex(obj, true);
+        }
+        else if (_drop &&
+                 nsToCollectionSubstring(_curns) == ".system.users" &&
+                 _users.count(obj["user"].String())) {
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
             // Since system collections can't be dropped, we have to manually
             // replace the contents of the system.users collection
             BSONObj userMatch = BSON("user" << obj["user"].String());
             conn().update(_curns, Query(userMatch), obj);
             _users.erase(obj["user"].String());
-        } else {
+        }
+        else {
             conn().insert( _curns , obj );
 
             // wait for insert to propagate to "w" nodes (doesn't warn if w used without replset)
@@ -421,7 +462,12 @@ private:
         while ( i.more() ) {
             BSONElement e = i.next();
             if (strcmp(e.fieldName(), "ns") == 0) {
+<<<<<<< HEAD
                 string s = _curdb + "." + _curcoll;
+=======
+                NamespaceString n(e.String());
+                string s = _curdb + "." + (keepCollName ? n.coll().toString() : _curcoll);
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
                 bo.append("ns", s);
             }
             else if (strcmp(e.fieldName(), "v") != 0) { // Remove index version number

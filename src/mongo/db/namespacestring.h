@@ -20,7 +20,11 @@
 
 #include <string>
 
+<<<<<<< HEAD
 #include "mongo/bson/util/builder.h"
+=======
+#include "mongo/base/string_data.h"
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
 #include "mongo/util/assert_util.h"
 
 namespace mongo {
@@ -60,14 +64,14 @@ namespace mongo {
     */
     class NamespaceString {
     public:
-        string db;
-        string coll; // note collection names can have periods in them for organizing purposes (e.g. "system.indexes")
+        NamespaceString( const StringData& ns );
 
-        NamespaceString( const char * ns ) { init(ns); }
-        NamespaceString( const string& ns ) { init(ns.c_str()); }
+        StringData db() const;
+        StringData coll() const;
 
-        string ns() const { return db + '.' + coll; }
+        const string& ns() const { return _ns; }
 
+<<<<<<< HEAD
         bool isSystem() const { return strncmp(coll.c_str(), "system.", 7) == 0; }
         static bool isSystem(const StringData &ns) {
             return nsToCollectionSubstring(ns).startsWith("system.");
@@ -76,10 +80,20 @@ namespace mongo {
         static bool isCommand(const StringData &ns) {
             return nsToCollectionSubstring(ns) == "$cmd";
         }
+=======
+        operator string() const { return _ns; }
+        string toString() const { return _ns; }
+
+        size_t size() const { return _ns.size(); }
+
+        bool isSystem() const { return coll().startsWith( "system." ); }
+        bool isCommand() const { return coll() == "$cmd"; }
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
 
         /**
          * @return true if the namespace is valid. Special namespaces for internal use are considered as valid.
          */
+<<<<<<< HEAD
         bool isValid() const {
             return validDBName( db ) && !coll.empty();
         }
@@ -88,31 +102,33 @@ namespace mongo {
         }
 
         operator string() const { return ns(); }
+=======
+        bool isValid() const { return validDBName( db() ) && !coll().empty(); }
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
 
-        bool operator==( const string& nsIn ) const { return nsIn == ns(); }
-        bool operator==( const char* nsIn ) const { return (string)nsIn == ns(); }
-        bool operator==( const NamespaceString& nsIn ) const { return nsIn.db == db && nsIn.coll == coll; }
+        bool operator==( const string& nsIn ) const { return nsIn == _ns; }
+        bool operator==( const NamespaceString& nsIn ) const { return nsIn._ns == _ns; }
 
-        bool operator!=( const string& nsIn ) const { return nsIn != ns(); }
-        bool operator!=( const char* nsIn ) const { return (string)nsIn != ns(); }
-        bool operator!=( const NamespaceString& nsIn ) const { return nsIn.db != db || nsIn.coll != coll; }
-
-        size_t size() const { return ns().size(); }
-
-        string toString() const { return ns(); }
+        bool operator!=( const string& nsIn ) const { return nsIn != _ns; }
+        bool operator!=( const NamespaceString& nsIn ) const { return nsIn._ns != _ns; }
 
         /**
          * @return true if ns is 'normal'.  $ used for collections holding index data, which do not contain BSON objects in their records.
          * special case for the local.oplog.$main ns -- naming it as such was a mistake.
          * TokuMX doesn't need this special case.
          */
+<<<<<<< HEAD
         static bool normal(const StringData &ns) {
             return ns.find('$') == string::npos;
         }
+=======
+        static bool normal(const StringData& ns);
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
 
         /**
          * @return true if the ns is an oplog one, otherwise false.
          */
+<<<<<<< HEAD
         static bool oplog(const StringData &ns) {
             return ns == "local.oplog.rs" || ns == "local.oplog.refs";
         }
@@ -120,21 +136,27 @@ namespace mongo {
         static bool special(const StringData &ns) {
             return !normal(ns) || isSystem(ns);
         }
+=======
+        static bool oplog(const StringData& ns);
+
+        static bool special(const StringData& ns);
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
 
         /**
          * samples:
-         *   good:  
-         *      foo  
+         *   good
+         *      foo
          *      bar
          *      foo-bar
          *   bad:
          *      foo bar
          *      foo.bar
          *      foo"bar
-         *        
+         *
          * @param db - a possible database name
          * @return if db is an allowed database name
          */
+<<<<<<< HEAD
         static bool validDBName(const StringData &db) {
             if (db.size() == 0 || db.size() > 64) {
                 return false;
@@ -146,6 +168,9 @@ namespace mongo {
 #endif
             return good == db.size();
         }
+=======
+        static bool validDBName( const StringData& dbin );
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
 
         /**
          * samples:
@@ -154,22 +179,24 @@ namespace mongo {
          *   bad:
          *      foo.
          *
-         * @param dbcoll - a possible collection name of the form db.coll
+         * @param ns - a full namesapce (a.b)
          * @return if db.coll is an allowed collection name
          */
+<<<<<<< HEAD
         static bool validCollectionName(const StringData &dbcoll) {
             StringData coll = nsToCollectionSubstring(dbcoll);
             return !coll.empty() && normal(dbcoll);
         }
+=======
+        static bool validCollectionName(const StringData& ns);
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
 
     private:
-        void init(const char *ns) {
-            const char *p = strchr(ns, '.');
-            if( p == 0 ) return;
-            db = string(ns, p - ns);
-            coll = p + 1;
-        }
+
+        string _ns;
+        size_t _dotIndex;
     };
+
 
     // "database.a.b.c" -> "database"
     inline void nsToDatabase(const StringData& ns, char *database) {
@@ -182,6 +209,7 @@ namespace mongo {
         return nsToDatabaseSubstring( ns ).toString();
     }
 
+<<<<<<< HEAD
     inline string nsToCollection(const StringData &ns) {
         return nsToCollectionSubstring( ns ).toString();
     }
@@ -207,4 +235,43 @@ namespace mongo {
         return ss.str();
     }
 
+=======
+    // "database.a.b.c" -> "database"
+    inline StringData nsToCollectionSubstring( const StringData& ns ) {
+        size_t i = ns.find( '.' );
+        massert(16886, "nsToCollectionSubstring: no .", i != string::npos );
+        return ns.substr( i + 1 );
+    }
+
+
+    /**
+     * NamespaceDBHash and NamespaceDBEquals allow you to do something like
+     * unordered_map<string,int,NamespaceDBHash,NamespaceDBEquals>
+     * and use the full namespace for the string
+     * but comparisons are done only on the db piece
+     */
+
+    /**
+     * this can change, do not store on disk
+     */
+    int nsDBHash( const string& ns );
+
+    bool nsDBEquals( const string& a, const string& b );
+
+    struct NamespaceDBHash {
+        int operator()( const string& ns ) const {
+            return nsDBHash( ns );
+        }
+    };
+
+    struct NamespaceDBEquals {
+        bool operator()( const string& a, const string& b ) const {
+            return nsDBEquals( a, b );
+        }
+    };
+
+>>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
 }
+
+
+#include "mongo/db/namespacestring-inl.h"
