@@ -29,16 +29,15 @@
 
 #include <boost/thread/recursive_mutex.hpp>
 
-#include "cursor.h"
-#include "jsobj.h"
-#include "../util/net/message.h"
-#include "../util/net/listen.h"
-#include "../util/background.h"
-#include "dbhelpers.h"
-#include "matcher.h"
-#include "projection.h"
-#include "s/d_chunk_manager.h"
+#include "mongo/db/cursor.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/matcher.h"
+#include "mongo/db/projection.h"
 #include "mongo/db/keypattern.h"
+#include "mongo/s/d_chunk_manager.h"
+#include "mongo/util/net/message.h"
+#include "mongo/util/net/listen.h"
+#include "mongo/util/background.h"
 
 namespace mongo {
 

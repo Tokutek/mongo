@@ -24,6 +24,7 @@
 
 #include "mongo/db/cursor.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/dbhelpers.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/queryoptimizer.h"

@@ -19,11 +19,7 @@
 
 #pragma once
 
-#include <limits>
-#include <map>
-
 #include <db.h>
-#include <boost/filesystem.hpp>
 
 #include "mongo/pch.h"
 

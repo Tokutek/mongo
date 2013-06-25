@@ -24,7 +24,6 @@
 #include "mongo/util/md5.hpp"
 #include "mongo/db/instance.h"
 #include "mongo/db/dbwebserver.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/clientcursor.h"
