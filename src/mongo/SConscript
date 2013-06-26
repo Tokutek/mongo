@@ -460,11 +460,6 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/client.cpp",
                     "db/client_load.cpp",
                     "db/database.cpp",
-<<<<<<< HEAD
-=======
-                    "db/background.cpp",
-                    "db/pdfile.cpp",
->>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
                     "db/cursor.cpp",
                     "db/query_optimizer.cpp",
                     "db/query_optimizer_internal.cpp",
@@ -615,13 +610,65 @@ serverOnlyFiles += [ "s/d_logic.cpp",
 
 env.StaticLibrary("defaultversion", "s/default_version.cpp")
 
+<<<<<<< HEAD
+=======
+env.StaticLibrary("working_set", [ "db/exec/working_set.cpp", ],
+                  LIBDEPS = [ "bson",])
+env.CppUnitTest("working_set_test", [ "db/exec/working_set_test.cpp" ], LIBDEPS = ["working_set"])
+
+env.StaticLibrary("geometry", [ "db/geo/hash.cpp", "db/geo/shapes.cpp", ], LIBDEPS = [ "bson" ])
+env.StaticLibrary("geoparser", [ "db/geo/geoparser.cpp", ],
+                  LIBDEPS = [ "bson",
+                              "geometry",
+                              '$BUILD_DIR/third_party/s2/s2' ])
+env.StaticLibrary("geoquery", [ "db/geo/geoquery.cpp", ],
+                  LIBDEPS = [ "bson",
+                              "geometry",
+                              '$BUILD_DIR/third_party/s2/s2' ])
+
+env.CppUnitTest("hash_test", [ "db/geo/hash_test.cpp" ], LIBDEPS = ["geometry" ])
+env.CppUnitTest("geoparser_test", [ "db/geo/geoparser_test.cpp" ], LIBDEPS = ["geoparser"])
+
+env.StaticLibrary('range_deleter',
+                  [ 'db/range_deleter.cpp',
+                    'db/range_deleter_mock_env.cpp',
+                    'db/range_deleter_stats.cpp'
+                  ],
+                  LIBDEPS = [
+                      '$BUILD_DIR/mongo/s/base', # range_arithmetic.cpp
+                      'base/base',
+                      'bson',
+                      'synchronization'
+                  ])
+
+env.CppUnitTest('range_deleter_test',
+                [ 'db/range_deleter_test.cpp' ],
+                LIBDEPS = [ 'range_deleter', 'db/common' ]);
+
+env.CppUnitTest('range_deleter_stat_test',
+                [ 'db/range_deleter_stat_test.cpp' ],
+                LIBDEPS = [ 'range_deleter', 'db/common' ]);
+
+
+>>>>>>> f45a246... SERVER-10026 interfaces, index scan stage, debug cmd, jstest
 env.StaticLibrary("serveronly", serverOnlyFiles,
                   LIBDEPS=["coreshard",
                            "db/auth/authmongod",
                            "db/common",
                            "dbcmdline",
                            "defaultversion",
+<<<<<<< HEAD
                            "index_set"])
+=======
+                           "geoparser",
+                           "geoquery",
+                           "index_set",
+                           'range_deleter',
+                           's/metadata',
+                           "working_set",
+                           '$BUILD_DIR/third_party/shim_snappy'])
+>>>>>>> f45a246... SERVER-10026 interfaces, index scan stage, debug cmd, jstest
+
 
 # These files go into mongos and mongod only, not into the shell or any tools.
 mongodAndMongosFiles = [
