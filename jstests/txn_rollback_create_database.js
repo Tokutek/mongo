@@ -1,6 +1,6 @@
 var testName = 'txn_rollback_create_database';
 
-var port = allocatePorts(1)[0];
+var port = allocatePorts(1, myPort())[0];
 var mongod = startMongod('--port', port,
                          '--dbpath', '/data/db/' + testName,
                          '--nohttpinterface',
