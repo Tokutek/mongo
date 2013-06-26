@@ -1,10 +1,6 @@
 var testName = 'txn_rollback_create_database';
 
-var path = '/data/db/' + testName;
-var opts = db.adminCommand('getCmdLineOpts').parsed;
-if (opts.dbpath) {
-    path = opts.dbpath + '/' + testName;
-}
+var path = MongoRunner.toRealDir(testName);
 var port = allocatePorts(1, parseInt(myPort(), 10) + 1)[0];
 var mongod = startMongod('--port', port,
                          '--dbpath', path,
