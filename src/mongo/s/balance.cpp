@@ -25,6 +25,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/s/chunk.h"
 #include "mongo/s/config.h"
+#include "mongo/s/config_server_checker_service.h"
 #include "mongo/s/grid.h"
 #include "mongo/s/server.h"
 #include "mongo/s/shard.h"
@@ -455,7 +456,14 @@ namespace mongo {
                         sleepsecs( sleepTime ); // no need to wake up soon
                         continue;
                     }
-                    
+
+                    if ( !isConfigServerConsistent() ) {
+                        conn.done();
+                        warning() << "Skipping balancing round because data inconsistency"
+                                  << " was detected amongst the config servers." << endl;
+                        continue;
+                    }
+
                     LOG(1) << "*** start balancing round" << endl;
 
                     vector<CandidateChunkPtr> candidateChunks;
