@@ -738,6 +738,8 @@ def set_globals(options, tests):
     if options.tests_log_file is not None and len(options.tests_log_file) > 0:
         tests_log = open(options.tests_log_file, "w")
     elif quiet:
+        if not os.path.exists(smoke_db_prefix):
+            os.mkdir(smoke_db_prefix)
         tests_log = open(os.path.join(smoke_db_prefix, "tests.log"), "w")
     if options.server_log_file is not None and len(options.server_log_file) > 0:
         server_log_file = options.server_log_file
