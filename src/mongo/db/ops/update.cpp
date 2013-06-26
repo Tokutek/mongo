@@ -156,7 +156,7 @@ namespace mongo {
         loud.ns = ns;
         loud.fromMigrate = fromMigrate;
 
-        if ( !hasClusteringSecondaryKey(d) ) {
+        if ( cmdLine.fastupdates && !hasClusteringSecondaryKey(d) ) {
             // Fast update path, no _id query, which is okay
             // because we have no secondary clustering keys
             // to maintain.

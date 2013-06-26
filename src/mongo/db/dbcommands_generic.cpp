@@ -233,6 +233,13 @@ namespace mongo {
                     cmdObj["releaseConnectionsAfterResponse"].trueValue();
                 s++;
             }
+            if( cmdObj.hasElement( "fastupdates" ) ) {
+                if ( s == 0 ) {
+                    result.appendBool( "was", cmdLine.fastupdates );
+                }
+                cmdLine.fastupdates = cmdObj["fastupdates"].trueValue();
+                s++;
+            }
 
             if( s == 0 && !found ) {
                 errmsg = "no option found to set, use help:true to see options ";

@@ -491,6 +491,7 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     ("dbpath", po::value<string>() , dbpathBuilder.str().c_str())
     ("diaglog", po::value<int>(), "0=off 1=W 2=R 3=both 7=W+some reads")
     ("directio", "use direct I/O in tokumx")
+    ("fastupdates", "use fast updates in tokumx. improves unindexed _id update performance but prevents replication rollback.")
     ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
     ("logDir", po::value<string>(), "directory to store transaction log files (default is --dbpath)")
     ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
@@ -706,6 +707,9 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
         }
         if (params.count("directio")) {
             cmdLine.directio = true;
+        }
+        if (params.count("fastupdates")) {
+            cmdLine.fastupdates = true;
         }
         if (params.count("checkpointPeriod")) {
             cmdLine.checkpointPeriod = params["checkpointPeriod"].as<uint32_t>();
