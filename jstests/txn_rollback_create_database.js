@@ -1,8 +1,13 @@
 var testName = 'txn_rollback_create_database';
 
+var path = '/data/db/' + testName;
+var opts = db.adminCommand('getCmdLineOpts').parsed;
+if (opts.dbpath) {
+    path = opts.dbpath + '/' + testName;
+}
 var port = allocatePorts(1, myPort())[0];
 var mongod = startMongod('--port', port,
-                         '--dbpath', '/data/db/' + testName,
+                         '--dbpath', path,
                          '--nohttpinterface',
                          '--bind_ip', '127.0.0.1');
 
@@ -17,7 +22,7 @@ assert.eq(1, db.foo.count());
 stopMongod(port);
 
 mongod = startMongodNoReset('--port', port,
-                            '--dbpath', '/data/db/' + testName,
+                            '--dbpath', path,
                             '--nohttpinterface',
                             '--bind_ip', '127.0.0.1');
 

@@ -3,8 +3,14 @@
 var name = "logpath";
 var token = "logpath_token";
 
-var dbdir = "/data/db/" + name + "/"; // this will work under windows as well as linux
-var basedir = "/data/db/" + name + "files" + "/";
+var dbdir = '/data/db/' + name + '/'; // this will work under windows as well as linux
+var basedir = '/data/db/' + name + 'files/';
+var opts = db.adminCommand('getCmdLineOpts').parsed;
+if (opts.dbpath) {
+    dbdir = opts.dbpath + '/' + name + '/';
+    basedir = opts.dbpath + '/' + name + 'files/';
+}
+
 var logdir = basedir + "logdir/";
 var testdir = basedir + "testdir/"
 var sfile = _isWindows() ? "NUL:" : "/dev/null";
