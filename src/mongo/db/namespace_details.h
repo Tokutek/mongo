@@ -523,10 +523,11 @@ namespace mongo {
                 clearQueryCache();
         }
         CachedQueryPlan cachedQueryPlanForPattern( const QueryPattern &pattern ) {
-            return _qcCache[ pattern ];
+            map<QueryPattern,CachedQueryPlan>::const_iterator i = _qcCache.find(pattern);
+            return i != _qcCache.end() ? i->second : CachedQueryPlan();
         }
         void registerCachedQueryPlanForPattern( const QueryPattern &pattern,
-                                               const CachedQueryPlan &cachedQueryPlan ) {
+                                                const CachedQueryPlan &cachedQueryPlan ) {
             _qcCache[ pattern ] = cachedQueryPlan;
         }
 
