@@ -72,6 +72,21 @@ namespace mongo {
         uassert( 12522 , "$ operator made object too large" , newObj.objsize() <= BSONObjMaxUserSize );
     }
 
+    // Hack to apply an update message supplied by a NamespaceDetails to
+    // some row in an in IndexDetails (for fast ydb updates).
+    // TODO: Make this interaction cleaner.
+    class ApplyUpdateMessage : storage::UpdateCallback {
+        BSONObj apply( const BSONObj &oldObj, const BSONObj &msg ) {
+            // The update message is simply an update object, supplied by the user.
+            const BSONObj &updateObj = msg;
+            ModSet mods( updateObj );
+            auto_ptr<ModSetState> mss = mods.prepare( oldObj );
+            BSONObj newObj = mss->createNewFromMods();
+            checkTooLarge( newObj );
+            return newObj;
+        }
+    } _storageUpdateCallback; // installed as the ydb update callback in db.cpp via set_update_callback
+
     static void updateUsingMods(NamespaceDetails *d, NamespaceDetailsTransient *nsdt,
             const BSONObj &pk, const BSONObj &obj, ModSetState &mss, struct LogOpUpdateDetails* loud) {
 
@@ -107,20 +122,15 @@ namespace mongo {
         }
     }
 
-    static bool mayUpdateById(NamespaceDetails *d, const BSONObj &patternOrig) {
-        if ( isSimpleIdQuery(patternOrig) ) {
-            for (int i = 0; i < d->nIndexesBeingBuilt(); i++) {
-                IndexDetails &idx = d->idx(i);
-                if (idx.info()["clustering"].trueValue()) {
-                    return false;
-                }
+    static bool hasClusteringSecondaryKey(NamespaceDetails *d) {
+        for (int i = 0; i < d->nIndexesBeingBuilt(); i++) {
+            IndexDetails &idx = d->idx(i);
+            if (!d->isPKIndex(idx) && idx.clustering()) {
+                // has a clustering secondary key
+                return true;
             }
-            // We may update by _id, since:
-            // - The query is a simple _id query
-            // - The modifications do not affect any indexed fields
-            // - There are no clustering secondary keys.
-            return true;
         }
+        // no clustering secondary keys
         return false;
     }
 
@@ -137,32 +147,37 @@ namespace mongo {
                                     NamespaceDetailsTransient *nsdt,
                                     const char* ns,
                                     const BSONObj& updateobj,
-                                    BSONObj patternOrig,
                                     bool logop,
                                     OpDebug& debug,
                                     bool fromMigrate = false) {
 
-        BSONObj obj;
-        {
-            TOKULOG(3) << "_updateById looking for pk " << pk << endl;
-            dassert(pk == patternOrig["_id"].wrap(""));
-            bool found = d->findById( patternOrig, obj );
-            TOKULOG(3) << "_updateById findById() got " << obj << endl;
-            if ( !found ) {
-                // no upsert support in _updateById yet, so we are done.
-                return UpdateResult( 0 , 0 , 0 , BSONObj() );
-            }
-        }
-
-        verify(nsdt);
-        nsdt->notifyOfWriteOp();
-
-        /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
-           regular ones at the moment. */
-        struct LogOpUpdateDetails loud;
+        struct LogOpUpdateDetails loud; // TODO: Write a constructor for me
         loud.logop = logop;
         loud.ns = ns;
         loud.fromMigrate = fromMigrate;
+
+        if ( !hasClusteringSecondaryKey(d) ) {
+            // Fast update path, no _id query, which is okay
+            // because we have no secondary clustering keys
+            // to maintain.
+            d->updateObjectMods(pk, updateobj);
+            if ( nsdt != NULL ) {
+                nsdt->notifyOfWriteOp();
+            }
+            // TODO: Log this fast update
+            return UpdateResult( 0, 0, 0, BSONObj() );
+        }
+
+        BSONObj obj;
+        const bool found = d->findByPK( pk, obj );
+        if ( !found ) {
+            // TODO: No reason we can't upsert here, right?
+            // no upsert support in _updateById yet, so we are done.
+            return UpdateResult( 0 , 0 , 1 , BSONObj() );
+        }
+
+        /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
+           regular ones at the moment. */
         if ( isOperatorUpdate ) {
             auto_ptr<ModSetState> mss = mods->prepare( obj );
 
@@ -213,10 +228,9 @@ namespace mongo {
             modsAreIndexed = mods->isIndexed();
         }
 
-
         int idIdxNo = -1;
-        if ( planPolicy.permitOptimalIdPlan() && !multi && !modsAreIndexed &&
-             (idIdxNo = d->findIdIndex()) >= 0 && mayUpdateById(d, patternOrig) ) {
+        if ( planPolicy.permitOptimalIdPlan() && !multi && !modsAreIndexed && !d->isCapped() &&
+             (idIdxNo = d->findIdIndex()) >= 0 && isSimpleIdQuery(patternOrig) ) {
             debug.idhack = true;
             IndexDetails &idx = d->idx(idIdxNo);
             BSONObj pk = idx.getKeyFromQuery(patternOrig);
@@ -228,7 +242,6 @@ namespace mongo {
                                                nsdt,
                                                ns,
                                                updateobj,
-                                               patternOrig,
                                                logop,
                                                debug,
                                                fromMigrate);

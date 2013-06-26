@@ -47,6 +47,16 @@ namespace mongo {
         void handle_ydb_error(int error);
         void handle_ydb_error_fatal(int error);
 
+        class UpdateCallback : boost::noncopyable {
+        public:
+            virtual ~UpdateCallback() { }
+            virtual BSONObj apply(const BSONObj &oldObj, const BSONObj &msg) {
+                msgasserted( 16854, "bug: update callback not properly installed" );
+            }
+        };
+
+        void set_update_callback(UpdateCallback *cb);
+
     } // namespace storage
 
 } // namespace mongo

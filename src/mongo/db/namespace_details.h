@@ -281,6 +281,9 @@ namespace mongo {
         // update an object in the namespace by pk, replacing oldObj with newObj
         virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags = 0);
 
+        // update an object in the namespace by pk, described by the updateObj's $ operators
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, uint64_t flags = 0);
+
         // create a new index with the given info for this namespace.
         virtual void createIndex(const BSONObj &info);
 

@@ -187,7 +187,7 @@ namespace mongo {
 
         // We already did the unique check above. We can just pass flags of zero.
         const int put_flags = (flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0;
-        int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, put_flags);
+        const int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, put_flags);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
@@ -199,10 +199,24 @@ namespace mongo {
         DBT kdbt = skey.dbt();
 
         const int del_flags = ((flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0) | DB_DELETE_ANY;
-        int r = _db->del(_db, cc().txn().db_txn(), &kdbt, del_flags);
+        const int r = _db->del(_db, cc().txn().db_txn(), &kdbt, del_flags);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
+    }
+
+    void IndexDetails::updatePair(const BSONObj &key, const BSONObj *pk, const BSONObj &msg, uint64_t flags) {
+        storage::Key skey(key, pk);
+        DBT kdbt = skey.dbt();
+        DBT vdbt = storage::make_dbt(msg.objdata(), msg.objsize());
+
+        const int update_flags = (flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0;
+        const int r = _db->update(_db, cc().txn().db_txn(), &kdbt, &vdbt, update_flags);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
+        TOKULOG(3) << "index " << info()["key"].Obj() << ": sent update to "
+                   << key << ", pk " << (pk ? *pk : BSONObj()) << ", msg " << msg << endl;
     }
 
     enum toku_compression_method IndexDetails::getCompressionMethod() const {

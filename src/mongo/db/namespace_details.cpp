@@ -1003,6 +1003,11 @@ namespace mongo {
         }
     }
 
+    void NamespaceDetails::updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, uint64_t flags) {
+        IndexDetails &pkIdx = getPKIndex();
+        pkIdx.updatePair(pk, NULL, updateObj, flags);
+    }
+
     void NamespaceDetails::setIndexIsMultikey(const StringData& thisns, int i) {
         dassert(thisns == _ns);
         dassert(i < NIndexesMax);

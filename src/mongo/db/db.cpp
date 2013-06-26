@@ -337,9 +337,12 @@ namespace mongo {
         acquirePathLock();
 
         // the last thing we do before initializing storage is to install the
-        // txn complete hooks, which live in namespace_details.cpp
+        // txn complete hooks and update callback, which live in txn_complete_hooks.cpp
+        // and storage/env.cpp respectively.
         extern TxnCompleteHooks _txnCompleteHooks;
+        extern storage::UpdateCallback _storageUpdateCallback;
         setTxnCompleteHooks(&_txnCompleteHooks);
+        set_update_callback(&_storageUpdateCallback);
         storage::startup();
 
         // comes after storage::startup() because this reads from the database

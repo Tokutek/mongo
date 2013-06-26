@@ -47,6 +47,11 @@ namespace mongo {
     namespace storage {
 
         DB_ENV *env;
+        UpdateCallback *_updateCallback;
+
+        void set_update_callback(UpdateCallback *cb) {
+            _updateCallback = cb;
+        }
 
         static int dbt_key_compare(DB *db, const DBT *dbt1, const DBT *dbt2) {
             try {
@@ -68,6 +73,31 @@ namespace mongo {
                 fassertFailed(16455);
             }
         }
+
+        static int update_callback(DB *db, const DBT *key, const DBT *old_val, const DBT *extra,
+                                   void (*set_val)(const DBT *new_val, void *set_extra),
+                                   void *set_extra) {
+            verify( _updateCallback != NULL );
+            try {
+                verify( key != NULL && extra != NULL && extra->data != NULL );
+                BSONObj oldObj;
+                // old_val is NULL when the old row did not exist (and so this is an upsert)
+                if (old_val->data != NULL) {
+                    oldObj = BSONObj(static_cast<char *>(old_val->data));
+                }
+                // Apply the message, set the new value.
+                const BSONObj msg(static_cast<char *>(extra->data));
+                const BSONObj newObj = _updateCallback->apply( oldObj, msg );
+                DBT new_val = make_dbt(newObj.objdata(), newObj.objsize());
+                set_val(&new_val, set_extra);
+                return 0;
+            } catch (...) { 
+                LOG(0) << "Caught exception while processing update message. That's bad." << endl;
+                verify(false);
+            }
+            return -1;
+        }
+
 
         static uint64_t calculate_cachesize(void) {
             uint64_t physmem, maxdata;
@@ -135,6 +165,7 @@ namespace mongo {
                 handle_ydb_error_fatal(r);
             }
             env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
+            env->set_update(env, update_callback);
 
             const int redzone_threshold = cmdLine.fsRedzone;
             r = env->set_redzone(env, redzone_threshold);
