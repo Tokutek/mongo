@@ -549,7 +549,8 @@ env.CppUnitTest("shard_conn_test", [ "s/shard_conn_test.cpp" ], LIBS=env['LIBS']
                     "coredb",
                     "dbcmdline",
                     "mongodandmongos",
-                    "mocklib"],
+                    "mocklib",
+                    "$BUILD_DIR/mongo/db/auth/authmocks"],
                  NO_CRUTCH=True)
 
 
@@ -622,6 +623,7 @@ env.StaticLibrary("alltools",
                            "coreserver",
                            "coredb",
                            "$BUILD_DIR/mongo/util/options_parser/options_parser",
+                           "$BUILD_DIR/mongo/db/auth/authmocks",
                            "notmongodormongos"])
 
 normalTools = [ "dump", "restore", "export", "import", "stat", "top", "2toku"]
@@ -684,7 +686,8 @@ test = testEnv.Install(
                        "gridfs",
                        "notmongodormongos",
                        "s/upgrade",
-                       "mocklib"]))
+                       "mocklib",
+                       "$BUILD_DIR/mongo/db/auth/authmocks"]))
 addBuildRpath(env, test)
 
 if len(testEnv.subst('$PROGSUFFIX')):

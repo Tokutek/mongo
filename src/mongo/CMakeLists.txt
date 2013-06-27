@@ -529,7 +529,7 @@ if (BUILD_TESTING)
   endforeach ()
   target_link_whole_libraries(collection_manager_test mocklib)
   target_link_whole_libraries(metadata_loader_test mocklib)
-  target_link_whole_libraries(shard_conn_test mocklib)
+  target_link_whole_libraries(shard_conn_test mocklib authmocks)
 
   foreach (test
       bson_template_evaluator_test

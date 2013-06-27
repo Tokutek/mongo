@@ -9,4 +9,5 @@ target_link_libraries(alltools LINK_PUBLIC
   coreserver
   coredb
   options_parser
+  authmocks
   )

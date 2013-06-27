@@ -42,6 +42,7 @@ link_recursive_deps(smokeTest
   gridfs
   s_upgrade
   mocklib
+  authmocks
   ${TokuKV_LIBRARIES}
   ${TOKUMX_SSL_LIBRARIES}
   )

@@ -77,6 +77,14 @@ target_link_libraries(authmongos LINK_PUBLIC
   authservercommon
   )
 
+add_library(authmocks STATIC
+  authz_manager_external_state_mock
+  )
+add_dependencies(authmocks generate_error_codes generate_action_types)
+target_link_libraries(authmocks
+  coredb
+  )
+
 if (BUILD_TESTING)
   foreach (test
       action_set_test
@@ -96,6 +104,8 @@ if (BUILD_TESTING)
       ${TOKUMX_SSL_LIBRARIES}
       )
   endforeach ()
+  target_link_libraries(authorization_manager_test authmocks)
+  target_link_libraries(authorization_session_test authmocks)
 endif ()
 
 install(FILES generate_action_types.py action_types.txt
