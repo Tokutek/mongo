@@ -62,16 +62,9 @@ namespace mongo {
     }
 #endif
 
-    bool initializeServerGlobalState() {
 
-        Listener::globalTicketHolder.resize( cmdLine.maxConns );
-
+    static bool forkServer() {
 #ifndef _WIN32
-        if (!fs::is_directory(cmdLine.socket)) {
-            cout << cmdLine.socket << " must be a directory" << endl;
-            return false;
-        }
-
         if (cmdLine.doFork) {
             fassert(16447, !cmdLine.logpath.empty() || cmdLine.logWithSyslog);
 
@@ -138,6 +131,24 @@ namespace mongo {
                 cout << "Cant reassign stdin while forking server process: " << strerror(errno) << endl;
                 return false;
             }
+        }
+#endif  // !defined(_WIN32)
+        return true;
+    }
+
+    void forkServerOrDie() {
+        if (!forkServer())
+            _exit(EXIT_FAILURE);
+    }
+
+    bool initializeServerGlobalState() {
+
+        Listener::globalTicketHolder.resize( cmdLine.maxConns );
+
+#ifndef _WIN32
+        if (!fs::is_directory(cmdLine.socket)) {
+            cout << cmdLine.socket << " must be a directory" << endl;
+            return false;
         }
 
         if (cmdLine.logWithSyslog) {
