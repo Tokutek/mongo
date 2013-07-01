@@ -1042,11 +1042,11 @@ namespace mongo {
         while (true) {
             int actualSignal = 0;
             int status = sigwait( &asyncSignals, &actualSignal );
-            fassert(16781, status == 0);
+            fassert(16854, status == 0);
             switch (actualSignal) {
             case SIGUSR1:
                 // log rotate signal
-                fassert(16782, rotateLogs());
+                fassert(16855, rotateLogs());
                 break;
             default:
                 // interrupt/terminate signal
