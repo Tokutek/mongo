@@ -93,6 +93,7 @@ target_link_libraries(mongocommon LINK_PUBLIC
 add_subdirectory(base)
 add_subdirectory(bson)
 add_subdirectory(db)
+add_subdirectory(logger)
 add_subdirectory(platform)
 add_subdirectory(plugins)
 add_subdirectory(s)
@@ -823,6 +824,12 @@ if (BUILD_TESTING)
       bson_validate_test
       )
     add_mongo_test(bson ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      rotatable_file_writer_test
+      )
+    add_mongo_test(logger ${test} ${test})
   endforeach ()
 
   foreach (test
