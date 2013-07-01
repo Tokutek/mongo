@@ -124,11 +124,11 @@ namespace mongo {
         /* for debugging purposes, show what the query and sort are */
         DEV {
             (log() << "\n---- query BSON\n" <<
-             pQueryObj->jsonString(Strict, 1) << "\n----\n").flush();
+             pQueryObj->jsonString(Strict, 1) << "\n----\n");
             (log() << "\n---- sort BSON\n" <<
-             pSortObj->jsonString(Strict, 1) << "\n----\n").flush();
+             pSortObj->jsonString(Strict, 1) << "\n----\n");
             (log() << "\n---- fullName\n" <<
-             fullName << "\n----\n").flush();
+             fullName << "\n----\n");
         }
 
         // Create the necessary context to use a Cursor, including taking a namespace read lock,

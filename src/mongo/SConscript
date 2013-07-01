@@ -54,7 +54,8 @@ env.SConscript(['base/SConscript',
                 'logger/SConscript',
                 'platform/SConscript',
                 's/SConscript',
-                'unittest/SConscript'])
+                'unittest/SConscript',
+                'util/concurrency/SConscript'])
 
 allPlugins = env.SConscript(['plugins/SConscript'])
 
@@ -78,7 +79,9 @@ env.StaticLibrary('foundation',
                     ],
                   LIBDEPS=['stacktrace',
                            '$BUILD_DIR/mongo/base/base',
+                           '$BUILD_DIR/mongo/logger/logger',
                            '$BUILD_DIR/mongo/platform/platform',
+                           '$BUILD_DIR/mongo/util/concurrency/thread_name',
                            '$BUILD_DIR/third_party/shim_boost'])
 
 env.CppUnitTest('text_test', 'util/text_test.cpp', LIBDEPS=['foundation'])
@@ -167,7 +170,6 @@ commonFiles = [ "pch.cpp",
                 "util/intrusive_counter.cpp",
                 "util/util.cpp",
                 "util/trace.cpp",
-                "util/ramlog.cpp",
                 "util/progress_meter.cpp",
                 "util/concurrency/task.cpp",
                 "util/concurrency/thread_pool.cpp",
@@ -250,6 +252,7 @@ env.StaticLibrary('mongocommon', commonFiles,
                            'stacktrace',
                            'stringutils',
                            'fail_point',
+                           'util/concurrency/thread_name',
                            '$BUILD_DIR/third_party/pcrecpp',
                            '$BUILD_DIR/third_party/murmurhash3/murmurhash3',
                            '$BUILD_DIR/third_party/shim_boost'] +

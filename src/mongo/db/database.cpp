@@ -175,7 +175,7 @@ namespace mongo {
             if (db == NULL) {
                 StringData dbname = _todb( ns );
                 DBs &m = _paths[path];
-                if( logLevel >= 1 || m.size() > 40 || DEBUG_BUILD ) {
+                if( logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1)) || m.size() > 40 || DEBUG_BUILD ) {
                     log() << "opening db: " << (path==dbpath?"":path) << ' ' << dbname << endl;
                 }
 

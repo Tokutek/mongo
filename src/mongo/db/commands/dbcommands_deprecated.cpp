@@ -101,7 +101,7 @@ namespace mongo {
             string ns = dbname + "." + cmdObj.firstElement().valuestrsafe();
             Collection *cl = getCollection(ns);
             if ( !cmdLine.quiet )
-                tlog() << "CMD: validate " << ns << endl;
+                MONGO_TLOG(0) << "CMD: validate " << ns << endl;
 
             if ( ! cl ) {
                 errmsg = "ns not found";

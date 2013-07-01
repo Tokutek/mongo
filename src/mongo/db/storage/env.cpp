@@ -1203,41 +1203,41 @@ namespace mongo {
                 case TOKUDB_MVCC_DICTIONARY_TOO_NEW:
                     throw RetryableException::MvccDictionaryTooNew();
                 case TOKUDB_HUGE_PAGES_ENABLED:
-                    LOG(LL_ERROR) << endl << endl
-                                  << "************************************************************" << endl
-                                  << "                                                            " << endl
-                                  << "                        @@@@@@@@@@@                         " << endl
-                                  << "                      @@'         '@@                       " << endl
-                                  << "                     @@    _     _  @@                      " << endl
-                                  << "                     |    (.)   (.)  |                      " << endl
-                                  << "                     |             ` |                      " << endl
-                                  << "                     |        >    ' |                      " << endl
-                                  << "                     |     .----.    |                      " << endl
-                                  << "                     ..   |.----.|  ..                      " << endl
-                                  << "                      ..  '      ' ..                       " << endl
-                                  << "                        .._______,.                         " << endl
-                                  << "                                                            " << endl
-                                  << " TokuMX will not run with transparent huge pages enabled.   " << endl
-                                  << " Please disable them to continue.                           " << endl
-                                  << " (echo never > /sys/kernel/mm/transparent_hugepage/enabled) " << endl
-                                  << "                                                            " << endl
-                                  << " The assertion failure you are about to see is intentional. " << endl
-                                  << "************************************************************" << endl
-                                  << endl;
+                    severe() << endl << endl
+                             << "************************************************************" << endl
+                             << "                                                            " << endl
+                             << "                        @@@@@@@@@@@                         " << endl
+                             << "                      @@'         '@@                       " << endl
+                             << "                     @@    _     _  @@                      " << endl
+                             << "                     |    (.)   (.)  |                      " << endl
+                             << "                     |             ` |                      " << endl
+                             << "                     |        >    ' |                      " << endl
+                             << "                     |     .----.    |                      " << endl
+                             << "                     ..   |.----.|  ..                      " << endl
+                             << "                      ..  '      ' ..                       " << endl
+                             << "                        .._______,.                         " << endl
+                             << "                                                            " << endl
+                             << " TokuMX will not run with transparent huge pages enabled.   " << endl
+                             << " Please disable them to continue.                           " << endl
+                             << " (echo never > /sys/kernel/mm/transparent_hugepage/enabled) " << endl
+                             << "                                                            " << endl
+                             << " The assertion failure you are about to see is intentional. " << endl
+                             << "************************************************************" << endl
+                             << endl;
                     verify(false);
                 case TOKUDB_UPGRADE_FAILURE:
-                    LOG(LL_ERROR) << endl << endl;
-                    LOG(LL_ERROR) << "************************************************************" << endl;
-                    LOG(LL_ERROR) << endl;
-                    LOG(LL_ERROR) << " Detected an unclean shutdown during version upgrade." << endl;
-                    LOG(LL_ERROR) << " Before upgrading, you must perform a clean shutdown of the" << endl;
-                    LOG(LL_ERROR) << " old version of TokuMX before starting the new version." << endl;
-                    LOG(LL_ERROR) << endl;
-                    LOG(LL_ERROR) << " You must go back to the old version, recover, and then" << endl;
-                    LOG(LL_ERROR) << " shut down cleanly before upgrading." << endl;
-                    LOG(LL_ERROR) << endl;
-                    LOG(LL_ERROR) << " The assertion failure you are about to see is intentional." << endl;
-                    LOG(LL_ERROR) << "************************************************************" << endl;
+                    severe() << endl << endl
+                             << "************************************************************" << endl
+                             << endl
+                             << " Detected an unclean shutdown during version upgrade." << endl
+                             << " Before upgrading, you must perform a clean shutdown of the" << endl
+                             << " old version of TokuMX before starting the new version." << endl
+                             << endl
+                             << " You must go back to the old version, recover, and then" << endl
+                             << " shut down cleanly before upgrading." << endl
+                             << endl
+                             << " The assertion failure you are about to see is intentional." << endl
+                             << "************************************************************" << endl;
                     // uassert(17357, "for below SystemException");
                     throw SystemException(error, 17357, "Detected an unclean shutdown during version upgrade.");
                 default: 

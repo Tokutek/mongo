@@ -58,7 +58,7 @@ namespace mongo {
         
         if ( _total > 0 ) {
             int per = (int)( ( (double)_done * 100.0 ) / (double)_total );
-            Nullstream& out = log();
+            LogstreamBuilder out = log();
             if (_parent != NULL) {
                 out << "\t\t" << treeString() << endl;
             } else {

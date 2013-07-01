@@ -1,3 +1,5 @@
+add_subdirectory(concurrency)
+
 add_library(stacktrace STATIC
   stacktrace
   )
@@ -20,7 +22,9 @@ add_dependencies(foundation generate_error_codes generate_action_types)
 target_link_libraries(foundation LINK_PUBLIC
   stacktrace
   base
+  logger
   platform
+  thread_name
   ${Boost_LIBRARIES}
   )
 
@@ -34,7 +38,6 @@ add_library(mongocommon_util STATIC
   intrusive_counter
   util
   trace
-  ramlog
   progress_meter
   percentage_progress_meter
   concurrency/task
@@ -65,6 +68,7 @@ target_link_libraries(mongocommon_util LINK_PUBLIC
   stacktrace
   stringutils
   fail_point
+  thread_name
   ${PCRE_LIBRARIES}
   murmurhash3
   ${Boost_LIBRARIES}

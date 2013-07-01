@@ -22,6 +22,11 @@
 #include <iostream>
 #include <map>
 
+#include "mongo/base/init.h"
+#include "mongo/logger/console_appender.h"
+#include "mongo/logger/log_manager.h"
+#include "mongo/logger/message_event_utf8_encoder.h"
+#include "mongo/logger/message_log_domain.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
 
@@ -30,6 +35,8 @@ namespace mongo {
     namespace unittest {
 
         namespace {
+            logger::MessageLogDomain* unittestOutput =
+                logger::globalLogManager()->getNamedDomain("unittest");
             typedef std::map<std::string, Suite*> SuiteMap;
 
             inline SuiteMap& _allSuites() {
@@ -38,6 +45,20 @@ namespace mongo {
             }
 
         }  // namespace
+
+        logger::LogstreamBuilder log() {
+            return LogstreamBuilder(unittestOutput, getThreadName(), logger::LogSeverity::Log());
+        }
+
+        MONGO_INITIALIZER_WITH_PREREQUISITES(UnitTestOutput, ("GlobalLogManager", "default"))(
+                InitializerContext*) {
+
+            unittestOutput->attachAppender(
+                    logger::MessageLogDomain::AppenderAutoPtr(
+                            new logger::ConsoleAppender<logger::MessageLogDomain::Event>(
+                                    new logger::MessageEventDetailsEncoder)));
+            return Status::OK();
+        }
 
         class Result {
         public:

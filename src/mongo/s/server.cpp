@@ -50,6 +50,7 @@
 #include "mongo/scripting/engine.h"
 #include "mongo/util/admin_access.h"
 #include "mongo/util/concurrency/task.h"
+#include "mongo/util/concurrency/thread_name.h"
 #include "mongo/util/exception_filter_win32.h"
 #include "mongo/util/log.h"
 #include "mongo/util/net/message.h"
@@ -235,7 +236,8 @@ namespace mongo {
     void init() {
         serverID.init();
 
-        Logstream::get().addGlobalTee( new RamLog("global") );
+        logger::globalLogDomain()->attachAppender(
+                logger::MessageLogDomain::AppenderAutoPtr(new RamLogAppender(new RamLog("global"))));
     }
 
     void start( const MessageServer::Options& opts ) {
@@ -454,7 +456,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
     }
 
     if ( params.count( "test" ) ) {
-        logLevel = 5;
+        ::mongo::logger::globalLogDomain()->setMinimumLoggedSeverity(::mongo::logger::LogSeverity::Debug(5));
         StartupTest::runTests();
         cout << "tests passed" << endl;
         ::_exit(EXIT_SUCCESS);

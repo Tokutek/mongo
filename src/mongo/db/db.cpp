@@ -66,6 +66,7 @@
 #include "mongo/scripting/engine.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/task.h"
+#include "mongo/util/concurrency/thread_name.h"
 #include "mongo/util/exception_filter_win32.h"
 #include "mongo/util/net/message_server.h"
 #include "mongo/util/ntservice.h"
@@ -654,13 +655,15 @@ namespace mongo {
 
         Client::initThread("initandlisten");
 
-        Logstream::get().addGlobalTee( new RamLog("global") );
+        logger::globalLogDomain()->attachAppender(
+                logger::MessageLogDomain::AppenderAutoPtr(
+                        new RamLogAppender(new RamLog("global"))));
 
         bool is32bit = sizeof(int*) == 4;
 
         {
             ProcessId pid = ProcessId::getCurrent();
-            Nullstream& l = log();
+            LogstreamBuilder l = log();
             l << "TokuMX starting : pid=" << pid << " port=" << cmdLine.port << " dbpath=" << dbpath;
             l << ( is32bit ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() << endl;
         }

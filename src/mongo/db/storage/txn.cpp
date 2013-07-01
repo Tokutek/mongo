@@ -61,12 +61,7 @@ namespace mongo {
                  _flags(parent == NULL
                         ? flags
                         : parent->_flags)
-        {
-            DEV {
-                LOG(3) << "begin txn " << _db_txn << " (" << (parent == NULL ? NULL : parent->_db_txn)
-                       << ", " << (parent == NULL ? flags : DB_INHERIT_ISOLATION) << ")" << endl;
-            }
-        }
+        {}
 
         Txn::~Txn() {
             if (isLive()) {
@@ -76,14 +71,12 @@ namespace mongo {
 
         void Txn::commit(int flags) {
             dassert(isLive());
-            DEV { LOG(3) << "commit txn " << _db_txn << " with flags " << flags << endl; }
             storage::commit_txn(_db_txn, flags);
             _db_txn = NULL;
         }
 
         void Txn::abort() {
             dassert(isLive());
-            DEV { LOG(3) << "abort txn " << _db_txn << endl; }
             storage::abort_txn(_db_txn);
             _db_txn = NULL;
         }

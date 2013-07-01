@@ -209,7 +209,7 @@ namespace ThreadedTests {
             cc().shutdown();
         }
         virtual void validate() {
-            log() << "mongomutextest validate" << endl;
+            mongo::unittest::log() << "mongomutextest validate" << endl;
             ASSERT( ! Lock::isReadLocked() );
             ASSERT( wToXSuccessfulUpgradeCount >= 39 * N / 2000 );
             {
@@ -601,10 +601,13 @@ namespace ThreadedTests {
 #endif
                             DEV {
                                 // a _DEBUG buildbot might be slow, try to avoid false positives
-                                log() << "warning lock upgrade was slow " << t.millis() << endl;
+                                mongo::unittest::log() <<
+                                    "warning lock upgrade was slow " << t.millis() << endl;
                             }
                             else {
-                                log() << "assertion failure: lock upgrade was too slow: " << t.millis() << endl;
+                                mongo::unittest::log() <<
+                                    "assertion failure: lock upgrade was too slow: " <<
+                                    t.millis() << endl;
                                 ASSERT( false );
                             }
                         }
@@ -902,7 +905,7 @@ namespace ThreadedTests {
                 _hotel.checkOut();
 
                 if( ( i % ( checkIns / 10 ) ) == 0 )
-                    log() << "checked in " << i << " times..." << endl;
+                    mongo::unittest::log() << "checked in " << i << " times..." << endl;
 
             }
 

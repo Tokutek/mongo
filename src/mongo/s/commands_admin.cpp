@@ -739,7 +739,7 @@ namespace mongo {
                     }
                 }
 
-                tlog() << "CMD: shardcollection: " << cmdObj << endl;
+                MONGO_TLOG(0) << "CMD: shardcollection: " << cmdObj << endl;
 
                 config->shardCollection( ns , proposedKey , careAboutUnique , &initSplits );
 
@@ -764,7 +764,8 @@ namespace mongo {
 
                         BSONObj moveResult;
                         if ( ! chunk->moveAndCommit( to , moveResult ) ) {
-                            warning() << "Couldn't move chunk " << chunk << " to shard "  << to
+                            warning().stream()
+                                      << "Couldn't move chunk " << chunk << " to shard "  << to
                                       << " while sharding collection " << ns << ". Reason: "
                                       <<  moveResult << endl;
                         }
@@ -786,9 +787,10 @@ namespace mongo {
                             if ( ! subSplits.empty() ){
                                 BSONObj splitResult;
                                 if ( ! currentChunk->multiSplit( subSplits , splitResult ) ){
-                                    warning() << "Couldn't split chunk " << currentChunk
-                                              << " while sharding collection " << ns << ". Reason: "
-                                              << splitResult << endl;
+                                    warning().stream()
+                                        << "Couldn't split chunk " << currentChunk
+                                        << " while sharding collection " << ns << ". Reason: "
+                                        << splitResult << endl;
                                 }
                                 subSplits.clear();
                             }
@@ -961,7 +963,7 @@ namespace mongo {
                 }
 
                 verify(chunk.get());
-                log() << "splitting: " << ns << "  shard: " << chunk << endl;
+                log().stream() << "splitting: " << ns << "  shard: " << chunk << endl;
 
                 BSONObj res;
                 bool worked;
@@ -1071,7 +1073,7 @@ namespace mongo {
                     return false;
                 }
 
-                tlog() << "CMD: movechunk: " << cmdObj << endl;
+                MONGO_TLOG(0) << "CMD: movechunk: " << cmdObj << endl;
 
                 BSONObj res;
                 if ( ! c->moveAndCommit(to, res) ) {

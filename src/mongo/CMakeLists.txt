@@ -132,6 +132,16 @@ set(client_sources
   db/json.cpp
   db/lasterror.cpp
   db/dbmessage.cpp
+  logger/console.cpp
+  logger/log_manager.cpp
+  logger/log_severity.cpp
+  logger/logger.cpp
+  logger/logstream_builder.cpp
+  logger/message_event_utf8_encoder.cpp
+  logger/message_log_domain.cpp
+  logger/ramlog.cpp
+  logger/rotatable_file_manager.cpp
+  logger/rotatable_file_writer.cpp
   pch.cpp
   platform/backtrace.cpp
   platform/posix_fadvise.cpp
@@ -144,6 +154,7 @@ set(client_sources
   util/concurrency/spin_lock.cpp
   util/concurrency/synchronization.cpp
   util/concurrency/task.cpp
+  util/concurrency/thread_name.cpp
   util/concurrency/thread_pool.cpp
   util/concurrency/mutexdebugger.cpp
   util/debug_util.cpp
@@ -167,7 +178,6 @@ set(client_sources
   util/password.cpp
   util/processinfo.cpp
   util/processinfo_${system_suffix}.cpp
-  util/ramlog.cpp
   util/signal_handlers.cpp
   util/stringutils.cpp
   util/text.cpp
@@ -286,6 +296,7 @@ foreach (client_header_dir
     db/repl
     db/ops
     db/storage
+    logger
     platform
     s
     scripting
@@ -827,6 +838,7 @@ if (BUILD_TESTING)
   endforeach ()
 
   foreach (test
+      log_test
       rotatable_file_writer_test
       )
     add_mongo_test(logger ${test} ${test})

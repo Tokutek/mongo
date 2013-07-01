@@ -253,7 +253,7 @@ namespace mongo {
                                         << manager->_maxCollVersion.toString()
                                         << ", this should be rare";
 
-                warning() << errMsg << endl;
+                warning() << *errMsg << endl;
 
                 manager->_maxCollVersion = ChunkVersion();
                 manager->_chunksMap.clear();
