@@ -184,7 +184,7 @@ namespace {
         return checkAuthForPrivilege(Privilege(resource, actions)).isOK();
     }
 
-    Status AuthorizationSession::checkAuthForQuery(const std::string& ns) {
+    Status AuthorizationSession::checkAuthForQuery(const std::string& ns, const BSONObj& query) {
         verify(!NamespaceString::isCommand(ns));
         if (!checkAuthorization(ns, ActionType::find)) {
             return Status(ErrorCodes::Unauthorized,
@@ -194,16 +194,40 @@ namespace {
         return Status::OK();
     }
 
-    Status AuthorizationSession::checkAuthForInsert(const std::string& ns) {
-        if (!checkAuthorization(ns, ActionType::insert)) {
+    Status AuthorizationSession::checkAuthForGetMore(const std::string& ns, long long cursorID) {
+        if (!checkAuthorization(ns, ActionType::find)) {
             return Status(ErrorCodes::Unauthorized,
-                          mongoutils::str::stream() << "not authorized for insert on " << ns,
+                          mongoutils::str::stream() << "not authorized for getmore on " << ns,
                           0);
         }
         return Status::OK();
     }
 
-    Status AuthorizationSession::checkAuthForUpdate(const std::string& ns, bool upsert) {
+    Status AuthorizationSession::checkAuthForInsert(const std::string& ns,
+                                                    const BSONObj& document) {
+        if (nsToCollectionSubstring(ns) == "system.indexes") {
+            std::string indexNS = document["ns"].String();
+            if (!checkAuthorization(indexNS, ActionType::ensureIndex)) {
+                return Status(ErrorCodes::Unauthorized,
+                              mongoutils::str::stream() << "not authorized to create index on " <<
+                                      indexNS,
+                              0);
+            }
+        } else {
+            if (!checkAuthorization(ns, ActionType::insert)) {
+                return Status(ErrorCodes::Unauthorized,
+                              mongoutils::str::stream() << "not authorized for insert on " << ns,
+                              0);
+            }
+        }
+
+        return Status::OK();
+    }
+
+    Status AuthorizationSession::checkAuthForUpdate(const std::string& ns,
+                                                    const BSONObj& query,
+                                                    const BSONObj& update,
+                                                    bool upsert) {
         if (!upsert) {
             if (!checkAuthorization(ns, ActionType::update)) {
                 return Status(ErrorCodes::Unauthorized,
@@ -224,17 +248,13 @@ namespace {
         return Status::OK();
     }
 
-    Status AuthorizationSession::checkAuthForDelete(const std::string& ns) {
+    Status AuthorizationSession::checkAuthForDelete(const std::string& ns, const BSONObj& query) {
         if (!checkAuthorization(ns, ActionType::remove)) {
             return Status(ErrorCodes::Unauthorized,
                           mongoutils::str::stream() << "not authorized to remove from " << ns,
                           0);
         }
         return Status::OK();
-    }
-
-    Status AuthorizationSession::checkAuthForGetMore(const std::string& ns) {
-        return checkAuthForQuery(ns);
     }
 
     Privilege AuthorizationSession::_modifyPrivilegeForSpecialCases(const Privilege& privilege) {
