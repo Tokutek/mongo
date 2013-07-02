@@ -26,6 +26,7 @@
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/privilege.h"
+#include "mongo/db/commands/shutdown.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/json.h"

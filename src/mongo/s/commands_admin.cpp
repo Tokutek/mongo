@@ -25,6 +25,7 @@
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/commands/shutdown.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/field_parser.h"

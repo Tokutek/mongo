@@ -92,6 +92,7 @@ add_library(coredb STATIC
   commands/mr_common
   commands/rename_collection_common
   commands/server_status
+  commands/shutdown
   commands/parameters
   commands/user_management_commands.cpp
   pipeline/pipeline

@@ -23,9 +23,6 @@
 #include <vector>
 
 #include "mongo/base/status.h"
-#include "mongo/db/auth/action_set.h"
-#include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/client_basic.h"
 #include "mongo/db/jsobj.h"
@@ -354,38 +351,6 @@ namespace mongo {
             errmsg = name + " is not supported when running with authentication enabled";
             return false;
         }
-    };
-
-    class CmdShutdown : public Command {
-    public:
-        virtual bool adminOnly() const { return true; }
-        virtual bool localHostOnlyIfNoAuth(const BSONObj& cmdObj) { return true; }
-        virtual bool logTheOp() {
-            return false;
-        }
-        virtual bool slaveOk() const {
-            return true;
-        }
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
-            ActionSet actions;
-            actions.addAction(ActionType::shutdown);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
-        }
-        virtual bool requiresShardedOperationScope() const { return false; }
-        virtual LockType locktype() const { return NONE; }
-        virtual bool requiresSync() const { return false; }
-        // Cannot have a transaction while shutting down the server.
-        virtual bool needsTxn() const { return false; }
-        virtual int txnFlags() const { return noTxnFlags(); }
-        virtual bool canRunInMultiStmtTxn() const { return false; }
-        virtual OpSettings getOpSettings() const { return OpSettings(); }
-        virtual void help( stringstream& help ) const;
-        CmdShutdown() : Command("shutdown") {}
-        bool run(const string& dbname, BSONObj& cmdObj, int options, string& errmsg, BSONObjBuilder& result, bool fromRepl);
-    private:
-        bool shutdownHelper();
     };
 
     bool _runCommands(const char *ns, const BSONObj &cmdObj, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions);

@@ -37,6 +37,7 @@
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/client.h"
+#include "mongo/db/commands/shutdown.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/cursor.h"
