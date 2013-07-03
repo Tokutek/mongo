@@ -30,7 +30,7 @@
 namespace mongo {
 
     AuthInfo::AuthInfo() {
-        user = "__system";
+        user = UserName("__system", "local");
     }
     AuthInfo internalSecurity;
 

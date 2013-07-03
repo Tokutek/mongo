@@ -34,7 +34,7 @@ namespace mongo {
      */
     struct AuthInfo {
         AuthInfo();
-        std::string user;
+        UserName user;
         std::string pwd;
         BSONObj authParams;
     };
