@@ -490,9 +490,10 @@ def runTest(test, testnum):
         vlog.flush()
 
         if quiet:
-            qlog.write("%s %d %s\n" % (ternary(r == 0, "ok", "not ok"),
-                                       testnum,
-                                       os.path.basename(path)))
+            if r == 0:
+                qlog.write('ok %d %s\n' % (testnum, os.path.basename(path)))
+            else:
+                qlog.write('not ok %d %s # exit %d' % (testnum, os.path.basename(path), r))
             qlog.flush()
             if r != 0:
                 tempfile.seek(0)
