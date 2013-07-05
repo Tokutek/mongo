@@ -377,7 +377,7 @@ def skipTest(path):
 
     return False
 
-def runTest(test):
+def runTest(test, testnum):
     # test is a tuple of ( filename , usedb<bool> )
     # filename should be a js file to run
     # usedb is true if the test expects a mongod to be running
@@ -431,9 +431,11 @@ def runTest(test):
     if quiet:
         vlog = tests_log
         qlog = sys.stdout
+        tlog = sys.stderr
     else:
         vlog = sys.stdout
         qlog = None
+        tlog = None
 
     vlog.write(" *******************************************\n")
     vlog.write("         Test : %s ...\n" % os.path.basename(path))
@@ -488,14 +490,15 @@ def runTest(test):
         vlog.flush()
 
         if quiet:
-            qlog.write("%s%s : %s\n" % ((" " * max(0, 64 - len(os.path.basename(path)))),
-                                        os.path.basename(path),
-                                        ternary(r == 0, "ok", "fail")))
+            qlog.write("%s %d %s\n" % (ternary(r == 0, "ok", "not ok"),
+                                       testnum,
+                                       os.path.basename(path)))
+            qlog.flush()
             if r != 0:
                 tempfile.seek(0)
                 for line in tempfile:
-                    qlog.write(line)
-            qlog.flush()
+                    tlog.write(line)
+                tlog.flush()
         if r != 0:
             raise TestExitFailure(path, r)
     finally:
@@ -542,10 +545,12 @@ def run_tests(tests):
                 master.wait_for_repl()
 
             tests_run = 0
+            if quiet:
+                sys.stdout.write('1..%d\n' % len(tests))
             for tests_run, test in enumerate(tests):
                 try:
                     fails.append(test)
-                    runTest(test)
+                    runTest(test, tests_run + 1)
                     fails.pop()
                     winners.append(test)
 
