@@ -439,7 +439,7 @@ namespace mongo {
         if ( errmsg ) {
             problem() << errmsg << endl;
         }
-        printStackTrace();
+        printStackTrace(cerr);
     }
 
 }

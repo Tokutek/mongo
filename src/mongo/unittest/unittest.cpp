@@ -47,11 +47,11 @@ namespace mongo {
                 std::stringstream ss;
 
                 char result[128];
-                sprintf(result, "%-20s | tests: %4d | fails: %4d | assert calls: %6d\n", _name.c_str(), _tests, _fails, _asserts);
+                sprintf(result, "# %-20s | tests: %4d | fails: %4d | assert calls: %6d\n", _name.c_str(), _tests, _fails, _asserts);
                 ss << result;
 
                 for ( std::vector<std::string>::iterator i=_messages.begin(); i!=_messages.end(); i++ ) {
-                    ss << "\t" << *i << '\n';
+                    ss << "#\t" << *i << std::endl;
                 }
 
                 return ss.str();
@@ -112,11 +112,7 @@ namespace mongo {
             _tests.push_back(new TestHolder(name, testFn));
         }
 
-        Result * Suite::run( const std::string& filter, int runsPerTest ) {
-
-            LOG(1) << "\t about to setupTests" << std::endl;
-            setupTests();
-            LOG(1) << "\t done setupTests" << std::endl;
+        Result * Suite::run( const std::string& filter, int runsPerTest, int alreadyRan ) {
 
             Result * r = new Result( _name );
             Result::cur = r;
@@ -154,8 +150,14 @@ namespace mongo {
                     err << " caught int " << x << " in test " << tc->getName();
                 }
 
-                if ( ! passes ) {
+                if (passes) {
+                    std::cout << "ok " << r->_tests + alreadyRan << " " << tc->getName() << std::endl;
+                    std::cout.flush();
+                }
+                else {
                     std::string s = err.str();
+                    std::cout << "not ok " << r->_tests + alreadyRan << " " << tc->getName() << " # " << s << std::endl;
+                    std::cout.flush();
                     log() << "FAIL: " << s << std::endl;
                     r->_fails++;
                     r->_messages.push_back( s );
@@ -171,6 +173,18 @@ namespace mongo {
             log() << "\t DONE running tests" << std::endl;
 
             return r;
+        }
+
+        int Suite::numTests(const std::string& filter) const {
+            int numTests = 0;
+            for ( std::vector<TestHolder*>::const_iterator i=_tests.begin(); i!=_tests.end(); i++ ) {
+                const TestHolder* const tc = *i;
+                if ( filter.size() && tc->getName().find( filter ) == std::string::npos ) {
+                    continue;
+                }
+                numTests++;
+            }
+            return numTests;
         }
 
         int Suite::run( const std::vector<std::string>& suites , const std::string& filter , int runsPerTest ) {
@@ -197,18 +211,35 @@ namespace mongo {
                 }
             }
 
+            LOG(1) << "\t about to setupTests" << std::endl;
+            for ( std::vector<std::string>::iterator i=torun.begin(); i!=torun.end(); i++ ) {
+                Suite* s = _allSuites()[*i];
+                s->setupTests();
+            }
+            LOG(1) << "\t done setupTests" << std::endl;
+
+            int totalNumTests = 0;
+            for ( std::vector<std::string>::iterator i=torun.begin(); i!=torun.end(); i++ ) {
+                Suite* s = _allSuites()[*i];
+                totalNumTests += s->numTests(filter);
+            }
+            std::cout << "1.." << totalNumTests << std::endl;
+            std::cout.flush();
+
             std::vector<Result*> results;
 
+            int alreadyRan = 0;
             for ( std::vector<std::string>::iterator i=torun.begin(); i!=torun.end(); i++ ) {
                 std::string name = *i;
                 Suite* s = _allSuites()[name];
                 fassert( 16145,  s );
 
                 log() << "going to run suite: " << name << std::endl;
-                results.push_back( s->run( filter, runsPerTest ) );
+                results.push_back( s->run( filter, runsPerTest, alreadyRan ) );
+                alreadyRan += s->numTests(filter);
             }
 
-            log() << "**************************************************" << std::endl;
+            std::cout << "# ************************************************" << std::endl;
 
             int rc = 0;
 
@@ -218,7 +249,7 @@ namespace mongo {
 
             for ( std::vector<Result*>::iterator i=results.begin(); i!=results.end(); i++ ) {
                 Result* r = *i;
-                log() << r->toString();
+                cout << r->toString();
                 if ( abs( r->rc() ) > abs( rc ) )
                     rc = r->rc();
 
@@ -232,7 +263,7 @@ namespace mongo {
             totals._fails = fails;
             totals._asserts = asserts;
 
-            log() << totals.toString(); // includes endl
+            cout << totals.toString();
 
             return rc;
         }

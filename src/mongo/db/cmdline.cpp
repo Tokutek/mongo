@@ -183,7 +183,7 @@ namespace mongo {
             } else if ( s.find( "=FALSE" ) == string::npos ) {
                 ss << line << endl;
             } else {
-                cout << "warning: remove or comment out this line by starting it with \'#\', skipping now : " << line << endl;
+                cerr << "warning: remove or comment out this line by starting it with \'#\', skipping now : " << line << endl;
             }
         }
         return;
