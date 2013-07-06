@@ -245,7 +245,7 @@ namespace mongo {
 
             void add(const std::string& name, const TestFunction& testFn);
 
-            Result * run( const std::string& filter , int runsPerTest );
+            Result * run( const std::string& filter , int runsPerTest, int alreadyRan );
 
             static int run( const std::vector<std::string>& suites , const std::string& filter , int runsPerTest );
 
@@ -262,6 +262,8 @@ namespace mongo {
 
         private:
             typedef std::vector<TestHolder *> TestHolderList;
+
+            int numTests(const std::string& filter) const;
 
             template <typename T>
             static void runTestObject() {
