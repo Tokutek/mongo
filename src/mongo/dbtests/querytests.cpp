@@ -1058,7 +1058,7 @@ namespace QueryTests {
                 fast = t.micros();
             }
 
-            cout << "HelperTest  slow:" << slow << " fast:" << fast << endl;
+            cerr << "HelperTest  slow:" << slow << " fast:" << fast << endl;
             transaction.commit();
         }
     };

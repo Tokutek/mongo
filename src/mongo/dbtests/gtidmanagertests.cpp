@@ -69,8 +69,8 @@ namespace mongo {
             uint64_t hash;
             GTID gtid;
             mgr.getGTIDForPrimary(&gtid, &ts, &hash);
-            cout << gtid.toString() << endl;
-            cout << currMin.toString() <<endl;
+            cerr << gtid.toString() << endl;
+            cerr << currMin.toString() <<endl;
             ASSERT(GTID::cmp(gtid, currMin) == 0);
             ASSERT(GTID::cmp(gtid, mgr._minLiveGTID) == 0);
             ASSERT(GTID::cmp(gtid, mgr._lastLiveGTID) == 0);
