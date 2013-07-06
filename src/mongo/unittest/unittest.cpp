@@ -249,7 +249,7 @@ namespace mongo {
 
             for ( std::vector<Result*>::iterator i=results.begin(); i!=results.end(); i++ ) {
                 Result* r = *i;
-                cout << r->toString();
+                std::cout << r->toString();
                 if ( abs( r->rc() ) > abs( rc ) )
                     rc = r->rc();
 
@@ -263,7 +263,7 @@ namespace mongo {
             totals._fails = fails;
             totals._asserts = asserts;
 
-            cout << totals.toString();
+            std::cout << totals.toString();
 
             return rc;
         }
