@@ -67,10 +67,7 @@ def addSmokeSuite( name, suitefile ):
     # resolve an initial # in the suitefile
     suitefile = str(env.File(suitefile))
 
-    args = []
-    if has_option('smoke-quiet'):
-        args += ['--quiet']
-    args += ['--mode', 'files', '--from-file', suitefile]
+    args = smokeFlags + ['--mode', 'files', '--from-file', suitefile]
     addTest(name, [suitefile],
             utils.run_smoke_command(*args))
 
