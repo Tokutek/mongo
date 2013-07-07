@@ -106,4 +106,17 @@ namespace mongo {
         return ok;
     }
 
+    void AuthzManagerExternalStateMongod::getAllDatabaseNames(
+            std::vector<std::string>* dbnames) const {
+        getDatabaseNames(*dbnames);
+    }
+
+    std::vector<BSONObj> AuthzManagerExternalStateMongod::getAllV1PrivilegeDocsForDB(
+            const std::string& dbname) const {
+        Client::GodScope gs;
+        Client::ReadContext ctx(dbname);
+
+        return Helpers::findAll(dbname, BSONObj());
+    }
+
 } // namespace mongo
