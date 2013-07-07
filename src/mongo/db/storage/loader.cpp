@@ -43,6 +43,10 @@ namespace mongo {
             if (r != 0) {
                 handle_ydb_error(r);
             }
+            r = _loader->set_error_callback(_loader, error_callback, &_error_extra);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
         }
 
         Loader::~Loader() {
@@ -62,8 +66,21 @@ namespace mongo {
                 return 0;
             } catch (std::exception &e) {
                 info->ex = &e;
-                return -1;
             }
+            return -1;
+        }
+
+        void Loader::error_callback(DB *db, int i, int err,
+                                    DBT *key, DBT *val, void *extra) {
+            error_callback_extra *info = static_cast<error_callback_extra *>(extra);
+            str::stream errmsg;
+            errmsg << "Index build failed with code " << err << ".";
+            if (err == EINVAL) {
+                 errmsg << " This may be due to keys > 32kb or a document > 32mb." <<
+                           " Check the error log for " <<
+                           "\"Key too big ...\" or \"Row too big...\"";
+            }
+            info->errmsg = errmsg;
         }
 
         int Loader::put(DBT *key, DBT *val) {
@@ -74,11 +91,15 @@ namespace mongo {
             const int r = _loader->close(_loader);
             // Doesn't matter if the close succeded or not. It's dead to us now.
             _closed = true;
-            // Forward the callback-generated exception (an interrupting uassert).
-            if (r == -1) {
-                verify(_poll_extra.ex != NULL);
+            // Forward any callback-generated exception. Could be an error
+            // from the error callback or an interrupt from the poll function.
+            uassert( 16860, _error_extra.errmsg, _error_extra.errmsg.empty() );
+            if (_poll_extra.ex != NULL) {
                 throw *_poll_extra.ex;
             }
+            // Any other non-zero error code that didn't trigger the error
+            // callback or come from the poll function should be handled
+            // in some generic fashion by the caller.
             return r;
         }
 
