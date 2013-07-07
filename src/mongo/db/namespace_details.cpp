@@ -896,10 +896,6 @@ namespace mongo {
     void NamespaceDetails::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
-        if ((flags & NamespaceDetails::NO_UNIQUE_CHECKS) && _indexes.size() > 1) {
-            //wunimplemented("overwrite inserts on secondary keys right now don't work");
-            //uassert(16432, "can't do overwrite inserts when there are secondary keys yet", !overwrite || _indexes.size() == 1);
-        }
         for (int i = 0; i < nIndexes(); i++) {
             IndexDetails &idx = *_indexes[i];
             if (i == 0) {
@@ -923,8 +919,8 @@ namespace mongo {
         dassert(!obj.isEmpty());
         for (int i = 0; i < nIndexes(); i++) {
             IndexDetails &idx = *_indexes[i];
-
             if (i == 0) {
+                dassert(isPKIndex(idx));
                 idx.deletePair(pk, NULL, flags);
             } else {
                 BSONObjSet keys;
