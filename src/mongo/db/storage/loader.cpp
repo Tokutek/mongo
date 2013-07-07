@@ -47,7 +47,7 @@ namespace mongo {
 
         Loader::~Loader() {
             if (!_closed && _loader != NULL) {
-                int r = _loader->abort(_loader);
+                const int r = _loader->abort(_loader);
                 if (r != 0) {
                     problem() << "storage::~Loader, failed to close DB_LOADER, error: "
                               << r << endl;
@@ -72,12 +72,12 @@ namespace mongo {
 
         int Loader::close() {
             const int r = _loader->close(_loader);
+            // Doesn't matter if the close succeded or not. It's dead to us now.
+            _closed = true;
+            // Forward the callback-generated exception (an interrupting uassert).
             if (r == -1) {
                 verify(_poll_extra.ex != NULL);
                 throw *_poll_extra.ex;
-            }
-            if (r == 0) {
-                _closed = true;
             }
             return r;
         }
