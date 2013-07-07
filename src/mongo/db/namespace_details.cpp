@@ -1115,13 +1115,13 @@ namespace mongo {
                 try {
                     buildIndex(index);
                 }
-                catch (DBException) {
+                catch (...) {
                     _indexes.pop_back();
                     throw;
                 }
             }
         }
-        catch (DBException &) {
+        catch (...) {
             // Can't let the IndexDetails destructor get called on its own any more, see IndexDetails::close for why.
             index->close();
             throw;
