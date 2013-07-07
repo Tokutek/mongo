@@ -404,7 +404,7 @@ namespace mongo {
     // transactions, serializable cursors, and RMW (write) cursors.
     //
     // If row locks are to be acquired, we _must_ prelock here, since we
-    // pass DB_PRELOCKED to cursor operations.
+    // pass DB_PRELOCKED | DB_PRELOCKED_WRITE to cursor operations.
     //
     // We would ideally use the ydb prelocking API to prelock each interval
     // as we iterated (via advance()), because there may be multiple intervals
@@ -471,8 +471,8 @@ namespace mongo {
 
     int IndexCursor::getf_flags() {
         // Since all locktree locks are acquired on cursor creation,
-        // we should pass DB_PRELOCKED (see cursor_flags()).
-        const int lockFlags = DB_PRELOCKED;
+        // we should pass DB_PRELOCKED | DB_PRELOCKED_WRITE (see cursor_flags()).
+        const int lockFlags = DB_PRELOCKED | DB_PRELOCKED_WRITE;
         const int prefetchFlags = _numWanted > 0 ? DBC_DISABLE_PREFETCHING : 0;
         return lockFlags | prefetchFlags;
     }
