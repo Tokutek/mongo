@@ -69,8 +69,9 @@ def addSmokeSuite( name, suitefile ):
     # resolve an initial # in the suitefile
     suitefile = str(env.File(suitefile))
 
+    args = smokeFlags + ['--mode', 'files', '--from-file', suitefile]
     addTest(name, [suitefile],
-            utils.run_smoke_command('--mode', 'files', '--from-file', suitefile))
+            utils.run_smoke_command(*args))
 
 addSmoketest( "smoke", [ add_exe( "test" ), add_exe( "mongod" ), add_exe( "mongo" ) ] )
 addSmoketest( "smokePerf", [ add_exe("perftest") ]  )

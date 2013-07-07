@@ -673,9 +673,9 @@ if not has_option("skip-tarballs"):
             ['#buildscripts/make_archive.py',
              debuginfoBinaries],
             '$PYTHON ${SOURCES[0]} -o $TARGET '
-            '--transform distsrc=${SERVER_DIST_BASENAME}-debuginfo '
-            '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=${SERVER_DIST_BASENAME}-debuginfo/bin '
-            '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=${SERVER_DIST_BASENAME}-debuginfo/bin '
+            '--transform distsrc=${SERVER_DIST_BASENAME} '
+            '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=${SERVER_DIST_BASENAME}/bin '
+            '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=${SERVER_DIST_BASENAME}/bin '
             '${TEMPFILE(SOURCES[1:])}')
 
 #final alias

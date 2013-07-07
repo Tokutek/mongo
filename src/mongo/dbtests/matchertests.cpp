@@ -290,7 +290,7 @@ namespace MatcherTests {
             long normal = time( BSON( "x" << 5 ) , BSON( "x" << 5 ) );
             long all = time( BSON( "x" << BSON( "$all" << BSON_ARRAY( 5 ) ) ) , BSON( "x" << 5 ) );
 
-            cout << "normal: " << normal << " all: " << all << endl;
+            cerr << "normal: " << normal << " all: " << all << endl;
         }
     };
 
