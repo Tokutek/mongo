@@ -45,7 +45,7 @@ namespace mongo {
         void set_cleaner_iterations(uint32_t num_iterations);
 
         void handle_ydb_error(int error);
-        void handle_ydb_error_fatal(int error);
+        MONGO_COMPILER_NORETURN void handle_ydb_error_fatal(int error);
 
     } // namespace storage
 
