@@ -475,27 +475,27 @@ namespace mongo {
                     ;
             }
             if (error > 0) {
-                throw SystemException("You may have hit a bug. Check the error log for more details.", error, 16770);
+                throw SystemException(error, 16770, "You may have hit a bug. Check the error log for more details.");
             }
             switch (error) {
                 case DB_LOCK_NOTGRANTED:
-                    throw LockException("Lock not granted. Try restarting the transaction.", 16759);
+                    throw LockException(16759, "Lock not granted. Try restarting the transaction.");
                 case DB_LOCK_DEADLOCK:
-                    throw LockException("Deadlock detected during lock acquisition. Try restarting the transaction.", 16760);
+                    throw LockException(16760, "Deadlock detected during lock acquisition. Try restarting the transaction.");
                 case DB_KEYEXIST:
-                    throw Exception("Duplicate key error.", ASSERT_ID_DUPKEY);
+                    throw UserException(ASSERT_ID_DUPKEY, "Duplicate key error.");
                 case DB_NOTFOUND:
-                    throw Exception("Index key not found.", 16761);
+                    throw UserException(16761, "Index key not found.");
                 case DB_RUNRECOVERY:
-                    throw DataCorruptionException("Automatic environment recovery failed.", 16762);
+                    throw DataCorruptionException(16762, "Automatic environment recovery failed.");
                 case DB_BADFORMAT:
-                    throw DataCorruptionException("File-format error when reading dictionary from disk.", 16763);
+                    throw DataCorruptionException(16763, "File-format error when reading dictionary from disk.");
                 case TOKUDB_BAD_CHECKSUM:
-                    throw DataCorruptionException("Checksum mismatch when reading dictionary from disk.", 16764);
+                    throw DataCorruptionException(16764, "Checksum mismatch when reading dictionary from disk.");
                 case TOKUDB_NEEDS_REPAIR:
-                    throw DataCorruptionException("Repair requested when reading dictionary from disk.", 16765);
+                    throw DataCorruptionException(16765, "Repair requested when reading dictionary from disk.");
                 case TOKUDB_DICTIONARY_NO_HEADER:
-                    throw DataCorruptionException("No header found when reading dictionary from disk.", 16766);
+                    throw DataCorruptionException(16766, "No header found when reading dictionary from disk.");
                 case TOKUDB_MVCC_DICTIONARY_TOO_NEW:
                     throw RetryableException::MvccDictionaryTooNew();
                 case TOKUDB_HUGE_PAGES_ENABLED:
@@ -521,21 +521,30 @@ namespace mongo {
                                   << "************************************************************" << endl
                                   << endl;
                     verify(false);
-                default:
-                    throw Exception(str::stream() << "Unhandled ydb error: " << error, 16767);
+                default: 
+                {
+                    string s = str::stream() << "Unhandled ydb error: " << error;
+                    throw MsgAssertionException(16767, s);
+                }
             }
         }
 
-        void handle_ydb_error_fatal(int error) {
+        NOINLINE_DECL void handle_ydb_error_fatal(int error) {
             try {
                 handle_ydb_error(error);
             }
-            catch (Exception &e) {
+            catch (UserException &e) {
                 problem() << "fatal error " << e.getCode() << ": " << e.what() << endl;
                 problem() << e << endl;
                 fassertFailed(e.getCode());
             }
-            msgasserted(16853, mongoutils::str::stream() << "No storage exception thrown but one should have been thrown for error " << error);
+            catch (MsgAssertionException &e) {
+                problem() << "fatal error " << e.getCode() << ": " << e.what() << endl;
+                problem() << e << endl;
+                fassertFailed(e.getCode());
+            }                
+            problem() << "No storage exception thrown but one should have been thrown for error " << error << endl;
+            fassertFailed(16853);
         }
     
     } // namespace storage
