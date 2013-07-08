@@ -188,8 +188,11 @@ namespace mongo {
 
         // We already did the unique check above. We can just pass flags of zero.
         const int put_flags = (flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0;
-        int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, put_flags);
-        if (r != 0) {
+        const int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, put_flags);
+        if (r == EINVAL) {
+            uasserted( 16861, str::stream() << "Indexed insertion failed." <<
+                          " This may be due to keys > 32kb. Check the error log." );
+        } else if (r != 0) {
             storage::handle_ydb_error(r);
         }
         TOKULOG(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
