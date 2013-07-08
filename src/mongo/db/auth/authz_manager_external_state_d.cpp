@@ -20,6 +20,7 @@
 #include "mongo/db/auth/user_name.h"
 #include "mongo/db/client.h"
 #include "mongo/db/collection.h"
+#include "mongo/db/d_concurrency.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/namespacestring.h"
@@ -39,6 +40,9 @@ namespace mongo {
         {
             Client::GodScope gs;
             Client::AlternateTransactionStack altStack;
+            // TODO(spencer): Once we're no longer fully rebuilding the user cache on every change
+            // to user data we should remove the global lock
+            Lock::GlobalWrite w;
             client.insert(userNS, userObj);
         }
 
@@ -63,6 +67,9 @@ namespace mongo {
         {
             Client::GodScope gs;
             Client::AlternateTransactionStack altStack;
+            // TODO(spencer): Once we're no longer fully rebuilding the user cache on every change
+            // to user data we should remove the global lock
+            Lock::GlobalWrite w;
             client.update(userNS,
                           QUERY("user" << user.getUser() << "userSource" << BSONNULL),
                           updateObj);
