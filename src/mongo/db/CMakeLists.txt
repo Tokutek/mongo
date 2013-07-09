@@ -80,6 +80,7 @@ add_library(storage_global_params_impl STATIC
   )
 
 add_library(coredb STATIC
+  audit
   client_transaction
   opsettings
   commands.cpp

@@ -392,6 +392,7 @@ if get_option('allocator') == 'tcmalloc':
 
 env.StaticLibrary("coredb", [
         "client/parallel.cpp",
+        "db/audit.cpp",
         "db/client_transaction.cpp",
         "db/opsettings.cpp",
         "db/commands.cpp",
