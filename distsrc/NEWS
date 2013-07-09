@@ -1,6 +1,26 @@
 tokumx news
 ===========
 
+tokumx 1.0.2
+------------
+Release date: 2013-07-11
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.0.1.
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a bug introduced in tokumx 1.0.1 where lock timeouts and
+      deadlocks caused the connection to die unnecessarily. (#293, #301)
+
+    - Properly handle errors that arise during operation of the bulk
+      loader. (#295, #296)
+
+
 tokumx 1.0.0
 ------------
 Release date: 2013-06-19
