@@ -11,6 +11,13 @@ General
     - This release is focused on bug fixes since 1.0.1.
 
 
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Backported SERVER-1752 to improve the performance of some count()
+      queries by a factor of 2. (#300)
+
+
 Bug fixes
 ~~~~~~~~~
 
