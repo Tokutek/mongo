@@ -243,6 +243,14 @@ namespace {
         newActions.addAllActionsFromSet(privilege.getActions());
         StringData collectionName = nsToCollectionSubstring(privilege.getResource());
         if (collectionName == "system.users") {
+            if (newActions.contains(ActionType::insert) ||
+                    newActions.contains(ActionType::update)) {
+                // End users can't insert or update system.users directly, only the system can.
+                // TODO(spencer): check for remove also once there's a command to remove users.
+                newActions.addAction(ActionType::userAdminV1);
+            } else {
+                newActions.addAction(ActionType::userAdmin);
+            }
             newActions.removeAction(ActionType::find);
             newActions.removeAction(ActionType::insert);
             newActions.removeAction(ActionType::update);

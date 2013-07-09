@@ -248,6 +248,7 @@ namespace {
         internalActions.addAction(ActionType::replSetHeartbeat);
         internalActions.addAction(ActionType::updateSlave);
         internalActions.addAction(ActionType::writebacklisten);
+        internalActions.addAction(ActionType::userAdminV1);
         internalActions.addAction(ActionType::_migrateClone);
         internalActions.addAction(ActionType::_migrateStartCloneTransaction);
         internalActions.addAction(ActionType::_recvChunkAbort);
