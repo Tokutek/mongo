@@ -131,6 +131,9 @@ namespace mongo {
         }
         
         virtual void explainDetails( BSONObjBuilder& b ) const { return; }
+
+        /// Should this cursor be destroyed when it's namespace is deleted
+        virtual bool shouldDestroyOnNSDeletion() { return true; }
     };
 
     class FieldRange;

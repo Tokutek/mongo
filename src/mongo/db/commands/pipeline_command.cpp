@@ -15,23 +15,136 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
 
-#include "db/interrupt_status_mongod.h"
-#include "db/namespacestring.h"
-#include "db/pipeline/pipeline.h"
-#include "db/pipeline/pipeline_d.h"
-#include "db/pipeline/accumulator.h"
-#include "db/pipeline/document.h"
-#include "db/pipeline/document_source.h"
-#include "db/pipeline/expression.h"
-#include "db/pipeline/expression_context.h"
+#include "mongo/pch.h"
+
+#include "mongo/db/commands.h"
+#include "mongo/db/namespacestring.h"
+#include "mongo/db/interrupt_status_mongod.h"
+#include "mongo/db/pipeline/accumulator.h"
+#include "mongo/db/pipeline/document.h"
+#include "mongo/db/pipeline/document_source.h"
+#include "mongo/db/pipeline/expression_context.h"
+#include "mongo/db/pipeline/expression.h"
+#include "mongo/db/pipeline/pipeline_d.h"
+#include "mongo/db/pipeline/pipeline.h"
+#include "mongo/db/ops/query.h"
 
 namespace mongo {
 
-    /** mongodb "commands" (sent via db.$cmd.findOne(...))
-        subclass to make a command.  define a singleton object for it.
-        */
+    extern const int MaxBytesToReturnToClientAtOnce;
+
+    static bool isCursorCommand(BSONObj cmdObj) {
+        BSONElement cursorElem = cmdObj["cursor"];
+        if (cursorElem.eoo())
+            return false;
+
+        uassert(16954, "cursor field must be missing or an object",
+                cursorElem.type() == Object);
+
+        BSONObj cursor = cursorElem.embeddedObject();
+        BSONElement batchSizeElem = cursor["batchSize"];
+        if (batchSizeElem.eoo()) {
+            uassert(16955, "cursor object can't contain fields other than batchSize",
+                cursor.isEmpty());
+        }
+        else {
+            uassert(16956, "cursor.batchSize must be a number",
+                    batchSizeElem.isNumber());
+
+            // This can change in the future, but for now all negatives are reserved.
+            uassert(16957, "Cursor batchSize must not be negative",
+                    batchSizeElem.numberLong() >= 0);
+        }
+
+        return true;
+    }
+
+    static void handleCursorCommand(CursorId id, BSONObj& cmdObj, BSONObjBuilder& result) {
+        BSONElement batchSizeElem = cmdObj.getFieldDotted("cursor.batchSize");
+        const long long batchSize = batchSizeElem.isNumber()
+                                    ? batchSizeElem.numberLong()
+                                    : 101; // same as query
+
+        // Using limited cursor API that ignores many edge cases. Should be sufficient for commands.
+        ClientCursor::Pin pin(id);
+        ClientCursor* cursor = pin.c();
+
+        massert(16958, "Cursor shouldn't have been deleted",
+                cursor);
+
+        // Make sure this cursor won't disappear on us
+        fassert(16959, !cursor->c()->shouldDestroyOnNSDeletion());
+
+        try {
+            // can't use result BSONObjBuilder directly since it won't handle exceptions correctly.
+            BSONArrayBuilder resultsArray;
+            const int byteLimit = MaxBytesToReturnToClientAtOnce;
+            for (int objs = 0;
+                    objs < batchSize && cursor->ok() && resultsArray.len() <= byteLimit;
+                    objs++) {
+                // TODO may need special logic if cursor->current() would cause results to be > 16MB
+                resultsArray.append(cursor->current());
+                cursor->advance();
+            }
+
+            // The initial ok() on a cursor may be very expensive so we don't do it when batchSize
+            // is 0 since that indicates a desire for a fast return.
+            if (batchSize != 0 && !cursor->ok()) {
+                // There is no more data. Kill the cursor.
+                pin.release();
+                ClientCursor::erase(id);
+                id = 0;
+            }
+
+            BSONObjBuilder cursorObj(result.subobjStart("cursor"));
+            cursorObj.append("id", id);
+            cursorObj.append("ns", cursor->ns());
+            cursorObj.append("firstBatch", resultsArray.arr());
+            cursorObj.done();
+        }
+        catch (...) {
+            // Clean up cursor on way out of scope.
+            pin.release();
+            ClientCursor::erase(id);
+            throw;
+        }
+    }
+
+
+    class PipelineCursor : public Cursor {
+    public:
+        PipelineCursor(intrusive_ptr<Pipeline> pipeline)
+            : _pipeline(pipeline)
+        {}
+
+        // "core" cursor protocol
+        virtual bool ok() { return !iterator()->eof(); }
+        virtual bool advance() { return iterator()->advance(); }
+        virtual BSONObj current() {
+            BSONObjBuilder builder;
+            iterator()->getCurrent().toBson(&builder);
+            return builder.obj();
+        }
+
+        virtual bool shouldDestroyOnNSDeletion() { return false; }
+
+        virtual bool supportGetMore() { return true; }
+        virtual bool getsetdup(const BSONObj &pk) { return false; } // we don't generate dups
+        virtual bool isMultiKey() const { return false; }
+        virtual bool modifiedKeys() const { return false; }
+        virtual string toString() const { return "Aggregate_Cursor"; }
+
+        // These probably won't be needed once aggregation supports it's own explain.
+        virtual long long nscanned() const { return 0; }
+        virtual void explainDetails( BSONObjBuilder& b ) const { return; }
+    private:
+        const DocumentSource* iterator() const { return _pipeline->output(); }
+        DocumentSource* iterator() { return _pipeline->output(); }
+
+        intrusive_ptr<Pipeline> _pipeline;
+    };
+
     class PipelineCommand :
         public Command {
     public:
@@ -165,7 +278,8 @@ namespace mongo {
         /* run the shard pipeline */
         BSONObjBuilder shardResultBuilder;
         string shardErrmsg;
-        pShardPipeline->run(shardResultBuilder, shardErrmsg);
+        pShardPipeline->stitch();
+        pShardPipeline->run(shardResultBuilder);
         BSONObj shardResult(shardResultBuilder.done());
 
         /* pick out the shard result, and prepare to read it */
@@ -178,12 +292,14 @@ namespace mongo {
             if ((strcmp(pFieldName, "result") == 0) ||
                 (strcmp(pFieldName, "serverPipeline") == 0)) {
                 pPipeline->addInitialSource(DocumentSourceBsonArray::create(&shardElement, pCtx));
+                pPipeline->stitch();
 
                 /*
                   Connect the output of the shard pipeline with the mongos
                   pipeline that will merge the results.
                 */
-                return pPipeline->run(result, errmsg);
+                pPipeline->run(result);
+                return true;
             }
         }
 
@@ -231,7 +347,26 @@ namespace mongo {
 
         // This does the mongod-specific stuff like creating a cursor
         PipelineD::prepareCursorSource(pPipeline, nsToDatabase(ns), pCtx);
-        return pPipeline->run(result, errmsg);
+        pPipeline->stitch();
+
+        if (isCursorCommand(cmdObj)) {
+            CursorId id;
+            {
+                // Set up cursor
+                Client::ReadContext ctx(ns);
+                shared_ptr<Cursor> cursor(new PipelineCursor(pPipeline));
+                // cc will be owned by cursor manager
+                ClientCursor* cc = new ClientCursor(0, cursor, ns, cmdObj.getOwned());
+                id = cc->cursorid();
+            }
+
+            handleCursorCommand(id, cmdObj, result);
+        }
+        else {
+            pPipeline->run(result);
+        }
+
+        return true;
     }
 
 } // namespace mongo
