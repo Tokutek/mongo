@@ -312,6 +312,11 @@ namespace mongo {
          */
         static void clearPool();
 
+        /**
+         * Forgets a namespace to prevent future versioning.
+         */
+        static void forgetNS( const string& ns );
+
     private:
         void _init();
         void _finishInit();

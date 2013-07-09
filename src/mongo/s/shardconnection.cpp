@@ -305,6 +305,11 @@ namespace mongo {
             _hosts.clear();
         }
 
+        void forgetNS( const string& ns ) {
+            scoped_spinlock lock( _lock );
+            _seenNS.erase( ns );
+        }
+
         // -----
 
         static thread_specific_ptr<ClientConnections> _perThread;
@@ -453,5 +458,9 @@ namespace mongo {
     void ShardConnection::clearPool() {
         shardConnectionPool.clear();
         ClientConnections::threadInstance()->clearPool();
+    }
+
+    void ShardConnection::forgetNS( const string& ns ) {
+        ClientConnections::threadInstance()->forgetNS( ns );
     }
 }
