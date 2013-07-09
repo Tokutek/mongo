@@ -717,6 +717,16 @@ Status addMongoShellOptions(moe::OptionSection* options) {
     if (!ret.isOK()) {
         return ret;
     }
+    ret = options->addOption(OD("ssl.CRLFile", "sslCRLFile", moe::String,
+                "Certificate Revocation List file for SSL", true));
+    if (!ret.isOK()) {
+        return ret;
+    }
+    ret = options->addOption(OD("ssl.FIPSMode", "sslFIPSMode", moe::Switch,
+                "activate FIPS 140-2 mode at startup", true));
+    if (!ret.isOK()) {
+        return ret;
+    }
 #endif
 
     ret = options->addOption(OD("dbaddress", "dbaddress", moe::String, "dbaddress" , false));
@@ -766,6 +776,12 @@ Status storeMongoShellOptions() {
     }
     if (params.count("ssl.CAFile")) {
         mongo::cmdLine.sslCAFile = params["ssl.CAFile"].as<std::string>();
+    }
+    if (params.count("ssl.CRLFile")) {
+        mongo::cmdLine.sslCRLFile = params["ssl.CRLFile"].as<std::string>();
+    }
+    if (params.count( "ssl.FIPSMode")) {
+        mongo::cmdLine.sslFIPSMode = true;
     }
 #endif
     if ( params.count( "ipv6" ) ) {
@@ -825,6 +841,7 @@ int _main( int argc, char* argv[], char **envp ) {
     std::string sslPEMKeyFile;
     std::string sslPEMKeyPassword;
     std::string sslCAFile;
+    std::string sslCRLFile;
 
     bool runShell = false;
     bool nodb = false;
