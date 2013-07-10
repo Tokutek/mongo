@@ -299,5 +299,12 @@ again:
         return _remoteParsed;
     }
 
+    SockAddr MessagingPort::remoteAddr() const {
+        return psock->remoteAddr();
+    }
+
+    SockAddr MessagingPort::localAddr() const {
+        return psock->localAddr();
+    }
 
 } // namespace mongo
