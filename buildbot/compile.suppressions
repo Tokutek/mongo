@@ -1,0 +1,6 @@
+# Suppress some warnings we get from js, they aren't our fault.
+src/third_party/js-1.7/jsarray.c : comparison is always false due to limited range of data type
+src/third_party/js-1.7/jsapi.c : passing argument 5 of 'TryArgumentFormatter' from incompatible pointer type
+src/third_party/js-1.7/jsprf.c : pointer targets in passing argument 1 of 'js_OneUcs4ToUtf8Char' differ in signedness
+src/third_party/js-1.7/jsstr.c : pointer targets in passing argument 1 of 'Utf8ToOneUcs4Char' differ in signedness
+src/third_party/js-1.7/jsxml.c : comparison is always false due to limited range of data type
