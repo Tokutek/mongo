@@ -150,18 +150,19 @@ namespace mongo {
                     err << " caught int " << x << " in test " << tc->getName();
                 }
 
+                std::cerr.flush();
                 if (passes) {
                     std::cout << "ok " << r->_tests + alreadyRan << " " << tc->getName() << std::endl;
-                    std::cout.flush();
                 }
                 else {
                     std::string s = err.str();
-                    std::cout << "not ok " << r->_tests + alreadyRan << " " << tc->getName() << " # " << s << std::endl;
-                    std::cout.flush();
+                    std::cout << "not ok " << r->_tests + alreadyRan << " " << tc->getName() << std::endl << "# " << s << std::endl;
                     log() << "FAIL: " << s << std::endl;
                     r->_fails++;
                     r->_messages.push_back( s );
                 }
+                std::cout.flush();
+                std::cerr.flush();
             }
 
             if ( r->_fails )
@@ -223,6 +224,7 @@ namespace mongo {
                 Suite* s = _allSuites()[*i];
                 totalNumTests += s->numTests(filter);
             }
+            std::cerr.flush();
             std::cout << "1.." << totalNumTests << std::endl;
             std::cout.flush();
 
@@ -239,6 +241,7 @@ namespace mongo {
                 alreadyRan += s->numTests(filter);
             }
 
+            std::cerr.flush();
             std::cout << "# ************************************************" << std::endl;
 
             int rc = 0;
@@ -264,6 +267,7 @@ namespace mongo {
             totals._asserts = asserts;
 
             std::cout << totals.toString();
+            std::cout.flush();
 
             return rc;
         }
