@@ -384,6 +384,9 @@ def runTest(test, testnum):
 
     (path, usedb) = test
     (ignore, ext) = os.path.splitext(path)
+    # the dbtests know how to format themselves nicely, we'll detect if we're running them and if
+    # so, we won't mess with the output
+    is_test_binary = False
     if skipTest(path):
         print "skipping " + path
         return
@@ -409,6 +412,8 @@ def runTest(test, testnum):
         # Blech.
         if os.path.basename(path) in ["test", "test.exe", "perftest", "perftest.exe"]:
             argv = [path]
+            if os.path.basename(path) in ["test", "test.exe"]:
+                is_test_binary = True
         # more blech
         elif os.path.basename(path) in ['mongos', 'mongos.exe']:
             argv = [path, "--test"]
@@ -428,7 +433,7 @@ def runTest(test, testnum):
 
     # sys.stdout.write() is more atomic than print, so using it prevents
     # lines being interrupted by, e.g., child processes
-    if quiet:
+    if quiet and not is_test_binary:
         vlog = tests_log
         qlog = sys.stdout
         tlog = sys.stderr
@@ -477,17 +482,20 @@ def runTest(test, testnum):
     try:
         os.environ['MONGO_TEST_FILENAME'] = os.path.basename(path)
         t1 = time.time()
-        r = call(buildlogger(argv), cwd=test_path, stdout=tempfile)
+        r = call(buildlogger(argv), cwd=test_path,
+                 # the dbtests know how to format their own output nicely
+                 stdout=ternary(is_test_binary, vlog, tempfile))
         t2 = time.time()
         del os.environ['MONGO_TEST_FILENAME']
 
         vlog.write("                %fms\n" % ((t2 - t1) * 1000))
         vlog.flush()
 
-        tempfile.seek(0)
-        for line in tempfile:
-            vlog.write(line)
-        vlog.flush()
+        if not is_test_binary:
+            tempfile.seek(0)
+            for line in tempfile:
+                vlog.write(line)
+            vlog.flush()
 
         if quiet:
             if r == 0:
