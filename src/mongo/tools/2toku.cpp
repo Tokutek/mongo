@@ -211,7 +211,7 @@ public:
                                     warning() << "If you want to manually ensure this index without dropDups, you can try by issuing this command:" << endl;
                                     warning() << "  mongo " << getParam("host") << "/" << dbname << " --eval 'db.system.indexes.insert(" << builder.done() << ")'" << endl;
                                     warning() << "If that succeeds without detecting any duplicates, you can then resume mongo2toku with this option: "
-                                              << "--ts=" << thisTime.getSecs() << ":" << thisTime.getInc() + 1 << endl;
+                                              << "--ts=" << thisTime.getSecs() << ":" << thisTime.getInc() << endl;
                                     return logAndExit(-1);
                                 }
                             }
