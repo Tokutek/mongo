@@ -193,6 +193,27 @@ public:
                                     }
                                     o = builder.obj();
                                 }
+                                // We need to warn very carefully about dropDups.
+                                if (o["dropDups"].trueValue()) {
+                                    rconn->done();
+                                    BSONObjBuilder builder;
+                                    BSONObjIterator it(o);
+                                    while (it.more()) {
+                                        BSONElement e = it.next();
+                                        if (strncmp(e.fieldName(), "dropDups", sizeof("dropDups")) != 0) {
+                                            builder.append(e);
+                                        }
+                                    }
+                                    warning() << "Detected an ensureIndex with dropDups: true in " << o << "." << endl;
+                                    warning() << "This option is not supported in TokuMX, because it deletes arbitrary data." << endl;
+                                    warning() << "If it were replayed, it could result in a completely different data set than the source database." << endl;
+                                    warning() << "Therefore, we will not replay it." << endl;
+                                    warning() << "If you want to manually ensure this index without dropDups, you can try by issuing this command:" << endl;
+                                    warning() << "  mongo " << getParam("host") << "/" << dbname << " --eval 'db.system.indexes.insert(" << builder.done() << ")'" << endl;
+                                    warning() << "If that succeeds without detecting any duplicates, you can then resume mongo2toku with this option: "
+                                              << "--ts=" << thisTime.getSecs() << ":" << thisTime.getInc() + 1 << endl;
+                                    return logAndExit(-1);
+                                }
                             }
                             conn().insert(ns, o);
                         } else if (op == "u") {
