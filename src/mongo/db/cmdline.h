@@ -110,6 +110,8 @@ namespace mongo {
         bool logAppend;        // True if logging to a file in append mode.
         bool logWithSyslog;    // True if logging to syslog; must not be set if logpath is set.
 
+        bool isHttpInterfaceEnabled; // True if the dbwebserver should be enabled.
+
 #ifndef _WIN32
         ProcessId parentProc;      // --fork pid of initial process
         ProcessId leaderProc;      // --fork pid of leader process
@@ -191,7 +193,7 @@ namespace mongo {
         objcheck(true), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), moveParanoia( false ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"), maxConns(DEFAULT_MAX_CONN),
-        logAppend(false), logWithSyslog(false),
+        logAppend(false), logWithSyslog(false), isHttpInterfaceEnabled(false),
         directio(false), gdb(false), cacheSize(0), locktreeMaxMemory(0), loaderMaxMemory(0), loaderCompressTmp(true), checkpointPeriod(60), cleanerPeriod(2),
         cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""), gdbPath(""),
         txnMemLimit(1ULL<<20), fastupdates(false), fastupdatesIgnoreErrors(false), pluginsDir(), plugins()
