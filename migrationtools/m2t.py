@@ -32,12 +32,18 @@ def main():
             continue
 
     # connect to fromhost and tohost
-    fromv = fromhost.split(':')
-    assert len(fromv) == 2
-    fromc = MongoClient(fromv[0], int(fromv[1]))
-    tov = tohost.split(':')
-    assert len(tov) == 2
-    toc = MongoClient(tov[0], int(tov[1]))
+    try:
+        fromv = fromhost.split(':')
+        fromc = MongoClient(fromv[0], int(fromv[1]))
+    except:
+        print(fromv, sys.exc_info())
+        return 1
+    try:
+        tov = tohost.split(':')
+        toc = MongoClient(tov[0], int(tov[1]))
+    except:
+        print(tov, sys.exc_info())
+        return 1
 
     # run a tailable cursor over the from host connection's  oplog from a point in time
     # and replay each oplog entry on the to host connection
@@ -57,8 +63,9 @@ def main():
             for oploge in c:
                 if verbose: print(oploge)
                 op = oploge['op']
-                ts = oploge['ts']
+                this_ts = oploge['ts']
                 replay(toc, op, oploge, verbose)
+                ts = this_ts
     return 0
 def replay(toc, op, oploge, verbose):
     if op == 'i':
