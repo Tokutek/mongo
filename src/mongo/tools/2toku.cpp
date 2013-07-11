@@ -212,7 +212,7 @@ public:
                                     warning() << "  mongo " << getParam("host") << "/" << dbname << " --eval 'db.system.indexes.insert(" << builder.done() << ")'" << endl;
                                     warning() << "If that succeeds without detecting any duplicates, you can then resume mongo2toku with this option: "
                                               << "--ts=" << thisTime.getSecs() << ":" << thisTime.getInc() << endl;
-                                    return logAndExit(-1);
+                                    return -1;
                                 }
                             }
                             conn().insert(ns, o);
