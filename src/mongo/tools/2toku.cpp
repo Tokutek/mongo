@@ -34,8 +34,27 @@ using namespace mongo;
 namespace po = boost::program_options;
 
 class OplogTool : public Tool {
+    OpTime _maxOpTimeSynced;
+    OpTime _thisTime;
+    bool _logAtExit;
+
+    static string fmtOpTime(const OpTime &t) {
+        stringstream ss;
+        ss << t.getSecs() << ":" << t.getInc();
+        return ss.str();
+    }
+
 public:
-    OplogTool() : Tool("2toku") {
+    void logPosition() const {
+        if (_thisTime != OpTime()) {
+            log() << "Exiting while processing operation with OpTime " << fmtOpTime(_thisTime) << endl;
+        }
+        log() << "Synced up to OpTime " << fmtOpTime(_maxOpTimeSynced) << endl
+              << "Use --ts=" << fmtOpTime(_maxOpTimeSynced) << " to resume." << endl;
+    }
+    static volatile bool running;
+
+    OplogTool() : Tool("2toku"), _logAtExit(true) {
         addFieldOptions();
         add_options()
         ("ts" , po::value<string>() , "OpTime to start reading from (secs:inc)" )
@@ -62,25 +81,26 @@ public:
                 log() << "need to specify --ts as <secs>:<inc>" << endl;
                 return -1;
             }
-            maxOpTimeSynced = OpTime(secs, i);
+            _maxOpTimeSynced = OpTime(secs, i);
         }
 
-        const string &oplogns(getParam("oplogns"));
-        const int tailingQueryOptions = QueryOption_SlaveOk | QueryOption_CursorTailable | QueryOption_OplogReplay | QueryOption_AwaitData;
+        const string &oplogns = getParam("oplogns");
 
         Client::initThread( "mongo2toku" );
 
-        log() << "going to connect" << endl;
+        LOG(1) << "going to connect" << endl;
         
         scoped_ptr<ScopedDbConnection> rconn(ScopedDbConnection::getScopedDbConnection(getParam("from")));
 
-        log() << "connected" << endl;
+        LOG(1) << "connected" << endl;
 
         try {
             while (running) {
+                const int tailingQueryOptions = QueryOption_SlaveOk | QueryOption_CursorTailable | QueryOption_OplogReplay | QueryOption_AwaitData;
+
                 BSONObjBuilder queryBuilder;
                 BSONObjBuilder gteBuilder(queryBuilder.subobjStart("ts"));
-                gteBuilder.appendTimestamp("$gte", maxOpTimeSynced.asDate());
+                gteBuilder.appendTimestamp("$gte", _maxOpTimeSynced.asDate());
                 gteBuilder.doneFast();
                 BSONObj query = queryBuilder.done();
 
@@ -94,7 +114,7 @@ public:
                         Logstream::get().flush();
                         sleepsecs(1);
                     }
-                    log() << endl;
+                    log() << "retrying" << endl;
                     continue;
                 }
 
@@ -104,12 +124,13 @@ public:
                     if (!tsElt.ok()) {
                         log() << "oplog format error: " << obj << " missing 'ts' field." << endl;
                         rconn->done();
-                        return logAndExit(-1);
+                        logPosition();
+                        return -1;
                     }
                     OpTime firstTime(tsElt.date());
-                    if (firstTime != maxOpTimeSynced) {
-                        warning() << "Tried to start at OpTime " << maxOpTimeSynced.getSecs() << ":" << maxOpTimeSynced.getInc()
-                                  << ", but didn't find anything before " << firstTime.getSecs() << ":" << firstTime.getInc() << "!" << endl;
+                    if (firstTime != _maxOpTimeSynced) {
+                        warning() << "Tried to start at OpTime " << fmtOpTime(_maxOpTimeSynced)
+                                  << ", but didn't find anything before " << fmtOpTime(firstTime) << "!" << endl;
                         warning() << "This may mean your oplog has been truncated past the point you are trying to resume from." << endl;
                         warning() << "Either retry with a different value of --ts, or restart your migration procedure." << endl;
                         rconn->done();
@@ -118,192 +139,184 @@ public:
                 }
 
                 while (running && cursor->more()) {
-                    thisTime = OpTime();
-
                     BSONObj obj = cursor->next();
                     LOG(2) << obj << endl;
 
-                    if (obj.hasField("$err")) {
-                        log() << "error getting oplog" << endl;
-                        log() << obj << endl;
+                    bool ok = processObj(obj);
+                    if (!ok) {
                         rconn->done();
-                        return logAndExit(-1);
+                        logPosition();
+                        return -1;
                     }
-
-                    static const char *names[] = {"ts", "op", "ns", "o", "b"};
-                    BSONElement fields[5];
-                    obj.getFields(5, names, fields);
-
-                    BSONElement &tsElt = fields[0];
-                    if (!tsElt.ok()) {
-                        log() << "oplog format error: " << obj << " missing 'ts' field." << endl;
-                        rconn->done();
-                        return logAndExit(-1);
-                    }
-                    if (tsElt.type() != Date && tsElt.type() != Timestamp) {
-                        log() << "oplog format error: " << obj << " wrong 'ts' field type." << endl;
-                        rconn->done();
-                        return logAndExit(-1);
-                    }
-                    thisTime = OpTime(tsElt.date());
-
-                    BSONElement &opElt = fields[1];
-                    if (!opElt.ok()) {
-                        log() << "oplog format error: " << obj << " missing 'op' field." << endl;
-                        rconn->done();
-                        return logAndExit(-1);
-                    }
-                    string op = opElt.String();
-
-                    // nop
-                    if (op == "n") {
-                        continue;
-                    }
-                    // "presence of a database"
-                    if (op == "db") {
-                        continue;
-                    }
-                    if (op != "c" && op != "i" && op != "u" && op != "d") {
-                        log() << "oplog format error: " << obj << " has an invalid 'op' field of '" << op << "'." << endl;
-                        rconn->done();
-                        return logAndExit(-1);
-                    }
-
-                    BSONElement &nsElt = fields[2];
-                    if (!nsElt.ok()) {
-                        log() << "oplog format error: " << obj << " missing 'ns' field." << endl;
-                        rconn->done();
-                        return logAndExit(-1);
-                    }
-                    string ns = nsElt.String();
-                    size_t i = ns.find('.');
-                    if (i == string::npos) {
-                        log() << "oplog format error: invalid namespace '" << ns << "' in op " << obj << "." << endl;
-                        rconn->done();
-                        return logAndExit(-1);
-                    }
-                    string dbname = ns.substr(0, i);
-                    string collname = ns.substr(i + 1);
-
-                    BSONElement &oElt = fields[3];
-                    if (!oElt.ok()) {
-                        log() << "oplog format error: " << obj << " missing 'o' field." << endl;
-                        rconn->done();
-                        return logAndExit(-1);
-                    }
-                    BSONObj o = obj["o"].Obj();
-
-                    if (op == "c") {
-                        if (collname != "$cmd") {
-                            log() << "oplog format error: invalid namespace '" << ns << "' for command in op " << obj << "." << endl;
-                            rconn->done();
-                            return logAndExit(-1);
-                        }
-                        BSONObj info;
-                        bool ok = conn().runCommand(dbname, o, info);
-                        if (!ok) {
-                            log() << "replay of command " << o << " failed: " << info << endl;
-                            rconn->done();
-                            return logAndExit(-1);
-                        }
-                    } else {
-                        if (op == "i") {
-                            if (collname == "system.indexes") {
-                                // For now, we need to strip out any background fields from
-                                // ensureIndex.  Once we do hot indexing we can do something more
-                                // like what vanilla applyOperation_inlock does.
-                                if (o["background"].trueValue()) {
-                                    BSONObjBuilder builder;
-                                    BSONObjIterator it(o);
-                                    while (it.more()) {
-                                        BSONElement e = it.next();
-                                        if (strncmp(e.fieldName(), "background", sizeof("background")) != 0) {
-                                            builder.append(e);
-                                        }
-                                    }
-                                    o = builder.obj();
-                                }
-                                // We need to warn very carefully about dropDups.
-                                if (o["dropDups"].trueValue()) {
-                                    rconn->done();
-                                    BSONObjBuilder builder;
-                                    BSONObjIterator it(o);
-                                    while (it.more()) {
-                                        BSONElement e = it.next();
-                                        if (strncmp(e.fieldName(), "dropDups", sizeof("dropDups")) != 0) {
-                                            builder.append(e);
-                                        }
-                                    }
-                                    warning() << "Detected an ensureIndex with dropDups: true in " << o << "." << endl;
-                                    warning() << "This option is not supported in TokuMX, because it deletes arbitrary data." << endl;
-                                    warning() << "If it were replayed, it could result in a completely different data set than the source database." << endl;
-                                    warning() << "Therefore, we will not replay it." << endl;
-                                    warning() << "If you want to manually ensure this index without dropDups, you can try by issuing this command:" << endl;
-                                    warning() << "  mongo " << getParam("host") << "/" << dbname << " --eval 'db.system.indexes.insert(" << builder.done() << ")'" << endl;
-                                    warning() << "If that succeeds without detecting any duplicates, you can then resume mongo2toku with this option: "
-                                              << "--ts=" << thisTime.getSecs() << ":" << thisTime.getInc() << endl;
-                                    return -1;
-                                }
-                            }
-                            conn().insert(ns, o);
-                        } else if (op == "u") {
-                            BSONElement o2Elt = obj["o2"];
-                            if (!o2Elt.ok()) {
-                                log() << "oplog format error: " << obj << " missing 'o2' field." << endl;
-                                rconn->done();
-                                return logAndExit(-1);
-                            }
-                            BSONElement &bElt = fields[4];
-                            bool upsert = bElt.booleanSafe();
-                            BSONObj o2 = o2Elt.Obj();
-                            conn().update(ns, o2, o, upsert, false);
-                        } else if (op == "d") {
-                            BSONElement &bElt = fields[4];
-                            bool justOne = bElt.booleanSafe();
-                            conn().remove(ns, o, justOne);
-                        }
-                        string err = conn().getLastError(dbname, false, false, 1);  // w=1
-                        if (!err.empty()) {
-                            log() << "replay of insert " << o << " failed: " << err << endl;
-                            rconn->done();
-                            return logAndExit(-1);
-                        }
-                    }
-                    // If we got here, we completed the operation successfully.
-                    maxOpTimeSynced = thisTime;
-                    thisTime = OpTime();
                 }
             }
         }
         catch (DBException &e) {
             warning() << "Caught exception " << e.what() << " while processing.  Exiting..." << endl;
             rconn->done();
-            return logAndExit(-1);
+            logPosition();
+            return -1;
         }
         catch (...) {
             warning() << "Caught unknown exception while processing.  Exiting..." << endl;
             rconn->done();
-            logAndExit(-1);
+            logPosition();
+            return -1;
         }
 
-        return logAndExit(-1);
-    }
-
-    void logPosition() const {
-        if (thisTime.getSecs() != 0 || thisTime.getInc() != 0) {
-            log() << "Exiting while processing operation with OpTime " << thisTime.getSecs() << ":" << thisTime.getInc() << endl;
+        if (_logAtExit) {
+            logPosition();
+            return 0;
         }
-        log() << "Synced up to OpTime " << maxOpTimeSynced.getSecs() << ":" << maxOpTimeSynced.getInc() << endl
-              << "Use --ts=" << maxOpTimeSynced.getSecs() << ":" << maxOpTimeSynced.getInc() << " to resume." << endl;
+        else {
+            return -1;
+        }
     }
-    static volatile bool running;
-  private:
-    OpTime maxOpTimeSynced;
-    OpTime thisTime;
 
-    int logAndExit(int exitcode) {
-        logPosition();
-        return exitcode;
+    bool processObj(const BSONObj &obj) {
+        if (obj.hasField("$err")) {
+            log() << "error getting oplog: " << obj << endl;
+            return false;
+        }
+
+        static const char *names[] = {"ts", "op", "ns", "o", "b"};
+        BSONElement fields[5];
+        obj.getFields(5, names, fields);
+
+        BSONElement &tsElt = fields[0];
+        if (!tsElt.ok()) {
+            log() << "oplog format error: " << obj << " missing 'ts' field." << endl;
+            return false;
+        }
+        if (tsElt.type() != Date && tsElt.type() != Timestamp) {
+            log() << "oplog format error: " << obj << " wrong 'ts' field type." << endl;
+            return false;
+        }
+        _thisTime = OpTime(tsElt.date());
+
+        BSONElement &opElt = fields[1];
+        if (!opElt.ok()) {
+            log() << "oplog format error: " << obj << " missing 'op' field." << endl;
+            return false;
+        }
+        string op = opElt.String();
+
+        // nop
+        if (op == "n") {
+            return true;
+        }
+        // "presence of a database"
+        if (op == "db") {
+            return true;
+        }
+        if (op != "c" && op != "i" && op != "u" && op != "d") {
+            log() << "oplog format error: " << obj << " has an invalid 'op' field of '" << op << "'." << endl;
+            return false;
+        }
+
+        BSONElement &nsElt = fields[2];
+        if (!nsElt.ok()) {
+            log() << "oplog format error: " << obj << " missing 'ns' field." << endl;
+            return false;
+        }
+        string ns = nsElt.String();
+        size_t i = ns.find('.');
+        if (i == string::npos) {
+            log() << "oplog format error: invalid namespace '" << ns << "' in op " << obj << "." << endl;
+            return false;
+        }
+        string dbname = ns.substr(0, i);
+        string collname = ns.substr(i + 1);
+
+        BSONElement &oElt = fields[3];
+        if (!oElt.ok()) {
+            log() << "oplog format error: " << obj << " missing 'o' field." << endl;
+            return false;
+        }
+        BSONObj o = obj["o"].Obj();
+
+        if (op == "c") {
+            if (collname != "$cmd") {
+                log() << "oplog format error: invalid namespace '" << ns << "' for command in op " << obj << "." << endl;
+                return false;
+            }
+            BSONObj info;
+            bool ok = conn().runCommand(dbname, o, info);
+            if (!ok) {
+                log() << "replay of command " << o << " failed: " << info << endl;
+                return false;
+            }
+        }
+        else {
+            if (op == "i") {
+                if (collname == "system.indexes") {
+                    // For now, we need to strip out any background fields from
+                    // ensureIndex.  Once we do hot indexing we can do something more
+                    // like what vanilla applyOperation_inlock does.
+                    if (o["background"].trueValue()) {
+                        BSONObjBuilder builder;
+                        BSONObjIterator it(o);
+                        while (it.more()) {
+                            BSONElement e = it.next();
+                            if (strncmp(e.fieldName(), "background", sizeof("background")) != 0) {
+                                builder.append(e);
+                            }
+                        }
+                        o = builder.obj();
+                    }
+                    // We need to warn very carefully about dropDups.
+                    if (o["dropDups"].trueValue()) {
+                        rconn->done();
+                        BSONObjBuilder builder;
+                        BSONObjIterator it(o);
+                        while (it.more()) {
+                            BSONElement e = it.next();
+                            if (strncmp(e.fieldName(), "dropDups", sizeof("dropDups")) != 0) {
+                                builder.append(e);
+                            }
+                        }
+                        warning() << "Detected an ensureIndex with dropDups: true in " << o << "." << endl;
+                        warning() << "This option is not supported in TokuMX, because it deletes arbitrary data." << endl;
+                        warning() << "If it were replayed, it could result in a completely different data set than the source database." << endl;
+                        warning() << "Therefore, we will not replay it." << endl;
+                        warning() << "If you want to manually ensure this index without dropDups, you can try by issuing this command:" << endl;
+                        warning() << "  mongo " << getParam("host") << "/" << dbname << " --eval 'db.system.indexes.insert(" << builder.done() << ")'" << endl;
+                        warning() << "If that succeeds without detecting any duplicates, you can then resume mongo2toku with this option: "
+                                  << "--ts=" << fmtOpTime(_thisTime) << endl;
+                        running = false;
+                        _logAtExit = false;
+                        return true;
+                    }
+                }
+                conn().insert(ns, o);
+            }
+            else if (op == "u") {
+                BSONElement o2Elt = obj["o2"];
+                if (!o2Elt.ok()) {
+                    log() << "oplog format error: " << obj << " missing 'o2' field." << endl;
+                    return false;
+                }
+                BSONElement &bElt = fields[4];
+                bool upsert = bElt.booleanSafe();
+                BSONObj o2 = o2Elt.Obj();
+                conn().update(ns, o2, o, upsert, false);
+            }
+            else if (op == "d") {
+                BSONElement &bElt = fields[4];
+                bool justOne = bElt.booleanSafe();
+                conn().remove(ns, o, justOne);
+            }
+            string err = conn().getLastError(dbname, false, false, 1);  // w=1
+            if (!err.empty()) {
+                log() << "replay of operation " << obj << " failed: " << err << endl;
+                return false;
+            }
+        }
+
+        // If we got here, we completed the operation successfully.
+        _maxOpTimeSynced = _thisTime;
+        _thisTime = OpTime();
+        return true;
     }
 };
 
