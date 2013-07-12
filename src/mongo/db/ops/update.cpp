@@ -92,6 +92,12 @@ namespace mongo {
         updateOneObject( d, nsdt, pk, obj, updateobj, loud );
     }
 
+    static void checkBulkLoad(const StringData &ns) {
+        uassert(16893, str::stream() <<
+                       "Cannot update a collection under-going bulk load: " << ns,
+                       ns != cc().bulkLoadNS());
+    }
+
     static void insertAndLog(const char *ns, NamespaceDetails *d, NamespaceDetailsTransient *nsdt,
             BSONObj &newObj, bool logop, bool fromMigrate) {
 
@@ -101,6 +107,7 @@ namespace mongo {
         // We cannot pass NamespaceDetails::NO_UNIQUE_CHECKS because we still need to check secondary indexes.
         // We know if we are in this function that we did a query for the object and it didn't exist yet, so the unique check on the PK won't fail.
         // To prove this to yourself, look at the callers of insertAndLog and see that they return an UpdateResult that says the object didn't exist yet.
+        checkBulkLoad(ns);
         insertOneObject(d, nsdt, newObj);
         if (logop) {
             OpLogHelpers::logInsert(ns, newObj, &cc().txn());
@@ -236,11 +243,9 @@ namespace mongo {
                 return result;
             }
             else if ( upsert && ! isOperatorUpdate && ! logop) {
-                // this handles repl inserts
-                checkNoMods( updateobj );
                 debug.upsert = true;
                 BSONObj objModified = updateobj;
-                insertOneObject( d, nsdt, objModified );
+                insertAndLog( ns, d, nsdt, objModified, logop, fromMigrate );
                 return UpdateResult( 0 , 0 , 1 , updateobj );
             }
         }

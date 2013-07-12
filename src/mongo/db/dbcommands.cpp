@@ -1536,8 +1536,6 @@ namespace mongo {
         // You shouldn't be making a transaction without a lock to protect metadata, so your
         // command is probably broken.
         dassert(!c->needsTxn());
-        // logging requires a transaction
-        verify(!c->logTheOp());
         
         // we also trust that this won't crash
         retval = true;

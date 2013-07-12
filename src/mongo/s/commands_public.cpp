@@ -793,6 +793,20 @@ namespace mongo {
             RollbackTransactionCmd() : NotAllowedOnShardedClusterCmd("rollbackTransaction") {}
         } rollbackTransactionCmd;
 
+        class BeginLoadCmd : public NotAllowedOnShardedClusterCmd  {
+        public:
+            BeginLoadCmd() : NotAllowedOnShardedClusterCmd("beginLoad") {}
+        } beginLoadCmd;
+
+        class CommitLoadCmd : public NotAllowedOnShardedClusterCmd  {
+        public:
+            CommitLoadCmd() : NotAllowedOnShardedClusterCmd("commitLoad") {}
+        } commitLoadCmd;
+
+        class AbortLoadCmd : public NotAllowedOnShardedClusterCmd  {
+        public:
+            AbortLoadCmd() : NotAllowedOnShardedClusterCmd("abortLoad") {}
+        } abortLoadCmd;
 
         class GroupCmd : public NotAllowedOnShardedCollectionCmd  {
         public:

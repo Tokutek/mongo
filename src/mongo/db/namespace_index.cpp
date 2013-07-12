@@ -186,7 +186,7 @@ namespace mongo {
         return 0;
     }
 
-    NamespaceDetails *NamespaceIndex::open_ns(const StringData& ns) {
+    NamespaceDetails *NamespaceIndex::open_ns(const StringData& ns, const bool bulkLoad) {
         init();
         if (!allocated()) {
             return NULL;
@@ -199,7 +199,7 @@ namespace mongo {
         DB_TXN *db_txn = cc().hasTxn() ? cc().txn().db_txn() : NULL;
         int r = _nsdb->getf_set(_nsdb, db_txn, 0, &ndbt, getf_serialized, &serialized);
         if (r == 0) {
-            shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized );
+            shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized, bulkLoad );
             verify(!_namespaces[ns]);
             _namespaces[ns] = details;
             return details.get();
@@ -209,7 +209,11 @@ namespace mongo {
         return NULL;
     }
 
-    bool NamespaceIndex::close_ns(const StringData& ns) {
+    // TODO: We ought to be able to do close_ns in a read lock as long
+    //       as we take an exclusive lock on the _openRWLock.
+    //
+    //       We will need this in order to close/abort a load in a read lock.
+    bool NamespaceIndex::close_ns(const StringData& ns, const bool aborting) {
         Lock::assertWriteLocked(ns);
         // No need to initialize first. If the nsdb is null at this point,
         // we simply say that the ns you want to close wasn't open.
@@ -220,9 +224,10 @@ namespace mongo {
         // Find and erase the old entry, if it exists.
         NamespaceDetailsMap::const_iterator it = _namespaces.find(ns);
         if (it != _namespaces.end()) {
+            // TODO: Handle the case where a client tries to close a load they didn't start.
             shared_ptr<NamespaceDetails> d = it->second;
             _namespaces.erase(ns);
-            d->close();
+            d->close(aborting);
             return true;
         }
         return false;

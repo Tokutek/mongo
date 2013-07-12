@@ -268,6 +268,23 @@ namespace mongo {
             }
         };
 
+        /** Enter load mode for a particular namespace, given indexes and options. */
+        void beginClientLoad(const StringData &ns, const vector<BSONObj> &indexes,
+                             const BSONObj &options);
+
+        /** Commit the client load. uasserts if none is in progress. */
+        void commitClientLoad();
+
+        /** Abort the client load. uasserts if none is in progress. */
+        void abortClientLoad();
+
+        /** @return true if a load is in progress. */
+        bool loadInProgress() const;
+
+        // HACK we need this until upserts go through the NamespaceDetails class
+        //      and can prevent writes on a bulk loaded collection automatically.
+        string bulkLoadNS() const { return _bulkLoadNS; }
+
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
         friend class CurOp;
@@ -276,6 +293,7 @@ namespace mongo {
         CurOp * _curOp;
         Context * _context;
         shared_ptr<TransactionStack> _transactions;
+        string _bulkLoadNS; // the ns currently under-going bulk load by this client
         bool _shutdown; // to track if Client::shutdown() gets called
         std::string _desc;
         bool _god;

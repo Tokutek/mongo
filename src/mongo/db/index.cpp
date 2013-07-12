@@ -36,6 +36,7 @@
 namespace mongo {
 
     IndexDetails::IndexDetails(const BSONObj &info, bool may_create) :
+        _db(NULL),
         _info(info.copy()),
         _keyPattern(info["key"].Obj().copy()),
         _unique(info["unique"].trueValue()),
@@ -48,8 +49,13 @@ namespace mongo {
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
-        if (may_create) {
-            addNewNamespaceToCatalog(dbname);
+        try {
+            if (may_create) {
+                addNewNamespaceToCatalog(dbname);
+            }
+        } catch (...) {
+            close();
+            throw;
         }
     }
 
@@ -99,7 +105,7 @@ namespace mongo {
             }
 
             if (!StringData(pns).endsWith(".system.indexes")) {
-                int n = removeFromSysIndexes(pns, indexName());
+                const int n = removeFromSysIndexes(pns, indexName());
                 wassert( n == 1 );
             }
         }
@@ -203,6 +209,13 @@ namespace mongo {
 
         const int del_flags = ((flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0) | DB_DELETE_ANY;
         int r = _db->del(_db, cc().txn().db_txn(), &kdbt, del_flags);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
+    }
+
+    void IndexDetails::acquireTableLock() {
+        const int r = _db->pre_acquire_table_lock(_db, cc().txn().db_txn());
         if (r != 0) {
             storage::handle_ydb_error(r);
         }

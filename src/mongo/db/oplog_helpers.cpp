@@ -220,6 +220,10 @@ namespace OpLogHelpers{
                 BSONObj key = row["key"].Obj();
                 const string &coll = row["ns"].String();
                 NamespaceDetails* collNsd = nsdetails(coll.c_str());
+
+                // TODO: Use collNsd->ensureIndex(row), which returns true if the
+                //       index did not exists and is now built, and false otherwise.
+                //       It does not insert into system.indexes or system.namespaces
                 int i = collNsd->findIndexByKeyPattern(key);
                 if (i >= 0) {
                     // the index already exists, so this is a no-op

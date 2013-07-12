@@ -1,4 +1,4 @@
-// client.cpp
+// client_transaction.cpp
 
 /**
 *    Copyright (C) 2009 10gen Inc.

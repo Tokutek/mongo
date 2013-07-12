@@ -147,6 +147,7 @@ namespace mongo {
 
         void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, uint64_t flags);
         void deletePair(const BSONObj &key, const BSONObj *pk, uint64_t flags);
+        void acquireTableLock();
 
         enum toku_compression_method getCompressionMethod() const;
         uint32_t getPageSize() const;
@@ -193,7 +194,6 @@ namespace mongo {
         // Open dictionary representing the index on disk.
         DB *_db;
 
-        void _build();
         static int hot_opt_callback(void *extra, float progress);
 
         // Info about the index. Stored on disk in the database.ns dictionary
