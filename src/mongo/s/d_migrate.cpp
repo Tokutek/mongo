@@ -68,10 +68,11 @@
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/client/remote_transaction.h"
 
+#include "mongo/logger/ramlog.h"
+
 #include "mongo/util/queue.h"
 #include "mongo/util/startup_test.h"
 #include "mongo/util/processinfo.h"
-#include "mongo/util/ramlog.h"
 #include "mongo/util/elapsed_tracker.h"
 
 #include "mongo/s/chunk.h"
@@ -84,7 +85,6 @@
 #include "mongo/util/elapsed_tracker.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/queue.h"
-#include "mongo/util/ramlog.h"
 #include "mongo/util/startup_test.h"
 
 using namespace std;
@@ -108,7 +108,7 @@ namespace mongo {
         return true;
     }
 
-    Tee* migrateLog = new RamLog( "migrate" );
+    Tee* migrateLog = RamLog::get("migrate");
 
     class MoveTimingHelper {
     public:
