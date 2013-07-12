@@ -122,7 +122,7 @@ public:
                 {
                     BSONElement tsElt = firstObj["ts"];
                     if (!tsElt.ok()) {
-                        log() << "oplog format error: " << obj << " missing 'ts' field." << endl;
+                        log() << "oplog format error: " << firstObj << " missing 'ts' field." << endl;
                         rconn->done();
                         logPosition();
                         return -1;
@@ -163,6 +163,8 @@ public:
             logPosition();
             return -1;
         }
+
+        rconn->done();
 
         if (_logAtExit) {
             logPosition();
@@ -266,7 +268,6 @@ public:
                     }
                     // We need to warn very carefully about dropDups.
                     if (o["dropDups"].trueValue()) {
-                        rconn->done();
                         BSONObjBuilder builder;
                         BSONObjIterator it(o);
                         while (it.more()) {
