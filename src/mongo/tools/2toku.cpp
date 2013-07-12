@@ -80,12 +80,42 @@ public:
             while (running) {
                 BSONObjBuilder queryBuilder;
                 BSONObjBuilder gteBuilder(queryBuilder.subobjStart("ts"));
-                gteBuilder.appendTimestamp("$gt", maxOpTimeSynced.asDate());
+                gteBuilder.appendTimestamp("$gte", maxOpTimeSynced.asDate());
                 gteBuilder.doneFast();
                 BSONObj query = queryBuilder.done();
 
                 BSONObj res;
                 auto_ptr<DBClientCursor> cursor(rconn->conn().query(oplogns, query, 0, 0, &res, tailingQueryOptions));
+
+                if (!cursor->more()) {
+                    log() << "oplog query returned no results, sleeping";
+                    for (int i = 0; running && i < 10; ++i) {
+                        log() << '.';
+                        Logstream::get().flush();
+                        sleepsecs(1);
+                    }
+                    log() << endl;
+                    continue;
+                }
+
+                BSONObj firstObj = cursor->next();
+                {
+                    BSONElement tsElt = firstObj["ts"];
+                    if (!tsElt.ok()) {
+                        log() << "oplog format error: " << obj << " missing 'ts' field." << endl;
+                        rconn->done();
+                        return logAndExit(-1);
+                    }
+                    OpTime firstTime(tsElt.date());
+                    if (firstTime != maxOpTimeSynced) {
+                        warning() << "Tried to start at OpTime " << maxOpTimeSynced.getSecs() << ":" << maxOpTimeSynced.getInc()
+                                  << ", but didn't find anything before " << firstTime.getSecs() << ":" << firstTime.getInc() << "!" << endl;
+                        warning() << "This may mean your oplog has been truncated past the point you are trying to resume from." << endl;
+                        warning() << "Either retry with a different value of --ts, or restart your migration procedure." << endl;
+                        rconn->done();
+                        return -1;
+                    }
+                }
 
                 while (running && cursor->more()) {
                     thisTime = OpTime();
