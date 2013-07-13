@@ -975,7 +975,16 @@ namespace mongo {
         }
         JParse jparse(jsonString);
         BSONObjBuilder builder;
-        Status ret = jparse.object("UNUSED", builder, false);
+        Status ret = Status::OK();
+        try {
+            ret = jparse.object("UNUSED", builder, false);
+        }
+        catch(std::exception& e) {
+            std::ostringstream message;
+            message << "caught exception from within JSON parser: " << e.what();
+            throw MsgAssertionException(17367, message.str());
+        }
+
         if (ret != Status::OK()) {
             ostringstream message;
             message << "code " << ret.code() << ": " << ret.codeString() << ": " << ret.reason();

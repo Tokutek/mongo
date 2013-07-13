@@ -1,4 +1,5 @@
 add_subdirectory(concurrency)
+add_subdirectory(options_parser)
 
 add_library(stacktrace STATIC
   stacktrace

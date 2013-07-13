@@ -838,6 +838,13 @@ if (BUILD_TESTING)
   endforeach ()
 
   foreach (test
+      options_parser_test
+      environment_test
+      )
+    add_mongo_test(util/options_parser ${test} ${test})
+  endforeach ()
+
+  foreach (test
       atomic_word_test
       bits_test
       process_id_test
