@@ -282,18 +282,6 @@ public:
             return -1;
         }
 
-        OpTime maxOpTimeSynced;
-        if (hasParam("ts")) {
-            unsigned secs, i;
-            const string &ts(getParam("ts"));
-            int r = sscanf(ts.c_str(), "%u:%u", &secs, &i);
-            if (r != 2) {
-                log() << "need to specify --ts as <secs>:<inc>" << endl;
-                return -1;
-            }
-            maxOpTimeSynced = OpTime(secs, i);
-        }
-
         const string &oplogns = getParam("oplogns");
 
         Client::initThread( "mongo2toku" );
@@ -304,7 +292,21 @@ public:
 
         LOG(1) << "connected" << endl;
 
-        _player.reset(new VanillaOplogPlayer(conn(), _host, maxOpTimeSynced, running, _logAtExit));
+        {
+            OpTime maxOpTimeSynced;
+            if (hasParam("ts")) {
+                unsigned secs, i;
+                const string &ts(getParam("ts"));
+                int r = sscanf(ts.c_str(), "%u:%u", &secs, &i);
+                if (r != 2) {
+                    log() << "need to specify --ts as <secs>:<inc>" << endl;
+                    return -1;
+                }
+                maxOpTimeSynced = OpTime(secs, i);
+            }
+
+            _player.reset(new VanillaOplogPlayer(conn(), _host, maxOpTimeSynced, running, _logAtExit));
+        }
 
         try {
             while (running) {
@@ -340,8 +342,8 @@ public:
                         return -1;
                     }
                     OpTime firstTime(tsElt.date());
-                    if (firstTime != maxOpTimeSynced) {
-                        warning() << "Tried to start at OpTime " << fmtOpTime(maxOpTimeSynced)
+                    if (firstTime != _player->maxOpTimeSynced()) {
+                        warning() << "Tried to start at OpTime " << _player->maxOpTimeSyncedStr()
                                   << ", but didn't find anything before " << fmtOpTime(firstTime) << "!" << endl;
                         warning() << "This may mean your oplog has been truncated past the point you are trying to resume from." << endl;
                         warning() << "Either retry with a different value of --ts, or restart your migration procedure." << endl;
