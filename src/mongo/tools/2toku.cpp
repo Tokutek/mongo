@@ -263,7 +263,7 @@ public:
     OplogTool() : Tool("2toku"), _logAtExit(true) {
         addFieldOptions();
         add_options()
-        ("ts" , po::value<string>() , "OpTime to start reading from (secs:inc)" )
+        ("ts" , po::value<string>() , "max OpTime already applied (secs:inc)" )
         ("from", po::value<string>() , "host to pull from" )
         ("oplogns", po::value<string>()->default_value( "local.oplog.rs" ) , "ns to pull from" )
         ;
