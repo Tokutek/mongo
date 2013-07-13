@@ -193,23 +193,21 @@ class VanillaOplogPlayer : boost::noncopyable {
                                 builder.append(e);
                             }
                         }
+                        flushInserts();
                         warning() << "Detected an ensureIndex with dropDups: true in " << o << "." << endl;
                         warning() << "This option is not supported in TokuMX, because it deletes arbitrary data." << endl;
                         warning() << "If it were replayed, it could result in a completely different data set than the source database." << endl;
-                        warning() << "Therefore, we will not replay it." << endl;
-                        warning() << "If you want to manually ensure this index without dropDups, you can try by issuing this command:" << endl;
-                        if (_host == "DIRECT") {
-                            warning() << "  mongo <host>:<port>/" << dbname << " --eval 'db.system.indexes.insert(" << builder.done() << ")'" << endl;
-                            warning() << "after starting the server on <host>:<port>." << endl;
+                        warning() << "We will attempt to replay it without dropDups, but if that fails, you must" << endl;
+                        warning() << "restart your migration process." << endl;
+                        _conn.insert(ns, o);
+                        string err = _conn.getLastError(dbname, false, false);
+                        if (!err.empty()) {
+                            log() << "replay of operation " << obj << " failed: " << err << endl;
+                            warning() << "You cannot continue processing this replication stream.  You need to restart the migration process." << endl;
+                            _running = false;
+                            _logAtExit = false;
+                            return true;
                         }
-                        else {
-                            warning() << "  mongo " << _host << "/" << dbname << " --eval 'db.system.indexes.insert(" << builder.done() << ")'" << endl;
-                        }
-                        warning() << "If that succeeds without detecting any duplicates, you can then resume mongo2toku with this option: "
-                                  << "--ts=" << thisTimeStr() << endl;
-                        _running = false;
-                        _logAtExit = false;
-                        return true;
                     }
                 }
                 pushInsert(ns, o);
@@ -233,7 +231,7 @@ class VanillaOplogPlayer : boost::noncopyable {
                 bool justOne = bElt.booleanSafe();
                 _conn.remove(ns, o, justOne);
             }
-            string err = _conn.getLastError(dbname, false, false, 1);  // w=1
+            string err = _conn.getLastError(dbname, false, false);
             if (!err.empty()) {
                 log() << "replay of operation " << obj << " failed: " << err << endl;
                 return false;
