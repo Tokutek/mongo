@@ -197,8 +197,7 @@ class VanillaOplogPlayer : boost::noncopyable {
                         warning() << "Detected an ensureIndex with dropDups: true in " << o << "." << endl;
                         warning() << "This option is not supported in TokuMX, because it deletes arbitrary data." << endl;
                         warning() << "If it were replayed, it could result in a completely different data set than the source database." << endl;
-                        warning() << "We will attempt to replay it without dropDups, but if that fails, you must" << endl;
-                        warning() << "restart your migration process." << endl;
+                        warning() << "We will attempt to replay it without dropDups, but if that fails, you must restart your migration process." << endl;
                         _conn.insert(ns, o);
                         string err = _conn.getLastError(dbname, false, false);
                         if (!err.empty()) {
