@@ -44,7 +44,8 @@ import shlex
 import socket
 from subprocess import (Popen,
                         PIPE,
-                        call)
+                        call,
+                        check_output)
 import sys
 from tempfile import SpooledTemporaryFile
 import time
@@ -88,6 +89,8 @@ small_oplog_rs = False
 tests_log = sys.stdout
 server_log_file = ''
 quiet = False
+
+_debug = False
 
 # This class just implements the with statement API, for a sneaky
 # purpose below.
@@ -177,6 +180,8 @@ class mongod(object):
     def start(self):
         global mongod_port
         global mongod
+        global shell_executable
+        global _debug
         if self.proc:
             print >> sys.stderr, "probable bug: self.proc already set in start()"
             return
@@ -230,6 +235,10 @@ class mongod(object):
 
         if not self.did_mongod_start(self.port):
             raise Exception("Failed to start mongod")
+
+        if "true" == check_output([shell_executable, '--port', str(self.port), '--quiet', '--eval',
+                                   'print(db.runCommand("buildInfo").debug)']).strip():
+            _debug = True
 
         if self.auth:
             self.setup_admin_user(self.port)
@@ -373,6 +382,10 @@ def skipTest(path):
             return True
         # These tests fail due to bugs
         if os.path.join(parentDir,basename) in ["sharding/sync_conn_cmd.js"]:
+            return True
+    if _debug:
+        # MutexDebugger complains about this test, it's not unique to tokumx though, see #79
+        if os.path.join(parentDir,basename) in ["sharding/remove2.js"]:
             return True
 
     return False
