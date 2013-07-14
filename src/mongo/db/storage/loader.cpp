@@ -60,8 +60,9 @@ namespace mongo {
             try {
                 killCurrentOp.checkForInterrupt(info->c); // uasserts if we should stop
                 return 0;
-            } catch (std::exception &e) {
-                info->ex = &e;
+            }
+            catch (const std::exception &ex) {
+                info->saveException(ex);
                 return -1;
             }
         }
@@ -73,8 +74,7 @@ namespace mongo {
         int Loader::close() {
             const int r = _loader->close(_loader);
             if (r == -1) {
-                verify(_poll_extra.ex != NULL);
-                throw *_poll_extra.ex;
+                _poll_extra.throwException();
             }
             if (r == 0) {
                 _closed = true;

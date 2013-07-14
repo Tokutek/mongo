@@ -18,6 +18,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/client.h"
+#include "mongo/util/assert_util.h"
 
 #include <db.h>
 
@@ -37,10 +38,9 @@ namespace mongo {
 
             int close();
 
-            struct poll_function_extra {
-                poll_function_extra(Client &client) : c(client), ex(NULL) { }
+            struct poll_function_extra : public ExceptionSaver {
+                poll_function_extra(Client &client) : c(client) {}
                 Client &c;
-                std::exception *ex;
             };
             static int poll_function(void *extra, float progress);
 

@@ -150,7 +150,7 @@ namespace mongo {
 
     /* ---------------------------------------------------------------------- */
 
-    struct cursor_getf_extra {
+    struct cursor_getf_extra : public ExceptionSaver {
         RowBuffer *buffer;
         int rows_fetched;
         int rows_to_fetch;
@@ -167,15 +167,21 @@ namespace mongo {
         // key is not found. in that case, key == NULL
         if (key) {
             struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
-            RowBuffer *buffer = info->buffer;
-            storage::Key sKey(key);
-            buffer->append(sKey, val->size > 0 ?
-                    BSONObj(static_cast<const char *>(val->data)) : BSONObj());
+            try {
+                RowBuffer *buffer = info->buffer;
+                storage::Key sKey(key);
+                buffer->append(sKey, val->size > 0 ?
+                               BSONObj(static_cast<const char *>(val->data)) : BSONObj());
 
-            // request more bulk fetching if we are allowed to fetch more rows
-            // and the row buffer is not too full.
-            if (++info->rows_fetched < info->rows_to_fetch && !buffer->isGorged()) {
-                r = TOKUDB_CURSOR_CONTINUE;
+                // request more bulk fetching if we are allowed to fetch more rows
+                // and the row buffer is not too full.
+                if (++info->rows_fetched < info->rows_to_fetch && !buffer->isGorged()) {
+                    r = TOKUDB_CURSOR_CONTINUE;
+                }
+            }
+            catch (const std::exception &ex) {
+                info->saveException(ex);
+                return -1;
             }
         }
 
@@ -488,6 +494,7 @@ namespace mongo {
             r = cursor->c_getf_set_range_reverse(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         }
         if ( r != 0 && r != DB_NOTFOUND ) {
+            extra.throwException();
             storage::handle_ydb_error(r);
         }
 
@@ -678,6 +685,7 @@ again:      while ( !allInclusive && ok() ) {
             r = cursor->c_getf_prev(cursor, getf_flags(), cursor_getf, &extra);
         }
         if ( r != 0 && r != DB_NOTFOUND ) {
+            extra.throwException();
             storage::handle_ydb_error(r);
         }
 

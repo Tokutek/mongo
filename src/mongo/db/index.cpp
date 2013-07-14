@@ -126,7 +126,7 @@ namespace mongo {
         }
     }
 
-    struct UniqueCheckExtra {
+    struct UniqueCheckExtra : public ExceptionSaver {
         const IndexDetails &d;
         const BSONObj &newkey;
         bool &isUnique;
@@ -136,9 +136,15 @@ namespace mongo {
 
     int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
         if (key != NULL) {
-            const storage::Key sKey(key);
             UniqueCheckExtra *e = static_cast<UniqueCheckExtra *>(extra);
-            e->d.uniqueCheckCallback(e->newkey, sKey.key(), e->isUnique);
+            try {
+                const storage::Key sKey(key);
+                e->d.uniqueCheckCallback(e->newkey, sKey.key(), e->isUnique);
+            }
+            catch (const std::exception &ex) {
+                e->saveException(ex);
+                return -1;
+            }
         }
         return 0;
     }
@@ -163,6 +169,7 @@ namespace mongo {
         UniqueCheckExtra extra(*this, key, isUnique);
         int r = cursor->c_getf_set_range(cursor, 0, &kdbt, mongo::uniqueCheckCallback, &extra);
         if (r != 0 && r != DB_NOTFOUND) {
+            extra.throwException();
             storage::handle_ydb_error(r);
         }
         if (!isUnique) {
