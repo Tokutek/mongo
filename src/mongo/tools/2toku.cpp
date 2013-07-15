@@ -162,8 +162,21 @@ class VanillaOplogPlayer : boost::noncopyable {
             BSONObj info;
             bool ok = _conn.runCommand(dbname, o, info);
             if (!ok) {
-                log() << "replay of command " << o << " failed: " << info << endl;
-                return false;
+                const char *fieldName = o.firstElementFieldName();
+                string errmsg = info["errmsg"].str();
+                bool isDropIndexes = (strncmp(fieldName, "dropIndexes", sizeof("dropIndexes")) == 0 ||
+                                      strncmp(fieldName, "deleteIndexes", sizeof("deleteIndexes")) == 0);
+                if (((strncmp(fieldName, "drop", sizeof("drop")) == 0 || isDropIndexes) &&
+                     errmsg == "ns not found") ||
+                    (isDropIndexes && (errmsg == "index not found" ||
+                                       errmsg.find("can't find index with key:") == 0))) {
+                    // This is actually ok.  We don't mind dropping something that's not there.
+                    LOG(1) << "Tried to replay " << o << ", got " << info << ", ignoring." << endl;
+                }
+                else {
+                    log() << "replay of command " << o << " failed: " << info << endl;
+                    return false;
+                }
             }
         }
         else {
