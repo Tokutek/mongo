@@ -74,6 +74,7 @@ scratch
 
 /mongodump
 /mongorestore
+/mongo2toku
 
 /mongofiles
 /mongoexport
