@@ -681,7 +681,7 @@ startMongodTest = function (port, dirname, restart, extraOptions ) {
             oplogSize: "40",
             nohttpinterface: ""
         };
-    
+
     if( jsTestOptions().noJournal ) options["nojournal"] = ""
     if( jsTestOptions().noJournalPrealloc ) options["nopreallocj"] = ""
     if( jsTestOptions().auth ) options["auth"] = ""
@@ -731,7 +731,7 @@ startMongos = function(args){
 /**
  * Returns a new argArray with any test-specific arguments added.
  */
-getTestArgs = function(argArray) {
+function appendSetParameterArgs(argArray) {
     var programName = argArray[0];
     if (programName.endsWith('mongod') || programName.endsWith('mongos')) {
         if (jsTest.options().enableTestCommands) {
@@ -741,6 +741,21 @@ getTestArgs = function(argArray) {
             argArray.push.apply(argArray,
                                 ['--setParameter',
                                  "authenticationMechanisms=" + jsTest.options().authMechanism]);
+        }
+
+        //TODO: support mongos setParameter options
+
+        // mongod only options
+        if (programName.endsWith('mongod')) {
+            // apply setParameters for mongod
+            if (jsTest.options().setParameters) {
+                var params = jsTest.options().setParameters.split(",");
+                if (params && params.length > 0) {
+                    params.forEach(function(p) {
+                        if (p) argArray.push.apply(argArray, ['--setParameter', p])
+                    });
+                }
+            }
         }
     }
     return argArray;
@@ -753,7 +768,7 @@ getTestArgs = function(argArray) {
 MongoRunner.startWithArgs = function(argArray, waitForConnect) {
     // TODO: Make there only be one codepath for starting mongo processes
 
-    argArray = getTestArgs(argArray);
+    argArray = appendSetParameterArgs(argArray);
     var port = _parsePort.apply(null, argArray);
     var pid = _startMongoProgram.apply(null, argArray);
 
@@ -794,7 +809,7 @@ startMongoProgram = function(){
     // TODO: Make this work better with multi-version testing so that we can support
     // enabling this on 2.4 when testing 2.6
     var args = argumentsToArray( arguments );
-    args = getTestArgs(args);
+    args = appendSetParameterArgs(args);
     var pid = _startMongoProgram.apply( null, args );
 
     var m;
