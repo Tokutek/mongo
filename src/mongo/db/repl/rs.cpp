@@ -1047,10 +1047,10 @@ namespace mongo {
                             found = d->findOne(BSONObj(), result);
                         }
                         else {
-                            BSONObjBuilder q;
-                            addGTIDToBSON("$gt", lastTimeRead, q);
                             BSONObjBuilder query;
-                            query.append("_id", q.done());
+                            BSONObjBuilder q(query.subobjStart("_id"));;
+                            addGTIDToBSON("$gt", lastTimeRead, q);
+                            q.doneFast();
                             found = d->findOne(query.done(), result, false);
                         }
                     }
