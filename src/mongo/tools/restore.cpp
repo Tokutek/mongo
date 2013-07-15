@@ -111,6 +111,8 @@ public:
 
         if (doOplog) {
             // fail early if errors
+            log() << "TokuMX does not support --oplogReplay." << endl;
+            return -1;
 
             if (_db != "") {
                 log() << "Can only replay oplog on full restore" << endl;
