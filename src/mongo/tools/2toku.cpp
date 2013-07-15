@@ -26,6 +26,7 @@
 
 #include "mongo/tools/tool.h"
 
+#include "mongo/base/string_data.h"
 #include "mongo/client/connpool.h"
 #include "mongo/db/jsobj.h"
 
@@ -52,13 +53,13 @@ class VanillaOplogPlayer : boost::noncopyable {
     volatile bool &_running;
     bool &_logAtExit;
 
-    void pushInsert(const string &ns, const BSONObj &o) {
+    void pushInsert(const StringData &ns, const BSONObj &o) {
         uassert(16862, "cannot append an earlier optime", _thisTime > _insertMaxTime);
         // semes like enough room for headers/metadata
         static const size_t MAX_SIZE = BSONObjMaxUserSize - (4<<10);
         if (ns != _insertNs || _insertSize + o.objsize() > MAX_SIZE) {
             flushInserts();
-            _insertNs = ns;
+            _insertNs = ns.toString();
         }
         _insertBuf.push_back(o.getOwned());
         _insertSize += o.objsize();
@@ -114,7 +115,7 @@ class VanillaOplogPlayer : boost::noncopyable {
             log() << "oplog format error: " << obj << " missing 'op' field." << endl;
             return false;
         }
-        string op = opElt.String();
+        StringData op = opElt.Stringdata();
 
         // nop
         if (op == "n") {
@@ -138,14 +139,14 @@ class VanillaOplogPlayer : boost::noncopyable {
             log() << "oplog format error: " << obj << " missing 'ns' field." << endl;
             return false;
         }
-        string ns = nsElt.String();
+        StringData ns = nsElt.Stringdata();
         size_t i = ns.find('.');
         if (i == string::npos) {
             log() << "oplog format error: invalid namespace '" << ns << "' in op " << obj << "." << endl;
             return false;
         }
-        string dbname = ns.substr(0, i);
-        string collname = ns.substr(i + 1);
+        StringData dbname = ns.substr(0, i);
+        StringData collname = ns.substr(i + 1);
 
         BSONElement &oElt = fields[3];
         if (!oElt.ok()) {
@@ -160,16 +161,14 @@ class VanillaOplogPlayer : boost::noncopyable {
                 return false;
             }
             BSONObj info;
-            bool ok = _conn.runCommand(dbname, o, info);
+            bool ok = _conn.runCommand(dbname.toString(), o, info);
             if (!ok) {
-                const char *fieldName = o.firstElementFieldName();
-                string errmsg = info["errmsg"].str();
-                bool isDropIndexes = (strncmp(fieldName, "dropIndexes", sizeof("dropIndexes")) == 0 ||
-                                      strncmp(fieldName, "deleteIndexes", sizeof("deleteIndexes")) == 0);
-                if (((strncmp(fieldName, "drop", sizeof("drop")) == 0 || isDropIndexes) &&
-                     errmsg == "ns not found") ||
-                    (isDropIndexes && (errmsg == "index not found" ||
-                                       errmsg.find("can't find index with key:") == 0))) {
+                StringData fieldName = o.firstElementFieldName();
+                BSONElement errmsgElt = info["errmsg"];
+                StringData errmsg = errmsgElt.type() == String ? errmsgElt.Stringdata() : "";
+                bool isDropIndexes = (fieldName == "dropIndexes" || fieldName == "deleteIndexes");
+                if (((fieldName == "drop" || isDropIndexes) && errmsg == "ns not found") ||
+                    (isDropIndexes && (errmsg == "index not found" || errmsg.find("can't find index with key:") == 0))) {
                     // This is actually ok.  We don't mind dropping something that's not there.
                     LOG(1) << "Tried to replay " << o << ", got " << info << ", ignoring." << endl;
                 }
@@ -180,6 +179,7 @@ class VanillaOplogPlayer : boost::noncopyable {
             }
         }
         else {
+            string nsstr = ns.toString();
             if (op == "i") {
                 if (collname == "system.indexes") {
                     // For now, we need to strip out any background fields from
@@ -211,8 +211,8 @@ class VanillaOplogPlayer : boost::noncopyable {
                         warning() << "This option is not supported in TokuMX, because it deletes arbitrary data." << endl;
                         warning() << "If it were replayed, it could result in a completely different data set than the source database." << endl;
                         warning() << "We will attempt to replay it without dropDups, but if that fails, you must restart your migration process." << endl;
-                        _conn.insert(ns, o);
-                        string err = _conn.getLastError(dbname, false, false);
+                        _conn.insert(nsstr, o);
+                        string err = _conn.getLastError(dbname.toString(), false, false);
                         if (!err.empty()) {
                             log() << "replay of operation " << obj << " failed: " << err << endl;
                             warning() << "You cannot continue processing this replication stream.  You need to restart the migration process." << endl;
@@ -222,7 +222,7 @@ class VanillaOplogPlayer : boost::noncopyable {
                         }
                     }
                 }
-                pushInsert(ns, o);
+                pushInsert(nsstr, o);
                 // Don't call GLE or update _maxOpTimeSynced yet.
                 _thisTime = OpTime();
                 return true;
@@ -236,14 +236,14 @@ class VanillaOplogPlayer : boost::noncopyable {
                 BSONElement &bElt = fields[4];
                 bool upsert = bElt.booleanSafe();
                 BSONObj o2 = o2Elt.Obj();
-                _conn.update(ns, o2, o, upsert, false);
+                _conn.update(nsstr, o2, o, upsert, false);
             }
             else if (op == "d") {
                 BSONElement &bElt = fields[4];
                 bool justOne = bElt.booleanSafe();
-                _conn.remove(ns, o, justOne);
+                _conn.remove(nsstr, o, justOne);
             }
-            string err = _conn.getLastError(dbname, false, false);
+            string err = _conn.getLastError(dbname.toString(), false, false);
             if (!err.empty()) {
                 log() << "replay of operation " << obj << " failed: " << err << endl;
                 return false;
