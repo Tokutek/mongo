@@ -54,7 +54,7 @@ class VanillaOplogPlayer : boost::noncopyable {
     bool &_logAtExit;
 
     void pushInsert(const StringData &ns, const BSONObj &o) {
-        uassert(16862, "cannot append an earlier optime", _thisTime > _insertMaxTime);
+        uassert(16863, "cannot append an earlier optime", _thisTime > _insertMaxTime);
         // semes like enough room for headers/metadata
         static const size_t MAX_SIZE = BSONObjMaxUserSize - (4<<10);
         if (ns != _insertNs || _insertSize + o.objsize() > MAX_SIZE) {
