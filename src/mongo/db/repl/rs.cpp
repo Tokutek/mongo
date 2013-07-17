@@ -1024,6 +1024,7 @@ namespace mongo {
         _replOplogPurgeRunning = true;
         GTID lastTimeRead;
         Client::initThread("purgeOplog");
+        replLocalAuth();
         while (_replBackgroundShouldRun) {
             const uint64_t expireMillis = expireOplogMilliseconds();
             if (expireMillis) {
