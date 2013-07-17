@@ -305,7 +305,7 @@ namespace mongo {
         DBT end = eKey.dbt();
 
         DBC *cursor = _cursor.dbc();
-        const int r = cursor->c_pre_acquire_range_lock( cursor, &start, &end );
+        const int r = cursor->c_set_bounds( cursor, &start, &end, true, 0 );
         if ( r != 0 ) {
             storage::handle_ydb_error(r);
         }
