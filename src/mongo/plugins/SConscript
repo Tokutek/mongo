@@ -1,0 +1,16 @@
+# -*- mode: python -*-
+
+Import("env")
+
+env.StaticLibrary('plugins', ['plugins.cpp'])
+
+def libfilename(name):
+    return "${SHLIBPREFIX}%s${SHLIBSUFFIX}" % name
+
+allPlugins = []
+for subdir in Glob('./*/SConscript'):
+    plugin, name = env.SConscript(subdir)
+    allPlugins += env.Command(libfilename(name), subdir.File(env.subst(libfilename(name))), Copy('$TARGET', '$SOURCE'))
+
+env.Alias('allPlugins', [env.Install('#/plugins/', plugin) for plugin in allPlugins])
+Return('allPlugins')
