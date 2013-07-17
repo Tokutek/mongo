@@ -854,7 +854,10 @@ namespace {
 
         try {
             std::vector<std::string> dbNames;
-            _externalState->getAllDatabaseNames(&dbNames);
+            Status status = _externalState->getAllDatabaseNames(&dbNames);
+            if (!status.isOK()) {
+                return status;
+            }
 
             for (std::vector<std::string>::iterator dbIt = dbNames.begin();
                     dbIt != dbNames.end(); ++dbIt) {
@@ -884,15 +887,13 @@ namespace {
                     }
 
                     if (source == dbname || source == "$external") {
-                        Status status = _initializeUserCredentialsFromPrivilegeDocument(user,
+                        status = _initializeUserCredentialsFromPrivilegeDocument(user,
                                                                                         privDoc);
                         if (!status.isOK()) {
                             return status;
                         }
                     }
-                    Status status = _initializeUserRolesFromPrivilegeDocument(user,
-                                                                              privDoc,
-                                                                              dbname);
+                    status = _initializeUserRolesFromPrivilegeDocument(user, privDoc, dbname);
                     if (!status.isOK()) {
                         return status;
                     }

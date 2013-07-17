@@ -106,9 +106,10 @@ namespace mongo {
         return ok;
     }
 
-    void AuthzManagerExternalStateMongod::getAllDatabaseNames(
+    Status AuthzManagerExternalStateMongod::getAllDatabaseNames(
             std::vector<std::string>* dbnames) const {
         getDatabaseNames(*dbnames);
+        return Status::OK();
     }
 
     std::vector<BSONObj> AuthzManagerExternalStateMongod::getAllV1PrivilegeDocsForDB(
