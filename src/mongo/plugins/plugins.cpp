@@ -32,33 +32,44 @@ namespace mongo {
         class DLHandle : boost::noncopyable {
             void *_h;
           public:
-            void *handle() const { return _h; }
-            DLHandle(void *h) : _h(h) {}
-            ~DLHandle() {
+            void *h() const { return _h; }
+            bool open(const char *filename, int flags) {
+                verify(_h == NULL);
+                _h = dlopen(filename, flags);
+                return _h != NULL;
+            }
+            void *sym(const char *symbol) {
+                return dlsym(_h, symbol);
+            }
+            bool close() {
+                verify(_h != NULL);
                 int r = dlclose(_h);
-                if (r != 0) {
-                    log() << "error in dlclose: " << r << endl;
+                _h = NULL;
+                return r == 0;
+            }
+            string error() {
+                char *err = dlerror();
+                if (err == NULL) {
+                    return "unknown error";
+                }
+                else {
+                    return err;
+                }
+            }
+            DLHandle() : _h(NULL) {}
+            ~DLHandle() {
+                if (_h != NULL) {
+                    if (!close()) {
+                        log() << "error in dlclose: " << error() << endl;
+                    }
                 }
             }
         };
 
         class PluginHandle : boost::noncopyable {
             const string _filename;
-            scoped_ptr<DLHandle> _dlHandle;
+            DLHandle _dl;
             PluginInterface *_interface;
-
-            void reportDlerror(string &errmsg) {
-                char *err = dlerror();
-                stringstream errs;
-                errs << "error loading plugin from file " << _filename << ": ";
-                if (err == NULL) {
-                    errs << "unknown error";
-                }
-                else {
-                    errs << err;
-                }
-                errmsg += errs.str();
-            }
 
           public:
             explicit PluginHandle(const string &filename) : _filename(filename) {}
@@ -66,15 +77,14 @@ namespace mongo {
             const string &name() const { return _interface->name(); }
 
             bool init(string &errmsg, BSONObjBuilder &result) {
-                void *handle = dlopen(_filename.c_str(), RTLD_NOW);
-                if (handle == NULL) {
-                    reportDlerror(errmsg);
+                bool ok = _dl.open(_filename.c_str(), RTLD_NOW);
+                if (!ok) {
+                    errmsg += "error loading plugin from file " + _filename + ": " + _dl.error();
                     return false;
                 }
-                _dlHandle.reset(new DLHandle(handle));
-                GetInterfaceFunc getInterface = reinterpret_cast<GetInterfaceFunc>(dlsym(_dlHandle->handle(), "getInterface"));
+                GetInterfaceFunc getInterface = reinterpret_cast<GetInterfaceFunc>(_dl.sym("getInterface"));
                 if (getInterface == NULL) {
-                    reportDlerror(errmsg);
+                    errmsg += "error finding symbol `getInterface' in file " + _filename + ": " + _dl.error();
                     return false;
                 }
                 PluginInterface *interfacep = getInterface();
@@ -98,7 +108,7 @@ namespace mongo {
                 string nameCopy = name();
                 _interface->unload(errmsg);
                 _interface = NULL;
-                _dlHandle.reset();
+                _dl.close();
                 LOG(0) << "Unloaded plugin " << nameCopy << " from " << _filename << endl;
                 return true;
             }
