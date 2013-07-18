@@ -27,6 +27,7 @@ namespace mongo {
         class PluginInterface {
           public:
             virtual const string &name() const = 0;
+            virtual const string &version() const = 0;
             virtual bool load(string &errmsg, BSONObjBuilder &result) = 0;
             virtual void unload(string &errmsg) = 0;
             virtual ~PluginInterface() {}
