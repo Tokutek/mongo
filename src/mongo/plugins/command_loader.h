@@ -64,10 +64,18 @@ namespace mongo {
              */
             virtual CommandVector commands() const = 0;
 
+            /**
+             * Anything that should be done before loading.  Returning false stops the plugin from being loaded.
+             */
+            virtual bool preLoad(string &errmsg, BSONObjBuilder &result) {}
+
           public:
             virtual ~CommandLoader() {}
 
             bool load(string &errmsg, BSONObjBuilder &result) {
+                if (!preLoad(errmsg, result)) {
+                    return false;
+                }
                 BSONArrayBuilder b(result.subarrayStart("newCommands"));
                 CommandVector allCommands = commands();
                 for (CommandVector::const_iterator it = allCommands.begin(); it != allCommands.end(); ++it) {
