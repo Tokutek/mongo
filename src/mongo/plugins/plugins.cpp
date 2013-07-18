@@ -26,7 +26,7 @@
 
 namespace mongo {
 
-    namespace plugin {
+    namespace plugins {
 
         class PluginHandle : boost::noncopyable {
             const string _filename;
@@ -112,7 +112,7 @@ namespace mongo {
             }
         } loader;
 
-    }  // namespace plugin
+    }  // namespace plugins
 
     /**
      * Load a plugin into mongod.
@@ -146,7 +146,7 @@ namespace mongo {
                     errmsg = "filename argument must not be empty";
                     return false;
                 }
-                return plugin::loader.load(filename, errmsg, result);
+                return plugins::loader.load(filename, errmsg, result);
             }
             else {
                 BSONElement e = cmdObj.firstElement();
@@ -161,7 +161,7 @@ namespace mongo {
                 }
                 string filename = mongoutils::str::stream() << "lib" << name << ".so";
                 result.append("filename", filename);
-                return plugin::loader.load(filename, errmsg, result);
+                return plugins::loader.load(filename, errmsg, result);
             }
         }
     } loadPluginCommand;
@@ -197,7 +197,7 @@ namespace mongo {
                 errmsg = "unloadPlugin argument must not be empty";
                 return false;
             }
-            return plugin::loader.unload(name, errmsg, result);
+            return plugins::loader.unload(name, errmsg, result);
         }
     } unloadPluginCommand;
 

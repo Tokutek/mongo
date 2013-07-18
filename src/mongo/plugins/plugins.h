@@ -20,7 +20,7 @@
 
 namespace mongo {
 
-    namespace plugin {
+    namespace plugins {
 
         class PluginInterface {
           public:
@@ -33,6 +33,6 @@ namespace mongo {
 
         typedef PluginInterface *(*GetInterfaceFunc)();
 
-    } // namespace plugin
+    } // namespace plugins
 
 } // namespace mongo

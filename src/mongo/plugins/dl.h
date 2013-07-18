@@ -24,7 +24,7 @@
 
 namespace mongo {
 
-    namespace plugin {
+    namespace plugins {
 
         /**
          * Wrapper for dlopen/dlsym/dlclose/dlerror that closes the handle in the destructor.
@@ -40,6 +40,6 @@ namespace mongo {
             string error() const;
         };
 
-    } // namespace plugin
+    } // namespace plugins
 
 } // namespace mongo

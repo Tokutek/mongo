@@ -25,7 +25,7 @@
 
 namespace mongo {
 
-    namespace plugin {
+    namespace plugins {
 
         bool DLHandle::open(const char *filename, int flags) {
             verify(_h == NULL);
@@ -58,6 +58,6 @@ namespace mongo {
             }
         }
 
-    } // namespace plugin
+    } // namespace plugins
 
 } // namespace mongo
