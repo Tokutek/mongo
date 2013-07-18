@@ -268,7 +268,7 @@ namespace mongo {
             time_t before = curTimeMicros64() / 1000000;
 
             bool ok = requestHeartbeat(theReplSet->name(), theReplSet->selfFullName(),
-                                       h.toString(), info, theReplSet->config().version, theirConfigVersion);
+                                       h.toString(), info, theReplSet->config().version);
 
             mem.ping = (unsigned int)timer.millis();
 
