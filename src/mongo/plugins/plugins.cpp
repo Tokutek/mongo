@@ -65,7 +65,7 @@ namespace mongo {
 
             const string &name() const { return _interface->name(); }
 
-            bool load(string &errmsg, BSONObjBuilder &result) {
+            bool init(string &errmsg, BSONObjBuilder &result) {
                 void *handle = dlopen(_filename.c_str(), RTLD_NOW);
                 if (handle == NULL) {
                     reportDlerror(errmsg);
@@ -83,6 +83,10 @@ namespace mongo {
                     return false;
                 }
                 _interface = interfacep;
+                return true;
+            }
+
+            bool load(string &errmsg, BSONObjBuilder &result) {
                 bool ok = _interface->load(errmsg, result);
                 if (ok) {
                     LOG(0) << "Loaded plugin " << name() << " from " << _filename << endl;
@@ -106,11 +110,19 @@ namespace mongo {
           public:
             bool load(const StringData &filename, string &errmsg, BSONObjBuilder &result) {
                 shared_ptr<PluginHandle> pluginHandle(new PluginHandle(filename.toString()));
-                bool ok = pluginHandle->load(errmsg, result);
+                bool ok = pluginHandle->init(errmsg, result);
                 if (!ok) {
                     return false;
                 }
                 const string &name = pluginHandle->name();
+                if (_plugins[name]) {
+                    errmsg = "cannot load plugin " + name + " twice";
+                    return false;
+                }
+                ok = pluginHandle->load(errmsg, result);
+                if (!ok) {
+                    return false;
+                }
                 _plugins[name] = pluginHandle;
                 result.append("loaded", name);
                 return true;
