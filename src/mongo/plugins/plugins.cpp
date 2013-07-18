@@ -18,53 +18,15 @@
 
 #include "mongo/pch.h"
 
-// TODO: feature detection to disable plugin code if we don't have dlopen/dlsym
-#include <dlfcn.h>
+#include "mongo/plugins/plugins.h"
 
 #include "mongo/db/commands.h"
-#include "mongo/plugins/plugins.h"
+#include "mongo/plugins/dl.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
 
     namespace plugin {
-
-        class DLHandle : boost::noncopyable {
-            void *_h;
-          public:
-            void *h() const { return _h; }
-            bool open(const char *filename, int flags) {
-                verify(_h == NULL);
-                _h = dlopen(filename, flags);
-                return _h != NULL;
-            }
-            void *sym(const char *symbol) {
-                return dlsym(_h, symbol);
-            }
-            bool close() {
-                verify(_h != NULL);
-                int r = dlclose(_h);
-                _h = NULL;
-                return r == 0;
-            }
-            string error() {
-                char *err = dlerror();
-                if (err == NULL) {
-                    return "unknown error";
-                }
-                else {
-                    return err;
-                }
-            }
-            DLHandle() : _h(NULL) {}
-            ~DLHandle() {
-                if (_h != NULL) {
-                    if (!close()) {
-                        log() << "error in dlclose: " << error() << endl;
-                    }
-                }
-            }
-        };
 
         class PluginHandle : boost::noncopyable {
             const string _filename;
