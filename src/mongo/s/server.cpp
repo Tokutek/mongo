@@ -46,6 +46,7 @@
 #include "shard_version.h"
 #include "../util/processinfo.h"
 #include "mongo/db/lasterror.h"
+#include "mongo/plugins/loader.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/log.h"
 
@@ -537,6 +538,7 @@ int main(int argc, char* argv[], char** envp) {
 
 void mongo::exitCleanly( ExitCode code ) {
     // TODO: do we need to add anything?
+    plugins::loader.shutdown();
     mongo::dbexit( code );
 }
 

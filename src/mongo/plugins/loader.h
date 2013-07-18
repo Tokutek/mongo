@@ -48,6 +48,7 @@ namespace mongo {
           public:
             bool load(const StringData &filename, string &errmsg, BSONObjBuilder &result);
             bool unload(const StringData &name, string &errmsg, BSONObjBuilder &result);
+            void shutdown();
         };
 
         extern Loader loader;

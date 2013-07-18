@@ -99,6 +99,19 @@ namespace mongo {
             return true;
         }
 
+        void Loader::shutdown() {
+            while (!_plugins.empty()) {
+                PluginMap::iterator it = _plugins.begin();
+                shared_ptr<PluginHandle> plugin = it->second;
+                string errmsg;
+                bool ok = plugin->unload(errmsg);
+                if (!ok) {
+                    LOG(0) << "During shutdown, error unloading plugin " << it->first << ": " << errmsg << endl;
+                }
+                _plugins.erase(it);
+            }
+        }
+
         Loader loader;
 
     }  // namespace plugins
