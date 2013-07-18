@@ -510,7 +510,6 @@ namespace mongo {
         }
         _applyMissingOpsDuringInitialSync();
 
-        changeState(MemberState::RS_RECOVERING);
         sethbmsg("initial sync done",0);
 
         return true;
