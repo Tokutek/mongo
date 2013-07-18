@@ -5,6 +5,7 @@ add_library(bson STATIC
   ../util/safe_num
   bson_validate
   oid
+  optime
   ../db/jsobj
   ../db/json
   )

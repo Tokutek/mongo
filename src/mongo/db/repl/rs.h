@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "mongo/bson/optime.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/oplog.h"
@@ -26,7 +27,6 @@
 #include "mongo/db/repl/rs_config.h"
 #include "mongo/db/repl/rs_exception.h"
 #include "mongo/db/repl/rs_member.h"
-#include "mongo/db/repl/optime.h"
 #include "mongo/db/repl/rs_optime.h"
 #include "mongo/db/repl/rs_sync.h"
 #include "mongo/util/concurrency/list.h"

@@ -24,9 +24,9 @@
 
 #pragma once
 
+#include "mongo/bson/optime.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/oplogreader.h"
-#include "mongo/db/repl/optime.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
