@@ -16,6 +16,8 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#pragma once
+
 #include "mongo/pch.h"
 
 // TODO: feature detection to disable plugin code if we don't have dlopen/dlsym

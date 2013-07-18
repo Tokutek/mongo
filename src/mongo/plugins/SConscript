@@ -2,8 +2,9 @@
 
 Import("env")
 
-env.StaticLibrary('plugins', ['dl.cpp',
-                              'plugins.cpp'])
+env.StaticLibrary('plugins', ['commands.cpp',
+                              'dl.cpp',
+                              'loader.cpp'])
 
 def libfilename(name):
     return "${SHLIBPREFIX}%s${SHLIBSUFFIX}" % name
