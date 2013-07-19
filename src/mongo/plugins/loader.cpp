@@ -104,9 +104,11 @@ namespace mongo {
                 PluginMap::iterator it = _plugins.begin();
                 shared_ptr<PluginHandle> plugin = it->second;
                 string errmsg;
-                bool ok = plugin->unload(errmsg);
-                if (!ok) {
-                    LOG(0) << "During shutdown, error unloading plugin " << it->first << ": " << errmsg << endl;
+                if (plugin) {
+                    bool ok = plugin->unload(errmsg);
+                    if (!ok) {
+                        LOG(0) << "During shutdown, error unloading plugin " << it->first << ": " << errmsg << endl;
+                    }
                 }
                 _plugins.erase(it);
             }
