@@ -67,7 +67,9 @@ namespace mongo {
             /**
              * Anything that should be done before loading.  Returning false stops the plugin from being loaded.
              */
-            virtual bool preLoad(string &errmsg, BSONObjBuilder &result) {}
+            virtual bool preLoad(string &errmsg, BSONObjBuilder &result) {
+                return true;
+            }
 
           public:
             virtual ~CommandLoader() {}
