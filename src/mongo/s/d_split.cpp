@@ -443,13 +443,13 @@ namespace mongo {
             // 'force'-ing a split is equivalent to having maxChunkSize be the size of the current chunk, i.e., the
             // logic below will split that chunk in half
             long long maxChunkSize = 0;
-            bool force = false;
+            bool forceMedianSplit = false;
             {
                 BSONElement maxSizeElem = jsobj[ "maxChunkSize" ];
                 BSONElement forceElem = jsobj[ "force" ];
 
                 if ( forceElem.trueValue() ) {
-                    force = true;
+                    forceMedianSplit = true;
                 }
                 else if ( maxSizeElem.isNumber() ) {
                     maxChunkSize = maxSizeElem.numberLong() * 1<<20;
@@ -461,13 +461,13 @@ namespace mongo {
                     }
                 }
 
-                if ( !force && maxChunkSize <= 0 ) {
+                if ( !forceMedianSplit && maxChunkSize <= 0 ) {
                     errmsg = "need to specify the desired max chunk size (maxChunkSize or maxChunkSizeBytes)";
                     return false;
                 }
             }
 
-            if (!force && idx->clustering()) {
+            if (!forceMedianSplit && idx->clustering()) {
                 SplitVectorFinder finder(d, *idx, keyPattern, min, max, splitKeys);
                 finder.find(maxChunkSize, maxSplitPoints);
             } else {
@@ -480,7 +480,8 @@ namespace mongo {
 
                 // 'force'-ing a split is equivalent to having maxChunkSize be the size of the current chunk, i.e., the
                 // logic below will split that chunk in half
-                if (force) {
+                if (forceMedianSplit) {
+                    // This chunk size is effectively ignored
                     maxChunkSize = dataSize;
                 }
 
@@ -525,7 +526,7 @@ namespace mongo {
                             currCount++;
 
                             // we want ~half-full chunks
-                            if (2 * currSize >= maxChunkSize) {
+                            if (2 * currSize >= maxChunkSize && !forceMedianSplit) {
                                 BSONObj currKey = c->prettyKey(c->currKey()).extractFields(keyPattern);
                                 // Do not use this split key if it is the same used in the previous split point.
                                 if (currKey.woCompare(splitKeys.back()) == 0) {
@@ -552,11 +553,16 @@ namespace mongo {
                             }
                         }
 
-                        if (splitKeys.size() > 1 || !force) {
+                        if (!forceMedianSplit) {
                             break;
                         }
 
-                        force = false;
+                        //
+                        // If we're forcing a split at the halfway point, then the first pass was just
+                        // to count the keys, and we still need a second pass.
+                        //
+
+                        forceMedianSplit = false;
                         maxChunkSize = currSize;
                         currCount = 0;
                         LOG(0) << "splitVector doing another cycle because of force, maxChunkSize now: " << maxChunkSize << endl;
