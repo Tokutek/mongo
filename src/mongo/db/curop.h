@@ -273,6 +273,7 @@ namespace mongo {
 
         /** @return "" if not interrupted.  otherwise, you should stop. */
         const char *checkForInterruptNoAssert();
+        const char *checkForInterruptNoAssert(Client &c);
 
         // increments _killForTransition, thereby making
         // checkForInterrupt uassert and kill operations

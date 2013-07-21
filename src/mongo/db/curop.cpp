@@ -197,6 +197,10 @@ namespace mongo {
     
     const char * KillCurrentOp::checkForInterruptNoAssert() {
         Client& c = cc();
+        return checkForInterruptNoAssert(c);
+    }
+
+    const char * KillCurrentOp::checkForInterruptNoAssert(Client &c) {
         if (_killForTransition > 0) {
             return "interrupted due to state transition";
         }
