@@ -182,6 +182,9 @@ class VanillaOplogPlayer : boost::noncopyable {
         else {
             if (op == "i") {
                 if (collname == "system.indexes") {
+                    // Can't ensure multiple indexes in the same batch.
+                    flushInserts();
+
                     // For now, we need to strip out any background fields from
                     // ensureIndex.  Once we do hot indexing we can do something more
                     // like what vanilla applyOperation_inlock does.
@@ -206,7 +209,6 @@ class VanillaOplogPlayer : boost::noncopyable {
                                 builder.append(e);
                             }
                         }
-                        flushInserts();
                         warning() << "Detected an ensureIndex with dropDups: true in " << o << "." << endl;
                         warning() << "This option is not supported in TokuMX, because it deletes arbitrary data." << endl;
                         warning() << "If it were replayed, it could result in a completely different data set than the source database." << endl;
