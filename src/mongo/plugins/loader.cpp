@@ -95,7 +95,9 @@ namespace mongo {
             }
             shared_ptr<PluginHandle> pluginHandle = it->second;
             _plugins.erase(it);
-            pluginHandle->unload(errmsg);
+            if (pluginHandle) {
+                pluginHandle->unload(errmsg);
+            }
             return true;
         }
 
