@@ -28,6 +28,7 @@
 
 #include "mongo/client/connpool.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/util/timer.h"
 
 using namespace mongo;
 
@@ -182,6 +183,9 @@ class VanillaOplogPlayer : boost::noncopyable {
         else {
             if (op == "i") {
                 if (collname == "system.indexes") {
+                    // Can't ensure multiple indexes in the same batch.
+                    flushInserts();
+
                     // For now, we need to strip out any background fields from
                     // ensureIndex.  Once we do hot indexing we can do something more
                     // like what vanilla applyOperation_inlock does.
@@ -206,7 +210,6 @@ class VanillaOplogPlayer : boost::noncopyable {
                                 builder.append(e);
                             }
                         }
-                        flushInserts();
                         warning() << "Detected an ensureIndex with dropDups: true in " << o << "." << endl;
                         warning() << "This option is not supported in TokuMX, because it deletes arbitrary data." << endl;
                         warning() << "If it were replayed, it could result in a completely different data set than the source database." << endl;
@@ -260,6 +263,9 @@ class VanillaOplogPlayer : boost::noncopyable {
 class OplogTool : public Tool {
     bool _logAtExit;
     scoped_ptr<VanillaOplogPlayer> _player;
+    scoped_ptr<ScopedDbConnection> _rconn;
+    string _oplogns;
+    mutable Timer _reportingTimer;
 
 public:
     void logPosition() const {
@@ -267,23 +273,59 @@ public:
             if (_player->thisTime() != OpTime()) {
                 log() << "Exiting while processing operation with OpTime " << _player->thisTimeStr() << endl;
             }
-            log() << "Synced up to OpTime " << _player->maxOpTimeSyncedStr() << endl
-                  << "Use --ts=" << _player->maxOpTimeSyncedStr() << " to resume." << endl;
+            report();
+            log() << "Use --ts=" << _player->maxOpTimeSyncedStr() << " to resume." << endl;
         }
     }
     static volatile bool running;
 
-    OplogTool() : Tool("2toku"), _logAtExit(true) {
+    OplogTool() : Tool("2toku"), _logAtExit(true), _player(), _reportingTimer() {
         addFieldOptions();
         add_options()
         ("ts" , po::value<string>() , "max OpTime already applied (secs:inc)" )
         ("from", po::value<string>() , "host to pull from" )
         ("oplogns", po::value<string>()->default_value( "local.oplog.rs" ) , "ns to pull from" )
+        ("reportingPeriod", po::value<int>()->default_value(10) , "seconds between progress reports" )
         ;
     }
 
     virtual void printExtraHelp(ostream& out) {
         out << "Pull and replay a remote MongoDB oplog.\n" << endl;
+    }
+
+    void report() const {
+        const OpTime &maxOpTimeSynced = _player->maxOpTimeSynced();
+        LOG(0) << "synced up to " << fmtOpTime(maxOpTimeSynced);
+        if (!_rconn) {
+            LOG(0) << endl;
+            return;
+        }
+        Query lastQuery;
+        lastQuery.sort("$natural", -1);
+        BSONObj lastFields = BSON("ts" << 1);
+        BSONObj lastObj = _rconn->conn().findOne(_oplogns, lastQuery, &lastFields);
+        BSONElement tsElt = lastObj["ts"];
+        if (!tsElt.ok()) {
+            warning() << "couldn't find last oplog entry on remote host" << endl;
+            LOG(0) << endl;
+            return;
+        }
+        OpTime lastOpTime = OpTime(tsElt.date());
+        LOG(0) << ", source has up to " << fmtOpTime(lastOpTime);
+        if (maxOpTimeSynced == lastOpTime) {
+            LOG(0) << ", fully synced." << endl;
+        }
+        else {
+            int diff = lastOpTime.getSecs() - maxOpTimeSynced.getSecs();
+            if (diff > 0) {
+                LOG(0) << ", " << (lastOpTime.getSecs() - maxOpTimeSynced.getSecs())
+                       << " seconds behind source." << endl;
+            }
+            else {
+                LOG(0) << ", less than 1 second behind source." << endl;
+            }
+        }
+        _reportingTimer.reset();
     }
 
     int run() {
@@ -292,13 +334,13 @@ public:
             return -1;
         }
 
-        const string &oplogns = getParam("oplogns");
+        _oplogns = getParam("oplogns");
 
         Client::initThread( "mongo2toku" );
 
         LOG(1) << "going to connect" << endl;
         
-        scoped_ptr<ScopedDbConnection> rconn(ScopedDbConnection::getScopedDbConnection(getParam("from")));
+        _rconn.reset(ScopedDbConnection::getScopedDbConnection(getParam("from")));
 
         LOG(1) << "connected" << endl;
 
@@ -318,6 +360,8 @@ public:
             _player.reset(new VanillaOplogPlayer(conn(), _host, maxOpTimeSynced, running, _logAtExit));
         }
 
+        const int reportingPeriod = getParam("reportingPeriod", 10);
+
         try {
             while (running) {
                 const int tailingQueryOptions = QueryOption_SlaveOk | QueryOption_CursorTailable | QueryOption_OplogReplay | QueryOption_AwaitData;
@@ -329,7 +373,7 @@ public:
                 BSONObj query = queryBuilder.done();
 
                 BSONObj res;
-                auto_ptr<DBClientCursor> cursor(rconn->conn().query(oplogns, query, 0, 0, &res, tailingQueryOptions));
+                auto_ptr<DBClientCursor> cursor(_rconn->conn().query(_oplogns, query, 0, 0, &res, tailingQueryOptions));
 
                 if (!cursor->more()) {
                     log() << "oplog query returned no results, sleeping";
@@ -347,8 +391,9 @@ public:
                     BSONElement tsElt = firstObj["ts"];
                     if (!tsElt.ok()) {
                         log() << "oplog format error: " << firstObj << " missing 'ts' field." << endl;
-                        rconn->done();
                         logPosition();
+                        _rconn->done();
+                        _rconn.reset();
                         return -1;
                     }
                     OpTime firstTime(tsElt.date());
@@ -357,10 +402,13 @@ public:
                                   << ", but didn't find anything before " << fmtOpTime(firstTime) << "!" << endl;
                         warning() << "This may mean your oplog has been truncated past the point you are trying to resume from." << endl;
                         warning() << "Either retry with a different value of --ts, or restart your migration procedure." << endl;
-                        rconn->done();
+                        _rconn->done();
+                        _rconn.reset();
                         return -1;
                     }
                 }
+
+                report();
 
                 while (running && cursor->more()) {
                     while (running && cursor->moreInCurrentBatch()) {
@@ -369,35 +417,45 @@ public:
 
                         bool ok = _player->processObj(obj);
                         if (!ok) {
-                            rconn->done();
                             logPosition();
+                            _rconn->done();
+                            _rconn.reset();
                             return -1;
                         }
                     }
                     _player->flushInserts();
+
+                    if (_reportingTimer.seconds() >= reportingPeriod) {
+                        report();
+                    }
                 }
             }
         }
         catch (DBException &e) {
             warning() << "Caught exception " << e.what() << " while processing.  Exiting..." << endl;
-            rconn->done();
             logPosition();
+            _rconn->done();
+            _rconn.reset();
             return -1;
         }
         catch (...) {
             warning() << "Caught unknown exception while processing.  Exiting..." << endl;
-            rconn->done();
             logPosition();
+            _rconn->done();
+            _rconn.reset();
             return -1;
         }
 
-        rconn->done();
-
         if (_logAtExit) {
             logPosition();
+
+            _rconn->done();
+            _rconn.reset();
             return 0;
         }
         else {
+            _rconn->done();
+            _rconn.reset();
             return -1;
         }
     }
