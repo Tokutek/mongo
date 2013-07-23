@@ -136,7 +136,7 @@ namespace mongo {
             // Rebuild full user cache on every user modification.
             // TODO(spencer): Remove this once we update user cache on-demand for each user
             // modification.
-            status = authzManager->initilizeAllV1UserData();
+            status = authzManager->initializeAllV1UserData();
             if (!status.isOK()) {
                 addStatus(status, result);
                 return false;
@@ -312,7 +312,7 @@ namespace mongo {
             // Rebuild full user cache on every user modification.
             // TODO(spencer): Remove this once we update user cache on-demand for each user
             // modification.
-            status = authzManager->initilizeAllV1UserData();
+            status = authzManager->initializeAllV1UserData();
             if (!status.isOK()) {
                 addStatus(status, result);
                 return false;
