@@ -56,7 +56,7 @@ namespace {
         _externalState->startRequest();
     }
 
-    void AuthorizationSession::addAuthorizedPrincipal(Principal* principal) {
+    void AuthorizationSession::addAndAuthorizePrincipal(Principal* principal) {
 
         // Log out any already-logged-in user on the same database as "principal".
         logoutDatabase(principal->getName().getDB().toString());  // See SERVER-8144.
@@ -78,6 +78,14 @@ namespace {
         principal->markDatabaseAsProbed(ADMIN_DBNAME);
         _acquirePrivilegesForPrincipalFromDatabase(dbname, principal->getName());
         principal->markDatabaseAsProbed(dbname);
+    }
+
+    void AuthorizationSession::addPrincipal(Principal* principal) {
+
+        // Log out any already-logged-in user on the same database as "principal".
+        logoutDatabase(principal->getName().getDB().toString());  // See SERVER-8144.
+        _authenticatedPrincipals.add(principal);
+        _externalState->onAddAuthorizedPrincipal(principal);
     }
 
     void AuthorizationSession::_acquirePrivilegesForPrincipalFromDatabase(
@@ -131,7 +139,7 @@ namespace {
         ActionSet actions;
         actions.addAllActions();
 
-        addAuthorizedPrincipal(principal);
+        addPrincipal(principal);
         fassert(17001, acquirePrivilege(Privilege(PrivilegeSet::WILDCARD_RESOURCE, actions),
                                     principal->getName()).isOK());
     }

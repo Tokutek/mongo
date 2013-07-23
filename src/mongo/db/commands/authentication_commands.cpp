@@ -197,7 +197,7 @@ namespace mongo {
         AuthorizationSession* authorizationSession =
             ClientBasic::getCurrent()->getAuthorizationSession();
         Principal* principal = new Principal(user);
-        authorizationSession->addAuthorizedPrincipal(principal);
+        authorizationSession->addAndAuthorizePrincipal(principal);
 
         return Status::OK();
     }
@@ -240,7 +240,7 @@ namespace mongo {
             else {
                 Principal* principal = new Principal(user);
                 principal->setImplicitPrivilegeAcquisition(true);
-                authorizationSession->addAuthorizedPrincipal(principal);
+                authorizationSession->addAndAuthorizePrincipal(principal);
             }
             return Status::OK();
         }
