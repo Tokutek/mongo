@@ -684,6 +684,7 @@ namespace {
         unordered_map<UserName, User*>::iterator it = _userCache.find(userName);
         if (it != _userCache.end()) {
             fassert(16914, it->second);
+            fassert(17368, it->second->isValid());
             it->second->incrementRefCount();
             *acquiredUser = it->second;
             return Status::OK();
@@ -899,7 +900,7 @@ namespace {
 
                     if (source == dbname || source == "$external") {
                         status = _initializeUserCredentialsFromPrivilegeDocument(user,
-                                                                                        privDoc);
+                                                                                 privDoc);
                         if (!status.isOK()) {
                             return status;
                         }
