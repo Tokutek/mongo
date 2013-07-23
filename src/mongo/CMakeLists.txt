@@ -541,6 +541,7 @@ if (BUILD_TESTING)
       string_map_test
       stringutils_test
       text_test
+      time_support_test
       )
     string(REGEX REPLACE "^.*/" "" test ${test_source})
     add_executable(${test} util/${test_source})
@@ -889,6 +890,7 @@ if (BUILD_TESTING)
       string_map_test
       stringutils_test
       text_test
+      time_support_test
       )
     add_mongo_test(util ${test} ${test})
   endforeach ()
