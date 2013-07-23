@@ -209,10 +209,6 @@ namespace mongo {
         return NULL;
     }
 
-    // TODO: We ought to be able to do close_ns in a read lock as long
-    //       as we take an exclusive lock on the _openRWLock.
-    //
-    //       We will need this in order to close/abort a load in a read lock.
     bool NamespaceIndex::close_ns(const StringData& ns, const bool aborting) {
         Lock::assertWriteLocked(ns);
         // No need to initialize first. If the nsdb is null at this point,
