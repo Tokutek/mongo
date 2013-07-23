@@ -1,6 +1,42 @@
 tokumx news
 ===========
 
+tokumx 1.0.3
+------------
+Release date: 2013-07-23
+
+General
+~~~~~~~
+
+    - This release adds a tool for performing online data migration from
+      vanilla MongoDB.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added the `mongo2toku` tool that reads and replays the vanilla
+      MongoDB replication format, which allows TokuMX to sync from vanilla
+      MongoDB. (#320)
+
+    - Added a storage layer optimization that improves the processor
+      caching behavior and performance of point queries and especially
+      non-covering secondary range queries. (#312)
+
+    - Improved the concurrency behavior of the storage layer when, for a
+      large transaction, the commit or abort itself is expensive. (#334)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a few race conditions and strange behaviors related to
+      replication. (#322, #325, #328, #329)
+
+    - Fixed a resource leak that could occur if the creation of an index
+      fails for any reason. (#331)
+
+
 tokumx 1.0.2
 ------------
 Release date: 2013-07-11
