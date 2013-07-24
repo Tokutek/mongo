@@ -50,7 +50,20 @@ namespace mongo {
             return true;
         }
 
+        const string &PluginHandle::name() const {
+            if (!_interface) {
+                DEV LOG(0) << "in PluginHandle::name, plugin is not initialized" << endl;
+                static const string empty("");
+                return empty;
+            }
+            return _interface->name();
+        }
+
         bool PluginHandle::load(string &errmsg, BSONObjBuilder &result) {
+            if (!_interface) {
+                errmsg = "plugin not initialized";
+                return false;
+            }
             bool ok = _interface->load(errmsg, result);
             if (ok) {
                 LOG(0) << "Loaded plugin " << name() << " from " << _filename << endl;
@@ -59,6 +72,10 @@ namespace mongo {
         }
 
         bool PluginHandle::unload(string &errmsg) {
+            if (!_interface) {
+                errmsg = "plugin not initialized";
+                return false;
+            }
             string nameCopy = name();
             _interface->unload(errmsg);
             _interface = NULL;

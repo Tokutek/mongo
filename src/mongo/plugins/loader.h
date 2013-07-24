@@ -36,7 +36,7 @@ namespace mongo {
 
           public:
             explicit PluginHandle(const string &filename) : _filename(filename) {}
-            const string &name() const { return _interface->name(); }
+            const string &name() const;
             bool init(string &errmsg, BSONObjBuilder &result);
             bool load(string &errmsg, BSONObjBuilder &result);
             bool unload(string &errmsg);
