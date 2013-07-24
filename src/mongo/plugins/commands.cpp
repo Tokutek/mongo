@@ -71,7 +71,6 @@ namespace mongo {
                     return false;
                 }
                 string filename = mongoutils::str::stream() << "lib" << name << ".so";
-                result.append("filename", filename);
                 return plugins::loader.load(filename, errmsg, result);
             }
         }
