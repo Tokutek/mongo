@@ -20,7 +20,6 @@
 #include "mongo/db/ops/count.h"
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/namespace.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/queryoptimizercursor.h"
@@ -59,29 +58,24 @@ namespace mongo {
         Lock::assertAtLeastReadLocked(ns);
         Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         try {
-            bool simpleEqualityMatch = false;
-            {
-                shared_ptr<Cursor> cursor =
-                        NamespaceDetailsTransient::getCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
-                                                              &simpleEqualityMatch );
-                for ( ; cursor->ok() ; cursor->advance() ) {
-                    // With simple equality matching there is no need to use the matcher because the bounds
-                    // are enforced by the FieldRangeVectorIterator and only key fields have constraints.  There
-                    // is no need to do key deduping because an exact value is specified in the query for all key
-                    // fields and duplicate keys are not allowed per document.
-                    // NOTE In the distant past we used a min/max bounded IndexCursor with a shallow
-                    // equality comparison to check for matches in the simple match case.  That may be
-                    // more performant, but I don't think we've measured the performance.
-                    if ( simpleEqualityMatch ||
-                         ( cursor->currentMatches() && !cursor->getsetdup( cursor->currPK() ) ) ) {
-                        if ( skip > 0 ) {
-                            --skip;
-                        }
-                        else {
-                            ++count;
-                            if ( limit > 0 && count >= limit ) {
-                                break;
-                            }
+            shared_ptr<Cursor> cursor =
+                    NamespaceDetailsTransient::getCursor( ns,
+                                                          query,
+                                                          BSONObj(),
+                                                          QueryPlanSelectionPolicy::any(),
+                                                          // Avoid using a Matcher when a Cursor can
+                                                          // exactly match the query using a
+                                                          // FieldRangeVector.  See SERVER-1752.
+                                                          false /* requestMatcher */ );
+            for ( ; cursor->ok() ; cursor->advance() ) {
+                if ( cursor->currentMatches() && !cursor->getsetdup( cursor->currPK() ) ) {
+                    if ( skip > 0 ) {
+                        --skip;
+                    }
+                    else {
+                        ++count;
+                        if ( limit > 0 && count >= limit ) {
+                            break;
                         }
                     }
                 }

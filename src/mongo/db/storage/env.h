@@ -23,6 +23,8 @@
 
 namespace mongo {
 
+    class Descriptor;
+
     namespace storage {
 
         extern DB_ENV *env;
@@ -30,7 +32,8 @@ namespace mongo {
         void startup(void);
         void shutdown(void);
 
-        int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create);
+        int db_open(DB **dbp, const string &name, const BSONObj &info,
+                    const mongo::Descriptor &descriptor, bool may_create);
         void db_close(DB *db);
         void db_remove(const string &name);
         void db_rename(const string &old_name, const string &new_name);

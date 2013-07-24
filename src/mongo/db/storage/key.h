@@ -192,7 +192,7 @@ namespace mongo {
 
             // The real comparison function is a function of two keys
             // and an ordering, which is a bit more clear.
-            int woCompare(const Key &key, const Ordering &ordering) {
+            int woCompare(const Key &key, const Ordering &ordering) const {
                 return woCompare(*this, key, ordering);
             }
 

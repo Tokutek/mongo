@@ -15,13 +15,13 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "../commands.h"
-#include "../instance.h"
-#include "../clientcursor.h"
-#include "../dbhelpers.h"
-#include "../ops/delete.h"
-#include "../ops/update.h"
+#include "mongo/pch.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/namespace_details.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/update.h"
 #include "../queryutil.h"
 #include "mongo/db/relock.h"
 
@@ -126,7 +126,8 @@ namespace mongo {
                                 bool upsert , bool returnNew , bool remove ,
                                 BSONObjBuilder& result , string& errmsg ) {
             BSONObj doc;
-            bool found = Helpers::findOne( ns.c_str() , queryOriginal , doc );
+            NamespaceDetails *d = nsdetails( ns.c_str() );
+            const bool found = d != NULL && d->findOne( queryOriginal , doc );
 
             BSONObj queryModified = queryOriginal;
             if ( found && doc["_id"].type() && ! isSimpleIdQuery( queryOriginal ) ) {
@@ -211,7 +212,8 @@ namespace mongo {
                             // we do this so that if the update changes the fields, it still matches
                             queryModified = queryModified["_id"].wrap();
                         }
-                        if ( ! Helpers::findOne( ns.c_str() , queryModified , doc ) ) {
+                        d = nsdetails( ns.c_str() );
+                        if ( d == NULL || ! d->findOne( queryModified , doc ) ) {
                             errmsg = str::stream() << "can't find object after modification  " 
                                                    << " ns: " << ns 
                                                    << " queryModified: " << queryModified 

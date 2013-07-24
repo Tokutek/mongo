@@ -40,148 +40,10 @@
 
 namespace mongo {
 
-    const BSONObj reverseNaturalObj = BSON( "$natural" << -1 );
-
-    void Helpers::ensureIndex(const char *ns, BSONObj keyPattern, bool unique, const char *name) {
-        NamespaceDetails *d = nsdetails(ns);
-        if( d == 0 )
-            return;
-
-        {
-            NamespaceDetails::IndexIterator i = d->ii();
-            while( i.more() ) {
-                if( i.next().keyPattern().woCompare(keyPattern) == 0 )
-                    return;
-            }
-        }
-
-        if( d->nIndexes() >= NamespaceDetails::NIndexesMax ) {
-            problem() << "Helper::ensureIndex fails, MaxIndexes exceeded " << ns << '\n';
-            return;
-        }
-
-        string system_indexes = cc().database()->name() + ".system.indexes";
-
-        BSONObjBuilder b;
-        b.append("name", name);
-        b.append("ns", ns);
-        b.append("key", keyPattern);
-        b.appendBool("unique", unique);
-        BSONObj o = b.done();
-
-        insertObject(system_indexes.c_str(), o, 0, true);
-    }
-
-    /* fetch a single object from collection ns that matches query
-       set your db SavedContext first
-    */
-    bool Helpers::findOne(const char *ns, const BSONObj &query, BSONObj& result, bool requireIndex) {
-        BSONObj obj = findOne( ns, query, requireIndex );
-        if ( obj.isEmpty() )
-            return false;
-        result = obj;
-        return true;
-    }
-
-    /* fetch a single object from collection ns that matches query
-       set your db SavedContext first
-    */
-    BSONObj Helpers::findOne(const char *ns, const BSONObj &query, bool requireIndex) {
-        shared_ptr<Cursor> c =
-            NamespaceDetailsTransient::getCursor( ns , query, BSONObj(),
-                                                  requireIndex ?
-                                                  QueryPlanSelectionPolicy::indexOnly() :
-                                                  QueryPlanSelectionPolicy::any() );
-        while( c->ok() ) {
-            if ( c->currentMatches() && !c->getsetdup( c->currPK() ) ) {
-                return c->current().copy();
-            }
-            c->advance();
-        }
-        return BSONObj();
-    }
-
-
-    bool Helpers::findById( const char *ns, BSONObj query, BSONObj& result ) {
-        Lock::assertAtLeastReadLocked(ns);
-        NamespaceDetails *d = nsdetails(ns);
-        return d != NULL ? d->findById(query, result) : false;
-    }
-
-    shared_ptr<Cursor> Helpers::findTableScan(const char *ns, const BSONObj &order) {
-        const int direction = order.getField("$natural").number() >= 0 ? 1 : -1;
-        NamespaceDetails *d = nsdetails(ns);
-        return shared_ptr<Cursor>( BasicCursor::make(d, direction) );
-    }
-
-    vector<BSONObj> Helpers::findAll( const string& ns , const BSONObj& query ) {
-        Lock::assertAtLeastReadLocked( ns );
-
-        vector<BSONObj> all;
-
-        Client::Context tx( ns );
-        
-        shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor( ns.c_str(), query );
-
-        while( c->ok() ) {
-            if ( c->currentMatches() && !c->getsetdup( c->currPK() ) ) {
-                all.push_back( c->current().copy() );
-            }
-            c->advance();
-        }
-
-        return all;
-    }
-
-    bool Helpers::isEmpty(const char *ns, bool doAuth) {
-        Client::Context context(ns, dbpath, doAuth);
-        shared_ptr<Cursor> c = findTableScan(ns, BSONObj());
-        return !c->ok();
-    }
-
-    /* Get the first object from a collection.  Generally only useful if the collection
-       only ever has a single object -- which is a "singleton collection.
-
-       Returns: true if object exists.
-    */
-    bool Helpers::getSingleton(const char *ns, BSONObj& result) {
-        Client::Context context(ns);
-
-        shared_ptr<Cursor> c = findTableScan(ns, BSONObj());
-        if ( !c->ok() ) {
-            context.getClient()->curop()->done();
-            return false;
-        }
-
-        result = c->current().copy();
-        context.getClient()->curop()->done();
-        return true;
-    }
-
-    bool Helpers::getFirst(const char *ns, BSONObj& result) {
-        return getSingleton(ns, result);
-    }
-
-    bool Helpers::getLast(const char *ns, BSONObj& result) {
-        Client::Context ctx(ns);
-        shared_ptr<Cursor> c = findTableScan(ns, reverseNaturalObj);
-        if( !c->ok() )
-            return false;
-        result = c->current().copy();
-        return true;
-    }
-
     void Helpers::putSingleton(const char *ns, BSONObj obj) {
         OpDebug debug;
         Client::Context context(ns);
         updateObjects(ns, obj, /*pattern=*/BSONObj(), /*upsert=*/true, /*multi=*/false , /*logtheop=*/true , debug );
-        context.getClient()->curop()->done();
-    }
-
-    void Helpers::putSingletonGod(const char *ns, BSONObj obj, bool logTheOp) {
-        OpDebug debug;
-        Client::Context context(ns);
-        _updateObjects(/*god=*/true, ns, obj, /*pattern=*/BSONObj(), /*upsert=*/true, /*multi=*/false , logTheOp , debug );
         context.getClient()->curop()->done();
     }
 
@@ -255,9 +117,9 @@ namespace mongo {
         int minOrMax = maxInclusive ? 1 : -1;
         BSONObj newMax = Helpers::modifiedRangeBound( max , keyPattern , minOrMax );
 
-        for (IndexCursor c(d, i, newMin, newMax, maxInclusive, 1); c.ok(); c.advance()) {
-            BSONObj pk = c.currPK();
-            BSONObj obj = c.current();
+        for (shared_ptr<Cursor> c(IndexCursor::make(d, i, newMin, newMax, maxInclusive, 1)); c->ok(); c->advance()) {
+            BSONObj pk = c->currPK();
+            BSONObj obj = c->current();
             OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate, &cc().txn());
             deleteOneObject(d, nsdt, pk, obj);
             numDeleted++;
@@ -265,11 +127,6 @@ namespace mongo {
 
         txn.commit();
         return numDeleted;
-    }
-
-    void Helpers::emptyCollection(const char *ns) {
-        Client::Context context(ns);
-        deleteObjects(ns, BSONObj(), false);
     }
 
 } // namespace mongo

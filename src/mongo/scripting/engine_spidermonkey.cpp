@@ -339,7 +339,11 @@ namespace mongo {
             b.appendRegex( name , s.substr( 0 , end ) , s.substr( end + 1 ) );
         }
 
-        void append( BSONObjBuilder& b , string name , jsval val , BSONType oldType = EOO , const TraverseStack& stack=TraverseStack() ) {
+        void append( BSONObjBuilder& b,
+                     const std::string& name,
+                     jsval val,
+                     BSONType oldType = EOO,
+                     const TraverseStack& stack=TraverseStack() ) {
             //cout << "name: " << name << "\t" << typeString( val ) << " oldType: " << oldType << endl;
             switch ( JS_TypeOfValue( _context , val ) ) {
 
@@ -1691,7 +1695,7 @@ namespace mongo {
             _reportError = reportError;
             JSBool worked = JS_EvaluateScript( _context,
                                                _global,
-                                               code.data(),
+                                               code.rawData(),
                                                code.size(),
                                                name.c_str(),
                                                1,
@@ -1813,7 +1817,7 @@ namespace mongo {
                            readOnlyRecv );
         }
 
-        void gotError( string s ) {
+        void gotError( const std::string& s ) {
             _error = s;
         }
 

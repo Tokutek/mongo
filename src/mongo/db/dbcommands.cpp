@@ -659,7 +659,7 @@ namespace mongo {
             if ( !cmdLine.quiet )
                 tlog() << "CMD: drop " << nsToDrop << endl;
             uassert( 10039 ,  "can't drop collection with reserved $ character in name", strchr(nsToDrop.c_str(), '$') == 0 );
-            NamespaceDetails *d = nsdetails(nsToDrop.c_str());
+            NamespaceDetails *d = nsdetails(nsToDrop);
             if ( d == 0 ) {
                 errmsg = "ns not found";
                 return false;
@@ -843,7 +843,7 @@ namespace mongo {
             long long size = 0;
             {
                 Client::Context ctx( source ); // auths against source
-                NamespaceDetails *nsd = nsdetails( source.c_str() );
+                NamespaceDetails *nsd = nsdetails( source );
                 uassert( 10026 ,  "source namespace does not exist", nsd );
                 capped = nsd->isCapped();
                 // TODO: Get the capped size
@@ -864,12 +864,10 @@ namespace mongo {
             // if we are renaming in the same database, just
             // rename the namespace and we're done.
             {
-                char from[256];
-                nsToDatabase( source.c_str(), from );
-                char to[256];
-                nsToDatabase( target.c_str(), to );
-                if ( strcmp( from, to ) == 0 ) {
-                    renameNamespace( source.c_str(), target.c_str(), cmdObj["stayTemp"].trueValue() );
+                StringData from = nsToDatabaseSubstring(source);
+                StringData to = nsToDatabaseSubstring(target);
+                if ( from == to ) {
+                    renameNamespace( source, target, cmdObj["stayTemp"].trueValue() );
                     // make sure we drop counters etc
                     Top::global.collectionDropped( source );
                     return true;
@@ -883,7 +881,7 @@ namespace mongo {
                 spec.appendBool( "capped", true );
                 spec.append( "size", double( size ) );
             }
-            if ( !userCreateNS( target.c_str(), spec.done(), errmsg , false) )
+            if ( !userCreateNS( target, spec.done(), errmsg , false) )
                 return false;
 
             auto_ptr< DBClientCursor > c;
@@ -902,11 +900,8 @@ namespace mongo {
                 insertObject( target.c_str(), o, 0, false );
             }
 
-            char cl[256];
-            nsToDatabase( source.c_str(), cl );
-            string sourceIndexes = string( cl ) + ".system.indexes";
-            nsToDatabase( target.c_str(), cl );
-            string targetIndexes = string( cl ) + ".system.indexes";
+            string sourceIndexes = nsToDatabaseSubstring(source).toString() + ".system.indexes";
+            string targetIndexes = nsToDatabaseSubstring(target).toString() + ".system.indexes";
             {
                 c = bridge.query( sourceIndexes, QUERY( "ns" << source ), 0, 0, 0, fromRepl ? QueryOption_SlaveOk : 0 );
             }
@@ -1164,7 +1159,8 @@ namespace mongo {
                     return 1;
                 }
 #endif
-                c = Helpers::findTableScan( ns.c_str() , BSONObj() );
+                NamespaceDetails *d = nsdetails( ns.c_str() );
+                c =  BasicCursor::make( d );
             }
             else if ( min.isEmpty() || max.isEmpty() ) {
                 errmsg = "only one of min or max specified";
@@ -1186,7 +1182,7 @@ namespace mongo {
                 min = Helpers::modifiedRangeBound( min , idx->keyPattern() , -1 );
                 max = Helpers::modifiedRangeBound( max , idx->keyPattern() , -1 );
 
-                c.reset( new IndexCursor( d, *idx, min, max, false, 1 ) );
+                c = IndexCursor::make( d, *idx, min, max, false, 1 );
             }
 
             //long long avgObjSize = d->stats.datasize / d->stats.nrecords;
@@ -1260,14 +1256,6 @@ namespace mongo {
 
             struct NamespaceDetailsAccStats accStats;
             nsd->fillCollectionStats(&accStats, &result, scale);
-
-            // TODO: Capped collection stats
-#if 0
-            if ( nsd->isCapped() ) {
-                result.append( "capped" , nsd->isCapped() );
-                result.appendNumber( "max" , nsd->maxCappedDocs() );
-            }
-#endif
 
             return true;
         }
@@ -1548,8 +1536,6 @@ namespace mongo {
         // You shouldn't be making a transaction without a lock to protect metadata, so your
         // command is probably broken.
         dassert(!c->needsTxn());
-        // logging requires a transaction
-        verify(!c->logTheOp());
         
         // we also trust that this won't crash
         retval = true;

@@ -17,14 +17,13 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "namespace.h"
-#include "index.h"
-#include "background.h"
-#include "../util/stringutils.h"
-#include "../util/mongoutils/str.h"
-#include "../util/text.h"
+#include "mongo/pch.h"
+#include "mongo/db/index.h"
+#include "mongo/db/background.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/util/stringutils.h"
+#include "mongo/util/mongoutils/str.h"
+#include "mongo/util/text.h"
 
 namespace mongo {
 

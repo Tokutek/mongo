@@ -47,7 +47,7 @@ namespace mongo {
     bool QueryPlanSelectionPolicy::IdElseNatural::permitPlan( const QueryPlan &plan ) const {
         return !plan.indexed() || plan.index()->isIdIndex();
     }
-    BSONObj QueryPlanSelectionPolicy::IdElseNatural::planHint( const char *ns ) const {
+    BSONObj QueryPlanSelectionPolicy::IdElseNatural::planHint( const StringData& ns ) const {
         NamespaceDetails *nsd = nsdetails( ns );
         if ( !nsd || !nsd->hasIdIndex() ) {
             return BSON( "$hint" << BSON( "$natural" << 1 ) );
@@ -323,14 +323,6 @@ namespace mongo {
 
         virtual long long nscanned() const { return _takeover ? _takeover->nscanned() : _nscanned; }
 
-        virtual shared_ptr<CoveredIndexMatcher> matcherPtr() const {
-            if ( _takeover ) {
-                return _takeover->matcherPtr();
-            }
-            assertOk();
-            return _currOp->queryPlan().matcher();
-        }
-
         virtual CoveredIndexMatcher *matcher() const {
             if ( _takeover ) {
                 return _takeover->matcher();
@@ -536,17 +528,17 @@ namespace mongo {
     }
     
     shared_ptr<Cursor>
-    NamespaceDetailsTransient::getCursor( const char *ns,
+    NamespaceDetailsTransient::getCursor( const StringData &ns,
                                          const BSONObj &query,
                                          const BSONObj &order,
                                          const QueryPlanSelectionPolicy &planPolicy,
-                                         bool *simpleEqualityMatch,
+                                         bool requestMatcher,
                                          const shared_ptr<const ParsedQuery> &parsedQuery,
                                          bool requireOrder,
                                          QueryPlanSummary *singlePlanSummary ) {
 
         try {
-            CursorGenerator generator( ns, query, order, planPolicy, simpleEqualityMatch, parsedQuery,
+            CursorGenerator generator( ns, query, order, planPolicy, requestMatcher, parsedQuery,
                                        requireOrder, singlePlanSummary );
             return generator.generate();
         }
@@ -557,11 +549,11 @@ namespace mongo {
         }
     }
     
-    CursorGenerator::CursorGenerator( const char *ns,
+    CursorGenerator::CursorGenerator( const StringData &ns,
                                      const BSONObj &query,
                                      const BSONObj &order,
                                      const QueryPlanSelectionPolicy &planPolicy,
-                                     bool *simpleEqualityMatch,
+                                     bool requestMatcher,
                                      const shared_ptr<const ParsedQuery> &parsedQuery,
                                      bool requireOrder,
                                      QueryPlanSummary *singlePlanSummary ) :
@@ -569,14 +561,11 @@ namespace mongo {
     _query( query ),
     _order( order ),
     _planPolicy( planPolicy ),
-    _simpleEqualityMatch( simpleEqualityMatch ),
+    _requestMatcher( requestMatcher ),
     _parsedQuery( parsedQuery ),
     _requireOrder( requireOrder ),
     _singlePlanSummary( singlePlanSummary ) {
         // Initialize optional return variables.
-        if ( _simpleEqualityMatch ) {
-            *_simpleEqualityMatch = false;
-        }
         if ( _singlePlanSummary ) {
             *_singlePlanSummary = QueryPlanSummary();
         }
@@ -592,7 +581,7 @@ namespace mongo {
             if ( d ) {
                 int i = d->findIdIndex();
                 if( i < 0 ) {
-                    if ( strstr( _ns , ".system." ) == 0 )
+                    if ( _ns.find( ".system." ) == string::npos )
                         log() << "warning: no _id index on $snapshot query, ns:" << _ns << endl;
                 }
                 else {
@@ -624,7 +613,7 @@ namespace mongo {
                 if ( idxNo >= 0 ) {
                     IndexDetails& i = d->idx( idxNo );
                     BSONObj key = i.getKeyFromQuery( _query );
-                    return shared_ptr<Cursor>( new IndexCursor( d, i, key, key, true, 1, numWanted ) );
+                    return shared_ptr<Cursor>( IndexCursor::make( d, i, key, key, true, 1, numWanted ) );
                 }
             }
         }
@@ -653,15 +642,24 @@ namespace mongo {
         }
         shared_ptr<Cursor> single = singlePlan->newCursor();
         if ( !_query.isEmpty() && !single->matcher() ) {
-            single->setMatcher( singlePlan->matcher() );
+
+            // The query plan must have a matcher.  The matcher's constructor performs some aspects
+            // of query validation that should occur before a cursor is returned.
+            fassert( 16859, singlePlan->matcher() );
+
+            if ( // If a matcher is requested or ...
+                 _requestMatcher ||
+                 // ... the index ranges do not exactly match the query or ...
+                 singlePlan->mayBeMatcherNecessary() ||
+                 // ... the matcher must look at the full record ...
+                 singlePlan->matcher()->needRecord() ) {
+
+                // ... then set the cursor's matcher to the query plan's matcher.
+                single->setMatcher( singlePlan->matcher() );
+            }
         }
         if ( singlePlan->keyFieldsOnly() ) {
             single->setKeyFieldsOnly( singlePlan->keyFieldsOnly() );
-        }
-        if ( _simpleEqualityMatch ) {
-            if ( singlePlan->exactKeyMatch() && !single->matcher()->needRecord() ) {
-                *_simpleEqualityMatch = true;
-            }
         }
         return single;
     }

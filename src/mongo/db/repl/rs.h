@@ -21,6 +21,7 @@
 
 #include "mongo/db/commands.h"
 #include "mongo/db/index.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/oplogreader.h"
 #include "mongo/db/repl/rs_config.h"
@@ -298,14 +299,17 @@ namespace mongo {
         SP sp;
     };
 
-    void parseReplsetCmdLine(string cfgString, string& setname, vector<HostAndPort>& seeds, set<HostAndPort>& seedSet );
+    void parseReplsetCmdLine(const std::string& cfgString,
+                             string& setname,
+                             vector<HostAndPort>& seeds,
+                             set<HostAndPort>& seedSet);
 
     /** Parameter given to the --replSet command line option (parsed).
         Syntax is "<setname>/<seedhost1>,<seedhost2>"
         where setname is a name and seedhost is "<host>[:<port>]" */
     class ReplSetCmdline {
     public:
-        ReplSetCmdline(string cfgString) { parseReplsetCmdLine(cfgString, setname, seeds, seedSet); }
+        ReplSetCmdline(const std::string& cfgString) { parseReplsetCmdLine(cfgString, setname, seeds, seedSet); }
         string setname;
         vector<HostAndPort> seeds;
         set<HostAndPort> seedSet;
@@ -390,7 +394,7 @@ namespace mongo {
         char _hbmsg[256]; // we change this unlocked, thus not an stl::string
         time_t _hbmsgTime; // when it was logged
     public:
-        void sethbmsg(string s, int logLevel = 0);
+        void sethbmsg(const std::string& s, int logLevel = 0);
 
         /**
          * Election with Priorities
@@ -700,6 +704,14 @@ namespace mongo {
         }
         
         return true;
+    }
+
+    inline BSONObj getLastEntryInOplog() {
+        BSONObj o;
+        Client::ReadContext lk(rsoplog);
+        NamespaceDetails *d = nsdetails(rsoplog);
+        shared_ptr<Cursor> c( BasicCursor::make(d, -1) );
+        return c->ok() ? c->current().copy() : BSONObj();
     }
 
 }

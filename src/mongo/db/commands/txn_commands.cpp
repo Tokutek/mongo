@@ -17,7 +17,6 @@
 #include "pch.h"
 
 #include "mongo/db/commands.h"
-#include <db.h>
 #include "mongo/db/client.h"
 #include "mongo/db/repl/rs.h"
 
@@ -68,7 +67,12 @@ namespace mongo {
                 }
             }
 
+            // We disallow clients from _explicitly_ creating child transactions.
+            // If we ever change this, we'll have to make sure that the child
+            // transaction created by the 'beginLoad' command isn't improperly
+            // handled by clients.
             uassert(16787, "transaction already exists", !cc().hasTxn());
+
             cc().beginClientTxn(iso_flags);
             result.append("status", "transaction began");
             return true;
@@ -95,11 +99,12 @@ namespace mongo {
                          bool fromRepl) 
         {
             uassert(16788, "no transaction exists to be committed", cc().hasTxn());
-            result.append("status", "transaction committed");
+            uassert(16889, "a bulk load is still in progress. commit or abort the load before committing the transaction.",
+                            !cc().loadInProgress());
             cc().commitTopTxn();
-            // after committing txn, there should be 
-            // no txn left on stack, having a dassert to verify
+            // after committing txn, there should be no txn left on stack,
             dassert(!cc().hasTxn());
+            result.append("status", "transaction committed");
             return true;
         }
     } commitTransactionCmd;
@@ -124,11 +129,12 @@ namespace mongo {
                          bool fromRepl) 
         {
             uassert(16789, "no transaction exists to be rolled back", cc().hasTxn());
-            result.append("status", "transaction rolled back");
+            uassert(16890, "a bulk load is still in progress. commit or abort the load before aborting the transaction.",
+                            !cc().loadInProgress());
             cc().abortTopTxn();
-            // after committing txn, there should be 
-            // no txn left on stack, having a dassert to verify
+            // after committing txn, there should be no txn left on stack,
             dassert(!cc().hasTxn());
+            result.append("status", "transaction rolled back");
             return true;
         }
     } rollbackTransactionCmd;

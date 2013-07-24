@@ -24,11 +24,10 @@
 
 #pragma once
 
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/oplogreader.h"
 #include "mongo/util/optime.h"
 #include "mongo/util/timer.h"
-#include "mongo/db/oplogreader.h"
 
 namespace mongo {
 
@@ -60,8 +59,6 @@ namespace mongo {
         convention is
           { msg : "text", ... }
     */
-
-    extern int __findingStartInitialTimeout; // configurable for testing
 
     class QueryPlan;
     

@@ -25,11 +25,11 @@
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/ops/insert.h"
 #include "mongo/db/json.h"
 #include "mongo/dbtests/dbtests.h"
 
 namespace mongo {
-    void __forceLinkGeoPlugin();
     shared_ptr<Cursor> newQueryOptimizerCursor( const char *ns, const BSONObj &query,
                                                const BSONObj &order = BSONObj(),
                                                const QueryPlanSelectionPolicy &planPolicy =
@@ -46,9 +46,32 @@ namespace QueryOptimizerCursorTests {
         BSONObjBuilder result;
         dropCollection( ns, errmsg, result );
     }
+
+    void ensureIndex(const char *ns, BSONObj keyPattern, bool unique, const char *name) {
+        NamespaceDetails *d = nsdetails(ns);
+        if( d == 0 )
+            return;
+
+        {
+            NamespaceDetails::IndexIterator i = d->ii();
+            while( i.more() ) {
+                if( i.next().keyPattern().woCompare(keyPattern) == 0 )
+                    return;
+            }
+        }
+
+        string system_indexes = cc().database()->name() + ".system.indexes";
+
+        BSONObjBuilder b;
+        b.append("name", name);
+        b.append("ns", ns);
+        b.append("key", keyPattern);
+        b.appendBool("unique", unique);
+        BSONObj o = b.done();
+
+        insertObject(system_indexes.c_str(), o, 0, true);
+    }
         
-    using boost::shared_ptr;
-    
     namespace CachedMatchCounter {
         
         using mongo::CachedMatchCounter;
@@ -665,7 +688,6 @@ namespace QueryOptimizerCursorTests {
             // _id 10 {_id:1}
             ASSERT_EQUALS( 10, c->current().getIntField( "_id" ) );
             ASSERT( !c->matcher()->matchesCurrent( c.get() ) );
-            ASSERT( !c->matcherPtr()->matchesCurrent( c.get() ) );
             ASSERT( c->advance() );
             
             // _id 0 {a:1}
@@ -681,7 +703,6 @@ namespace QueryOptimizerCursorTests {
             // _id 11 {_id:1}
             ASSERT_EQUALS( BSON( "_id" << 11 << "a" << 12 ), c->current() );
             ASSERT( c->matcher()->matchesCurrent( c.get() ) );
-            ASSERT( c->matcherPtr()->matchesCurrent( c.get() ) );
             ASSERT( !c->getsetdup( c->currPK() ) );
             ASSERT( c->advance() );
             
@@ -1006,12 +1027,14 @@ namespace QueryOptimizerCursorTests {
                 // Create an index cursor on an optimal a:1,b:1 plan.
                 Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
                 Client::ReadContext ctx( ns() );
-                shared_ptr<Cursor> cursor = getCursor();
-                ASSERT_EQUALS( "IndexCursor a_1_b_1", cursor->toString() );
-                
-                // The optimal a:1,b:1 plan is recorded.
-                ASSERT_EQUALS( BSON( "a" << 1 << "b" << 1 ),
-                              cachedIndexForQuery( BSON( "a" << 1 ), BSON( "b" << 1 ) ) );
+                {
+                    shared_ptr<Cursor> cursor = getCursor();
+                    ASSERT_EQUALS( "IndexCursor a_1_b_1", cursor->toString() );
+                    
+                    // The optimal a:1,b:1 plan is recorded.
+                    ASSERT_EQUALS( BSON( "a" << 1 << "b" << 1 ),
+                                  cachedIndexForQuery( BSON( "a" << 1 ), BSON( "b" << 1 ) ) );
+                }
                 transaction.commit();
             }
             
@@ -1022,12 +1045,14 @@ namespace QueryOptimizerCursorTests {
                 // Create a QueryOptimizerCursor, without an optimal plan.
                 Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
                 Client::ReadContext ctx( ns() );
-                shared_ptr<Cursor> cursor = getCursor();
-                ASSERT_EQUALS( "QueryOptimizerCursor", cursor->toString() );
-                ASSERT_EQUALS( BSON( "a" << 1 << "b" << 1 ), cursor->indexKeyPattern() );
-                ASSERT( cursor->advance() );
-                // An alternative plan is quickly attempted.
-                ASSERT_EQUALS( BSONObj(), cursor->indexKeyPattern() );
+                {
+                    shared_ptr<Cursor> cursor = getCursor();
+                    ASSERT_EQUALS( "QueryOptimizerCursor", cursor->toString() );
+                    ASSERT_EQUALS( BSON( "a" << 1 << "b" << 1 ), cursor->indexKeyPattern() );
+                    ASSERT( cursor->advance() );
+                    // An alternative plan is quickly attempted.
+                    ASSERT_EQUALS( BSONObj(), cursor->indexKeyPattern() );
+                }
                 transaction.commit();
             }
         }
@@ -1389,17 +1414,19 @@ namespace QueryOptimizerCursorTests {
                 _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
                 _cli.insert( ns(), BSON( "a" << 1 << "b" << 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                {
+                    Lock::GlobalWrite lk;
 
-                Client::Context ctx( ns() );
-                ClientCursor::Holder p
-                        ( new ClientCursor
-                         ( QueryOption_NoCursorTimeout,
-                          NamespaceDetailsTransient::getCursor
-                          ( ns(), BSON( "a" << GTE << 0 << "b" << GTE << 0 ) ),
-                          ns() ) );
-                ClientCursor::invalidate( ns() );
-                ASSERT_EQUALS( 0U, nNsCursors() );
+                    Client::Context ctx( ns() );
+                    ClientCursor::Holder p
+                            ( new ClientCursor
+                             ( QueryOption_NoCursorTimeout,
+                              NamespaceDetailsTransient::getCursor
+                              ( ns(), BSON( "a" << GTE << 0 << "b" << GTE << 0 ) ),
+                              ns() ) );
+                    ClientCursor::invalidate( ns() );
+                    ASSERT_EQUALS( 0U, nNsCursors() );
+                }
                 transaction.commit();
             }
         };
@@ -1412,20 +1439,22 @@ namespace QueryOptimizerCursorTests {
                 _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
                 _cli.insert( ns(), BSON( "a" << 1 << "b" << 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
-                Client::Context ctx( ns() );
-                ClientCursor::Holder p
-                        ( new ClientCursor
-                          ( 0,
-                            NamespaceDetailsTransient::getCursor
-                            ( ns(), BSON( "a" << GTE << 0 << "b" << GTE << 0 ) ),
-                            ns() ) );
-            
-                // Construct component client cursors.
-                ASSERT( nNsCursors() > 0 );
-            
-                ClientCursor::invalidate( ns() );
-                ASSERT_EQUALS( 0U, nNsCursors() );
+                {
+                    Lock::GlobalWrite lk;
+                    Client::Context ctx( ns() );
+                    ClientCursor::Holder p
+                            ( new ClientCursor
+                              ( 0,
+                                NamespaceDetailsTransient::getCursor
+                                ( ns(), BSON( "a" << GTE << 0 << "b" << GTE << 0 ) ),
+                                ns() ) );
+                
+                    // Construct component client cursors.
+                    ASSERT( nNsCursors() > 0 );
+                
+                    ClientCursor::invalidate( ns() );
+                    ASSERT_EQUALS( 0U, nNsCursors() );
+                }
                 transaction.commit();
             }
         };
@@ -1438,21 +1467,23 @@ namespace QueryOptimizerCursorTests {
                 _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
                 _cli.insert( ns(), BSON( "a" << 1 << "b" << 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                {
+                    Lock::GlobalWrite lk;
 
-                Client::Context ctx( ns() );
-                ClientCursor::Holder p
-                        ( new ClientCursor
-                         ( 0,
-                          NamespaceDetailsTransient::getCursor
-                          ( ns(), BSON( "a" << GTE << 0 << "b" << GTE << 0 ) ),
-                          ns() ) );
-                
-                // Construct component client cursors.
-                ASSERT( nNsCursors() > 0 );
-                
-                ClientCursor::idleTimeReport( 600001 );
-                ASSERT_EQUALS( 0U, nNsCursors() );
+                    Client::Context ctx( ns() );
+                    ClientCursor::Holder p
+                            ( new ClientCursor
+                             ( 0,
+                              NamespaceDetailsTransient::getCursor
+                              ( ns(), BSON( "a" << GTE << 0 << "b" << GTE << 0 ) ),
+                              ns() ) );
+                    
+                    // Construct component client cursors.
+                    ASSERT( nNsCursors() > 0 );
+                    
+                    ClientCursor::idleTimeReport( 600001 );
+                    ASSERT_EQUALS( 0U, nNsCursors() );
+                }
                 transaction.commit();
             }
         };
@@ -1466,16 +1497,18 @@ namespace QueryOptimizerCursorTests {
                 
                 {
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    Client::WriteContext ctx(ns());
-                    ClientCursor::Holder p
-                        ( new ClientCursor
-                         ( QueryOption_NoCursorTimeout,
-                          NamespaceDetailsTransient::getCursor
-                          ( ns(), BSON( "_id" << GT << 0 << "z" << 0 ) ),
-                          ns() ) );
+                    {
+                        Client::WriteContext ctx(ns());
+                        ClientCursor::Holder p
+                            ( new ClientCursor
+                             ( QueryOption_NoCursorTimeout,
+                              NamespaceDetailsTransient::getCursor
+                              ( ns(), BSON( "_id" << GT << 0 << "z" << 0 ) ),
+                              ns() ) );
 
-                    ASSERT_EQUALS( "QueryOptimizerCursor", p->c()->toString() );
-                    ASSERT_EQUALS( 1, p->c()->current().getIntField( "_id" ) );
+                        ASSERT_EQUALS( "QueryOptimizerCursor", p->c()->toString() );
+                        ASSERT_EQUALS( 1, p->c()->current().getIntField( "_id" ) );
+                    }
                     transaction.commit();
                 }
                 
@@ -1583,7 +1616,7 @@ namespace QueryOptimizerCursorTests {
                 if ( c->indexKeyPattern() == BSON( "a" << 1 ) ) {
                     foundA = true;
                     ASSERT( c->keyFieldsOnly() );
-                    ASSERT_EQUALS( BSON( "a" << 1 ), c->keyFieldsOnly()->hydrate( c->currKey() ) );
+                    ASSERT_EQUALS( BSON( "a" << 1 ), c->keyFieldsOnly()->hydrate( c->currKey(), c->currPK() ) );
                 }
                 if ( c->indexKeyPattern() == BSON( "b" << 1 ) ) {
                     foundB = true;
@@ -1621,8 +1654,8 @@ namespace QueryOptimizerCursorTests {
                 if ( c->indexKeyPattern() == BSON( "a" << 1 ) ) {
                     foundA = true;
                     ASSERT( c->keyFieldsOnly() );
-                    ASSERT( BSON( "a" << 1 ) == c->keyFieldsOnly()->hydrate( c->currKey() ) ||
-                           BSON( "a" << 2 ) == c->keyFieldsOnly()->hydrate( c->currKey() ) );
+                    ASSERT( BSON( "a" << 1 ) == c->keyFieldsOnly()->hydrate( c->currKey(), c->currPK() ) ||
+                           BSON( "a" << 2 ) == c->keyFieldsOnly()->hydrate( c->currKey(), c->currPK() ) );
                 }
                 if ( c->indexKeyPattern() == BSON( "b" << 1 ) ) {
                     foundB = true;
@@ -1687,7 +1720,7 @@ namespace QueryOptimizerCursorTests {
                 // Best plan selected by query.
                 nPlans( 1 );
                 nPlans( 1 );
-                Helpers::ensureIndex( ns(), BSON( "c" << 1 ), false, "c_1" );
+                ensureIndex( ns(), BSON( "c" << 1 ), false, "c_1" );
                 // Best plan cleared when new index added.
                 nPlans( 3 );
                 runQuery();
@@ -1706,41 +1739,43 @@ namespace QueryOptimizerCursorTests {
             }
 
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::Context ctx( ns() );
+            {
+                Client::Context ctx( ns() );
 
-            // Best plan cleared by ~1000 writes.
-            nPlans( 3 );
+                // Best plan cleared by ~1000 writes.
+                nPlans( 3 );
 
-            shared_ptr<ParsedQuery> parsedQuery
-                    ( new ParsedQuery( ns(), 0, 0, 0,
-                                      BSON( "$query" << BSON( "a" << 4 ) <<
-                                           "$hint" << BSON( "$natural" << 1 ) ),
-                                      BSON( "b" << 1 ) ) );
-            shared_ptr<Cursor> cursor =
-            NamespaceDetailsTransient::getCursor( ns(), BSON( "a" << 4 ), BSONObj(),
-                                                  QueryPlanSelectionPolicy::any(), 0, parsedQuery,
-                                                  false );
-            while( cursor->advance() );
-            // No plan recorded when a hint is used.
-            nPlans( 3 );
-            
-            shared_ptr<ParsedQuery> parsedQuery2
-                    ( new ParsedQuery( ns(), 0, 0, 0,
-                                      BSON( "$query" << BSON( "a" << 4 ) <<
-                                           "$orderby" << BSON( "b" << 1 << "c" << 1 ) ),
-                                      BSONObj() ) );
-            shared_ptr<Cursor> cursor2 =
-            NamespaceDetailsTransient::getCursor( ns(), BSON( "a" << 4 ),
-                                                 BSON( "b" << 1 << "c" << 1 ),
-                                                 QueryPlanSelectionPolicy::any(), 0,
-                                                 parsedQuery2, false );
-            while( cursor2->advance() );
-            // Plan recorded was for a different query pattern (different sort spec).
-            nPlans( 3 );
-            
-            // Best plan still selected by query after all these other tests.
-            runQuery();
-            nPlans( 1 );
+                shared_ptr<ParsedQuery> parsedQuery
+                        ( new ParsedQuery( ns(), 0, 0, 0,
+                                          BSON( "$query" << BSON( "a" << 4 ) <<
+                                               "$hint" << BSON( "$natural" << 1 ) ),
+                                          BSON( "b" << 1 ) ) );
+                shared_ptr<Cursor> cursor =
+                NamespaceDetailsTransient::getCursor( ns(), BSON( "a" << 4 ), BSONObj(),
+                                                      QueryPlanSelectionPolicy::any(), 0, parsedQuery,
+                                                      false );
+                while( cursor->advance() );
+                // No plan recorded when a hint is used.
+                nPlans( 3 );
+                
+                shared_ptr<ParsedQuery> parsedQuery2
+                        ( new ParsedQuery( ns(), 0, 0, 0,
+                                          BSON( "$query" << BSON( "a" << 4 ) <<
+                                               "$orderby" << BSON( "b" << 1 << "c" << 1 ) ),
+                                          BSONObj() ) );
+                shared_ptr<Cursor> cursor2 =
+                NamespaceDetailsTransient::getCursor( ns(), BSON( "a" << 4 ),
+                                                     BSON( "b" << 1 << "c" << 1 ),
+                                                     QueryPlanSelectionPolicy::any(), 0,
+                                                     parsedQuery2, false );
+                while( cursor2->advance() );
+                // Plan recorded was for a different query pattern (different sort spec).
+                nPlans( 3 );
+                
+                // Best plan still selected by query after all these other tests.
+                runQuery();
+                nPlans( 1 );
+            }
             transaction.commit();
         }
     private:
@@ -2337,11 +2372,10 @@ namespace QueryOptimizerCursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Lock::GlobalWrite lk;
                 Client::Context ctx( ns() );
-                bool simpleEqualityMatch;
                 if ( expectException() ) {
                     ASSERT_THROWS
                     ( NamespaceDetailsTransient::getCursor
-                     ( ns(), query(), order(), planPolicy(), &simpleEqualityMatch ),
+                     ( ns(), query(), order(), planPolicy() ),
                      MsgAssertionException );
                     return;
                 }
@@ -2354,8 +2388,7 @@ namespace QueryOptimizerCursorTests {
                 }
                 shared_ptr<Cursor> c =
                 NamespaceDetailsTransient::getCursor( ns(), extractedQuery, order(), planPolicy(),
-                                                      &simpleEqualityMatch, _parsedQuery, false );
-                ASSERT_EQUALS( expectSimpleEquality(), simpleEqualityMatch );
+                                                      true, _parsedQuery, false );
                 string type = c->toString().substr( 0, expectedType().length() );
                 ASSERT_EQUALS( expectedType(), type );
                 check( c );
@@ -2364,7 +2397,6 @@ namespace QueryOptimizerCursorTests {
         protected:
             virtual string expectedType() const { return "TESTDUMMY"; }
             virtual bool expectException() const { return false; }
-            virtual bool expectSimpleEquality() const { return false; }
             virtual BSONObj query() const { return BSONObj(); }
             virtual BSONObj order() const { return BSONObj(); }
             virtual int skip() const { return 0; }
@@ -2788,6 +2820,102 @@ namespace QueryOptimizerCursorTests {
 
         } // namespace IdElseNatural
         
+        /**
+         * Generating a cursor for an invalid query asserts, even if the collection is empty or
+         * missing.
+         */
+        class MatcherValidation : public Base {
+        public:
+            void run() {
+                // Matcher validation with an empty collection.
+                _cli.remove( ns(), BSONObj() );
+                checkInvalidQueryAssertions();
+                
+                // Matcher validation with a missing collection.
+                _cli.dropCollection( ns() );
+                checkInvalidQueryAssertions();
+            }
+        private:
+            static void checkInvalidQueryAssertions() {
+                Client::ReadContext ctx( ns() );
+                
+                // An invalid query generating a single query plan asserts.
+                BSONObj invalidQuery = fromjson( "{$and:[{$atomic:true}]}" );
+                assertInvalidQueryAssertion( invalidQuery );
+                
+                // An invalid query generating multiple query plans asserts.
+                BSONObj invalidIdQuery = fromjson( "{_id:0,$and:[{$atomic:true}]}" );
+                assertInvalidQueryAssertion( invalidIdQuery );
+            }
+            static void assertInvalidQueryAssertion( const BSONObj &query ) {
+                ASSERT_THROWS( NamespaceDetailsTransient::getCursor( ns(), query, BSONObj() ),
+                               UserException );
+            }
+        };
+
+        /**
+         * A Cursor returned by NamespaceDetailsTransient::getCursor() may or may not have a
+         * matcher().  A Matcher will generally exist if required to match the provided query or
+         * if specifically requested.
+         */
+        class MatcherSet : public Base {
+        public:
+            MatcherSet() {
+                _cli.insert( ns(), BSON( "a" << 2 << "b" << 3 ) );
+                _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
+            }
+            void run() {
+                Client::Transaction transaction(DB_SERIALIZABLE);
+                {
+                    // No matcher is set for an empty query.
+                    ASSERT( !hasMatcher( BSONObj(), false ) );
+                    // No matcher is set for an empty query, even if a matcher is requested.
+                    ASSERT( !hasMatcher( BSONObj(), true ) );
+                    // No matcher is set for an exact key match indexed query.
+                    ASSERT( !hasMatcher( BSON( "a" << 2 ), false ) );
+                    // No matcher is set for an exact key match indexed query, unless one is requested.
+                    ASSERT( hasMatcher( BSON( "a" << 2 ), true ) );
+                    // A matcher is set for a non exact key match indexed query.
+                    ASSERT( hasMatcher( BSON( "a" << 2 << "b" << 3 ), false ) );
+                }
+                transaction.commit();
+            }
+        private:
+            bool hasMatcher( const BSONObj& query, bool requestMatcher ) {
+                Client::ReadContext ctx( ns() );
+                shared_ptr<Cursor> cursor =
+                        NamespaceDetailsTransient::getCursor( ns(),
+                                                              query,
+                                                              BSONObj(),
+                                                              QueryPlanSelectionPolicy::any(),
+                                                              requestMatcher );
+                return cursor->matcher();
+            }
+        };
+
+        /**
+         * Even though a Matcher may not be used to perform matching when requestMatcher == false, a
+         * Matcher must be created because the Matcher's constructor performs query validation.
+         */
+        class MatcherValidate : public Base {
+        public:
+            void run() {
+                Client::ReadContext ctx( ns() );
+                Client::Transaction transaction(DB_SERIALIZABLE);
+                {
+                    // An assertion is triggered because { a:undefined } is an invalid query, even
+                    // though no matcher is required.
+                    ASSERT_THROWS
+                            ( NamespaceDetailsTransient::getCursor( ns(),
+                                                                    fromjson( "{a:undefined}" ),
+                                                                    BSONObj(),
+                                                                    QueryPlanSelectionPolicy::any(),
+                                                                    /* requestMatcher */ false ),
+                              UserException );
+                }
+            }
+        };
+        
     } // namespace GetCursor
     
     namespace Explain {
@@ -2801,23 +2929,25 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "a" << 1 << "b" << 1 ) );
                 
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::WriteContext ctx(ns());
-                BSONObj query = BSON( "a" << 1 << "b" << 1 );
-                shared_ptr<Cursor> c =
-                NamespaceDetailsTransient::getCursor( ns(), query );
-                while( c->advance() );
-                shared_ptr<ParsedQuery> parsedQuery
-                        ( new ParsedQuery( ns(), 0, 0, 0,
-                                          BSON( "$query" << query << "$explain" << true ),
-                                          BSONObj() ) );
-                c = NamespaceDetailsTransient::getCursor( ns(), query, BSONObj(), QueryPlanSelectionPolicy::any(), 0,
-                                                          parsedQuery, false );
-                set<BSONObj> indexKeys;
-                while( c->ok() ) {
-                    indexKeys.insert( c->indexKeyPattern() );
-                    c->advance();
+                {
+                    Client::WriteContext ctx(ns());
+                    BSONObj query = BSON( "a" << 1 << "b" << 1 );
+                    shared_ptr<Cursor> c =
+                    NamespaceDetailsTransient::getCursor( ns(), query );
+                    while( c->advance() );
+                    shared_ptr<ParsedQuery> parsedQuery
+                            ( new ParsedQuery( ns(), 0, 0, 0,
+                                              BSON( "$query" << query << "$explain" << true ),
+                                              BSONObj() ) );
+                    c = NamespaceDetailsTransient::getCursor( ns(), query, BSONObj(), QueryPlanSelectionPolicy::any(), 0,
+                                                              parsedQuery, false );
+                    set<BSONObj> indexKeys;
+                    while( c->ok() ) {
+                        indexKeys.insert( c->indexKeyPattern() );
+                        c->advance();
+                    }
+                    ASSERT( indexKeys.size() > 1 );
                 }
-                ASSERT( indexKeys.size() > 1 );
                 transaction.commit();
             }
         };
@@ -2829,23 +2959,25 @@ namespace QueryOptimizerCursorTests {
                 setupCollection();
                 
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::WriteContext ctx(ns());
-                shared_ptr<ParsedQuery> parsedQuery
-                        ( new ParsedQuery( ns(), 0, 0, 0,
-                                          BSON( "$query" << query() << "$explain" << true ),
-                                          fields() ) );
-                _cursor =
-                dynamic_pointer_cast<QueryOptimizerCursor>
-                ( NamespaceDetailsTransient::getCursor( ns(), query(), BSONObj(), QueryPlanSelectionPolicy::any(), 0,
-                                                        parsedQuery, false ) );
-                ASSERT( _cursor );
-                
-                handleCursor();
-                
-                _explainInfo = _cursor->explainQueryInfo();
-                _explain = _explainInfo->bson();
+                {
+                    Client::WriteContext ctx(ns());
+                    shared_ptr<ParsedQuery> parsedQuery
+                            ( new ParsedQuery( ns(), 0, 0, 0,
+                                              BSON( "$query" << query() << "$explain" << true ),
+                                              fields() ) );
+                    _cursor =
+                    dynamic_pointer_cast<QueryOptimizerCursor>
+                    ( NamespaceDetailsTransient::getCursor( ns(), query(), BSONObj(), QueryPlanSelectionPolicy::any(), 0,
+                                                            parsedQuery, false ) );
+                    ASSERT( _cursor );
+                    
+                    handleCursor();
+                    
+                    _explainInfo = _cursor->explainQueryInfo();
+                    _explain = _explainInfo->bson();
 
-                checkExplain();
+                    checkExplain();
+                }
                 transaction.commit();
             }
         protected:
@@ -3452,6 +3584,8 @@ namespace QueryOptimizerCursorTests {
             //add<GetCursor::IdElseNatural::HintedNaturalForQuery>( BSON( "_id" << 1 << "a" << 1 ) );
             // There's no more $atomic operator, so this test isn't useful anymore.
             //add<GetCursor::MatcherValidation>(); 
+            add<GetCursor::MatcherSet>();
+            add<GetCursor::MatcherValidate>();
             add<Explain::ClearRecordedIndex>();
             add<Explain::Initial>();
             add<Explain::Empty>();

@@ -54,18 +54,18 @@ namespace mongo {
     Database::~Database() {
     }
 
-    Database::Database(const char *name, const string &path)
-        : _name(name), _path(path), _nsIndex( _path, _name ),
+    Database::Database(const StringData &name, const StringData &path)
+        : _name(name.toString()), _path(path.toString()), _nsIndex( _path, _name ),
           _profileName(_name + ".system.profile")
     {
         try {
             // check db name is valid
-            size_t L = strlen(name);
+            size_t L = name.size();
             uassert( 10028 ,  "db name is empty", L > 0 );
             uassert( 10032 ,  "db name too long", L < 64 );
-            uassert( 10029 ,  "bad db name [1]", *name != '.' );
+            uassert( 10029 ,  "bad db name [1]", name[0] != '.' );
             uassert( 10030 ,  "bad db name [2]", name[L-1] != '.' );
-            uassert( 10031 ,  "bad char(s) in db name", strchr(name, ' ') == 0 );
+            uassert( 10031 ,  "bad char(s) in db name", name.find(' ') == string::npos );
 #ifdef _WIN32
             static const char* windowsReservedNames[] = {
                 "con", "prn", "aux", "nul",
@@ -122,76 +122,24 @@ namespace mongo {
         return true;
     }
 
-    void DatabaseHolder::closeDatabases(const string &path) {
-        Paths::iterator pi = _paths.find(path);
+    void DatabaseHolder::closeDatabases(const StringData &path) {
+        Paths::const_iterator pi = _paths.find(path);
         if (pi != _paths.end()) {
-            DBs &dbs = pi->second;
+            const DBs &dbs = pi->second;
             while (!dbs.empty()) {
-                DBs::iterator it = dbs.begin();
+                DBs::const_iterator it = dbs.begin();
                 Database *db = it->second;
                 dassert(db->name() == it->first);
                 // This erases dbs[db->name] for us, can't lift it out yet until we understand the callers of closeDatabase().
                 // That's why we have a weird loop here.
                 Client::WriteContext ctx(db->name());
-                db->closeDatabase(db->name().c_str(), path);
+                db->closeDatabase(db->name(), path);
             }
-            _paths.erase(pi);
+            _paths.erase(path);
         }
     }
 
-    bool DatabaseHolder::closeAll(const string& path, BSONObjBuilder& result, bool force) {
-        log() << "DatabaseHolder::closeAll path:" << path << endl;
-        verify(Lock::isW());
-
-        Paths::iterator x = _paths.find(path);
-        wassert(x != _paths.end());
-        const DBs &m = x->second;
-
-        set<string> dbs;
-        for (DBs::const_iterator it = m.begin(); it != m.end(); ++it) {
-            wassert(it->second->path() == path);
-            dbs.insert(it->first);
-        }
-
-        cc().getContext()->_clear();
-
-        BSONObjBuilder bb(result.subarrayStart("dbs"));
-        int n = 0;
-        int nNotClosed = 0;
-        for (set<string>::const_iterator it = dbs.begin(); it != dbs.end(); ++it) {
-            string name = *it;
-            LOG(2) << "DatabaseHolder::closeAll path:" << path << " name:" << name << endl;
-            Client::Context ctx(name, path);
-            // Don't know how to implement this check anymore.
-            /*
-            if (!force && BackgroundOperation::inProgForDb(name.c_str())) {
-                log() << "WARNING: can't close database " << name << " because a bg job is in progress - try killOp command" << endl;
-                nNotClosed++;
-            }
-            else {
-            */
-                // This removes the db from m for us
-                Database::closeDatabase(name.c_str(), path);
-                bb.append(bb.numStr(n++), name);
-            /*
-            }
-            */
-        }
-        bb.done();
-        if (nNotClosed) {
-            result.append("nNotClosed", nNotClosed);
-        }
-        else {
-            ClientCursor::assertNoCursors();
-        }
-
-        _size -= m.size();
-        _paths.erase(x);
-
-        return true;
-    }
-
-    Database* DatabaseHolder::getOrCreate( const string& ns , const string& path ) {
+    Database* DatabaseHolder::getOrCreate( const StringData &ns , const StringData& path ) {
         Lock::assertAtLeastReadLocked(ns);
         Database *db;
 
@@ -210,13 +158,13 @@ namespace mongo {
             SimpleRWLock::Exclusive lk(_rwlock);
             db = _get(ns, path);
             if (db == NULL) {
-                string dbname = _todb( ns );
+                StringData dbname = _todb( ns );
                 DBs &m = _paths[path];
                 if( logLevel >= 1 || m.size() > 40 || DEBUG_BUILD ) {
                     log() << "opening db: " << (path==dbpath?"":path) << ' ' << dbname << endl;
                 }
 
-                db = new Database( dbname.c_str() , path );
+                db = new Database( dbname , path );
 
                 verify( m[dbname] == 0 );
                 m[dbname] = db;

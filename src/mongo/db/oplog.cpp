@@ -36,8 +36,6 @@
 
 namespace mongo {
 
-    int __findingStartInitialTimeout = 5; // configurable for testing
-
     // cached copies of these...so don't rename them, drop them, etc.!!!
     static NamespaceDetails *rsOplogDetails = NULL;
     static NamespaceDetails *rsOplogRefsDetails = NULL;
@@ -171,26 +169,30 @@ namespace mongo {
     }
 
     bool getLastGTIDinOplog(GTID* gtid) {
-        Lock::DBRead lk(rsoplog);
-        BSONObj o;
-        if( Helpers::getLast(rsoplog, o) ) {
-            *gtid = getGTIDFromOplogEntry(o);
+        Client::ReadContext ctx(rsoplog);
+        // TODO: Should this be using rsOplogDetails, verifying non-null?
+        NamespaceDetails *d = nsdetails(rsoplog);
+        shared_ptr<Cursor> c( BasicCursor::make(d, -1) );
+        if (c->ok()) {
+            *gtid = getGTIDFromOplogEntry(c->current());
             return true;
         }
         return false;
     }
 
     bool gtidExistsInOplog(GTID gtid) {
-        Lock::DBRead lk(rsoplog);
+        Client::ReadContext ctx(rsoplog);
+        // TODO: Should this be using rsOplogDetails, verifying non-null?
+        NamespaceDetails *d = nsdetails(rsoplog);
         char gtidBin[GTID::GTIDBinarySize()];
         gtid.serializeBinaryData(gtidBin);
         BSONObj result;
         BSONObj query(BSON("_id" << gtidBin));
-        bool found = Helpers::findOne(
-            rsoplog, 
-            query, 
-            result
-            );
+        const bool found = d != NULL &&
+            d->findOne(
+               query, 
+               result
+               );
         return found;
     }
 
@@ -265,7 +267,9 @@ namespace mongo {
             BSONObj entry;
             {
                 Client::ReadContext ctx(rsOplogRefs);
-                if (!Helpers::findOne(rsOplogRefs, BSON("_id" << BSON("$gt" << BSON("oid" << oid << "seq" << seq))), entry, true)) {
+                // TODO: Should this be using rsOplogRefsDetails, verifying non-null?
+                NamespaceDetails *d = nsdetails(rsOplogRefs);
+                if (d == NULL || !d->findOne(BSON("_id" << BSON("$gt" << BSON("oid" << oid << "seq" << seq))), entry, true)) {
                     break;
                 }
             }
@@ -339,7 +343,9 @@ namespace mongo {
             BSONObj entry;
             {
                 Client::ReadContext ctx(rsOplogRefs);
-                if (!Helpers::findOne(rsOplogRefs, BSON("_id" << BSON("$lt" << BSON("oid" << oid << "seq" << seq))), entry, true)) {
+                // TODO: Should this be using rsOplogRefsDetails, verifying non-null?
+                NamespaceDetails *d = nsdetails(rsOplogRefs);
+                if (d == NULL || !d->findOne(BSON("_id" << BSON("$lt" << BSON("oid" << oid << "seq" << seq))), entry, true)) {
                     break;
                 }
             }

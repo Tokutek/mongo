@@ -27,7 +27,7 @@ namespace mongo {
     // see also mongoutils/str.h - perhaps move these there?
     // see also text.h
 
-    void splitStringDelim( const string& str , std::vector<std::string>* res , char delim );
+    void splitStringDelim( const std::string& str , std::vector<std::string>* res , char delim );
 
     void joinStringDelim( const std::vector<std::string>& strs , std::string* res , char delim );
 
@@ -56,10 +56,9 @@ namespace mongo {
          * For convenience, character 255 is greater than anything else.
          * @param lexOnly - compare all characters lexically, including digits.
          */
-        static int cmp( const char *s1, const char *s2, bool lexOnly );
-        int cmp( const char *s1, const char *s2 ) const;
-        bool operator()( const char *s1, const char *s2 ) const;
-        bool operator()( const std::string &s1, const std::string &s2 ) const;
+        static int cmp( const StringData& s1, const StringData& s2, bool lexOnly );
+        int cmp( const StringData& s1, const StringData& s2 ) const;
+        bool operator()( const StringData& s1, const StringData& s2 ) const;
     private:
         bool _lexOnly;
     };

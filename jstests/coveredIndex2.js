@@ -9,7 +9,7 @@ assert.eq( t.count(), 2, "Not right length" );
 // use simple index
 t.ensureIndex({a: 1});
 assert.eq( t.find({a:1}).explain().indexOnly, false, "Find using covered index but all fields are returned");
-assert.eq( t.find({a:1}, {a: 1}).explain().indexOnly, false, "Find using covered index but _id is returned");
+assert.eq( t.find({a:1}, {a: 1}).explain().indexOnly, true, "Find using covered index and _id is returned");
 assert.eq( t.find({a:1}, {a: 1, _id: 0}).explain().indexOnly, true, "Find is not using covered index");
 
 // add multikey

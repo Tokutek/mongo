@@ -282,7 +282,7 @@ namespace mongo {
                   _nextMigrateLogId(0),
                   _snapshotTaken(false) {}
 
-        void start( string ns ,
+        void start( const std::string& ns ,
                     const BSONObj& min ,
                     const BSONObj& max ,
                     const BSONObj& shardKeyPattern ) {
@@ -552,7 +552,7 @@ namespace mongo {
                 BSONObj min = Helpers::modifiedRangeBound( _min , idx->keyPattern() , -1 );
                 BSONObj max = Helpers::modifiedRangeBound( _max , idx->keyPattern() , -1 );
 
-                shared_ptr<Cursor> idxCursor(new IndexCursor( d , *idx , min , max , false , 1 ));
+                shared_ptr<Cursor> idxCursor(IndexCursor::make( d , *idx , min , max , false , 1 ));
                 _cc.reset(new ClientCursor(QueryOption_NoCursorTimeout, idxCursor, _ns));
 
                 cc().swapTransactionStack(_txnStack);
@@ -660,7 +660,7 @@ namespace mongo {
     const char MigrateFromStatus::MIGRATE_LOG_REF_NS[] = "local.migratelogref.sh";
 
     struct MigrateStatusHolder {
-        MigrateStatusHolder( string ns ,
+        MigrateStatusHolder( const std::string& ns ,
                              const BSONObj& min ,
                              const BSONObj& max ,
                              const BSONObj& shardKeyPattern ) {

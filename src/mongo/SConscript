@@ -27,7 +27,8 @@ ltokufractaltree = os.getenv('LIBTOKUFRACTALTREE_NAME', 'tokufractaltree')
 ltokuportability = os.getenv('LIBTOKUPORTABILITY_NAME', 'tokuportability')
 tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
 
-env.SConscript(['platform/SConscript',
+env.SConscript(['base/SConscript',
+                'platform/SConscript',
                 'unittest/SConscript'])
 
 def add_exe( v ):
@@ -43,8 +44,11 @@ env.StaticLibrary('foundation',
                     'util/signal_handlers.cpp',
                     'util/text.cpp',
                     'util/time_support.cpp',
+                    'util/timer.cpp'
                     ],
                   LIBDEPS=['stacktrace',
+                           '$BUILD_DIR/mongo/base/base',
+                           '$BUILD_DIR/mongo/platform/platform',
                            '$BUILD_DIR/third_party/shim_boost'])
 
 env.StaticLibrary('stringutils', ['util/stringutils.cpp', 'util/base64.cpp',])
@@ -54,15 +58,23 @@ env.StaticLibrary('md5', [
         'util/md5main.cpp',
         ])
 
+env.CppUnitTest( "stringutils_test", [ "util/stringutils_test.cpp" ],
+                 LIBDEPS=["stringutils"] )
+
 env.StaticLibrary('bson', [
         'bson/oid.cpp',
         'db/nonce.cpp',
         'db/jsobj.cpp',
         'db/json.cpp',
         ], LIBDEPS=[
+        'base/base',
         'md5',
         'stringutils',
         ])
+
+env.CppUnitTest('string_map_test', ['util/string_map_test.cpp'],
+                LIBDEPS=['bson','foundation'])
+
 
 commonFiles = [ "pch.cpp",
                 "buildinfo.cpp",
@@ -71,7 +83,6 @@ commonFiles = [ "pch.cpp",
                 "shell/mongo.cpp",
                 "util/background.cpp",
                 "util/intrusive_counter.cpp",
-                "util/timer.cpp",
                 "util/util.cpp",
                 "util/trace.cpp",
                 "util/ramlog.cpp",
@@ -163,6 +174,7 @@ env.StaticLibrary("coredb", [
         "db/security_commands.cpp",
         "db/security_common.cpp",
         "db/stats/top.cpp",
+        "db/descriptor.cpp",
         "db/storage/cursor.cpp",
         "db/storage/txn.cpp",
         "db/storage/env.cpp",
@@ -267,6 +279,7 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/dbhelpers.cpp",
                     "db/instance.cpp",
                     "db/client.cpp",
+                    "db/client_load.cpp",
                     "db/database.cpp",
                     "db/cursor.cpp",
                     "db/security.cpp",
@@ -282,10 +295,10 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/ops/update.cpp",
                     "db/ops/update_internal.cpp",
                     "db/ops/insert.cpp",
-                    "db/dbcommands.cpp",
-                    "db/commands/dbcommands_deprecated.cpp",
 
                     # most commands are only for mongod
+                    "db/dbcommands.cpp",
+                    "db/commands/dbcommands_deprecated.cpp",
                     "db/commands/fsync.cpp",
                     "db/commands/distinct.cpp",
                     "db/commands/find_and_modify.cpp",
@@ -295,6 +308,7 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/pipeline/pipeline_d.cpp",
                     "db/pipeline/document_source_cursor.cpp",
                     "db/commands/txn_commands.cpp",
+                    "db/commands/load.cpp",
                     "db/driverHelpers.cpp",
 
                     # Most storage/ files are in coredb, but this is server-only.
@@ -305,7 +319,8 @@ env.Library( "dbcmdline", "db/cmdline.cpp" )
 env.Library('stacktrace', 'util/stacktrace.cpp')
 
 env.Program('lame_stacktrace_test', 'util/lame_stacktrace_test.cpp',
-            LIBDEPS=['stacktrace'])
+            LIBDEPS=['stacktrace',
+                     '$BUILD_DIR/mongo/base/base'])
 
 serverOnlyFiles += [ "db/stats/snapshots.cpp" ]
 
@@ -580,7 +595,9 @@ env.Alias( "core", [ '#/%s' % b for b in [ add_exe( "mongo" ), add_exe( "mongod"
 
 #headers
 if installSetup.headers:
-    for id in [ "", "util/", "util/net/", "util/mongoutils/", "util/concurrency/", "db/", "db/stats/", "db/repl/", "db/ops/", "client/", "bson/", "bson/util/", "s/", "scripting/" ]:
+    for id in [ "", "util/", "util/net/", "util/mongoutils/", "util/concurrency/", "db/",
+                "db/stats/", "db/repl/", "db/ops/", "client/", "bson/", "bson/util/", "s/",
+                "scripting/", "base/", "platform/" ]:
         env.Install( "$INSTALL_DIR/include/" + id, Glob( id + "*.h" ) )
         env.Install( "$INSTALL_DIR/include/" + id, Glob( id + "*.hpp" ) )
 
@@ -622,33 +639,47 @@ module_banner_transforms = ["--transform %s=$SERVER_DIST_BASENAME" % d for d in 
 toku_lib_dirs = set([Dir('#').rel_path(f.get_dir()) for f in env['TOKULIBS']])
 toku_lib_transforms = ["--transform %s=$SERVER_DIST_BASENAME/lib64" % d for d in toku_lib_dirs]
 
-env.Command(
-    '#/${SERVER_ARCHIVE}',
-    ['#buildscripts/make_archive.py'] + env["MODULE_BANNERS"] + env['TOKULIBS'] + distBinaries +
-    ['/lib64/libgcc_s.so.1',
-     '/usr/lib64/libstdc++.so.6',
-     os.path.realpath('/lib64/libgcc_s.so.1'),
-     os.path.realpath('/usr/lib64/libstdc++.so.6')],
-    ' '.join(['$PYTHON ${SOURCES[0]} -o $TARGET'] + toku_lib_transforms + module_banner_transforms + [
-            '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=$SERVER_DIST_BASENAME/bin',
-            '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=$SERVER_DIST_BASENAME/bin',
-            '--transform ${str(Dir(BUILD_DIR))}/mongo=$SERVER_DIST_BASENAME/bin',
-            '--transform /lib64=$SERVER_DIST_BASENAME/lib64',
-            '--transform /usr/lib64=$SERVER_DIST_BASENAME/lib64',
-            '--transform /lib=$SERVER_DIST_BASENAME/lib',
-            '--transform /usr/lib=$SERVER_DIST_BASENAME/lib',
-            '${TEMPFILE(SOURCES[1:])}']))
+if not has_option("skip-tarballs"):
+    for d in ['/', '/usr/local/gcc-4.7', '/usr/local/gcc-4.7.3']:
+        libdir = os.path.join(d, 'lib64')
+        if os.path.exists(libdir):
+            libgcc_s = os.path.join(libdir, 'libgcc_s.so.1')
+            libgcc_s_base64 = libdir
+            libgcc_s_base = os.path.join(d, 'lib')
+    for d in ['/usr', '/usr/local/gcc-4.7', '/usr/local/gcc-4.7.3']:
+        libdir = os.path.join(d, 'lib64')
+        if os.path.exists(libdir):
+            libstdcxx = os.path.join(libdir, 'libstdc++.so.6')
+            libstdcxx_base64 = libdir
+            libstdcxx_base = os.path.join(d, 'lib')
 
-if (solaris or linux) and (not has_option("nostrip")):
     env.Command(
-        '#/${SERVER_DEBUGINFO_ARCHIVE}',
-        ['#buildscripts/make_archive.py',
-         debuginfoBinaries],
-        '$PYTHON ${SOURCES[0]} -o $TARGET '
-        '--transform distsrc=${SERVER_DIST_BASENAME}-debuginfo '
-        '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=${SERVER_DIST_BASENAME}-debuginfo/bin '
-        '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=${SERVER_DIST_BASENAME}-debuginfo/bin '
-        '${TEMPFILE(SOURCES[1:])}')
+        '#/${SERVER_ARCHIVE}',
+        ['#buildscripts/make_archive.py'] + env["MODULE_BANNERS"] + env['TOKULIBS'] + distBinaries +
+        [libgcc_s,
+         libstdcxx,
+         os.path.realpath(libgcc_s),
+         os.path.realpath(libstdcxx)],
+        ' '.join(['$PYTHON ${SOURCES[0]} -o $TARGET'] + toku_lib_transforms + module_banner_transforms + [
+                '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=$SERVER_DIST_BASENAME/bin',
+                '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=$SERVER_DIST_BASENAME/bin',
+                '--transform ${str(Dir(BUILD_DIR))}/mongo=$SERVER_DIST_BASENAME/bin',
+                '--transform %s=$SERVER_DIST_BASENAME/lib64' % libgcc_s_base64,
+                '--transform %s=$SERVER_DIST_BASENAME/lib64' % libstdcxx_base64,
+                '--transform %s=$SERVER_DIST_BASENAME/lib' % libgcc_s_base,
+                '--transform %s=$SERVER_DIST_BASENAME/lib' % libstdcxx_base,
+                '${TEMPFILE(SOURCES[1:])}']))
+    
+    if (solaris or linux) and (not has_option("nostrip")):
+        env.Command(
+            '#/${SERVER_DEBUGINFO_ARCHIVE}',
+            ['#buildscripts/make_archive.py',
+             debuginfoBinaries],
+            '$PYTHON ${SOURCES[0]} -o $TARGET '
+            '--transform distsrc=${SERVER_DIST_BASENAME} '
+            '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=${SERVER_DIST_BASENAME}/bin '
+            '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=${SERVER_DIST_BASENAME}/bin '
+            '${TEMPFILE(SOURCES[1:])}')
 
 #final alias
 env.Alias( "install", "$INSTALL_DIR" )

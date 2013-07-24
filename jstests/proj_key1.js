@@ -15,7 +15,7 @@ t.ensureIndex( { a : 1 } )
 
 assert( t.find( { a : { $gte : 0 } } , { a : 1 , _id : 0 } ).explain().indexOnly , "A2" )
 
-assert( ! t.find( { a : { $gte : 0 } } , { a : 1 } ).explain().indexOnly , "A3" ) // because id _id
+assert( t.find( { a : { $gte : 0 } } , { a : 1 } ).explain().indexOnly , "A3" ) // still index only even with _id
 
 // assert( t.find( {} , { a : 1 , _id : 0 } ).explain().indexOnly , "A4" ); // TODO: need to modify query optimier SERVER-2109
 

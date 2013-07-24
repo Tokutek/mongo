@@ -540,7 +540,8 @@ namespace mongo {
                 {
                     Client::ReadContext ctx(rsoplog);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    foundLocally = Helpers::findOne( rsoplog, localQuery.done(), localObj);
+                    NamespaceDetails *d = nsdetails( rsoplog );
+                    foundLocally = d != NULL && d->findOne( localQuery.done(), localObj);
                 }
                 if (foundLocally) {
                     GTID localGTID = getGTIDFromBSON("_id", localObj);
@@ -628,7 +629,8 @@ namespace mongo {
                     Lock::DBRead lk(rsoplog);
                     Client::Transaction txn(DB_SERIALIZABLE);
                     // if there is nothing in the oplog, break
-                    if( !Helpers::getLast(rsoplog, o) ) {
+                    o = getLastEntryInOplog();
+                    if( o.isEmpty() ) {
                         break;
                     }
                 }

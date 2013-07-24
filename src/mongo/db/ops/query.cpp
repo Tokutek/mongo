@@ -319,7 +319,7 @@ namespace mongo {
         if ( allowCovered ) {
             const Projection::KeyOnly *keyFieldsOnly = _cursor->keyFieldsOnly();
             if ( keyFieldsOnly ) {
-                return keyFieldsOnly->hydrate( _cursor->currKey() );
+                return keyFieldsOnly->hydrate( _cursor->currKey(), _cursor->currPK() );
             }
         }
         BSONObj ret = _cursor->current();
@@ -663,7 +663,7 @@ namespace mongo {
         
         cursor =
             NamespaceDetailsTransient::getCursor( ns.c_str(), query, order, QueryPlanSelectionPolicy::any(),
-                                                  0, pq_shared, false, &queryPlan );
+                                                  true, pq_shared, false, &queryPlan );
         verify( cursor );
 
         // Tailable cursors must be marked as such before any use. This is so that

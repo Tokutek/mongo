@@ -22,11 +22,12 @@
 
 namespace mongo {
 
-    OpSettings::OpSettings()
-        : _queryCursorMode(DEFAULT_LOCK_CURSOR),
-          _shouldBulkFetch(false),
-          _shouldAppendPKForCapped(false)
-    {}
+    OpSettings::OpSettings() :
+        _queryCursorMode(DEFAULT_LOCK_CURSOR),
+        _shouldBulkFetch(false),
+        _shouldAppendPKForCapped(false),
+        _justOne(false) {
+    }
 
     OpSettings& OpSettings::setQueryCursorMode(QueryCursorMode mode) {
         _queryCursorMode = mode;
@@ -52,6 +53,15 @@ namespace mongo {
 
     OpSettings& OpSettings::setCappedAppendPK(bool val) {
         _shouldAppendPKForCapped = val;
+        return *this;
+    }
+
+    bool OpSettings::getJustOne() {
+        return _justOne;
+    }
+
+    OpSettings &OpSettings::setJustOne(bool val) {
+        _justOne = val;
         return *this;
     }
 

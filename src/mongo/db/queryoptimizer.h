@@ -52,7 +52,7 @@ namespace mongo {
                                        shared_ptr<const ParsedQuery>(),
                                const BSONObj &startKey = BSONObj(),
                                const BSONObj &endKey = BSONObj(),
-                               string special="" );
+                               const std::string& special="" );
 
         /** Categorical classification of a QueryPlan's utility. */
         enum Utility {
@@ -71,10 +71,13 @@ namespace mongo {
         /** @return true if ScanAndOrder processing will be required for result set. */
         bool scanAndOrderRequired() const { return _scanAndOrderRequired; }
         /**
-         * @return true if the index we are using has keys such that it can completely resolve the
-         * query expression to match by itself without ever checking the main object.
+         * @return false if document matching can be determined entirely using index keys and the
+         * FieldRangeSetPair generated for the query, without using a Matcher.  This function may
+         * return false positives but not false negatives.  For example, if the field range set's
+         * mustBeExactMatchRepresentation() returns a false negative, this function will return a
+         * false positive.
          */
-        bool exactKeyMatch() const { return _exactKeyMatch; }
+        bool mayBeMatcherNecessary() const { return _matcherNecessary; }
         /** @return true if this QueryPlan would perform an unindexed scan. */
         bool willScanTable() const { return _idxNo < 0 && ( _utility != Impossible ); }
         /** @return 'special' attribute of the plan, which was either set explicitly or generated from the index. */
@@ -123,7 +126,7 @@ namespace mongo {
                   const BSONObj &originalQuery,
                   const BSONObj &order,
                   const shared_ptr<const ParsedQuery> &parsedQuery,
-                  string special );
+                  const std::string& special );
         void init( const FieldRangeSetPair *originalFrsp,
                   const BSONObj &startKey,
                   const BSONObj &endKey );
@@ -142,7 +145,7 @@ namespace mongo {
         shared_ptr<const ParsedQuery> _parsedQuery;
         const IndexDetails * _index;
         bool _scanAndOrderRequired;
-        bool _exactKeyMatch;
+        bool _matcherNecessary;
         int _direction;
         shared_ptr<FieldRangeVector> _frv;
         shared_ptr<FieldRangeVector> _originalFrv;
@@ -489,7 +492,7 @@ namespace mongo {
     class MultiPlanScanner {
     public:
         
-        static MultiPlanScanner *make( const char *ns,
+        static MultiPlanScanner *make( const StringData& ns,
                                       const BSONObj &query,
                                       const BSONObj &order,
                                       const shared_ptr<const ParsedQuery> &parsedQuery =
@@ -583,7 +586,7 @@ namespace mongo {
 
     private:
 
-        MultiPlanScanner( const char *ns,
+        MultiPlanScanner( const StringData& ns,
                          const BSONObj &query,
                          const shared_ptr<const ParsedQuery> &parsedQuery,
                          const BSONObj &hint,
@@ -659,7 +662,6 @@ namespace mongo {
 
         virtual bool isMultiKey() const { return _mps->hasMultiKey(); }
 
-        virtual shared_ptr< CoveredIndexMatcher > matcherPtr() const { return _matcher; }
         virtual CoveredIndexMatcher* matcher() const { return _matcher.get(); }
 
         virtual bool capped() const { return _c->capped(); }

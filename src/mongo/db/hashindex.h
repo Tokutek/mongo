@@ -22,7 +22,6 @@
 #include "mongo/db/index.h"
 #include "mongo/db/keypattern.h"
 #include "mongo/db/matcher.h"
-#include "mongo/db/namespace.h"
 
 namespace mongo {
 

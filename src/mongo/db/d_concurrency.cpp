@@ -62,13 +62,6 @@ namespace mongo {
     	virtual ~DBTryLockTimeoutException() throw() { }
     };
 
-#if 0
-    namespace dur {
-        void assertNothingSpooled();
-        void releasingWriteLock();
-    }
-#endif
-
     // e.g. externalobjsortmutex uses hlmutex as it can be locked for very long times
     // todo : report HLMutex status in db.currentOp() output
     // perhaps move this elsewhere as this could be used in mongos and this file is for mongod
@@ -96,10 +89,6 @@ namespace mongo {
     LockStat* Lock::nestableLockStat( Nestable db ) {
         return &nestableLocks[db]->stats;
     }
-
-    static void locked_W();
-    static void unlocking_w();
-    static void unlocking_W();
 
     class WrapperForQLock { 
         QLock q;
@@ -135,7 +124,6 @@ namespace mongo {
             {
                 q.lock_W();
             }
-            locked_W();
         }
 
         // how to count try's that fail is an interesting question. we should get rid of try().
@@ -152,7 +140,6 @@ namespace mongo {
             bool got = q.lock_W_try(millis); 
             if( got ) {
                 lockState().lockedStart( 'W' );
-                locked_W();
             }
             return got;
         }
@@ -164,7 +151,6 @@ namespace mongo {
         }
 
         void unlock_w() {
-            unlocking_w();
             wassert( threadState() == 'w' );
             lockState().unlocked();
             q.unlock_w(); 
@@ -174,7 +160,6 @@ namespace mongo {
 
         void unlock_W() {
             wassert( threadState() == 'W' );
-            unlocking_W();
             lockState().unlocked();
             q.unlock_W(); 
         }
@@ -513,13 +498,13 @@ namespace mongo {
         }
     }
 
-    Lock::DBWrite::DBWrite( const StringData& ns ) 
-        : ScopedLock( 'w' ), _what(ns.data()), _nested(false) {
+    Lock::DBWrite::DBWrite( const StringData& ns )
+        : ScopedLock( 'w' ), _what(ns.toString()), _nested(false) {
         lockDB( _what );
     }
 
-    Lock::DBRead::DBRead( const StringData& ns )   
-        : ScopedLock( 'r' ), _what(ns.data()), _nested(false) {
+    Lock::DBRead::DBRead( const StringData& ns )
+        : ScopedLock( 'r' ), _what(ns.toString()), _nested(false) {
         lockDB( _what );
     }
 
@@ -689,18 +674,6 @@ namespace mongo {
         _got = true;
     }
     readlocktry::~readlocktry() { 
-    }
-
-    void locked_W() {
-    }
-    void unlocking_w() {
-        // we can't commit early in this case; so a bit more to do here.
-        // TODO: What do we do here?
-        //dur::releasingWriteLock();
-    }
-    void unlocking_W() {
-        // TODO: What do we do here?
-        //dur::releasingWriteLock();
     }
 
 }

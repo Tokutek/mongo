@@ -21,7 +21,6 @@
 
 #include <boost/checked_delete.hpp>
 
-#include "mongo/db/namespace.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/index.h"
 #include "mongo/db/curop.h"
@@ -37,6 +36,8 @@
 namespace mongo {
 
     IndexDetails::IndexDetails(const BSONObj &info, bool may_create) :
+        _db(NULL),
+        _descriptor(Ordering::make(info["key"].Obj())),
         _info(info.copy()),
         _keyPattern(info["key"].Obj().copy()),
         _unique(info["unique"].trueValue()),
@@ -45,12 +46,17 @@ namespace mongo {
         string dbname = indexNamespace();
         TOKULOG(1) << "Opening IndexDetails " << dbname << endl;
         // Open the dictionary. Creates it if necessary.
-        int r = storage::db_open(&_db, dbname, info, may_create);
+        const int r = storage::db_open(&_db, dbname, info, _descriptor, may_create);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
-        if (may_create) {
-            addNewNamespaceToCatalog(dbname);
+        try {
+            if (may_create) {
+                addNewNamespaceToCatalog(dbname);
+            }
+        } catch (...) {
+            close();
+            throw;
         }
     }
 
@@ -66,7 +72,7 @@ namespace mongo {
         }
     }
 
-    int IndexDetails::keyPatternOffset( const string& key ) const {
+    int IndexDetails::keyPatternOffset( const StringData& key ) const {
         BSONObjIterator i( keyPattern() );
         int n = 0;
         while ( i.more() ) {
@@ -99,8 +105,8 @@ namespace mongo {
                 LOG(2) << "IndexDetails::kill(): couldn't drop ns " << ns << endl;
             }
 
-            if (!mongoutils::str::endsWith(pns.c_str(), ".system.indexes")) {
-                int n = removeFromSysIndexes(pns.c_str(), indexName().c_str());
+            if (!StringData(pns).endsWith(".system.indexes")) {
+                const int n = removeFromSysIndexes(pns, indexName());
                 wassert( n == 1 );
             }
         }
@@ -114,39 +120,31 @@ namespace mongo {
     }
 
     const IndexSpec& IndexDetails::getSpec() const {
-        SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
-        return NamespaceDetailsTransient::get_inlock( info()["ns"].valuestr() ).getIndexSpec( this );
+        SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
+        return NamespaceDetailsTransient::get_inlock( info()["ns"].String() ).getIndexSpec( this );
     }
 
-    void IndexDetails::uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const {
-        const Ordering &ordering(*reinterpret_cast<const Ordering *>(_db->cmp_descriptor->dbt.data));
-        const int c = newkey.woCompare(oldkey, ordering);
-        if (c == 0) {
-            isUnique = false;
-        }
-    }
-
-    struct UniqueCheckExtra : public ExceptionSaver {
-        const IndexDetails &d;
-        const BSONObj &newkey;
-        bool &isUnique;
-        UniqueCheckExtra(const IndexDetails &_d, const BSONObj &_newkey, bool &_isUnique)
-                : d(_d), newkey(_newkey), isUnique(_isUnique) {}
-    };
-
-    int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
-        if (key != NULL) {
-            UniqueCheckExtra *e = static_cast<UniqueCheckExtra *>(extra);
-            try {
-                const storage::Key sKey(key);
-                e->d.uniqueCheckCallback(e->newkey, sKey.key(), e->isUnique);
+    int IndexDetails::uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
+        UniqueCheckExtra *info = static_cast<UniqueCheckExtra *>(extra);
+        try {
+            if (key != NULL) {
+                // Create two new storage keys that have the pk stripped out. This will tell
+                // us whether or not just the 'key' portions are equal, which is what.
+                // Stripping out the pk is as easy as calling the key constructor with
+                // the original key's buffer but hasPK = false (which will silently ignore
+                // any bytes that are found after the first key).
+                const storage::Key sKey1(reinterpret_cast<const char *>(key->data), false);
+                const storage::Key sKey2(reinterpret_cast<const char *>(info->newKey.buf()), false);
+                const int c = info->descriptor.compareKeys(sKey1, sKey2);
+                if (c == 0) {
+                    info->isUnique = false;
+                }
             }
-            catch (const std::exception &ex) {
-                e->saveException(ex);
-                return -1;
-            }
+            return 0;
+        } catch (const std::exception &ex) {
+            info->saveException(ex);
         }
-        return 0;
+        return -1;
     }
 
     void IndexDetails::uniqueCheck(const BSONObj &key, const BSONObj *pk) const {
@@ -162,12 +160,17 @@ namespace mongo {
         IndexDetails::Cursor c(*this, DB_SERIALIZABLE);
         DBC *cursor = c.dbc();
 
-        storage::Key skey(key, pk != NULL ? &minKey : NULL);
-        DBT kdbt = skey.dbt();
+        const bool hasPK = pk != NULL;
+        storage::Key sKey(key, hasPK ? &minKey : NULL);
+        DBT kdbt = sKey.dbt();
 
         bool isUnique = true;
-        UniqueCheckExtra extra(*this, key, isUnique);
-        int r = cursor->c_getf_set_range(cursor, 0, &kdbt, mongo::uniqueCheckCallback, &extra);
+        UniqueCheckExtra extra(sKey, _descriptor, isUnique);
+        // If the key has a PK, we need to set range in order to find the first
+        // key greater than { key, minKey }. If there is no pk then there's
+        // just one component to the key, so we can just getf_set to that point.
+        const int r = hasPK ? cursor->c_getf_set_range(cursor, 0, &kdbt, uniqueCheckCallback, &extra) :
+                              cursor->c_getf_set(cursor, 0, &kdbt, uniqueCheckCallback, &extra);
         if (r != 0 && r != DB_NOTFOUND) {
             extra.throwException();
             storage::handle_ydb_error(r);
@@ -197,8 +200,11 @@ namespace mongo {
 
         // We already did the unique check above. We can just pass flags of zero.
         const int put_flags = (flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0;
-        int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, put_flags);
-        if (r != 0) {
+        const int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, put_flags);
+        if (r == EINVAL) {
+            uasserted( 16861, str::stream() << "Indexed insertion failed." <<
+                          " This may be due to keys > 32kb. Check the error log." );
+        } else if (r != 0) {
             storage::handle_ydb_error(r);
         }
         TOKULOG(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
@@ -210,6 +216,13 @@ namespace mongo {
 
         const int del_flags = ((flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0) | DB_DELETE_ANY;
         int r = _db->del(_db, cc().txn().db_txn(), &kdbt, del_flags);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
+    }
+
+    void IndexDetails::acquireTableLock() {
+        const int r = _db->pre_acquire_table_lock(_db, cc().txn().db_txn());
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
@@ -249,7 +262,7 @@ namespace mongo {
         }
     }
 
-    static int hot_opt_callback(void *extra, float progress) {
+    int IndexDetails::hot_opt_callback(void *extra, float progress) {
         int retval = 0;
         uint64_t iter = *(uint64_t *)extra;
         try {
@@ -369,4 +382,5 @@ namespace mongo {
             storage::handle_ydb_error(r);
         }
     }
-}
+
+} // namespace mongo

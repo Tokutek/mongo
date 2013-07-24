@@ -502,7 +502,8 @@ namespace mongo {
     /* db - database name
        path - db directory
     */
-    void Database::closeDatabase( const char *name, const string& path ) {
+    // Why is this in instance.cpp?
+    void Database::closeDatabase( const StringData &name, const StringData &path ) {
         verify( Lock::isW() );
 
         Client::Context * ctx = cc().getContext();
@@ -512,22 +513,18 @@ namespace mongo {
         verify( database->name() == name );
 
         /* important: kill all open cursors on the database */
-        string prefix(name);
-        prefix += '.';
-        ClientCursor::invalidate(prefix.c_str());
+        string prefix(name.toString() + ".");
+        ClientCursor::invalidate(prefix);
 
-        NamespaceDetailsTransient::clearForPrefix( prefix.c_str() );
+        NamespaceDetailsTransient::clearForPrefix( prefix );
 
         dbHolderW().erase( name, path );
         ctx->_clear();
         delete database; // closes files
     }
 
-    static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &toupdate, const BSONObj &query, int flags) {
-        bool upsert = flags & UpdateOption_Upsert;
-        bool multi = flags & UpdateOption_Multi;
-        bool broadcast = flags & UpdateOption_Broadcast;
-
+    static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &toupdate, const BSONObj &query,
+                                     const bool upsert, const bool multi, const bool broadcast) {
         // void ReplSetImpl::relinquish() uses big write lock so 
         // this is thus synchronized given our lock above.
         uassert(10054,  "not master", isMasterNs(ns));
@@ -561,17 +558,22 @@ namespace mongo {
         op.debug().query = query;
         op.setQuery(query);
 
+        const bool upsert = flags & UpdateOption_Upsert;
+        const bool multi = flags & UpdateOption_Multi;
+        const bool broadcast = flags & UpdateOption_Broadcast;
+
         OpSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+        settings.setJustOne(!multi);
         cc().setOpSettings(settings);
 
         try {
             Lock::DBRead lk(ns);
-            lockedReceivedUpdate(ns, m, op, toupdate, query, flags);
+            lockedReceivedUpdate(ns, m, op, toupdate, query, upsert, multi, broadcast);
         }
         catch (RetryWithWriteLock &e) {
             Lock::DBWrite lk(ns);
-            lockedReceivedUpdate(ns, m, op, toupdate, query, flags);
+            lockedReceivedUpdate(ns, m, op, toupdate, query, upsert, multi, broadcast);
         }
     }
 
@@ -586,12 +588,13 @@ namespace mongo {
         op.debug().query = pattern;
         op.setQuery(pattern);
 
+        const bool justOne = flags & RemoveOption_JustOne;
+        const bool broadcast = flags & RemoveOption_Broadcast;
+
         OpSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+        settings.setJustOne(justOne);
         cc().setOpSettings(settings);
-
-        bool justOne = flags & RemoveOption_JustOne;
-        bool broadcast = flags & RemoveOption_Broadcast;
 
         Lock::DBRead lk(ns);
 
@@ -773,7 +776,7 @@ namespace mongo {
         return ok;
     }
 
-    static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, bool keepGoing) {
+    static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, const bool keepGoing) {
         // writelock is used to synchronize stepdowns w/ writes
         uassert(10058, "not master", isMasterNs(ns));
 
@@ -870,10 +873,11 @@ namespace mongo {
                 return true;
             // we have a local database.  return true if oplog isn't empty
             {
-                Lock::DBRead lk(rsoplog);
+                Client::ReadContext ctx(rsoplog);
                 Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
+                NamespaceDetails *d = nsdetails(rsoplog);
                 BSONObj o;
-                if (Helpers::getFirst(rsoplog, o)) {
+                if (d != NULL && d->findOne(BSONObj(), o)) {
                     txn.commit();
                     return true;
                 }
@@ -976,7 +980,7 @@ namespace mongo {
             Lock::GlobalWrite lk;
             log() << "shutdown: going to close databases..." << endl;
             dbHolderW().closeDatabases(dbpath);
-            log() << "shutdown: going to shutdown TokuKV..." << endl;
+            log() << "shutdown: going to shutdown TokuMX..." << endl;
             storage::shutdown();
         }
 
@@ -1051,10 +1055,6 @@ namespace mongo {
         }
         catch (...) { }
 #endif
-
-        // block the dur thread from doing any work for the rest of the run
-        LOG(2) << "shutdown: groupCommitMutex" << endl;
-        //SimpleMutex::scoped_lock lk(dur::commitJob.groupCommitMutex);
 
 #ifdef _WIN32
         // Windows Service Controller wants to be told when we are down,

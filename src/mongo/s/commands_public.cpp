@@ -408,11 +408,11 @@ namespace mongo {
             RenameCollectionCmd() : PublicGridCommand( "renameCollection" ) {}
             bool run(const string& dbName, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 string fullnsFrom = cmdObj.firstElement().valuestrsafe();
-                string dbNameFrom = nsToDatabase( fullnsFrom.c_str() );
+                string dbNameFrom = nsToDatabase( fullnsFrom );
                 DBConfigPtr confFrom = grid.getDBConfig( dbNameFrom , false );
 
                 string fullnsTo = cmdObj["to"].valuestrsafe();
-                string dbNameTo = nsToDatabase( fullnsTo.c_str() );
+                string dbNameTo = nsToDatabase( fullnsTo );
                 DBConfigPtr confTo = grid.getDBConfig( dbNameTo , false );
 
                 uassert(13140, "Don't recognize source or target DB", confFrom && confTo);
@@ -793,6 +793,20 @@ namespace mongo {
             RollbackTransactionCmd() : NotAllowedOnShardedClusterCmd("rollbackTransaction") {}
         } rollbackTransactionCmd;
 
+        class BeginLoadCmd : public NotAllowedOnShardedClusterCmd  {
+        public:
+            BeginLoadCmd() : NotAllowedOnShardedClusterCmd("beginLoad") {}
+        } beginLoadCmd;
+
+        class CommitLoadCmd : public NotAllowedOnShardedClusterCmd  {
+        public:
+            CommitLoadCmd() : NotAllowedOnShardedClusterCmd("commitLoad") {}
+        } commitLoadCmd;
+
+        class AbortLoadCmd : public NotAllowedOnShardedClusterCmd  {
+        public:
+            AbortLoadCmd() : NotAllowedOnShardedClusterCmd("abortLoad") {}
+        } abortLoadCmd;
 
         class GroupCmd : public NotAllowedOnShardedCollectionCmd  {
         public:

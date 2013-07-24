@@ -77,7 +77,9 @@ namespace mongo {
                 if (dbHolder().__isLoaded(ns, dbpath)) {
                     scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                                     new Client::Context(ns) : NULL);
-                    (void) nsindex(ns)->close_ns(ns);
+                    // Pass aborting = true to close_ns(), which hints to the implementation
+                    // that the calling transaction is about to abort.
+                    (void) nsindex(ns)->close_ns(ns, true);
                 }
             }
 

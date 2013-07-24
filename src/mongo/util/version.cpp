@@ -44,7 +44,7 @@ namespace mongo {
      * If you really need to do something else you'll need to fix _versionArray()
      */
     const char mongodbVersionString[] = "2.2.5";
-    const char tokumxVersionString[] = "1.0.0-pre-";
+    const char tokumxVersionString[] = "1.1.0-pre-";
 
     std::string fullVersionString() {
         stringstream ss;
@@ -282,20 +282,20 @@ namespace mongo {
     }
 
     int versionCmp(StringData rhs, StringData lhs) {
-        if (strcmp(rhs.data(),lhs.data()) == 0)
+        if ( rhs == lhs )
             return 0;
 
         // handle "1.2.3-" and "1.2.3-pre"
         if (rhs.size() < lhs.size()) {
-            if (strncmp(rhs.data(), lhs.data(), rhs.size()) == 0 && lhs.data()[rhs.size()] == '-')
+            if (strncmp(rhs.rawData(), lhs.rawData(), rhs.size()) == 0 && lhs[rhs.size()] == '-')
                 return +1;
         }
         else if (rhs.size() > lhs.size()) {
-            if (strncmp(rhs.data(), lhs.data(), lhs.size()) == 0 && rhs.data()[lhs.size()] == '-')
+            if (strncmp(rhs.rawData(), lhs.rawData(), lhs.size()) == 0 && rhs[lhs.size()] == '-')
                 return -1;
         }
 
-        return LexNumCmp::cmp(rhs.data(), lhs.data(), false);
+        return LexNumCmp::cmp(rhs, lhs, false);
     }
 
     class VersionCmpTest : public StartupTest {

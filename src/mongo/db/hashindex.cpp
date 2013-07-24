@@ -130,12 +130,8 @@ namespace mongo {
                 new FieldRangeVector( newfrs , *_spec , 1 ) );
 
         const shared_ptr< Cursor > cursor(
-                new IndexCursor( d,
-                                 *idx,
-                                 newVector,
-                                 false,
-                                 1,
-                                 numWanted) );
+                IndexCursor::make( d, *idx, newVector,
+                                   false, 1, numWanted) );
         cursor->setMatcher( forceDocMatcher );
         return cursor;
     }

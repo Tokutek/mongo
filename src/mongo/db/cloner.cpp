@@ -18,6 +18,7 @@
 */
 
 #include "mongo/pch.h"
+#include "mongo/base/string_data.h"
 #include "mongo/bson/util/builder.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/client/remote_transaction.h"
@@ -588,20 +589,20 @@ namespace mongo {
                     errmsg = "each collection name must be a string";
                     return false;
                 }
-                if (!checkCollection(dbname, e.String(), errmsg)) {
+                if (!checkCollection(dbname, e.Stringdata(), errmsg)) {
                     return false;
                 }
             }
             return true;
         }
       private:
-        bool checkCollection(const string &dbname, const string &collname, string &errmsg) {
-            const string ns = (mongoutils::str::startsWith(collname, dbname + ".")
-                               ? collname
-                               : dbname + "." + collname);
+        bool checkCollection(const StringData &dbname, const StringData &collname, string &errmsg) {
+            const string ns = collname.startsWith(dbname.toString() + ".")
+                              ? collname.toString()
+                              : dbname.toString() + "." + collname.toString();
             NamespaceDetails *d;
             try {
-                d = nsdetails(ns.c_str());
+                d = nsdetails(ns);
             }
             catch (storage::SystemException::Enoent &e) {
                 d = NULL;
@@ -611,7 +612,7 @@ namespace mongo {
                 return false;
             }
             try {
-                scoped_ptr<Cursor> _c(BasicCursor::make(d));
+                shared_ptr<Cursor> c(BasicCursor::make(d));
             }
             catch (storage::RetryableException::MvccDictionaryTooNew &e) {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped and re-created";

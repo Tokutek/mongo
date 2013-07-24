@@ -42,13 +42,37 @@ namespace mongo {
         Message response;
         runQuery( m, q, response );
     }
-    void __forceLinkGeoPlugin();
 } // namespace mongo
 
 namespace QueryOptimizerTests {
 
     using boost::shared_ptr;
     
+    void ensureIndex(const char *ns, BSONObj keyPattern, bool unique, const char *name) {
+        NamespaceDetails *d = nsdetails(ns);
+        if( d == 0 )
+            return;
+
+        {
+            NamespaceDetails::IndexIterator i = d->ii();
+            while( i.more() ) {
+                if( i.next().keyPattern().woCompare(keyPattern) == 0 )
+                    return;
+            }
+        }
+
+        string system_indexes = cc().database()->name() + ".system.indexes";
+
+        BSONObjBuilder b;
+        b.append("name", name);
+        b.append("ns", ns);
+        b.append("key", keyPattern);
+        b.appendBool("unique", unique);
+        BSONObj o = b.done();
+
+        insertObject(system_indexes.c_str(), o, 0, true);
+    }
+
     void dropCollection( const char *ns ) {
      	string errmsg;
         BSONObjBuilder result;
@@ -111,6 +135,7 @@ namespace QueryOptimizerTests {
                 return p.frv()->endKey();
             }
             DBDirectClient &client() const { return client_; }
+
         private:
             Client::Transaction _transaction;
             Lock::GlobalWrite lk_;
@@ -136,7 +161,7 @@ namespace QueryOptimizerTests {
                                                          BSONObj() ) );
                 ASSERT_EQUALS( QueryPlan::Helpful, p->utility() );
                 ASSERT( !p->scanAndOrderRequired() );
-                ASSERT( !p->exactKeyMatch() );
+                ASSERT( p->mayBeMatcherNecessary() );
             }
         };
 
@@ -393,120 +418,124 @@ namespace QueryOptimizerTests {
             }
         };
 
-        class KeyMatch : public Base {
+        /**
+         * QueryPlan::mayBeMatcherNecessary() returns false when an index is optimal and a field
+         * range set mustBeExactMatchRepresentation() (for a single key index).
+         */
+        class NotMatcherNecessary : public Base {
         public:
             void run() {
-                scoped_ptr<QueryPlan> p( QueryPlan::make( nsd(), INDEXNO( "a" << 1 ),
-                                                         FRSP( BSONObj() ), FRSP2( BSONObj() ),
-                                                         BSONObj(), BSON( "a" << 1 ) ) );
-                ASSERT( !p->exactKeyMatch() );
-                scoped_ptr<QueryPlan> p2( QueryPlan::make( nsd(), INDEXNO( "b" << 1 << "a" << 1 ),
-                                                          FRSP( BSONObj() ), FRSP2( BSONObj() ),
-                                                          BSONObj(), BSON( "a" << 1 ) ) );
-                ASSERT( !p2->exactKeyMatch() );
-                scoped_ptr<QueryPlan> p3( QueryPlan::make( nsd(), INDEXNO( "b" << 1 << "a" << 1 ),
-                                                          FRSP( BSON( "b" << "z" ) ),
-                                                          FRSP2( BSON( "b" << "z" ) ),
-                                                          BSON( "b" << "z" ), BSON( "a" << 1 ) ) );
-                ASSERT( !p3->exactKeyMatch() );
-                scoped_ptr<QueryPlan> p4
-                        ( QueryPlan::make( nsd(), INDEXNO( "b" << 1 << "a" << 1 << "c" << 1 ),
-                                          FRSP( BSON( "c" << "y" << "b" << "z" ) ),
-                                          FRSP2( BSON( "c" << "y" << "b" << "z" ) ),
-                                          BSON( "c" << "y" << "b" << "z" ),
-                                          BSON( "a" << 1 ) ) );
-                ASSERT( !p4->exactKeyMatch() );
-                scoped_ptr<QueryPlan> p5
-                        ( QueryPlan::make( nsd(), INDEXNO( "b" << 1 << "a" << 1 << "c" << 1 ),
-                                          FRSP( BSON( "c" << "y" << "b" << "z" ) ),
-                                          FRSP2( BSON( "c" << "y" << "b" << "z" ) ),
-                                          BSON( "c" << "y" << "b" << "z" ),
-                                          BSONObj() ) );
-                ASSERT( !p5->exactKeyMatch() );
-                scoped_ptr<QueryPlan> p6
-                        ( QueryPlan::make( nsd(), INDEXNO( "b" << 1 << "a" << 1 << "c" << 1 ),
-                                          FRSP( BSON( "c" << LT << "y" << "b" << GT << "z" ) ),
-                                          FRSP2( BSON( "c" << LT << "y" << "b" << GT << "z" ) ),
-                                          BSON( "c" << LT << "y" << "b" << GT << "z" ),
-                                          BSONObj() ) );
-                ASSERT( !p6->exactKeyMatch() );
-                scoped_ptr<QueryPlan> p7( QueryPlan::make( nsd(), INDEXNO( "b" << 1 ),
-                                                          FRSP( BSONObj() ), FRSP2( BSONObj() ),
-                                                          BSONObj(), BSON( "a" << 1 ) ) );
-                ASSERT( !p7->exactKeyMatch() );
-                scoped_ptr<QueryPlan> p8( QueryPlan::make( nsd(), INDEXNO( "a" << 1 << "b" << 1 ),
-                                                          FRSP( BSON( "b" << "y" << "a" << "z" ) ),
-                                                          FRSP2( BSON( "b" << "y" << "a" << "z" ) ),
-                                                          BSON( "b" << "y" << "a" << "z" ),
-                                                          BSONObj() ) );
-                ASSERT( p8->exactKeyMatch() );
-                scoped_ptr<QueryPlan> p9( QueryPlan::make( nsd(), INDEXNO( "a" << 1 ),
-                                                          FRSP( BSON( "a" << "z" ) ),
-                                                          FRSP2( BSON( "a" << "z" ) ),
-                                                          BSON( "a" << "z" ), BSON( "a" << 1 ) ) );
-                ASSERT( p9->exactKeyMatch() );
+                // Non compound index tests.
+                ASSERT( !matcherNecessary( BSON( "a" << 1 ), BSON( "a" << 5 ) ) );
+                ASSERT( !matcherNecessary( BSON( "a" << 1 ), BSON( "a" << GT << 5 ) ) );
+                ASSERT( !matcherNecessary( BSON( "a" << 1 ), BSON( "a" << GT << 5 << LT << 10 ) ) );
+                ASSERT( !matcherNecessary( BSON( "a" << 1 ),
+                                           BSON( "a" << BSON( "$in" << BSON_ARRAY( 1 << 2 ) ) ) ) );
+                // Compound index tests.
+                ASSERT( !matcherNecessary( BSON( "a" << 1 << "b" << 1 ),
+                                           BSON( "a" << 5 << "b" << 6 ) ) );
+                ASSERT( !matcherNecessary( BSON( "a" << 1 << "b" << -1 ),
+                                           BSON( "a" << 2 << "b" << GT << 5 ) ) );
+                ASSERT( !matcherNecessary( BSON( "a" << -1 << "b" << 1 ),
+                                           BSON( "a" << 3 << "b" << GT << 5 << LT << 10 ) ) );
+                ASSERT( !matcherNecessary( BSON( "a" << -1 << "b" << -1 ),
+                                           BSON( "a" << "q" <<
+                                                 "b" << BSON( "$in" << BSON_ARRAY( 1 << 2 ) ) ) ) );
+            }
+        private:
+            bool matcherNecessary( const BSONObj& index, const BSONObj& query ) {
+                scoped_ptr<QueryPlan> plan( makePlan( index, query ) );
+                return plan->mayBeMatcherNecessary();
+            }
+            QueryPlan* makePlan( const BSONObj& index, const BSONObj& query ) {
+                return QueryPlan::make( nsd(),
+                                        nsd()->idxNo( *this->index( index ) ),
+                                        FRSP( query ),
+                                        FRSP2( query ),
+                                        query,
+                                        BSONObj() );
             }
         };
 
-        class MoreKeyMatch : public Base {
+        /**
+         * QueryPlan::mayBeMatcherNecessary() returns true when an index is not optimal or a field
+         * range set !mustBeExactMatchRepresentation().
+         */
+        class MatcherNecessary : public Base {
         public:
             void run() {
-                scoped_ptr<QueryPlan> p
-                        ( QueryPlan::make( nsd(), INDEXNO( "a" << 1 ),
-                                          FRSP( BSON( "a" << "r" << "b" << NE << "q" ) ),
-                                          FRSP2( BSON( "a" << "r" << "b" << NE << "q" ) ),
-                                          BSON( "a" << "r" << "b" << NE << "q" ),
-                                          BSON( "a" << 1 ) ) );
-                ASSERT( !p->exactKeyMatch() );
-                // When no match is possible, keyMatch attribute is not set.
-                BSONObj impossibleQuery = BSON( "a" << BSON( "$in" << BSONArray() ) );
-                scoped_ptr<QueryPlan> p2( QueryPlan::make( nsd(), INDEXNO( "a" << 1 ),
-                                                          FRSP( impossibleQuery ),
-                                                          FRSP2( impossibleQuery ), impossibleQuery,
-                                                          BSONObj() ) );
-                ASSERT( !p2->exactKeyMatch() );
-                // When no match is possible on an unindexed field, keyMatch attribute is not set.
-                BSONObj bImpossibleQuery = BSON( "a" << 1 << "b" << GT << 10 << LT << 10 );
-                scoped_ptr<QueryPlan> p3( QueryPlan::make( nsd(), INDEXNO( "a" << 1 ),
-                                                          FRSP( bImpossibleQuery ),
-                                                          FRSP2( bImpossibleQuery ),
-                                                          bImpossibleQuery, BSONObj() ) );
-                ASSERT( !p3->exactKeyMatch() );
+                // Not mustBeExactMatchRepresentation.
+                ASSERT( matcherNecessary( BSON( "a" << 1 ), BSON( "a" << BSON_ARRAY( 5 ) ) ) );
+                ASSERT( matcherNecessary( BSON( "a" << 1 ), BSON( "a" << NE << 5 ) ) );
+                ASSERT( matcherNecessary( BSON( "a" << 1 ), fromjson( "{a:/b/}" ) ) );
+                ASSERT( matcherNecessary( BSON( "a" << 1 ),
+                                          BSON( "a" << 1 << "$where" << "false" ) ) );
+                // Not optimal index.
+                ASSERT( matcherNecessary( BSON( "a" << 1 ), BSON( "a" << 5 << "b" << 6 ) ) );
+                ASSERT( matcherNecessary( BSON( "a" << 1 << "b" << -1 ), BSON( "b" << GT << 5 ) ) );
+                ASSERT( matcherNecessary( BSON( "a" << -1 << "b" << 1 ),
+                                          BSON( "a" << GT << 2 << "b" << LT << 10 ) ) );
+                ASSERT( matcherNecessary( BSON( "a" << -1 << "b" << -1 ),
+                                          BSON( "a" << BSON( "$in" << BSON_ARRAY( 1 << 2 ) ) <<
+                                                "b" << "q" ) ) );
+                // Not mustBeExactMatchRepresentation and not optimal index.
+                ASSERT( matcherNecessary( BSON( "a" << 1 << "b" << 1 ),
+                                          BSON( "b" << BSON_ARRAY( 5 ) ) ) );
+            }
+        private:
+            bool matcherNecessary( const BSONObj& index, const BSONObj& query ) {
+                scoped_ptr<QueryPlan> plan( makePlan( index, query ) );
+                return plan->mayBeMatcherNecessary();
+            }
+            QueryPlan* makePlan( const BSONObj& index, const BSONObj& query ) {
+                return QueryPlan::make( nsd(),
+                                        nsd()->idxNo( *this->index( index ) ),
+                                        FRSP( query ),
+                                        FRSP2( query ),
+                                        query,
+                                        BSONObj() );
             }
         };
 
-        class ExactKeyQueryTypes : public Base {
+        /**
+         * QueryPlan::mustBeMatcherNecessary() returns true when field ranges on a multikey index
+         * cannot be intersected for a single field or across multiple fields.
+         */
+        class MatcherNecessaryMultikey : public Base {
         public:
+            MatcherNecessaryMultikey() {
+                client().insert( ns(), fromjson( "{ a:[ { b:1, c:1 }, { b:2, c:2 } ] }" ) );
+            }
             void run() {
-                scoped_ptr<QueryPlan> p( QueryPlan::make( nsd(), INDEXNO( "a" << 1 ),
-                                                         FRSP( BSON( "a" << "b" ) ),
-                                                         FRSP2( BSON( "a" << "b" ) ),
-                                                         BSON( "a" << "b" ), BSONObj() ) );
-                ASSERT( p->exactKeyMatch() );
-                scoped_ptr<QueryPlan> p2( QueryPlan::make( nsd(), INDEXNO( "a" << 1 ),
-                                                          FRSP( BSON( "a" << 4 ) ),
-                                                          FRSP2( BSON( "a" << 4 ) ),
-                                                          BSON( "a" << 4 ), BSONObj() ) );
-                ASSERT( !p2->exactKeyMatch() );
-                scoped_ptr<QueryPlan> p3
-                        ( QueryPlan::make( nsd(), INDEXNO( "a" << 1 ),
-                                          FRSP( BSON( "a" << BSON( "c" << "d" ) ) ),
-                                          FRSP2( BSON( "a" << BSON( "c" << "d" ) ) ),
-                                          BSON( "a" << BSON( "c" << "d" ) ),
-                                          BSONObj() ) );
-                ASSERT( !p3->exactKeyMatch() );
-                BSONObjBuilder b;
-                b.appendRegex( "a", "^ddd" );
-                BSONObj q = b.obj();
-                scoped_ptr<QueryPlan> p4( QueryPlan::make( nsd(), INDEXNO( "a" << 1 ), FRSP( q ),
-                                                          FRSP2( q ), q, BSONObj() ) );
-                ASSERT( !p4->exactKeyMatch() );
-                scoped_ptr<QueryPlan> p5( QueryPlan::make( nsd(), INDEXNO( "a" << 1 << "b" << 1 ),
-                                                          FRSP( BSON( "a" << "z" << "b" << 4 ) ),
-                                                          FRSP2( BSON( "a" << "z" << "b" << 4 ) ),
-                                                          BSON( "a" << "z" << "b" << 4 ),
-                                                          BSONObj() ) );
-                ASSERT( !p5->exactKeyMatch() );
+                ASSERT( !matcherNecessary( BSON( "a" << 1 ), BSON( "a" << GT << 4 ) ) );
+                ASSERT( !matcherNecessary( BSON( "a" << 1 << "b" << 1 ),
+                                           BSON( "a" << 4 << "b" << LT << 8 ) ) );
+                // The two constraints on 'a' cannot be intersected for a multikey index on 'a'.
+                ASSERT( matcherNecessary( BSON( "a" << 1 ), BSON( "a" << GT << 4 << LT << 8 ) ) );
+                ASSERT( !matcherNecessary( BSON( "a.b" << 1 ), BSON( "a.b" << 5 ) ) );
+                ASSERT( !matcherNecessary( BSON( "a.b" << 1 << "c.d" << 1 ),
+                                           BSON( "a.b" << 5 << "c.d" << 6 ) ) );
+                // The constraints on 'a.b' and 'a.c' cannot be intersected, see comments on
+                // SERVER-958 in FieldRangeVector().
+                ASSERT( matcherNecessary( BSON( "a.b" << 1 << "a.c" << 1 ),
+                                          BSON( "a.b" << 5 << "a.c" << 6 ) ) );
+                // The constraints on 'a.b' and 'a.c' can be intersected, but
+                // mustBeExactMatchRepresentation() is false for an '$elemMatch' query.
+                ASSERT( matcherNecessary( BSON( "a.b" << 1 << "a.c" << 1 ),
+                                          fromjson( "{ a:{ $elemMatch:{ b:5, c:6 } } }" ) ) );
+            }
+        private:
+            bool matcherNecessary( const BSONObj& index, const BSONObj& query ) {
+                scoped_ptr<QueryPlan> plan( makePlan( index, query ) );
+                return plan->mayBeMatcherNecessary();
+            }
+            QueryPlan* makePlan( const BSONObj& index, const BSONObj& query ) {
+                return QueryPlan::make( nsd(),
+                                        nsd()->idxNo( *this->index( index ) ),
+                                        FRSP( query ),
+                                        FRSP2( query ),
+                                        query,
+                                        BSONObj() );
             }
         };
 
@@ -564,7 +593,7 @@ namespace QueryOptimizerTests {
                                                           BSON( "a" << 1 ), BSONObj(),
                                                           parsedQuery ) );
                 ASSERT( p2->keyFieldsOnly() );
-                ASSERT_EQUALS( BSON( "a" << 4 ), p2->keyFieldsOnly()->hydrate( BSON( "" << 4 ) ) );
+                ASSERT_EQUALS( BSON( "a" << 4 ), p2->keyFieldsOnly()->hydrate( BSON( "" << 4 ), BSONObj() ) );
                 
                 // Fields supplied, but index is multikey.
                 DBDirectClient client;
@@ -912,8 +941,8 @@ namespace QueryOptimizerTests {
         class Optimal : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "b_2" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "b_2" );
                 BSONObj query = BSON( "a" << 4 );
 
                 // Only one optimal plan is added to the plan set.
@@ -934,8 +963,8 @@ namespace QueryOptimizerTests {
         class NoOptimal : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 ASSERT_EQUALS( 3, makeQps( BSON( "a" << 4 ), BSON( "b" << 1 ) )->nPlans() );
             }
         };
@@ -943,8 +972,8 @@ namespace QueryOptimizerTests {
         class NoSpec : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 ASSERT_EQUALS( 1, makeQps()->nPlans() );
             }
         };
@@ -952,8 +981,8 @@ namespace QueryOptimizerTests {
         class HintSpec : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 ASSERT_EQUALS( 1, makeQps( BSON( "a" << 1 ), BSON( "b" << 1 ),
                                            BSON( "hint" << BSON( "a" << 1 ) ) )->nPlans() );
             }
@@ -962,8 +991,8 @@ namespace QueryOptimizerTests {
         class HintName : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 ASSERT_EQUALS( 1, makeQps( BSON( "a" << 1 ), BSON( "b" << 1 ),
                                            BSON( "hint" << "a_1" ) )->nPlans() );
             }
@@ -972,8 +1001,8 @@ namespace QueryOptimizerTests {
         class NaturalHint : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 ASSERT_EQUALS( 1, makeQps( BSON( "a" << 1 ), BSON( "b" << 1 ),
                                            BSON( "hint" << BSON( "$natural" << 1 ) ) )->nPlans() );
             }
@@ -982,8 +1011,8 @@ namespace QueryOptimizerTests {
         class NaturalSort : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "b_2" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "b_2" );
                 ASSERT_EQUALS( 1, makeQps( BSON( "a" << 1 ), BSON( "$natural" << 1 ) )->nPlans() );
             }
         };
@@ -1000,8 +1029,8 @@ namespace QueryOptimizerTests {
         class Count : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 string err;
                 int errCode;
                 ASSERT_EQUALS( 0, runCount( ns(), BSON( "query" << BSON( "a" << 4 ) ), err, errCode ) );
@@ -1044,8 +1073,8 @@ namespace QueryOptimizerTests {
         class UnhelpfulIndex : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 ASSERT_EQUALS( 2, makeQps( BSON( "a" << 1 << "c" << 2 ) )->nPlans() );
             }
         };
@@ -1056,17 +1085,18 @@ namespace QueryOptimizerTests {
                 BSONObj one = BSON( "a" << 1 );
                 insertObject( ns(), one );
                 BSONObj result;
-                ASSERT( Helpers::findOne( ns(), BSON( "a" << 1 ), result ) );
-                ASSERT_THROWS( Helpers::findOne( ns(), BSON( "a" << 1 ), result, true ), AssertionException );
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                ASSERT( Helpers::findOne( ns(), BSON( "a" << 1 ), result, true ) );
+                NamespaceDetails *d = nsdetails( ns() );
+                ASSERT( d->findOne( BSON( "a" << 1 ), result ) );
+                ASSERT_THROWS( d->findOne( BSON( "a" << 1 ), result, true ), AssertionException );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ASSERT( d->findOne( BSON( "a" << 1 ), result, true ) );
             }
         };
 
         class Delete : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
                 for( int i = 0; i < 200; ++i ) {
                     BSONObj two = BSON( "a" << 2 );
                     insertObject( ns(), two );
@@ -1087,7 +1117,7 @@ namespace QueryOptimizerTests {
         class DeleteOneScan : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "_id" << 1 ), false, "_id_1" );
+                ensureIndex( ns(), BSON( "_id" << 1 ), false, "_id_1" );
                 BSONObj one = BSON( "_id" << 3 << "a" << 1 );
                 BSONObj two = BSON( "_id" << 2 << "a" << 1 );
                 BSONObj three = BSON( "_id" << 1 << "a" << -1 );
@@ -1095,15 +1125,16 @@ namespace QueryOptimizerTests {
                 insertObject( ns(), two );
                 insertObject( ns(), three );
                 deleteObjects( ns(), BSON( "_id" << GTE << 3 << "a" << GTE << 1 ), true );
-                for( boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() ); c->ok(); c->advance() )
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) ); c->ok(); c->advance() ) {
                     ASSERT( 3 != c->current().getIntField( "_id" ) );
+                }
             }
         };
 
         class DeleteOneIndex : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a" );
                 BSONObj one = BSON( "a" << 2 << "_id" << 0 );
                 BSONObj two = BSON( "a" << 1 << "_id" << 1 );
                 BSONObj three = BSON( "a" << 0 << "_id" << 2 );
@@ -1111,15 +1142,16 @@ namespace QueryOptimizerTests {
                 insertObject( ns(), two );
                 insertObject( ns(), three );
                 deleteObjects( ns(), BSON( "a" << GTE << 2 ), true );
-                for( boost::shared_ptr<Cursor> c = Helpers::findTableScan( ns(), BSONObj() ); c->ok(); c->advance() )
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) ); c->ok(); c->advance() ) {
                     ASSERT( 0 != c->current().getIntField( "_id" ) );
+                }
             }
         };
 
         class InQueryIntervals : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
                 for( int i = 0; i < 10; ++i ) {
                     BSONObj temp = BSON( "a" << i );
                     insertObject( ns(), temp );
@@ -1158,7 +1190,7 @@ namespace QueryOptimizerTests {
         class EqualityThenIn : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 << "b" << 1 ), false, "a_1_b_1" );
+                ensureIndex( ns(), BSON( "a" << 1 << "b" << 1 ), false, "a_1_b_1" );
                 for( int i = 0; i < 10; ++i ) {
                     BSONObj temp = BSON( "a" << 5 << "b" << i );
                     insertObject( ns(), temp );
@@ -1181,7 +1213,7 @@ namespace QueryOptimizerTests {
         class NotEqualityThenIn : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 << "b" << 1 ), false, "a_1_b_1" );
+                ensureIndex( ns(), BSON( "a" << 1 << "b" << 1 ), false, "a_1_b_1" );
                 for( int i = 0; i < 10; ++i ) {
                     BSONObj temp = BSON( "a" << 5 << "b" << i );
                     insertObject(ns(), temp );
@@ -1204,8 +1236,8 @@ namespace QueryOptimizerTests {
         class ExcludeSpecialPlanWhenIndexPlan : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << "2d" ), false, "a_2d" );
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "a" << "2d" ), false, "a_2d" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
                 shared_ptr<QueryPlanSet> s =
                         makeQps( BSON( "a" << BSON_ARRAY( 0 << 0 ) << "b" << 1 ) );
                 // Two query plans, index and collection scan.
@@ -1219,7 +1251,7 @@ namespace QueryOptimizerTests {
         class ExcludeUnindexedPlanWhenSpecialPlan : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << "2d" ), false, "a_2d" );
+                ensureIndex( ns(), BSON( "a" << "2d" ), false, "a_2d" );
                 shared_ptr<QueryPlanSet> s =
                         makeQps( BSON( "a" << BSON_ARRAY( 0 << 0 ) << "b" << 1 ) );
                 // Single query plan.
@@ -1232,8 +1264,8 @@ namespace QueryOptimizerTests {
         class PossiblePlans : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 
                 {
                     shared_ptr<QueryPlanSet> qps = makeQps( BSON( "a" << 1 ), BSONObj() );
@@ -1316,7 +1348,7 @@ namespace QueryOptimizerTests {
         class AvoidUnhelpfulRecordedPlan : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
 
                 // Record the {a:1} index for a {b:1} query.
                 NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get( ns() );
@@ -1366,7 +1398,7 @@ namespace QueryOptimizerTests {
                 BSONObj naturalIndex = BSON( "$natural" << 1 );
                 BSONObj specialIndex = BSON( "a" << "2d" );
                 BSONObj query = BSON( "a" << BSON_ARRAY( 0 << 0 ) );
-                Helpers::ensureIndex( ns(), specialIndex, false, "a_2d" );
+                ensureIndex( ns(), specialIndex, false, "a_2d" );
 
                 // The special plan is chosen if allowed.
                 assertSingleIndex( specialIndex, makeQps( query ) );
@@ -1445,8 +1477,8 @@ namespace QueryOptimizerTests {
         class PossiblePlans : public Base {
         public:
             void run() {
-                Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
+                ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+                ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
                 
                 {
                     shared_ptr<MultiPlanScanner> mps = makeMps( BSON( "a" << 1 ), BSONObj() );
@@ -1548,8 +1580,8 @@ namespace QueryOptimizerTests {
     class BestGuess : public Base {
     public:
         void run() {
-            Helpers::ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-            Helpers::ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
+            ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
+            ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
             BSONObj temp = BSON( "a" << 1 );
             insertObject( ns(), temp );
             temp = BSON( "b" << 1 );
@@ -1577,7 +1609,7 @@ namespace QueryOptimizerTests {
 
             FieldRangeSet frs( "ns", BSON( "a" << 1 ), true, true );
             {
-                SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
+                SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
                 NamespaceDetailsTransient::get_inlock( ns() ).
                         registerCachedQueryPlanForPattern( frs.pattern( BSON( "b" << 1 ) ),
                                                           CachedQueryPlan( BSON( "a" << 1 ), 0,
@@ -1607,9 +1639,9 @@ namespace QueryOptimizerTests {
             add<QueryPlanTests::Optimal>();
             add<QueryPlanTests::MoreOptimal>();
             add<QueryPlanTests::Impossible>();
-            add<QueryPlanTests::KeyMatch>();
-            add<QueryPlanTests::MoreKeyMatch>();
-            add<QueryPlanTests::ExactKeyQueryTypes>();
+            add<QueryPlanTests::NotMatcherNecessary>();
+            add<QueryPlanTests::MatcherNecessary>();
+            add<QueryPlanTests::MatcherNecessaryMultikey>();
             add<QueryPlanTests::Unhelpful>();
             add<QueryPlanTests::KeyFieldsOnly>();
             add<QueryPlanTests::SparseExistsFalse>();

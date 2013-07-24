@@ -143,8 +143,12 @@ namespace mongo {
         }
     } cmdReplSetHeartbeat;
 
-    bool requestHeartbeat(string setName, string from, string memberFullName, BSONObj& result,
-                          int myCfgVersion, bool checkEmpty) {
+    bool requestHeartbeat(const std::string& setName,
+                          const std::string& from,
+                          const std::string& memberFullName,
+                          BSONObj& result,
+                          int myCfgVersion,
+                          bool checkEmpty) {
         if( replSetBlind ) {
             return false;
         }

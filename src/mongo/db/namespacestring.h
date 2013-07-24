@@ -26,7 +26,7 @@ namespace mongo {
 
     /* in the mongo source code, "client" means "database". */
 
-    const int MaxDatabaseNameLen = 128; // max str len for the db name, including null char
+    const size_t MaxDatabaseNameLen = 128; // max str len for the db name, including null char
 
     /* e.g.
        NamespaceString ns("acme.orders");
@@ -95,15 +95,14 @@ namespace mongo {
          * @param db - a possible database name
          * @return if db is an allowed database name
          */
-        static bool validDBName( const string& db ) {
-            if ( db.size() == 0 || db.size() > 64 )
+        static bool validDBName(const StringData &db) {
+            if (db.size() == 0 || db.size() > 64) {
                 return false;
+            }
 #ifdef _WIN32
-            // We prohibit all FAT32-disallowed characters on Windows
-            size_t good = strcspn( db.c_str() , "/\\. \"*<>:|?" );
+# error "TokuMX doesn't support windows."
 #else
-            // For non-Windows platforms we are much more lenient
-            size_t good = strcspn( db.c_str() , "/\\. \"" );
+            size_t good = db.cspn("/\\. \"");
 #endif
             return good == db.size();
         }
@@ -133,31 +132,48 @@ namespace mongo {
     };
 
     // "database.a.b.c" -> "database"
-    inline void nsToDatabase(const char *ns, char *database) {
-        for( int i = 0; i < MaxDatabaseNameLen; i++ ) {
-            database[i] = ns[i];
-            if( database[i] == '.' ) {
-                database[i] = 0;
-                return;
-            }
-            if( database[i] == 0 ) {
-                return;
-            }
-        }
-        // other checks should have happened already, this is defensive. thus massert not uassert
-        massert(10078, "nsToDatabase: ns too long", false);
-    }
-    inline string nsToDatabase(const char *ns) {
-        char buf[MaxDatabaseNameLen];
-        nsToDatabase(ns, buf);
-        return buf;
-    }
-    inline string nsToDatabase(const string& ns) {
+    inline StringData nsToDatabaseSubstring( const StringData &ns ) {
         size_t i = ns.find( '.' );
-        if ( i == string::npos )
+        if ( i == string::npos ) {
+            massert(10078, "nsToDatabase: ns too long", ns.size() < MaxDatabaseNameLen );
             return ns;
-        massert(10088, "nsToDatabase: ns too long", i < (size_t)MaxDatabaseNameLen);
-        return ns.substr( 0 , i );
+        }
+        massert(10088, "nsToDatabase: ns too long", i < static_cast<size_t>(MaxDatabaseNameLen));
+        return ns.substr( 0, i );
+    }
+
+    // "database.a.b.c" -> "database"
+    inline void nsToDatabase(const StringData& ns, char *database) {
+        StringData db = nsToDatabaseSubstring( ns );
+        db.copyTo( database, true );
+    }
+
+    // TODO: make this return a StringData
+    inline string nsToDatabase(const StringData &ns) {
+        return nsToDatabaseSubstring( ns ).toString();
+    }
+
+    inline bool isValidNS( const string &ns ) {
+        // TODO: should check for invalid characters
+
+        size_t idx = ns.find( '.' );
+        if ( idx == string::npos )
+            return false;
+
+        if ( idx == ns.size() - 1 )
+            return false;
+
+        return true;
+    }
+
+    // TODO: Possibly make this less inefficient.
+    inline string getSisterNS(const StringData &ns, const StringData &local) {
+        verify( local.size() > 0 && local[0] != '.' );
+        string old(ns.toString());
+        if (old.find( "." ) != string::npos) {
+            old = old.substr( 0, old.find( "." ) );
+        }
+        return old + "." + local.toString();
     }
 
 }

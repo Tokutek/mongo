@@ -43,11 +43,15 @@ namespace mongo {
             if (r != 0) {
                 handle_ydb_error(r);
             }
+            r = _loader->set_error_callback(_loader, error_callback, &_error_extra);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
         }
 
         Loader::~Loader() {
             if (!_closed && _loader != NULL) {
-                int r = _loader->abort(_loader);
+                const int r = _loader->abort(_loader);
                 if (r != 0) {
                     problem() << "storage::~Loader, failed to close DB_LOADER, error: "
                               << r << endl;
@@ -60,11 +64,23 @@ namespace mongo {
             try {
                 killCurrentOp.checkForInterrupt(info->c); // uasserts if we should stop
                 return 0;
-            }
-            catch (const std::exception &ex) {
+            } catch (const std::exception &ex) {
                 info->saveException(ex);
-                return -1;
             }
+            return -1;
+        }
+
+        void Loader::error_callback(DB *db, int i, int err,
+                                    DBT *key, DBT *val, void *extra) {
+            error_callback_extra *info = static_cast<error_callback_extra *>(extra);
+            str::stream errmsg;
+            errmsg << "Index build failed with code " << err << ".";
+            if (err == EINVAL) {
+                 errmsg << " This may be due to keys > 32kb or a document > 32mb." <<
+                           " Check the error log for " <<
+                           "\"Key too big ...\" or \"Row too big...\"";
+            }
+            info->errmsg = errmsg;
         }
 
         int Loader::put(DBT *key, DBT *val) {
@@ -73,12 +89,18 @@ namespace mongo {
 
         int Loader::close() {
             const int r = _loader->close(_loader);
+
+            // Doesn't matter if the close succeded or not. It's dead to us now.
+            _closed = true;
             if (r == -1) {
                 _poll_extra.throwException();
             }
-            if (r == 0) {
-                _closed = true;
-            }
+            // Forward any callback-generated exception. Could be an error
+            // from the error callback or an interrupt from the poll function.
+            uassert( 16860, _error_extra.errmsg, _error_extra.errmsg.empty() );
+            // Any other non-zero error code that didn't trigger the error
+            // callback or come from the poll function should be handled
+            // in some generic fashion by the caller.
             return r;
         }
 

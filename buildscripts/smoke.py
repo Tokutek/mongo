@@ -44,7 +44,8 @@ import shlex
 import socket
 from subprocess import (Popen,
                         PIPE,
-                        call)
+                        call,
+                        check_output)
 import sys
 from tempfile import SpooledTemporaryFile
 import time
@@ -88,6 +89,8 @@ small_oplog_rs = False
 tests_log = sys.stdout
 server_log_file = ''
 quiet = False
+
+_debug = False
 
 # This class just implements the with statement API, for a sneaky
 # purpose below.
@@ -177,6 +180,8 @@ class mongod(object):
     def start(self):
         global mongod_port
         global mongod
+        global shell_executable
+        global _debug
         if self.proc:
             print >> sys.stderr, "probable bug: self.proc already set in start()"
             return
@@ -230,6 +235,10 @@ class mongod(object):
 
         if not self.did_mongod_start(self.port):
             raise Exception("Failed to start mongod")
+
+        if "true" == check_output([shell_executable, '--port', str(self.port), '--quiet', '--eval',
+                                   'print(db.runCommand("buildInfo").debug)']).strip():
+            _debug = True
 
         if self.auth:
             self.setup_admin_user(self.port)
@@ -374,6 +383,10 @@ def skipTest(path):
         # These tests fail due to bugs
         if os.path.join(parentDir,basename) in ["sharding/sync_conn_cmd.js"]:
             return True
+    if _debug:
+        # MutexDebugger complains about this test, it's not unique to tokumx though, see #79
+        if os.path.join(parentDir,basename) in ["sharding/remove2.js"]:
+            return True
 
     return False
 
@@ -384,6 +397,9 @@ def runTest(test, testnum):
 
     (path, usedb) = test
     (ignore, ext) = os.path.splitext(path)
+    # the dbtests know how to format themselves nicely, we'll detect if we're running them and if
+    # so, we won't mess with the output
+    is_test_binary = False
     if skipTest(path):
         print "skipping " + path
         return
@@ -409,6 +425,8 @@ def runTest(test, testnum):
         # Blech.
         if os.path.basename(path) in ["test", "test.exe", "perftest", "perftest.exe"]:
             argv = [path]
+            if os.path.basename(path) in ["test", "test.exe"]:
+                is_test_binary = True
         # more blech
         elif os.path.basename(path) in ['mongos', 'mongos.exe']:
             argv = [path, "--test"]
@@ -428,7 +446,7 @@ def runTest(test, testnum):
 
     # sys.stdout.write() is more atomic than print, so using it prevents
     # lines being interrupted by, e.g., child processes
-    if quiet:
+    if quiet and not is_test_binary:
         vlog = tests_log
         qlog = sys.stdout
         tlog = sys.stderr
@@ -477,17 +495,20 @@ def runTest(test, testnum):
     try:
         os.environ['MONGO_TEST_FILENAME'] = os.path.basename(path)
         t1 = time.time()
-        r = call(buildlogger(argv), cwd=test_path, stdout=tempfile)
+        r = call(buildlogger(argv), cwd=test_path,
+                 # the dbtests know how to format their own output nicely
+                 stdout=ternary(is_test_binary, vlog, tempfile))
         t2 = time.time()
         del os.environ['MONGO_TEST_FILENAME']
 
         vlog.write("                %fms\n" % ((t2 - t1) * 1000))
         vlog.flush()
 
-        tempfile.seek(0)
-        for line in tempfile:
-            vlog.write(line)
-        vlog.flush()
+        if not is_test_binary:
+            tempfile.seek(0)
+            for line in tempfile:
+                vlog.write(line)
+            vlog.flush()
 
         if quiet:
             if r == 0:
@@ -744,6 +765,8 @@ def set_globals(options, tests):
     if options.tests_log_file is not None and len(options.tests_log_file) > 0:
         tests_log = open(options.tests_log_file, "w")
     elif quiet:
+        if not os.path.exists(smoke_db_prefix):
+            os.mkdir(smoke_db_prefix)
         tests_log = open(os.path.join(smoke_db_prefix, "tests.log"), "w")
     if options.server_log_file is not None and len(options.server_log_file) > 0:
         server_log_file = options.server_log_file

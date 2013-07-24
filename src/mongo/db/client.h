@@ -29,20 +29,19 @@
 
 #include <stack>
 
-#include "security.h"
-#include "namespace.h"
-#include "lasterror.h"
-#include "stats/top.h"
-#include "../db/client_common.h"
-#include "../util/concurrency/threadlocal.h"
-#include "../util/net/message_port.h"
-#include "../util/concurrency/rwlock.h"
-#include "d_concurrency.h"
+#include "mongo/db/security.h"
+#include "mongo/db/lasterror.h"
+#include "mongo/db/stats/top.h"
+#include "mongo/db/client_common.h"
+#include "mongo/db/d_concurrency.h"
 #include "mongo/db/lockstate.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
-#include "mongo/util/paths.h"
 #include "mongo/db/opsettings.h"
+#include "mongo/util/paths.h"
+#include "mongo/util/concurrency/threadlocal.h"
+#include "mongo/util/net/message_port.h"
+#include "mongo/util/concurrency/rwlock.h"
 
 namespace mongo {
 
@@ -269,6 +268,23 @@ namespace mongo {
             }
         };
 
+        /** Enter load mode for a particular namespace, given indexes and options. */
+        void beginClientLoad(const StringData &ns, const vector<BSONObj> &indexes,
+                             const BSONObj &options);
+
+        /** Commit the client load. uasserts if none is in progress. */
+        void commitClientLoad();
+
+        /** Abort the client load. uasserts if none is in progress. */
+        void abortClientLoad();
+
+        /** @return true if a load is in progress. */
+        bool loadInProgress() const;
+
+        // HACK we need this until upserts go through the NamespaceDetails class
+        //      and can prevent writes on a bulk loaded collection automatically.
+        string bulkLoadNS() const { return _bulkLoadNS; }
+
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
         friend class CurOp;
@@ -277,6 +293,7 @@ namespace mongo {
         CurOp * _curOp;
         Context * _context;
         shared_ptr<TransactionStack> _transactions;
+        string _bulkLoadNS; // the ns currently under-going bulk load by this client
         bool _shutdown; // to track if Client::shutdown() gets called
         std::string _desc;
         bool _god;
@@ -310,25 +327,25 @@ namespace mongo {
         class Context : boost::noncopyable {
         public:
             /** this is probably what you want */
-            Context(const string& ns, string path=dbpath, bool doauth=true, bool doVersion=true);
+            Context(const StringData &ns, const StringData &path=dbpath, bool doauth=true, bool doVersion=true );
 
             /** note: this does not call finishInit -- i.e., does not call 
                       shardVersionOk() for example. 
                 see also: reset().
             */
-            Context(string ns, Database * db, bool doauth=true);
+            Context( const StringData &ns , Database * db, bool doauth=true );
 
             // used by ReadContext
-            Context(const string& path, const string& ns, Database *db, bool doauth);
+            Context(const StringData &path, const StringData &ns, Database *db, bool doauth);
 
             ~Context();
             Client* getClient() const { return _client; }
             Database* db() const { return _db; }
             const char * ns() const { return _ns.c_str(); }
-            bool equals( const string& ns , const string& path=dbpath ) const { return _ns == ns && _path == path; }
+            bool equals( const StringData &ns , const StringData &path=dbpath ) const { return _ns == ns && _path == path; }
 
             /** @return true iff the current Context is using db/path */
-            bool inDB( const string& db , const string& path=dbpath ) const;
+            bool inDB( const StringData& db , const StringData& path=dbpath ) const;
 
             void _clear() { // this is sort of an "early destruct" indication, _ns can never be uncleared
                 const_cast<string&>(_ns).clear();
@@ -364,7 +381,7 @@ namespace mongo {
          */
         class ReadContext : boost::noncopyable { 
         public:
-            ReadContext(const string &ns, string path=dbpath, bool doauth=true);
+            ReadContext(const StringData &ns, const StringData &path=dbpath, bool doauth=true);
             Context& ctx() { return _c; }
         private:
             Lock::DBRead _lk;
@@ -373,7 +390,7 @@ namespace mongo {
 
         class WriteContext : boost::noncopyable {
         public:
-            WriteContext(const string& ns, string path=dbpath, bool doauth=true );
+            WriteContext(const StringData &ns, const StringData &path=dbpath, bool doauth=true );
             Context& ctx() { return _c; }
         private:
             Lock::DBWrite _lk;

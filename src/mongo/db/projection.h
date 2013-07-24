@@ -37,12 +37,13 @@ namespace mongo {
         class KeyOnly {
         public:
 
-            KeyOnly() : _stringSize(0) {}
+            KeyOnly() : _stringSize(0), _includeIDFromPK(false) {}
 
-            BSONObj hydrate( const BSONObj& key ) const;
+            BSONObj hydrate( const BSONObj &key, const BSONObj &pk ) const;
 
             void addNo() { _add( false , "" ); }
             void addYes( const string& name ) { _add( true , name ); }
+            void includeIDFromPK() { _includeIDFromPK = true; }
 
         private:
 
@@ -56,6 +57,7 @@ namespace mongo {
             vector<string> _names; // name of field since key doesn't have names
 
             int _stringSize;
+            bool _includeIDFromPK;
         };
 
         enum ArrayOpType {
@@ -98,12 +100,12 @@ namespace mongo {
 
 
         /**
-         * @return if the keyPattern has all the information needed to return then
+         * @return if the keyPattern and pkPattern have all the information needed to return then
          *         return a new KeyOnly otherwise null
          *         NOTE: a key may have modified the actual data
          *               which has to be handled above this (arrays, geo)
          */
-        KeyOnly* checkKey( const BSONObj& keyPattern ) const;
+        KeyOnly *checkKey( const BSONObj &keyPattern, const BSONObj &pkPattern ) const;
 
         bool includeID() const { return _includeID; }
 

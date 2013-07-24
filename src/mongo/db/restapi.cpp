@@ -24,7 +24,6 @@
 #include "mongo/util/md5.hpp"
 #include "mongo/db/instance.h"
 #include "mongo/db/dbwebserver.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/clientcursor.h"
@@ -50,7 +49,7 @@ namespace mongo {
                 url.find_last_of( '/' ) > 0;
         }
 
-        virtual void handle( const char *rq, string url, BSONObj params,
+        virtual void handle( const char *rq, const std::string& url, BSONObj params,
                              string& responseMsg, int& responseCode,
                              vector<string>& headers,  const SockAddr &from ) {
 
@@ -111,7 +110,11 @@ namespace mongo {
             responseMsg = ss.str();
         }
 
-        bool handleRESTQuery( string ns , string action , BSONObj & params , int & responseCode , stringstream & out ) {
+        bool handleRESTQuery( const std::string& ns,
+                              const std::string& action,
+                              BSONObj & params,
+                              int & responseCode,
+                              stringstream & out ) {
             Timer t;
 
             int html = _getOption( params["html"] , 0 );
@@ -209,7 +212,11 @@ namespace mongo {
         }
 
         // TODO Generate id and revision per couch POST spec
-        void handlePost( string ns, const char *body, BSONObj& params, int & responseCode, stringstream & out ) {
+        void handlePost( const std::string& ns,
+                         const char *body,
+                         BSONObj& params,
+                         int & responseCode,
+                         stringstream & out ) {
             try {
                 BSONObj obj = fromjson( body );
                 db.insert( ns.c_str(), obj );
@@ -254,7 +261,9 @@ namespace mongo {
         readlocktry rl(/*"admin.system.users", */10000);
         uassert( 16173 , "couldn't get read lock to get admin auth credentials" , rl.got() );
         Client::Context cx( "admin.system.users", dbpath, false );
-        return ! Helpers::isEmpty("admin.system.users", false);
+        BSONObj o;
+        NamespaceDetails *d = nsdetails( "admin.system.users" );
+        return d != NULL && d->findOne(BSONObj(), o);
     }
 
     BSONObj RestAdminAccess::getAdminUser( const string& username ) const {
@@ -264,7 +273,8 @@ namespace mongo {
         uassert( 16174 , "couldn't get read lock to check admin user" , rl.got() );
         Client::Context cx( "admin.system.users" );
         BSONObj user;
-        if ( Helpers::findOne( "admin.system.users" , BSON( "user" << username ) , user ) )
+        NamespaceDetails *d = nsdetails( "admin.system.users" );
+        if ( d != NULL && d->findOne( BSON( "user" << username ) , user ) )
             return user.copy();
         return BSONObj();
     }

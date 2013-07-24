@@ -19,11 +19,7 @@
 
 #pragma once
 
-#include <limits>
-#include <map>
-
 #include <db.h>
-#include <boost/filesystem.hpp>
 
 #include "mongo/pch.h"
 
@@ -31,12 +27,12 @@
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/index.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/namespace.h"
 #include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/querypattern.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/concurrency/simplerwlock.h"
+#include "mongo/util/string_map.h"
 
 namespace mongo {
 
@@ -50,30 +46,39 @@ namespace mongo {
         For example <dbname>.system.users is ok for regular clients to update.
         @param write used when .system.js
     */
-    bool legalClientSystemNS( const string& ns , bool write );
+    bool legalClientSystemNS( const StringData& ns , bool write );
 
-    bool userCreateNS(const char *ns, BSONObj options, string& err, bool logForReplication);
+    bool userCreateNS(const StringData& ns, BSONObj options, string& err, bool logForReplication);
 
     // used for operations that are supposed to create the namespace if it does not exist,
     // such as insert, some updates, and create index
-    NamespaceDetails* getAndMaybeCreateNS(const char *ns, bool logop);
+    NamespaceDetails* getAndMaybeCreateNS(const StringData& ns, bool logop);
 
-    void dropCollection(const string &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system = false);
+    void dropCollection(const StringData &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system = false);
 
-    void dropDatabase(const string &db);
+    void dropDatabase(const StringData &db);
 
     /**
      * Record that a new namespace exists in <dbname>.system.namespaces.
      */
-    void addNewNamespaceToCatalog(const string &name, const BSONObj *options = NULL);
+    void addNewNamespaceToCatalog(const StringData& name, const BSONObj *options = NULL);
 
-    void removeNamespaceFromCatalog(const string &name);
+    void removeNamespaceFromCatalog(const StringData& name);
 
-    int removeFromSysIndexes(const char *ns, const char *name);
+    int removeFromSysIndexes(const StringData& ns, const StringData& name);
 
     // Rename a namespace within current 'client' db.
     // (Arguments should include db name)
-    void renameNamespace( const char *from, const char *to, bool stayTemp);
+    void renameNamespace( const StringData& from, const StringData& to, bool stayTemp);
+
+    // Manage bulk loading into a namespace
+    //
+    // To begin a load, the ns must exist and be empty.
+    // TODO: Any other documentation to put here?
+    void beginBulkLoad(const StringData &ns, const vector<BSONObj> &indexes,
+                       const BSONObj &options);
+    void commitBulkLoad(const StringData &ns);
+    void abortBulkLoad(const StringData &ns);
 
     // struct for storing the accumulated states of a NamespaceDetails
     // all values, except for nIndexes, are estiamtes
@@ -99,14 +104,27 @@ namespace mongo {
         static const uint64_t NO_UNIQUE_CHECKS = 2; // skip uniqueness checks
 
         // Creates the appropriate NamespaceDetails implementation based on options.
-        static shared_ptr<NamespaceDetails> make(const string &ns, const BSONObj &options);
-        static shared_ptr<NamespaceDetails> make(const BSONObj &serialized);
+        static shared_ptr<NamespaceDetails> make(const StringData &ns, const BSONObj &options);
+        // The bulkLoad parameter is used by beginBulkLoad to open an existing
+        // IndexedCollection using a BulkLoadedCollection interface.
+        static shared_ptr<NamespaceDetails> make(const BSONObj &serialized, const bool bulkLoad = false);
 
         virtual ~NamespaceDetails() {
         }
 
-        // Closes all the underlying IndexDetails (in case one of them throws, we can't be doing this in a destructor).
-        void close();
+        // Close the collection. For regular collections, closes the underlying IndexDetails
+        // (and their underlying dictionaries). For bulk loaded collections, closes the
+        // loader first and then closes dictionaries. The caller may wish to advise the 
+        // implementation that the close() is getting called due to an aborting transaction.
+        virtual void close(const bool aborting = false);
+
+        // Ensure that the given index exists, or build it if it doesn't.
+        // @param info is the index spec (ie: { ns: "test.foo", key: { a: 1 }, name: "a_1", clustering: true })
+        // @return whether or the the index was just built.
+        bool ensureIndex(const BSONObj &info);
+
+        // Acquire a full table lock on each index.
+        void acquireTableLock();
 
         int nIndexes() const {
             return _nIndexes;
@@ -158,9 +176,7 @@ namespace mongo {
             const unsigned long long mask = 1ULL << i;
             return (_multiKeyIndexBits & mask) != 0;
         }
-        void setIndexIsMultikey(const char *thisns, int i);
-
-        bool dropIndexes(const char *ns, const char *name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex);
+        void setIndexIsMultikey(const StringData& thisns, int i);
 
         /**
          * Record that a new index exists in <dbname>.system.indexes.
@@ -170,12 +186,12 @@ namespace mongo {
         void addDefaultIndexesToCatalog();
 
         // @return offset in indexes[]
-        int findIndexByName(const char *name) const;
+        int findIndexByName(const StringData& name) const;
 
         // @return offset in indexes[]
         int findIndexByKeyPattern(const BSONObj& keyPattern) const;
 
-        void findIndexByType( const string& name , vector<int> &matches ) const {
+        void findIndexByType( const StringData& name , vector<int> &matches ) const {
             for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
                 const IndexDetails *index = it->get();
                 if (index->getSpec().getTypeName() == name) {
@@ -217,8 +233,9 @@ namespace mongo {
             return idx;
         }
 
-        int averageObjectSize() const {
-            return 10; // TODO: Return something meaningful based on in-memory stats
+        // Key pattern for the primary key. For typical collections, this is { _id: 1 }.
+        const BSONObj &pkPattern() const {
+            return _pk;
         }
 
         bool indexBuildInProgress() const {
@@ -226,15 +243,15 @@ namespace mongo {
         }
 
         // @return a BSON representation of this NamespaceDetail's state
-        static BSONObj serialize(const char *ns, const BSONObj &options,
+        static BSONObj serialize(const StringData& ns, const BSONObj &options,
                                  const BSONObj &pk, unsigned long long multiKeyIndexBits,
                                  const BSONArray &indexes_array);
         BSONObj serialize() const;
 
         void fillCollectionStats(struct NamespaceDetailsAccStats* accStats, BSONObjBuilder* result, int scale) const;
 
-        // Run optimize on each index.
-        void optimize();
+        // Find the first object that matches the query. Force index if requireIndex is true.
+        bool findOne(const BSONObj &query, BSONObj &result, const bool requireIndex = false) const;
 
         // Find by primary key (single element bson object, no field name).
         bool findByPK(const BSONObj &pk, BSONObj &result) const;
@@ -242,6 +259,17 @@ namespace mongo {
         // return true if this namespace has an index on the _id field.
         bool hasIdIndex() const {
             return findIdIndex() >= 0;
+        }
+
+        // Run optimize on each index.
+        virtual void optimize();
+
+        virtual bool dropIndexes(const StringData& ns, const StringData& name, string &errmsg,
+                                 BSONObjBuilder &result, bool mayDeleteIdIndex);
+
+        virtual void validateConnectionId(const ConnectionId &id) {
+            // By default, the calling connection id is valid.
+            // Other implementations may decide otherwise.
         }
         
         // optional to implement, populate the obj builder with collection specific stats
@@ -269,7 +297,7 @@ namespace mongo {
 
         // finds an object by _id field
         virtual bool findById(const BSONObj &query, BSONObj &result) const {
-            massert(16461, "findById shouldn't be called unless it is implemented.", false);
+            msgasserted( 16461, "findById shouldn't be called unless it is implemented." );
         }
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
@@ -284,33 +312,37 @@ namespace mongo {
         // create a new index with the given info for this namespace.
         virtual void createIndex(const BSONObj &info);
 
+        // remove everything from a collection
+        virtual void empty();
+
         // note the commit/abort of a transaction, given:
         // minPK: the minimal PK inserted
         // nDelta: the number of inserts minus the number of deletes
         // sizeDelta: the size of inserts minus the size of deletes
         virtual void noteCommit(const BSONObj &minPK, long long nDelta, long long sizeDelta) {
-            massert( 16756, "bug: noted a commit, but it wasn't implemented", false );
+            msgasserted( 16756, "bug: noted a commit, but it wasn't implemented" );
         }
         virtual void noteAbort(const BSONObj &minPK, long long nDelta, long long sizeDelta) {
-            massert( 16757, "bug: noted an abort, but it wasn't implemented", false );
+            msgasserted( 16757, "bug: noted an abort, but it wasn't implemented" );
         }
 
         virtual void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
-            massert( 16775, "bug: should not call insertObjectIntoCappedAndLogOps into non-capped collection", false );
+            msgasserted( 16775, "bug: should not call insertObjectIntoCappedAndLogOps into non-capped collection" );
         }
 
         virtual void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
-            massert( 16772, "bug: should not call insertObjectIntoCappedWithPK into non-capped collection", false );
+            msgasserted( 16772, "bug: should not call insertObjectIntoCappedWithPK into non-capped collection" );
         }
         
         virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
-            massert( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection", false );
+            msgasserted( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection" );
         }
 
     protected:
-        NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
+        NamespaceDetails(const StringData& ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit NamespaceDetails(const BSONObj &serialized);
 
+        void checkIndexUniqueness(const IndexDetails &idx);
         void buildIndex(shared_ptr<IndexDetails> &index);
 
         void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
@@ -318,11 +350,6 @@ namespace mongo {
 
         // uassert on duplicate key
         void checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj);
-
-        // remove everything from a collection
-        virtual void empty() {
-            massert( 16758, "bug: tried to empty a collection, but it wasn't implemented", false );
-        }
 
         // generate an index info BSON for this namespace, with the same options
         BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) const;
@@ -345,6 +372,14 @@ namespace mongo {
         IndexVector _indexes;
 
         unsigned long long _multiKeyIndexBits;
+
+    private:
+        struct findByPKCallbackExtra {
+            BSONObj &obj;
+            std::exception *ex;
+            findByPKCallbackExtra(BSONObj &o) : obj(o), ex(NULL) { }
+        };
+        static int findByPKCallback(const DBT *key, const DBT *value, void *extra);
 
         friend class NamespaceIndex;
         friend class EmptyCapped; // for empty() only
@@ -370,9 +405,9 @@ namespace mongo {
     class NamespaceDetailsTransient : boost::noncopyable {
         const string _ns;
         void reset();
-        static std::map< string, shared_ptr< NamespaceDetailsTransient > > _nsdMap;
+        static StringMap<shared_ptr<NamespaceDetailsTransient> > _nsdMap;
 
-        NamespaceDetailsTransient(const char *ns);
+        NamespaceDetailsTransient(const StringData& ns);
     public:
         ~NamespaceDetailsTransient();
         void addedIndex() { reset(); }
@@ -380,8 +415,8 @@ namespace mongo {
         /* Drop cached information on all namespaces beginning with the specified prefix.
            Can be useful as index namespaces share the same start as the regular collection.
            SLOW - sequential scan of all NamespaceDetailsTransient objects */
-        static void clearForPrefix(const char *prefix);
-        static void eraseForPrefix(const char *prefix);
+        static void clearForPrefix(const StringData& prefix);
+        static void eraseForPrefix(const StringData& prefix);
 
         /**
          * @return a cursor interface to the query optimizer.  The implementation may utilize a
@@ -400,8 +435,13 @@ namespace mongo {
          *
          * @param planPolicy - A policy for selecting query plans - see queryoptimizercursor.h
          *
-         * @param simpleEqualityMatch - Set to true for certain simple queries - see
-         * queryoptimizer.cpp.
+         * @param requestMatcher - Set to true to request that the returned Cursor provide a
+         * matcher().  If false, the cursor's matcher() may return NULL if the Cursor can perform
+         * accurate query matching internally using a non Matcher mechanism.  One case where a
+         * Matcher might be requested even though not strictly necessary to select matching
+         * documents is if metadata about matches may be requested using MatchDetails.  NOTE This is
+         * a hint that the Cursor use a Matcher, but the hint may be ignored.  In some cases the
+         * returned cursor may not provide a matcher even if 'requestMatcher' is true.
          *
          * @param parsedQuery - Additional query parameters, as from a client query request.
          *
@@ -418,15 +458,16 @@ namespace mongo {
          * - covered indexes
          * - in memory sorting
          */
-        static shared_ptr<Cursor> getCursor( const char *ns, const BSONObj &query,
-                                            const BSONObj &order = BSONObj(),
-                                            const QueryPlanSelectionPolicy &planPolicy =
-                                            QueryPlanSelectionPolicy::any(),
-                                            bool *simpleEqualityMatch = 0,
-                                            const shared_ptr<const ParsedQuery> &parsedQuery =
-                                            shared_ptr<const ParsedQuery>(),
-                                            bool requireOrder = true,
-                                            QueryPlanSummary *singlePlanSummary = 0 );
+        static shared_ptr<Cursor> getCursor( const StringData& ns,
+                                             const BSONObj& query,
+                                             const BSONObj& order = BSONObj(),
+                                             const QueryPlanSelectionPolicy& planPolicy =
+                                                 QueryPlanSelectionPolicy::any(),
+                                             bool requestMatcher = true,
+                                             const shared_ptr<const ParsedQuery>& parsedQuery =
+                                                 shared_ptr<const ParsedQuery>(),
+                                             bool requireOrder = true,
+                                             QueryPlanSummary* singlePlanSummary = NULL );
 
         /**
          * @return a single cursor that may work well for the given query.  A $or style query will
@@ -435,7 +476,7 @@ namespace mongo {
          * for checking this if they are not sure an index for a sort exists, and defaulting to a non-sort if
          * no suitable indices exist.
          */
-        static shared_ptr<Cursor> bestGuessCursor( const char *ns, const BSONObj &query, const BSONObj &sort );
+        static shared_ptr<Cursor> bestGuessCursor( const StringData& ns, const BSONObj &query, const BSONObj &sort );
 
         /* indexKeys() cache ---------------------------------------------------- */
         /* assumed to be in write lock for this */
@@ -474,83 +515,96 @@ namespace mongo {
     private:
         int _qcWriteCount;
         map<QueryPattern,CachedQueryPlan> _qcCache;
-        static NamespaceDetailsTransient& make_inlock(const char *ns);
+        static NamespaceDetailsTransient& make_inlock(const StringData& ns);
     public:
-        static SimpleMutex _qcMutex;
+        static SimpleRWLock _qcRWLock;
 
-        /* you must be in the qcMutex when calling this.
-           A NamespaceDetailsTransient object will not go out of scope on you if you are
+        /* A NamespaceDetailsTransient object will not go out of scope on you if you are
            d.dbMutex.atLeastReadLocked(), so you do't have to stay locked.
            Creates a NamespaceDetailsTransient before returning if one DNE. 
            todo: avoid creating too many on erroneous ns queries.
            */
-        static NamespaceDetailsTransient& get_inlock(const char *ns);
-
-        static NamespaceDetailsTransient& get(const char *ns) {
-            // todo : _qcMutex will create bottlenecks in our parallelism
-            SimpleMutex::scoped_lock lk(_qcMutex);
+        static NamespaceDetailsTransient *_get(const StringData& ns);
+        static NamespaceDetailsTransient &get_inlock(const StringData& ns);
+        static NamespaceDetailsTransient &get(const StringData& ns) {
+            {
+                // Common path - try finding it with a shared lock.
+                SimpleRWLock::Shared lk(_qcRWLock);
+                NamespaceDetailsTransient *nsdt = _get(ns);
+                if (nsdt != NULL) {
+                    return *nsdt;
+                }
+            }
+            // Try finding it again in an exclusive lock, creating if necessary.
+            SimpleRWLock::Exclusive lk(_qcRWLock);
             return get_inlock(ns);
         }
 
         void clearQueryCache() {
-            SimpleMutex::scoped_lock lk(_qcMutex);
+            SimpleRWLock::Exclusive lk(_qcRWLock);
             _qcCache.clear();
             _qcWriteCount = 0;
         }
+
         /* you must notify the cache if you are doing writes, as query plan utility will change */
-        // TODO: TokuMX: John does not understand why 100+ writes necessarily means
-        // the query strategy changes. We need to figure this out eventually.
         void notifyOfWriteOp() {
+            // Is there a problem calling empty() on a std::map without a lock?
+            // What if other threads are doing deletes/inserts and a RB tree
+            // child pointer changes to null or something?
             if ( _qcCache.empty() )
                 return;
             if ( ++_qcWriteCount >= 100 )
                 clearQueryCache();
         }
         CachedQueryPlan cachedQueryPlanForPattern( const QueryPattern &pattern ) {
-            return _qcCache[ pattern ];
+            map<QueryPattern,CachedQueryPlan>::const_iterator i = _qcCache.find(pattern);
+            return i != _qcCache.end() ? i->second : CachedQueryPlan();
         }
         void registerCachedQueryPlanForPattern( const QueryPattern &pattern,
-                                               const CachedQueryPlan &cachedQueryPlan ) {
+                                                const CachedQueryPlan &cachedQueryPlan ) {
             _qcCache[ pattern ] = cachedQueryPlan;
         }
 
     }; /* NamespaceDetailsTransient */
 
-    inline NamespaceDetailsTransient& NamespaceDetailsTransient::get_inlock(const char *ns) {
-        std::map< string, shared_ptr< NamespaceDetailsTransient > >::iterator i = _nsdMap.find(ns);
-        if( i != _nsdMap.end() && 
-            i->second.get() ) { // could be null ptr from clearForPrefix
-            return *i->second;
-        }
-        return make_inlock(ns);
+    // does not create. must be at least shared locked.
+    inline NamespaceDetailsTransient *NamespaceDetailsTransient::_get(const StringData& ns) {
+        StringMap<shared_ptr<NamespaceDetailsTransient> >::const_iterator i = _nsdMap.find(ns);
+        return i != _nsdMap.end() ? i->second.get() : NULL;
+    }
+
+    // creates if necessary. must be exclusive locked.
+    inline NamespaceDetailsTransient& NamespaceDetailsTransient::get_inlock(const StringData& ns) {
+        NamespaceDetailsTransient *nsdt = _get(ns);
+        return nsdt != NULL ? *nsdt : make_inlock(ns);
     }
 
     /* NamespaceIndex is the the "system catalog" if you will: at least the core parts.
      * (Additional info in system.* collections.) */
     class NamespaceIndex {
     public:
-        NamespaceIndex(const string &dir, const string &database);
+        NamespaceIndex(const string &dir, const StringData& database);
 
         ~NamespaceIndex();
 
         void init(bool may_create = false);
 
         // @return true if the ns existed and was closed, false otherwise.
-        bool close_ns(const char *ns);
+        bool close_ns(const StringData& ns, const bool aborting = false);
 
         // The index entry for ns is removed and brought up-to-date with the nsdb on txn abort.
-        void add_ns(const char *ns, shared_ptr<NamespaceDetails> details);
+        void add_ns(const StringData& ns, shared_ptr<NamespaceDetails> details);
 
         // The index entry for ns is removed and brought up-to-date with the nsdb on txn abort.
-        void kill_ns(const char *ns);
+        void kill_ns(const StringData& ns);
 
         // If something changes that causes details->serialize() to be different,
         // call this to persist it to the nsdb.
-        void update_ns(const char *ns, const BSONObj &serialized, bool overwrite);
+        void update_ns(const StringData& ns, const BSONObj &serialized, bool overwrite);
 
         // Find an NamespaceDetails in the nsindex.
         // Will not open the if its closed, unlike nsdetails()
-        NamespaceDetails *find_ns(const char *ns) {
+        NamespaceDetails *find_ns(const StringData& ns) {
             init();
             if (!allocated()) {
                 return NULL;
@@ -564,7 +618,7 @@ namespace mongo {
         // entries may be "closed" in the sense that the key exists but the
         // value is null. If the desired namespace is closed, we open it,
         // which must succeed, by the first invariant.
-        NamespaceDetails *details(const char *ns) {
+        NamespaceDetails *details(const StringData& ns) {
             init();
             if (!allocated()) {
                 return NULL;
@@ -575,6 +629,7 @@ namespace mongo {
                 SimpleRWLock::Shared lk(_openRWLock);
                 NamespaceDetails *d = find_ns_locked(ns);
                 if (d != NULL) {
+                    d->validateConnectionId(cc().getConnectionId());
                     return d;
                 }
             }
@@ -583,7 +638,8 @@ namespace mongo {
             // and do the open if we still can't find it.
             SimpleRWLock::Exclusive lk(_openRWLock);
             NamespaceDetails *d = find_ns_locked(ns);
-            return d != NULL ? d : open_ns(ns);
+            return d != NULL ? d->validateConnectionId(cc().getConnectionId()), d :
+                               open_ns(ns);
         }
 
         bool allocated() const { return _nsdb != NULL; }
@@ -595,16 +651,15 @@ namespace mongo {
 
         void rollbackCreate();
 
-        typedef std::map<Namespace, shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
+        typedef StringMap<shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
 
     private:
         void _init(bool may_create);
 
         // @return NamespaceDetails object is the ns is currently open, NULL otherwise.
         // requires: openRWLock is locked, either shared or exclusively.
-        NamespaceDetails *find_ns_locked(const char *ns) {
-            Namespace n(ns);
-            NamespaceDetailsMap::iterator it = _namespaces.find(n);
+        NamespaceDetails *find_ns_locked(const StringData& ns) {
+            NamespaceDetailsMap::const_iterator it = _namespaces.find(ns);
             if (it != _namespaces.end()) {
                 verify(it->second.get() != NULL);
                 return it->second.get();
@@ -614,29 +669,29 @@ namespace mongo {
 
         // @return NamespaceDetails object if the ns existed and is now open, NULL otherwise.
         // requires: _openRWLock is locked, exclusively.
-        NamespaceDetails *open_ns(const char *ns);
+        NamespaceDetails *open_ns(const StringData& ns, const bool bulkLoad = false);
+        // Only beginBulkLoad may call open_ns with bulkLoad = true.
+        friend void beginBulkLoad(const StringData &ns, const vector<BSONObj> &indexes, const BSONObj &options);
 
         DB *_nsdb;
         NamespaceDetailsMap _namespaces;
-        string _dir;
-        string _database;
+        const string _dir;
+        const string _nsdbFilename;
+        const string _database;
         // This rwlock serializes _nsdb/_namespaces opens and lookups in a DBRead lock.
         // It isn't necessary to hold this rwlock in a a DBWrite lock.
         SimpleRWLock _openRWLock;
     };
 
-    // Defined in database.cpp
     // Gets the namespace objects for this client threads' current database.
-    NamespaceIndex *nsindex(const char *ns);
-    NamespaceDetails *nsdetails(const char *ns);
-    NamespaceDetails *nsdetails_maybe_create(const char *ns, BSONObj options = BSONObj());
+    NamespaceIndex *nsindex(const StringData& ns);
+    NamespaceDetails *nsdetails(const StringData& ns);
+    NamespaceDetails *nsdetails_maybe_create(const StringData& ns, BSONObj options = BSONObj());
 
     inline IndexDetails& NamespaceDetails::idx(int idxNo) const {
-        if ( idxNo < NIndexesMax ) {
-            verify(idxNo >= 0 && idxNo < (int) _indexes.size());
-            return *_indexes[idxNo];
-        }
-        unimplemented("more than NIndexesMax indexes"); // TokuMX: Make sure we handle the case where idxNo >= NindexesMax 
+        verify( idxNo < NIndexesMax );
+        verify( idxNo >= 0 && idxNo < (int) _indexes.size() );
+        return *_indexes[idxNo];
     }
 
     inline int NamespaceDetails::idxNo(const IndexDetails& idx) const {
@@ -646,7 +701,7 @@ namespace mongo {
                 return it - _indexes.begin();
             }
         }
-        massert( 10349 , "E12000 idxNo fails", false);
+        msgasserted( 10349 , "E12000 idxNo fails" );
         return -1;
     }
 
@@ -677,10 +732,10 @@ namespace mongo {
     }
 
     // @return offset in indexes[]
-    inline int NamespaceDetails::findIndexByName(const char *name) const {
+    inline int NamespaceDetails::findIndexByName(const StringData& name) const {
         for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
             const IndexDetails *index = it->get();
-            if (mongoutils::str::equals(index->indexName().c_str(), name)) {
+            if (index->indexName() == name) {
                 return it - _indexes.begin();
             }
         }

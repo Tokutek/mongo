@@ -267,7 +267,7 @@ dodouble:
         BSONObjIterator i(*this);
         while ( i.more() ) {
             BSONElement e = i.next();
-            if ( strcmp(e.fieldName(), name.data()) == 0 )
+            if ( name == e.fieldName() )
                 return e;
         }
         return BSONElement();
@@ -406,7 +406,7 @@ dodouble:
     inline bool BSONObjBuilder::hasField( const StringData& name ) const {
         BSONObjIterator i = iterator();
         while ( i.more() )
-            if ( strcmp( name.data() , i.next().fieldName() ) == 0 )
+            if ( name == i.next().fieldName() )
                 return true;
         return false;
     }
@@ -919,9 +919,9 @@ dodouble:
     }
 
     // used by jsonString()
-    inline std::string escape( std::string s , bool escape_slash=false) {
+    inline std::string escape( const std::string& s , bool escape_slash=false) {
         StringBuilder ret;
-        for ( std::string::iterator i = s.begin(); i != s.end(); ++i ) {
+        for ( std::string::const_iterator i = s.begin(); i != s.end(); ++i ) {
             switch ( *i ) {
             case '"':
                 ret << "\\\"";
@@ -989,13 +989,13 @@ dodouble:
         verify( ! j.more() );
     }
 
-    inline BSONObj BSONObj::removeField(const StringData& name) const { 
+    inline BSONObj BSONObj::removeField(const StringData& name) const {
         BSONObjBuilder b;
         BSONObjIterator i(*this);
         while ( i.more() ) {
             BSONElement e = i.next();
             const char *fname = e.fieldName();
-            if( strcmp(name.data(), fname) )
+            if ( name != fname )
                 b.append(e);
         }
         return b.obj();

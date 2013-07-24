@@ -19,6 +19,8 @@
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 
+#include "mongo/util/string_map.h"
+
 namespace mongo {
 
     /**
@@ -61,14 +63,14 @@ namespace mongo {
             UsageData commands;
         };
 
-        typedef map<string,CollectionData> UsageMap;
+        typedef StringMap<CollectionData> UsageMap;
 
     public:
         void record( const StringData& ns , int op , int lockType , long long micros , bool command );
         void append( BSONObjBuilder& b );
         void cloneMap(UsageMap& out) const;
         CollectionData getGlobalData() const { return _global; }
-        void collectionDropped( const string& ns );
+        void collectionDropped( const StringData& ns );
 
     public: // static stuff
         static Top global;

@@ -28,6 +28,7 @@
 #include <fstream>
 #include <set>
 
+#include "mongo/base/initializer.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/tools/tool.h"
 #include "mongo/util/version.h"
@@ -454,7 +455,6 @@ private:
         int objSize;
         BSONObj obj;
         obj = fromjson (buf.get(), &objSize);
-        uassert(15934, "JSON object size didn't match file size", objSize == fileSize);
         return obj;
     }
 
@@ -571,7 +571,8 @@ private:
     }
 };
 
-int main( int argc , char ** argv ) {
+int main( int argc , char ** argv, char ** envp ) {
+    mongo::runGlobalInitializersOrDie(argc, argv, envp);
     Restore restore;
     return restore.main( argc , argv );
 }

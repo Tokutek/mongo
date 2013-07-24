@@ -1,7 +1,5 @@
-// @file db.logger.h
-
-/*
- *    Copyright (C) 2010 10gen Inc.
+/**
+ *    Copyright (C) 2012 10gen Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -18,14 +16,14 @@
 
 #pragma once
 
-namespace mongo {
+#include <cstdlib>
 
-    /** helper to log (and read log) of a capped collection in the database */
-    class DBLogger {
-        bool _inited;
-    public:
-        const string _ns;
-        DBLogger(string ns) : _inited(false), _ns(ns) { }
-    };
-
+#ifdef _WIN32
+static inline long long strtoll(const char* nptr, char** endptr, int base) {
+    return _strtoi64(nptr, endptr, base);
 }
+
+static inline unsigned long long strtoull(const char* nptr, char** endptr, int base) {
+    return _strtoui64(nptr, endptr, base);
+}
+#endif  // defined(_WIN32)

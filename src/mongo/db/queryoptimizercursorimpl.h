@@ -179,11 +179,11 @@ namespace mongo {
      */
     class CursorGenerator {
     public:
-        CursorGenerator( const char *ns,
+        CursorGenerator( const StringData& ns,
                         const BSONObj &query,
                         const BSONObj &order,
                         const QueryPlanSelectionPolicy &planPolicy,
-                        bool *simpleEqualityMatch,
+                        bool requestMatcher,
                         const shared_ptr<const ParsedQuery> &parsedQuery,
                         bool requireOrder,
                         QueryPlanSummary *singlePlanSummary );
@@ -210,11 +210,11 @@ namespace mongo {
         void setMultiPlanScanner();
         shared_ptr<Cursor> singlePlanCursor();
         
-        const char *_ns;
+        const StringData _ns;
         BSONObj _query;
         BSONObj _order;
         const QueryPlanSelectionPolicy &_planPolicy;
-        bool *_simpleEqualityMatch;
+        bool _requestMatcher;
         shared_ptr<const ParsedQuery> _parsedQuery;
         bool _requireOrder;
         QueryPlanSummary *_singlePlanSummary;

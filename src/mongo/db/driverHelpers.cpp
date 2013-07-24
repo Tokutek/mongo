@@ -21,9 +21,8 @@
 */
 
 
-#include "pch.h"
+#include "mongo/pch.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/namespace.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/cursor.h"

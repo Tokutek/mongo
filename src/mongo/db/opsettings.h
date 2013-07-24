@@ -30,15 +30,21 @@ namespace mongo {
         QueryCursorMode _queryCursorMode; // default DEFAULT_LOCK_CURSOR
         bool _shouldBulkFetch; // default false
         bool _shouldAppendPKForCapped; // if true, cursor->current should append the pk before returning the row
+        bool _justOne; // if true, then the number of affected rows will be at most one.
       public:
         OpSettings();
 
         OpSettings& setQueryCursorMode(QueryCursorMode mode);
         QueryCursorMode getQueryCursorMode();
+
         bool shouldBulkFetch();
         OpSettings& setBulkFetch(bool val);
+
         bool shouldCappedAppendPK();
         OpSettings& setCappedAppendPK(bool val);
+
+        bool getJustOne();
+        OpSettings& setJustOne(bool val);
     };
 
 } // namespace mongo

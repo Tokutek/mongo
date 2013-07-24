@@ -155,12 +155,12 @@ namespace mongo {
     }
 
     BSONObj CachedBSONObj::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");
-    Client::Context::Context( string ns , Database * db, bool doauth ) :
+    Client::Context::Context( const StringData &ns , Database * db, bool doauth ) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( mongo::dbpath ), // is this right? could be a different db? may need a dassert for this
         _doVersion( true ),
-        _ns( ns ), 
+        _ns( ns.toString() ),
         _db(db)
     {
         verify( db == 0 || db->isOk() );
@@ -168,12 +168,12 @@ namespace mongo {
         checkNsAccess( doauth );
     }
 
-    Client::Context::Context(const string& ns, string path , bool doauth, bool doVersion) :
-        _client( currentClient.get() ), 
+    Client::Context::Context(const StringData &ns, const StringData &path , bool doauth, bool doVersion ) :
+        _client( currentClient.get() ),
         _oldContext( _client->_context ),
-        _path( path ), 
+        _path( path.toString() ),
         _doVersion(doVersion),
-        _ns( ns ), 
+        _ns( ns.toString() ),
         _db(0)
     {
         _finishInit( doauth );
@@ -182,12 +182,12 @@ namespace mongo {
     /** "read lock, and set my context, all in one operation" 
      *  This handles (if not recursively locked) opening an unopened database.
      */
-    Client::ReadContext::ReadContext(const string& ns, string path, bool doauth)
+    Client::ReadContext::ReadContext(const StringData &ns, const StringData &path, bool doauth)
         : _lk( ns ) ,
           _c( ns , path , doauth ) {
     }
 
-    Client::WriteContext::WriteContext(const string& ns, string path , bool doauth ) 
+    Client::WriteContext::WriteContext(const StringData &ns, const StringData &path , bool doauth ) 
         : _lk( ns ) ,
           _c( ns , path , doauth ) {
     }
@@ -213,12 +213,12 @@ namespace mongo {
     }
 
     // invoked from ReadContext
-    Client::Context::Context(const string& path, const string& ns, Database *db , bool doauth) :
-        _client( currentClient.get() ), 
+    Client::Context::Context(const StringData &path, const StringData &ns, Database *db , bool doauth) :
+        _client( currentClient.get() ),
         _oldContext( _client->_context ),
-        _path( path ), 
+        _path( path.toString() ),
         _doVersion( true ),
-        _ns( ns ), 
+        _ns( ns.toString() ),
         _db(db)
     {
         verify(_db);
@@ -263,14 +263,14 @@ namespace mongo {
         _client->_context = _oldContext; // note: _oldContext may be null
     }
 
-    bool Client::Context::inDB( const string& db , const string& path ) const {
+    bool Client::Context::inDB( const StringData& db , const StringData& path ) const {
         if ( _path != path )
             return false;
 
         if ( db == _ns )
             return true;
 
-        string::size_type idx = _ns.find( db );
+        size_t idx = _ns.find( db.toString() );
         if ( idx != 0 )
             return false;
 
@@ -535,10 +535,7 @@ namespace mongo {
         // to connect to a machine even though the machine is shutting
         // down. We should find a way for the oplog to veto
         // that machine, but can't find method to do it now
-        if (exceptionInfo.code == 11600 && 
-            mongoutils::str::equals(ns.toString().c_str(), "local.oplog.rs")
-            )
-        {
+        if (exceptionInfo.code == 11600 && ns == "local.oplog.rs" ) {
             return true;
         }
         return false;
@@ -553,7 +550,7 @@ namespace mongo {
             s << "command ";
         else
             s << opToString( op ) << ' ';
-        s << ns.toString();
+        s << ns;
 
         if ( ! query.isEmpty() ) {
             if ( iscommand )
@@ -607,7 +604,7 @@ namespace mongo {
 #define OPDEBUG_APPEND_BOOL(x) if( x ) b.appendBool( #x , (x) )
     void OpDebug::append( const CurOp& curop, BSONObjBuilder& b ) const {
         b.append( "op" , iscommand ? "command" : opToString( op ) );
-        b.append( "ns" , ns.toString() );
+        b.append( "ns" , ns );
         if ( ! query.isEmpty() )
             b.append( iscommand ? "command" : "query" , query );
         else if ( ! iscommand && curop.haveQuery() )

@@ -20,7 +20,6 @@
 #include "mongo/client/remote_transaction.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cursor.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/oplog.h"
@@ -84,7 +83,7 @@ namespace mongo {
     /* todo : progress metering to sethbmsg. */
     static bool clone(
         const char *master, 
-        string db,
+        const std::string& db,
         shared_ptr<DBClientConnection> conn,
         bool syncIndexes
         ) 
@@ -271,16 +270,17 @@ namespace mongo {
     void ReplSetImpl::_fillGaps(OplogReader* r) {
         Client::ReadContext ctx(rsoplog);
         Client::Transaction catchupTransaction(0);
+        NamespaceDetails *d = nsdetails(rsReplInfo);
         
         // now we should have replInfo on this machine,
         // let's query the minLiveGTID to figure out from where
         // we should copy the opLog
         BSONObj result;
-        bool foundMinLive = Helpers::findOne(
-            rsReplInfo, 
-            BSON( "_id" << "minLive" ), 
-            result
-            );
+        const bool foundMinLive = d != NULL &&
+            d->findOne(
+               BSON( "_id" << "minLive" ),
+               result
+               );
         verify(foundMinLive);
         GTID minLiveGTID;
         minLiveGTID = getGTIDFromBSON("GTID", result);
@@ -320,15 +320,17 @@ namespace mongo {
             // accumulate a list of transactions that are unapplied
             Client::ReadContext ctx(rsoplog);
             Client::Transaction catchupTransaction(0);        
+            NamespaceDetails *d = nsdetails(rsReplInfo);
+
             // now we should have replInfo on this machine,
             // let's query the minUnappliedGTID to figure out from where
             // we should copy the opLog
             BSONObj result;
-            bool foundMinUnapplied = Helpers::findOne(
-                rsReplInfo, 
-                BSON( "_id" << "minUnapplied" ), 
-                result
-                );
+            const bool foundMinUnapplied = d != NULL &&
+                d->findOne(
+                   BSON( "_id" << "minUnapplied" ), 
+                   result
+                   );
             verify(foundMinUnapplied);
             GTID minUnappliedGTID;
             minUnappliedGTID = getGTIDFromBSON("GTID", result);

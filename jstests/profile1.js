@@ -56,14 +56,11 @@ try {
     assert.throws( function(z){ db.getCollection("system.profile").drop(); } )
 
     /* With pre-created system.profile (un-capped) */
+    /* TokuMX enforces that the profile collection is capped. See SERVER-6937 */
     db.runCommand({profile: 0});
     db.getCollection("system.profile").drop();
     assert.eq(0, db.runCommand({profile: -1}).was, "F");
-    
-    db.createCollection("system.profile");
-    db.runCommand({profile: 2});
-    assert.eq(2, db.runCommand({profile: -1}).was, "G");
-    assert.eq(null, db.system.profile.stats().capped, "G1");
+    assert.throws(db.createCollection("system.profile"));
     
     /* With no system.profile collection */
     db.runCommand({profile: 0});

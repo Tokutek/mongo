@@ -19,7 +19,6 @@
 #include "../cmdline.h"
 #include "../../util/net/sock.h"
 #include "../client.h"
-#include "../dbhelpers.h"
 #include "../../s/d_logic.h"
 #include "rs.h"
 #include "connections.h"
@@ -51,7 +50,7 @@ namespace mongo {
         }
     }
 
-    void ReplSetImpl::sethbmsg(string s, int logLevel) {
+    void ReplSetImpl::sethbmsg(const std::string& s, int logLevel) {
         static time_t lastLogged;
         _hbmsgTime = time(0);
 
@@ -374,7 +373,10 @@ namespace mongo {
 
     /** @param cfgString <setname>/<seedhost1>,<seedhost2> */
 
-    void parseReplsetCmdLine(string cfgString, string& setname, vector<HostAndPort>& seeds, set<HostAndPort>& seedSet ) {
+    void parseReplsetCmdLine(const std::string& cfgString,
+                             string& setname,
+                             vector<HostAndPort>& seeds,
+                             set<HostAndPort>& seedSet ) {
         const char *p = cfgString.c_str();
         const char *slash = strchr(p, '/');
         if( slash )
@@ -473,8 +475,8 @@ namespace mongo {
     void ReplSetImpl::loadGTIDManager() {
         Lock::DBWrite lk(rsoplog);
         Client::Transaction txn(DB_SERIALIZABLE);
-        BSONObj o;
-        if( Helpers::getLast(rsoplog, o) ) {
+        const BSONObj o = getLastEntryInOplog();
+        if (!o.isEmpty()) {
             GTID lastGTID = getGTIDFromBSON("_id", o);
             uint64_t lastTime = o["ts"]._numberLong();
             uint64_t lastHash = o["h"].numberLong();
@@ -541,9 +543,8 @@ namespace mongo {
                 {
                     Client::ReadContext ctx(rsoplog);
                     Client::Transaction transaction(0);
-                    BSONObj o;
-                    bool ret= Helpers::getLast(rsoplog, o);
-                    verify(ret);
+                    BSONObj o = getLastEntryInOplog();
+                    verify(!o.isEmpty());
                     GTID lastGTID = getGTIDFromBSON("_id", o);
                     uint64_t lastTime = o["ts"]._numberLong();
                     uint64_t lastHash = o["h"].numberLong();
@@ -1032,25 +1033,29 @@ namespace mongo {
                 const uint64_t minTime = curTimeMillis64() - ageAllowed;
                 // now get the minimum entry in the oplog, if it has timestamp
                 // less than minTime, delete it, otherwise, 
-                BSONObj result;
-                bool ret;
                 uint64_t millisToWait = 0;
                 // do a possible deletion from the oplog, if we find an entry
                 // old enough. If not, we will sleep
                 try {
+                    BSONObj result;
+                    bool found = false;
+
                     Client::ReadContext ctx(rsoplog);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    if (lastTimeRead.isInitial()) {
-                        ret = Helpers::getFirst(rsoplog, result);
+                    NamespaceDetails *d = nsdetails(rsoplog);
+                    if (d != NULL) {
+                        if (lastTimeRead.isInitial()) {
+                            found = d->findOne(BSONObj(), result);
+                        }
+                        else {
+                            BSONObjBuilder query;
+                            BSONObjBuilder q(query.subobjStart("_id"));;
+                            addGTIDToBSON("$gt", lastTimeRead, q);
+                            q.doneFast();
+                            found = d->findOne(query.done(), result, false);
+                        }
                     }
-                    else {
-                        BSONObjBuilder q;
-                        addGTIDToBSON("$gt", lastTimeRead, q);
-                        BSONObjBuilder query;
-                        query.append("_id", q.done());
-                        ret = Helpers::findOne(rsoplog, query.done(), result, false);
-                    }
-                    if (ret) {
+                    if (found) {
                         lastTimeRead = getGTIDFromBSON("_id", result);                    
                         uint64_t ts = result["ts"]._numberLong();
                         if (ts < minTime) {

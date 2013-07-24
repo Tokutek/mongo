@@ -27,7 +27,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/indexkey.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/namespace.h"
+#include "mongo/db/descriptor.h"
 #include "mongo/db/storage/cursor.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/key.h"
@@ -76,15 +76,17 @@ namespace mongo {
          * @return offset into keyPattern for key
                    -1 if doesn't exist
          */
-        int keyPatternOffset( const string& key ) const;
-        bool inKeyPattern( const string& key ) const { return keyPatternOffset( key ) >= 0; }
+        int keyPatternOffset( const StringData& key ) const;
+        bool inKeyPattern( const StringData& key ) const { return keyPatternOffset( key ) >= 0; }
 
         /* true if the specified key is in the index */
         bool hasKey(const BSONObj& key);
 
-        static string indexNamespace(const string &ns, const string &idxName) {
+        static string indexNamespace(const StringData& ns, const StringData& idxName) {
             dassert(ns != "" && idxName != "");
-            return ns + ".$" + idxName;
+            stringstream ss;
+            ss << ns.toString() << ".$" << idxName.toString();
+            return ss.str();
         }
 
         // returns name of this index's storage area
@@ -142,19 +144,31 @@ namespace mongo {
             return _info.toString();
         }
 
-        const BSONObj &info() const { return _info; }
+        const BSONObj &info() const {
+            return _info;
+        }
 
         void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, uint64_t flags);
         void deletePair(const BSONObj &key, const BSONObj *pk, uint64_t flags);
+        void acquireTableLock();
 
         enum toku_compression_method getCompressionMethod() const;
         uint32_t getPageSize() const;
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
-        void uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const;
-        void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
         void optimize();
 
+        struct UniqueCheckExtra : public ExceptionSaver {
+            const storage::Key &newKey;
+            const Descriptor &descriptor;
+            bool &isUnique;
+            std::exception *ex;
+            UniqueCheckExtra(const storage::Key &sKey, const Descriptor &d, bool &u) :
+                newKey(sKey), descriptor(d), isUnique(u), ex(NULL) {
+            }
+        };
+        static int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra);
+        void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
         void uassertedDupKey(const BSONObj &key) const;
 
         template<class Callback>
@@ -184,7 +198,11 @@ namespace mongo {
         // Open dictionary representing the index on disk.
         DB *_db;
 
-        void _build();
+        // Used to describe the index to the ydb layer, for key
+        // comparisons and, later, for key generation.
+        Descriptor _descriptor;
+
+        static int hot_opt_callback(void *extra, float progress);
 
         // Info about the index. Stored on disk in the database.ns dictionary
         // for this database as a BSON object.

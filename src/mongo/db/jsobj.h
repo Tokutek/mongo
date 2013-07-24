@@ -39,5 +39,5 @@
 #include "mongo/bson/bsonobjiterator.h"
 #include "mongo/bson/bson-inl.h"
 #include "mongo/bson/ordering.h"
-#include "mongo/bson/stringdata.h"
+#include "mongo/base/string_data.h"
 #include "mongo/bson/bson_db.h"

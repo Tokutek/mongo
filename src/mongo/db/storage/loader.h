@@ -43,11 +43,18 @@ namespace mongo {
                 Client &c;
             };
             static int poll_function(void *extra, float progress);
+            struct error_callback_extra {
+                error_callback_extra() { }
+                string errmsg;
+            };
+            static void error_callback(DB *db, int i, int err,
+                                       DBT *key, DBT *val, void *extra);
 
         private:
             DB *_db;
             DB_LOADER *_loader;
             poll_function_extra _poll_extra;
+            error_callback_extra _error_extra;
             bool _closed;
         };
 

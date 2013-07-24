@@ -31,9 +31,6 @@ namespace mongo {
     class NamespaceDetails;
     class CoveredIndexMatcher;
 
-    extern BSONObj minKey;
-    extern BSONObj maxKey;
-
     /**
      * Query cursors, base class.  This is for our internal cursors.  "ClientCursor" is a separate
      * concept and is for the user's cursor.
@@ -110,8 +107,6 @@ namespace mongo {
 
         // Used when we want fast matcher lookup
         virtual CoveredIndexMatcher *matcher() const { return 0; }
-        // Used when we need to share this matcher with someone else
-        virtual shared_ptr< CoveredIndexMatcher > matcherPtr() const { return shared_ptr< CoveredIndexMatcher >(); }
 
         virtual bool currentMatches( MatchDetails *details = 0 ) {
             return !matcher() || matcher()->matchesCurrent( this, details );
@@ -194,17 +189,18 @@ namespace mongo {
      */
     class IndexCursor : public Cursor {
     public:
-        // If numWanted is > 0, there exists a limit clause, so don't prefetch.
 
         // Create a cursor over a specific start, end key range.
-        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
-                     const BSONObj &startKey, const BSONObj &endKey,
-                     bool endKeyInclusive, int direction, int numWanted = 0);
+        static shared_ptr<IndexCursor> make( NamespaceDetails *d, const IndexDetails &idx,
+                                             const BSONObj &startKey, const BSONObj &endKey,
+                                             bool endKeyInclusive, int direction,
+                                             int numWanted = 0);
 
         // Create a cursor over a set of one or more field ranges.
-        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
-                     const shared_ptr< FieldRangeVector > &bounds,
-                     int singleIntervalLimit, int direction, int numWanted = 0);
+        static shared_ptr<IndexCursor> make( NamespaceDetails *d, const IndexDetails &idx,
+                                             const shared_ptr< FieldRangeVector > &bounds,
+                                             int singleIntervalLimit, int direction,
+                                             int numWanted = 0);
 
         virtual ~IndexCursor();
 
@@ -232,24 +228,19 @@ namespace mongo {
 
         BSONObj currPK() const { return _currPK; }
         BSONObj currKey() const { return _currKey; }
+        BSONObj current();
         BSONObj indexKeyPattern() const { return _idx.keyPattern(); }
 
-        BSONObj current();
         string toString() const;
-
+        BSONObj prettyIndexBounds() const;
         BSONObj prettyKey( const BSONObj &key ) const {
             return key.replaceFieldNames( indexKeyPattern() ).clientReadable();
         }
 
-        BSONObj prettyIndexBounds() const;
-
         CoveredIndexMatcher *matcher() const { return _matcher.get(); }
-        shared_ptr< CoveredIndexMatcher > matcherPtr() const { return _matcher; }
-
         void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { _matcher = matcher;  }
-
+        bool currentMatches( MatchDetails *details = NULL );
         const Projection::KeyOnly *keyFieldsOnly() const { return _keyFieldsOnly.get(); }
-        
         void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
             _keyFieldsOnly = keyFieldsOnly;
         }
@@ -258,6 +249,13 @@ namespace mongo {
 
     protected:
         bool forward() const;
+
+        // Optionally pre-acquire row locks for this cursor. cursor_flags() and
+        // getf_flags() should be the correct flags to pass to the ydb, given the
+        // implementation of prelock() (ie: DB_PRELOCKED if locks were grabbed).
+        virtual void prelock();
+        virtual int cursor_flags();
+        virtual int getf_flags();
 
         // True if intuitive bounds-ordering for minKey and MaxKey is reverse for
         // this cursor, based on an index ordering and cursor direction.
@@ -271,23 +269,41 @@ namespace mongo {
         // - Ascending/forward, return false.
         static bool reverseMinMaxBoundsOrder(const Ordering &ordering, const int direction);
 
+        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+                     const BSONObj &startKey, const BSONObj &endKey,
+                     bool endKeyInclusive, int direction, int numWanted = 0);
+
+        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+                     const shared_ptr< FieldRangeVector > &bounds,
+                     int singleIntervalLimit, int direction, int numWanted = 0);
+
     private:
+
         /** Initialize the internal DBC */
         void initializeDBC();
         void _prelockCompoundBounds(const int currentRange, vector<const FieldInterval *> &combo,
                                     BufBuilder &startKeyBuilder, BufBuilder &endKeyBuilder);
         void _prelockBounds();
         void _prelockRange(const BSONObj &startKey, const BSONObj &endKey);
-        void prelock();
 
         /** Get the current key/pk/obj from the row buffer and set _currKey/PK/Obj */
         void getCurrentFromBuffer();
         /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */
         void _advance();
 
+        /** ydb cursor callback + flags */
+        struct cursor_getf_extra : public ExceptionSaver {
+            RowBuffer *buffer;
+            int rows_fetched;
+            int rows_to_fetch;
+            std::exception *ex;
+            cursor_getf_extra(RowBuffer *buf, int n_to_fetch) :
+                buffer(buf), rows_fetched(0), rows_to_fetch(n_to_fetch), ex(NULL) {
+            }
+        };
+        static int cursor_getf(const DBT *key, const DBT *val, void *extra);
         /** determine how many rows the next getf should bulk fetch */
         int getf_fetch_count();
-        int getf_flags();
         /** pull more rows from the DBC into the RowBuffer */
         bool fetchMoreRows();
         /** find by key where the PK used for search is determined by _direction */
@@ -298,6 +314,13 @@ namespace mongo {
         bool checkCurrentAgainstBounds();
         void skipPrefix(const BSONObj &key, const int k);
         int skipToNextKey(const BSONObj &currentKey);
+        /**
+         * Attempt to locate the next index key matching _bounds.  This may mean advancing to the
+         * next successive key in the index, or skipping to a new position in the index.  If an
+         * internal iteration cutoff is reached before a matching key is found, then the search for
+         * a matching key will be aborted, leaving the cursor pointing at a key that is not within
+         * bounds.
+         */
         bool skipOutOfRangeKeysAndCheckEnd();
         void checkEnd();
 
@@ -314,6 +337,10 @@ namespace mongo {
         const int _direction;
         shared_ptr< FieldRangeVector > _bounds; // field ranges to iterate over, if non-null
         auto_ptr< FieldRangeVectorIterator > _boundsIterator;
+        bool _boundsMustMatch; // If iteration is aborted before a key matching _bounds is
+                               // identified, the cursor may be left pointing at a key that is not
+                               // within bounds (_bounds->matchesKey( currKey() ) may be false).
+                               // _boundsMustMatch will be set to false accordingly.
         shared_ptr< CoveredIndexMatcher > _matcher;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
         long long _nscanned;
@@ -357,7 +384,7 @@ namespace mongo {
      */
     class BasicCursor : public IndexScanCursor {
     public:
-        static Cursor *make( NamespaceDetails *d, int direction = 1 );
+        static shared_ptr<Cursor> make( NamespaceDetails *d, int direction = 1 );
 
         BSONObj currKey() const { return BSONObj(); }
         virtual BSONObj indexKeyPattern() const { return BSONObj(); }

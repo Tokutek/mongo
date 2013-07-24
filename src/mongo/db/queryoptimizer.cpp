@@ -23,7 +23,6 @@
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/cmdline.h"
-#include "mongo/db/dbhelpers.h"
 
 //#define DEBUGQO(x) cout << x << endl;
 #define DEBUGQO(x)
@@ -38,23 +37,6 @@ namespace mongo {
         return 1;
     }
 
-    bool exactKeyMatchSimpleQuery( const BSONObj &query, const int expectedFieldCount ) {
-        if ( query.nFields() != expectedFieldCount ) {
-            return false;
-        }
-        BSONObjIterator i( query );
-        while( i.more() ) {
-            BSONElement e = i.next();
-            if ( e.fieldName()[0] == '$' ) {
-                return false;
-            }
-            if ( e.mayEncapsulate() ) {
-                return false;
-            }
-        }
-        return true;
-    }
-    
     // returns an IndexDetails * for a hint, 0 if hint is $natural.
     // hint must not be eoo()
     IndexDetails *parseHint( const BSONElement &hint, NamespaceDetails *d ) {
@@ -96,7 +78,7 @@ namespace mongo {
                                const shared_ptr<const ParsedQuery> &parsedQuery,
                                const BSONObj &startKey,
                                const BSONObj &endKey,
-                               string special ) {
+                               const std::string& special ) {
         auto_ptr<QueryPlan> ret( new QueryPlan( d, idxNo, frsp, originalQuery, order, parsedQuery,
                                                special ) );
         ret->init( originalFrsp, startKey, endKey );
@@ -109,7 +91,7 @@ namespace mongo {
                          const BSONObj &originalQuery,
                          const BSONObj &order,
                          const shared_ptr<const ParsedQuery> &parsedQuery,
-                         string special ) :
+                         const std::string& special ) :
         _d(d),
         _idxNo(idxNo),
         _frs( frsp.frsForIndex( _d, _idxNo ) ),
@@ -119,7 +101,7 @@ namespace mongo {
         _parsedQuery( parsedQuery ),
         _index( 0 ),
         _scanAndOrderRequired( true ),
-        _exactKeyMatch( false ),
+        _matcherNecessary( true ),
         _direction( 0 ),
         _endKeyInclusive(),
         _utility( Helpful ),
@@ -149,6 +131,8 @@ namespace mongo {
         }
 
         _index = &_d->idx(_idxNo);
+        const BSONObj &pkPattern = _d->pkPattern();
+        const BSONObj &keyPattern = _index->keyPattern();
 
         // If the parsing or index indicates this is a special query, don't continue the processing
         if ( _special.size() ||
@@ -228,13 +212,20 @@ doneCheckOrder:
         if ( !_scanAndOrderRequired &&
                 ( optimalIndexedQueryCount == _frs.numNonUniversalRanges() ) )
             _utility = Optimal;
-        if ( exactIndexedQueryCount == _frs.numNonUniversalRanges() &&
-            orderFieldsUnindexed.size() == 0 &&
-            exactIndexedQueryCount == idxKey.nFields() &&
-            exactKeyMatchSimpleQuery( _originalQuery, exactIndexedQueryCount ) ) {
-            _exactKeyMatch = true;
-        }
         _frv.reset( new FieldRangeVector( _frs, idxSpec, _direction ) );
+
+        if ( // If all field range constraints are on indexed fields and ...
+             _utility == Optimal &&
+             // ... the field ranges exactly represent the query and ...
+             _frs.mustBeExactMatchRepresentation() &&
+             // ... all indexed ranges are represented in the field range vector ...
+             _frv->hasAllIndexedRanges() ) {
+
+            // ... then the field range vector is sufficient to perform query matching against index
+            // keys.  No matcher is required.
+            _matcherNecessary = false;
+        }
+
         if ( originalFrsp ) {
             _originalFrv.reset( new FieldRangeVector( originalFrsp->frsForIndex( _d, _idxNo ),
                                                      idxSpec, _direction ) );
@@ -264,7 +255,7 @@ doneCheckOrder:
         }
 
         if ( _parsedQuery && _parsedQuery->getFields() && !_d->isMultikey( _idxNo ) ) { // Does not check modifiedKeys()
-            _keyFieldsOnly.reset( _parsedQuery->getFields()->checkKey( _index->keyPattern() ) );
+            _keyFieldsOnly.reset( _parsedQuery->getFields()->checkKey( keyPattern, pkPattern ) );
         }
     }
 
@@ -291,27 +282,29 @@ doneCheckOrder:
 
         if ( willScanTable() ) {
             checkTableScanAllowed();
-            return Helpers::findTableScan( _frs.ns(), _order);
+            const int direction = _order.getField("$natural").number() >= 0 ? 1 : -1;
+            NamespaceDetails *d = nsdetails( _frs.ns() );
+            return shared_ptr<Cursor>( BasicCursor::make( d, direction ) );
         }
                 
         if ( _startOrEndSpec ) {
             // we are sure to spec _endKeyInclusive
-            return shared_ptr<Cursor>( new IndexCursor( _d, *_index, _startKey, _endKey, _endKeyInclusive, _direction >= 0 ? 1 : -1, numWanted ) );
+            return shared_ptr<Cursor>( IndexCursor::make( _d, *_index, _startKey, _endKey, _endKeyInclusive, _direction >= 0 ? 1 : -1, numWanted ) );
         }
         else if ( _index->getSpec().getType() ) {
-            return shared_ptr<Cursor>( new IndexCursor( _d, *_index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1, numWanted ) );
+            return shared_ptr<Cursor>( IndexCursor::make( _d, *_index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1, numWanted ) );
         }
         else {
-            return shared_ptr<Cursor>( new IndexCursor( _d, *_index, _frv, independentRangesSingleIntervalLimit(), _direction >= 0 ? 1 : -1, numWanted) );
+            return shared_ptr<Cursor>( IndexCursor::make( _d, *_index, _frv, independentRangesSingleIntervalLimit(), _direction >= 0 ? 1 : -1, numWanted) );
         }
     }
 
     shared_ptr<Cursor> QueryPlan::newReverseCursor() const {
         if ( willScanTable() ) {
-            int orderSpec = _order.getIntField( "$natural" );
-            if ( orderSpec == INT_MIN )
-                orderSpec = 1;
-            return Helpers::findTableScan( _frs.ns(), BSON( "$natural" << -orderSpec ) );
+            const int orderSpec = _order.getIntField( "$natural" );
+            const int direction = orderSpec == INT_MIN ? -1 : -orderSpec;
+            NamespaceDetails *d = nsdetails( _frs.ns() );
+            return shared_ptr<Cursor>( BasicCursor::make( d, direction ) );
         }
         massert( 10364 ,  "newReverseCursor() not implemented for indexed plans", false );
         return shared_ptr<Cursor>();
@@ -331,7 +324,7 @@ doneCheckOrder:
             return;
         }
 
-        SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
+        SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
         QueryPattern queryPattern = _frs.pattern( _order );
         CachedQueryPlan queryPlanToCache( indexKey(), nScanned, candidatePlans );
         NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get_inlock( ns() );
@@ -954,7 +947,7 @@ doneCheckOrder:
         return bab.arr().jsonString();
     }
     
-    MultiPlanScanner *MultiPlanScanner::make( const char *ns,
+    MultiPlanScanner *MultiPlanScanner::make( const StringData& ns,
                                              const BSONObj &query,
                                              const BSONObj &order,
                                              const shared_ptr<const ParsedQuery> &parsedQuery,
@@ -1156,12 +1149,12 @@ doneCheckOrder:
      * $nor component that would not be represented in QueryPattern.    
      */
     
-    MultiPlanScanner::MultiPlanScanner( const char *ns,
+    MultiPlanScanner::MultiPlanScanner( const StringData& ns,
                                        const BSONObj &query,
                                        const shared_ptr<const ParsedQuery> &parsedQuery,
                                        const BSONObj &hint,
                                        QueryPlanGenerator::RecordedPlanPolicy recordedPlanPolicy ) :
-        _ns( ns ),
+        _ns( ns.toString() ),
         _or( !query.getField( "$or" ).eoo() ),
         _query( query.getOwned() ),
         _parsedQuery( parsedQuery ),
@@ -1544,13 +1537,15 @@ doneCheckOrder:
         return id;
     }
     
-    shared_ptr<Cursor> NamespaceDetailsTransient::bestGuessCursor( const char *ns,
+    shared_ptr<Cursor> NamespaceDetailsTransient::bestGuessCursor( const StringData& ns,
                                                                   const BSONObj &query,
                                                                   const BSONObj &sort ) {
-        auto_ptr<FieldRangeSetPair> frsp( new FieldRangeSetPair( ns, query, true ) );
+        // TODO: make FieldRangeSet and QueryPlanSet understand StringData
+        string ns_s = ns.toString();
+        auto_ptr<FieldRangeSetPair> frsp( new FieldRangeSetPair( ns_s.c_str(), query, true ) );
         auto_ptr<FieldRangeSetPair> origFrsp( new FieldRangeSetPair( *frsp ) );
 
-        scoped_ptr<QueryPlanSet> qps( QueryPlanSet::make( ns, frsp, origFrsp, query, sort,
+        scoped_ptr<QueryPlanSet> qps( QueryPlanSet::make( ns_s.c_str(), frsp, origFrsp, query, sort,
                                                          shared_ptr<const ParsedQuery>(), BSONObj(),
                                                          QueryPlanGenerator::UseIfInOrder,
                                                          BSONObj(), BSONObj(), true ) );
@@ -1577,7 +1572,7 @@ doneCheckOrder:
     }
     
     void QueryUtilIndexed::clearIndexesForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
-        SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
+        SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
         NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get_inlock( frsp.ns() );
         CachedQueryPlan noCachedPlan;
         nsdt.registerCachedQueryPlanForPattern( frsp._singleKey.pattern( order ), noCachedPlan );
@@ -1585,8 +1580,8 @@ doneCheckOrder:
     }
     
     CachedQueryPlan QueryUtilIndexed::bestIndexForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
-        SimpleMutex::scoped_lock lk(NamespaceDetailsTransient::_qcMutex);
-        NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get_inlock( frsp.ns() );
+        NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get( frsp.ns() );
+        SimpleRWLock::Shared lk(NamespaceDetailsTransient::_qcRWLock);
         // TODO Maybe it would make sense to return the index with the lowest
         // nscanned if there are two possibilities.
         {

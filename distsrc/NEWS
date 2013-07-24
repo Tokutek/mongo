@@ -64,6 +64,29 @@ Bug fixes
       loader. (#295, #296)
 
 
+tokumx 1.0.1
+------------
+Release date: 2013-06-26
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The default compression method is now zlib. (#189)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a bug causing concurrent insertions on different keys in
+      certain (typically nearly-sequential insertion order) scenarios to
+      block.  This should improve the performance of workloads with
+      multiple writers.  (#273)
+
+    - The code that takes distributed locks in a cluster now correctly
+      handles row lock error codes.  This eliminates what were previously
+      rare crashes.  (#249)
+
+
 tokumx 1.0.0
 ------------
 Release date: 2013-06-19
@@ -106,6 +129,12 @@ Bug fixes
       fixed. (#212)
 
     - Calls to db.eval() are now properly profiled. (#16)
+
+
+Miscellaneous
+~~~~~~~~~~~~~
+
+    - The mongoperf tool has been deprecated. (#174)
 
 
 tokumx 1.0.0-rc.0
