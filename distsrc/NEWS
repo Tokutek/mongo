@@ -9,6 +9,14 @@ General
 ~~~~~~~
 
 
+Bug fixes
+~~~~~~~~~
+
+    - Backported https://jira.mongodb.org/browse/SERVER-7951[SERVER-7951]
+      from mongodb 2.4 to allow replace-style updates when using hashed
+      shard keys. (#347)
+
+
 tokumx 1.0.3
 ------------
 Release date: 2013-07-23
