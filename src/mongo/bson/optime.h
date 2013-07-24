@@ -20,9 +20,9 @@
 #include <iostream>
 #include <sstream>
 
-#include "mongo/bson/util/misc.h"  // time_t_to_String
 #include "mongo/util/assert_util.h"
 #include "mongo/util/concurrency/mutex.h"
+#include "mongo/util/time_support.h"
 
 #include "mongo/util/assert_util.h"
 #include "mongo/util/concurrency/mutex.h"
