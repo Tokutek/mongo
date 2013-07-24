@@ -20,7 +20,9 @@
 
 #include <boost/thread/condition.hpp>
 
+#include "mongo/util/assert_util.h"
 #include "mongo/util/concurrency/mutex.h"
+#include "mongo/util/time_support.h"
 
 namespace mongo {
 
@@ -110,9 +112,7 @@ namespace mongo {
         bool isNull() const { return secs == 0; }
 
         string toStringLong() const {
-            char buf[64];
-            time_t_to_String(secs, buf);
-            stringstream ss;
+            std::stringstream ss;
             ss << time_t_to_String_short(secs) << ' ';
             ss << hex << secs << ':' << i;
             return ss.str();
