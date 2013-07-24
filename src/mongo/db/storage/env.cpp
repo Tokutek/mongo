@@ -34,6 +34,7 @@
 
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/descriptor.h"
 #include "mongo/db/storage/exception.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/util/assert_util.h"
@@ -50,10 +51,13 @@ namespace mongo {
 
         static int dbt_key_compare(DB *db, const DBT *dbt1, const DBT *dbt2) {
             try {
+                const DBT *desc = &db->cmp_descriptor->dbt;
+                verify(desc->data != NULL);
+
+                Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
                 Key key1(dbt1);
                 Key key2(dbt2);
-                const Ordering &ordering(*reinterpret_cast<const Ordering *>(db->cmp_descriptor->dbt.data));
-                return key1.woCompare(key2, ordering);
+                return descriptor.compareKeys(key1, key2);
             } catch (std::exception &e) {
                 // We don't have a way to return an error from a comparison (through the ydb), and the ydb isn't exception-safe.
                 // Of course, if a comparison throws, something is very wrong anyway.
@@ -201,36 +205,31 @@ namespace mongo {
             }
         }
 
-        // set a descriptor for the given dictionary. the descriptor is
-        // a serialization of the index's ordering bits.
-        static void set_db_descriptor(DB *db, DB_TXN *txn, const BSONObj &key_pattern) {
-            const Ordering ordering = Ordering::make(key_pattern);
-            DBT dbt = make_dbt((const char *) &ordering, sizeof(Ordering));
+        // set a descriptor for the given dictionary.
+        static void set_db_descriptor(DB *db, DB_TXN *txn, const Descriptor &descriptor) {
             const int flags = DB_UPDATE_CMP_DESCRIPTOR;
-            int r = db->change_descriptor(db, txn, &dbt, flags);
+            DBT desc = descriptor.dbt();
+            const int r = db->change_descriptor(db, txn, &desc, flags);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "set db " << db << " descriptor to key pattern: " << key_pattern << endl;
         }
 
-        static void verify_db_descriptor(DB *db, const BSONObj &key_pattern) {
-            verify(db->cmp_descriptor->dbt.size == sizeof(Ordering));
-            const Ordering ordering = Ordering::make(key_pattern);
-            const int c = memcmp(db->cmp_descriptor->dbt.data, &ordering, sizeof(Ordering));
-            if (c != 0) {
-                problem() << " bad db descriptor on open, key pattern " << key_pattern << endl;
-            }
-            verify(c == 0);
+        static void verify_db_descriptor(DB *db, const Descriptor &descriptor) {
+            const DBT *desc = &db->cmp_descriptor->dbt;
+            verify(desc != NULL);
+            const Descriptor existing(reinterpret_cast<const char *>(desc->data), desc->size);
+            verify(existing == descriptor);
         }
 
-        int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create) {
+        int db_open(DB **dbp, const string &name, const BSONObj &info,
+                    const Descriptor &descriptor, bool may_create) {
             // TODO: Refactor this option setting code to someplace else. It's here because
             // the YDB api doesn't allow a db->close to be called before db->open, and we
             // would leak memory if we chose to do nothing. So we validate all the
             // options here before db_create + db->open.
             int readPageSize = 65536;
-            int pageSize = 4*1024*1024;
+            int pageSize = 4 * 1024 * 1024;
             TOKU_COMPRESSION_METHOD compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
             BSONObj key_pattern = info["key"].Obj();
             
@@ -309,9 +308,9 @@ namespace mongo {
             }
 
             if (may_create) {
-                set_db_descriptor(db, txn, key_pattern);
+                set_db_descriptor(db, txn, descriptor);
             }
-            verify_db_descriptor(db, key_pattern);
+            verify_db_descriptor(db, descriptor);
             *dbp = db;
         exit:
             return r;

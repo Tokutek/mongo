@@ -27,6 +27,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/indexkey.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/descriptor.h"
 #include "mongo/db/storage/cursor.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/key.h"
@@ -143,7 +144,9 @@ namespace mongo {
             return _info.toString();
         }
 
-        const BSONObj &info() const { return _info; }
+        const BSONObj &info() const {
+            return _info;
+        }
 
         void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, uint64_t flags);
         void deletePair(const BSONObj &key, const BSONObj *pk, uint64_t flags);
@@ -156,12 +159,13 @@ namespace mongo {
         void optimize();
 
         struct UniqueCheckExtra {
-            const BSONObj &newkey;
-            const Ordering &ordering;
+            const storage::Key &newKey;
+            const Descriptor &descriptor;
             bool &isUnique;
             std::exception *ex;
-            UniqueCheckExtra(const BSONObj &k, const Ordering &o, bool &u)
-                    : newkey(k), ordering(o), isUnique(u), ex(NULL) {}
+            UniqueCheckExtra(const storage::Key &sKey, const Descriptor &d, bool &u) :
+                newKey(sKey), descriptor(d), isUnique(u), ex(NULL) {
+            }
         };
         static int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra);
         void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
@@ -193,6 +197,10 @@ namespace mongo {
     private:
         // Open dictionary representing the index on disk.
         DB *_db;
+
+        // Used to describe the index to the ydb layer, for key
+        // comparisons and, later, for key generation.
+        Descriptor _descriptor;
 
         static int hot_opt_callback(void *extra, float progress);
 

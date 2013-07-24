@@ -37,6 +37,7 @@ namespace mongo {
 
     IndexDetails::IndexDetails(const BSONObj &info, bool may_create) :
         _db(NULL),
+        _descriptor(Ordering::make(info["key"].Obj())),
         _info(info.copy()),
         _keyPattern(info["key"].Obj().copy()),
         _unique(info["unique"].trueValue()),
@@ -45,7 +46,7 @@ namespace mongo {
         string dbname = indexNamespace();
         TOKULOG(1) << "Opening IndexDetails " << dbname << endl;
         // Open the dictionary. Creates it if necessary.
-        const int r = storage::db_open(&_db, dbname, info, may_create);
+        const int r = storage::db_open(&_db, dbname, info, _descriptor, may_create);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
@@ -127,8 +128,14 @@ namespace mongo {
         UniqueCheckExtra *info = static_cast<UniqueCheckExtra *>(extra);
         try {
             if (key != NULL) {
-                const storage::Key sKey(key);
-                const int c = info->newkey.woCompare(sKey.key(), info->ordering);
+                // Create two new storage keys that have the pk stripped out. This will tell
+                // us whether or not just the 'key' portions are equal, which is what.
+                // Stripping out the pk is as easy as calling the key constructor with
+                // the original key's buffer but hasPK = false (which will silently ignore
+                // any bytes that are found after the first key).
+                const storage::Key sKey1(reinterpret_cast<const char *>(key->data), false);
+                const storage::Key sKey2(reinterpret_cast<const char *>(info->newKey.buf()), false);
+                const int c = info->descriptor.compareKeys(sKey1, sKey2);
                 if (c == 0) {
                     info->isUnique = false;
                 }
@@ -154,12 +161,11 @@ namespace mongo {
         DBC *cursor = c.dbc();
 
         const bool hasPK = pk != NULL;
-        storage::Key skey(key, hasPK ? &minKey : NULL);
-        DBT kdbt = skey.dbt();
+        storage::Key sKey(key, hasPK ? &minKey : NULL);
+        DBT kdbt = sKey.dbt();
 
         bool isUnique = true;
-        const Ordering &ordering(*reinterpret_cast<const Ordering *>(_db->cmp_descriptor->dbt.data));
-        UniqueCheckExtra extra(key, ordering, isUnique);
+        UniqueCheckExtra extra(sKey, _descriptor, isUnique);
         // If the key has a PK, we need to set range in order to find the first
         // key greater than { key, minKey }. If there is no pk then there's
         // just one component to the key, so we can just getf_set to that point.
@@ -375,4 +381,5 @@ namespace mongo {
             storage::handle_ydb_error(r);
         }
     }
-}
+
+} // namespace mongo
