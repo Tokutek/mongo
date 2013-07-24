@@ -680,12 +680,6 @@ namespace mongo {
         _heartbeatTimeout(DEFAULT_HB_TIMEOUT) {
     }
 
-    ReplSetConfig* ReplSetConfig::make(BSONObj cfg, bool force) {
-        auto_ptr<ReplSetConfig> ret(new ReplSetConfig());
-        ret->init(cfg, force);
-        return ret.release();
-    }
-
     ReplSetConfig::ReplSetConfig(BSONObj cfg, bool force) :
         _ok(false),_chainingAllowed(true),_majority(-1)
     {
