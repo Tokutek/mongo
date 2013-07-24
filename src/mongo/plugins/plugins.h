@@ -29,7 +29,7 @@ namespace mongo {
             virtual const string &name() const = 0;
             virtual const string &version() const = 0;
             virtual bool load(string &errmsg, BSONObjBuilder &result) = 0;
-            virtual bool info(string &errmsg, BSONObjBuilder &result) const {}
+            virtual bool info(string &errmsg, BSONObjBuilder &result) const { return true; }
             virtual void unload(string &errmsg) = 0;
             virtual ~PluginInterface() {}
         };
