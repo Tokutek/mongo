@@ -40,6 +40,7 @@ add_library(authcore STATIC
   role_name
   user
   user_name
+  user_set
   )
 add_dependencies(authcore generate_error_codes generate_action_types)
 target_link_libraries(authcore LINK_PUBLIC

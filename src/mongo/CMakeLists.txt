@@ -678,6 +678,7 @@ if (BUILD_TESTING)
       principal_set_test
       privilege_set_test
       role_graph_test
+      user_set_test
       ## TODO: re-enable after bringing in new matcher
       #authorization_manager_test
       #authorization_session_test
