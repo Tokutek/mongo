@@ -723,11 +723,9 @@ namespace mongo {
                     }
                 }
 
-                // TODO: (Zardosht), figure out what this is meant to do
-                
                 // should eventually clean this up a bit
                 if (isOplog) {
-                    curop.setExpectedLatencyMs( 4100 + timer->millis() );
+                    curop.setExpectedLatencyMs( 4100 );
                 }
                 else {
                     // not sure if this 1100 is still wise.
