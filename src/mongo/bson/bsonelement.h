@@ -70,7 +70,7 @@ namespace mongo {
 
             std::string foo = obj["foo"].String(); // std::exception if not a std::string type or DNE
         */
-        std::string String()        const { return chk(mongo::String).valuestr(); }
+        std::string String()        const { return chk(mongo::String).str(); }
         StringData Stringdata()     const { return chk(mongo::String).valuestringdatasafe(); }  // disambiguating this from the class makes the capitalization annoying.
         Date_t Date()               const { return chk(mongo::Date).date(); }
         double Number()             const { return chk(isNumber()).number(); }
