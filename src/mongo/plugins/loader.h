@@ -36,9 +36,11 @@ namespace mongo {
 
           public:
             explicit PluginHandle(const string &filename) : _filename(filename) {}
-            const string &name() const { return _interface->name(); }
+            const string &name() const;
+            const string &version() const;
             bool init(string &errmsg, BSONObjBuilder &result);
             bool load(string &errmsg, BSONObjBuilder &result);
+            bool info(string &errmsg, BSONObjBuilder &result) const;
             bool unload(string &errmsg);
         };
 
@@ -47,6 +49,7 @@ namespace mongo {
             PluginMap _plugins;
           public:
             bool load(const StringData &filename, string &errmsg, BSONObjBuilder &result);
+            bool list(string &errmsg, BSONObjBuilder &result) const;
             bool unload(const StringData &name, string &errmsg, BSONObjBuilder &result);
             void shutdown();
         };
