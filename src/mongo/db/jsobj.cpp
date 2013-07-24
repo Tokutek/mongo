@@ -953,7 +953,7 @@ namespace mongo {
         char name;
         char eoo;
     } maxkeydata;
-    BSONObj maxKey((const char *) &maxkeydata);
+    const BSONObj maxKey((const char *) &maxkeydata);
 
     struct MinKeyData {
         MinKeyData() {
@@ -967,7 +967,27 @@ namespace mongo {
         char name;
         char eoo;
     } minkeydata;
-    BSONObj minKey((const char *) &minkeydata);
+    const BSONObj minKey((const char *) &minkeydata);
+
+    struct NullEltData {
+        NullEltData() {
+            type = jstNULL;
+            name = '\0';
+        }
+        char type;
+        char name;
+    } nulleltdata;
+    const BSONElement nullElt((const char *) &nulleltdata);
+
+    struct UndefinedEltData {
+        UndefinedEltData() {
+            type = Undefined;
+            name = '\0';
+        }
+        char type;
+        char name;
+    } undefinedeltdata;
+    const BSONElement undefinedElt((const char *) &undefinedeltdata);
 
     /*
         struct JSObj0 {
