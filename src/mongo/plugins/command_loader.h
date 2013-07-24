@@ -80,7 +80,7 @@ namespace mongo {
                 }
                 CommandVector allCommands = commands();
                 _loadedCommands.insert(_loadedCommands.end(), allCommands.begin(), allCommands.end());
-                return info(errmsg, result);
+                return true;
             }
 
             virtual bool info(string &errmsg, BSONObjBuilder &result) const {

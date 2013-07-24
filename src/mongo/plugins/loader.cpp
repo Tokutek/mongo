@@ -59,15 +59,6 @@ namespace mongo {
             return _interface->name();
         }
 
-        const string &PluginHandle::version() const {
-            if (!_interface) {
-                DEV LOG(0) << "in PluginHandle::version, plugin is not initialized" << endl;
-                static const string empty("");
-                return empty;
-            }
-            return _interface->version();
-        }
-
         bool PluginHandle::load(string &errmsg, BSONObjBuilder &result) {
             if (!_interface) {
                 errmsg = "plugin not initialized";
@@ -85,6 +76,9 @@ namespace mongo {
                 errmsg = "plugin not initialized";
                 return false;
             }
+            result.append("filename", _filename);
+            result.append("name", _interface->name());
+            result.append("version", _interface->version());
             return _interface->info(errmsg, result);
         }
 
@@ -118,10 +112,9 @@ namespace mongo {
             }
             _plugins[name] = pluginHandle;
             BSONObjBuilder lb(result.subobjStart("loaded"));
-            lb.append("name", name);
-            lb.append("version", pluginHandle->version());
+            ok = pluginHandle->info(errmsg, lb);
             lb.doneFast();
-            return true;
+            return ok;
         }
 
         bool Loader::list(string &errmsg, BSONObjBuilder &result) const {
@@ -129,8 +122,6 @@ namespace mongo {
             for (PluginMap::const_iterator it = _plugins.begin(); it != _plugins.end(); ++it) {
                 const shared_ptr<PluginHandle> &plugin = it->second;
                 BSONObjBuilder b(ab.subobjStart());
-                b.append("name", plugin->name());
-                b.append("version", plugin->version());
                 bool ok = plugin->info(errmsg, b);
                 b.doneFast();
                 if (!ok) {
