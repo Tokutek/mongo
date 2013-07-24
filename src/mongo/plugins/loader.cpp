@@ -83,7 +83,10 @@ namespace mongo {
                 return false;
             }
             _plugins[name] = pluginHandle;
-            result.append("loaded", name);
+            BSONObjBuilder lb(result.subobjStart("loaded"));
+            lb.append("name", name);
+            lb.append("version", pluginHandle->version());
+            lb.doneFast();
             return true;
         }
 
