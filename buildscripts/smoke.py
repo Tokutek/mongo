@@ -524,6 +524,8 @@ def runTest(test, testnum):
             argv = [path]
             if os.path.basename(path) in ["test", "test.exe"]:
                 is_test_binary = True
+            if "newUpdateFrameworkEnabled" in set_parameters:
+                argv += ["--testNewUpdateFramework"]
         # more blech
         elif os.path.basename(path) in ['mongos', 'mongos.exe']:
             argv = [path, "--test"]
