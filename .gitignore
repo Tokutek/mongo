@@ -99,6 +99,8 @@ scratch
 /libmongotestfiles.*
 /libmongoshellfiles.*
 
+# plugins
+/plugins/
 
 /emr.jar
 *.class

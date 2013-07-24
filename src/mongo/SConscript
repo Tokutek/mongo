@@ -21,7 +21,7 @@ tokuinc = tokusrc.Dir('include')
 tokulib = tokusrc.Dir('lib')
 for e in [env, testEnv]:
     e.Append(CPPPATH=[tokuinc])
-    e.Append(RPATH=[tokulib.get_abspath()])
+    e.Append(RPATH=[tokulib.get_abspath(), Dir('#/plugins/')])
 
 ltokufractaltree = os.getenv('LIBTOKUFRACTALTREE_NAME', 'tokufractaltree')
 ltokuportability = os.getenv('LIBTOKUPORTABILITY_NAME', 'tokuportability')
@@ -30,6 +30,8 @@ tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
 env.SConscript(['base/SConscript',
                 'platform/SConscript',
                 'unittest/SConscript'])
+
+allPlugins = env.SConscript(['plugins/SConscript'])
 
 def add_exe( v ):
     return "${PROGPREFIX}%s${PROGSUFFIX}" % v
@@ -180,7 +182,8 @@ env.StaticLibrary("coredb", [
         "db/storage/env.cpp",
         "db/storage/key.cpp",
         "s/shardconnection.cpp",
-        ])
+        ],
+        LIBDEPS=['plugins/plugins'])
 
 coreServerFiles = [ "util/version.cpp",
                     "db/common.cpp",
@@ -552,7 +555,7 @@ def installBinary( e, name, fix_rpath=True ):
 
     if fix_rpath:
         name = e.Command('install_rpath/%s' % name, name, Copy('$TARGET', '$SOURCE'))[0]
-        e.AddPostAction(name, "chrpath -r '$$ORIGIN/../lib64:$$ORIGIN/../lib' $TARGET")
+        e.AddPostAction(name, "chrpath -r '$$ORIGIN/../lib64:$$ORIGIN/../lib:$$ORIGIN/../plugins' $TARGET")
 
     if (solaris or linux) and (not has_option("nostrip")):
         basename = str(name).replace('install_rpath/', '')
@@ -655,7 +658,7 @@ if not has_option("skip-tarballs"):
 
     env.Command(
         '#/${SERVER_ARCHIVE}',
-        ['#buildscripts/make_archive.py'] + env["MODULE_BANNERS"] + env['TOKULIBS'] + distBinaries +
+        ['#buildscripts/make_archive.py'] + env["MODULE_BANNERS"] + env['TOKULIBS'] + distBinaries + allPlugins +
         [libgcc_s,
          libstdcxx,
          os.path.realpath(libgcc_s),
@@ -663,6 +666,7 @@ if not has_option("skip-tarballs"):
         ' '.join(['$PYTHON ${SOURCES[0]} -o $TARGET'] + toku_lib_transforms + module_banner_transforms + [
                 '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=$SERVER_DIST_BASENAME/bin',
                 '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=$SERVER_DIST_BASENAME/bin',
+                '--transform ${str(Dir(BUILD_DIR))}/mongo/plugins=$SERVER_DIST_BASENAME/plugins',
                 '--transform ${str(Dir(BUILD_DIR))}/mongo=$SERVER_DIST_BASENAME/bin',
                 '--transform %s=$SERVER_DIST_BASENAME/lib64' % libgcc_s_base64,
                 '--transform %s=$SERVER_DIST_BASENAME/lib64' % libstdcxx_base64,
