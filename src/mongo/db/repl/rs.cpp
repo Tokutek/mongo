@@ -1049,7 +1049,7 @@ namespace mongo {
                         }
                         else {
                             BSONObjBuilder query;
-                            BSONObjBuilder q(query.subobjStart("_id"));;
+                            BSONObjBuilder q(query.subobjStart("_id"));
                             addGTIDToBSON("$gt", lastTimeRead, q);
                             q.doneFast();
                             found = d->findOne(query.done(), result, false);
