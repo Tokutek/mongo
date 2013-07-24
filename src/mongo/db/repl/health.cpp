@@ -339,7 +339,6 @@ namespace mongo {
         return 0;
     }
 
-<<<<<<< HEAD
     const GTID ReplSetImpl::lastOtherGTID() const {
         GTID closest;
         for( Member *m = _members.head(); m; m=m->next() ) {
