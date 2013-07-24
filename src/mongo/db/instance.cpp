@@ -676,7 +676,7 @@ namespace mongo {
                     else {
                         theReplSet->gtidManager->waitForDifferentMinLive(
                             last, 
-                            4000 // ms
+                            2000 // ms, this will be called twice
                             );
                     }
                 }
@@ -726,12 +726,14 @@ namespace mongo {
                     }
                 }
 
-                // TODO: (Zardosht), figure out what this is meant to do
-                
-                // note: the 1100 is beacuse of the waitForDifferent above
                 // should eventually clean this up a bit
-                //curop.setExpectedLatencyMs( 1100 + timer->millis() );
-                
+                if (isOplog) {
+                    curop.setExpectedLatencyMs( 4100 );
+                }
+                else {
+                    // not sure if this 1100 is still wise.
+                    curop.setExpectedLatencyMs( 1100 + timer->millis() );
+                }
                 continue;
             }
             break;
