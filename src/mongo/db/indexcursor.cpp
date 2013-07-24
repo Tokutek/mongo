@@ -280,8 +280,8 @@ namespace mongo {
                 }
             }
             return 0;
-        } catch (std::exception &e) {
-            info->ex = &e;
+        } catch (const std::exception &ex) {
+            info->saveException(ex);
         }
         return -1;
     }
@@ -538,6 +538,7 @@ namespace mongo {
             throw *extra.ex;
         }
         if ( r != 0 && r != DB_NOTFOUND ) {
+            extra.throwException();
             storage::handle_ydb_error(r);
         }
 
@@ -732,6 +733,7 @@ again:      while ( !allInclusive && ok() ) {
             throw *extra.ex;
         }
         if ( r != 0 && r != DB_NOTFOUND ) {
+            extra.throwException();
             storage::handle_ydb_error(r);
         }
 

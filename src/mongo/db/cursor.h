@@ -292,7 +292,7 @@ namespace mongo {
         void _advance();
 
         /** ydb cursor callback + flags */
-        struct cursor_getf_extra {
+        struct cursor_getf_extra : public ExceptionSaver {
             RowBuffer *buffer;
             int rows_fetched;
             int rows_to_fetch;

@@ -64,8 +64,8 @@ namespace mongo {
             try {
                 killCurrentOp.checkForInterrupt(info->c); // uasserts if we should stop
                 return 0;
-            } catch (std::exception &e) {
-                info->ex = &e;
+            } catch (const std::exception &ex) {
+                info->saveException(ex);
             }
             return -1;
         }
@@ -89,14 +89,15 @@ namespace mongo {
 
         int Loader::close() {
             const int r = _loader->close(_loader);
+
             // Doesn't matter if the close succeded or not. It's dead to us now.
             _closed = true;
+            if (r == -1) {
+                _poll_extra.throwException();
+            }
             // Forward any callback-generated exception. Could be an error
             // from the error callback or an interrupt from the poll function.
             uassert( 16860, _error_extra.errmsg, _error_extra.errmsg.empty() );
-            if (_poll_extra.ex != NULL) {
-                throw *_poll_extra.ex;
-            }
             // Any other non-zero error code that didn't trigger the error
             // callback or come from the poll function should be handled
             // in some generic fashion by the caller.

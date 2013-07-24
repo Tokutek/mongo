@@ -158,7 +158,7 @@ namespace mongo {
         void getStat64(DB_BTREE_STAT64* stats) const;
         void optimize();
 
-        struct UniqueCheckExtra {
+        struct UniqueCheckExtra : public ExceptionSaver {
             const storage::Key &newKey;
             const Descriptor &descriptor;
             bool &isUnique;

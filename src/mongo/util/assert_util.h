@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <boost/scoped_ptr.hpp>
+
 #include <iostream>
 #include <typeinfo>
 #include <string>
@@ -147,6 +149,87 @@ namespace mongo {
         MsgAssertionException(int c, const std::string& m) : AssertionException( m , c ) {}
         virtual bool severe() { return false; }
         virtual void appendPrefix( std::stringstream& ss ) const;
+    };
+
+    /** ExceptionSaver can be subclassed to create an object suitable for use in a C callback.
+        Use of this class allows C callbacks to throw exceptions around a C API that is not internally exception-safe.
+        Typical use is something like this:
+
+            class ExtraArg : public ExceptionSaver {
+              public:
+                int foo;
+            };
+
+            int cb(int x, void *extra) {
+                ExtraArg *e = static_cast<ExtraArg *>(extra);
+                try {
+                    e->foo = bar(x);
+                    return 0;
+                }
+                catch (const std::exception &ex) {
+                    e->saveException(ex);
+                    return -1;
+                }
+            }
+
+            void baz() {
+                ExtraArg extra;
+                int r = c_api_func(42, &extra);
+                if (r == -1) {
+                    extra.throwException();
+                }
+            }
+
+        It tries several dynamic_casts at save time in order to record the static type of the exception.
+        Therefore, the thrown exception will have the same static type (as long as it is one of the listed types.
+    */
+    class ExceptionSaver {
+        boost::scoped_ptr<MsgAssertionException> _mae;
+        boost::scoped_ptr<UserException> _ue;
+        boost::scoped_ptr<AssertionException> _ae;
+        boost::scoped_ptr<DBException> _dbe;
+        boost::scoped_ptr<std::exception> _e;
+      public:
+        void saveException(const std::exception &e) {
+            const MsgAssertionException *mae = dynamic_cast<const MsgAssertionException *>(&e);
+            if (mae) {
+                _mae.reset(new MsgAssertionException(*mae));
+                return;
+            }
+            const UserException *ue = dynamic_cast<const UserException *>(&e);
+            if (ue) {
+                _ue.reset(new UserException(*ue));
+                return;
+            }
+            const AssertionException *ae = dynamic_cast<const AssertionException *>(&e);
+            if (ae) {
+                _ae.reset(new AssertionException(*ae));
+                return;
+            }
+            const DBException *dbe = dynamic_cast<const DBException *>(&e);
+            if (dbe) {
+                _dbe.reset(new DBException(*dbe));
+                return;
+            }
+            _e.reset(new std::exception(e));
+        }
+        void throwException() const {
+            if (_mae) {
+                throw *_mae;
+            }
+            if (_ue) {
+                throw *_ue;
+            }
+            if (_ae) {
+                throw *_ae;
+            }
+            if (_dbe) {
+                throw *_dbe;
+            }
+            if (_e) {
+                throw *_e;
+            }
+        }
     };
 
     MONGO_COMPILER_NORETURN void verifyFailed(const char *msg, const char *file, unsigned line);

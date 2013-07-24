@@ -141,8 +141,8 @@ namespace mongo {
                 }
             }
             return 0;
-        } catch (std::exception &e) {
-            info->ex = &e;
+        } catch (const std::exception &ex) {
+            info->saveException(ex);
         }
         return -1;
     }
@@ -172,6 +172,7 @@ namespace mongo {
         const int r = hasPK ? cursor->c_getf_set_range(cursor, 0, &kdbt, uniqueCheckCallback, &extra) :
                               cursor->c_getf_set(cursor, 0, &kdbt, uniqueCheckCallback, &extra);
         if (r != 0 && r != DB_NOTFOUND) {
+            extra.throwException();
             storage::handle_ydb_error(r);
         }
         if (!isUnique) {
