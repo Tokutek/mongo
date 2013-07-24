@@ -78,11 +78,15 @@ namespace mongo {
                 if (!preLoad(errmsg, result)) {
                     return false;
                 }
-                BSONArrayBuilder b(result.subarrayStart("newCommands"));
                 CommandVector allCommands = commands();
-                for (CommandVector::const_iterator it = allCommands.begin(); it != allCommands.end(); ++it) {
+                _loadedCommands.insert(_loadedCommands.end(), allCommands.begin(), allCommands.end());
+                return info(errmsg, result);
+            }
+
+            virtual bool info(string &errmsg, BSONObjBuilder &result) const {
+                BSONArrayBuilder b(result.subarrayStart("commands"));
+                for (CommandVector::const_iterator it = _loadedCommands.begin(); it != _loadedCommands.end(); ++it) {
                     const shared_ptr<Command> &cmd = *it;
-                    _loadedCommands.push_back(cmd);
                     b.append(cmd->name);
                 }
                 b.doneFast();
