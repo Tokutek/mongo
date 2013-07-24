@@ -78,6 +78,27 @@ namespace mongo {
     } loadPluginCommand;
 
     /**
+     * List plugins currently loaded into mongod.
+     */
+    class ListPluginsCommand : public InformationCommand {
+      public:
+        // Be strict for now, relax later if we need to.
+        virtual LockType locktype() const { return READ; }
+        virtual bool lockGlobally() const { return true; }
+        virtual bool requiresAuth() { return true; }
+        virtual bool adminOnly() const { return true; }
+        virtual void help(stringstream &h) const {
+            h << "List plugins currently loaded into mongod." << endl
+              << "{ listPlugins : 1 }" << endl;
+        }
+        ListPluginsCommand() : InformationCommand("listPlugins", false) {}
+
+        virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
+            return plugins::loader.list(errmsg, result);
+        }
+    } listPluginsCommand;
+
+    /**
      * Unload a plugin from mongod.
      */
     class UnloadPluginCommand : public InformationCommand {

@@ -50,7 +50,29 @@ namespace mongo {
             return true;
         }
 
+        const string &PluginHandle::name() const {
+            if (!_interface) {
+                DEV LOG(0) << "in PluginHandle::name, plugin is not initialized" << endl;
+                static const string empty("");
+                return empty;
+            }
+            return _interface->name();
+        }
+
+        const string &PluginHandle::version() const {
+            if (!_interface) {
+                DEV LOG(0) << "in PluginHandle::version, plugin is not initialized" << endl;
+                static const string empty("");
+                return empty;
+            }
+            return _interface->version();
+        }
+
         bool PluginHandle::load(string &errmsg, BSONObjBuilder &result) {
+            if (!_interface) {
+                errmsg = "plugin not initialized";
+                return false;
+            }
             bool ok = _interface->load(errmsg, result);
             if (ok) {
                 LOG(0) << "Loaded plugin " << name() << " from " << _filename << endl;
@@ -58,7 +80,19 @@ namespace mongo {
             return ok;
         }
 
+        bool PluginHandle::info(string &errmsg, BSONObjBuilder &result) const {
+            if (!_interface) {
+                errmsg = "plugin not initialized";
+                return false;
+            }
+            return _interface->info(errmsg, result);
+        }
+
         bool PluginHandle::unload(string &errmsg) {
+            if (!_interface) {
+                errmsg = "plugin not initialized";
+                return false;
+            }
             string nameCopy = name();
             _interface->unload(errmsg);
             _interface = NULL;
@@ -87,6 +121,23 @@ namespace mongo {
             lb.append("name", name);
             lb.append("version", pluginHandle->version());
             lb.doneFast();
+            return true;
+        }
+
+        bool Loader::list(string &errmsg, BSONObjBuilder &result) const {
+            BSONArrayBuilder ab(result.subarrayStart("plugins"));
+            for (PluginMap::const_iterator it = _plugins.begin(); it != _plugins.end(); ++it) {
+                const shared_ptr<PluginHandle> &plugin = it->second;
+                BSONObjBuilder b(ab.subobjStart());
+                b.append("name", plugin->name());
+                b.append("version", plugin->version());
+                bool ok = plugin->info(errmsg, b);
+                b.doneFast();
+                if (!ok) {
+                    break;
+                }
+            }
+            ab.doneFast();
             return true;
         }
 
