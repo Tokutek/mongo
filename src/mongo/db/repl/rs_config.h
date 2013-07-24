@@ -180,10 +180,6 @@ namespace mongo {
         static const int DEFAULT_HB_TIMEOUT;
 
     private:
-        void init(const HostAndPort& h);
-        void init(BSONObj cfg, bool force);
-
-    private:
         bool _ok;
 
         /**
