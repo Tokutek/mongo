@@ -107,6 +107,23 @@ namespace mongo {
         return task->ki_rssize * sysconf( _SC_PAGESIZE ) / 1024 / 1024; // convert from pages to MB
     }
 
+    string ProcessInfo::getExePath() const {
+        char name[128];
+        sprintf(name, "/proc/%d/file", _pid);
+
+        char path[128];
+        shared_ptr<char> real(realpath(name, NULL), free);
+        if (!real.get()) {
+            stringstream ss;
+            ss << "couldn't realpath [" << name << "] " << errnoWithDescription();
+            string s = ss.str();
+            // help the assert# control uasserted( 16899 , s.c_str() );
+            msgassertedNoTrace( 16899 , s.c_str() );
+        }
+        string exePath(real.get());
+        return exePath;
+    }
+
     void ProcessInfo::SystemInfo::collectSystemInfo() {
         osType = "BSD";
         osName = "FreeBSD";

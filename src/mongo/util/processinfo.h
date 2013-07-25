@@ -47,6 +47,11 @@ namespace mongo {
         int getResidentSize();
 
         /**
+         * Get the path to the binary that's running.
+         */
+        string getExePath() const;
+
+        /**
          * Get the type of os (e.g. Windows, Linux, Mac OS)
          */
         const string& getOsType() const { return sysInfo().osType; }

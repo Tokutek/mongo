@@ -19,6 +19,9 @@
 #include "processinfo.h"
 #include <iostream>
 #include <psapi.h>
+#include <Windows.h>
+
+#include <boost/scoped_array.hpp>
 
 using namespace std;
 
@@ -93,6 +96,36 @@ namespace mongo {
             info.append("availPageFileMB", static_cast<int>(mse.ullAvailPageFile / 1024 / 1024));
             info.append("ramMB", static_cast<int>(mse.ullTotalPhys / 1024 / 1024));
         }
+    }
+
+    static inline string LPCTSTRtostring(LPCTSTR tstr, DWORD len) {
+#ifdef UNICODE
+        boost::scoped_array<char> buf(new char[len]);
+        size_t sz = wcstombs(buf.get(), tstr, len);
+        verify(sz < (size_t)-1);
+        string s(buf.get());
+#else
+        string s(tstr, len);
+#endif
+        return s;
+    }
+
+    string ProcessInfo::getExePath() const {
+        DWORD nSize = 128;
+        boost::scoped_array<TCHAR> buf(new TCHAR[nSize]);
+        DWORD len;
+        while (true) {
+            len = GetModuleFileName(NULL, buf, 128);
+            verify(len != 0);
+            verify(len <= nSize);
+            if (len < nSize) {
+                break;
+            }
+            nSize *= 2;
+            buf.reset(new TCHAR[nSize]);
+        }
+        string exePath = LPCTSTRtostring(buf.get(), len);
+        return exePath;
     }
 
     void ProcessInfo::SystemInfo::collectSystemInfo() {

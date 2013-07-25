@@ -373,6 +373,21 @@ namespace mongo {
         return (int)( p.getResidentSize() / ( 1024.0 * 1024 ) );
     }
 
+    string ProcessInfo::getExePath() const {
+        char name[128];
+        sprintf(name, "/proc/%d/exe", _pid);
+        shared_ptr<char> real(realpath(name, NULL), free);
+        if (!real.get()) {
+            stringstream ss;
+            ss << "couldn't realpath [" << name << "] " << errnoWithDescription();
+            string s = ss.str();
+            // help the assert# control uasserted( 16898 , s.c_str() );
+            msgassertedNoTrace( 16898 , s.c_str() );
+        }
+        string exePath(real.get());
+        return exePath;
+    }
+
     void ProcessInfo::getExtraInfo( BSONObjBuilder& info ) {
         // [dm] i don't think mallinfo works. (64 bit.)  ??
         struct mallinfo malloc_info = mallinfo(); // structure has same name as function that returns it. (see malloc.h)
