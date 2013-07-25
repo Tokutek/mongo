@@ -756,7 +756,7 @@ namespace mongo {
             IndexDetails *idx = it->get();
             idx->close();
         }
-        NamespaceDetailsTransient::eraseForPrefix(_ns);
+        NamespaceDetailsTransient::eraseForPrefix(_ns.c_str());
     }
 
     // Serialize the information necessary to re-open this NamespaceDetails later.
