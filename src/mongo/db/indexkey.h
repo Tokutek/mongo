@@ -113,6 +113,46 @@ namespace mongo {
         static map<string,IndexPlugin*> * _plugins;
     };
 
+    class KeyGenerator {
+    public:
+        KeyGenerator( const IndexSpec &spec ) : _spec( spec ) {}
+        
+        void getKeys( const BSONObj &obj, BSONObjSet &keys ) const;
+
+        static void getHashedKey(const BSONObj &obj, const char *hashedField,
+                                 const int seed, const bool sparse, BSONObjSet &keys);
+
+        static void getKeys(const BSONObj &obj, vector<const char *> &fieldNames,
+                            const bool sparse, BSONObjSet &keys);
+        
+    private:
+        /**
+         * @param arrayNestedArray - set if the returned element is an array nested directly within arr.
+         */
+        static BSONElement extractNextElement( const BSONObj &obj, const BSONObj &arr,
+                                               const char *&field, bool &arrayNestedArray );
+        
+        static void _getKeysArrEltFixed( vector<const char*> &fieldNames , vector<BSONElement> &fixed ,
+                                         const BSONElement &arrEntry, const bool sparse, BSONObjSet &keys, int numNotFound,
+                                         const BSONElement &arrObjElt, const set< unsigned > &arrIdxs,
+                                         bool mayExpandArrayUnembedded );
+        
+        /**
+         * @param fieldNames - fields to index, may be postfixes in recursive calls
+         * @param fixed - values that have already been identified for their index fields
+         * @param obj - object from which keys should be extracted, based on names in fieldNames
+         * @param keys - set where index keys are written
+         * @param numNotFound - number of index fields that have already been identified as missing
+         * @param array - array from which keys should be extracted, based on names in fieldNames
+         *        If obj and array are both nonempty, obj will be one of the elements of array.
+         */        
+        static void _getKeys( vector<const char*> fieldNames , vector<BSONElement> fixed ,
+                              const BSONObj &obj, const bool sparse, BSONObjSet &keys, int numNotFound = 0,
+                              const BSONObj &array = BSONObj() );
+        
+        const IndexSpec &_spec;
+    };
+
     /* precomputed details about an index, used for inserting keys on updates
        stored/cached in NamespaceDetailsTransient, or can be used standalone
        */

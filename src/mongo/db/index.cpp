@@ -35,13 +35,31 @@
 
 namespace mongo {
 
+    // What a mess:
+    // - Only the hashed plugin exists. Therefore if we find a plugin
+    //   for the key pattern and it's "hashed", you're good.
+    // - If it's anything else, there's no such plugin.
+    // - If/when we add other plugins, we'll migrate to a better
+    //   Index architecture that looks more like Mongo 2.4+
+    static bool checkForHashedPlugin(const BSONObj &keyPattern) {
+        string pluginName = IndexPlugin::findPluginName( keyPattern );
+        if (pluginName == "hashed") {
+            return true;
+        } else if (pluginName != "") {
+            log() << "warning: can't find plugin [" << pluginName << "]" << endl;
+        }
+        return false;
+    }
+
     IndexDetails::IndexDetails(const BSONObj &info, bool may_create) :
         _db(NULL),
-        _descriptor(Ordering::make(info["key"].Obj())),
         _info(info.copy()),
         _keyPattern(info["key"].Obj().copy()),
         _unique(info["unique"].trueValue()),
-        _clustering(info["clustering"].trueValue()) {
+        _hashed(checkForHashedPlugin(_keyPattern)),
+        _sparse(info["sparse"].trueValue()),
+        _clustering(info["clustering"].trueValue()),
+        _descriptor(_keyPattern, _hashed, info["seed"].numberInt(), _sparse, _clustering) {
 
         string dbname = indexNamespace();
         TOKULOG(1) << "Opening IndexDetails " << dbname << endl;
@@ -116,7 +134,7 @@ namespace mongo {
     }
 
     void IndexDetails::getKeysFromObject(const BSONObj& obj, BSONObjSet& keys) const {
-        getSpec().getKeys( obj, keys );
+        _descriptor.generateKeys( obj, keys );
     }
 
     const IndexSpec& IndexDetails::getSpec() const {

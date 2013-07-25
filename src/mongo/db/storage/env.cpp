@@ -219,7 +219,7 @@ namespace mongo {
             const DBT *desc = &db->cmp_descriptor->dbt;
             verify(desc != NULL);
             const Descriptor existing(reinterpret_cast<const char *>(desc->data), desc->size);
-            verify(existing == descriptor);
+            existing.assertEqual(descriptor);
         }
 
         int db_open(DB **dbp, const string &name, const BSONObj &info,

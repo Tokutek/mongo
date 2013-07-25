@@ -64,11 +64,12 @@ namespace mongo {
     }
 
     NOINLINE_DECL void NamespaceIndex::_init(bool may_create) {
-        BSONObj info = BSON("key" << fromjson("{\"ns\":1}" ));
+        const BSONObj keyPattern = BSON("ns" << 1 );
+        const BSONObj info = BSON("key" << keyPattern);
 
         // Try first without the create flag, because we're not sure if we
         // have a write lock just yet. It won't matter if the nsdb exists.
-        Descriptor descriptor(Ordering::make(info));
+        Descriptor descriptor(keyPattern);
         int r = storage::db_open(&_nsdb, _nsdbFilename, info, descriptor, false);
         if (r == ENOENT) {
             if (!may_create) {

@@ -21,6 +21,7 @@
 #include "mongo/db/index.h"
 #include "mongo/db/background.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/hasher.h"
 #include "mongo/util/stringutils.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/text.h"
@@ -132,58 +133,79 @@ namespace mongo {
         uasserted( ParallelArraysCode ,  ss.str() );
     }
 
-    class KeyGenerator {
-    public:
-        KeyGenerator( const IndexSpec &spec ) : _spec( spec ) {}
-        
-        void getKeys( const BSONObj &obj, BSONObjSet &keys ) const {
-            if ( _spec._indexType.get() ) { //plugin (eg geo)
-                _spec._indexType->getKeys( obj , keys );
-                return;
-            }
-            vector<const char*> fieldNames( _spec._fieldNames );
-            vector<BSONElement> fixed( _spec._fixed );
-            _getKeys( fieldNames , fixed , obj, keys );
-            if ( keys.empty() && ! _spec._sparse )
-                keys.insert( _spec._nullKey );
-        }     
-        
-    private:
-        /**
-         * @param arrayNestedArray - set if the returned element is an array nested directly within arr.
-         */
-        BSONElement extractNextElement( const BSONObj &obj, const BSONObj &arr, const char *&field, bool &arrayNestedArray ) const {
-            string firstField = mongoutils::str::before( field, '.' );
-            bool haveObjField = !obj.getField( firstField ).eoo();
-            BSONElement arrField = arr.getField( firstField );
-            bool haveArrField = !arrField.eoo();
-
-            // An index component field name cannot exist in both a document array and one of that array's children.
-            uassert( 15855 ,  mongoutils::str::stream() << "Ambiguous field name found in array (do not use numeric field names in embedded elements in an array), field: '" << arrField.fieldName() << "' for array: " << arr, !haveObjField || !haveArrField );
-
-            arrayNestedArray = false;
-			if ( haveObjField ) {
-                return obj.getFieldDottedOrArray( field );
-            }
-            else if ( haveArrField ) {
-                if ( arrField.type() == Array ) {
-                    arrayNestedArray = true;
-                }
-                return arr.getFieldDottedOrArray( field );
-            }
-            return BSONElement();
+    void KeyGenerator::getKeys( const BSONObj &obj, BSONObjSet &keys ) const {
+        if ( _spec._indexType.get() ) { //plugin (eg geo)
+            _spec._indexType->getKeys( obj , keys );
+            return;
         }
-        
-        void _getKeysArrEltFixed( vector<const char*> &fieldNames , vector<BSONElement> &fixed , const BSONElement &arrEntry, BSONObjSet &keys, int numNotFound, const BSONElement &arrObjElt, const set< unsigned > &arrIdxs, bool mayExpandArrayUnembedded ) const {
-            // set up any terminal array values
-            for( set<unsigned>::const_iterator j = arrIdxs.begin(); j != arrIdxs.end(); ++j ) {
-                if ( *fieldNames[ *j ] == '\0' ) {
-                    fixed[ *j ] = mayExpandArrayUnembedded ? arrEntry : arrObjElt;
-                }
-            }
-            // recurse
-            _getKeys( fieldNames, fixed, ( arrEntry.type() == Object ) ? arrEntry.embeddedObject() : BSONObj(), keys, numNotFound, arrObjElt.embeddedObject() );        
+        vector<const char*> fieldNames( _spec._fieldNames );
+        getKeys(obj, fieldNames, _spec._sparse, keys);
+    }     
+
+    // Taken from hashindex.cpp more or less.
+    void KeyGenerator::getHashedKey(const BSONObj &obj, const char *hashedField,
+                                    const int seed, const bool sparse,
+                                    BSONObjSet &keys) {
+        const BSONElement &fieldVal = obj.getFieldDottedOrArray( hashedField );
+        uassert( 16897 , "Error: hashed indexes do not currently support array values" , fieldVal.type() != Array );
+
+        if ( ! fieldVal.eoo() ) {
+            BSONObj key = BSON( "" << BSONElementHasher::hash64( fieldVal , seed ) );
+            keys.insert( key );
+        } else if (! sparse ) {
+            BSONObj key = BSON( "" << BSONElementHasher::hash64( nullElt , seed ) );
+            keys.insert( key );
         }
+    }
+
+    void KeyGenerator::getKeys(const BSONObj &obj, vector<const char *> &fieldNames,
+                               const bool sparse, BSONObjSet &keys) {
+        vector<BSONElement> fixed( fieldNames.size() );
+        _getKeys( fieldNames , fixed , obj, sparse, keys );
+        if ( keys.empty() && ! sparse ) {
+            BSONObjBuilder nullKey;
+            for (size_t i = 0; i < fieldNames.size(); i++) {
+                nullKey.appendNull("");
+            }
+            keys.insert( nullKey.done() );
+        }
+    }
+        
+    /**
+     * @param arrayNestedArray - set if the returned element is an array nested directly within arr.
+     */
+    BSONElement KeyGenerator::extractNextElement( const BSONObj &obj, const BSONObj &arr, const char *&field, bool &arrayNestedArray ) {
+        string firstField = mongoutils::str::before( field, '.' );
+        bool haveObjField = !obj.getField( firstField ).eoo();
+        BSONElement arrField = arr.getField( firstField );
+        bool haveArrField = !arrField.eoo();
+
+        // An index component field name cannot exist in both a document array and one of that array's children.
+        uassert( 15855 ,  mongoutils::str::stream() << "Ambiguous field name found in array (do not use numeric field names in embedded elements in an array), field: '" << arrField.fieldName() << "' for array: " << arr, !haveObjField || !haveArrField );
+
+        arrayNestedArray = false;
+                    if ( haveObjField ) {
+            return obj.getFieldDottedOrArray( field );
+        }
+        else if ( haveArrField ) {
+            if ( arrField.type() == Array ) {
+                arrayNestedArray = true;
+            }
+            return arr.getFieldDottedOrArray( field );
+        }
+        return BSONElement();
+    }
+        
+    void KeyGenerator::_getKeysArrEltFixed( vector<const char*> &fieldNames , vector<BSONElement> &fixed , const BSONElement &arrEntry, const bool sparse, BSONObjSet &keys, int numNotFound, const BSONElement &arrObjElt, const set< unsigned > &arrIdxs, bool mayExpandArrayUnembedded ) {
+        // set up any terminal array values
+        for( set<unsigned>::const_iterator j = arrIdxs.begin(); j != arrIdxs.end(); ++j ) {
+            if ( *fieldNames[ *j ] == '\0' ) {
+                fixed[ *j ] = mayExpandArrayUnembedded ? arrEntry : arrObjElt;
+            }
+        }
+        // recurse
+        _getKeys( fieldNames, fixed, ( arrEntry.type() == Object ) ? arrEntry.embeddedObject() : BSONObj(), sparse, keys, numNotFound, arrObjElt.embeddedObject() );        
+    }
         
         /**
          * @param fieldNames - fields to index, may be postfixes in recursive calls
@@ -194,73 +216,70 @@ namespace mongo {
          * @param array - array from which keys should be extracted, based on names in fieldNames
          *        If obj and array are both nonempty, obj will be one of the elements of array.
          */        
-        void _getKeys( vector<const char*> fieldNames , vector<BSONElement> fixed , const BSONObj &obj, BSONObjSet &keys, int numNotFound = 0, const BSONObj &array = BSONObj() ) const {
-            BSONElement arrElt;
-            set<unsigned> arrIdxs;
-            bool mayExpandArrayUnembedded = true;
-            for( unsigned i = 0; i < fieldNames.size(); ++i ) {
-                if ( *fieldNames[ i ] == '\0' ) {
-                    continue;
-                }
-                
-                bool arrayNestedArray;
-                // Extract element matching fieldName[ i ] from object xor array.
-                BSONElement e = extractNextElement( obj, array, fieldNames[ i ], arrayNestedArray );
-                
-                if ( e.eoo() ) {
-                    // if field not present, set to null
-                    fixed[ i ] = _spec._nullElt;
-                    // done expanding this field name
-                    fieldNames[ i ] = "";
-                    numNotFound++;
-                }
-                else if ( e.type() == Array ) {
-                    arrIdxs.insert( i );
-                    if ( arrElt.eoo() ) {
-                        // we only expand arrays on a single path -- track the path here
-                        arrElt = e;
-                    }
-                    else if ( e.rawdata() != arrElt.rawdata() ) {
-                        // enforce single array path here
-                        assertParallelArrays( e.fieldName(), arrElt.fieldName() );
-                    }
-                    if ( arrayNestedArray ) {
-                        mayExpandArrayUnembedded = false;   
-                    }
-                }
-                else {
-                    // not an array - no need for further expansion
-                    fixed[ i ] = e;
-                }
+    void KeyGenerator::_getKeys( vector<const char*> fieldNames , vector<BSONElement> fixed , const BSONObj &obj, const bool sparse, BSONObjSet &keys, int numNotFound, const BSONObj &array ) {
+        BSONElement arrElt;
+        set<unsigned> arrIdxs;
+        bool mayExpandArrayUnembedded = true;
+        for( unsigned i = 0; i < fieldNames.size(); ++i ) {
+            if ( *fieldNames[ i ] == '\0' ) {
+                continue;
             }
             
-            if ( arrElt.eoo() ) {
-                // No array, so generate a single key.
-                if ( _spec._sparse && numNotFound == _spec._nFields ) {
-                    return;
-                }            
-                BSONObjBuilder b(_spec._sizeTracker);
-                for( vector< BSONElement >::iterator i = fixed.begin(); i != fixed.end(); ++i ) {
-                    b.appendAs( *i, "" );
-                }
-                keys.insert( b.obj() );
+            bool arrayNestedArray;
+            // Extract element matching fieldName[ i ] from object xor array.
+            BSONElement e = extractNextElement( obj, array, fieldNames[ i ], arrayNestedArray );
+            
+            if ( e.eoo() ) {
+                // if field not present, set to null
+                fixed[ i ] = nullElt;
+                // done expanding this field name
+                fieldNames[ i ] = "";
+                numNotFound++;
             }
-            else if ( arrElt.embeddedObject().firstElement().eoo() ) {
-                // Empty array, so set matching fields to undefined.
-                _getKeysArrEltFixed( fieldNames, fixed, _spec._undefinedElt, keys, numNotFound, arrElt, arrIdxs, true );
+            else if ( e.type() == Array ) {
+                arrIdxs.insert( i );
+                if ( arrElt.eoo() ) {
+                    // we only expand arrays on a single path -- track the path here
+                    arrElt = e;
+                }
+                else if ( e.rawdata() != arrElt.rawdata() ) {
+                    // enforce single array path here
+                    assertParallelArrays( e.fieldName(), arrElt.fieldName() );
+                }
+                if ( arrayNestedArray ) {
+                    mayExpandArrayUnembedded = false;   
+                }
             }
             else {
-                // Non empty array that can be expanded, so generate a key for each member.
-                BSONObj arrObj = arrElt.embeddedObject();
-                BSONObjIterator i( arrObj );
-                while( i.more() ) {
-                    _getKeysArrEltFixed( fieldNames, fixed, i.next(), keys, numNotFound, arrElt, arrIdxs, mayExpandArrayUnembedded );
-                }
+                // not an array - no need for further expansion
+                fixed[ i ] = e;
             }
         }
         
-        const IndexSpec &_spec;
-    };
+        if ( arrElt.eoo() ) {
+            // No array, so generate a single key.
+            if ( sparse && numNotFound == (int) fieldNames.size() ) {
+                return;
+            }            
+            BSONObjBuilder b(128);
+            for( vector< BSONElement >::iterator i = fixed.begin(); i != fixed.end(); ++i ) {
+                b.appendAs( *i, "" );
+            }
+            keys.insert( b.obj() );
+        }
+        else if ( arrElt.embeddedObject().firstElement().eoo() ) {
+            // Empty array, so set matching fields to undefined.
+            _getKeysArrEltFixed( fieldNames, fixed, undefinedElt, sparse, keys, numNotFound, arrElt, arrIdxs, true );
+        }
+        else {
+            // Non empty array that can be expanded, so generate a key for each member.
+            BSONObj arrObj = arrElt.embeddedObject();
+            BSONObjIterator i( arrObj );
+            while( i.more() ) {
+                _getKeysArrEltFixed( fieldNames, fixed, i.next(), sparse, keys, numNotFound, arrElt, arrIdxs, mayExpandArrayUnembedded );
+            }
+        }
+    }
     
     void IndexSpec::getKeys( const BSONObj &obj, BSONObjSet &keys ) const {
         KeyGenerator g( *this );

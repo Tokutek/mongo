@@ -198,10 +198,6 @@ namespace mongo {
         // Open dictionary representing the index on disk.
         DB *_db;
 
-        // Used to describe the index to the ydb layer, for key
-        // comparisons and, later, for key generation.
-        Descriptor _descriptor;
-
         static int hot_opt_callback(void *extra, float progress);
 
         // Info about the index. Stored on disk in the database.ns dictionary
@@ -211,7 +207,13 @@ namespace mongo {
         // Precomputed values from _info, for speed.
         const BSONObj _keyPattern;
         const bool _unique;
+        const bool _hashed;
+        const bool _sparse;
         const bool _clustering;
+
+        // Used to describe the index to the ydb layer, for key
+        // comparisons and, later, for key generation.
+        Descriptor _descriptor;
 
         friend class NamespaceDetails;
     };
