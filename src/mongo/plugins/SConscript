@@ -14,5 +14,5 @@ for subdir in Glob('./*/SConscript'):
     plugin, name = env.SConscript(subdir)
     allPlugins += env.Command(libfilename(name), subdir.File(env.subst(libfilename(name))), Copy('$TARGET', '$SOURCE'))
 
-env.Alias('allPlugins', [env.Install('#/plugins/', plugin) for plugin in allPlugins])
+env.Alias('allPlugins', allPlugins)
 Return('allPlugins')

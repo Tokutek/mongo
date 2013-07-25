@@ -21,7 +21,7 @@ tokuinc = tokusrc.Dir('include')
 tokulib = tokusrc.Dir('lib')
 for e in [env, testEnv]:
     e.Append(CPPPATH=[tokuinc])
-    e.Append(RPATH=[tokulib.get_abspath(), Dir('#/plugins/')])
+    e.Append(RPATH=[tokulib.get_abspath(), Dir('plugins')])
 
 ltokufractaltree = os.getenv('LIBTOKUFRACTALTREE_NAME', 'tokufractaltree')
 ltokuportability = os.getenv('LIBTOKUPORTABILITY_NAME', 'tokuportability')
