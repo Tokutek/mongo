@@ -32,7 +32,7 @@ namespace mongo {
 
         // Create a header and write it first.
         Header h(Ordering::make(keyPattern),
-                 hashed, hashSeed, sparse, clustering, keyPattern.nFields());
+                 hashed, sparse, clustering, hashSeed, keyPattern.nFields());
         memcpy(_dataOwned.get(), &h, sizeof(Header));
 
         // The offsets array is based after the header. It is an array of
