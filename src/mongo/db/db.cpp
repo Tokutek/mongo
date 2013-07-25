@@ -757,6 +757,9 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
         if (params.count("autoloadPluginsDir")) {
             cmdLine.autoloadPluginsDir = params["autoloadPluginsDir"].as<string>();
         }
+        else {
+            cmdLine.autoloadPluginsDir = plugins::defaultDir();
+        }
         if (params.count("nohints")) {
             useHints = false;
         }
