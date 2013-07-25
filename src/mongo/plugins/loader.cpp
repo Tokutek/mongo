@@ -20,6 +20,11 @@
 
 #include "mongo/plugins/loader.h"
 
+#include <dlfcn.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "mongo/base/string_data.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/plugins/dl.h"
@@ -36,11 +41,44 @@ namespace mongo {
                 errmsg += "error loading plugin from file " + _filename + ": " + _dl.error();
                 return false;
             }
-            GetInterfaceFunc getInterface = reinterpret_cast<GetInterfaceFunc>(_dl.sym("getInterface"));
-            if (getInterface == NULL) {
+            void *getInterfacev = _dl.sym("getInterface");
+            if (getInterfacev == NULL) {
                 errmsg += "error finding symbol `getInterface' in file " + _filename + ": " + _dl.error();
                 return false;
             }
+
+            {
+                // TODO: portability, dlinfo should work on freebsd
+                Dl_info info;
+                int r = dladdr(getInterfacev, &info);
+                // dladdr() returns 0 on failure, non-zero on success.  Really.
+                if (r == 0) {
+                    errmsg += "unknown error getting info about plugin using dladdr()";
+                    return false;
+                }
+
+                shared_ptr<char> buf(realpath(info.dli_fname, NULL), free);
+                _fullpath = buf.get();
+
+                LOG(2) << "Found plugin \"" << _filename << "\" actually at \"" << _fullpath << "\"" << endl;
+
+                struct stat st;
+                r = stat(_fullpath.c_str(), &st);
+                if (r != 0) {
+                    stringstream ss;
+                    ss << "couldn't stat [" << _fullpath << "] (error " << errnoWithDescription() << "), not loading plugin";
+                    errmsg += ss.str();
+                    return false;
+                }
+                if (st.st_mode & S_IWOTH) {
+                    stringstream ss;
+                    ss << "plugin \"" << _filename << "\" at \"" << _fullpath << "\" is world writable, not loading";
+                    errmsg += ss.str();
+                    return false;
+                }
+            }
+
+            GetInterfaceFunc getInterface = reinterpret_cast<GetInterfaceFunc>(getInterfacev);
             PluginInterface *interfacep = getInterface();
             if (interfacep == NULL) {
                 errmsg += "couldn't load plugin from " + _filename;
@@ -77,6 +115,7 @@ namespace mongo {
                 return false;
             }
             result.append("filename", _filename);
+            result.append("fullpath", _fullpath);
             result.append("name", _interface->name());
             result.append("version", _interface->version());
             return _interface->info(errmsg, result);

@@ -31,6 +31,7 @@ namespace mongo {
 
         class PluginHandle : boost::noncopyable {
             const string _filename;
+            string _fullpath;
             DLHandle _dl;
             PluginInterface *_interface;
 
