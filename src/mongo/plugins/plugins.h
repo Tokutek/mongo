@@ -1,4 +1,4 @@
-// @file plugin.h
+// @file plugins.h
 
 /**
 *    Copyright (C) 2013 Tokutek Inc.

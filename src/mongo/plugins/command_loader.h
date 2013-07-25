@@ -1,4 +1,4 @@
-// @file plugin.h
+// @file command_loader.h
 
 /**
 *    Copyright (C) 2013 Tokutek Inc.
