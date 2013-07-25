@@ -501,30 +501,6 @@ namespace mongo {
 
     }
 
-    /* db - database name
-       path - db directory
-    */
-    // Why is this in instance.cpp?
-    void Database::closeDatabase( const StringData &name, const StringData &path ) {
-        verify( Lock::isW() );
-
-        Client::Context * ctx = cc().getContext();
-        verify( ctx );
-        verify( ctx->inDB( name , path ) );
-        Database *database = ctx->db();
-        verify( database->name() == name );
-
-        /* important: kill all open cursors on the database */
-        string prefix(name.toString() + ".");
-        ClientCursor::invalidate(prefix);
-
-        NamespaceDetailsTransient::clearForPrefix( prefix );
-
-        dbHolderW().erase( name, path );
-        ctx->_clear();
-        delete database; // closes files
-    }
-
     static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &toupdate, const BSONObj &query,
                                      const bool upsert, const bool multi, const bool broadcast) {
         // void ReplSetImpl::relinquish() uses big write lock so 

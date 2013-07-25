@@ -77,7 +77,7 @@ namespace mongo {
         const string _profileName; // "alleyinsider.system.profile"
         int _magic; // used for making sure the object is still loaded in memory
 
-        ~Database(); // closes files and other cleanup see below.
+        ~Database() { }
 
         friend class NamespaceIndex;
         friend NamespaceIndex *nsindex(const StringData&);

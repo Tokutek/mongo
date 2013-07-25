@@ -33,27 +33,6 @@ namespace mongo {
         return _dbHolder;
     }
 
-    void assertDbAtLeastReadLocked(const Database *db) { 
-        if( db ) { 
-            Lock::assertAtLeastReadLocked(db->name());
-        }
-        else {
-            verify( Lock::isLocked() );
-        }
-    }
-
-    void assertDbWriteLocked(const Database *db) { 
-        if( db ) { 
-            Lock::assertWriteLocked(db->name());
-        }
-        else {
-            verify( Lock::isW() );
-        }
-    }
-
-    Database::~Database() {
-    }
-
     Database::Database(const StringData &name, const StringData &path)
         : _name(name.toString()), _path(path.toString()), _nsIndex( _path, _name ),
           _profileName(_name + ".system.profile")
@@ -98,7 +77,6 @@ namespace mongo {
         }
     }    
 
-
     bool Database::setProfilingLevel( int newLevel , string& errmsg ) {
         if ( _profile == newLevel )
             return true;
@@ -120,6 +98,29 @@ namespace mongo {
 
         _profile = newLevel;
         return true;
+    }
+
+    /* db - database name
+       path - db directory
+    */
+    void Database::closeDatabase( const StringData &name, const StringData &path ) {
+        verify( Lock::isW() );
+
+        Client::Context * ctx = cc().getContext();
+        verify( ctx );
+        verify( ctx->inDB( name , path ) );
+        Database *database = ctx->db();
+        verify( database->name() == name );
+
+        /* important: kill all open cursors on the database */
+        string prefix(name.toString() + ".");
+        ClientCursor::invalidate(prefix);
+
+        NamespaceDetailsTransient::clearForPrefix( prefix );
+
+        dbHolderW().erase( name, path );
+        ctx->_clear();
+        delete database; // closes files
     }
 
     void DatabaseHolder::closeDatabases(const StringData &path) {
