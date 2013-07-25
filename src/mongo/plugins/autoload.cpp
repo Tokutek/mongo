@@ -20,6 +20,10 @@
 
 #include "mongo/plugins/autoload.h"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <boost/filesystem.hpp>
 
 #include "mongo/plugins/loader.h"
@@ -46,6 +50,20 @@ namespace mongo {
             if (!fs::exists(pluginsPath)) {
                 LOG(1) << "Plugin directory \"" << pluginsDir << "\" doesn't exist, not auto-loading any plugins." << endl;
                 return;
+            }
+
+            {
+                // TODO: portability
+                struct stat st;
+                int r = stat(pluginsDir.c_str(), &st);
+                if (r != 0) {
+                    LOG(1) << "Couldn't stat plugins directory \"" << pluginsDir << "\" (error " << errnoWithDescription() << "), not auto-loading any plugins." << endl;
+                    return;
+                }
+                if (st.st_mode & S_IWOTH) {
+                    LOG(1) << "Plugins directory \"" << pluginsDir << " is world writable, won't load plugins from it." << endl;
+                    return;
+                }
             }
 
             vector<BSONObj> loaded;
