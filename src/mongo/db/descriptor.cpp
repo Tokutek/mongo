@@ -62,7 +62,7 @@ namespace mongo {
         h.checkVersion();
 
         // Strictly greater, since there should be at least one field.
-        verify(_size > FixedSize);
+        verify(_size > (size_t) FixedSize);
     }
 
     size_t Descriptor::serializedSize(const BSONObj &keyPattern) {
@@ -74,7 +74,7 @@ namespace mongo {
             size += 4;
             size += strlen(e.fieldName()) + 1;
         }
-        verify(size > FixedSize);
+        verify(size > (size_t) FixedSize);
         return size;
     }
 
