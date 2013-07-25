@@ -839,6 +839,7 @@ test = testEnv.Install(
                          not str(f).endswith('framework_options_test.cpp') ],
                     LIBS=env['LIBS'] + tokulibs,
                     LIBDEPS = [
+                       "mutable_bson_test_utils",
                        "mongocommon",
                        "serveronly",
                        "coreserver",
