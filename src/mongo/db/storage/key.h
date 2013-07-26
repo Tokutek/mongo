@@ -109,12 +109,12 @@ namespace mongo {
             void traditional(const BSONObj& obj); // store as traditional bson not as compact format
         };
 
-        inline DBT make_dbt(const char *buf, size_t size) {
+        inline DBT make_dbt(const char *buf, size_t size, const int flags = 0) {
             DBT dbt;
             dbt.data = const_cast<char *>(buf);
             dbt.size = size;
             dbt.ulen = 0;
-            dbt.flags = 0;
+            dbt.flags = flags;
             return dbt;
         }
 
@@ -150,6 +150,8 @@ namespace mongo {
             static int woCompare(const Key &key1, const Key &key2, const Ordering &ordering) {
                 // Interpret the beginning of the Key's buf as KeyV1. The size of the Key
                 // must be at least as big as the size of the KeyV1 (otherwise format error).
+                dassert(key1.buf());
+                dassert(key2.buf());
                 const KeyV1 k1(static_cast<const char *>(key1.buf()));
                 const KeyV1 k2(static_cast<const char *>(key2.buf()));
                 dassert((int) key1.size() >= k1.dataSize());

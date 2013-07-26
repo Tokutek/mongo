@@ -73,6 +73,68 @@ namespace mongo {
             }
         }
 
+        static void dbt_realloc(DBT *dbt, const void *data, const size_t size) {
+            if (dbt->ulen < size) {;
+                dbt->ulen = size;
+                dbt->data = realloc(dbt->data, dbt->ulen);
+                verify(dbt->flags == DB_DBT_REALLOC);
+                verify(dbt->data != NULL);
+            }
+            dbt->size = size;
+            memcpy(dbt->data, data, size);
+        }
+
+        static void generate_key(DB *dest_db, DB *src_db, DBT *dest_key,
+                                 const DBT *src_key, const DBT *src_val) {
+            const DBT *desc = &dest_db->cmp_descriptor->dbt;
+            Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+
+            const Key sPK(src_key);
+            dassert(sPK.pk().isEmpty());
+            const BSONObj pk(sPK.key());
+            const BSONObj obj(reinterpret_cast<const char *>(src_val->data));
+
+            if (dest_db == src_db) {
+                dbt_realloc(dest_key, src_key->data, src_key->size);
+            } else {
+                // Generate keys for a secondary index.
+                //
+                // Higher layers of code should prevent the put multiple API from
+                // getting called on a multi-key index.
+                BSONObjSet keys;
+                descriptor.generateKeys(obj, keys);
+                if (keys.size() == 1) {
+                    const Key sKey(*keys.begin(), &pk);
+                    dbt_realloc(dest_key, sKey.buf(), sKey.size());
+                } else {
+                    verify(keys.size() == 0);
+                    dbt_realloc(dest_key, NULL, 0);
+                }
+            }
+        }
+
+        static int generate_row_for_del(DB *dest_db, DB *src_db, DBT *dest_key,
+                                        const DBT *src_key, const DBT *src_val) {
+            // Delete just needs a key, generate it.
+            generate_key(dest_db, src_db, dest_key, src_key, src_val);
+            return 0;
+        }
+
+        static int generate_row_for_put(DB *dest_db, DB *src_db, DBT *dest_key, DBT *dest_val,
+                                        const DBT *src_key, const DBT *src_val) {
+            // Put needs a key and possible a val (for clustering indexes.)
+            generate_key(dest_db, src_db, dest_key, src_key, src_val);
+
+            const DBT *desc = &dest_db->cmp_descriptor->dbt;
+            Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+            if (descriptor.clustering()) {
+                dbt_realloc(dest_val, src_val->data, src_val->size);
+            } else {
+                verify(dest_db != src_db);
+            }
+            return 0; 
+        }
+
         static uint64_t calculate_cachesize(void) {
             uint64_t physmem, maxdata;
             physmem = toku_os_get_phys_memory_size();
@@ -138,6 +200,17 @@ namespace mongo {
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
+
+            r = env->set_generate_row_callback_for_put(env, generate_row_for_put);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
+            
+            r = env->set_generate_row_callback_for_del(env, generate_row_for_del);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
+
             env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
 
             const int redzone_threshold = cmdLine.fsRedzone;

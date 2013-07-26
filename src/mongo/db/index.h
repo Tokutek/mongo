@@ -198,6 +198,10 @@ namespace mongo {
         // Open dictionary representing the index on disk.
         DB *_db;
 
+        DB *db() const {
+            return _db;
+        }
+
         static int hot_opt_callback(void *extra, float progress);
 
         // Info about the index. Stored on disk in the database.ns dictionary

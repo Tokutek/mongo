@@ -1000,22 +1000,100 @@ namespace mongo {
         }
     }
 
+    class DBTArrayHolder {
+    public:
+        DBTArrayHolder(DBT *dbts, const int n) :
+            _dbts(dbts),
+            _n(n) {
+            for (int i = 0; i < _n; i++) {
+                DBT *dbt = &_dbts[i];
+                memset(dbt, 0, sizeof(DBT));
+            }
+        }
+        ~DBTArrayHolder() {
+            for (int i = 0; i < _n; i++) {
+                DBT *dbt = &_dbts[i];
+                if (dbt->data != NULL && dbt->flags != 0) {
+                    free(dbt->data);
+                    dbt->data = NULL;
+                }
+            }
+        }
+    private:
+        DBT *const _dbts;
+        const int _n;
+    };
+
     void NamespaceDetails::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
-        for (int i = 0; i < nIndexes(); i++) {
+
+        const int n = nIndexesBeingBuilt();
+        DB *dbs[n];
+        DBT key_dbts[n];
+        DBT val_dbts[n];
+        DBTArrayHolder keysHolder(key_dbts, n);
+        DBTArrayHolder valsHolder(key_dbts, n);
+        uint32_t put_flags[n];
+        storage::Key sPK(pk, NULL);
+
+        // Generate keys for each index, prepare data structures for put multiple.
+        // We will end up abandoning put multiple if there are any multikey or sparse
+        // indexes (that is, any index that does not have a single associated row
+        // in the primary key).
+        bool allSingleKeys = true;
+        vector<BSONObjSet> keys(n);
+        for (int i = 0; i < n; i++) {
+            const bool isPK = i == 0;
+            const bool prelocked = flags & NamespaceDetails::NO_LOCKTREE;
+            const bool noUniqueChecks = flags & NamespaceDetails::NO_UNIQUE_CHECKS;
             IndexDetails &idx = *_indexes[i];
-            if (i == 0) {
-                dassert(isPKIndex(idx));
-                idx.insertPair(pk, NULL, obj, flags);
+            dbs[i] = idx.db();
+            key_dbts[i] = isPK ? storage::make_dbt(sPK.buf(), sPK.size()) :
+                                 storage::make_dbt(NULL, 0, DB_DBT_REALLOC);
+            val_dbts[i] = isPK ? storage::make_dbt(obj.objdata(), obj.objsize()) :
+                                 storage::make_dbt(NULL, 0, DB_DBT_REALLOC);
+            put_flags[i] = (isPK && !noUniqueChecks ? DB_NOOVERWRITE : 0) |
+                           (prelocked ? DB_PRELOCKED_WRITE : 0);
+
+            BSONObjSet &idxKeys = keys[i];
+            if (isPK) {
+                idxKeys.insert(pk);
             } else {
-                BSONObjSet keys;
-                idx.getKeysFromObject(obj, keys);
-                if (keys.size() > 1) {
-                    setIndexIsMultikey(_ns.c_str(), i);
+                idx.getKeysFromObject(obj, idxKeys);
+                allSingleKeys = allSingleKeys && idxKeys.size() == 1;
+                if (allSingleKeys && idx.unique() && !noUniqueChecks) {
+                    idx.uniqueCheck(*idxKeys.begin(), &pk);
                 }
-                for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                    idx.insertPair(*ki, &pk, obj, flags);
+            }
+        }
+
+        if (allSingleKeys) {
+            DB_ENV *env = storage::env;
+            const int r = env->put_multiple(env, dbs[0], cc().txn().db_txn(),
+                                            &key_dbts[0], &val_dbts[0],
+                                            n, dbs, key_dbts, val_dbts, put_flags);
+            if (r == EINVAL) {
+                uasserted( 16900, str::stream() << "Indexed insertion failed." <<
+                                  " This may be due to keys > 32kb. Check the error log." );
+            } else if (r != 0) {
+                storage::handle_ydb_error(r);
+            }
+        } else {
+            // If there are any multikeys or sparse keys, we cannot use put multiple.
+            for (int i = 0; i < n; i++) {
+                IndexDetails &idx = *_indexes[i];
+                const BSONObjSet &idxKeys = keys[i];
+                if (i == 0) {
+                    dassert(isPKIndex(idx));
+                    idx.insertPair(*idxKeys.begin(), NULL, obj, flags);
+                } else {
+                    if (idxKeys.size() > 1) {
+                        setIndexIsMultikey(_ns.c_str(), i);
+                    }
+                    for (BSONObjSet::const_iterator ki = idxKeys.begin(); ki != idxKeys.end(); ++ki) {
+                        idx.insertPair(*ki, &pk, obj, flags);
+                    }
                 }
             }
         }
@@ -1024,19 +1102,62 @@ namespace mongo {
     void NamespaceDetails::deleteFromIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
-        for (int i = 0; i < nIndexes(); i++) {
+
+        const int n = nIndexesBeingBuilt();
+        DB *dbs[n];
+        DBT key_dbts[n];
+        DBT val_dbts[n];
+        DBTArrayHolder keysHolder(key_dbts, n);
+        DBTArrayHolder valsHolder(key_dbts, n);
+        val_dbts[0] = storage::make_dbt(obj.objdata(), obj.objsize());
+        uint32_t del_flags[n];
+        storage::Key sPK(pk, NULL);
+
+        // Generate keys for each index, prepare data structures for del multiple.
+        // We will end up abandoning del multiple if there are any multikey indexes.
+        bool allSingleKeys = true;
+        vector<BSONObjSet> keys(n);
+        for (int i = 0; i < n; i++) {
+            const bool isPK = i == 0;
+            const bool prelocked = flags & NamespaceDetails::NO_LOCKTREE;
             IndexDetails &idx = *_indexes[i];
-            if (i == 0) {
-                dassert(isPKIndex(idx));
-                idx.deletePair(pk, NULL, flags);
+            dbs[i] = idx.db();
+            key_dbts[i] = isPK ? storage::make_dbt(sPK.buf(), sPK.size()) :
+                                 storage::make_dbt(NULL, 0, DB_DBT_REALLOC);
+            del_flags[i] = prelocked ? DB_PRELOCKED_WRITE : 0;
+
+            BSONObjSet &idxKeys = keys[i];
+            if (isPK) {
+                idxKeys.insert(pk);
             } else {
-                BSONObjSet keys;
-                idx.getKeysFromObject(obj, keys);
-                if (keys.size() > 1) {
-                    dassert(isMultikey(i)); // some prior insert should have marked it as multikey
-                }
-                for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                    idx.deletePair(*ki, &pk, flags);
+                idx.getKeysFromObject(obj, idxKeys);
+                allSingleKeys = allSingleKeys && idxKeys.size() == 1;
+            }
+        }
+
+        if (allSingleKeys) {
+            DB_ENV *env = storage::env;
+            const int r = env->del_multiple(env, dbs[0], cc().txn().db_txn(),
+                                            &key_dbts[0], &val_dbts[0],
+                                            n, dbs, key_dbts, del_flags);
+            if (r != 0) {
+                storage::handle_ydb_error(r);
+            }
+        } else {
+            // If there are any multikeys or sparse keys, we cannot use del multiple.
+            for (int i = 0; i < n; i++) {
+                IndexDetails &idx = *_indexes[i];
+                const BSONObjSet &idxKeys = keys[i];
+                if (i == 0) {
+                    dassert(isPKIndex(idx));
+                    idx.deletePair(*idxKeys.begin(), NULL, flags);
+                } else {
+                    if (idxKeys.size() > 1) {
+                        dassert(isMultikey(i)); // some prior insert should have marked it as multikey
+                    }
+                    for (BSONObjSet::const_iterator ki = idxKeys.begin(); ki != idxKeys.end(); ++ki) {
+                        idx.deletePair(*ki, &pk, flags);
+                    }
                 }
             }
         }
