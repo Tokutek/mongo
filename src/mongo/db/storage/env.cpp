@@ -327,14 +327,14 @@ namespace mongo {
             if (r != 0) {
                 handle_ydb_error(r);
             }
-            if (altTxn.get() != NULL) {
-                altTxn->commit();
-            }
-
             if (may_create) {
                 set_db_descriptor(db, descriptor);
             }
             verify_or_upgrade_db_descriptor(db, descriptor);
+
+            if (altTxn.get() != NULL) {
+                altTxn->commit();
+            }
             *dbp = db;
         exit:
             return r;
