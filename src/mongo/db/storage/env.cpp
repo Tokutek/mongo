@@ -206,20 +206,45 @@ namespace mongo {
         }
 
         // set a descriptor for the given dictionary.
-        static void set_db_descriptor(DB *db, DB_TXN *txn, const Descriptor &descriptor) {
+        static void set_db_descriptor(DB *db, const Descriptor &descriptor) {
             const int flags = DB_UPDATE_CMP_DESCRIPTOR;
             DBT desc = descriptor.dbt();
-            const int r = db->change_descriptor(db, txn, &desc, flags);
+            const int r = db->change_descriptor(db, cc().txn().db_txn(), &desc, flags);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
         }
 
-        static void verify_db_descriptor(DB *db, const Descriptor &descriptor) {
+        static void verify_or_upgrade_db_descriptor(DB *db, const Descriptor &descriptor) {
             const DBT *desc = &db->cmp_descriptor->dbt;
-            verify(desc != NULL);
-            const Descriptor existing(reinterpret_cast<const char *>(desc->data), desc->size);
-            existing.assertEqual(descriptor);
+            verify(desc->data != NULL && desc->size >= 4);
+
+            if (desc->size == 4) {
+                // existing descriptor is from before descriptors were even versioned.
+                // it's only an ordering. make sure it matches, then upgrade.
+                const Ordering &ordering(*reinterpret_cast<const Ordering *>(desc->data));
+                const Ordering &expected(descriptor.ordering());
+                verify(memcmp(&ordering, &expected, 4) == 0);
+                set_db_descriptor(db, descriptor);
+            } else {
+                const Descriptor existing(reinterpret_cast<const char *>(desc->data), desc->size);
+                if (existing.version() < descriptor.version()) {
+                    // existing descriptor is out-dated. upgrade to the current version.
+                    set_db_descriptor(db, descriptor);
+                } else if (existing.version() > descriptor.version()) {
+                    problem() << "Detected a \"dictionary descriptor\" version that is too new: "
+                              << existing.version() << ". The highest known version is " << descriptor.version()
+                              << "This data may have already been upgraded by a newer version of "
+                              << "TokuMX and is now no longer usable by this version."
+                              << endl << endl
+                              << "The assertion failure you are about to see is intentional."
+                              << endl;
+                    verify(false);
+                } else {
+                    // same version, ensure the contents of the descriptor are correct
+                    verify(existing == descriptor);
+                }
+            }
         }
 
         int db_open(DB **dbp, const string &name, const BSONObj &info,
@@ -294,8 +319,7 @@ namespace mongo {
                                                    new Client::Transaction(0));
 
             const int db_flags = may_create ? DB_CREATE : 0;
-            DB_TXN *txn = cc().txn().db_txn();
-            r = db->open(db, txn, name.c_str(), NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+            r = db->open(db, cc().txn().db_txn(), name.c_str(), NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
             if (r == ENOENT) {
                 verify(!may_create);
                 goto exit;
@@ -308,9 +332,9 @@ namespace mongo {
             }
 
             if (may_create) {
-                set_db_descriptor(db, txn, descriptor);
+                set_db_descriptor(db, descriptor);
             }
-            verify_db_descriptor(db, descriptor);
+            verify_or_upgrade_db_descriptor(db, descriptor);
             *dbp = db;
         exit:
             return r;

@@ -43,9 +43,11 @@ namespace mongo {
         // For interpretting a memory buffer as a descriptor.
         Descriptor(const char *data, const size_t size);
 
-        static size_t serializedSize(const BSONObj &keyPattern);
+        bool operator==(const Descriptor &rhs) const;
 
-        void assertEqual(const Descriptor &rhs) const;
+        int version() const;
+
+        const Ordering &ordering() const;
 
         DBT dbt() const;
 
@@ -58,6 +60,7 @@ namespace mongo {
             return h.clustering;
         }
 
+        static size_t serializedSize(const BSONObj &keyPattern);
 
     private:
 #pragma pack(1)
@@ -74,23 +77,19 @@ namespace mongo {
         // virtualized in IndexDetails just yet...) instead of just all thrown
         // together in one format here.
         struct Header {
-            Header(const Ordering &o, char h, char s, char c, int hs, uint32_t n)
-                : ordering(o), version(0), hashed(h), sparse(s), clustering(c),
-                  hashSeed(hs), numFields(n) {
-            }
+        private:
+            enum Version {
+                // Version 0 is kind of a fake version.
+                VERSION_0 = 0,
+                VERSION_1 = 1,
+                NEXT_VERSION = 2
+            };
+            static const int CURRENT_VERSION = (int) NEXT_VERSION - 1;
 
-            void checkVersion() const {
-                if (version != CURRENT_VERSION) {
-                    problem() << "Detected unsupported dictionary descriptor version: " << version << "."
-                              << "To use this data with this version of TokuMX, restart with the version "
-                              << "that created this data and mongodump/restore into the newer version. You "
-                              << "could also just synchronize a secondary replica member using the newer "
-                              << "version (preferred)."
-                              << endl << endl
-                              << "The assertion failure you are about to see is intentional."
-                              << endl;
-                }
-                verify(version == CURRENT_VERSION);
+        public:
+            Header(const Ordering &o, char h, char s, char c, int hs, uint32_t n)
+                : ordering(o), version((char) CURRENT_VERSION), hashed(h), sparse(s), clustering(c),
+                  hashSeed(hs), numFields(n) {
             }
 
             Ordering ordering;
@@ -100,13 +99,6 @@ namespace mongo {
             char clustering;
             int hashSeed;
             uint32_t numFields;
-
-        private:
-            enum Version {
-                VERSION_0 = 0,
-                NEXT_VERSION = 1
-            };
-            static const Version CURRENT_VERSION = (Version) (((int) NEXT_VERSION) - 1);
         };
 
         static const int FixedSize = sizeof(Header);

@@ -58,9 +58,6 @@ namespace mongo {
     Descriptor::Descriptor(const char *data, const size_t size) :
         _data(data), _size(size) {
         verify(_data != NULL);
-        const Header &h(*reinterpret_cast<const Header *>(_data));
-        h.checkVersion();
-
         // Strictly greater, since there should be at least one field.
         verify(_size > (size_t) FixedSize);
     }
@@ -78,9 +75,18 @@ namespace mongo {
         return size;
     }
 
-    void Descriptor::assertEqual(const Descriptor &rhs) const {
-        const bool equal = _size == rhs._size && memcmp(_data, rhs._data, _size) == 0;
-        verify(equal);
+    bool Descriptor::operator==(const Descriptor &rhs) const {
+        return _size == rhs._size && memcmp(_data, rhs._data, _size) == 0;
+    }
+
+    int Descriptor::version() const {
+        const Header &h(*reinterpret_cast<const Header *>(_data));
+        return h.version;
+    }
+
+    const Ordering &Descriptor::ordering() const {
+        const Header &h(*reinterpret_cast<const Header *>(_data));
+        return h.ordering;
     }
 
     DBT Descriptor::dbt() const {
