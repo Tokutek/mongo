@@ -20,8 +20,6 @@
 #include "mongo/pch.h"
 #include "jsobj.h"
 
-#include "mongo/plugins/autoload.h"
-
 namespace boost {
     namespace program_options {
         class options_description;
@@ -128,7 +126,6 @@ namespace mongo {
         string logDir;
         string tmpDir;
         uint64_t txnMemLimit;
-        string autoloadPluginsDir;
 
         static void launchOk();
 
@@ -164,8 +161,7 @@ namespace mongo {
         slowMS(100), defaultLocalThresholdMillis(15), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
         directio(false), cacheSize(0), checkpointPeriod(60), cleanerPeriod(2),
-        cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""), txnMemLimit(1ULL<<20),
-        autoloadPluginsDir(plugins::defaultDir())
+        cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""), txnMemLimit(1ULL<<20)
     {
         started = time(0);
 
