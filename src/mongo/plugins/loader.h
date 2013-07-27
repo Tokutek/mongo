@@ -34,9 +34,16 @@ namespace mongo {
             string _fullpath;
             DLHandle _dl;
             PluginInterface *_interface;
+            bool _loaded;
 
           public:
-            explicit PluginHandle(const string &filename) : _filename(filename) {}
+            explicit PluginHandle(const string &filename)
+                    : _filename(filename),
+                      _fullpath(""),
+                      _dl(),
+                      _interface(NULL),
+                      _loaded(false) {}
+            ~PluginHandle();
             const string &name() const;
             bool init(string &errmsg, BSONObjBuilder &result);
             bool load(string &errmsg, BSONObjBuilder &result);

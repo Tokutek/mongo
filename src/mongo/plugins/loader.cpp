@@ -105,6 +105,7 @@ namespace mongo {
             bool ok = _interface->load(errmsg, result);
             if (ok) {
                 LOG(0) << "Loaded plugin " << name() << " from " << _filename << endl;
+                _loaded = true;
             }
             return ok;
         }
@@ -121,6 +122,15 @@ namespace mongo {
             return _interface->info(errmsg, result);
         }
 
+        PluginHandle::~PluginHandle() {
+            if (_loaded) {
+                string errmsg;
+                if (!unload(errmsg)) {
+                    LOG(0) << "Error unloading plugin in destructor: " << errmsg << endl;
+                }
+            }
+        }
+
         bool PluginHandle::unload(string &errmsg) {
             if (!_interface) {
                 errmsg = "plugin not initialized";
@@ -131,6 +141,7 @@ namespace mongo {
             _interface = NULL;
             _dl.close();
             LOG(0) << "Unloaded plugin " << nameCopy << " from " << _filename << endl;
+            _loaded = false;
             return true;
         }
 
