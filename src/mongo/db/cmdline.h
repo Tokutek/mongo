@@ -165,7 +165,7 @@ namespace mongo {
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
         directio(false), cacheSize(0), checkpointPeriod(60), cleanerPeriod(2),
         cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""), txnMemLimit(1ULL<<20),
-        autoloadPluginsDir("")
+        autoloadPluginsDir(plugins::defaultDir())
     {
         started = time(0);
 
