@@ -580,7 +580,7 @@ namespace mongo {
                 case DB_LOCK_DEADLOCK:
                     throw LockException(16760, "Deadlock detected during lock acquisition. Try restarting the transaction.");
                 case DB_KEYEXIST:
-                    throw UserException(ASSERT_ID_DUPKEY, "Duplicate key error.");
+                    throw UserException(ASSERT_ID_DUPKEY, "E11000 duplicate key error.");
                 case DB_NOTFOUND:
                     throw UserException(16761, "Index key not found.");
                 case DB_RUNRECOVERY:
