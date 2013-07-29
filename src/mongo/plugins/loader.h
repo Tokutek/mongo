@@ -21,6 +21,7 @@
 #include "mongo/pch.h"
 
 #include <map>
+#include <boost/filesystem.hpp>
 
 #include "mongo/plugins/dl.h"
 #include "mongo/plugins/plugins.h"
@@ -54,8 +55,11 @@ namespace mongo {
         class Loader : boost::noncopyable {
             typedef map<string, shared_ptr<PluginHandle> > PluginMap;
             PluginMap _plugins;
+
+            static boost::filesystem::path pluginsDir();
+
           public:
-            bool load(const StringData &filename, string &errmsg, BSONObjBuilder &result);
+            bool load(const string &filename, string &errmsg, BSONObjBuilder &result);
             bool list(string &errmsg, BSONObjBuilder &result) const;
             bool unload(const StringData &name, string &errmsg, BSONObjBuilder &result);
             void shutdown();

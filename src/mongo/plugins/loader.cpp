@@ -25,11 +25,16 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <boost/filesystem.hpp>
+
 #include "mongo/base/string_data.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/plugins/dl.h"
 #include "mongo/plugins/plugins.h"
 #include "mongo/util/log.h"
+#include "mongo/util/processinfo.h"
+
+namespace fs = boost::filesystem;
 
 namespace mongo {
 
@@ -145,8 +150,9 @@ namespace mongo {
             return true;
         }
 
-        bool Loader::load(const StringData &filename, string &errmsg, BSONObjBuilder &result) {
-            shared_ptr<PluginHandle> pluginHandle(new PluginHandle(filename.toString()));
+        bool Loader::load(const string &filename, string &errmsg, BSONObjBuilder &result) {
+            fs::path filepath = pluginsDir() / filename;
+            shared_ptr<PluginHandle> pluginHandle(new PluginHandle(filepath.string()));
             bool ok = pluginHandle->init(errmsg, result);
             if (!ok) {
                 return false;
@@ -209,6 +215,12 @@ namespace mongo {
                 }
                 _plugins.erase(it);
             }
+        }
+
+        fs::path Loader::pluginsDir() {
+            ProcessInfo p;
+            fs::path exePath(p.getExePath());
+            return exePath.parent_path().parent_path() / "lib64" / "plugins";
         }
 
         Loader loader;
