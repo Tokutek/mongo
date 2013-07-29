@@ -457,6 +457,7 @@ def skipTest(path):
                            ("sharding", "read_pref.js"), # SERVER-6972
                            ("sharding", "read_pref_cmd.js"), # SERVER-6972
                            ("sharding", "gle_with_conf_servers.js"), # SERVER-6972
+                           ("repl", "repl4.js"), # SERVER-10344
                            ("sharding", "sync3.js"), # SERVER-6388 for this and those below
                            ("sharding", "sync6.js"),
                            ("sharding", "test_all_commands.js"), # some commands will fail due to auth, we don't need to test that they're linked again, testing without auth is sufficient
