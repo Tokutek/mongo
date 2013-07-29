@@ -307,6 +307,8 @@ static bool runMongosServer( bool doUpgrade ) {
 
     init();
 
+    plugins::loader.autoload(cmdLine.plugins);
+
 #if !defined(_WIN32)
     CmdLine::launchOk();
 #endif

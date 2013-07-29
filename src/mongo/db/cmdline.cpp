@@ -131,6 +131,7 @@ namespace mongo {
         ("fork" , "fork server process" )
         ("syslog" , "log to system's syslog facility instead of file or stdout" )
 #endif
+        ("plugins", po::value<vector<string> >()->composing(), "load plugins at startup")
         ;
         
 
@@ -476,6 +477,11 @@ namespace mongo {
         }
         else {
             cmdLine.keyFile = false;
+        }
+
+        if (params.count("plugins")) {
+            const vector<string> &plugins = params["plugins"].as<vector<string> >();
+            cmdLine.plugins.insert(cmdLine.plugins.end(), plugins.begin(), plugins.end());
         }
 
 #ifdef MONGO_SSL

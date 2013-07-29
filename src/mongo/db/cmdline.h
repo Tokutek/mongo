@@ -127,6 +127,8 @@ namespace mongo {
         string tmpDir;
         uint64_t txnMemLimit;
 
+        vector<string> plugins;
+
         static void launchOk();
 
         static void addGlobalOptions( boost::program_options::options_description& general ,
@@ -161,7 +163,8 @@ namespace mongo {
         slowMS(100), defaultLocalThresholdMillis(15), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
         directio(false), cacheSize(0), checkpointPeriod(60), cleanerPeriod(2),
-        cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""), txnMemLimit(1ULL<<20)
+        cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""),
+        txnMemLimit(1ULL<<20), plugins()
     {
         started = time(0);
 

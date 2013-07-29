@@ -42,6 +42,7 @@
 #include "mongo/db/stats/snapshots.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/ttl.h"
+#include "mongo/plugins/loader.h"
 #include "mongo/s/d_writeback.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/background.h"
@@ -365,6 +366,8 @@ namespace mongo {
 
         /* this is for security on certain platforms (nonce generation) */
         srand((unsigned) (curTimeMicros() ^ startupSrandTimer.micros()));
+
+        plugins::loader.autoload(cmdLine.plugins);
 
         snapshotThread.go();
         d.clientCursorMonitor.go();
