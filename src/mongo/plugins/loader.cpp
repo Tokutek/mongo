@@ -150,6 +150,28 @@ namespace mongo {
             return true;
         }
 
+        void Loader::autoload(const vector<string> &plugins) {
+            for (vector<string>::const_iterator it = plugins.begin(); it != plugins.end(); ++it) {
+                const string &plugin = *it;
+                if (plugin.find('/') != string::npos) {
+                    LOG(0) << "Not loading plugin \"" << plugin << "\" because it contains a '/'." << endl;
+                    continue;
+                }
+                stringstream ss;
+                ss << "lib" << plugin << ".so";
+                BSONObjBuilder b;
+                string errmsg;
+                bool ok = load(ss.str(), errmsg, b);
+                if (ok) {
+                    LOG(0) << "Loaded plugin \"" << plugin << "\"." << endl;
+                    LOG(1) << "\t" << b.done() << endl;
+                }
+                else {
+                    LOG(0) << "Error loading plugin \"" << plugin << "\": " << errmsg << endl;
+                }
+            }
+        }
+
         bool Loader::load(const string &filename, string &errmsg, BSONObjBuilder &result) {
             fs::path filepath = pluginsDir() / filename;
             shared_ptr<PluginHandle> pluginHandle(new PluginHandle(filepath.string()));

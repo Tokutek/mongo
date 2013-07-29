@@ -59,6 +59,7 @@ namespace mongo {
             static boost::filesystem::path pluginsDir();
 
           public:
+            void autoload(const vector<string> &plugins);
             bool load(const string &filename, string &errmsg, BSONObjBuilder &result);
             bool list(string &errmsg, BSONObjBuilder &result) const;
             bool unload(const StringData &name, string &errmsg, BSONObjBuilder &result);
