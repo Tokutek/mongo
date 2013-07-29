@@ -65,7 +65,7 @@ namespace {
         if (!principal->isImplicitPrivilegeAcquisitionEnabled())
             return;
 
-        if (principal->getName() == internalSecurity.user) {
+        if (principal->getName() == internalSecurity.user->getName()) {
 
             // Grant full access to internal user
             ActionSet allActions;
