@@ -299,8 +299,7 @@ namespace mongo {
 
                             ClientInfo * ci = r.getClientInfo();
                             if (AuthorizationManager::isAuthEnabled()) {
-                                ci->getAuthorizationSession()->grantInternalAuthorization(
-                                        UserName("_writebackListener", "local"));
+                                ci->getAuthorizationSession()->grantInternalAuthorization();
                             }
                             ci->noAutoSplit();
 

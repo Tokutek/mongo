@@ -22,6 +22,7 @@
 #include "mongo/db/ttl.h"
 
 #include "mongo/base/counter.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/commands/fsync.h"
 #include "mongo/db/commands/server_status.h"
 #include "mongo/db/databaseholder.h"
@@ -126,6 +127,7 @@ namespace mongo {
 
         virtual void run() {
             Client::initThread( name().c_str() );
+            cc().getAuthorizationSession()->grantInternalAuthorization();
 
             while ( ! inShutdown() ) {
                 sleepsecs( 60 );
