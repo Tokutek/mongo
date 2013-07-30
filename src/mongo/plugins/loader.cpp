@@ -40,6 +40,42 @@ namespace mongo {
 
     namespace plugins {
 
+        static bool checkPermissions(fs::path abspath, int components, int invalidPerms, string &errmsg) {
+            for (fs::path::iterator it = abspath.begin(); it != abspath.end(); ++it) {
+                if (*it == ".." || *it == ".") {
+                    stringstream ss;
+                    ss << "invalid path component \"" << *it << "\" in plugin path";
+                    errmsg = ss.str();
+                    return false;
+                }
+            }
+
+            // We want to check the paths from top to bottom.
+            vector<fs::path> paths;
+            for (int i = 0; i < components && !abspath.empty(); ++i) {
+                paths.push_back(abspath);
+                abspath = abspath.parent_path();
+            }
+            for (vector<fs::path>::const_reverse_iterator it = paths.rbegin(); it != paths.rend(); ++it) {
+                struct stat st;
+                const string &curPath = it->string();
+                int r = stat(curPath.c_str(), &st);
+                if (r != 0) {
+                    stringstream ss;
+                    ss << "couldn't stat \"" << curPath << "\" ( error " << errnoWithDescription() << ")" << endl;
+                    errmsg = ss.str();
+                    return false;
+                }
+                if ((st.st_mode & invalidPerms) != 0) {
+                    stringstream ss;
+                    ss << "invalid permissions " << std::oct << std::setw(4) << std::setfill('0') << invalidPerms << " on path \"" << curPath << "\"";
+                    errmsg = ss.str();
+                    return false;
+                }
+            }
+            return true;
+        }
+
         bool PluginHandle::init(string &errmsg, BSONObjBuilder &result) {
             bool ok = _dl.open(_filename.c_str(), RTLD_NOW);
             if (!ok) {
@@ -62,25 +98,19 @@ namespace mongo {
                     return false;
                 }
 
+                // Need to check before resolving symlinks and after resolving them.
+                ok = checkPermissions(info.dli_fname, 4, S_IWOTH, errmsg);
+                if (!ok) {
+                    return false;
+                }
                 shared_ptr<char> buf(realpath(info.dli_fname, NULL), free);
+                ok = checkPermissions(buf.get(), 4, S_IWOTH, errmsg);
+                if (!ok) {
+                    return false;
+                }
                 _fullpath = buf.get();
 
                 LOG(2) << "Found plugin \"" << _filename << "\" actually at \"" << _fullpath << "\"" << endl;
-
-                struct stat st;
-                r = stat(_fullpath.c_str(), &st);
-                if (r != 0) {
-                    stringstream ss;
-                    ss << "couldn't stat [" << _fullpath << "] (error " << errnoWithDescription() << "), not loading plugin";
-                    errmsg += ss.str();
-                    return false;
-                }
-                if (st.st_mode & S_IWOTH) {
-                    stringstream ss;
-                    ss << "plugin \"" << _filename << "\" at \"" << _fullpath << "\" is world writable, not loading";
-                    errmsg += ss.str();
-                    return false;
-                }
             }
 
             GetInterfaceFunc getInterface = reinterpret_cast<GetInterfaceFunc>(getInterfacev);
