@@ -25,6 +25,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <fstream>
+
 #include <boost/filesystem.hpp>
 
 #include "mongo/base/string_data.h"
@@ -32,6 +34,7 @@
 #include "mongo/plugins/dl.h"
 #include "mongo/plugins/plugins.h"
 #include "mongo/util/log.h"
+#include "mongo/util/md5.hpp"
 #include "mongo/util/processinfo.h"
 
 namespace fs = boost::filesystem;
@@ -76,7 +79,7 @@ namespace mongo {
             return true;
         }
 
-        bool PluginHandle::init(string &errmsg, BSONObjBuilder &result) {
+        bool PluginHandle::init(const StringData &expectedHash, string &errmsg, BSONObjBuilder &result) {
             bool ok = _dl.open(_filename.c_str(), RTLD_NOW);
             if (!ok) {
                 errmsg += "error loading plugin from file " + _filename + ": " + _dl.error();
@@ -88,6 +91,7 @@ namespace mongo {
                 return false;
             }
 
+            // Check permissions
             {
                 // TODO: portability, dlinfo should work on freebsd
                 Dl_info info;
@@ -113,6 +117,43 @@ namespace mongo {
                 LOG(2) << "Found plugin \"" << _filename << "\" actually at \"" << _fullpath << "\"" << endl;
             }
 
+            // Verify checksum
+            {
+                class Closer : boost::noncopyable {
+                    std::ifstream &_f;
+                  public:
+                    Closer(std::ifstream &f) : _f(f) {}
+                    ~Closer() { _f.close(); }
+                };
+
+                boost::scoped_ptr<Hasher> hasher(HasherFactory::createHasher(0));
+                size_t bufsize = 1<<12;
+                scoped_array<char> hashBuf(new char[bufsize]);
+                std::ifstream fs(_fullpath.c_str(), std::ifstream::binary);
+                if (!fs.is_open()) {
+                    stringstream ss;
+                    ss << "couldn't open file \"" << _fullpath << "\": " << errnoWithDescription() << endl;
+                    errmsg = ss.str();
+                    return false;
+                }
+                Closer closer(fs);
+
+                while (fs.good()) {
+                    fs.read(hashBuf.get(), bufsize);
+                    hasher->addData(static_cast<const void *>(hashBuf.get()), fs.gcount());
+                }
+                hasher->finish(_hash);
+
+                if (!expectedHash.empty()) {
+                    if (expectedHash != hashString()) {
+                        stringstream ss;
+                        ss << "MD5 mismatch for plugin \"" << _filename << "\": expected " << expectedHash << ", found " << hashString();
+                        errmsg = ss.str();
+                        return false;
+                    }
+                }
+            }
+
             GetInterfaceFunc getInterface = reinterpret_cast<GetInterfaceFunc>(getInterfacev);
             PluginInterface *interfacep = getInterface();
             if (interfacep == NULL) {
@@ -130,6 +171,10 @@ namespace mongo {
                 return empty;
             }
             return _interface->name();
+        }
+
+        string PluginHandle::hashString() const {
+            return digestToString(_hash);
         }
 
         bool PluginHandle::load(string &errmsg, BSONObjBuilder &result) {
@@ -154,6 +199,7 @@ namespace mongo {
             result.append("fullpath", _fullpath);
             result.append("name", _interface->name());
             result.append("version", _interface->version());
+            result.append("checksum", hashString());
             return _interface->info(errmsg, result);
         }
 
@@ -182,18 +228,25 @@ namespace mongo {
 
         void Loader::autoload(const vector<string> &plugins) {
             for (vector<string>::const_iterator it = plugins.begin(); it != plugins.end(); ++it) {
-                const string &plugin = *it;
+                StringData pluginStr = *it;
+                size_t colonPos = pluginStr.find(':');
+                if (colonPos == string::npos) {
+                    LOG(0) << "Invalid plugin specification \"" << pluginStr << "\", should be \"<plugin name>:<md5 checksum>\"." << endl;
+                    continue;
+                }
+                StringData plugin = pluginStr.substr(0, colonPos);
+                StringData hash = pluginStr.substr(colonPos + 1);
                 if (plugin.find('/') != string::npos) {
                     LOG(0) << "Not loading plugin \"" << plugin << "\" because it contains a '/'." << endl;
                     continue;
                 }
+
                 stringstream ss;
-                ss << "lib" << plugin << ".so";
+                ss << "lib" << plugin.toString() << ".so";
                 BSONObjBuilder b;
                 string errmsg;
-                bool ok = load(ss.str(), errmsg, b);
+                bool ok = load(ss.str(), hash, errmsg, b);
                 if (ok) {
-                    LOG(0) << "Loaded plugin \"" << plugin << "\"." << endl;
                     LOG(1) << "\t" << b.done() << endl;
                 }
                 else {
@@ -202,10 +255,20 @@ namespace mongo {
             }
         }
 
-        bool Loader::load(const string &filename, string &errmsg, BSONObjBuilder &result) {
+        bool Loader::load(const string &filename, StringData expectedHash, string &errmsg, BSONObjBuilder &result) {
+            if (expectedHash == "skipChecksumValidation") {
+                expectedHash = StringData();
+            }
+            else if (expectedHash.spn("1234567890abcdef") != expectedHash.size()) {
+                stringstream ss;
+                ss << "Invalid expected checksum: \"" << expectedHash << "\", not loading plugin \"" << filename << "\"." << endl;
+                errmsg = ss.str();
+                return false;
+            }
+
             fs::path filepath = _pluginsDir / filename;
             shared_ptr<PluginHandle> pluginHandle(new PluginHandle(filepath.string()));
-            bool ok = pluginHandle->init(errmsg, result);
+            bool ok = pluginHandle->init(expectedHash, errmsg, result);
             if (!ok) {
                 return false;
             }

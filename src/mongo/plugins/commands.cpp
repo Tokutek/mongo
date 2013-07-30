@@ -37,7 +37,7 @@ namespace mongo {
         virtual bool adminOnly() const { return true; }
         virtual void help(stringstream &h) const {
             h << "Load a plugin into mongod." << endl
-              << "{ loadPlugin : <name> [, filename: <filename>] }" << endl;
+              << "{ loadPlugin : <name> [, checksum: <md5 checksum>] }" << endl;
         }
         LoadPluginCommand() : InformationCommand("loadPlugin", false) {}
 
@@ -57,7 +57,17 @@ namespace mongo {
                 return false;
             }
             string filename = mongoutils::str::stream() << "lib" << name << ".so";
-            return plugins::loader.load(filename, errmsg, result);
+
+            StringData checksum("skipChecksumValidation");
+            BSONElement cksumElt = cmdObj["checksum"];
+            if (cksumElt.ok()) {
+                if (cksumElt.type() != String) {
+                    errmsg = "checksum must be a string";
+                    return false;
+                }
+                checksum = cksumElt.Stringdata();
+            }
+            return plugins::loader.load(filename, checksum, errmsg, result);
         }
     } loadPluginCommand;
 

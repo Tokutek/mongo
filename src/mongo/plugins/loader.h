@@ -23,6 +23,7 @@
 #include <map>
 #include <boost/filesystem.hpp>
 
+#include "mongo/db/hasher.h"
 #include "mongo/plugins/dl.h"
 #include "mongo/plugins/plugins.h"
 
@@ -36,6 +37,7 @@ namespace mongo {
             DLHandle _dl;
             PluginInterface *_interface;
             bool _loaded;
+            HashDigest _hash;
 
           public:
             explicit PluginHandle(const string &filename)
@@ -46,8 +48,9 @@ namespace mongo {
                       _loaded(false) {}
             ~PluginHandle();
             const string &name() const;
-            bool init(string &errmsg, BSONObjBuilder &result);
+            bool init(const StringData &expectedHash, string &errmsg, BSONObjBuilder &result);
             bool load(string &errmsg, BSONObjBuilder &result);
+            string hashString() const;
             bool info(string &errmsg, BSONObjBuilder &result) const;
             bool unload(string &errmsg);
         };
@@ -63,7 +66,7 @@ namespace mongo {
             Loader() : _pluginsDir(defaultPluginsDir()) {}
             void setPluginsDir(const string &path);
             void autoload(const vector<string> &plugins);
-            bool load(const string &filename, string &errmsg, BSONObjBuilder &result);
+            bool load(const string &filename, StringData expectedHash, string &errmsg, BSONObjBuilder &result);
             bool list(string &errmsg, BSONObjBuilder &result) const;
             bool unload(const StringData &name, string &errmsg, BSONObjBuilder &result);
             void shutdown();
