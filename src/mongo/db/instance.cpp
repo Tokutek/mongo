@@ -1010,6 +1010,8 @@ namespace mongo {
 
         {
             Lock::GlobalWrite lk;
+            log() << "aborting any live transactions" << endl;
+            Client::abortLiveTransactions();
             log() << "now exiting" << endl;
             dbexit( code );
         }
