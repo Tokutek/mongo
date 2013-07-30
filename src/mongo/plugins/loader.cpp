@@ -203,7 +203,7 @@ namespace mongo {
         }
 
         bool Loader::load(const string &filename, string &errmsg, BSONObjBuilder &result) {
-            fs::path filepath = pluginsDir() / filename;
+            fs::path filepath = _pluginsDir / filename;
             shared_ptr<PluginHandle> pluginHandle(new PluginHandle(filepath.string()));
             bool ok = pluginHandle->init(errmsg, result);
             if (!ok) {
@@ -269,7 +269,14 @@ namespace mongo {
             }
         }
 
-        fs::path Loader::pluginsDir() {
+        void Loader::setPluginsDir(const string &path) {
+            string errmsg;
+            bool ok = checkPermissions(path, 3, S_IWOTH, errmsg);
+            massert(16901, errmsg, ok);
+            _pluginsDir = path;
+        }
+
+        fs::path Loader::defaultPluginsDir() {
             ProcessInfo p;
             fs::path exePath(p.getExePath());
             return exePath.parent_path().parent_path() / "lib64" / "plugins";

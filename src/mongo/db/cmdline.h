@@ -127,6 +127,7 @@ namespace mongo {
         string tmpDir;
         uint64_t txnMemLimit;
 
+        string pluginsDir;
         vector<string> plugins;
 
         static void launchOk();
@@ -164,7 +165,7 @@ namespace mongo {
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
         directio(false), cacheSize(0), checkpointPeriod(60), cleanerPeriod(2),
         cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""),
-        txnMemLimit(1ULL<<20), plugins()
+        txnMemLimit(1ULL<<20), pluginsDir(), plugins()
     {
         started = time(0);
 

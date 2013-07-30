@@ -307,6 +307,9 @@ static bool runMongosServer( bool doUpgrade ) {
 
     init();
 
+    if (!cmdLine.pluginsDir.empty()) {
+        plugins::loader.setPluginsDir(cmdLine.pluginsDir);
+    }
     plugins::loader.autoload(cmdLine.plugins);
 
 #if !defined(_WIN32)

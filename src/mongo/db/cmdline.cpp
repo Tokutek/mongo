@@ -131,6 +131,7 @@ namespace mongo {
         ("fork" , "fork server process" )
         ("syslog" , "log to system's syslog facility instead of file or stdout" )
 #endif
+        ("pluginsDir", po::value<string>(), "directory containing plugins (defaults to lib64/plugins)")
         ("loadPlugin", po::value<vector<string> >()->composing(), "load plugins at startup")
         ;
         
@@ -477,6 +478,10 @@ namespace mongo {
         }
         else {
             cmdLine.keyFile = false;
+        }
+
+        if (params.count("pluginsDir")) {
+            cmdLine.pluginsDir = params["pluginsDir"].as<string>();
         }
 
         if (params.count("loadPlugin")) {

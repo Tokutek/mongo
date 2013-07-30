@@ -55,10 +55,13 @@ namespace mongo {
         class Loader : boost::noncopyable {
             typedef map<string, shared_ptr<PluginHandle> > PluginMap;
             PluginMap _plugins;
+            boost::filesystem::path _pluginsDir;
 
-            static boost::filesystem::path pluginsDir();
+            static boost::filesystem::path defaultPluginsDir();
 
           public:
+            Loader() : _pluginsDir(defaultPluginsDir()) {}
+            void setPluginsDir(const string &path);
             void autoload(const vector<string> &plugins);
             bool load(const string &filename, string &errmsg, BSONObjBuilder &result);
             bool list(string &errmsg, BSONObjBuilder &result) const;
