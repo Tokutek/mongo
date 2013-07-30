@@ -25,14 +25,18 @@ namespace mongo {
 
     class ProgressMeter : boost::noncopyable {
     public:
-        ProgressMeter( unsigned long long total , int secondsBetween = 3 , int checkInterval = 100 , std::string units = "" ) : _units(units) {
+        ProgressMeter(unsigned long long total,
+                      int secondsBetween = 3,
+                      int checkInterval = 100,
+                      std::string units = "",
+                      std::string name = "Progress")
+                : _showTotal(true),
+                  _units(units),
+                  _name(name) {
             reset( total , secondsBetween , checkInterval );
         }
 
-        ProgressMeter() {
-            _active = 0;
-            _units = "";
-        }
+        ProgressMeter() : _active(0), _showTotal(true), _units(""), _name("Progress") {}
 
         // typically you do ProgressMeterHolder
         void reset( unsigned long long total , int secondsBetween = 3 , int checkInterval = 100 );
@@ -59,6 +63,10 @@ namespace mongo {
 
         unsigned long long total() const { return _total; }
 
+        void showTotal(bool doShow) {
+            _showTotal = doShow;
+        }
+
         std::string toString() const;
 
         bool operator==( const ProgressMeter& other ) const { return this == &other; }
@@ -68,6 +76,7 @@ namespace mongo {
         bool _active;
 
         unsigned long long _total;
+        bool _showTotal;
         int _secondsBetween;
         int _checkInterval;
 
