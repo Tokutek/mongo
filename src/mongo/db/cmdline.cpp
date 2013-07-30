@@ -456,7 +456,7 @@ namespace {
                 }
             }
         }
-        if (!params.count("clusterAuthMode")){
+        if (!params.count("clusterAuthMode") && params.count("keyfile")){
             cmdLine.clusterAuthMode = "keyfile";
         }
 
