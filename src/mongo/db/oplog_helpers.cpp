@@ -217,22 +217,16 @@ namespace OpLogHelpers{
                 Client::WriteContext ctx(ns);
                 NamespaceDetails* nsd = nsdetails(ns);
                 NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
-                BSONObj key = row["key"].Obj();
                 const string &coll = row["ns"].String();
-                NamespaceDetails* collNsd = nsdetails(coll.c_str());
 
-                // TODO: Use collNsd->ensureIndex(row), which returns true if the
-                //       index did not exists and is now built, and false otherwise.
-                //       It does not insert into system.indexes or system.namespaces
-                int i = collNsd->findIndexByKeyPattern(key);
-                if (i >= 0) {
+                NamespaceDetails* collNsd = nsdetails(coll);
+                const bool ok = collNsd->ensureIndex(row);
+                if (!ok) {
                     // the index already exists, so this is a no-op
                     // Note that for create index and drop index, we
                     // are tolerant of the fact that the operation may
                     // have already been done
                     return;
-                } else {
-                    collNsd->createIndex(row);
                 }
                 // overwrite set to true because we are running on a secondary
                 insertOneObject(nsd, nsdt, row, NamespaceDetails::NO_UNIQUE_CHECKS);

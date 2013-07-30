@@ -309,9 +309,6 @@ namespace mongo {
         // update an object in the namespace by pk, replacing oldObj with newObj
         virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags = 0);
 
-        // create a new index with the given info for this namespace.
-        virtual void createIndex(const BSONObj &info);
-
         // remove everything from a collection
         virtual void empty();
 
@@ -338,12 +335,38 @@ namespace mongo {
             msgasserted( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection" );
         }
 
+        class Indexer : boost::noncopyable {
+        public:
+            // Must be write locked for both construction/destruction.
+            Indexer(NamespaceDetails *d, const BSONObj &info);
+            ~Indexer();
+
+            // Must be read locked if the implementation is "hot" (since a write lock is overkill).
+            //
+            // Must be write locked while the implementation is still cold, which means
+            // reads/writes to the collection are not allowed while the index is building.
+            void build();
+
+            // Must be write locked.
+            void commit();
+
+        private:
+            // Need to ensure that this namespace will not get dropped/destroyed
+            // during the lifetime of the indexer.
+            NamespaceDetails *_d;
+            const BSONObj _info;
+            const bool _isSecondaryIndex;
+        };
+
     protected:
         NamespaceDetails(const StringData& ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit NamespaceDetails(const BSONObj &serialized);
 
+        // create a new index with the given info for this namespace.
+        virtual void createIndex(const BSONObj &info);
+
         void checkIndexUniqueness(const IndexDetails &idx);
-        void buildIndex(shared_ptr<IndexDetails> &index);
+        void buildIndex(IndexDetails &idx);
 
         void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);

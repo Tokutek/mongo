@@ -905,6 +905,9 @@ def main():
     parser.add_option('--shuffle', dest='shuffle', default=False,
                       action="store_true",
                       help='Shuffle tests instead of running them in alphabetical order')
+    parser.add_option('--skip-until', dest='skip_tests_until', default="",
+                      action="store",
+                      help='Skip all tests alphabetically less than the given name.')
 
     # Buildlogger invocation from command line
     parser.add_option('--buildlogger-builder', dest='buildlogger_builder', default=None,
@@ -976,6 +979,14 @@ def main():
     if options.shuffle:
         import random
         random.shuffle(tests)
+
+    if options.skip_tests_until != "":
+        filtered_tests = []
+        for t in tests:
+            name = t[0]
+            if name >= name[:name.rfind('/')] + "/" + options.skip_tests_until:
+                filtered_tests.append(t)
+        tests = filtered_tests
 
     try:
         run_tests(tests)
