@@ -25,15 +25,56 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <boost/filesystem.hpp>
+
 #include "mongo/base/string_data.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/plugins/dl.h"
 #include "mongo/plugins/plugins.h"
 #include "mongo/util/log.h"
+#include "mongo/util/processinfo.h"
+
+namespace fs = boost::filesystem;
 
 namespace mongo {
 
     namespace plugins {
+
+        static bool checkPermissions(fs::path abspath, int components, int invalidPerms, string &errmsg) {
+            for (fs::path::iterator it = abspath.begin(); it != abspath.end(); ++it) {
+                if (*it == ".." || *it == ".") {
+                    stringstream ss;
+                    ss << "invalid path component \"" << *it << "\" in plugin path";
+                    errmsg = ss.str();
+                    return false;
+                }
+            }
+
+            // We want to check the paths from top to bottom.
+            vector<fs::path> paths;
+            for (int i = 0; i < components && !abspath.empty(); ++i) {
+                paths.push_back(abspath);
+                abspath = abspath.parent_path();
+            }
+            for (vector<fs::path>::const_reverse_iterator it = paths.rbegin(); it != paths.rend(); ++it) {
+                struct stat st;
+                const string &curPath = it->string();
+                int r = stat(curPath.c_str(), &st);
+                if (r != 0) {
+                    stringstream ss;
+                    ss << "couldn't stat \"" << curPath << "\" ( error " << errnoWithDescription() << ")" << endl;
+                    errmsg = ss.str();
+                    return false;
+                }
+                if ((st.st_mode & invalidPerms) != 0) {
+                    stringstream ss;
+                    ss << "invalid permissions " << std::oct << std::setw(4) << std::setfill('0') << invalidPerms << " on path \"" << curPath << "\"";
+                    errmsg = ss.str();
+                    return false;
+                }
+            }
+            return true;
+        }
 
         bool PluginHandle::init(string &errmsg, BSONObjBuilder &result) {
             bool ok = _dl.open(_filename.c_str(), RTLD_NOW);
@@ -57,25 +98,19 @@ namespace mongo {
                     return false;
                 }
 
+                // Need to check before resolving symlinks and after resolving them.
+                ok = checkPermissions(info.dli_fname, 4, S_IWOTH, errmsg);
+                if (!ok) {
+                    return false;
+                }
                 shared_ptr<char> buf(realpath(info.dli_fname, NULL), free);
+                ok = checkPermissions(buf.get(), 4, S_IWOTH, errmsg);
+                if (!ok) {
+                    return false;
+                }
                 _fullpath = buf.get();
 
                 LOG(2) << "Found plugin \"" << _filename << "\" actually at \"" << _fullpath << "\"" << endl;
-
-                struct stat st;
-                r = stat(_fullpath.c_str(), &st);
-                if (r != 0) {
-                    stringstream ss;
-                    ss << "couldn't stat [" << _fullpath << "] (error " << errnoWithDescription() << "), not loading plugin";
-                    errmsg += ss.str();
-                    return false;
-                }
-                if (st.st_mode & S_IWOTH) {
-                    stringstream ss;
-                    ss << "plugin \"" << _filename << "\" at \"" << _fullpath << "\" is world writable, not loading";
-                    errmsg += ss.str();
-                    return false;
-                }
             }
 
             GetInterfaceFunc getInterface = reinterpret_cast<GetInterfaceFunc>(getInterfacev);
@@ -105,6 +140,7 @@ namespace mongo {
             bool ok = _interface->load(errmsg, result);
             if (ok) {
                 LOG(0) << "Loaded plugin " << name() << " from " << _filename << endl;
+                _loaded = true;
             }
             return ok;
         }
@@ -121,6 +157,15 @@ namespace mongo {
             return _interface->info(errmsg, result);
         }
 
+        PluginHandle::~PluginHandle() {
+            if (_loaded) {
+                string errmsg;
+                if (!unload(errmsg)) {
+                    LOG(0) << "Error unloading plugin in destructor: " << errmsg << endl;
+                }
+            }
+        }
+
         bool PluginHandle::unload(string &errmsg) {
             if (!_interface) {
                 errmsg = "plugin not initialized";
@@ -131,11 +176,35 @@ namespace mongo {
             _interface = NULL;
             _dl.close();
             LOG(0) << "Unloaded plugin " << nameCopy << " from " << _filename << endl;
+            _loaded = false;
             return true;
         }
 
-        bool Loader::load(const StringData &filename, string &errmsg, BSONObjBuilder &result) {
-            shared_ptr<PluginHandle> pluginHandle(new PluginHandle(filename.toString()));
+        void Loader::autoload(const vector<string> &plugins) {
+            for (vector<string>::const_iterator it = plugins.begin(); it != plugins.end(); ++it) {
+                const string &plugin = *it;
+                if (plugin.find('/') != string::npos) {
+                    LOG(0) << "Not loading plugin \"" << plugin << "\" because it contains a '/'." << endl;
+                    continue;
+                }
+                stringstream ss;
+                ss << "lib" << plugin << ".so";
+                BSONObjBuilder b;
+                string errmsg;
+                bool ok = load(ss.str(), errmsg, b);
+                if (ok) {
+                    LOG(0) << "Loaded plugin \"" << plugin << "\"." << endl;
+                    LOG(1) << "\t" << b.done() << endl;
+                }
+                else {
+                    LOG(0) << "Error loading plugin \"" << plugin << "\": " << errmsg << endl;
+                }
+            }
+        }
+
+        bool Loader::load(const string &filename, string &errmsg, BSONObjBuilder &result) {
+            fs::path filepath = _pluginsDir / filename;
+            shared_ptr<PluginHandle> pluginHandle(new PluginHandle(filepath.string()));
             bool ok = pluginHandle->init(errmsg, result);
             if (!ok) {
                 return false;
@@ -198,6 +267,19 @@ namespace mongo {
                 }
                 _plugins.erase(it);
             }
+        }
+
+        void Loader::setPluginsDir(const string &path) {
+            string errmsg;
+            bool ok = checkPermissions(path, 3, S_IWOTH, errmsg);
+            massert(16901, errmsg, ok);
+            _pluginsDir = path;
+        }
+
+        fs::path Loader::defaultPluginsDir() {
+            ProcessInfo p;
+            fs::path exePath(p.getExePath());
+            return exePath.parent_path().parent_path() / "lib64" / "plugins";
         }
 
         Loader loader;
