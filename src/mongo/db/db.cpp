@@ -42,7 +42,7 @@
 #include "mongo/db/stats/snapshots.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/ttl.h"
-#include "mongo/plugins/autoload.h"
+#include "mongo/plugins/loader.h"
 #include "mongo/s/d_writeback.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/background.h"
@@ -367,7 +367,10 @@ namespace mongo {
         /* this is for security on certain platforms (nonce generation) */
         srand((unsigned) (curTimeMicros() ^ startupSrandTimer.micros()));
 
-        plugins::autoload(cmdLine.autoloadPluginsDir);
+        if (!cmdLine.pluginsDir.empty()) {
+            plugins::loader.setPluginsDir(cmdLine.pluginsDir);
+        }
+        plugins::loader.autoload(cmdLine.plugins);
 
         snapshotThread.go();
         d.clientCursorMonitor.go();
@@ -524,7 +527,6 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     ("syncdelay",po::value<double>(&cmdLine.syncdelay)->default_value(60), "seconds between disk syncs (0=never, but not recommended)")
     ("sysinfo", "print some diagnostic system information")
     ("txnMemLimit", po::value<uint64_t>(), "limit of the size of a transaction's  operation")
-    ("autoloadPluginsDir", po::value<string>(), "directory in which to search for plugins to autoload")
     ("upgrade", "upgrade db if needed")
     ;
 
@@ -753,12 +755,6 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
                 out() << "--txnMemLimit cannot be greater than 2MB" << endl;
                 dbexit( EXIT_BADOPTIONS );
             }
-        }
-        if (params.count("autoloadPluginsDir")) {
-            cmdLine.autoloadPluginsDir = params["autoloadPluginsDir"].as<string>();
-        }
-        else {
-            cmdLine.autoloadPluginsDir = plugins::defaultDir();
         }
         if (params.count("nohints")) {
             useHints = false;

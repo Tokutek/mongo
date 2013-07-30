@@ -2,8 +2,7 @@
 
 Import("env")
 
-env.StaticLibrary('plugins', ['autoload.cpp',
-                              'commands.cpp',
+env.StaticLibrary('plugins', ['commands.cpp',
                               'dl.cpp',
                               'loader.cpp'])
 

@@ -21,6 +21,7 @@
 #include "mongo/pch.h"
 
 #include <map>
+#include <boost/filesystem.hpp>
 
 #include "mongo/plugins/dl.h"
 #include "mongo/plugins/plugins.h"
@@ -34,9 +35,16 @@ namespace mongo {
             string _fullpath;
             DLHandle _dl;
             PluginInterface *_interface;
+            bool _loaded;
 
           public:
-            explicit PluginHandle(const string &filename) : _filename(filename) {}
+            explicit PluginHandle(const string &filename)
+                    : _filename(filename),
+                      _fullpath(""),
+                      _dl(),
+                      _interface(NULL),
+                      _loaded(false) {}
+            ~PluginHandle();
             const string &name() const;
             bool init(string &errmsg, BSONObjBuilder &result);
             bool load(string &errmsg, BSONObjBuilder &result);
@@ -47,8 +55,15 @@ namespace mongo {
         class Loader : boost::noncopyable {
             typedef map<string, shared_ptr<PluginHandle> > PluginMap;
             PluginMap _plugins;
+            boost::filesystem::path _pluginsDir;
+
+            static boost::filesystem::path defaultPluginsDir();
+
           public:
-            bool load(const StringData &filename, string &errmsg, BSONObjBuilder &result);
+            Loader() : _pluginsDir(defaultPluginsDir()) {}
+            void setPluginsDir(const string &path);
+            void autoload(const vector<string> &plugins);
+            bool load(const string &filename, string &errmsg, BSONObjBuilder &result);
             bool list(string &errmsg, BSONObjBuilder &result) const;
             bool unload(const StringData &name, string &errmsg, BSONObjBuilder &result);
             void shutdown();

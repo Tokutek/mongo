@@ -42,37 +42,22 @@ namespace mongo {
         LoadPluginCommand() : InformationCommand("loadPlugin", false) {}
 
         virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
-            if (db != "admin") {
-                errmsg = "loadPlugin must be run on the admin db";
+            BSONElement e = cmdObj.firstElement();
+            if (e.type() != String) {
+                errmsg = "loadPlugin argument must be a string";
                 return false;
             }
-            BSONElement filenameElt = cmdObj["filename"];
-            if (filenameElt.ok()) {
-                if (filenameElt.type() != String) {
-                    errmsg = "filename argument must be a string";
-                    return false;
-                }
-                StringData filename = filenameElt.Stringdata();
-                if (filename.empty()) {
-                    errmsg = "filename argument must not be empty";
-                    return false;
-                }
-                return plugins::loader.load(filename, errmsg, result);
+            string name = e.str();
+            if (name.empty()) {
+                errmsg = "loadPlugin argument must not be empty";
+                return false;
             }
-            else {
-                BSONElement e = cmdObj.firstElement();
-                if (e.type() != String) {
-                    errmsg = "loadPlugin argument must be a string";
-                    return false;
-                }
-                string name = e.str();
-                if (name.empty()) {
-                    errmsg = "loadPlugin argument must not be empty";
-                    return false;
-                }
-                string filename = mongoutils::str::stream() << "lib" << name << ".so";
-                return plugins::loader.load(filename, errmsg, result);
+            if (name.find('/') != string::npos) {
+                errmsg = "loadPlugin argument cannot contain a '/'";
+                return false;
             }
+            string filename = mongoutils::str::stream() << "lib" << name << ".so";
+            return plugins::loader.load(filename, errmsg, result);
         }
     } loadPluginCommand;
 
@@ -114,10 +99,6 @@ namespace mongo {
         UnloadPluginCommand() : InformationCommand("unloadPlugin", false) {}
 
         virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
-            if (db != "admin") {
-                errmsg = "unloadPlugin must be run on the admin db";
-                return false;
-            }
             BSONElement e = cmdObj.firstElement();
             if (e.type() != String) {
                 errmsg = "unloadPlugin argument must be a string";
