@@ -288,6 +288,7 @@ namespace mongo {
             NaturalOrderCollection::insertObject(obj, flags);
         }
 
+    protected:
         void createIndex(const BSONObj &info) {
             msgasserted(16464, "bug: system collections should not be indexed." );
         }
@@ -696,6 +697,7 @@ namespace mongo {
             msgasserted( 16850, "bug: The profile collection should not be updated." );
         }
 
+    protected:
         void createIndex(const BSONObj &idx_info) {
             uassert(16851, "Cannot have an _id index on the system profile collection", !idx_info["key"]["_id"].ok());
         }
@@ -730,8 +732,9 @@ namespace mongo {
                 // TODO: This is where we call _loader->abort()
             } else {
                 // TODO: This is where we call _loader->close()
-                for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-                    IndexDetails &idx = *it->get();
+                verify(!_indexBuildInProgress);
+                for (int i = 0; i < _nIndexes; i++) {
+                    IndexDetails &idx = *_indexes[i];
                     // The PK's uniqueness is verified on loader close, so we should not check it again.
                     if (!isPKIndex(idx) && idx.unique()) {
                         checkIndexUniqueness(idx);
@@ -759,9 +762,6 @@ namespace mongo {
         void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags = 0) {
             uasserted( 16866, "Cannot update a collection under-going bulk load." );
         }
-        void createIndex(const BSONObj &info) {
-            uasserted( 16867, "Cannot create an index on a collection under-going bulk load." );
-        }
         void empty() {
             uasserted( 16868, "Cannot empty a collection under-going bulk load." );
         }
@@ -772,8 +772,12 @@ namespace mongo {
                          BSONObjBuilder &result, bool mayDeleteIdIndex) {
             uasserted( 16894, "Cannot perform drop/dropIndexes on of a collection under-going bulk load." );
         }
-        // TODO: We need to prevent other things too, like drop and dropIndexes. Virtualize
-        //       them and put the uassert implementations here.
+
+    protected:
+        void createIndex(const BSONObj &info) {
+            uasserted( 16867, "Cannot create an index on a collection under-going bulk load." );
+        }
+
     private:
         // The connection that started the bulk load is the only one that can
         // do anything with the namespace until the load is complete and this
@@ -914,9 +918,10 @@ namespace mongo {
 
     void NamespaceDetails::close(const bool aborting) {
         // The default implementation doesn't care if the caller is closing for abort.
-        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-            IndexDetails *idx = it->get();
-            idx->close();
+        verify(!_indexBuildInProgress);
+        for (int i = 0; i < _nIndexes; i++) {
+            IndexDetails &idx = *_indexes[i];
+            idx.close();
         }
         NamespaceDetailsTransient::eraseForPrefix(_ns);
     }
@@ -932,9 +937,10 @@ namespace mongo {
     }
     BSONObj NamespaceDetails::serialize() const {
         BSONArrayBuilder indexes_array;
-        for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); it++) {
-            IndexDetails *index = it->get();
-            indexes_array.append(index->info());
+        // Serialize all indexes that exist, including a hot index if it exists.
+        for (int i = 0; i < nIndexesBeingBuilt(); i++) {
+            IndexDetails &idx = *_indexes[i];
+            indexes_array.append(idx.info());
         }
         return serialize(_ns, _options, _pk, _multiKeyIndexBits, indexes_array.arr());
     }
@@ -1028,7 +1034,7 @@ namespace mongo {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
 
-        const int n = nIndexesBeingBuilt();
+        const int n = _nIndexes;
         DB *dbs[n];
         DBT key_dbts[n];
         DBT val_dbts[n];
@@ -1103,7 +1109,7 @@ namespace mongo {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
 
-        const int n = nIndexesBeingBuilt();
+        const int n = _nIndexes;
         DB *dbs[n];
         DBT key_dbts[n];
         DBT val_dbts[n];
@@ -1258,18 +1264,16 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::buildIndex(shared_ptr<IndexDetails> &index) {
-        _indexBuildInProgress = true;
+    void NamespaceDetails::buildIndex(IndexDetails &idx) {
+        IndexDetails::Builder builder(idx);
 
-        IndexDetails::Builder builder(*index);
-
-        const int indexNum = idxNo(*index);
+        const int indexNum = idxNo(idx);
         for ( shared_ptr<Cursor> cursor(BasicCursor::make(this));
               cursor->ok(); cursor->advance() ) {
             BSONObj pk = cursor->currPK();
             BSONObj obj = cursor->current();
             BSONObjSet keys;
-            index->getKeysFromObject(obj, keys);
+            idx.getKeysFromObject(obj, keys);
             if (keys.size() > 1) {
                 setIndexIsMultikey(_ns, indexNum);
             }
@@ -1282,11 +1286,9 @@ namespace mongo {
         builder.done();
 
         // If the index is unique, check all adjacent keys for a duplicate.
-        if (index->unique()) {
-            checkIndexUniqueness(*index);
+        if (idx.unique()) {
+            checkIndexUniqueness(idx);
         }
-
-        _indexBuildInProgress = false;
     }
 
     void NamespaceDetails::empty() {
@@ -1295,79 +1297,15 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::createIndex(const BSONObj &idx_info) {
-        uassert(16449, "dropDups is not supported and is likely to remain unsupported for some time because it deletes arbitrary data",
-                !idx_info["dropDups"].trueValue());
-        uassert(12588, "cannot add index with a background operation in progress", !_indexBuildInProgress);
-        uassert(12523, "no index name specified", idx_info["name"].ok());
-
-        const StringData &name = idx_info["name"].Stringdata();
-        if (findIndexByName(name) >= 0) {
-            // index already exists.
-            uasserted(16753, mongoutils::str::stream() << "index with name " << name << " already exists");
-        }
-        const BSONObj &keyPattern = idx_info["key"].Obj();
-        if (findIndexByKeyPattern(keyPattern) >= 0) {
-            string s = (mongoutils::str::stream() << "index already exists with diff name " << name << ' ' << keyPattern.toString());
-            LOG(2) << s << endl;
-            uasserted(16754, s);
-        }
-
-        if (nIndexes() >= NIndexesMax ) {
-            string s = (mongoutils::str::stream() <<
-                        "add index fails, too many indexes for " << name <<
-                        " key:" << keyPattern.toString());
-            log() << s << endl;
-            uasserted(12505,s);
-        }
-
+    // Wrapper for offline (write locked) indexing.
+    void NamespaceDetails::createIndex(const BSONObj &info) {
         if (!Lock::isWriteLocked(_ns)) {
             throw RetryWithWriteLock();
         }
 
-        // Note this ns in the rollback so if this transaction aborts, we'll
-        // close this ns, forcing the next user to reload in-memory metadata.
-        NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(_ns);
-
-        shared_ptr<IndexDetails> index(new IndexDetails(idx_info));
-        // Ensure we initialize the spec in case the collection is empty.
-        // This also causes an error to be thrown if we're trying to create an invalid index on an empty collection.
-        const bool isSecondaryIndex = _nIndexes > 0;
-        try {
-            index->getSpec();
-            _indexes.push_back(index);
-
-            // Only secondary indexes need to be built.
-            if (isSecondaryIndex) {
-                try {
-                    buildIndex(index);
-                }
-                catch (...) {
-                    _indexes.pop_back();
-                    throw;
-                }
-            }
-        }
-        catch (...) {
-            // Can't let the IndexDetails destructor get called on its own any more, see IndexDetails::close for why.
-            index->close();
-            throw;
-        }
-        _nIndexes++;
-
-        const StringData &idx_ns = idx_info["ns"].Stringdata();
-
-        // The first index we create should be the pk index, when we first create the collection.
-        // Therefore the collection's NamespaceDetails should not already exist in the NamespaceIndex
-        // unless we are building a secondary index (and therefore the collection already exists)
-        const bool may_overwrite = isSecondaryIndex;
-        if (!may_overwrite) {
-            massert(16435, "first index should be pk index", index->keyPattern() == _pk);
-        }
-        nsindex(idx_ns)->update_ns(idx_ns, serialize(), isSecondaryIndex);
-
-        NamespaceDetailsTransient::get(idx_ns).addedIndex();
+        Indexer indexer(this, info);
+        indexer.build();
+        indexer.commit();
     }
 
     // Normally, we cannot drop the _id_ index.
@@ -1386,17 +1324,23 @@ namespace mongo {
         NamespaceDetails *d = nsdetails(ns);
         ClientCursor::invalidate(ns);
 
+        const int idxNum = findIndexByName(name);
+        if (_indexBuildInProgress &&
+            (name == "*" || idxNum == (int) _indexes.size() - 1)) {
+            uasserted( 16904, "Cannot drop index: build in progress." );
+        }
+
         if (name == "*") {
             result.append("nIndexesWas", (double) _nIndexes);
             // This is O(n^2), not great, but you can have at most 64 indexes anyway.
-            for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ) {
-                IndexDetails *idx = it->get();
-                if (mayDeleteIdIndex || (!idx->isIdIndex() && !d->isPKIndex(*idx))) {
-                    idx->kill_idx();
-                    it = _indexes.erase(it);
+            for (int i = 0; i < _nIndexes; ) {
+                IndexDetails &idx = *_indexes[i];
+                if (mayDeleteIdIndex || (!idx.isIdIndex() && !d->isPKIndex(idx))) {
+                    idx.kill_idx();
+                    _indexes.erase(_indexes.begin() + i);
                     _nIndexes--;
                 } else {
-                    it++;
+                    i++;
                 }
             }
             // Assuming id index isn't multikey
@@ -1405,10 +1349,9 @@ namespace mongo {
                                   ? "indexes dropped for collection"
                                   : "non-_id indexes dropped for collection"));
         } else {
-            int x = findIndexByName(name);
-            if (x >= 0) {
+            if (idxNum >= 0) {
                 result.append("nIndexesWas", (double) _nIndexes);
-                IndexVector::iterator it = _indexes.begin() + x;
+                IndexVector::iterator it = _indexes.begin() + idxNum;
                 IndexDetails *idx = it->get();
                 if ( !mayDeleteIdIndex && (idx->isIdIndex() || d->isPKIndex(*idx)) ) {
                     errmsg = "may not delete _id or $_ index";
@@ -1418,8 +1361,8 @@ namespace mongo {
                 _indexes.erase(it);
                 _nIndexes--;
                 // Removes the nth bit, and shifts any bits higher than it down a slot.
-                _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << x) - 1)) |
-                                     ((_multiKeyIndexBits >> (x + 1)) << x));
+                _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << idxNum) - 1)) |
+                                     ((_multiKeyIndexBits >> (idxNum + 1)) << idxNum));
             } else {
                 // theoretically, this should not be needed, as we do all of our fileops
                 // transactionally, but keeping this here just in case at the moment
@@ -1439,17 +1382,17 @@ namespace mongo {
     }
 
     void NamespaceDetails::fillIndexStats(std::vector<IndexStats> &indexStats) const {
-        for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-            IndexDetails *index = it->get();
-            IndexStats stats(*index);
+        for (int i = 0; i < _nIndexes; i++) {
+            IndexDetails &idx = *_indexes[i];
+            IndexStats stats(idx);
             indexStats.push_back(stats);
         }
     }
 
     void NamespaceDetails::optimize() {
-        for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-            IndexDetails *index = it->get();
-            index->optimize();
+        for (int i = 0; i < _nIndexes; i++) {
+            IndexDetails &idx = *_indexes[i];
+            idx.optimize();
         }
     }
 
@@ -1533,8 +1476,9 @@ namespace mongo {
     }
 
     void NamespaceDetails::acquireTableLock() {
-        for (IndexVector::iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-            IndexDetails &idx = *it->get();
+        verify(!_indexBuildInProgress);
+        for (int i = 0; i < _nIndexes; i++) {
+            IndexDetails &idx = *_indexes[i];
             idx.acquireTableLock();
         }
     }

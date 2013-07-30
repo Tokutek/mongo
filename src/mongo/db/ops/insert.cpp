@@ -56,16 +56,8 @@ namespace mongo {
         }
     }
 
-    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
-        if (mongoutils::str::contains(ns, "system.")) {
-            massert(16748, "need transaction to run insertObjects", cc().txnStackSize() > 0);
-            uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
-            massert(16750, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
-            if (!handle_system_collection_insert(ns, objs[0], logop)) {
-                return;
-            }
-        }
-
+    // Does not check magic system collection inserts.
+    void _insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
         NamespaceDetails *details = getAndMaybeCreateNS(ns, logop);
         NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         for (size_t i = 0; i < objs.size(); i++) {
@@ -104,6 +96,18 @@ namespace mongo {
                 }
             }
         }
+    }
+
+    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
+        if (mongoutils::str::contains(ns, "system.")) {
+            massert(16748, "need transaction to run insertObjects", cc().txnStackSize() > 0);
+            uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
+            massert(16750, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
+            if (!handle_system_collection_insert(ns, objs[0], logop)) {
+                return;
+            }
+        }
+        _insertObjects(ns, objs, keepGoing, flags, logop);
     }
 
     void insertObject(const char *ns, const BSONObj &obj, uint64_t flags, bool logop) {

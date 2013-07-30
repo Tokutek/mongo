@@ -756,6 +756,65 @@ namespace mongo {
         return ok;
     }
 
+    static void _receivedSystemIndexesInsert(const char *ns, Message &m, const vector<BSONObj> objs) {
+        uassert(16905, "Can only build one index at a time.", objs.size() == 1);
+
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        scoped_ptr<NamespaceDetails::Indexer> indexer;
+
+        // XXX
+        // This is the magic write lock that prevents this hot indexing
+        // scaffolding from breaking the existing "cold" indexing logic.
+        //
+        // Remove it once the indexer implementation is hot.
+        Lock::DBWrite lk(ns);
+
+        // Indexer creation is done in a DBWrite lock
+        {
+            Lock::DBWrite lk(ns);
+
+            uassert(16902, "not master", isMasterNs(ns));
+            if (handlePossibleShardedMessage(m, 0)) {
+                return;
+            }
+
+            Client::Context ctx(ns);
+            const BSONObj &info = objs[0];
+            const StringData &coll = info["ns"].Stringdata();
+            NamespaceDetails *d = getAndMaybeCreateNS(coll, true);
+            uassert(16903, str::stream() << "Cannot build an index on a namespace under-going bulk load: " << ns,
+                           cc().bulkLoadNS() != coll);
+            if (d->findIndexByKeyPattern(info["key"].Obj()) >= 0) {
+                // No error or action if the index already exists. We need to commit
+                // the transaction in case this is an ensure index on the _id field
+                // and the ns was created by getAndMaybeCreateNS()
+                transaction.commit();
+                return;
+            }
+
+            indexer.reset(new NamespaceDetails::Indexer(d, info));
+            _insertObjects(ns, objs, false, 0, true);
+        }
+
+        // XXX Change me to a read lock once the indexer implementation is hot.
+        try {
+            Client::WriteContext ctx(ns);
+            indexer->build();
+        } catch (...) {
+            // The indexer destructor must be called in a write lock
+            Lock::DBWrite lk(ns);
+            indexer.reset();
+            throw;
+        }
+
+        // Commit is done in a DBWrite lock
+        {
+            Client::WriteContext ctx(ns);
+            indexer->commit();
+        }
+        transaction.commit();
+    }
+
     static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, const bool keepGoing) {
         // writelock is used to synchronize stepdowns w/ writes
         uassert(10058, "not master", isMasterNs(ns));
@@ -791,6 +850,11 @@ namespace mongo {
         OpSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setOpSettings(settings);
+
+        if (str::contains(ns, ".system.indexes")) {
+            _receivedSystemIndexesInsert(ns, m, objs);
+            return;
+        }
 
         try {
             Lock::DBRead lk(ns);
