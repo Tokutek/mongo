@@ -167,7 +167,12 @@ namespace {
 
     Status AuthzManagerExternalStateMongod::getAllDatabaseNames(
             std::vector<std::string>* dbnames) const {
+        LOCK_REASON(lockReason, "auth: getting database names");
+        Lock::GlobalRead lk(lockReason);
+        Client::AlternateTransactionStack altStack;
+        Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         getDatabaseNames(*dbnames);
+        txn.commit();
         return Status::OK();
     }
 
