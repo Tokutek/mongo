@@ -122,6 +122,11 @@ namespace mongo {
 
     void printGitVersion() { log() << "git version: " << gitVersion() << endl; }
 
+#ifdef MONGO_SSL
+    const char * openSSLVersion() { return SSLeay_version(SSLEAY_VERSION); }
+    void printOpenSSLVersion() { log() << "OpenSSL version: " << openSSLVersion() << endl; }
+#endif
+
     void printSysInfo() {
         log() << "build info: " << sysInfo() << endl;
     }
@@ -133,6 +138,9 @@ namespace mongo {
                << "tokumxVersion" << tokumxVersionString
                << "gitVersion" << gitVersion()
                << "tokukvVersion" << tokukvVersion()
+#ifdef MONGO_SSL
+               << "OpenSSLVersion" << openSSLVersion()
+#endif
                << "sysInfo" << sysInfo()
                << "loaderFlags" << loaderFlags()
                << "compilerFlags" << compilerFlags()
