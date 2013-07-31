@@ -103,12 +103,12 @@ namespace mongo {
                 }
 
                 // Need to check before resolving symlinks and after resolving them.
-                ok = checkPermissions(info.dli_fname, 4, S_IWOTH, errmsg);
+                ok = checkPermissions(info.dli_fname, 2, S_IWOTH, errmsg);
                 if (!ok) {
                     return false;
                 }
                 shared_ptr<char> buf(realpath(info.dli_fname, NULL), free);
-                ok = checkPermissions(buf.get(), 4, S_IWOTH, errmsg);
+                ok = checkPermissions(buf.get(), 2, S_IWOTH, errmsg);
                 if (!ok) {
                     return false;
                 }
@@ -267,8 +267,14 @@ namespace mongo {
             }
 
             fs::path filepath = _pluginsDir / filename;
+            // If the user set pluginsDir, we should basically trust it.  If we're going from
+            // "basedir", we should verify all the way up to it.
+            bool ok = checkPermissions(filepath, _pluginsDir == defaultPluginsDir() ? 4 : 2, S_IWOTH, errmsg);
+            if (!ok) {
+                return false;
+            }
             shared_ptr<PluginHandle> pluginHandle(new PluginHandle(filepath.string()));
-            bool ok = pluginHandle->init(expectedHash, errmsg, result);
+            ok = pluginHandle->init(expectedHash, errmsg, result);
             if (!ok) {
                 return false;
             }
@@ -334,7 +340,7 @@ namespace mongo {
 
         void Loader::setPluginsDir(const string &path) {
             string errmsg;
-            bool ok = checkPermissions(path, 3, S_IWOTH, errmsg);
+            bool ok = checkPermissions(path, 1, S_IWOTH, errmsg);
             massert(16901, errmsg, ok);
             _pluginsDir = path;
         }
