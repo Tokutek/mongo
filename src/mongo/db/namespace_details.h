@@ -505,18 +505,20 @@ namespace mongo {
         static shared_ptr<Cursor> bestGuessCursor( const StringData& ns, const BSONObj &query, const BSONObj &sort );
 
         /* indexKeys() cache ---------------------------------------------------- */
-        /* assumed to be in write lock for this */
     private:
         bool _keysComputed;
         set<string> _indexKeys;
+        /* throws RetryWithWriteLock if not write locked (writes to _indexKeys and _keysComputed) */
         void computeIndexKeys();
     public:
         /* get set of index keys for this namespace.  handy to quickly check if a given
            field is indexed (Note it might be a secondary component of a compound index.)
         */
         set<string>& indexKeys() {
-            if ( !_keysComputed )
+            Lock::assertAtLeastReadLocked(_ns);
+            if ( !_keysComputed ) {
                 computeIndexKeys();
+            }
             return _indexKeys;
         }
 

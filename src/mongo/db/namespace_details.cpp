@@ -1550,8 +1550,7 @@ namespace mongo {
     typedef StringMap<shared_ptr<NamespaceDetailsTransient> >::const_iterator ouriter;
 
     void NamespaceDetailsTransient::reset() {
-        // TODO(leif): why is this here?
-        //Lock::assertWriteLocked(_ns); 
+        Lock::assertWriteLocked(_ns); 
         clearQueryCache();
         _keysComputed = false;
         _indexSpecs.clear();
@@ -1605,6 +1604,9 @@ namespace mongo {
     }
 
     void NamespaceDetailsTransient::computeIndexKeys() {
+        if (!Lock::isWriteLocked(_ns)) {
+            throw RetryWithWriteLock();
+        }
         _indexKeys.clear();
         NamespaceDetails *d = nsdetails(_ns);
         if ( ! d )
