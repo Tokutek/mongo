@@ -74,8 +74,6 @@ namespace mongo {
     }
 
     NamespaceDetails::Indexer::~Indexer() {
-        Lock::assertWriteLocked(_d->_ns);
-
         if (_d->_indexBuildInProgress) {
             shared_ptr<IndexDetails> idx = _d->_indexes.back();
             _d->_indexes.pop_back();
