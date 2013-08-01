@@ -288,12 +288,11 @@ namespace mongo {
             NaturalOrderCollection::insertObject(obj, flags);
         }
 
-    protected:
+    private:
         void createIndex(const BSONObj &info) {
             msgasserted(16464, "bug: system collections should not be indexed." );
         }
 
-    private:
         // For consistency with Vanilla MongoDB, the system catalogs have the following
         // fields, in order, if they exist.
         //
@@ -697,7 +696,7 @@ namespace mongo {
             msgasserted( 16850, "bug: The profile collection should not be updated." );
         }
 
-    protected:
+    private:
         void createIndex(const BSONObj &idx_info) {
             uassert(16851, "Cannot have an _id index on the system profile collection", !idx_info["key"]["_id"].ok());
         }
@@ -773,12 +772,11 @@ namespace mongo {
             uasserted( 16894, "Cannot perform drop/dropIndexes on of a collection under-going bulk load." );
         }
 
-    protected:
+    private:
         void createIndex(const BSONObj &info) {
             uasserted( 16867, "Cannot create an index on a collection under-going bulk load." );
         }
 
-    private:
         // The connection that started the bulk load is the only one that can
         // do anything with the namespace until the load is complete and this
         // namespace has been closed / re-opened.
@@ -1034,7 +1032,7 @@ namespace mongo {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
 
-        const int n = _nIndexes;
+        const int n = nIndexesBeingBuilt();
         DB *dbs[n];
         DBT key_dbts[n];
         DBT val_dbts[n];
@@ -1109,7 +1107,7 @@ namespace mongo {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
 
-        const int n = _nIndexes;
+        const int n = nIndexesBeingBuilt();
         DB *dbs[n];
         DBT key_dbts[n];
         DBT val_dbts[n];

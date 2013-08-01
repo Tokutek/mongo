@@ -16,7 +16,12 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/d_concurrency.h"
+#include "mongo/db/index.h"
+#include "mongo/db/jsobj.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/util/assert_util.h"
+#include "mongo/util/stringutils.h"
 
 namespace mongo {
 
@@ -70,19 +75,27 @@ namespace mongo {
 
     NamespaceDetails::Indexer::~Indexer() {
         if (_d->_indexBuildInProgress) {
-            _d->_indexes[_d->_nIndexes]->close();
+            shared_ptr<IndexDetails> idx = _d->_indexes.back();
             _d->_indexes.pop_back();
             _d->_indexBuildInProgress = false;
             verify(_d->_nIndexes == (int) _d->_indexes.size());
+            try {
+                idx->close();
+            } catch (const DBException &e) {
+                TOKULOG(0) << "Caught DBException exception while destroying Indexer: "
+                           << e.getCode() << ", " << e.what() << endl;
+            } catch (...) {
+                TOKULOG(0) << "Caught generic exception while destroying Indexer." << endl;
+            }
         }
     }
 
     void NamespaceDetails::Indexer::build() {
         Lock::assertAtLeastReadLocked(_d->_ns);
 
+        // The primary key doesn't need to be built - there's no data.
         if (_isSecondaryIndex) {
             IndexDetails &idx = *_d->_indexes[_d->_nIndexes];
-            // The primary key doesn't need to be built - there's no data.
             _d->buildIndex(idx);
         } 
     }

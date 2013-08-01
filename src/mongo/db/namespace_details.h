@@ -337,11 +337,14 @@ namespace mongo {
 
         class Indexer : boost::noncopyable {
         public:
-            // Must be write locked for both construction/destruction - be careful.
+            // Must be write locked for both construction/destruction.
             Indexer(NamespaceDetails *d, const BSONObj &info);
             ~Indexer();
 
-            // Must be read locked (write lock is overkill).
+            // Must be read locked if the implementation is "hot" (since a write lock is overkill).
+            //
+            // Must be write locked while the implementation is still cold, which means
+            // reads/writes to the collection are not allowed while the index is building.
             void build();
 
             // Must be write locked.

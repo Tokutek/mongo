@@ -762,28 +762,26 @@ namespace mongo {
         Client::Transaction transaction(DB_SERIALIZABLE);
         scoped_ptr<NamespaceDetails::Indexer> indexer;
 
-        // XXX
-        // This is the magic write lock that prevents this hot indexing
+        // This is the magic write lock that prevents the hot indexing
         // scaffolding from breaking the existing "cold" indexing logic.
-        //
-        // Remove it once the indexer implementation is hot.
         Lock::DBWrite lk(ns);
 
-        // Indexer creation is done in a DBWrite lock
-        {
+        try {
             Lock::DBWrite lk(ns);
-
             uassert(16902, "not master", isMasterNs(ns));
+
             if (handlePossibleShardedMessage(m, 0)) {
                 return;
             }
 
-            Client::Context ctx(ns);
             const BSONObj &info = objs[0];
             const StringData &coll = info["ns"].Stringdata();
+
+            Client::Context ctx(ns);
             NamespaceDetails *d = getAndMaybeCreateNS(coll, true);
             uassert(16903, str::stream() << "Cannot build an index on a namespace under-going bulk load: " << ns,
                            cc().bulkLoadNS() != coll);
+
             if (d->findIndexByKeyPattern(info["key"].Obj()) >= 0) {
                 // No error or action if the index already exists. We need to commit
                 // the transaction in case this is an ensure index on the _id field
@@ -792,13 +790,20 @@ namespace mongo {
                 return;
             }
 
-            indexer.reset(new NamespaceDetails::Indexer(d, info));
             _insertObjects(ns, objs, false, 0, true);
+            indexer.reset(new NamespaceDetails::Indexer(d, info));
+        } catch (...) {
+            // The indexer destructor must be called in a write lock
+            Lock::DBWrite lk(ns);
+            indexer.reset();
+            throw;
         }
 
-        // XXX Change me to a read lock once the indexer implementation is hot.
         try {
-            Client::WriteContext ctx(ns);
+            Lock::DBWrite lk(ns);
+            uassert(16906, "not master: after indexer setup but before build", isMasterNs(ns));
+
+            Client::Context ctx(ns);
             indexer->build();
         } catch (...) {
             // The indexer destructor must be called in a write lock
@@ -807,11 +812,19 @@ namespace mongo {
             throw;
         }
 
-        // Commit is done in a DBWrite lock
-        {
-            Client::WriteContext ctx(ns);
+        try {
+            Lock::DBWrite lk(ns);
+            uassert(16907, "not master: after indexer build but before commit", isMasterNs(ns));
+
+            Client::Context ctx(ns);
             indexer->commit();
+        } catch (...) {
+            // The indexer destructor must be called in a write lock
+            Lock::DBWrite lk(ns);
+            indexer.reset();
+            throw;
         }
+
         transaction.commit();
     }
 
