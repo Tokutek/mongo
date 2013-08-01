@@ -759,20 +759,37 @@ namespace mongo {
     static void _receivedSystemIndexesInsert(const char *ns, Message &m, const vector<BSONObj> objs) {
         uassert(16905, "Can only build one index at a time.", objs.size() == 1);
 
-        Client::Transaction transaction(DB_SERIALIZABLE);
-        scoped_ptr<NamespaceDetails::Indexer> indexer;
-
         // This is the magic write lock that prevents the hot indexing
         // scaffolding from breaking the existing "cold" indexing logic.
         Lock::DBWrite lk(ns);
 
-        try {
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        scoped_ptr<NamespaceDetails::Indexer> indexer;
+
+        // The indexer destructor must be called in a write lock
+        class DestroyIndexerInWriteLock : boost::noncopyable {
+        public:
+            DestroyIndexerInWriteLock(const char *ns,
+                                      scoped_ptr<NamespaceDetails::Indexer> &indexer) :
+                _ns(ns), _indexer(indexer) {
+            }
+            ~DestroyIndexerInWriteLock() {
+                Lock::DBWrite lk(_ns);
+                _indexer.reset();
+            }
+        private:
+            const char *_ns;
+            scoped_ptr<NamespaceDetails::Indexer> &_indexer;
+        } destroyIndexer(ns, indexer);
+
+        // Prepare the index build. Performs index validation and marks
+        // the NamespaceDetails as having an index build in progress.
+        {
             Lock::DBWrite lk(ns);
             uassert(16902, "not master", isMasterNs(ns));
 
-            if (handlePossibleShardedMessage(m, 0)) {
-                return;
-            }
+            // System.indexes cannot be sharded.
+            verify(!handlePossibleShardedMessage(m, 0));
 
             const BSONObj &info = objs[0];
             const StringData &coll = info["ns"].Stringdata();
@@ -792,39 +809,29 @@ namespace mongo {
 
             _insertObjects(ns, objs, false, 0, true);
             indexer.reset(new NamespaceDetails::Indexer(d, info));
-        } catch (...) {
-            // The indexer destructor must be called in a write lock
-            Lock::DBWrite lk(ns);
-            indexer.reset();
-            throw;
         }
 
-        try {
+        // Perform the index build - can be done in a read lock when if a hot indexer is utilized.
+        {
             Lock::DBWrite lk(ns);
             uassert(16906, "not master: after indexer setup but before build", isMasterNs(ns));
 
             Client::Context ctx(ns);
             indexer->build();
-        } catch (...) {
-            // The indexer destructor must be called in a write lock
-            Lock::DBWrite lk(ns);
-            indexer.reset();
-            throw;
         }
 
-        try {
+        // Commit the index build
+        {
             Lock::DBWrite lk(ns);
             uassert(16907, "not master: after indexer build but before commit", isMasterNs(ns));
 
             Client::Context ctx(ns);
             indexer->commit();
-        } catch (...) {
-            // The indexer destructor must be called in a write lock
-            Lock::DBWrite lk(ns);
+            // Indexer must get destroyed in the same locking context as commit(),
+            // (if it succeeded) because we have to atomically destroy the Indexer
+            // and set _indexBuildInProgress to false.
             indexer.reset();
-            throw;
         }
-
         transaction.commit();
     }
 

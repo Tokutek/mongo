@@ -347,7 +347,10 @@ namespace mongo {
             // reads/writes to the collection are not allowed while the index is building.
             void build();
 
-            // Must be write locked.
+            // Must be write locked. If commit() succeeds (ie: does not throw), the
+            // destructor must be called in the same write lock section to prevent
+            // a race condition where another thread sets _indedBuildInProgress back
+            // to true.
             void commit();
 
         private:
