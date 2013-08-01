@@ -9,6 +9,7 @@ force_toku_version=@force_toku_version@
 
 mongodbsrc=@mongodbsrc@
 tokufractaltreesrc=@tokufractaltreesrc@
+tokubackupsrc=@tokubackupsrc@
 LIBTOKUFRACTALTREE_NAME=@LIBTOKUFRACTALTREE_NAME@
 LIBTOKUPORTABILITY_NAME=@LIBTOKUPORTABILITY_NAME@
 
@@ -25,6 +26,7 @@ set -e
 
 md5sum --check $mongodbsrc.tar.gz.md5
 md5sum --check $tokufractaltreesrc.tar.gz.md5
+md5sum --check $tokubackupsrc.tar.gz.md5
 
 if [ ! -d $mongodbsrc ] ; then
     tar --extract \
@@ -32,6 +34,7 @@ if [ ! -d $mongodbsrc ] ; then
         --file $mongodbsrc.tar.gz
 fi
 tokufractaltreetarball=$PWD/$tokufractaltreesrc.tar.gz
+tokubackuptarball=$PWD/$tokubackupsrc.tar.gz
 pushd $mongodbsrc
     if [ ! -d src/third_party/tokukv/lib ] ; then
         mkdir -p src/third_party/tokukv
@@ -40,6 +43,14 @@ pushd $mongodbsrc
             --strip-components 1 \
             --directory src/third_party/tokukv/ \
             --file $tokufractaltreetarball
+    fi
+    if [ ! -d src/third_party/tokubackup/lib ] ; then
+        mkdir -p src/third_party/tokubackup
+        tar --extract \
+            --gzip \
+            --strip-components 1 \
+            --directory src/third_party/tokubackup/ \
+            --file $tokubackuptarball
     fi
 
     build_type_options=""
