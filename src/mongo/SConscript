@@ -19,9 +19,14 @@ tokupath = os.getenv('TOKUKV_PATH', '$BUILD_DIR/third_party/tokukv')
 tokusrc = env.Dir('#%s' % env['TOKUKV_PATH'])
 tokuinc = tokusrc.Dir('include')
 tokulib = tokusrc.Dir('lib')
+tokubackup_src = env.Dir('#%s' % os.getenv('TOKUBACKUP_PATH', 'src/third_party/tokubackup'))
+tokubackup_inc = tokubackup_src.Dir('include')
+tokubackup_lib = tokubackup_src.Dir('lib')
+
 for e in [env, testEnv]:
-    e.Append(CPPPATH=[tokuinc])
-    e.Append(RPATH=[tokulib.get_abspath(), Dir('plugins')])
+    e.Append(CPPPATH=[tokuinc, tokubackup_inc])
+    e.Append(LIBPATH=[tokubackup_lib])
+    e.Append(RPATH=[tokulib.get_abspath(), tokubackup_lib.get_abspath(), Dir('plugins')])
 
 ltokufractaltree = os.getenv('LIBTOKUFRACTALTREE_NAME', 'tokufractaltree')
 ltokuportability = os.getenv('LIBTOKUPORTABILITY_NAME', 'tokuportability')
@@ -424,7 +429,7 @@ env.StaticLibrary("coreserver", coreServerFiles, LIBDEPS=["mongocommon", "script
 
 # main db target
 mongod = env.Install(
-    '#/', env.Program( "mongod", mongodOnlyFiles, LIBS=env['LIBS'] + tokulibs,
+    '#/', env.Program( "mongod", mongodOnlyFiles, LIBS=['HotBackup'] + env['LIBS'] + tokulibs,
                        LIBDEPS=["coreserver", "serveronly", "coredb", "ntservice",
                                 "mongodandmongos"] + modules ) )
 Default( mongod )
@@ -621,6 +626,7 @@ env.Append(MODULE_BANNERS = [distsrc.File('README'),
                              distsrc.File('NEWS'),
                              toku_readme])
 env.Append(TOKULIBS = [tokulib.File('lib%s.so' % libname) for libname in [ltokufractaltree, ltokuportability]])
+env.Append(TOKULIBS=[tokubackup_lib.File('libHotBackup.so')])
 
 # If no module has introduced a file named LICENSE.txt, then inject the AGPL.
 if sum(itertools.imap(lambda x: x.name == "LICENSE.txt", env['MODULE_BANNERS'])) == 0:

@@ -5,7 +5,7 @@ set -u
 
 function usage() {
     echo 1>&2 "build.sh"
-    echo 1>&2 "[--mongo=$mongo] [--ft_index=$ft_index] [--jemalloc=$jemalloc]"
+    echo 1>&2 "[--mongo=$mongo] [--ft_index=$ft_index] [--jemalloc=$jemalloc] [--backup=$backup]"
     echo 1>&2 "[--github_user=$github_user] [--github_token=$github_token] [--github_use_ssh=$github_use_ssh]"
     echo 1>&2 "[--cc=$cc --cxx=$cxx] [--ftcc=$ftcc --ftcxx=$ftcxx]"
     echo 1>&2 "[--debugbuild=$debugbuild]"
@@ -91,6 +91,48 @@ function github_download() {
             --strip-components=1 \
             --file $dest.tar.gz
         rm -f $dest.tar.gz
+    fi
+}
+
+# check out the fractal tree source from subversion, build it, and make the fractal tree tarballs
+function build_backup_lib() {
+    if [ ! -d $tokubackupdir ] ; then
+        mkdir $tokubackupdir
+
+        if [ ! -d backup-community ] ; then
+            github_download Tokutek/backup-community $backup_community_rev backup-community
+        fi
+
+        pushd backup-community
+            echo `date` make backup-community $ftcc $($ftcc --version)
+            cmake_env="CC=$ftcc CXX=$ftcxx"
+            local build_type=""
+            local use_valgrind=""
+            local debug_paranoid=""
+            if [[ $debugbuild = 1 ]]; then
+                build_type="Debug"
+            else
+                build_type="Release"
+            fi
+            mkdir -p build
+            cd build
+            eval $cmake_env cmake \
+                -D HOT_BACKUP_LIBNAME=HotBackup \
+                -D CMAKE_BUILD_TYPE=$build_type \
+                -D CMAKE_INSTALL_PREFIX=$rootdir/$tokubackupdir \
+                -D BUILD_TESTING=OFF \
+                -Wno-dev \
+                ..
+            make install -j$makejobs
+        popd
+
+        # make tarballs
+        tar --create \
+            --gzip \
+            --file $tokubackupdir.tar.gz \
+            $tokubackupdir
+        md5sum $tokubackupdir.tar.gz >$tokubackupdir.tar.gz.md5
+        md5sum --check $tokubackupdir.tar.gz.md5
     fi
 }
 
@@ -184,6 +226,7 @@ function build_mongodb_src() {
             -e "s^@force_toku_version@^$ft_index_rev^" \
             -e "s^@mongodbsrc@^$mongodbsrc^" \
             -e "s^@tokufractaltreesrc@^$tokufractaltreedir^" \
+            -e "s^@tokubackupsrc@^$tokubackupdir^" \
             -e "s^@LIBTOKUFRACTALTREE_NAME@^${tokufractaltree}^" \
             -e "s^@LIBTOKUPORTABILITY_NAME@^${tokuportability}^" \
             >$mongodbsrc/buildscripts/build.tokukv.sh
@@ -216,6 +259,7 @@ suffix=''
 mongodb_version=2.2.4
 mongo=master
 ft_index=master
+backup=master
 jemalloc=3.3.1
 cc=gcc44
 cxx=g++44
@@ -271,21 +315,28 @@ if [[ $debugbuild != 0 && ( -z $suffix ) ]] ; then suffix=-debug; fi
 
 if [ ! -z $github_user ] ; then
     ft_index_rev=$(git ls-remote https://$github_user@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
+    backup_community_rev=$(git ls-remote https://$github_user@github.com/Tokutek/backup-community.git $backup | cut -c-7)
     mongo_rev=$(git ls-remote https://$github_user@github.com/Tokutek/mongo.git $mongo | cut -c-7)
 elif [ ! -z $github_token ] ; then
     ft_index_rev=$(git ls-remote https://${github_token}:x-oauth-basic@github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
+    backup_community_rev=$(git ls-remote https://${github_token}:x-oauth-basic@github.com/Tokutek/backup-community.git $backup | cut -c-7)
     mongo_rev=$(git ls-remote https://${github_token}:x-oauth-basic@github.com/Tokutek/mongo.git $mongo | cut -c-7)
 elif [ $github_use_ssh != 0 ] ; then
     ft_index_rev=$(git ls-remote git@github.com:Tokutek/ft-index.git $ft_index | cut -c-7)
+    backup_community_rev=$(git ls-remote git@github.com:Tokutek/backup-community.git $backup | cut -c-7)
     mongo_rev=$(git ls-remote git@github.com:Tokutek/mongo.git $mongo | cut -c-7)
 else
     ft_index_rev=$(git ls-remote http://github.com/Tokutek/ft-index.git $ft_index | cut -c-7)
+    backup_community_rev=$(git ls-remote http://github.com/Tokutek/backup-community.git $backup | cut -c-7)
     mongo_rev=$(git ls-remote http://github.com/Tokutek/mongo.git $mongo | cut -c-7)
 fi
 
 # maybe they just passed a rev, not a branch or tag
 if [ -z $ft_index_rev ] ; then
     ft_index_rev=$ft_index
+fi
+if [ -z $backup_community_rev ] ; then
+    backup_community_rev=$backup
 fi
 if [ -z $mongo_rev ] ; then
     mongo_rev=$mongo
@@ -302,6 +353,9 @@ tokufractaltree=tokukv-${ft_index_rev}${suffix}
 tokuportability=tokuportability-${ft_index_rev}${suffix}
 tokufractaltreedir=$tokufractaltree-$system-$arch
 build_fractal_tree
+backup_community=backup-community-${backup_community_rev}${suffix}
+backupdir=$backup_community-$system-$arch
+build_backup
 
 # build the mongodb source tarball
 build_mongodb_src
