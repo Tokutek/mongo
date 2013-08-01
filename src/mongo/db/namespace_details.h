@@ -176,7 +176,7 @@ namespace mongo {
             const unsigned long long mask = 1ULL << i;
             return (_multiKeyIndexBits & mask) != 0;
         }
-        void setIndexIsMultikey(const StringData& thisns, int i);
+        void setIndexIsMultikey(const int idxNum);
 
         /**
          * Record that a new index exists in <dbname>.system.indexes.

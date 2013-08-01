@@ -1063,12 +1063,12 @@ namespace NamespaceTests {
 
                 ASSERT( !nsd()->isMultikey( 1 ) );
                 
-                nsd()->setIndexIsMultikey( ns(), 1 );
+                nsd()->setIndexIsMultikey( 1 );
                 ASSERT( nsd()->isMultikey( 1 ) );
                 assertCachedIndexKey( BSONObj() );
                 
                 registerIndexKey( BSON( "a" << 1 ) );
-                nsd()->setIndexIsMultikey( ns(), 1 );
+                nsd()->setIndexIsMultikey( 1 );
                 assertCachedIndexKey( BSON( "a" << 1 ) );
             }
         };

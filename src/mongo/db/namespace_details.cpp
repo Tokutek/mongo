@@ -1093,7 +1093,7 @@ namespace mongo {
                     idx.insertPair(*idxKeys.begin(), NULL, obj, flags);
                 } else {
                     if (idxKeys.size() > 1) {
-                        setIndexIsMultikey(_ns.c_str(), i);
+                        setIndexIsMultikey(i);
                     }
                     for (BSONObjSet::const_iterator ki = idxKeys.begin(); ki != idxKeys.end(); ++ki) {
                         idx.insertPair(*ki, &pk, obj, flags);
@@ -1206,7 +1206,7 @@ namespace mongo {
                 idx.getKeysFromObject(oldObj, oldKeys);
                 idx.getKeysFromObject(newObj, newKeys);
                 if (newKeys.size() > 1) {
-                    setIndexIsMultikey(_ns.c_str(), i);
+                    setIndexIsMultikey(i);
                 }
 
                 // Delete the keys that exist in oldKeys but do not exist in newKeys
@@ -1231,22 +1231,19 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::setIndexIsMultikey(const StringData& thisns, int i) {
-        dassert(thisns == _ns);
-        dassert(i < NIndexesMax);
-        unsigned long long x = ((unsigned long long) 1) << i;
+    void NamespaceDetails::setIndexIsMultikey(const int idxNum) {
+        dassert(idxNum < NIndexesMax);
+        const unsigned long long x = ((unsigned long long) 1) << idxNum;
         if (_multiKeyIndexBits & x) {
             return;
         }
         if (!Lock::isWriteLocked(_ns)) {
             throw RetryWithWriteLock();
         }
+
         _multiKeyIndexBits |= x;
-
-        dassert(nsdetails(thisns) == this);
-        nsindex(thisns)->update_ns(thisns, serialize(), true);
-
-        NamespaceDetailsTransient::get(thisns).clearQueryCache();
+        nsindex(_ns)->update_ns(_ns, serialize(), true);
+        NamespaceDetailsTransient::get(_ns).clearQueryCache();
     }
 
     void NamespaceDetails::checkIndexUniqueness(const IndexDetails &idx) {
@@ -1273,7 +1270,7 @@ namespace mongo {
             BSONObjSet keys;
             idx.getKeysFromObject(obj, keys);
             if (keys.size() > 1) {
-                setIndexIsMultikey(_ns, indexNum);
+                setIndexIsMultikey(indexNum);
             }
             for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
                 builder.insertPair(*ki, &pk, obj);
