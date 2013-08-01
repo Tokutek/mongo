@@ -69,10 +69,8 @@ namespace mongo {
 
         // get or create the profiling collection
         NamespaceDetails *details = getOrCreateProfileCollection(db);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         if (details) {
-            // write: not replicated
-            insertOneObject(details, nsdt, p);
+            insertOneObject(details, p);
         }
     }
 

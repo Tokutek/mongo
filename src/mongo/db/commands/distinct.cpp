@@ -61,7 +61,7 @@ namespace mongo {
 
             shared_ptr<Cursor> cursor;
             if ( ! query.isEmpty() ) {
-                cursor = NamespaceDetailsTransient::getCursor(ns.c_str() , query , BSONObj() );
+                cursor = getOptimizedCursor(ns.c_str() , query , BSONObj() );
             }
             else {
 
@@ -75,16 +75,17 @@ namespace mongo {
                         continue;
 
                     if ( idx.inKeyPattern( key ) ) {
-                        cursor = NamespaceDetailsTransient::bestGuessCursor( ns.c_str() ,
-                                                                            BSONObj() ,
-                                                                            idx.keyPattern() );
+                        cursor = getBestGuessCursor( ns.c_str() ,
+                                                     BSONObj() ,
+                                                     idx.keyPattern() );
                         if( cursor.get() ) break;
                     }
 
                 }
 
-                if ( ! cursor.get() )
-                    cursor = NamespaceDetailsTransient::getCursor(ns.c_str() , query , BSONObj() );
+                if ( ! cursor.get() ) {
+                    cursor = getOptimizedCursor(ns.c_str() , query , BSONObj() );
+                }
 
             }
 

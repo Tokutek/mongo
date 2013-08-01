@@ -49,17 +49,14 @@ namespace mongo {
         return true;
     }
 
-    void insertOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt, BSONObj &obj, uint64_t flags) {
+    void insertOneObject(NamespaceDetails *details, BSONObj &obj, uint64_t flags) {
         details->insertObject(obj, flags);
-        if (nsdt != NULL) {
-            nsdt->notifyOfWriteOp();
-        }
+        details->notifyOfWriteOp();
     }
 
     // Does not check magic system collection inserts.
     void _insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
         NamespaceDetails *details = getAndMaybeCreateNS(ns, logop);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         for (size_t i = 0; i < objs.size(); i++) {
             const BSONObj &obj = objs[i];
             try {
@@ -80,12 +77,10 @@ namespace mongo {
                     // namespace details object. There is probably a nicer way
                     // to do this, but this works.
                     details->insertObjectIntoCappedAndLogOps(objModified, flags);
-                    if (nsdt != NULL) {
-                        nsdt->notifyOfWriteOp();
-                    }
+                    details->notifyOfWriteOp();
                 }
                 else {
-                    insertOneObject(details, nsdt, objModified, flags); // may add _id field
+                    insertOneObject(details, objModified, flags); // may add _id field
                     if (logop) {
                         OpLogHelpers::logInsert(ns, objModified, &cc().txn());
                     }

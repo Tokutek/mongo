@@ -324,11 +324,13 @@ doneCheckOrder:
             return;
         }
 
-        SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
-        QueryPattern queryPattern = _frs.pattern( _order );
-        CachedQueryPlan queryPlanToCache( indexKey(), nScanned, candidatePlans );
-        NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get_inlock( ns() );
-        nsdt.registerCachedQueryPlanForPattern( queryPattern, queryPlanToCache );
+        NamespaceDetails *d = nsdetails(ns());
+        if (d != NULL) {
+            NamespaceDetails::QueryCacheRWLock::Exclusive lk(d);
+            QueryPattern queryPattern = _frs.pattern( _order );
+            CachedQueryPlan queryPlanToCache( indexKey(), nScanned, candidatePlans );
+            d->registerCachedQueryPlanForPattern( queryPattern, queryPlanToCache );
+        }
     }
     
     void QueryPlan::checkTableScanAllowed() const {
@@ -1537,9 +1539,9 @@ doneCheckOrder:
         return id;
     }
     
-    shared_ptr<Cursor> NamespaceDetailsTransient::bestGuessCursor( const StringData& ns,
-                                                                  const BSONObj &query,
-                                                                  const BSONObj &sort ) {
+    shared_ptr<Cursor> getBestGuessCursor( const StringData& ns,
+                                           const BSONObj &query,
+                                           const BSONObj &sort ) {
         // TODO: make FieldRangeSet and QueryPlanSet understand StringData
         string ns_s = ns.toString();
         auto_ptr<FieldRangeSetPair> frsp( new FieldRangeSetPair( ns_s.c_str(), query, true ) );
@@ -1572,30 +1574,34 @@ doneCheckOrder:
     }
     
     void QueryUtilIndexed::clearIndexesForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
-        SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
-        NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get_inlock( frsp.ns() );
-        CachedQueryPlan noCachedPlan;
-        nsdt.registerCachedQueryPlanForPattern( frsp._singleKey.pattern( order ), noCachedPlan );
-        nsdt.registerCachedQueryPlanForPattern( frsp._multiKey.pattern( order ), noCachedPlan );
+        NamespaceDetails *d = nsdetails(frsp.ns());
+        if (d != NULL) {
+            NamespaceDetails::QueryCacheRWLock::Exclusive lk(d);
+            CachedQueryPlan noCachedPlan;
+            d->registerCachedQueryPlanForPattern( frsp._singleKey.pattern( order ), noCachedPlan );
+            d->registerCachedQueryPlanForPattern( frsp._multiKey.pattern( order ), noCachedPlan );
+        }
     }
     
     CachedQueryPlan QueryUtilIndexed::bestIndexForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
-        NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get( frsp.ns() );
-        SimpleRWLock::Shared lk(NamespaceDetailsTransient::_qcRWLock);
-        // TODO Maybe it would make sense to return the index with the lowest
-        // nscanned if there are two possibilities.
-        {
-            QueryPattern pattern = frsp._singleKey.pattern( order );
-            CachedQueryPlan cachedQueryPlan = nsdt.cachedQueryPlanForPattern( pattern );
-            if ( !cachedQueryPlan.indexKey().isEmpty() ) {
-                return cachedQueryPlan;
+        NamespaceDetails *d = nsdetails(frsp.ns());
+        if (d != NULL) {
+            NamespaceDetails::QueryCacheRWLock::Shared lk(d);
+            // TODO Maybe it would make sense to return the index with the lowest
+            // nscanned if there are two possibilities.
+            {
+                QueryPattern pattern = frsp._singleKey.pattern( order );
+                CachedQueryPlan cachedQueryPlan = d->cachedQueryPlanForPattern( pattern );
+                if ( !cachedQueryPlan.indexKey().isEmpty() ) {
+                    return cachedQueryPlan;
+                }
             }
-        }
-        {
-            QueryPattern pattern = frsp._multiKey.pattern( order );
-            CachedQueryPlan cachedQueryPlan = nsdt.cachedQueryPlanForPattern( pattern );
-            if ( !cachedQueryPlan.indexKey().isEmpty() ) {
-                return cachedQueryPlan;
+            {
+                QueryPattern pattern = frsp._multiKey.pattern( order );
+                CachedQueryPlan cachedQueryPlan = d->cachedQueryPlanForPattern( pattern );
+                if ( !cachedQueryPlan.indexKey().isEmpty() ) {
+                    return cachedQueryPlan;
+                }
             }
         }
         return CachedQueryPlan();

@@ -29,24 +29,22 @@
 
 namespace mongo {
 
-    void deleteOneObject(NamespaceDetails *d, NamespaceDetailsTransient *nsdt, const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
+    void deleteOneObject(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         d->deleteObject(pk, obj, flags);
-        if (nsdt != NULL) {
-            nsdt->notifyOfWriteOp();
-        }
+        d->notifyOfWriteOp();
     }
     
     long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
         NamespaceDetails *d = nsdetails( ns );
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         if ( ! d )
             return 0;
 
         uassert( 10101 ,  "can't remove from a capped collection" , ! d->isCapped() );
 
-        shared_ptr< Cursor > c = NamespaceDetailsTransient::getCursor( ns, pattern );
-        if( !c->ok() )
+        shared_ptr< Cursor > c = getOptimizedCursor( ns, pattern );
+        if ( !c->ok() ) {
             return 0;
+        }
 
         shared_ptr< Cursor > cPtr = c;
         auto_ptr<ClientCursor> ccc( new ClientCursor( QueryOption_NoCursorTimeout, cPtr, ns) );
@@ -78,7 +76,7 @@ namespace mongo {
                 OpLogHelpers::logDelete(ns, obj, false, &cc().txn());
             }
 
-            deleteOneObject(d, nsdt, pk, obj);
+            deleteOneObject(d, pk, obj);
             nDeleted++;
 
             if ( justOne ) {

@@ -55,7 +55,7 @@ namespace QueryTests {
         ~Base() {
             try {
                 for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) ); c->ok(); c->advance() ) {
-                    deleteOneObject( nsdetails(ns()), &NamespaceDetailsTransient::get(ns()), c->currPK(), c->current() );
+                    deleteOneObject( nsdetails(ns()), c->currPK(), c->current() );
                 }
                 _transaction.commit();
                 DBDirectClient cl;

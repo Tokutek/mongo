@@ -61,6 +61,9 @@ namespace mongo {
         _clustering(info["clustering"].trueValue()),
         _descriptor(_keyPattern, _hashed, info["seed"].numberInt(), _sparse, _clustering) {
 
+        // Throws if the index spec is invalid.
+        _spec.reset(this);
+
         string dbname = indexNamespace();
         TOKULOG(1) << "Opening IndexDetails " << dbname << endl;
         // Open the dictionary. Creates it if necessary.
@@ -105,11 +108,7 @@ namespace mongo {
     void IndexDetails::kill_idx() {
         string ns = indexNamespace(); // e.g. foo.coll.$ts_1
         try {
-
             string pns = parentNS(); // note we need a copy, as parentNS() won't work after the drop() below
-
-            // clean up parent namespace index cache
-            NamespaceDetailsTransient::get( pns.c_str() ).deletedIndex();
 
             storage::db_close(_db);
             _db = NULL;
@@ -135,11 +134,6 @@ namespace mongo {
 
     void IndexDetails::getKeysFromObject(const BSONObj& obj, BSONObjSet& keys) const {
         _descriptor.generateKeys( obj, keys );
-    }
-
-    const IndexSpec& IndexDetails::getSpec() const {
-        SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
-        return NamespaceDetailsTransient::get_inlock( info()["ns"].String() ).getIndexSpec( this );
     }
 
     int IndexDetails::uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {

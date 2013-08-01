@@ -25,10 +25,8 @@
 namespace mongo {
 
     class NamespaceDetails;
-    class NamespaceDetailsTransient;
 
-    void deleteOneObject(NamespaceDetails *details, NamespaceDetailsTransient *nsdt,
-                         const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
+    void deleteOneObject(NamespaceDetails *details, const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
 
     // System-y version of deleteObjects that allows you to delete from the system collections, used to be god = true.
     long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop);

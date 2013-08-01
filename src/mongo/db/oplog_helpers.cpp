@@ -203,10 +203,9 @@ namespace OpLogHelpers{
         ) 
     {
         NamespaceDetails* nsd = nsdetails(ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         // overwrite set to true because we are running on a secondary
         uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
-        insertOneObject(nsd, nsdt, row, flags);
+        insertOneObject(nsd, row, flags);
     }
     static void runInsertFromOplog(const char* ns, BSONObj op) {
         BSONObj row = op[KEY_STR_ROW].Obj();
@@ -216,7 +215,6 @@ namespace OpLogHelpers{
             if (theReplSet->buildIndexes()) {
                 Client::WriteContext ctx(ns);
                 NamespaceDetails* nsd = nsdetails(ns);
-                NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
                 const string &coll = row["ns"].String();
 
                 NamespaceDetails* collNsd = nsdetails(coll);
@@ -229,7 +227,7 @@ namespace OpLogHelpers{
                     return;
                 }
                 // overwrite set to true because we are running on a secondary
-                insertOneObject(nsd, nsdt, row, NamespaceDetails::NO_UNIQUE_CHECKS);
+                insertOneObject(nsd, row, NamespaceDetails::NO_UNIQUE_CHECKS);
             }
         }
         else {
@@ -250,16 +248,11 @@ namespace OpLogHelpers{
         BSONObj& row
         ) 
     {
-        NamespaceDetails* nsd = NULL;
-        NamespaceDetailsTransient *nsdt = NULL;
-        nsd = nsdetails(ns);
-        nsdt = &NamespaceDetailsTransient::get(ns);
+        NamespaceDetails *nsd = nsdetails(ns);
         // overwrite set to true because we are running on a secondary
-        uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
+        const uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
         nsd->insertObjectIntoCappedWithPK(pk, row, flags);
-        if (nsdt != NULL) {
-            nsdt->notifyOfWriteOp();
-        }
+        nsd->notifyOfWriteOp();
     }
     
     static void runCappedInsertFromOplog(const char* ns, BSONObj op) {
@@ -277,11 +270,10 @@ namespace OpLogHelpers{
 
     static void runDeleteFromOplogWithLock(const char* ns, BSONObj op) {
         NamespaceDetails* nsd = nsdetails(ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         BSONObj row = op[KEY_STR_ROW].Obj();
         BSONObj pk = row["_id"].wrap("");
         uint64_t flags = NamespaceDetails::NO_LOCKTREE;
-        deleteOneObject(nsd, nsdt, pk, row, flags);
+        deleteOneObject(nsd, pk, row, flags);
     }
 
     static void runDeleteFromOplog(const char* ns, BSONObj op) {
@@ -297,15 +289,12 @@ namespace OpLogHelpers{
 
     static void runCappedDeleteFromOplogWithLock(const char* ns, BSONObj op) {
         NamespaceDetails* nsd = nsdetails(ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         BSONObj row = op[KEY_STR_ROW].Obj();
         BSONObj pk = op[KEY_STR_PK].Obj();
 
         uint64_t flags = NamespaceDetails::NO_LOCKTREE;
         nsd->deleteObjectFromCappedWithPK(pk, row, flags);
-        if (nsdt != NULL) {
-            nsdt->notifyOfWriteOp();
-        }
+        nsd->notifyOfWriteOp();
     }
     
     static void runCappedDeleteFromOplog(const char* ns, BSONObj op) {
@@ -321,7 +310,6 @@ namespace OpLogHelpers{
 
     static void runUpdateFromOplogWithLock(const char* ns, BSONObj op, bool isRollback) {
         NamespaceDetails* nsd = nsdetails(ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         const char *names[] = {
             KEY_STR_PK,
             KEY_STR_OLD_ROW, 
@@ -340,11 +328,11 @@ namespace OpLogHelpers{
         if (isRollback) {
             // if this is a rollback, then the newRow is what is in the
             // collections, that we want to replace with oldRow
-            updateOneObject(nsd, nsdt, pk, newRow, oldRow, NULL, flags);
+            updateOneObject(nsd, pk, newRow, oldRow, NULL, flags);
         }
         else {
             // normal replication case
-            updateOneObject(nsd, nsdt, pk, oldRow, newRow, NULL, flags);
+            updateOneObject(nsd, pk, oldRow, newRow, NULL, flags);
         }
     }
     static void runUpdateFromOplog(const char* ns, BSONObj op, bool isRollback) {

@@ -834,7 +834,8 @@ namespace mongo {
         _pk(pkIndexPattern.copy()),
         _indexBuildInProgress(false),
         _nIndexes(0),
-        _multiKeyIndexBits(0) {
+        _multiKeyIndexBits(0),
+        _qcWriteCount(0) {
 
         massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns.rawData()));
 
@@ -854,6 +855,7 @@ namespace mongo {
             close();
             throw;
         }
+        computeIndexKeys();
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const StringData &ns, const BSONObj &options) {
         if (isOplogCollection(ns)) {
@@ -881,13 +883,15 @@ namespace mongo {
         _pk(serialized["pk"].Obj().copy()),
         _indexBuildInProgress(false),
         _nIndexes(serialized["indexes"].Array().size()),
-        _multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())) {
+        _multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())),
+        _qcWriteCount(0) {
 
         std::vector<BSONElement> index_array = serialized["indexes"].Array();
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
             shared_ptr<IndexDetails> idx(new IndexDetails(it->Obj(), false));
             _indexes.push_back(idx);
         }
+        computeIndexKeys();
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized, const bool bulkLoad) {
         const string ns = serialized["ns"].String();
@@ -921,7 +925,6 @@ namespace mongo {
             IndexDetails &idx = *_indexes[i];
             idx.close();
         }
-        NamespaceDetailsTransient::eraseForPrefix(_ns);
     }
 
     // Serialize the information necessary to re-open this NamespaceDetails later.
@@ -943,6 +946,45 @@ namespace mongo {
         return serialize(_ns, _options, _pk, _multiKeyIndexBits, indexes_array.arr());
     }
 
+    void NamespaceDetails::computeIndexKeys() {
+        _indexKeys.clear();
+        NamespaceDetails::IndexIterator i = ii();
+        while ( i.more() ) {
+            i.next().keyPattern().getFieldNames(_indexKeys);
+        }
+    }
+
+    void NamespaceDetails::resetTransient() {
+        Lock::assertWriteLocked(_ns); 
+        clearQueryCache();
+        computeIndexKeys();
+    }
+
+    void NamespaceDetails::clearQueryCache() {
+        QueryCacheRWLock::Exclusive lk(this);
+        _qcCache.clear();
+        _qcWriteCount = 0;
+    }
+
+    void NamespaceDetails::notifyOfWriteOp() {
+        if ( _qcCache.empty() ) {
+            return;
+        }
+        if ( ++_qcWriteCount >= 100 ) {
+            clearQueryCache();
+        }
+    }
+
+    CachedQueryPlan NamespaceDetails::cachedQueryPlanForPattern( const QueryPattern &pattern ) {
+        map<QueryPattern, CachedQueryPlan>::const_iterator i = _qcCache.find(pattern);
+        return i != _qcCache.end() ? i->second : CachedQueryPlan();
+    }
+
+    void NamespaceDetails::registerCachedQueryPlanForPattern( const QueryPattern &pattern,
+                                            const CachedQueryPlan &cachedQueryPlan ) {
+        _qcCache[ pattern ] = cachedQueryPlan;
+    }
+
     int NamespaceDetails::findByPKCallback(const DBT *key, const DBT *value, void *extra) {
         struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
         try {
@@ -959,7 +1001,7 @@ namespace mongo {
     }
 
     bool NamespaceDetails::findOne(const BSONObj &query, BSONObj &result, const bool requireIndex) const {
-        for (shared_ptr<Cursor> c( NamespaceDetailsTransient::getCursor(_ns, query, BSONObj(),
+        for (shared_ptr<Cursor> c( getOptimizedCursor(_ns, query, BSONObj(),
                                        requireIndex ? QueryPlanSelectionPolicy::indexOnly() :
                                                       QueryPlanSelectionPolicy::any() ) );
              c->ok(); c->advance()) {
@@ -1307,7 +1349,7 @@ namespace mongo {
 
         _multiKeyIndexBits |= x;
         nsindex(_ns)->update_ns(_ns, serialize(), true);
-        NamespaceDetailsTransient::get(_ns).clearQueryCache();
+        resetTransient();
     }
 
     void NamespaceDetails::checkIndexUniqueness(const IndexDetails &idx) {
@@ -1354,6 +1396,7 @@ namespace mongo {
         for ( shared_ptr<Cursor> c( BasicCursor::make(this) ); c->ok() ; c->advance() ) {
             deleteObject(c->currPK(), c->current(), 0);
         }
+        resetTransient();
     }
 
     // Wrapper for offline (write locked) indexing.
@@ -1365,6 +1408,15 @@ namespace mongo {
         Indexer indexer(this, info);
         indexer.build();
         indexer.commit();
+    }
+
+    void NamespaceDetails::dropIndex(const int idxNum) {
+        verify(idxNum < (int) _indexes.size());
+        IndexDetails &idx = *_indexes[idxNum];
+        idx.kill_idx();
+        _indexes.erase(_indexes.begin() + idxNum);
+        _nIndexes--;
+        resetTransient();
     }
 
     // Normally, we cannot drop the _id_ index.
@@ -1395,9 +1447,7 @@ namespace mongo {
             for (int i = 0; i < _nIndexes; ) {
                 IndexDetails &idx = *_indexes[i];
                 if (mayDeleteIdIndex || (!idx.isIdIndex() && !d->isPKIndex(idx))) {
-                    idx.kill_idx();
-                    _indexes.erase(_indexes.begin() + i);
-                    _nIndexes--;
+                    dropIndex(i);
                 } else {
                     i++;
                 }
@@ -1416,9 +1466,7 @@ namespace mongo {
                     errmsg = "may not delete _id or $_ index";
                     return false;
                 }
-                idx->kill_idx();
-                _indexes.erase(it);
-                _nIndexes--;
+                dropIndex(idxNum);
                 // Removes the nth bit, and shifts any bits higher than it down a slot.
                 _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << idxNum) - 1)) |
                                      ((_multiKeyIndexBits >> (idxNum + 1)) << idxNum));
@@ -1511,9 +1559,8 @@ namespace mongo {
         StringData database = nsToDatabaseSubstring(indexns);
         string ns = database.toString() + ".system.indexes";
         NamespaceDetails *d = nsdetails_maybe_create(ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         BSONObj objMod = info;
-        insertOneObject(d, nsdt, objMod);
+        insertOneObject(d, objMod);
     }
 
     void NamespaceDetails::addDefaultIndexesToCatalog() {
@@ -1543,79 +1590,6 @@ namespace mongo {
     }
 
     /* ------------------------------------------------------------------------- */
-
-    SimpleRWLock NamespaceDetailsTransient::_qcRWLock("qc");
-    SimpleMutex NamespaceDetailsTransient::_isMutex("is");
-    StringMap<shared_ptr<NamespaceDetailsTransient> > NamespaceDetailsTransient::_nsdMap;
-    typedef StringMap<shared_ptr<NamespaceDetailsTransient> >::const_iterator ouriter;
-
-    void NamespaceDetailsTransient::reset() {
-        Lock::assertWriteLocked(_ns); 
-        clearQueryCache();
-        _keysComputed = false;
-        _indexSpecs.clear();
-    }
-
-    /*static*/ NOINLINE_DECL NamespaceDetailsTransient& NamespaceDetailsTransient::make_inlock(const StringData& ns) {
-        shared_ptr< NamespaceDetailsTransient > &t = _nsdMap[ ns ];
-        verify( t.get() == 0 );
-        if( _nsdMap.size() % 20000 == 10000 ) { 
-            // so we notice if insanely large #s
-            log() << "opening namespace " << ns << endl;
-            log() << _nsdMap.size() << " namespaces in nsdMap" << endl;
-        }
-        t.reset( new NamespaceDetailsTransient(ns) );
-        return *t;
-    }
-
-    NamespaceDetailsTransient::NamespaceDetailsTransient(const StringData& ns) : 
-            _ns(ns.toString()), _keysComputed(false), _qcWriteCount() {
-    }
-
-    NamespaceDetailsTransient::~NamespaceDetailsTransient() { 
-    }
-
-    void NamespaceDetailsTransient::clearForPrefix(const StringData& prefix) {
-        SimpleRWLock::Exclusive lk(_qcRWLock);
-        vector< string > found;
-        for( ouriter i = _nsdMap.begin(); i != _nsdMap.end(); ++i ) {
-            if (StringData(i->first).startsWith(prefix)) {
-                found.push_back(i->first);
-                Lock::assertWriteLocked(i->first);
-            }
-        }
-        for( vector< string >::iterator i = found.begin(); i != found.end(); ++i ) {
-            _nsdMap[ *i ].reset();
-        }
-    }
-
-    void NamespaceDetailsTransient::eraseForPrefix(const StringData& prefix) {
-        SimpleRWLock::Exclusive lk(_qcRWLock);
-        vector< string > found;
-        for( ouriter i = _nsdMap.begin(); i != _nsdMap.end(); ++i ) {
-            if (StringData(i->first).startsWith(prefix)) {
-                found.push_back( i->first );
-                Lock::assertWriteLocked(i->first);
-            }
-        }
-        for( vector< string >::iterator i = found.begin(); i != found.end(); ++i ) {
-            _nsdMap.erase(*i);
-        }
-    }
-
-    void NamespaceDetailsTransient::computeIndexKeys() {
-        if (!Lock::isWriteLocked(_ns)) {
-            throw RetryWithWriteLock();
-        }
-        _indexKeys.clear();
-        NamespaceDetails *d = nsdetails(_ns);
-        if ( ! d )
-            return;
-        NamespaceDetails::IndexIterator i = d->ii();
-        while( i.more() )
-            i.next().keyPattern().getFieldNames(_indexKeys);
-        _keysComputed = true;
-    }
 
     // TODO: All global functions manipulating namespaces should be static in NamespaceDetails
 
@@ -1714,9 +1688,8 @@ namespace mongo {
             }
         }
 
-        // Invalidate cursors and query cache, then drop all of the indexes.
+        // Invalidate cursors, then drop all of the indexes.
         ClientCursor::invalidate(name.rawData());
-        NamespaceDetailsTransient::eraseForPrefix(name);
 
         LOG(1) << "\t dropIndexes done" << endl;
         d->dropIndexes(name, "*", errmsg, result, true);
@@ -1749,8 +1722,7 @@ namespace mongo {
         StringData database = nsToDatabaseSubstring(ns);
         string system_ns = database.toString() + ".system.namespaces";
         NamespaceDetails *d = nsdetails_maybe_create(system_ns);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(system_ns);
-        insertOneObject(d, nsdt, info);
+        insertOneObject(d, info);
     }
 
     void removeNamespaceFromCatalog(const StringData& ns) {
@@ -1791,7 +1763,6 @@ namespace mongo {
         // Invalidate any existing cursors on the old namespace details,
         // and reset the query cache.
         ClientCursor::invalidate( from );
-        NamespaceDetailsTransient::eraseForPrefix( from );
 
         StringData database = nsToDatabaseSubstring(from);
         string sysIndexes = database.toString() + ".system.indexes";
@@ -1809,10 +1780,9 @@ namespace mongo {
             BSONObj nsQuery = BSON( "ns" << from );
             vector<BSONObj> indexSpecs;
             {
-                // TODO: find method in namespace details?
                 // Find all entries in sysIndexes for the from ns
                 Client::Context ctx( sysIndexes );
-                for ( shared_ptr<Cursor> c( NamespaceDetailsTransient::getCursor( sysIndexes, nsQuery ) );
+                for ( shared_ptr<Cursor> c( getOptimizedCursor( sysIndexes, nsQuery ) );
                       c->ok(); c->advance() ) {
                     if (c->currentMatches()) {
                         indexSpecs.push_back( c->current().copy() );

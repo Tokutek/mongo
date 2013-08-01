@@ -138,7 +138,9 @@ namespace mongo {
         /** delete this index. */
         void kill_idx();
 
-        const IndexSpec& getSpec() const;
+        const IndexSpec &getSpec() const {
+            return _spec;
+        }
 
         string toString() const {
             return _info.toString();
@@ -218,6 +220,9 @@ namespace mongo {
         // Used to describe the index to the ydb layer, for key
         // comparisons and, later, for key generation.
         Descriptor _descriptor;
+
+        // The index spec describes the index (if it's special, etc)
+        IndexSpec _spec;
 
         friend class NamespaceDetails;
     };

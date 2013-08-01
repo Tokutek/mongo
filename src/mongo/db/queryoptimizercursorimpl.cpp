@@ -527,15 +527,14 @@ namespace mongo {
         return shared_ptr<Cursor>();
     }
     
-    shared_ptr<Cursor>
-    NamespaceDetailsTransient::getCursor( const StringData &ns,
-                                         const BSONObj &query,
-                                         const BSONObj &order,
-                                         const QueryPlanSelectionPolicy &planPolicy,
-                                         bool requestMatcher,
-                                         const shared_ptr<const ParsedQuery> &parsedQuery,
-                                         bool requireOrder,
-                                         QueryPlanSummary *singlePlanSummary ) {
+    shared_ptr<Cursor> getOptimizedCursor( const StringData &ns,
+                                           const BSONObj &query,
+                                           const BSONObj &order,
+                                           const QueryPlanSelectionPolicy &planPolicy,
+                                           bool requestMatcher,
+                                           const shared_ptr<const ParsedQuery> &parsedQuery,
+                                           bool requireOrder,
+                                           QueryPlanSummary *singlePlanSummary ) {
 
         try {
             CursorGenerator generator( ns, query, order, planPolicy, requestMatcher, parsedQuery,

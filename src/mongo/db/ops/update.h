@@ -26,7 +26,6 @@
 namespace mongo {
 
     class NamespaceDetails;
-    class NamespaceDetailsTransient;
 
     // ---------- public -------------
 
@@ -54,7 +53,6 @@ namespace mongo {
 
     void updateOneObject(
         NamespaceDetails *d, 
-        NamespaceDetailsTransient *nsdt, 
         const BSONObj &pk, 
         const BSONObj &oldObj, 
         const BSONObj &newObj, 

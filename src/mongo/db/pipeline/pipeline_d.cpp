@@ -145,7 +145,7 @@ namespace mongo {
 
             /* try to create the cursor with the query and the sort */
             shared_ptr<Cursor> pSortedCursor(
-                pCursor = NamespaceDetailsTransient::getCursor(
+                pCursor = getOptimizedCursor(
                     fullName.c_str(), *pQueryObj, *pSortObj,
                     QueryPlanSelectionPolicy::any(), true, pq));
 
@@ -164,7 +164,7 @@ namespace mongo {
 
             /* try to create the cursor without the sort */
             shared_ptr<Cursor> pUnsortedCursor(
-                pCursor = NamespaceDetailsTransient::getCursor(
+                pCursor = getOptimizedCursor(
                     fullName.c_str(), *pQueryObj, BSONObj(),
                     QueryPlanSelectionPolicy::any(), true, pq));
 

@@ -153,9 +153,7 @@ namespace mongo {
         const IndexSpec &_spec;
     };
 
-    /* precomputed details about an index, used for inserting keys on updates
-       stored/cached in NamespaceDetailsTransient, or can be used standalone
-       */
+    /* precomputed details about an index */
     class IndexSpec {
     public:
         BSONObj keyPattern; // e.g., { name : 1 }

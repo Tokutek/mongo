@@ -387,7 +387,7 @@ namespace CursorTests {
                 {
                     Client::ReadContext ctx( ns() );
                     shared_ptr<Cursor> c =
-                            NamespaceDetailsTransient::getCursor( ns(),
+                            getOptimizedCursor( ns(),
                                                                   query,
                                                                   BSONObj(),
                                                                   QueryPlanSelectionPolicy::any(),
@@ -435,7 +435,7 @@ namespace CursorTests {
                 {
                     Client::ReadContext ctx( ns() );
                     shared_ptr<Cursor> c =
-                            NamespaceDetailsTransient::getCursor( ns(),
+                            getOptimizedCursor( ns(),
                                                                   BSON( "a" << GT << 0 << LT << 5 ),
                                                                   BSONObj(),
                                                                   QueryPlanSelectionPolicy::any(),
@@ -475,7 +475,7 @@ namespace CursorTests {
                 {
                     Client::ReadContext ctx( ns() );
                     shared_ptr<Cursor> c =
-                            NamespaceDetailsTransient::getCursor( ns(),
+                            getOptimizedCursor( ns(),
                                                                   BSON( "a.b" << 2 << "a.c" << 2 ),
                                                                   BSONObj(),
                                                                   QueryPlanSelectionPolicy::any(),
@@ -509,7 +509,7 @@ namespace CursorTests {
                 {
                     Client::ReadContext ctx( ns() );
                     shared_ptr<Cursor> c =
-                            NamespaceDetailsTransient::getCursor( ns(),
+                            getOptimizedCursor( ns(),
                                                                   BSON( "a" << GTE << "" ),
                                                                   BSONObj(),
                                                                   QueryPlanSelectionPolicy::any(),
@@ -542,7 +542,7 @@ namespace CursorTests {
                 {
                     Client::ReadContext ctx( ns() );
                     shared_ptr<Cursor> c =
-                            NamespaceDetailsTransient::getCursor( ns(),
+                            getOptimizedCursor( ns(),
                                                                   BSON( "a" << LTE << Date_t( 1 ) ),
                                                                   BSONObj(),
                                                                   QueryPlanSelectionPolicy::any(),

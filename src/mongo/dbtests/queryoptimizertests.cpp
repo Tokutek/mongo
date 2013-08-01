@@ -881,7 +881,7 @@ namespace QueryOptimizerTests {
             virtual ~Base() {
                 if ( !nsd() )
                     return;
-                NamespaceDetailsTransient::get_inlock( ns() ).clearQueryCache();
+                nsdetails(ns())->clearQueryCache();
             }
         protected:
             static void assembleRequest( const string &ns, BSONObj query, int nToReturn, int nToSkip, BSONObj *fieldsToReturn, int queryOptions, Message &toSend ) {
@@ -951,7 +951,7 @@ namespace QueryOptimizerTests {
                 // The optimal plan is recorded in the plan cache.
                 FieldRangeSet frs( ns(), query, true, true );
                 CachedQueryPlan cachedPlan =
-                        NamespaceDetailsTransient::get( ns() ).cachedQueryPlanForPattern
+                        nsd()->cachedQueryPlanForPattern
                             ( QueryPattern( frs, BSONObj() ) );
                 ASSERT_EQUALS( BSON( "a" << 1 ), cachedPlan.indexKey() );
                 CandidatePlanCharacter planCharacter = cachedPlan.planCharacter();
@@ -1106,9 +1106,8 @@ namespace QueryOptimizerTests {
                 BSONObj delSpec = BSON( "a" << 1 << "_id" << NE << 0 );
                 deleteObjects( ns(), delSpec, false );
                 
-                NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get( ns() );
                 QueryPattern queryPattern = FieldRangeSet( ns(), delSpec, true, true ).pattern();
-                CachedQueryPlan cachedQueryPlan = nsdt.cachedQueryPlanForPattern( queryPattern ); 
+                CachedQueryPlan cachedQueryPlan = nsd()->cachedQueryPlanForPattern( queryPattern ); 
                 ASSERT_EQUALS( BSON( "a" << 1 ), cachedQueryPlan.indexKey() );
                 ASSERT_EQUALS( 1, cachedQueryPlan.nScanned() );
             }
@@ -1287,9 +1286,7 @@ namespace QueryOptimizerTests {
                     ASSERT( !qps->usingCachedPlan() );
                 }
                 
-                NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get( ns() );
-                
-                nsdt.registerCachedQueryPlanForPattern( makePattern( BSON( "a" << 1 ), BSONObj() ),
+                nsd()->registerCachedQueryPlanForPattern( makePattern( BSON( "a" << 1 ), BSONObj() ),
                                                        CachedQueryPlan( BSON( "a" << 1 ), 1,
                                                         CandidatePlanCharacter( true, false ) ) );
                 {
@@ -1302,7 +1299,7 @@ namespace QueryOptimizerTests {
                     ASSERT( qps->usingCachedPlan() );
                 }
 
-                nsdt.registerCachedQueryPlanForPattern
+                nsd()->registerCachedQueryPlanForPattern
                         ( makePattern( BSON( "a" << 1 ), BSON( "b" << 1 ) ),
                          CachedQueryPlan( BSON( "a" << 1 ), 1,
                                          CandidatePlanCharacter( true, true ) ) );
@@ -1317,7 +1314,7 @@ namespace QueryOptimizerTests {
                     ASSERT( qps->usingCachedPlan() );
                 }
 
-                nsdt.registerCachedQueryPlanForPattern
+                nsd()->registerCachedQueryPlanForPattern
                         ( makePattern( BSON( "a" << 1 ), BSON( "b" << 1 ) ),
                          CachedQueryPlan( BSON( "b" << 1 ), 1,
                                          CandidatePlanCharacter( true, true ) ) );
@@ -1351,8 +1348,7 @@ namespace QueryOptimizerTests {
                 ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
 
                 // Record the {a:1} index for a {b:1} query.
-                NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get( ns() );
-                nsdt.registerCachedQueryPlanForPattern
+                nsd()->registerCachedQueryPlanForPattern
                         ( makePattern( BSON( "b" << 1 ), BSONObj() ),
                          CachedQueryPlan( BSON( "a" << 1 ), 1,
                                          CandidatePlanCharacter( true, false ) ) );
@@ -1376,8 +1372,7 @@ namespace QueryOptimizerTests {
                                      "sparse" << true ) );
 
                 // Record the {a:1} index for a {a:null} query.
-                NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get( ns() );
-                nsdt.registerCachedQueryPlanForPattern
+                nsd()->registerCachedQueryPlanForPattern
                 ( makePattern( BSON( "a" << BSONNULL ), BSONObj() ),
                  CachedQueryPlan( BSON( "a" << 1 ), 1,
                                  CandidatePlanCharacter( true, false ) ) );
@@ -1417,8 +1412,7 @@ namespace QueryOptimizerTests {
                                UserException );
 
                 // The special plan is not chosen if not allowed, even if cached.
-                NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get( ns() );
-                nsdt.registerCachedQueryPlanForPattern
+                nsd()->registerCachedQueryPlanForPattern
                         ( makePattern( query, BSONObj() ),
                           CachedQueryPlan( specialIndex, 1,
                                            CandidatePlanCharacter( true, false ) ) );
@@ -1499,9 +1493,7 @@ namespace QueryOptimizerTests {
                     ASSERT( !mps->hasPossiblyExcludedPlans() );
                 }
                 
-                NamespaceDetailsTransient &nsdt = NamespaceDetailsTransient::get( ns() );
-
-                nsdt.registerCachedQueryPlanForPattern( makePattern( BSON( "a" << 1 ), BSONObj() ),
+                nsd()->registerCachedQueryPlanForPattern( makePattern( BSON( "a" << 1 ), BSONObj() ),
                                                        CachedQueryPlan( BSON( "a" << 1 ), 1,
                                                         CandidatePlanCharacter( true, false ) ) );
                 {
@@ -1513,7 +1505,7 @@ namespace QueryOptimizerTests {
                     ASSERT( !mps->hasPossiblyExcludedPlans() );
                 }
 
-                nsdt.registerCachedQueryPlanForPattern
+                nsd()->registerCachedQueryPlanForPattern
                         ( makePattern( BSON( "a" << 1 ), BSON( "b" << 1 ) ),
                          CachedQueryPlan( BSON( "a" << 1 ), 1,
                                          CandidatePlanCharacter( true, true ) ) );
@@ -1528,7 +1520,7 @@ namespace QueryOptimizerTests {
                     ASSERT( mps->hasPossiblyExcludedPlans() );
                 }
                 
-                nsdt.registerCachedQueryPlanForPattern
+                nsd()->registerCachedQueryPlanForPattern
                         ( makePattern( BSON( "a" << 1 ), BSON( "b" << 1 ) ),
                          CachedQueryPlan( BSON( "b" << 1 ), 1,
                                          CandidatePlanCharacter( true, true ) ) );
@@ -1588,10 +1580,10 @@ namespace QueryOptimizerTests {
             insertObject( ns(), temp );
 
             boost::shared_ptr< Cursor > c =
-            NamespaceDetailsTransient::bestGuessCursor( ns(), BSON( "b" << 1 ), BSON( "a" << 1 ) );
+            getBestGuessCursor( ns(), BSON( "b" << 1 ), BSON( "a" << 1 ) );
             ASSERT_EQUALS( string( "a" ), c->indexKeyPattern().firstElement().fieldName() );
             
-            c = NamespaceDetailsTransient::bestGuessCursor( ns(), BSON( "a" << 1 ),
+            c = getBestGuessCursor( ns(), BSON( "a" << 1 ),
                                                            BSON( "b" << 1 ) );
             ASSERT_EQUALS( string( "b" ), c->indexKeyPattern().firstElementFieldName() );
             ASSERT( c->matcher() );
@@ -1599,24 +1591,24 @@ namespace QueryOptimizerTests {
             c->advance();
             ASSERT( !c->currentMatches() ); // { a:1 } document
             
-            c = NamespaceDetailsTransient::bestGuessCursor( ns(), fromjson( "{b:1,$or:[{z:1}]}" ),
+            c = getBestGuessCursor( ns(), fromjson( "{b:1,$or:[{z:1}]}" ),
                                                          BSON( "a" << 1 ) );
             ASSERT_EQUALS( string( "a" ), c->indexKeyPattern().firstElement().fieldName() );
 
-            c = NamespaceDetailsTransient::bestGuessCursor( ns(), fromjson( "{a:1,$or:[{y:1}]}" ),
+            c = getBestGuessCursor( ns(), fromjson( "{a:1,$or:[{y:1}]}" ),
                                                          BSON( "b" << 1 ) );
             ASSERT_EQUALS( string( "b" ), c->indexKeyPattern().firstElementFieldName() );
 
             FieldRangeSet frs( "ns", BSON( "a" << 1 ), true, true );
             {
-                SimpleRWLock::Exclusive lk(NamespaceDetailsTransient::_qcRWLock);
-                NamespaceDetailsTransient::get_inlock( ns() ).
-                        registerCachedQueryPlanForPattern( frs.pattern( BSON( "b" << 1 ) ),
-                                                          CachedQueryPlan( BSON( "a" << 1 ), 0,
-                                                        CandidatePlanCharacter( true, true ) ) );
+                NamespaceDetails *d = nsdetails(ns());
+                NamespaceDetails::QueryCacheRWLock::Exclusive lk(d);
+                d->registerCachedQueryPlanForPattern( frs.pattern( BSON( "b" << 1 ) ),
+                                                      CachedQueryPlan( BSON( "a" << 1 ), 0,
+                                                      CandidatePlanCharacter( true, true ) ) );
             }
             
-            c = NamespaceDetailsTransient::bestGuessCursor( ns(), fromjson( "{a:1,$or:[{y:1}]}" ),
+            c = getBestGuessCursor( ns(), fromjson( "{a:1,$or:[{y:1}]}" ),
                                                            BSON( "b" << 1 ) );
             ASSERT_EQUALS( string( "b" ),
                           c->indexKeyPattern().firstElement().fieldName() );

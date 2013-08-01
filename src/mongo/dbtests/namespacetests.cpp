@@ -977,11 +977,11 @@ namespace NamespaceTests {
             const char *ns() const {
                 return ns_;
             }
-            NamespaceDetails *nsd() const {
+            NamespaceDetails *nsd() {
+                if (nsdetails(ns()) == NULL) {
+                    create();
+                }
                 return nsdetails( ns() );
-            }
-            NamespaceDetailsTransient &nsdt() const {
-                return NamespaceDetailsTransient::get( ns() );
             }
             static BSONObj bigObj(bool bGenID=false) {
                 BSONObjBuilder b;
@@ -1035,12 +1035,12 @@ namespace NamespaceTests {
                 
             }
         protected:
-            void assertCachedIndexKey( const BSONObj &indexKey ) const {
+            void assertCachedIndexKey( const BSONObj &indexKey ) {
                 ASSERT_EQUALS( indexKey,
-                              nsdt().cachedQueryPlanForPattern( _pattern ).indexKey() );
+                              nsd()->cachedQueryPlanForPattern( _pattern ).indexKey() );
             }
             void registerIndexKey( const BSONObj &indexKey ) {
-                nsdt().registerCachedQueryPlanForPattern
+                nsd()->registerCachedQueryPlanForPattern
                         ( _pattern,
                          CachedQueryPlan( indexKey, 1, CandidatePlanCharacter( true, false ) ) );                
             }
@@ -1072,11 +1072,7 @@ namespace NamespaceTests {
                 assertCachedIndexKey( BSON( "a" << 1 ) );
             }
         };
-        
-    } // namespace NamespaceDetailsTests
 
-    namespace NamespaceDetailsTransientTests {
-        
         /** clearQueryCache() clears the query plan cache. */
         class ClearQueryCache : public NamespaceDetailsTests::CachedPlanBase {
         public:
@@ -1086,13 +1082,13 @@ namespace NamespaceTests {
                 assertCachedIndexKey( BSON( "a" << 1 ) );
                 
                 // The query plan is cleared.
-                nsdt().clearQueryCache();
+                nsd()->clearQueryCache();
                 assertCachedIndexKey( BSONObj() );
             }
         };                                                                                         
         
-    } // namespace NamespaceDetailsTransientTests
-                                                                                 
+    } // namespace NamespaceDetailsTests
+
     class All : public Suite {
     public:
         All() : Suite( "namespace" ) {
@@ -1138,7 +1134,7 @@ namespace NamespaceTests {
             add< IndexSpecTests::NumericFieldSuitability >();
             add< NamespaceDetailsTests::TruncateCapped >();
             add< NamespaceDetailsTests::SetIndexIsMultikey >();
-            add< NamespaceDetailsTransientTests::ClearQueryCache >();
+            add< NamespaceDetailsTests::ClearQueryCache >();
         }
     } myall;
 } // namespace NamespaceTests

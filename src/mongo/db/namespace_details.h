@@ -37,10 +37,6 @@
 namespace mongo {
 
     class NamespaceDetails;
-    class Database;
-
-    // TODO: Put this in the cmdline abstraction, not extern global.
-    extern string dbpath; // --dbpath parm
 
     /** @return true if a client can modify this namespace even though it is under ".system."
         For example <dbname>.system.users is ok for regular clients to update.
@@ -111,6 +107,36 @@ namespace mongo {
 
         virtual ~NamespaceDetails() {
         }
+
+        const set<string> &indexKeys() const {
+            return _indexKeys;
+        }
+
+        void clearQueryCache();
+
+        /* you must notify the query cache if you are doing writes,
+         * as the query plan utility may change */
+        void notifyOfWriteOp();
+
+        CachedQueryPlan cachedQueryPlanForPattern( const QueryPattern &pattern );
+
+        void registerCachedQueryPlanForPattern( const QueryPattern &pattern,
+                                                const CachedQueryPlan &cachedQueryPlan );
+
+        class QueryCacheRWLock : boost::noncopyable {
+        public:
+            QueryCacheRWLock() : _lk("queryCache") { }
+            struct Shared : boost::noncopyable {
+                Shared(NamespaceDetails *d) : _lk(d->_qcRWLock._lk) { }
+                SimpleRWLock::Shared _lk;
+            };
+            struct Exclusive : boost::noncopyable {
+                Exclusive(NamespaceDetails *d) : _lk(d->_qcRWLock._lk) { }
+                SimpleRWLock::Exclusive _lk;
+            };
+        private:
+            SimpleRWLock _lk;
+        } _qcRWLock;
 
         // Close the collection. For regular collections, closes the underlying IndexDetails
         // (and their underlying dictionaries). For bulk loaded collections, closes the
@@ -400,6 +426,15 @@ namespace mongo {
         unsigned long long _multiKeyIndexBits;
 
     private:
+        set<string> _indexKeys;
+        void resetTransient();
+        void computeIndexKeys();
+        void dropIndex(const int idxNum);
+
+        /* query cache (for query optimizer) */
+        int _qcWriteCount;
+        map<QueryPattern, CachedQueryPlan> _qcCache;
+
         struct findByPKCallbackExtra {
             BSONObj &obj;
             std::exception *ex;
@@ -410,202 +445,6 @@ namespace mongo {
         friend class NamespaceIndex;
         friend class EmptyCapped; // for empty() only
     }; // NamespaceDetails
-
-    class ParsedQuery;
-    class QueryPlanSummary;
-    
-    /* NamespaceDetailsTransient
-
-       these are things we know / compute about a namespace that are transient -- things
-       we don't actually store in the .ns file.  so mainly caching of frequently used
-       information.
-
-       CAUTION: Are you maintaining this properly on a collection drop()?  A dropdatabase()?  Be careful.
-                The current field "allIndexKeys" may have too many keys in it on such an occurrence;
-                as currently used that does not cause anything terrible to happen.
-
-       todo: cleanup code, need abstractions and separation
-    */
-    // todo: multiple db's with the same name (repairDatbase) is not handled herein.  that may be 
-    //       the way to go, if not used by repair, but need some sort of enforcement / asserts.
-    class NamespaceDetailsTransient : boost::noncopyable {
-        const string _ns;
-        void reset();
-        static StringMap<shared_ptr<NamespaceDetailsTransient> > _nsdMap;
-
-        NamespaceDetailsTransient(const StringData& ns);
-    public:
-        ~NamespaceDetailsTransient();
-        void addedIndex() { reset(); }
-        void deletedIndex() { reset(); }
-        /* Drop cached information on all namespaces beginning with the specified prefix.
-           Can be useful as index namespaces share the same start as the regular collection.
-           SLOW - sequential scan of all NamespaceDetailsTransient objects */
-        static void clearForPrefix(const StringData& prefix);
-        static void eraseForPrefix(const StringData& prefix);
-
-        /**
-         * @return a cursor interface to the query optimizer.  The implementation may utilize a
-         * single query plan or interleave results from multiple query plans before settling on a
-         * single query plan.  Note that the schema of currKey() documents, indexKeyPattern(), the
-         * matcher(), and the isMultiKey() nature of the cursor may change over the course of
-         * iteration.
-         *
-         * @param query - Query used to select indexes and populate matchers; not copied if unowned
-         * (see bsonobj.h).
-         *
-         * @param order - Required ordering spec for documents produced by this cursor, empty object
-         * default indicates no order requirement.  If no index exists that satisfies the required
-         * sort order, an empty shared_ptr is returned unless parsedQuery is also provided.  This is
-         * not copied if unowned.
-         *
-         * @param planPolicy - A policy for selecting query plans - see queryoptimizercursor.h
-         *
-         * @param requestMatcher - Set to true to request that the returned Cursor provide a
-         * matcher().  If false, the cursor's matcher() may return NULL if the Cursor can perform
-         * accurate query matching internally using a non Matcher mechanism.  One case where a
-         * Matcher might be requested even though not strictly necessary to select matching
-         * documents is if metadata about matches may be requested using MatchDetails.  NOTE This is
-         * a hint that the Cursor use a Matcher, but the hint may be ignored.  In some cases the
-         * returned cursor may not provide a matcher even if 'requestMatcher' is true.
-         *
-         * @param parsedQuery - Additional query parameters, as from a client query request.
-         *
-         * @param requireOrder - If false, the resulting cursor may return results in an order
-         * inconsistent with the @param order spec.  See queryoptimizercursor.h for information on
-         * handling these results properly.
-         *
-         * @param singlePlanSummary - Query plan summary information that may be provided when a
-         * cursor running a single plan is returned.
-         *
-         * This is a work in progress.  Partial list of features not yet implemented through this
-         * interface:
-         * 
-         * - covered indexes
-         * - in memory sorting
-         */
-        static shared_ptr<Cursor> getCursor( const StringData& ns,
-                                             const BSONObj& query,
-                                             const BSONObj& order = BSONObj(),
-                                             const QueryPlanSelectionPolicy& planPolicy =
-                                                 QueryPlanSelectionPolicy::any(),
-                                             bool requestMatcher = true,
-                                             const shared_ptr<const ParsedQuery>& parsedQuery =
-                                                 shared_ptr<const ParsedQuery>(),
-                                             bool requireOrder = true,
-                                             QueryPlanSummary* singlePlanSummary = NULL );
-
-        /**
-         * @return a single cursor that may work well for the given query.  A $or style query will
-         * produce a single cursor, not a MultiCursor.
-         * It is possible no cursor is returned if the sort is not supported by an index.  Clients are responsible
-         * for checking this if they are not sure an index for a sort exists, and defaulting to a non-sort if
-         * no suitable indices exist.
-         */
-        static shared_ptr<Cursor> bestGuessCursor( const StringData& ns, const BSONObj &query, const BSONObj &sort );
-
-        /* indexKeys() cache ---------------------------------------------------- */
-    private:
-        bool _keysComputed;
-        set<string> _indexKeys;
-        /* throws RetryWithWriteLock if not write locked (writes to _indexKeys and _keysComputed) */
-        void computeIndexKeys();
-    public:
-        /* get set of index keys for this namespace.  handy to quickly check if a given
-           field is indexed (Note it might be a secondary component of a compound index.)
-        */
-        set<string>& indexKeys() {
-            Lock::assertAtLeastReadLocked(_ns);
-            if ( !_keysComputed ) {
-                computeIndexKeys();
-            }
-            return _indexKeys;
-        }
-
-        /* IndexSpec caching */
-    private:
-        map<const IndexDetails*,IndexSpec> _indexSpecs;
-        static SimpleMutex _isMutex;
-    public:
-        const IndexSpec& getIndexSpec( const IndexDetails * details ) {
-            IndexSpec& spec = _indexSpecs[details];
-            if ( ! spec._finishedInit ) {
-                SimpleMutex::scoped_lock lk(_isMutex);
-                if ( ! spec._finishedInit ) {
-                    spec.reset( details );
-                    verify( spec._finishedInit );
-                }
-            }
-            return spec;
-        }
-
-        /* query cache (for query optimizer) ------------------------------------- */
-    private:
-        int _qcWriteCount;
-        map<QueryPattern,CachedQueryPlan> _qcCache;
-        static NamespaceDetailsTransient& make_inlock(const StringData& ns);
-    public:
-        static SimpleRWLock _qcRWLock;
-
-        /* A NamespaceDetailsTransient object will not go out of scope on you if you are
-           d.dbMutex.atLeastReadLocked(), so you do't have to stay locked.
-           Creates a NamespaceDetailsTransient before returning if one DNE. 
-           todo: avoid creating too many on erroneous ns queries.
-           */
-        static NamespaceDetailsTransient *_get(const StringData& ns);
-        static NamespaceDetailsTransient &get_inlock(const StringData& ns);
-        static NamespaceDetailsTransient &get(const StringData& ns) {
-            {
-                // Common path - try finding it with a shared lock.
-                SimpleRWLock::Shared lk(_qcRWLock);
-                NamespaceDetailsTransient *nsdt = _get(ns);
-                if (nsdt != NULL) {
-                    return *nsdt;
-                }
-            }
-            // Try finding it again in an exclusive lock, creating if necessary.
-            SimpleRWLock::Exclusive lk(_qcRWLock);
-            return get_inlock(ns);
-        }
-
-        void clearQueryCache() {
-            SimpleRWLock::Exclusive lk(_qcRWLock);
-            _qcCache.clear();
-            _qcWriteCount = 0;
-        }
-
-        /* you must notify the cache if you are doing writes, as query plan utility will change */
-        void notifyOfWriteOp() {
-            // Is there a problem calling empty() on a std::map without a lock?
-            // What if other threads are doing deletes/inserts and a RB tree
-            // child pointer changes to null or something?
-            if ( _qcCache.empty() )
-                return;
-            if ( ++_qcWriteCount >= 100 )
-                clearQueryCache();
-        }
-        CachedQueryPlan cachedQueryPlanForPattern( const QueryPattern &pattern ) {
-            map<QueryPattern,CachedQueryPlan>::const_iterator i = _qcCache.find(pattern);
-            return i != _qcCache.end() ? i->second : CachedQueryPlan();
-        }
-        void registerCachedQueryPlanForPattern( const QueryPattern &pattern,
-                                                const CachedQueryPlan &cachedQueryPlan ) {
-            _qcCache[ pattern ] = cachedQueryPlan;
-        }
-
-    }; /* NamespaceDetailsTransient */
-
-    // does not create. must be at least shared locked.
-    inline NamespaceDetailsTransient *NamespaceDetailsTransient::_get(const StringData& ns) {
-        StringMap<shared_ptr<NamespaceDetailsTransient> >::const_iterator i = _nsdMap.find(ns);
-        return i != _nsdMap.end() ? i->second.get() : NULL;
-    }
-
-    // creates if necessary. must be exclusive locked.
-    inline NamespaceDetailsTransient& NamespaceDetailsTransient::get_inlock(const StringData& ns) {
-        NamespaceDetailsTransient *nsdt = _get(ns);
-        return nsdt != NULL ? *nsdt : make_inlock(ns);
-    }
 
     /* NamespaceIndex is the the "system catalog" if you will: at least the core parts.
      * (Additional info in system.* collections.) */

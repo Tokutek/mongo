@@ -59,14 +59,11 @@ namespace mongo {
         Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         try {
             shared_ptr<Cursor> cursor =
-                    NamespaceDetailsTransient::getCursor( ns,
-                                                          query,
-                                                          BSONObj(),
-                                                          QueryPlanSelectionPolicy::any(),
-                                                          // Avoid using a Matcher when a Cursor can
-                                                          // exactly match the query using a
-                                                          // FieldRangeVector.  See SERVER-1752.
-                                                          false /* requestMatcher */ );
+                    getOptimizedCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
+                                        // Avoid using a Matcher when a Cursor can
+                                        // exactly match the query using a
+                                        // FieldRangeVector.  See SERVER-1752.
+                                        false /* requestMatcher */ );
             for ( ; cursor->ok() ; cursor->advance() ) {
                 if ( cursor->currentMatches() && !cursor->getsetdup( cursor->currPK() ) ) {
                     if ( skip > 0 ) {

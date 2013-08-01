@@ -443,13 +443,13 @@ namespace mongo {
 
         void writeObjToMigrateLog(BSONObj &obj) {
             Client::ReadContext ctx(MIGRATE_LOG_NS);
-            insertOneObject(_migrateLogDetails, NULL, obj,
+            insertOneObject(_migrateLogDetails, obj,
                             NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         }
 
         void writeObjToMigrateLogRef(BSONObj &obj) {
             Client::ReadContext ctx(MIGRATE_LOG_REF_NS);
-            insertOneObject(_migrateLogRefDetails, NULL, obj,
+            insertOneObject(_migrateLogRefDetails, obj,
                             NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         }
 

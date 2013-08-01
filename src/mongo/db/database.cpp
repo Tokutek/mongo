@@ -116,8 +116,6 @@ namespace mongo {
         string prefix(name.toString() + ".");
         ClientCursor::invalidate(prefix);
 
-        NamespaceDetailsTransient::clearForPrefix( prefix );
-
         dbHolderW().erase( name, path );
         ctx->_clear();
         delete database; // closes files

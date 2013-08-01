@@ -348,7 +348,7 @@ namespace mongo {
             query.append("_id", q.done());
             
             {
-                shared_ptr<Cursor> c = NamespaceDetailsTransient::getCursor(rsoplog, query.done());
+                shared_ptr<Cursor> c = getOptimizedCursor(rsoplog, query.done());
                 while( c->ok() ) {
                     if ( c->currentMatches()) {
                         BSONObj curr = c->current();                    

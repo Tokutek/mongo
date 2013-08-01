@@ -118,7 +118,7 @@ namespace mongo {
             massert(16435, "first index should be pk index", _info["key"].Obj() == _d->_pk);
         }
         nsindex(_d->_ns)->update_ns(_d->_ns, _d->serialize(), _isSecondaryIndex);
-        NamespaceDetailsTransient::get(_d->_ns).addedIndex();
+        _d->resetTransient();
     }
 
 } // namespace mongo

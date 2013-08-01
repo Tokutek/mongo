@@ -770,10 +770,9 @@ namespace mongo {
 
             verify( pm == op->setMessage( "m/r: (3/3) final reduce to collection" , _safeCount( _db, _config.incLong, BSONObj(), QueryOption_SlaveOk ) ) );
 
-            shared_ptr<Cursor> temp =
-            NamespaceDetailsTransient::bestGuessCursor(_config.incLong.c_str(),
-                                                       BSONObj(),
-                                                       sortKey);
+            shared_ptr<Cursor> temp = getBestGuessCursor(_config.incLong.c_str(),
+                                                         BSONObj(),
+                                                         sortKey);
             ClientCursor::Holder cursor(new ClientCursor(QueryOption_NoCursorTimeout,
                                                          temp,
                                                          _config.incLong.c_str()));
@@ -1060,7 +1059,7 @@ namespace mongo {
                             Client::ReadContext ctx( config.ns );
 
                             // obtain full cursor on data to apply mr to
-                            shared_ptr<Cursor> temp = NamespaceDetailsTransient::getCursor( config.ns.c_str(), config.filter, config.sort );
+                            shared_ptr<Cursor> temp = getOptimizedCursor( config.ns.c_str(), config.filter, config.sort );
                             uassert( 16052, str::stream() << "could not create cursor over " << config.ns << " for query : " << config.filter << " sort : " << config.sort, temp.get() );
                             ClientCursor::Holder cursor(new ClientCursor(QueryOption_NoCursorTimeout,
                                                                          temp,

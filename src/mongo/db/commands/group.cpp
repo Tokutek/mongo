@@ -93,7 +93,7 @@ namespace mongo {
             map<BSONObj,int,BSONObjCmp> map;
             list<BSONObj> blah;
 
-            shared_ptr<Cursor> cursor = NamespaceDetailsTransient::getCursor(ns.c_str() , query);
+            shared_ptr<Cursor> cursor = getOptimizedCursor(ns.c_str() , query);
             ClientCursor::Holder ccPointer( new ClientCursor( QueryOption_NoCursorTimeout, cursor,
                                                              ns ) );
 

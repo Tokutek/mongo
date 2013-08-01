@@ -1056,8 +1056,7 @@ namespace mongo {
             BSONObj query = BSON( "files_id" << jsobj["filemd5"] << "n" << GTE << n );
             BSONObj sort = BSON( "files_id" << 1 << "n" << 1 );
 
-            shared_ptr<Cursor> cursor = NamespaceDetailsTransient::bestGuessCursor(ns.c_str(),
-                                                                                   query, sort);
+            shared_ptr<Cursor> cursor = getBestGuessCursor(ns.c_str(), query, sort);
             if ( ! cursor ) {
                 errmsg = "need an index on { files_id : 1 , n : 1 }";
                 return false;
