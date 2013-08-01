@@ -85,7 +85,7 @@ namespace mongo {
                 errmsg += "error loading plugin from file " + _filename + ": " + _dl.error();
                 return false;
             }
-            void *getInterfacev = _dl.sym("getInterface");
+            void *getInterfacev = _dl.sym("TokuMX_Plugin__getInterface");
             if (getInterfacev == NULL) {
                 errmsg += "error finding symbol `getInterface' in file " + _filename + ": " + _dl.error();
                 return false;
