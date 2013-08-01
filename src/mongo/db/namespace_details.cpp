@@ -1193,38 +1193,102 @@ namespace mongo {
         dassert(!oldObj.isEmpty());
         dassert(!newObj.isEmpty());
 
-        for (int i = 0; i < nIndexes(); i++) {
+        const int n = nIndexesBeingBuilt();
+        DB *dbs[n];
+        DBT key_dbts[n * 2];
+        DBT val_dbts[n + 1];
+        DBTArrayHolder keysHolder(key_dbts, n * 2);
+        DBTArrayHolder valsHolder(key_dbts, n);
+        val_dbts[n] = storage::make_dbt(oldObj.objdata(), oldObj.objsize());
+        uint32_t update_flags[n];
+        storage::Key sPK(pk, NULL);
+
+        // Generate keys for each index, prepare data structures for del multiple.
+        // We will end up abandoning del multiple if there are any multikey indexes.
+        bool allSingleKeys = true;
+        vector<BSONObjSet> oldKeys(n);
+        vector<BSONObjSet> newKeys(n);
+        for (int i = 0; i < n; i++) {
+            const bool isPK = i == 0;
+            const bool prelocked = flags & NamespaceDetails::NO_LOCKTREE;
+            const bool noUniqueChecks = flags & NamespaceDetails::NO_UNIQUE_CHECKS;
             IndexDetails &idx = *_indexes[i];
+            dbs[i] = idx.db();
+            key_dbts[i] = isPK ? storage::make_dbt(sPK.buf(), sPK.size()) :
+                                 storage::make_dbt(NULL, 0, DB_DBT_REALLOC);
+            val_dbts[i] = isPK ? storage::make_dbt(newObj.objdata(), newObj.objsize()) :
+                                 storage::make_dbt(NULL, 0, DB_DBT_REALLOC);
+            key_dbts[i + n] = storage::make_dbt(NULL, 0, DB_DBT_REALLOC); 
+            // The pk doesn't change - always skip uniqueness checks.
+            update_flags[i] = (isPK || !noUniqueChecks ? DB_NOOVERWRITE : 0) |
+                              (prelocked ? DB_PRELOCKED_WRITE : 0);
 
-            if (i == 0) {
-                // Overwrite oldObj with newObj using the given pk.
-                idx.insertPair(pk, NULL, newObj, flags | NamespaceDetails::NO_UNIQUE_CHECKS);
+            BSONObjSet &oldIdxKeys = oldKeys[i];
+            BSONObjSet &newIdxKeys = newKeys[i];
+            if (isPK) {
+                oldIdxKeys.insert(pk);
+                newIdxKeys.insert(pk);
             } else {
-                // Determine what keys need to be removed/added.
-                BSONObjSet oldKeys;
-                BSONObjSet newKeys;
-                idx.getKeysFromObject(oldObj, oldKeys);
-                idx.getKeysFromObject(newObj, newKeys);
-                if (newKeys.size() > 1) {
-                    setIndexIsMultikey(i);
+                idx.getKeysFromObject(oldObj, oldIdxKeys);
+                idx.getKeysFromObject(newObj, newIdxKeys);
+                allSingleKeys = allSingleKeys && oldIdxKeys.size() == 1 && newIdxKeys.size() == 1;
+                if (allSingleKeys && idx.unique() && !noUniqueChecks &&
+                    // Only perform the unique check if the key actually changed.
+                    *newIdxKeys.begin() != *oldIdxKeys.begin()) {
+                    idx.uniqueCheck(*newIdxKeys.begin(), &pk);
                 }
+            }
+        }
 
-                // Delete the keys that exist in oldKeys but do not exist in newKeys
-                for (BSONObjSet::iterator o = oldKeys.begin(); o != oldKeys.end(); o++) {
-                    const BSONObj &k = *o;
-                    if (!orderedSetContains(newKeys, k)) {
-                        idx.deletePair(k, &pk, flags);
+        if (allSingleKeys) {
+            DB_ENV *env = storage::env;
+           // The pk doesn't change, so old_src_key == new_src_key.
+           // We hackishly store the old obj in val_dbts[n], which
+           // isn't so bad because the ydb layer will never see it. */
+            const int r = env->update_multiple(env, dbs[0], cc().txn().db_txn(),
+                                               &key_dbts[0], &val_dbts[n],
+                                               &key_dbts[0], &val_dbts[0],
+                                               n, dbs, update_flags,
+                                               n * 2, key_dbts, n, val_dbts);
+            if (r == EINVAL) {
+                uasserted( 16908, str::stream() << "Indexed insertion (on update) failed." <<
+                                  " This may be due to keys > 32kb. Check the error log." );
+            } else if (r != 0) {
+                storage::handle_ydb_error(r);
+            }
+        } else {
+            for (int i = 0; i < nIndexes(); i++) {
+                IndexDetails &idx = *_indexes[i];
+
+                if (i == 0) {
+                    // Overwrite oldObj with newObj using the given pk.
+                    idx.insertPair(pk, NULL, newObj, flags | NamespaceDetails::NO_UNIQUE_CHECKS);
+                } else {
+                    BSONObjSet &oldIdxKeys = oldKeys[i];
+                    BSONObjSet &newIdxKeys = newKeys[i];
+
+                    // Determine what keys need to be removed/added.
+                    if (newIdxKeys.size() > 1) {
+                        setIndexIsMultikey(i);
                     }
-                }
-                // Insert the keys that exist in newKeys but do not exist in oldKeys
-                for (BSONObjSet::iterator n = newKeys.begin(); n != newKeys.end(); n++) {
-                    const BSONObj &k = *n;
-                    if (!orderedSetContains(oldKeys, k)) {
-                        idx.insertPair(k, &pk, newObj, flags);
+
+                    // Delete the keys that exist in oldIdxKeys but do not exist in newIdxKeys
+                    for (BSONObjSet::iterator o = oldIdxKeys.begin(); o != oldIdxKeys.end(); o++) {
+                        const BSONObj &k = *o;
+                        if (!orderedSetContains(newIdxKeys, k)) {
+                            idx.deletePair(k, &pk, flags);
+                        }
                     }
-                    else if (idx.clustering()) {
-                        // if clustering, overwrite every key with the new data
-                        idx.insertPair(k, &pk, newObj, flags | NamespaceDetails::NO_UNIQUE_CHECKS);
+                    // Insert the keys that exist in newIdxKeys but do not exist in oldIdxKeys
+                    for (BSONObjSet::iterator n = newIdxKeys.begin(); n != newIdxKeys.end(); n++) {
+                        const BSONObj &k = *n;
+                        if (!orderedSetContains(oldIdxKeys, k)) {
+                            idx.insertPair(k, &pk, newObj, flags);
+                        }
+                        else if (idx.clustering()) {
+                            // if clustering, overwrite every key with the new data
+                            idx.insertPair(k, &pk, newObj, flags | NamespaceDetails::NO_UNIQUE_CHECKS);
+                        }
                     }
                 }
             }

@@ -127,10 +127,8 @@ namespace mongo {
 
             const DBT *desc = &dest_db->cmp_descriptor->dbt;
             Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
-            if (descriptor.clustering()) {
+            if (dest_val != NULL && descriptor.clustering()) {
                 dbt_realloc(dest_val, src_val->data, src_val->size);
-            } else {
-                verify(dest_db != src_db);
             }
             return 0; 
         }
