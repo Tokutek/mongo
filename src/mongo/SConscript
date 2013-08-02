@@ -376,6 +376,8 @@ env.CppUnitTest("shard_test", [ "s/shard_test.cpp" ], LIBS=env['LIBS'] + tokulib
                           "mongodandmongos"],
                 NO_CRUTCH=True)
 
+env.CppUnitTest('graded_rwlock_test', 'util/concurrency/graded_rwlock_test.cpp', LIBDEPS=['mongocommon'])
+
 serverOnlyFiles += [ "s/d_logic.cpp",
                      "s/d_writeback.cpp",
                      "s/d_migrate.cpp",
