@@ -34,7 +34,7 @@ namespace mongo {
                 "{ beginTransaction, [isolation : ]  }\n"
                 " Possible values for isolation: serializable, mvcc (default), readUncommitted \n";
         }
-        BeginTransactionCmd() : InformationCommand("beginTransaction") {}
+        BeginTransactionCmd() : InformationCommand("beginTransaction", false) {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
@@ -85,7 +85,7 @@ namespace mongo {
                 "If running a multi statement transaction, commit transaction, no-op otherwise .\n"
                 "{ commitTransaction }";
         }
-        CommitTransactionCmd() : InformationCommand("commitTransaction") {}
+        CommitTransactionCmd() : InformationCommand("commitTransaction", false) {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
@@ -114,7 +114,7 @@ namespace mongo {
                 "If running a multi statement transaction, rollback transaction, no-op otherwise .\n"
                 "{ rollbackTransaction }";
         }
-        RollbackTransactionCmd() : InformationCommand("rollbackTransaction") {}
+        RollbackTransactionCmd() : InformationCommand("rollbackTransaction", false) {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
