@@ -601,10 +601,7 @@ namespace mongo {
                 }
                 scoped_lock ll(_workLock);
                 if ( ! _active ) {
-                    Client::ReadContext ctx(cleanup.ns);
-                    Client::Transaction txn(DB_SERIALIZABLE);
                     cleanup.doRemove();
-                    txn.commit();
                     return;
                 }
                 sleepmillis( 1000 );
