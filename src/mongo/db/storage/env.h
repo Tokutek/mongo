@@ -33,7 +33,8 @@ namespace mongo {
         void shutdown(void);
 
         int db_open(DB **dbp, const string &name, const BSONObj &info,
-                    const mongo::Descriptor &descriptor, bool may_create);
+                    const mongo::Descriptor &descriptor, const bool may_create,
+                    const bool hot_index);
         void db_close(DB *db);
         void db_remove(const string &name);
         void db_rename(const string &old_name, const string &new_name);

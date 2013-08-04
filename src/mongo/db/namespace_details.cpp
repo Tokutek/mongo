@@ -919,9 +919,10 @@ namespace mongo {
     }
 
     void NamespaceDetails::close(const bool aborting) {
-        // The default implementation doesn't care if the caller is closing for abort.
-        verify(!_indexBuildInProgress);
-        for (int i = 0; i < _nIndexes; i++) {
+        if (!aborting) {
+            verify(!_indexBuildInProgress);
+        }
+        for (int i = 0; i < nIndexesBeingBuilt(); i++) {
             IndexDetails &idx = *_indexes[i];
             idx.close();
         }
@@ -1281,33 +1282,6 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::buildIndex(IndexDetails &idx) {
-        IndexDetails::Builder builder(idx);
-
-        const int indexNum = idxNo(idx);
-        for ( shared_ptr<Cursor> cursor(BasicCursor::make(this));
-              cursor->ok(); cursor->advance() ) {
-            BSONObj pk = cursor->currPK();
-            BSONObj obj = cursor->current();
-            BSONObjSet keys;
-            idx.getKeysFromObject(obj, keys);
-            if (keys.size() > 1) {
-                setIndexIsMultikey(indexNum);
-            }
-            for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                builder.insertPair(*ki, &pk, obj);
-            }
-            killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
-        }
-
-        builder.done();
-
-        // If the index is unique, check all adjacent keys for a duplicate.
-        if (idx.unique()) {
-            checkIndexUniqueness(idx);
-        }
-    }
-
     void NamespaceDetails::empty() {
         for ( shared_ptr<Cursor> c( BasicCursor::make(this) ); c->ok() ; c->advance() ) {
             deleteObject(c->currPK(), c->current(), 0);
@@ -1321,7 +1295,9 @@ namespace mongo {
             throw RetryWithWriteLock();
         }
 
-        Indexer indexer(this, info);
+
+        ColdIndexer indexer(this, info);
+        indexer.prepare();
         indexer.build();
         indexer.commit();
     }

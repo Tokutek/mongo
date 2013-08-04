@@ -31,6 +31,7 @@
 #include "mongo/db/querypattern.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/db/storage/indexer.h"
 #include "mongo/util/concurrency/simplerwlock.h"
 #include "mongo/util/string_map.h"
 
@@ -70,7 +71,6 @@ namespace mongo {
     // Manage bulk loading into a namespace
     //
     // To begin a load, the ns must exist and be empty.
-    // TODO: Any other documentation to put here?
     void beginBulkLoad(const StringData &ns, const vector<BSONObj> &indexes,
                        const BSONObj &options);
     void commitBulkLoad(const StringData &ns);
@@ -363,28 +363,64 @@ namespace mongo {
 
         class Indexer : boost::noncopyable {
         public:
-            // Must be write locked for both construction/destruction.
-            Indexer(NamespaceDetails *d, const BSONObj &info);
-            ~Indexer();
-
-            // Must be read locked if the implementation is "hot" (since a write lock is overkill).
+            // Prepare an index build. Must be write locked.
             //
-            // Must be write locked while the implementation is still cold, which means
-            // reads/writes to the collection are not allowed while the index is building.
+            // Must ensure the given NamespaceDetails will remain valid for
+            // the lifetime of the indexer.
+            virtual void prepare();
+
+            // Perform the index build. May be read or write locked depending on implementation.
+            virtual void build() = 0;
+
+            // Commit the index build. Must be write locked.
+            //
+            // If commit() succeeds (ie: does not throw), the destructor must be called in
+            // the same write lock section to prevent a race condition where another thread
+            // sets _indedBuildInProgress back to true.
+            virtual void commit();
+
+        protected:
+            Indexer(NamespaceDetails *d, const BSONObj &info);
+            // Must be write locked for destructor.
+            virtual ~Indexer();
+
+            // Indexer implementation specifics.
+            virtual void _prepare() { }
+            virtual void _commit() { }
+
+            NamespaceDetails *_d;
+            shared_ptr<IndexDetails> _idx;
+            const BSONObj &_info;
+            const bool _isSecondaryIndex;
+        };
+
+        // Indexer for background (aka hot, aka online) indexing.
+        // build() should be called read locked, not write locked.
+        class HotIndexer : public Indexer {
+        public:
+            HotIndexer(NamespaceDetails *d, const BSONObj &info);
+            virtual ~HotIndexer();
+
             void build();
 
-            // Must be write locked. If commit() succeeds (ie: does not throw), the
-            // destructor must be called in the same write lock section to prevent
-            // a race condition where another thread sets _indedBuildInProgress back
-            // to true.
-            void commit();
-
         private:
-            // Need to ensure that this namespace will not get dropped/destroyed
-            // during the lifetime of the indexer.
-            NamespaceDetails *_d;
-            const BSONObj _info;
-            const bool _isSecondaryIndex;
+            void _prepare();
+            void _commit();
+            bool _multiKey;
+            scoped_ptr<storage::Indexer> _indexer;
+        };
+
+        // Indexer for foreground (aka cold, aka offline) indexing.
+        // build() should be called write locked.
+        //
+        // Cold indexing is theoretically faster than hot indexing at
+        // the expense of holding the write lock for a long time.
+        class ColdIndexer : public Indexer {
+        public:
+            ColdIndexer(NamespaceDetails *d, const BSONObj &info);
+            virtual ~ColdIndexer() { }
+
+            void build();
         };
 
     protected:
@@ -393,9 +429,7 @@ namespace mongo {
 
         // create a new index with the given info for this namespace.
         virtual void createIndex(const BSONObj &info);
-
         void checkIndexUniqueness(const IndexDetails &idx);
-        void buildIndex(IndexDetails &idx);
 
         void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);

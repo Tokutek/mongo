@@ -756,21 +756,17 @@ namespace mongo {
         return ok;
     }
 
-    static void _receivedSystemIndexesInsert(const char *ns, Message &m, const vector<BSONObj> objs) {
+    static void _buildHotIndex(const char *ns, Message &m, const vector<BSONObj> objs) {
         uassert(16905, "Can only build one index at a time.", objs.size() == 1);
 
-        // This is the magic write lock that prevents the hot indexing
-        // scaffolding from breaking the existing "cold" indexing logic.
-        Lock::DBWrite lk(ns);
-
-        Client::Transaction transaction(DB_SERIALIZABLE);
-        scoped_ptr<NamespaceDetails::Indexer> indexer;
+        scoped_ptr<Client::Transaction> transaction;
+        scoped_ptr<NamespaceDetails::HotIndexer> indexer;
 
         // The indexer destructor must be called in a write lock
         class DestroyIndexerInWriteLock : boost::noncopyable {
         public:
             DestroyIndexerInWriteLock(const char *ns,
-                                      scoped_ptr<NamespaceDetails::Indexer> &indexer) :
+                                      scoped_ptr<NamespaceDetails::HotIndexer> &indexer) :
                 _ns(ns), _indexer(indexer) {
             }
             ~DestroyIndexerInWriteLock() {
@@ -779,13 +775,14 @@ namespace mongo {
             }
         private:
             const char *_ns;
-            scoped_ptr<NamespaceDetails::Indexer> &_indexer;
+            scoped_ptr<NamespaceDetails::HotIndexer> &_indexer;
         } destroyIndexer(ns, indexer);
 
         // Prepare the index build. Performs index validation and marks
         // the NamespaceDetails as having an index build in progress.
         {
             Lock::DBWrite lk(ns);
+            transaction.reset(new Client::Transaction(DB_SERIALIZABLE));
             uassert(16902, "not master", isMasterNs(ns));
 
             // System.indexes cannot be sharded.
@@ -803,17 +800,18 @@ namespace mongo {
                 // No error or action if the index already exists. We need to commit
                 // the transaction in case this is an ensure index on the _id field
                 // and the ns was created by getAndMaybeCreateNS()
-                transaction.commit();
+                transaction->commit();
                 return;
             }
 
             _insertObjects(ns, objs, false, 0, true);
-            indexer.reset(new NamespaceDetails::Indexer(d, info));
+            indexer.reset(new NamespaceDetails::HotIndexer(d, info));
+            indexer->prepare();
         }
 
-        // Perform the index build - can be done in a read lock when if a hot indexer is utilized.
+        // Perform the index build
         {
-            Lock::DBWrite lk(ns);
+            Lock::DBRead lk(ns);
             uassert(16906, "not master: after indexer setup but before build", isMasterNs(ns));
 
             Client::Context ctx(ns);
@@ -832,7 +830,7 @@ namespace mongo {
             // and set _indexBuildInProgress to false.
             indexer.reset();
         }
-        transaction.commit();
+        transaction->commit();
     }
 
     static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, const bool keepGoing) {
@@ -871,8 +869,8 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setOpSettings(settings);
 
-        if (str::contains(ns, ".system.indexes")) {
-            _receivedSystemIndexesInsert(ns, m, objs);
+        if (str::contains(ns, ".system.indexes") && objs[0]["background"].trueValue()) {
+            _buildHotIndex(ns, m, objs);
             return;
         }
 
