@@ -22,6 +22,7 @@
 #include "mongo/db/background.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/hasher.h"
+#include "mongo/db/storage/assert_ids.h"
 #include "mongo/util/stringutils.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/text.h"
@@ -147,7 +148,9 @@ namespace mongo {
                                     const int seed, const bool sparse,
                                     BSONObjSet &keys) {
         const BSONElement &fieldVal = obj.getFieldDottedOrArray( hashedField );
-        uassert( 16897 , "Error: hashed indexes do not currently support array values" , fieldVal.type() != Array );
+        uassert( storage::ASSERT_IDS::CannotHashArrays,
+                 "Error: hashed indexes do not currently support array values",
+                 fieldVal.type() != Array );
 
         if ( ! fieldVal.eoo() ) {
             BSONObj key = BSON( "" << BSONElementHasher::hash64( fieldVal , seed ) );
@@ -181,7 +184,9 @@ namespace mongo {
         bool haveArrField = !arrField.eoo();
 
         // An index component field name cannot exist in both a document array and one of that array's children.
-        uassert( 15855 ,  mongoutils::str::stream() << "Ambiguous field name found in array (do not use numeric field names in embedded elements in an array), field: '" << arrField.fieldName() << "' for array: " << arr, !haveObjField || !haveArrField );
+        uassert( storage::ASSERT_IDS::AmbiguousFieldNames,
+                 mongoutils::str::stream() << "Ambiguous field name found in array (do not use numeric field names in embedded elements in an array), field: '" << arrField.fieldName() << "' for array: " << arr,
+                 !haveObjField || !haveArrField );
 
         arrayNestedArray = false;
                     if ( haveObjField ) {

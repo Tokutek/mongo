@@ -26,15 +26,14 @@ namespace mongo {
 
     namespace storage {
 
-        // RAII wrapper for a DB_LOADER.
-        class Loader {
+        class Indexer {
         public:
 
-            Loader(DB *db);
+            Indexer(DB *src_db, DB *dest_db);
 
-            ~Loader();
+            ~Indexer();
 
-            int put(DBT *key, DBT *val);
+            int build();
 
             int close();
 
@@ -51,7 +50,8 @@ namespace mongo {
                                        DBT *key, DBT *val, void *extra);
 
         private:
-            DB_LOADER *_loader;
+            DB *_dest_db;
+            DB_INDEXER *_indexer;
             poll_function_extra _poll_extra;
             error_callback_extra _error_extra;
             bool _closed;

@@ -31,6 +31,7 @@
 #include "mongo/db/querypattern.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/db/storage/indexer.h"
 #include "mongo/util/concurrency/simplerwlock.h"
 #include "mongo/util/string_map.h"
 
@@ -383,8 +384,9 @@ namespace mongo {
             // Need to ensure that this namespace will not get dropped/destroyed
             // during the lifetime of the indexer.
             NamespaceDetails *_d;
-            const BSONObj _info;
             const bool _isSecondaryIndex;
+            bool _multiKey;
+            scoped_ptr<storage::Indexer> _indexer;
         };
 
     protected:

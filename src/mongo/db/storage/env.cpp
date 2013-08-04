@@ -35,6 +35,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/descriptor.h"
+#include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/storage/exception.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/util/assert_util.h"
@@ -109,45 +110,64 @@ namespace mongo {
             dbt_array->size++;
         }
 
-        static void generate_key(DB *dest_db, DB *src_db,
+        static int generate_keys(DB *dest_db, DB *src_db,
                                  DBT_ARRAY *dest_keys,
                                  const DBT *src_key, const DBT *src_val) {
-            const DBT *desc = &dest_db->cmp_descriptor->dbt;
-            Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+            try {
+                const DBT *desc = &dest_db->cmp_descriptor->dbt;
+                Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
 
-            const Key sPK(src_key);
-            dassert(sPK.pk().isEmpty());
-            const BSONObj pk(sPK.key());
-            const BSONObj obj(reinterpret_cast<const char *>(src_val->data));
+                const Key sPK(src_key);
+                dassert(sPK.pk().isEmpty());
+                const BSONObj pk(sPK.key());
+                const BSONObj obj(reinterpret_cast<const char *>(src_val->data));
 
-            if (dest_db == src_db) {
-                dbt_array_clear_and_resize(dest_keys, 1);
-                dbt_array_push(dest_keys, src_key->data, src_key->size);
-            } else {
-                // Generate keys for a secondary index.
-                BSONObjSet keys;
-                descriptor.generateKeys(obj, keys);
-                dbt_array_clear_and_resize(dest_keys, keys.size());
-                for (BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); i++) {
-                    const Key sKey(*i, &pk);
-                    dbt_array_push(dest_keys, sKey.buf(), sKey.size());
+                if (dest_db == src_db) {
+                    dbt_array_clear_and_resize(dest_keys, 1);
+                    dbt_array_push(dest_keys, src_key->data, src_key->size);
+                } else {
+                    // Generate keys for a secondary index.
+                    BSONObjSet keys;
+                    descriptor.generateKeys(obj, keys);
+                    dbt_array_clear_and_resize(dest_keys, keys.size());
+                    for (BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); i++) {
+                        const Key sKey(*i, &pk);
+                        dbt_array_push(dest_keys, sKey.buf(), sKey.size());
+                    }
+                    // Set the multiKey bool if it's provided and we generated multiple keys.
+                    // See NamespaceDetails::Indexer::Indexer()
+                    if (dest_db->app_private != NULL && keys.size() > 1) {
+                        bool *multiKey = reinterpret_cast<bool *>(dest_db->app_private);
+                        if (!*multiKey) {
+                            *multiKey = true;
+                        }
+                    }
                 }
+            } catch (const DBException &ex) {
+                verify(ex.getCode() > 0);
+                return ex.getCode();
+            } catch (const std::exception &ex) {
+                problem() << "Unhandled std::exception in storage::generate_keys()" << endl;
+                verify(false);
             }
+            return 0;
         }
 
         static int generate_row_for_del(DB *dest_db, DB *src_db,
                                         DBT_ARRAY *dest_keys,
                                         const DBT *src_key, const DBT *src_val) {
             // Delete just needs keys, generate them.
-            generate_key(dest_db, src_db, dest_keys, src_key, src_val);
-            return 0;
+            return generate_keys(dest_db, src_db, dest_keys, src_key, src_val);
         }
 
         static int generate_row_for_put(DB *dest_db, DB *src_db,
                                         DBT_ARRAY *dest_keys, DBT_ARRAY *dest_vals,
                                         const DBT *src_key, const DBT *src_val) {
             // Put needs keys and possibly vals (for clustering indexes.)
-            generate_key(dest_db, src_db, dest_keys, src_key, src_val);
+            const int r = generate_keys(dest_db, src_db, dest_keys, src_key, src_val);
+            if (r != 0) {
+                return r;
+            }
 
             const DBT *desc = &dest_db->cmp_descriptor->dbt;
             Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
@@ -597,6 +617,12 @@ namespace mongo {
             switch (error) {
                 case ENOENT:
                     throw SystemException::Enoent();
+                case ASSERT_IDS::AmbiguousFieldNames:
+                    uasserted( storage::ASSERT_IDS::AmbiguousFieldNames,
+                               mongoutils::str::stream() << "Ambiguous field name found in array" );
+                case ASSERT_IDS::CannotHashArrays:
+                    uasserted( storage::ASSERT_IDS::CannotHashArrays,
+                               "Error: hashed indexes do not currently support array values" );
                 default:
                     // fall through
                     ;

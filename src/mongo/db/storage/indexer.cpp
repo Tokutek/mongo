@@ -14,51 +14,46 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mongo/pch.h"
-
 #include "mongo/db/curop.h"
-#include "mongo/db/interrupt_status.h"
 #include "mongo/db/storage/env.h"
-#include "mongo/db/storage/loader.h"
+#include "mongo/db/storage/indexer.h"
 
 namespace mongo {
 
     namespace storage {
 
-        Loader::Loader(DB *db) :
-            _loader(NULL), _poll_extra(cc()), _closed(false) {
-
+        Indexer::Indexer(DB *src_db, DB *dest_db) :
+            _dest_db(dest_db), _indexer(NULL), _poll_extra(cc()), _closed(false) {
             uint32_t db_flags = 0;
-            uint32_t dbt_flags = 0;
-            // TODO: Use a command line option for LOADER_COMPRESS_INTERMEDIATES
-            const int loader_flags = 0; 
-            int r = storage::env->create_loader(storage::env, cc().txn().db_txn(),
-                                                &_loader, db, 1, &db,
-                                                &db_flags, &dbt_flags, loader_flags);
+            uint32_t indexer_flags = 0;
+            DB_ENV *env = storage::env;
+            int r = env->create_indexer(env, cc().txn().db_txn(), &_indexer,
+                                        src_db, 1, &_dest_db,
+                                        &db_flags, indexer_flags);
             if (r != 0) {
-                handle_ydb_error(r);
+                storage::handle_ydb_error(r);
             }
-            r = _loader->set_poll_function(_loader, poll_function, &_poll_extra);
+            r = _indexer->set_poll_function(_indexer, poll_function, &_poll_extra);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            r = _loader->set_error_callback(_loader, error_callback, &_error_extra);
+            r = _indexer->set_error_callback(_indexer, error_callback, &_error_extra);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
         }
 
-        Loader::~Loader() {
-            if (!_closed && _loader != NULL) {
-                const int r = _loader->abort(_loader);
+        Indexer::~Indexer() {
+            if (!_closed && _indexer != NULL) {
+                const int r = _indexer->abort(_indexer);
                 if (r != 0) {
-                    problem() << "storage::~Loader, failed to close DB_LOADER, error: "
+                    problem() << "storage::~Indexer, failed to close DB_INDEXER, error: "
                               << r << endl;
                 }
             }
         }
 
-        int Loader::poll_function(void *extra, float progress) {
+        int Indexer::poll_function(void *extra, float progress) {
             poll_function_extra *info = static_cast<poll_function_extra *>(extra);
             try {
                 killCurrentOp.checkForInterrupt(info->c); // uasserts if we should stop
@@ -69,7 +64,7 @@ namespace mongo {
             return -1;
         }
 
-        void Loader::error_callback(DB *db, int i, int err,
+        void Indexer::error_callback(DB *db, int i, int err,
                                     DBT *key, DBT *val, void *extra) {
             error_callback_extra *info = static_cast<error_callback_extra *>(extra);
             str::stream errmsg;
@@ -82,12 +77,13 @@ namespace mongo {
             info->errmsg = errmsg;
         }
 
-        int Loader::put(DBT *key, DBT *val) {
-            return _loader->put(_loader, key, val);
+
+        int Indexer::build() {
+            return _indexer->build(_indexer);
         }
 
-        int Loader::close() {
-            const int r = _loader->close(_loader);
+        int Indexer::close() {
+            const int r = _indexer->close(_indexer);
 
             // Doesn't matter if the close succeded or not. It's dead to us now.
             _closed = true;
@@ -96,7 +92,7 @@ namespace mongo {
             }
             // Forward any callback-generated exception. Could be an error
             // from the error callback or an interrupt from the poll function.
-            uassert( 16860, _error_extra.errmsg, _error_extra.errmsg.empty() );
+            uassert( 16909, _error_extra.errmsg, _error_extra.errmsg.empty() );
             // Any other non-zero error code that didn't trigger the error
             // callback or come from the poll function should be handled
             // in some generic fashion by the caller.
@@ -106,3 +102,6 @@ namespace mongo {
     } // namespace storage
 
 } // namespace mongo
+
+
+
