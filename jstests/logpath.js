@@ -4,7 +4,7 @@ var name = "logpath";
 var token = "logpath_token";
 
 var dbdir = MongoRunner.toRealDir(name); // this will work under windows as well as linux
-var basedir = MongoRunner.toRealDir(name + 'files');
+var basedir = MongoRunner.toRealDir(name + 'files/');
 var logdir = basedir + "logdir/";
 var testdir = basedir + "testdir/"
 var sfile = _isWindows() ? "NUL:" : "/dev/null";
@@ -52,14 +52,14 @@ cleanupFiles();
 // log should not exist
 assert.eq(logCount(logs[0]), 0);
 
-print("------ Start mongod with logpath set to new file");
+print("------ Start mongod with logpath set to new file: " + logdir + logs[0]);
 var m = MongoRunner.runMongod({ port: port[0], dbpath: dbdir, logpath: logdir + logs[0]});
 
 // log should now exist (and no rotations should exist)
 assert.eq(logCount(logs[0], true), 1);
 stopMongod(port[0]);
 
-print("------ Start mongod with logpath set to existing file");
+print("------ Start mongod with logpath set to existing file: " + logdir + logs[0]);
 m = MongoRunner.runMongod({ port: port[1], dbpath: dbdir, logpath: logdir + logs[0]});
 
 // log should continue to exist
@@ -79,14 +79,14 @@ if ( false ) {
         print("------ Skipping fork tests... (Windows)");
 
     } else {
-        print("------ Start mongod with logpath set to new file, fork");
+        print("------ Start mongod with logpath set to new file: " + logdir + logs[1] + ", fork");
         var m = MongoRunner.runMongod({ port: port[2], dbpath: dbdir, logpath: logdir + logs[1], fork: true});
       
         // log should now exist (and no rotations should exist)
         assert.eq(logCount(logs[1], true), 1);
         stopMongod(port[2]);
       
-        print("------ Start mongod with logpath set to existing file, fork");
+        print("------ Start mongod with logpath set to existing file: " + logdir + logs[1] + ", fork");
         m = MongoRunner.runMongod({ port: port[3], dbpath: dbdir, logpath: logdir + logs[1], fork: true});
       
         // log should continue to exist
@@ -100,9 +100,9 @@ if ( false ) {
     }
     
     // the following tests depend on undefined behavior; assume that MongoRunner raises exception on error
-    print("------ Confirm that launch fails with directory");
+    print("------ Confirm that launch fails with directory: " + testdir);
     assert.throws(function() { MongoRunner.runMongod({ port: port[4], dbpath: dbdir, logpath: testdir }); });
 
-    print("------ Confirm that launch fails with special file");
+    print("------ Confirm that launch fails with special file: " + sfile);
     assert.throws(function() { MongoRunner.runMongod({ port: port[5], dbpath: dbdir, logpath: sfile }); });
 }
