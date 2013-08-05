@@ -83,6 +83,8 @@ env.CppUnitTest('string_map_test', ['util/string_map_test.cpp'],
                 LIBDEPS=['bson','foundation'])
 
 
+env.StaticLibrary('concurrency', ['util/concurrency/synchronization.cpp'])
+
 commonFiles = [ "pch.cpp",
                 "buildinfo.cpp",
                 "db/hasher.cpp",
@@ -102,7 +104,6 @@ commonFiles = [ "pch.cpp",
                 "util/concurrency/spin_lock.cpp",
                 "util/text_startuptest.cpp",
                 "util/stack_introspect.cpp",
-                "util/concurrency/synchronization.cpp",
                 "util/net/sock.cpp",
                 "util/net/httpclient.cpp",
                 "util/net/message.cpp",
@@ -126,6 +127,7 @@ env.StaticLibrary('mongocommon', commonFiles,
                            'md5',
                            'stacktrace',
                            'stringutils',
+                           'concurrency',
                            '$BUILD_DIR/third_party/pcrecpp',
                            '$BUILD_DIR/third_party/murmurhash3/murmurhash3',
                            '$BUILD_DIR/third_party/shim_boost'],)
@@ -376,7 +378,8 @@ env.CppUnitTest("shard_test", [ "s/shard_test.cpp" ], LIBS=env['LIBS'] + tokulib
                           "mongodandmongos"],
                 NO_CRUTCH=True)
 
-env.CppUnitTest('graded_rwlock_test', 'util/concurrency/graded_rwlock_test.cpp', LIBDEPS=['mongocommon'])
+env.CppUnitTest('graded_rwlock_test', ['util/concurrency/graded_rwlock_test.cpp'],
+                LIBDEPS=['concurrency'])
 
 serverOnlyFiles += [ "s/d_logic.cpp",
                      "s/d_writeback.cpp",
