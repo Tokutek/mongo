@@ -205,9 +205,7 @@ namespace mongo {
 
             srand( (unsigned) seed );
             printGitVersion();
-#ifdef MONGO_SSL
             printOpenSSLVersion();
-#endif
             printSysInfo();
 
             DEV log() << "_DEBUG build" << endl;
