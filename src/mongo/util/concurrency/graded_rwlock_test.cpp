@@ -79,19 +79,22 @@ namespace {
                 events[0].waitToBeNotified();
             }
             // 8. drop the cheap lock, this should let the write lock actually get control
-            //    we won't get the next cheap lock until the write lock is done
+            //    we won't get the next cheap lock until the write lock releases the cheap one
             states[0] = "none";
             logState();
             {
                 cheap_rdlock lk(_tllock);
-                // 10. get the cheap read lock again, then drop it
+                // 11. get the cheap read lock again, then drop it
                 states[0] = "cheap_rdlock_4";
+                logState();
+                events[2].notifyOne();
+                states[0] = "cheap_rdlock_4_again";
                 logState();
             }
             states[0] = "none";
             logState();
             events[0].waitToBeNotified();
-            // 12. make sure we can get the cheap lock one more time
+            // 13. make sure we can get the cheap lock one more time
             {
                 cheap_rdlock lk(_tllock);
                 states[0] = "cheap_rdlock_5";
@@ -122,7 +125,7 @@ namespace {
             events[0].notifyOne();
             {
                 expensive_rdlock lk(_tllock);
-                // 11. announce that we got the expensive read lock one more time, now we're done
+                // 12. announce that we got the expensive read lock one more time, now we're done
                 states[1] = "expensive_rdlock_2";
                 logState();
                 events[0].notifyOne();
@@ -142,7 +145,15 @@ namespace {
                 // 9. announce that we got the write lock, now we're done
                 states[2] = "exclusive_lock";
                 logState();
-                states[2] = "exclusive_lock_last";
+                {
+                    TwoLevelLock::exclusive_lock::release_cheap_locks<1> rel(lk);
+                    // 10. allow the cheap reader through again one more time
+                    states[2] = "exclusive_lock_release<1>";
+                    logState();
+                    events[2].waitToBeNotified();
+                }
+                // 12. re-grab the cheap lock, then exit
+                states[2] = "exclusive_lock_again";
                 logState();
             }
             states[2] = "none";

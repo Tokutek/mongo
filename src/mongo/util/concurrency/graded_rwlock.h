@@ -100,6 +100,27 @@ namespace mongo {
             RWLock::unlock();
         }
 
+        // We may want to, while we have the exclusive lock held, temporarily release some of the
+        // cheaper locks (those with level <= maxLevel).  We unlock the cheapest ones first, then
+        // the more expensive ones, and when we want to relock them, we lock the more expensive ones
+        // before the cheaper ones.  See exclusive_lock::release_cheap_locks.
+        inline void unlock_cheap(int maxLevel) {
+            dassert(maxLevel > 0);
+            dassert(maxLevel <= N);
+            _parent.unlock_cheap(maxLevel);
+            if (maxLevel >= N) {
+                RWLock::unlock();
+            }
+        }
+        inline void lock_cheap(int maxLevel) {
+            dassert(maxLevel > 0);
+            dassert(maxLevel <= N);
+            if (maxLevel >= N) {
+                RWLock::lock();
+            }
+            _parent.lock_cheap(maxLevel);
+        }
+
         template<int level>
         class shared_lock : boost::noncopyable {
             lock_type &_r;
@@ -113,6 +134,31 @@ namespace mongo {
           public:
             exclusive_lock(lock_type &rwlock) : _r(rwlock) { _r.lock(); }
             ~exclusive_lock() { _r.unlock(); }
+
+            /**
+             * Once we have the exclusive lock, we might want to temporarily let cheaper operations
+             * through for a while, without releasing the more expensive locks just yet.  This lets
+             * us do that:
+             *
+             *     typedef GradedRWLock<3> TrioLock;
+             *     {
+             *         TrioLock::exclusive_lock lk(tl);
+             *         // Do some things here
+             *         {
+             *             TrioLock::exclusive_lock::release_cheap_locks<2> rel(lk);
+             *             // do some things that can allow cheap operations through
+             *         }
+             *         // Now we have the exclusive lock again, and we didn't have to wait for the
+             *         // most expensive lock again
+             *     }
+             */
+            template<int level>
+            class release_cheap_locks : boost::noncopyable {
+                lock_type &_r;
+              public:
+                release_cheap_locks(exclusive_lock &lk) : _r(lk._r) { _r.unlock_cheap(level); }
+                ~release_cheap_locks() { _r.lock_cheap(level); }
+            };
         };
     };
 
@@ -127,6 +173,16 @@ namespace mongo {
         inline void unlock_shared(int level) {
             dassert(level == 1);
             RWLock::unlock_shared();
+        }
+        inline void unlock_cheap(int maxLevel) {
+            if (maxLevel >= 1) {
+                unlock();
+            }
+        }
+        inline void lock_cheap(int maxLevel) {
+            if (maxLevel >= 1) {
+                lock();
+            }
         }
         using RWLock::lock;
         using RWLock::unlock;
