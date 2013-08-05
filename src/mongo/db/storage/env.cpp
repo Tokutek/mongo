@@ -329,8 +329,9 @@ namespace mongo {
         }
 
         // set a descriptor for the given dictionary.
-        static void set_db_descriptor(DB *db, const Descriptor &descriptor) {
-            const int flags = DB_UPDATE_CMP_DESCRIPTOR;
+        static void set_db_descriptor(DB *db, const Descriptor &descriptor,
+                                      const bool hot_index) {
+            const int flags = DB_UPDATE_CMP_DESCRIPTOR | (hot_index ? DB_IS_HOT_INDEX : 0);
             DBT desc = descriptor.dbt();
             const int r = db->change_descriptor(db, cc().txn().db_txn(), &desc, flags);
             if (r != 0) {
@@ -338,7 +339,8 @@ namespace mongo {
             }
         }
 
-        static void verify_or_upgrade_db_descriptor(DB *db, const Descriptor &descriptor) {
+        static void verify_or_upgrade_db_descriptor(DB *db, const Descriptor &descriptor,
+                                                    const bool hot_index) {
             const DBT *desc = &db->cmp_descriptor->dbt;
             verify(desc->data != NULL && desc->size >= 4);
 
@@ -348,12 +350,12 @@ namespace mongo {
                 const Ordering &ordering(*reinterpret_cast<const Ordering *>(desc->data));
                 const Ordering &expected(descriptor.ordering());
                 verify(memcmp(&ordering, &expected, 4) == 0);
-                set_db_descriptor(db, descriptor);
+                set_db_descriptor(db, descriptor, hot_index);
             } else {
                 const Descriptor existing(reinterpret_cast<const char *>(desc->data), desc->size);
                 if (existing.version() < descriptor.version()) {
                     // existing descriptor is out-dated. upgrade to the current version.
-                    set_db_descriptor(db, descriptor);
+                    set_db_descriptor(db, descriptor, hot_index);
                 } else if (existing.version() > descriptor.version()) {
                     problem() << "Detected a \"dictionary descriptor\" version that is too new: "
                               << existing.version() << ". The highest known version is " << descriptor.version()
@@ -371,7 +373,8 @@ namespace mongo {
         }
 
         int db_open(DB **dbp, const string &name, const BSONObj &info,
-                    const Descriptor &descriptor, bool may_create) {
+                    const Descriptor &descriptor, const bool may_create,
+                    const bool hot_index) {
             // TODO: Refactor this option setting code to someplace else. It's here because
             // the YDB api doesn't allow a db->close to be called before db->open, and we
             // would leak memory if we chose to do nothing. So we validate all the
@@ -451,9 +454,9 @@ namespace mongo {
                 handle_ydb_error(r);
             }
             if (may_create) {
-                set_db_descriptor(db, descriptor);
+                set_db_descriptor(db, descriptor, hot_index);
             }
-            verify_or_upgrade_db_descriptor(db, descriptor);
+            verify_or_upgrade_db_descriptor(db, descriptor, hot_index);
 
             if (altTxn.get() != NULL) {
                 altTxn->commit();

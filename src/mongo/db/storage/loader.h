@@ -51,6 +51,7 @@ namespace mongo {
                                        DBT *key, DBT *val, void *extra);
 
         private:
+            DB *_db;
             DB_LOADER *_loader;
             poll_function_extra _poll_extra;
             error_callback_extra _error_extra;
