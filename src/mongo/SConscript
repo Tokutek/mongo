@@ -625,17 +625,21 @@ toku_lib_transforms = ["--transform %s=$SERVER_DIST_BASENAME/lib64" % d for d in
 
 if not has_option("skip-tarballs"):
     for d in ['/', '/usr/local/gcc-4.7', '/usr/local/gcc-4.7.3']:
-        libdir = os.path.join(d, 'lib64')
-        if os.path.exists(libdir):
-            libgcc_s = os.path.join(libdir, 'libgcc_s.so.1')
-            libgcc_s_base64 = libdir
-            libgcc_s_base = os.path.join(d, 'lib')
+        for lib64, lib32 in [('lib64', 'lib'), ('lib/x86_64-linux-gnu', 'lib/i386-linux-gnu')]:
+            libdir = os.path.join(d, lib64)
+            if os.path.exists(libdir):
+                libgcc_s = os.path.join(libdir, 'libgcc_s.so.1')
+                libgcc_s_base64 = libdir
+                libgcc_s_base32 = os.path.join(d, lib32)
+                break
     for d in ['/usr', '/usr/local/gcc-4.7', '/usr/local/gcc-4.7.3']:
-        libdir = os.path.join(d, 'lib64')
-        if os.path.exists(libdir):
-            libstdcxx = os.path.join(libdir, 'libstdc++.so.6')
-            libstdcxx_base64 = libdir
-            libstdcxx_base = os.path.join(d, 'lib')
+        for lib64, lib32 in [('lib64', 'lib'), ('lib/x86_64-linux-gnu', 'lib/i386-linux-gnu')]:
+            libdir = os.path.join(d, lib64)
+            if os.path.exists(libdir):
+                libstdcxx = os.path.join(libdir, 'libstdc++.so.6')
+                libstdcxx_base64 = libdir
+                libstdcxx_base32 = os.path.join(d, lib32)
+                break
 
     env.Command(
         '#/${SERVER_ARCHIVE}',
@@ -650,8 +654,8 @@ if not has_option("skip-tarballs"):
                 '--transform ${str(Dir(BUILD_DIR))}/mongo=$SERVER_DIST_BASENAME/bin',
                 '--transform %s=$SERVER_DIST_BASENAME/lib64' % libgcc_s_base64,
                 '--transform %s=$SERVER_DIST_BASENAME/lib64' % libstdcxx_base64,
-                '--transform %s=$SERVER_DIST_BASENAME/lib' % libgcc_s_base,
-                '--transform %s=$SERVER_DIST_BASENAME/lib' % libstdcxx_base,
+                '--transform %s=$SERVER_DIST_BASENAME/lib' % libgcc_s_base32,
+                '--transform %s=$SERVER_DIST_BASENAME/lib' % libstdcxx_base32,
                 '${TEMPFILE(SOURCES[1:])}']))
     
     if (solaris or linux) and (not has_option("nostrip")):
