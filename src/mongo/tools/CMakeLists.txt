@@ -8,8 +8,3 @@ target_link_libraries(alltools LINK_PUBLIC
   coreserver
   coredb
   )
-
-add_library(docgenerator STATIC
-  docgenerator
-  )
-add_dependencies(docgenerator generate_error_codes generate_action_types)

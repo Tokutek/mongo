@@ -467,12 +467,6 @@ env.CppUnitTest('v8_deadline_monitor_test', 'scripting/v8_deadline_monitor_test.
 
 env.Library('stacktrace', 'util/stacktrace.cpp')
 
-## lame_stacktrace_test won't link because stacktrace needs log.cpp
-## TODO: fix this and re-enable it
-#env.Program('lame_stacktrace_test', 'util/lame_stacktrace_test.cpp',
-#            LIBDEPS=['stacktrace',
-#                     '$BUILD_DIR/mongo/base/base'])
-
 serverOnlyFiles += [ "db/stats/snapshots.cpp" ]
 
 env.Library('coreshard', ['client/distlock.cpp',
@@ -618,13 +612,9 @@ for x in normalTools:
                                            LIBDEPS=["alltools"]) )
     addBuildRpath(env, tool)
 
-env.StaticLibrary("docgenerator", "tools/docgenerator.cpp")
-
 #some special tools
 env.Install( '#/', [
         env.Program( "mongofiles", "tools/files.cpp", LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools", "gridfs"] ),
-        env.Program( "docgen", "tools/docgeneratormain.cpp", LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools", "docgenerator"] ),
-        env.Program( "loadgen", "tools/loadgenerator.cpp", LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools", "docgenerator"] ),
         env.Program( "bsondump", "tools/bsondump.cpp", LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools"]),
         env.Program( "mongobridge", "tools/bridge.cpp", LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools"]),
         ] )

@@ -668,26 +668,6 @@ install_executables(tokumx_tools
   )
 target_link_libraries(mongofiles gridfs)
 
-add_executable(docgen tools/docgeneratormain)
-add_executable(loadgen tools/loadgenerator)
-foreach (tool
-    docgen
-    loadgen
-    )
-  add_dependencies(${tool} generate_error_codes generate_action_types)
-  if (NOT APPLE)
-    target_link_whole_libraries(${tool}
-      jemalloc
-      )
-  endif ()
-  link_recursive_deps(${tool}
-    COMBINED_LIBNAME docgen_tool_deps
-    alltools
-    docgenerator
-    ${TOKUMX_SSL_LIBRARIES}
-    )
-endforeach ()
-
 add_executable(mongos
   s/server
   )
