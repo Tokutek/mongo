@@ -735,21 +735,26 @@ namespace mongo {
         }
 
         void close(const bool abortingLoad) {
-            if (!abortingLoad) {
-                const int r = _loader->close();
-                if (r != 0) {
-                    storage::handle_ydb_error(r);
-                }
-                verify(!_indexBuildInProgress);
-                for (int i = 0; i < _nIndexes; i++) {
-                    IndexDetails &idx = *_indexes[i];
-                    // The PK's uniqueness is verified on loader close, so we should not check it again.
-                    if (!isPKIndex(idx) && idx.unique()) {
-                        checkIndexUniqueness(idx);
+            try {
+                if (!abortingLoad) {
+                    const int r = _loader->close();
+                    if (r != 0) {
+                        storage::handle_ydb_error(r);
+                    }
+                    verify(!_indexBuildInProgress);
+                    for (int i = 0; i < _nIndexes; i++) {
+                        IndexDetails &idx = *_indexes[i];
+                        // The PK's uniqueness is verified on loader close, so we should not check it again.
+                        if (!isPKIndex(idx) && idx.unique()) {
+                            checkIndexUniqueness(idx);
+                        }
                     }
                 }
+            } catch (...) {
+                _loader.reset();
+                NamespaceDetails::close();
+                throw;
             }
-            // Calls the destructor, which aborts the load if we didn't close above.
             _loader.reset();
             NamespaceDetails::close();
         }

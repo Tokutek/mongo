@@ -52,8 +52,6 @@ var testExternallyUsableAfterCommit = function() {
     assert.eq(1, t.count({ success: 1 }));
 }();
 
-/* TODO: Re-enable this once uniqueness constraints are handled
- *       by commitLoad() instead of on insert.
 var testUniquenessConstraintAbort = function() {
     t = db.loaderunique;
     t.drop();
@@ -83,4 +81,3 @@ var testUniquenessConstraintAbort = function() {
     rollback();
     assert.eq(0, t.count());
 }();
-*/
