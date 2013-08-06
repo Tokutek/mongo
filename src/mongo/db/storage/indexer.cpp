@@ -77,16 +77,8 @@ namespace mongo {
             info->errmsg = errmsg;
         }
 
-
         int Indexer::build() {
-            return _indexer->build(_indexer);
-        }
-
-        int Indexer::close() {
-            const int r = _indexer->close(_indexer);
-
-            // Doesn't matter if the close succeded or not. It's dead to us now.
-            _closed = true;
+            const int r = _indexer->build(_indexer);
             if (r == -1) {
                 _poll_extra.throwException();
             }
@@ -97,6 +89,12 @@ namespace mongo {
             // callback or come from the poll function should be handled
             // in some generic fashion by the caller.
             return r;
+        }
+
+        int Indexer::close() {
+            // Doesn't matter if the close succeeds or not.
+            _closed = true;
+            return _indexer->close(_indexer);
         }
 
     } // namespace storage

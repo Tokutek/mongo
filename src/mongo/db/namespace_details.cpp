@@ -1423,6 +1423,7 @@ namespace mongo {
         result->appendNumber("count", (long long) accStats->count);
 
         result->append("nindexes" , numIndexes );
+        result->append("nindexesbeingbuilt" , nIndexesBeingBuilt() );
 
         accStats->size = indexStats[0].getDataSize();
         result->appendNumber("size", (long long) accStats->size/scale);
