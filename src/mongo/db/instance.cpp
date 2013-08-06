@@ -501,6 +501,42 @@ namespace mongo {
 
     }
 
+    /* db - database name
+       path - db directory
+    */
+    void Database::closeDatabase( const char *name, const string& path ) {
+        verify( Lock::isW() );
+
+        Client::Context * ctx = cc().getContext();
+        verify( ctx );
+        verify( ctx->inDB( name , path ) );
+        Database *database = ctx->db();
+        verify( database->name() == name );
+
+        /* important: kill all open cursors on the database */
+        string prefix(name);
+        prefix += '.';
+        ClientCursor::invalidate(prefix.c_str());
+
+        NamespaceDetailsTransient::clearForPrefix( prefix.c_str() );
+
+        dbHolderW().erase( name, path );
+        ctx->_clear();
+        delete database; // closes files
+    }
+
+    // returns true if the operation should run in an alternate
+    // transaction stack instead of the possible multi statement
+    // transaction stack that it is a part of. Several operations/statements,
+    // such as authentication, should not run 
+    static bool opNeedsAltTxn(const char *ns) {
+        // for now, the only operations that need to run in an
+        // alternate transaction stack are authentication related
+        // operations. We do not want them to be part of multi statement
+        // transactions.
+        return mongoutils::str::endsWith(ns, ".system.users");
+    }
+
     static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &toupdate, const BSONObj &query,
                                      const bool upsert, const bool multi, const bool broadcast) {
         // void ReplSetImpl::relinquish() uses big write lock so 
@@ -513,10 +549,11 @@ namespace mongo {
         }
 
         Client::Context ctx(ns);
+        scoped_ptr<Client::AlternateTransactionStack> altStack(opNeedsAltTxn(ns) ? new Client::AlternateTransactionStack : NULL);
         Client::Transaction transaction(DB_SERIALIZABLE);
         UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
-        lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
         transaction.commit();
+        lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
     }
 
     void receivedUpdate(Message& m, CurOp& op) {
@@ -585,10 +622,13 @@ namespace mongo {
         }
 
         Client::Context ctx(ns);
+        long long n;
+        scoped_ptr<Client::AlternateTransactionStack> altStack(opNeedsAltTxn(ns) ? new Client::AlternateTransactionStack : NULL);
         Client::Transaction transaction(DB_SERIALIZABLE);
-        long long n = deleteObjects(ns, pattern, justOne, true);
-        lastError.getSafe()->recordDelete( n );
+        n = deleteObjects(ns, pattern, justOne, true);
         transaction.commit();
+
+        lastError.getSafe()->recordDelete( n );
     }
 
     QueryResult* emptyMoreResult(long long);
@@ -844,10 +884,11 @@ namespace mongo {
         }
 
         Client::Context ctx(ns);
+        scoped_ptr<Client::AlternateTransactionStack> altStack(opNeedsAltTxn(ns) ? new Client::AlternateTransactionStack : NULL);
         Client::Transaction transaction(DB_SERIALIZABLE);
         insertObjects(ns, objs, keepGoing, 0, true);
-        globalOpCounters.incInsertInWriteLock(objs.size());
         transaction.commit();
+        globalOpCounters.incInsertInWriteLock(objs.size());
     }
 
     void receivedInsert(Message& m, CurOp& op) {

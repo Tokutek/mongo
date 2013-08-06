@@ -87,6 +87,7 @@ namespace mongo {
         if ( ! noauth ) {
             Client::GodScope gs;
             Client::ReadContext ctx("admin.system.users");
+            Client::AlternateTransactionStack altStack;
             Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             BSONObj result;
             NamespaceDetails *d = nsdetails("admin.system.users");
@@ -131,6 +132,8 @@ namespace mongo {
             string systemUsers = dbname + ".system.users";
             {
                 Client::ReadContext tc(systemUsers, dbpath, false);
+                // we want all authentication stuff to happen on an alternate stack
+                Client::AlternateTransactionStack altStack;
                 Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
 
                 BSONObjBuilder b;
