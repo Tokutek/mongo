@@ -203,7 +203,9 @@ class mongod(object):
             db.authenticate("admin","password")
         except OperationFailure, e:
             try:
-                db.add_user("admin","password")
+                db.command("createUser",
+                           user="admin",
+                           pwd="password")
             except OperationFailure, e:
                 if e.message == 'need to login':
                     pass # SERVER-4225
