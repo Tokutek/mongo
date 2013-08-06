@@ -225,6 +225,7 @@ namespace mongo {
         IndexSpec _spec;
 
         friend class NamespaceDetails;
+        friend class BulkLoadedCollection;
     };
 
     // class to store statistics about an IndexDetails

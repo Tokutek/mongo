@@ -411,7 +411,7 @@ namespace mongo {
         };
 
         // Indexer for foreground (aka cold, aka offline) indexing.
-        // build() should be called write locked.
+        // build() must be called write locked.
         //
         // Cold indexing is theoretically faster than hot indexing at
         // the expense of holding the write lock for a long time.

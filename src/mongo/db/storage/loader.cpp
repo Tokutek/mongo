@@ -25,15 +25,17 @@ namespace mongo {
 
     namespace storage {
 
-        Loader::Loader(DB *db) :
-            _db(db), _loader(NULL), _poll_extra(cc()), _closed(false) {
+        // TODO: Use a command line option for LOADER_COMPRESS_INTERMEDIATES
+
+        Loader::Loader(DB **dbs, const int n) :
+            _dbs(dbs), _n(n),
+            _loader(NULL), _poll_extra(cc()), _closed(false) {
 
             uint32_t db_flags = 0;
             uint32_t dbt_flags = 0;
-            // TODO: Use a command line option for LOADER_COMPRESS_INTERMEDIATES
             const int loader_flags = 0; 
             int r = storage::env->create_loader(storage::env, cc().txn().db_txn(),
-                                                &_loader, db, 1, &_db,
+                                                &_loader, _dbs[0], _n, _dbs,
                                                 &db_flags, &dbt_flags, loader_flags);
             if (r != 0) {
                 handle_ydb_error(r);

@@ -724,13 +724,22 @@ namespace mongo {
             // will be called with aborting = true. See BulkLoadedCollection::close()
             NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
             rollback.noteNs(_ns);
+
+            const int n = _nIndexes;
+            _dbs.reset(new DB *[n]);
+            for (int i = 0; i < _nIndexes; i++) {
+                IndexDetails &idx = *_indexes[i];
+                _dbs[i] = idx.db();
+            }
+            _loader.reset(new storage::Loader(_dbs.get(), n));
         }
 
         void close(const bool abortingLoad) {
-            if (abortingLoad) {
-                // TODO: This is where we call _loader->abort()
-            } else {
-                // TODO: This is where we call _loader->close()
+            if (!abortingLoad) {
+                const int r = _loader->close();
+                if (r != 0) {
+                    storage::handle_ydb_error(r);
+                }
                 verify(!_indexBuildInProgress);
                 for (int i = 0; i < _nIndexes; i++) {
                     IndexDetails &idx = *_indexes[i];
@@ -740,6 +749,8 @@ namespace mongo {
                     }
                 }
             }
+            // Calls the destructor, which aborts the load if we didn't close above.
+            _loader.reset();
             NamespaceDetails::close();
         }
 
@@ -751,8 +762,13 @@ namespace mongo {
         }
 
         void insertObject(BSONObj &obj, uint64_t flags = 0) {
-            // Simple bulk load implementation utilizes no loader, just inserts.
-            IndexedCollection::insertObject(obj, flags);
+            obj = addIdField(obj);
+            BSONObj pk = obj["_id"].wrap("");
+
+            storage::Key sPK(pk, NULL);
+            DBT key = storage::make_dbt(sPK.buf(), sPK.size());
+            DBT val = storage::make_dbt(obj.objdata(), obj.objsize());
+            _loader->put(&key, &val);
         }
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0) {
@@ -781,6 +797,8 @@ namespace mongo {
         // do anything with the namespace until the load is complete and this
         // namespace has been closed / re-opened.
         ConnectionId _bulkLoadConnectionId;
+        scoped_array<DB *> _dbs;
+        scoped_ptr<storage::Loader> _loader;
     };
 
     /* ------------------------------------------------------------------------- */

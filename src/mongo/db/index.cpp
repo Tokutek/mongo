@@ -373,7 +373,7 @@ namespace mongo {
     /* ---------------------------------------------------------------------- */
 
     IndexDetails::Builder::Builder(IndexDetails &idx) :
-        _idx(idx), _loader(_idx._db) {
+        _idx(idx), _loader(&_idx._db, 1) {
     }
 
     void IndexDetails::Builder::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val) {
