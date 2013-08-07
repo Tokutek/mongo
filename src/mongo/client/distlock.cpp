@@ -24,6 +24,7 @@
 
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/storage/exception.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
@@ -734,13 +735,13 @@ namespace mongo {
 
                 // Expected format:
                 // nextSafe(): { $err: "Lock not granted. Try restarting the transaction.", code: 16759 }
-                StringData err = e.what();
-                StringData prefix("nextSafe(): ");
-                if (!err.startsWith(prefix)) {
+                const string & err = e.what();
+                string prefix("nextSafe(): ");
+                if (!mongoutils::str::startsWith(err, prefix)) {
                     throw;
                 }
-                StringData objStr = err.substr(prefix.size(), string::npos);
-                BSONObj errObj = fromjson(objStr.toString());
+                string objStr = err.substr(prefix.size(), string::npos);
+                BSONObj errObj = fromjson(objStr);
                 BSONElement codeElt = errObj["code"];
                 if (!codeElt.ok() || !codeElt.isNumber()) {
                     throw;
