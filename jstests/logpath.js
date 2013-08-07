@@ -4,9 +4,9 @@ var name = "logpath";
 var token = "logpath_token";
 
 var dbdir = MongoRunner.toRealDir(name); // this will work under windows as well as linux
-var basedir = MongoRunner.toRealDir(name + 'files/');
-var logdir = basedir + "logdir/";
-var testdir = basedir + "testdir/"
+var basedir = MongoRunner.toRealDir(name + 'files');
+var logdir = basedir + "/logdir/";
+var testdir = basedir + "/testdir/"
 var sfile = _isWindows() ? "NUL:" : "/dev/null";
 
 var logs = [token + "1", token + "2"];
