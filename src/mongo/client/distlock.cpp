@@ -24,6 +24,7 @@
 
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/storage/exception.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
@@ -511,7 +512,7 @@ namespace mongo {
         queryBuilder.appendElements( _id );
         queryBuilder.append( "state" , 0 );
 
-        {
+        try {
             // make sure its there so we can use simple update logic below
             BSONObj o = conn->findOne( locksNS , _id ).getOwned();
 
@@ -718,6 +719,40 @@ namespace mongo {
             else if ( o["ts"].type() ) {
                 queryBuilder.append( o["ts"] );
             }
+        }
+        catch (storage::RetryableException) {
+            conn.done();
+            return false;
+        }
+        catch (UserException &e) {
+            int code = e.getCode();
+            if (code == 13106) {
+                // DBClientCursor::nextSafe (inside DBClientInterface::findOne) throws exceptions
+                // with the code 13106 and the string "nextSafe(): " concatenated with the BSONObj
+                // returned by the query.  We need to look at this string to figure out the original
+                // error code.  This is not ideal, but we have to deal with the C++ driver's
+                // weirdness here.
+
+                // Expected format:
+                // nextSafe(): { $err: "Lock not granted. Try restarting the transaction.", code: 16759 }
+                const string & err = e.what();
+                string prefix("nextSafe(): ");
+                if (!mongoutils::str::startsWith(err, prefix)) {
+                    throw;
+                }
+                string objStr = err.substr(prefix.size(), string::npos);
+                BSONObj errObj = fromjson(objStr);
+                BSONElement codeElt = errObj["code"];
+                if (!codeElt.ok() || !codeElt.isNumber()) {
+                    throw;
+                }
+                long long wrappedCode = codeElt.numberLong();
+                if (wrappedCode == 16759 || wrappedCode == 16760 || wrappedCode == 16768) {
+                    conn.done();
+                    return false;
+                }
+            }
+            throw;
         }
 
         // Always reset our ping if we're trying to get a lock, since getting a lock implies the lock state is open
