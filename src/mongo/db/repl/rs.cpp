@@ -31,6 +31,8 @@
 #include "mongo/db/txn_context.h"
 #include "mongo/util/time_support.h"
 #include "mongo/db/oplog.h"
+#include "mongo/db/replutil.h"
+#include "mongo/db/oplog_helpers.h"
 
 using namespace std;
 
@@ -422,6 +424,8 @@ namespace mongo {
     ReplSetImpl::ReplSetImpl(ReplSetCmdline& replSetCmdline) : 
         _replInfoUpdateRunning(false),
         _replOplogPurgeRunning(false),
+        _replKeepOplogAliveRunning(false),
+        _keepOplogPeriodMillis(600*1000), // 10 minutes
         _replBackgroundShouldRun(true),
         elect(this),
         _forceSyncTarget(0),
@@ -1023,6 +1027,42 @@ namespace mongo {
         cc().getAuthenticationInfo()->authorize("local","_repl");
     }
 
+    // for testing only
+    void ReplSetImpl::setKeepOplogAlivePeriod(uint64_t val) {
+        boost::unique_lock<boost::mutex> lock(_keepOplogAliveMutex);
+        _keepOplogPeriodMillis = val;
+        _keepOplogAliveCond.notify_all();
+    }
+
+    void ReplSetImpl::keepOplogAliveThread() {
+        _replKeepOplogAliveRunning = true;
+        GTID lastSeenGTID = gtidManager->getLiveState();
+        Client::initThread("keepOplogAlive");
+        replLocalAuth();
+        while (_replBackgroundShouldRun) {
+            // make it 10 minutes
+            {
+                boost::unique_lock<boost::mutex> lock(_keepOplogAliveMutex);
+                _keepOplogAliveCond.timed_wait(
+                    _keepOplogAliveMutex,
+                    boost::posix_time::milliseconds(_keepOplogPeriodMillis)
+                    );
+            }
+            GTID curr = gtidManager->getLiveState();
+            RWLockRecursive::Shared lk(operationLock);
+            if (_replBackgroundShouldRun && _isMaster() && GTID::cmp(curr, lastSeenGTID) == 0) {
+                Client::Transaction txn (DB_SERIALIZABLE);
+                OpLogHelpers::logComment(BSON("comment" << "keepOplogAlive"), &cc().txn());
+                txn.commit(DB_TXN_NOSYNC);
+                lastSeenGTID = gtidManager->getLiveState();
+            }
+            else {
+                lastSeenGTID = curr;
+            }
+        }
+        _replKeepOplogAliveRunning = false;
+    }
+
     void ReplSetImpl::purgeOplogThread() {
         _replOplogPurgeRunning = true;
         GTID lastTimeRead;
@@ -1086,6 +1126,7 @@ namespace mongo {
                 }
             }
             else {                
+                boost::unique_lock<boost::mutex> lock(_purgeMutex);
                 _purgeCond.wait(_purgeMutex);
             }
         }        
@@ -1167,6 +1208,14 @@ namespace mongo {
         while (_replOplogPurgeRunning) {
             sleepsecs(1);
             log() << "still waiting for oplog purge thread to end..." << endl;
+        }
+        {
+            boost::unique_lock<boost::mutex> lock(_keepOplogAliveMutex);
+            _keepOplogAliveCond.notify_all();
+        }
+        while (_replKeepOplogAliveRunning) {
+            sleepsecs(1);
+            log() << "still waiting for keep oplog alive thread to end..." << endl;
         }
     }
 
