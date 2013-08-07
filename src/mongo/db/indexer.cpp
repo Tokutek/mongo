@@ -111,13 +111,7 @@ namespace mongo {
     }
 
     NamespaceDetails::HotIndexer::HotIndexer(NamespaceDetails *d, const BSONObj &info) :
-        NamespaceDetails::Indexer(d, info), _multiKey(false) {
-    }
-
-    NamespaceDetails::HotIndexer::~HotIndexer() {
-        if (_idx.get() != NULL) {
-            _idx->db()->app_private = NULL;
-        }
+        NamespaceDetails::Indexer(d, info) {
     }
 
     void NamespaceDetails::HotIndexer::_prepare() {
@@ -127,7 +121,7 @@ namespace mongo {
             // Give the underlying DB a pointer to the multikey bool, which 
             // will be set during index creation if multikeys are generated.
             // see storage::generate_keys()
-            _idx->db()->app_private = &_multiKey;
+            _multiKeyTracker.reset(new MultiKeyTracker(_idx->db()));
             _indexer.reset(new storage::Indexer(_d->getPKIndex().db(), _idx->db()));
         }
     }
@@ -150,12 +144,11 @@ namespace mongo {
 
     void NamespaceDetails::HotIndexer::_commit() {
         if (_indexer.get() != NULL) {
-            _idx->db()->app_private = NULL;
             const int r = _indexer->close();
             if (r != 0) {
                 storage::handle_ydb_error(r);
             }
-            if (_multiKey) {
+            if (_multiKeyTracker->isMultiKey()) {
                 _d->setIndexIsMultikey(_d->idxNo(*_idx.get()));
             }
         }

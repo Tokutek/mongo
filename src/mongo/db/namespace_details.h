@@ -399,14 +399,14 @@ namespace mongo {
         class HotIndexer : public Indexer {
         public:
             HotIndexer(NamespaceDetails *d, const BSONObj &info);
-            virtual ~HotIndexer();
+            virtual ~HotIndexer() { }
 
             void build();
 
         private:
             void _prepare();
             void _commit();
-            bool _multiKey;
+            scoped_ptr<MultiKeyTracker> _multiKeyTracker;
             scoped_ptr<storage::Indexer> _indexer;
         };
 

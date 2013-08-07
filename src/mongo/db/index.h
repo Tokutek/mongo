@@ -290,5 +290,29 @@ namespace mongo {
         }
     }
 
+    // Sets db->app_private to a bool that gets set
+    // if storage::generate_keys() generates multikeys.
+    // On destruction, safely unsets db->app_private.
+    //
+    // Used by the hot indexer and loader to track
+    // which indexes are multikey.
+    class MultiKeyTracker : boost::noncopyable {
+    public:
+        MultiKeyTracker(DB *db) :
+            _db(db) {
+            _db->app_private = &_multiKey;
+        }
+        ~MultiKeyTracker() {
+            _db->app_private = NULL;
+        }
+        bool isMultiKey() const {
+            return _multiKey;
+        }
+
+    private:
+        DB *_db;
+        bool _multiKey;
+    };
+
 } // namespace mongo
 

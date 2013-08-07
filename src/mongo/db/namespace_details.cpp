@@ -727,9 +727,12 @@ namespace mongo {
 
             const int n = _nIndexes;
             _dbs.reset(new DB *[n]);
+            _multiKeyTrackers.reset(new scoped_ptr<MultiKeyTracker>[n]);
+
             for (int i = 0; i < _nIndexes; i++) {
                 IndexDetails &idx = *_indexes[i];
                 _dbs[i] = idx.db();
+                _multiKeyTrackers[i].reset(new MultiKeyTracker(_dbs[i]));
             }
             _loader.reset(new storage::Loader(_dbs.get(), n));
         }
@@ -747,6 +750,9 @@ namespace mongo {
                         // The PK's uniqueness is verified on loader close, so we should not check it again.
                         if (!isPKIndex(idx) && idx.unique()) {
                             checkIndexUniqueness(idx);
+                        }
+                        if (_multiKeyTrackers[i]->isMultiKey()) {
+                            setIndexIsMultikey(i);
                         }
                     }
                 }
@@ -803,6 +809,7 @@ namespace mongo {
         // namespace has been closed / re-opened.
         ConnectionId _bulkLoadConnectionId;
         scoped_array<DB *> _dbs;
+        scoped_array< scoped_ptr<MultiKeyTracker> > _multiKeyTrackers;
         scoped_ptr<storage::Loader> _loader;
     };
 
