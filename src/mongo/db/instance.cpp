@@ -501,30 +501,6 @@ namespace mongo {
 
     }
 
-    /* db - database name
-       path - db directory
-    */
-    void Database::closeDatabase( const char *name, const string& path ) {
-        verify( Lock::isW() );
-
-        Client::Context * ctx = cc().getContext();
-        verify( ctx );
-        verify( ctx->inDB( name , path ) );
-        Database *database = ctx->db();
-        verify( database->name() == name );
-
-        /* important: kill all open cursors on the database */
-        string prefix(name);
-        prefix += '.';
-        ClientCursor::invalidate(prefix.c_str());
-
-        NamespaceDetailsTransient::clearForPrefix( prefix.c_str() );
-
-        dbHolderW().erase( name, path );
-        ctx->_clear();
-        delete database; // closes files
-    }
-
     // returns true if the operation should run in an alternate
     // transaction stack instead of the possible multi statement
     // transaction stack that it is a part of. Several operations/statements,
