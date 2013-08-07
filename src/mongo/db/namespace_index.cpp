@@ -33,7 +33,8 @@ namespace mongo {
             _dir(dir),
             _nsdbFilename(database.toString() + ".ns"),
             _database(database.toString()),
-            _openRWLock("nsOpenRWLock")
+            _openRWLock("nsOpenRWLock"),
+            _initLock("nsInitLock")
     {}
 
     NamespaceIndex::~NamespaceIndex() {
@@ -56,7 +57,7 @@ namespace mongo {
     void NamespaceIndex::init(bool may_create) {
         Lock::assertAtLeastReadLocked(_database);
         if (!allocated()) {
-            SimpleRWLock::Exclusive lk(_openRWLock);
+            SimpleMutex::scoped_lock lk(_initLock);
             if (!allocated()) {
                 _init(may_create);
             }
@@ -188,12 +189,10 @@ namespace mongo {
         return 0;
     }
 
+    // on input, _initLock is held, so this can be called by only one thread at a time,
+    // also, on input, the NamespaceIndex must be allocated
     NamespaceDetails *NamespaceIndex::open_ns(const StringData& ns, const bool bulkLoad) {
-        init();
-        if (!allocated()) {
-            return NULL;
-        }
-
+        verify(allocated());
         BSONObj serialized;
         BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
@@ -202,8 +201,11 @@ namespace mongo {
         int r = _nsdb->getf_set(_nsdb, db_txn, 0, &ndbt, getf_serialized, &serialized);
         if (r == 0) {
             shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized, bulkLoad );
-            verify(!_namespaces[ns]);
-            _namespaces[ns] = details;
+            {
+                SimpleRWLock::Exclusive lk(_openRWLock);
+                verify(!_namespaces[ns]);
+                _namespaces[ns] = details;
+            }
             return details.get();
         } else if (r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);

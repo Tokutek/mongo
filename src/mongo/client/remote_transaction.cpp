@@ -23,12 +23,14 @@
 #include "mongo/client/connpool.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/util/assert_util.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
     RemoteTransaction::RemoteTransaction(DBClientWithCommands &conn, const string &isolation) : _conn(&conn) {
-        bool ok = _conn->beginTransaction(isolation);
-        verify(ok);
+        BSONObj res;
+        bool ok = _conn->beginTransaction(isolation, &res);
+        massert(16909, mongoutils::str::stream() << "error in beginTransaction: " << res, ok);
     }
 
     RemoteTransaction::~RemoteTransaction() {
