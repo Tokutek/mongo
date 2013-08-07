@@ -157,6 +157,17 @@ var testAbortCommit = function() {
     assert.eq(0, db.system.namespaces.count({ "name" : "test.loadabortcommit2" }));
 }();
 
+var testIdIndexSpecified = function() {
+    t = db.loadid;
+    t.drop();
+    begin();
+    beginLoad('loadid', [ { key: { _id: 1 }, ns: 'test.loadid', unique: true, clustering: true, name: "_id_" } ], { });
+    t.insert({ bulkLoaded: 1 });
+    commitLoad();
+    commit();
+    assert.eq(1, t.find().itcount());
+}();
+
 var testSimpleInsert = function() {
     t = db.loadsimpleinsert;
     t.drop();

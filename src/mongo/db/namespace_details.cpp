@@ -1878,8 +1878,13 @@ namespace mongo {
             }
             uassert( 16887, "Each index spec must have a string name field.",
                             info["name"].ok() && info["name"].type() == mongo::String );
-            d->ensureIndex(info);
-            addIndexToCatalog(info);
+            if (d->ensureIndex(info)) {
+                addIndexToCatalog(info);
+            } else {
+                // The _id index is created automatically, so ensureIndex will
+                // say it already exists.
+                verify(info["key"]["_id"].ok());
+            }
         }
 
         // Now the ns exists. Close it and re-open it in "bulk load" mode.
