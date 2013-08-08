@@ -84,7 +84,7 @@ namespace mongo {
             }
             // Forward any callback-generated exception. Could be an error
             // from the error callback or an interrupt from the poll function.
-            uassert( 16910, _error_extra.errmsg, _error_extra.errmsg.empty() );
+            uassert( 16911, _error_extra.errmsg, _error_extra.errmsg.empty() );
             // Any other non-zero error code that didn't trigger the error
             // callback or come from the poll function should be handled
             // in some generic fashion by the caller.
