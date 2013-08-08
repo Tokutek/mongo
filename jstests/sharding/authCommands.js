@@ -10,7 +10,7 @@ var db = new Mongo('localhost:' + port).getDB('test');
 
 assert.eq(1, db.runCommand({dbStats : 1}).ok);
 
-db.getSiblingDB('admin').addUser("admin", "password"); // activate auth even though we're on localhost
+db.getSiblingDB('admin').addUser("admin", "password", false, 'all'); // activate auth even though we're on localhost
 
 assert.eq(0, db.runCommand({dbStats : 1}).ok);
 
@@ -26,7 +26,7 @@ assert.eq(0, db.runCommand({dropDatabase : 1, $auth : { test : { userName : Numb
 assert.eq(1, db.runCommand({dropDatabase : 1, $auth : { test : { userName : NumberInt(2) } } } ).ok );
 
 
-db.addUser( "roUser", "password", true ); // Set up read-only user for later
+db.addUser( "roUser", "password", true, 'all' ); // Set up read-only user for later
 
 // Test that you can't affect privileges by sending $auth when not authenticated as __system.
 
@@ -55,8 +55,8 @@ var st = new ShardingTest({ keyFile : 'jstests/libs/key1', shards : 2, chunksize
 
 db = st.s.getDB('test');
 
-db.addUser( 'roUser', 'password', true ); // Set up read-only user for later
-db.getSiblingDB('admin').addUser("admin", "password"); // activate auth even though we're on localhost
+db.addUser( 'roUser', 'password', true, 'all' ); // Set up read-only user for later
+db.getSiblingDB('admin').addUser("admin", "password", false, 'all'); // activate auth even though we're on localhost
 
 runTests( db );
 
