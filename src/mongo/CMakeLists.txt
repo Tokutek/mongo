@@ -103,7 +103,6 @@ add_subdirectory(tools)
 add_subdirectory(util)
 
 set(client_sources
-  base/configuration_variable_manager.cpp
   base/global_initializer.cpp
   base/global_initializer_registerer.cpp
   base/init.cpp
@@ -332,7 +331,6 @@ endif ()
 # subdirectories.
 if (BUILD_TESTING)
   foreach (test
-      configuration_variable_manager_test
       initializer_dependency_graph_test
       initializer_test
       owned_pointer_vector_test
@@ -820,7 +818,6 @@ if (BUILD_TESTING)
   endfunction ()
 
   foreach (test
-      configuration_variable_manager_test
       initializer_dependency_graph_test
       initializer_test
       owned_pointer_vector_test

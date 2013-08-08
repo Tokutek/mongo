@@ -18,7 +18,6 @@ add_custom_target(generate_error_codes DEPENDS
   )
 
 add_library(base STATIC
-  configuration_variable_manager
   "${CMAKE_CURRENT_BINARY_DIR}/error_codes.cpp"
   global_initializer
   global_initializer_registerer
