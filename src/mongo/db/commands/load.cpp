@@ -28,7 +28,7 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
-        virtual LockType locktype() const { return OPLOCK; }
+        virtual LockType locktype() const { return WRITE; }
         virtual bool needsTxn() const { return false; }
         virtual bool logTheOp() { return true; }
         virtual bool slaveOk() const { return false; }
@@ -80,7 +80,7 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
-        virtual LockType locktype() const { return OPLOCK; }
+        virtual LockType locktype() const { return WRITE; }
         virtual bool needsTxn() const { return false; }
         virtual bool logTheOp() { return true; }
         virtual bool slaveOk() const { return false; }
@@ -109,7 +109,7 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
-        virtual LockType locktype() const { return OPLOCK; }
+        virtual LockType locktype() const { return WRITE; }
         virtual bool needsTxn() const { return false; }
         virtual bool logTheOp() { return true; }
         virtual bool slaveOk() const { return false; }

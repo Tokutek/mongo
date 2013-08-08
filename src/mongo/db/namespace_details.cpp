@@ -1325,7 +1325,6 @@ namespace mongo {
             throw RetryWithWriteLock();
         }
 
-
         ColdIndexer indexer(this, info);
         indexer.prepare();
         indexer.build();
@@ -1779,8 +1778,9 @@ namespace mongo {
                        const BSONObj &options) {
         uassert( 16873, "Cannot bulk load a collection that alreadly exists.", nsdetails(ns) == NULL );
 
+        // Don't log the create. The begin/commit/abort load commands are already logged.
         string errmsg;
-        const bool created = userCreateNS(ns, options, errmsg, true);
+        const bool created = userCreateNS(ns, options, errmsg, false);
         verify(created);
 
         NamespaceIndex *ni = nsindex(ns);
