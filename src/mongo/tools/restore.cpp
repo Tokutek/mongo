@@ -100,9 +100,9 @@ public:
         _restoreOptions = !hasParam("noOptionsRestore");
         _restoreIndexes = !hasParam("noIndexRestore");
         _w = getParam( "w" , 1 );
-        _doBulkLoad = _w == 0 && _drop;
+        _doBulkLoad = _w == 0;
         if (!_doBulkLoad) {
-            log() << "WARNING! not using bulk load: either drop was not specified or w > 0" << endl;
+            log() << "WARNING! not using bulk load due to w > 0" << endl;
         }
         if (hasParam( "keepIndexVersion" )) {
             log() << "warning: --keepIndexVersion is deprecated in TokuMX" << endl;
@@ -283,7 +283,9 @@ public:
             bulkLoad.commit();
         } else {
             // No bulk load. Create collection and indexes manually.
-            createCollectionWithOptions(options);
+            if (!options.isEmpty()) {
+                createCollectionWithOptions(options);
+            }
             for (vector<BSONObj>::iterator it = indexes.begin(); it != indexes.end(); ++it) {
                 createIndex(*it, false);
             }
