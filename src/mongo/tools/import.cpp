@@ -338,7 +338,6 @@ public:
         if ( hasParam( "drop" ) ) {
             log() << "dropping: " << ns << endl;
             conn().dropCollection( ns.c_str() );
-            _doBulkLoad = true;
         }
 
         if ( hasParam( "ignoreBlanks" ) ) {
@@ -347,7 +346,6 @@ public:
 
         if ( hasParam( "upsert" ) || hasParam( "upsertFields" )) {
             _upsert = true;
-            _doBulkLoad = false;
 
             string uf = getParam("upsertFields");
             if (uf.empty()) {
@@ -358,8 +356,9 @@ public:
             }
         }
 
+        _doBulkLoad = !_upsert;
         if (!_doBulkLoad) {
-            log() << "warning: not using bulk load due to upsert/upsertFields = true or drop = false" << endl;
+            warning() << "not using bulk load because either upsert/upsertFields was specified" << endl;
         }
 
         if ( hasParam( "noimport" ) ) {

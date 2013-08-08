@@ -164,40 +164,49 @@ namespace mongo {
                        const string &dbname, const string &ns,
                        const vector<BSONObj> &indexes,
                        const BSONObj &options) :
-            _conn(conn),
-            _remoteTransaction(_conn),
-            _dbname(dbname), _committed(false) {
+            _conn(conn), _remoteTransaction(_conn),
+            _dbname(dbname), _beganLoad(false), _committed(false) {
+
+            BSONObj result;
+            BSONObjBuilder cmd;
             BSONArrayBuilder arrayBuilder;
             for (vector<BSONObj>::const_iterator i = indexes.begin(); i != indexes.end(); i++) {
                 arrayBuilder << *i;
             }
-            BSONObj result;
-            BSONObjBuilder cmd;
             cmd << "beginLoad" << 1;
             cmd << "ns" << ns;
             cmd.appendArray("indexes", arrayBuilder.done());
             cmd << "options" << options;
             _conn.runCommand(dbname, cmd.done(), result);
-            if (!result["ok"].trueValue()) {
-                log() << "Begin bulk load failed: " << result << endl;
+            if (result["ok"].trueValue()) {
+                _beganLoad = true;
+            } else {
+                log() << "Bulk load skipped for ns " << ns
+                      << ", the collection may already exist" << endl;
             }
         }
+
         ~ClientBulkLoad() {
             if (!_committed) {
-                BSONObj result;
-                _conn.runCommand(_dbname, BSON( "abortLoad" << 1 ), result);
-                if (!result["ok"].trueValue()) {
-                    log() << "Abort bulk load failed: " << result << endl;
+                if (_beganLoad) {
+                    BSONObj result;
+                    _conn.runCommand(_dbname, BSON( "abortLoad" << 1 ), result);
+                    if (!result["ok"].trueValue()) {
+                        log() << "Abort bulk load failed: " << result << endl;
+                    }
                 }
                 _remoteTransaction.rollback();
             }
         }
+
         void commit() {
-            BSONObj result;
             _committed = true;
-            _conn.runCommand(_dbname, BSON( "commitLoad" << 1 ), result);
-            if (!result["ok"].trueValue()) {
-                log() << "Commit bulk load failed: " << result << endl;
+            if (_beganLoad) {
+                BSONObj result;
+                _conn.runCommand(_dbname, BSON( "commitLoad" << 1 ), result);
+                if (!result["ok"].trueValue()) {
+                    log() << "Commit bulk load failed: " << result << endl;
+                }
             }
             _remoteTransaction.commit();
         }
@@ -205,6 +214,7 @@ namespace mongo {
         DBClientBase &_conn;
         RemoteTransaction _remoteTransaction;
         const string _dbname;
+        bool _beganLoad;
         bool _committed;
     };
 
