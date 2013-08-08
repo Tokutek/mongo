@@ -76,8 +76,6 @@ namespace mongo {
         _god(0),
         _mp(p)
     {
-        _hasWrittenThisPass = false;
-        //_pageFaultRetryableSection = 0;
         _connectionId = p ? p->connectionId() : 0;
         
         if ( str::equals( "conn" , desc ) && _connectionId > 0 )

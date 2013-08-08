@@ -265,10 +265,7 @@ namespace mongo {
         /** @return true if global interrupt and should terminate the operation */
         bool globalInterruptCheck() const { return _globalKill; }
 
-        /**
-         * @param heedMutex if true and have a write lock, won't kill op since it might be unsafe
-         */
-        void checkForInterrupt( bool heedMutex = true );
+        void checkForInterrupt();
         void checkForInterrupt( Client &c );
 
         /** @return "" if not interrupted.  otherwise, you should stop. */
@@ -292,7 +289,7 @@ namespace mongo {
 
     private:
         void interruptJs( AtomicUInt *op );
-        void _checkForInterrupt( Client &c, bool heedMutex );
+        void _checkForInterrupt( Client &c );
         volatile bool _globalKill;
         // number of threads that want operations killed
         // because there will be a state transition

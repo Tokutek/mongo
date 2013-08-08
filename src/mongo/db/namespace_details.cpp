@@ -1381,7 +1381,6 @@ namespace mongo {
             for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
                 builder.insertPair(*ki, &pk, obj);
             }
-            killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
         }
 
         builder.done();
