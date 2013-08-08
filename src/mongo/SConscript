@@ -560,8 +560,7 @@ serverOnlyFiles += [ "s/d_logic.cpp",
                      "s/d_state.cpp",
                      "s/d_split.cpp",
                      "client/distlock_test.cpp",
-                     "s/d_chunk_manager.cpp",
-                     "db/module.cpp" ]
+                     "s/d_chunk_manager.cpp" ]
 
 env.StaticLibrary("defaultversion", "s/default_version.cpp")
 

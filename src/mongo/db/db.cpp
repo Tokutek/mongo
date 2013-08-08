@@ -48,7 +48,6 @@
 #include "mongo/db/introspect.h"
 #include "mongo/db/json.h"
 #include "mongo/db/kill_current_op.h"
-#include "mongo/db/module.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
@@ -715,8 +714,6 @@ namespace mongo {
             log() << startupWarningsLog;
         }
 
-        Module::initAll();
-
         if ( scriptingEnabled ) {
             ScriptEngine::setup();
             globalScriptEngine->setCheckInterruptCallback( jsInterruptCallback );
@@ -945,7 +942,6 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
 #ifdef MONGO_SSL
     visible_options.add(ssl_options);
 #endif
-    Module::addOptions( visible_options );
 }
 
 static void processCommandLineOptions(const std::vector<std::string>& argv) {
@@ -1309,8 +1305,6 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             dbexit( EXIT_BADOPTIONS );
         }
 
-        Module::configAll( params );
-
         if (params.count("command")) {
             vector<string> command = params["command"].as< vector<string> >();
 
@@ -1332,8 +1326,6 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             }
         }
 
-
-        Module::configAll(params);
 
 #ifdef _WIN32
         ntservice::configureService(initService,

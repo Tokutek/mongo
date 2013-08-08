@@ -200,7 +200,6 @@ add_library(serveronly STATIC
   ../s/d_split
   ../client/distlock_test
   ../s/d_chunk_manager
-  module
   )
 add_dependencies(serveronly generate_error_codes generate_action_types install_tdb_h)
 target_link_libraries(serveronly LINK_PUBLIC
