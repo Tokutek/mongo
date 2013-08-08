@@ -283,7 +283,9 @@ public:
             bulkLoad.commit();
         } else {
             // No bulk load. Create collection and indexes manually.
-            createCollectionWithOptions(options);
+            if (!options.isEmpty()) {
+                createCollectionWithOptions(options);
+            }
             for (vector<BSONObj>::iterator it = indexes.begin(); it != indexes.end(); ++it) {
                 createIndex(*it, false);
             }
