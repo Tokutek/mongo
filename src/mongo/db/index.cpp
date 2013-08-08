@@ -374,6 +374,11 @@ namespace mongo {
 
     IndexDetails::Builder::Builder(IndexDetails &idx) :
         _idx(idx), _loader(&_idx._db, 1) {
+        _loader.setPollMessagePrefix(str::stream() << "Cold index build progress: "
+                                                   << idx.parentNS() << ", key "
+                                                   << idx.keyPattern()
+                                                   << ":");
+
     }
 
     void IndexDetails::Builder::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val) {

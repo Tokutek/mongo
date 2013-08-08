@@ -735,6 +735,7 @@ namespace mongo {
                 _multiKeyTrackers[i].reset(new MultiKeyTracker(_dbs[i]));
             }
             _loader.reset(new storage::Loader(_dbs.get(), n));
+            _loader->setPollMessagePrefix(str::stream() << "Loader build progress: " << _ns);
         }
 
         void close(const bool abortingLoad) {

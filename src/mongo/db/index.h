@@ -28,11 +28,11 @@
 #include "mongo/db/indexkey.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/descriptor.h"
+#include "mongo/db/storage/builder.h"
 #include "mongo/db/storage/cursor.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/db/storage/txn.h"
-#include "mongo/db/storage/loader.h"
 
 namespace mongo {
 

@@ -19,7 +19,7 @@
 #include "mongo/db/curop.h"
 #include "mongo/db/interrupt_status.h"
 #include "mongo/db/storage/env.h"
-#include "mongo/db/storage/loader.h"
+#include "mongo/db/storage/builder.h"
 
 namespace mongo {
 
@@ -29,7 +29,7 @@ namespace mongo {
 
         Loader::Loader(DB **dbs, const int n) :
             _dbs(dbs), _n(n),
-            _loader(NULL), _poll_extra(cc()), _closed(false) {
+            _loader(NULL), _closed(false) {
 
             uint32_t db_flags = 0;
             uint32_t dbt_flags = 0;
@@ -40,11 +40,11 @@ namespace mongo {
             if (r != 0) {
                 handle_ydb_error(r);
             }
-            r = _loader->set_poll_function(_loader, poll_function, &_poll_extra);
+            r = _loader->set_poll_function(_loader, BuilderBase::poll_function, &_poll_extra);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            r = _loader->set_error_callback(_loader, error_callback, &_error_extra);
+            r = _loader->set_error_callback(_loader, BuilderBase::error_callback, &_error_extra);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
@@ -58,30 +58,6 @@ namespace mongo {
                               << r << endl;
                 }
             }
-        }
-
-        int Loader::poll_function(void *extra, float progress) {
-            poll_function_extra *info = static_cast<poll_function_extra *>(extra);
-            try {
-                killCurrentOp.checkForInterrupt(info->c); // uasserts if we should stop
-                return 0;
-            } catch (const std::exception &ex) {
-                info->saveException(ex);
-            }
-            return -1;
-        }
-
-        void Loader::error_callback(DB *db, int i, int err,
-                                    DBT *key, DBT *val, void *extra) {
-            error_callback_extra *info = static_cast<error_callback_extra *>(extra);
-            str::stream errmsg;
-            errmsg << "Index build failed with code " << err << ".";
-            if (err == EINVAL) {
-                 errmsg << " This may be due to keys > 32kb or a document > 32mb." <<
-                           " Check the error log for " <<
-                           "\"Key too big ...\" or \"Row too big...\"";
-            }
-            info->errmsg = errmsg;
         }
 
         int Loader::put(DBT *key, DBT *val) {

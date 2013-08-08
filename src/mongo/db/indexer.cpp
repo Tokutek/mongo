@@ -123,6 +123,10 @@ namespace mongo {
             // see storage::generate_keys()
             _multiKeyTracker.reset(new MultiKeyTracker(_idx->db()));
             _indexer.reset(new storage::Indexer(_d->getPKIndex().db(), _idx->db()));
+            _indexer->setPollMessagePrefix(str::stream() << "Hot index build progress: "
+                                                         << _d->_ns << ", key "
+                                                         << _idx->keyPattern()
+                                                         << ":");
         }
     }
 

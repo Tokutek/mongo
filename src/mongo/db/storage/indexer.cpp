@@ -16,14 +16,14 @@
 
 #include "mongo/db/curop.h"
 #include "mongo/db/storage/env.h"
-#include "mongo/db/storage/indexer.h"
+#include "mongo/db/storage/builder.h"
 
 namespace mongo {
 
     namespace storage {
 
         Indexer::Indexer(DB *src_db, DB *dest_db) :
-            _dest_db(dest_db), _indexer(NULL), _poll_extra(cc()), _closed(false) {
+            _dest_db(dest_db), _indexer(NULL), _closed(false) {
             uint32_t db_flags = 0;
             uint32_t indexer_flags = 0;
             DB_ENV *env = storage::env;
@@ -33,11 +33,11 @@ namespace mongo {
             if (r != 0) {
                 storage::handle_ydb_error(r);
             }
-            r = _indexer->set_poll_function(_indexer, poll_function, &_poll_extra);
+            r = _indexer->set_poll_function(_indexer, BuilderBase::poll_function, &_poll_extra);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            r = _indexer->set_error_callback(_indexer, error_callback, &_error_extra);
+            r = _indexer->set_error_callback(_indexer, BuilderBase::error_callback, &_error_extra);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
@@ -51,30 +51,6 @@ namespace mongo {
                               << r << endl;
                 }
             }
-        }
-
-        int Indexer::poll_function(void *extra, float progress) {
-            poll_function_extra *info = static_cast<poll_function_extra *>(extra);
-            try {
-                killCurrentOp.checkForInterrupt(info->c); // uasserts if we should stop
-                return 0;
-            } catch (const std::exception &ex) {
-                info->saveException(ex);
-            }
-            return -1;
-        }
-
-        void Indexer::error_callback(DB *db, int i, int err,
-                                    DBT *key, DBT *val, void *extra) {
-            error_callback_extra *info = static_cast<error_callback_extra *>(extra);
-            str::stream errmsg;
-            errmsg << "Index build failed with code " << err << ".";
-            if (err == EINVAL) {
-                 errmsg << " This may be due to keys > 32kb or a document > 32mb." <<
-                           " Check the error log for " <<
-                           "\"Key too big ...\" or \"Row too big...\"";
-            }
-            info->errmsg = errmsg;
         }
 
         int Indexer::build() {

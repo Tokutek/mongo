@@ -31,7 +31,7 @@
 #include "mongo/db/querypattern.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/storage/env.h"
-#include "mongo/db/storage/indexer.h"
+#include "mongo/db/storage/builder.h"
 #include "mongo/util/concurrency/simplerwlock.h"
 #include "mongo/util/string_map.h"
 
