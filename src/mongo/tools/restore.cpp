@@ -39,40 +39,35 @@ using namespace mongo;
 
 namespace po = boost::program_options;
 
-namespace {
-    const char* OPLOG_SENTINEL = "$oplog";  // compare by ptr not strcmp
-}
-
 class Restore : public BSONTool {
 public:
 
     bool _drop;
-    bool _keepIndexVersion;
     bool _restoreOptions;
     bool _restoreIndexes;
     int _w;
+    bool _doBulkLoad;
     string _curns;
     string _curdb;
     string _curcoll;
     set<string> _users; // For restoring users with --drop
-    scoped_ptr<Matcher> _opmatcher; // For oplog replay
-    scoped_ptr<OpTime> _oplogLimitTS; // for oplog replay (limit)
-    int _oplogEntrySkips; // oplog entries skipped
-    int _oplogEntryApplies; // oplog entries applied
-    Restore() : BSONTool( "restore" ) , _drop(false) {
+
+    Restore() : BSONTool( "restore" ),
+        _drop(false), _restoreOptions(false), _restoreIndexes(false),
+        _w(0), _doBulkLoad(false) {
+
         add_options()
-        ("drop" , "drop each collection before import" )
-        ("oplogReplay", "replay oplog for point-in-time restore")
-        ("oplogLimit", po::value<string>(), "include oplog entries before the provided Timestamp "
-                "(seconds[:ordinal]) during the oplog replay; the ordinal value is optional")
-        ("keepIndexVersion" , "don't upgrade indexes to newest version")
+        ("drop" , "drop each collection before import. RECOMMENDED, since only non-existent collections are eligible for the bulk load optimization.")
+        ("oplogReplay", "deprecated")
+        ("oplogLimit", po::value<string>(), "deprecated")
+        ("keepIndexVersion" , "deprecated")
         ("noOptionsRestore" , "don't restore collection options")
         ("noIndexRestore" , "don't restore indexes")
-        ("w" , po::value<int>()->default_value(1) , "minimum number of replicas per write" )
+        ("w" , po::value<int>()->default_value(1) , "minimum number of replicas per write. WARNING, setting w > 0 prevents the bulk load optimization." )
         ;
         add_hidden_options()
         ("dir", po::value<string>()->default_value("dump"), "directory to restore from")
-        ("indexesLast" , "wait to add indexes (now default)") // left in for backwards compatibility
+        ("indexesLast" , "deprecated") // left in for backwards compatibility
         ;
         addPositionArg("dir", 1);
     }
@@ -102,99 +97,21 @@ public:
         }
 
         _drop = hasParam( "drop" );
-        _keepIndexVersion = hasParam("keepIndexVersion");
         _restoreOptions = !hasParam("noOptionsRestore");
         _restoreIndexes = !hasParam("noIndexRestore");
         _w = getParam( "w" , 1 );
-
-        bool doOplog = hasParam( "oplogReplay" );
-
-        if (doOplog) {
-            // fail early if errors
-            log() << "TokuMX does not support --oplogReplay." << endl;
-            return -1;
-
-            if (_db != "") {
-                log() << "Can only replay oplog on full restore" << endl;
-                return -1;
-            }
-
-            if ( ! exists(root / "oplog.bson") ) {
-                log() << "No oplog file to replay. Make sure you run mongodump with --oplog." << endl;
-                return -1;
-            }
-
-
-            BSONObj out;
-            if (! conn().simpleCommand("admin", &out, "buildinfo")) {
-                log() << "buildinfo command failed: " << out["errmsg"].String() << endl;
-                return -1;
-            }
-
-            StringData version = out["version"].valuestr();
-            if (versionCmp(version, "1.7.4-pre-") < 0) {
-                log() << "Can only replay oplog to server version >= 1.7.4" << endl;
-                return -1;
-            }
-
-            string oplogLimit = getParam( "oplogLimit", "" );
-            string oplogInc = "0";
-
-            if(!oplogLimit.empty()) {
-                size_t i = oplogLimit.find_first_of(':');
-                if ( i != string::npos ) {
-                    if ( i + 1 < oplogLimit.length() ) {
-                        oplogInc = oplogLimit.substr(i + 1);
-                    }
-
-                    oplogLimit = oplogLimit.substr(0, i);
-                }
-
-                try {
-                    _oplogLimitTS.reset(new OpTime(
-                        boost::lexical_cast<unsigned long>(oplogLimit.c_str()),
-                        boost::lexical_cast<unsigned long>(oplogInc.c_str())));
-                } catch( const boost::bad_lexical_cast& error) {
-                    log() << "Could not parse oplogLimit into Timestamp from values ( "
-                          << oplogLimit << " , " << oplogInc << " )"
-                          << endl;
-                    return -1;
-                }
-
-                if (!oplogLimit.empty()) {
-                    // Only for a replica set as master will have no-op entries so we would need to
-                    // skip them all to find the real op
-                    scoped_ptr<DBClientCursor> cursor(
-                            conn().query("local.oplog.rs", Query().sort(BSON("$natural" << -1)),
-                                         1 /*return first*/));
-                    OpTime tsOptime;
-                    // get newest oplog entry and make sure it is older than the limit to apply.
-                    if (cursor->more()) {
-                        tsOptime = cursor->next().getField("ts")._opTime();
-                        if (tsOptime > *_oplogLimitTS.get()) {
-                            log() << "The oplogLimit is not newer than"
-                                  << " the last oplog entry on the server."
-                                  << endl;
-                            return -1;
-                        }
-                    }
-
-                    BSONObjBuilder tsRestrictBldr;
-                    if (!tsOptime.isNull())
-                        tsRestrictBldr.appendTimestamp("$gt", tsOptime.asDate());
-                    tsRestrictBldr.appendTimestamp("$lt", _oplogLimitTS->asDate());
-
-                    BSONObj query = BSON("ts" << tsRestrictBldr.obj());
-
-                    if (!tsOptime.isNull()) {
-                        log() << "Latest oplog entry on the server is " << tsOptime.getSecs()
-                                << ":" << tsOptime.getInc() << endl;
-                        log() << "Only applying oplog entries matching this criteria: "
-                                << query.jsonString() << endl;
-                    }
-                    _opmatcher.reset(new Matcher(query));
-                }
-            }
+        _doBulkLoad = _w == 0 && _drop;
+        if (!_doBulkLoad) {
+            log() << "WARNING! not using bulk load: either drop was not specified or w > 0" << endl;
+        }
+        if (hasParam( "keepIndexVersion" )) {
+            log() << "warning: --keepIndexVersion is deprecated in TokuMX" << endl;
+        }
+        if (hasParam( "oplogReplay" )) {
+            log() << "warning: --oplogReplay is deprecated in TokuMX" << endl;
+        }
+        if (hasParam( "oplogLimit" )) {
+            log() << "warning: --oplogLimit is deprecated in TokuMX" << endl;
         }
 
         /* If _db is not "" then the user specified a db name to restore as.
@@ -206,29 +123,15 @@ public:
          * given either a root directory that contains only a single
          * .bson file, or a single .bson file itself (a collection).
          */
-        drillDown(root, _db != "", _coll != "", !(_oplogLimitTS.get() == NULL), true);
-
-        // should this happen for oplog replay as well?
+        drillDown(root, _db != "", _coll != "", true);
         conn().getLastError(_db == "" ? "admin" : _db);
-
-        if (doOplog) {
-            log() << "\t Replaying oplog" << endl;
-            _curns = OPLOG_SENTINEL;
-            processFile( root / "oplog.bson" );
-            log() << "Applied " << _oplogEntryApplies << " oplog entries out of "
-                  << _oplogEntryApplies + _oplogEntrySkips << " (" << _oplogEntrySkips
-                  << " skipped)." << endl;
-        }
-
         return EXIT_CLEAN;
     }
 
     void drillDown( boost::filesystem::path root,
                     bool use_db,
                     bool use_coll,
-                    bool oplogReplayLimit,
                     bool top_level=false) {
-        bool json_metadata = false;
         LOG(2) << "drillDown: " << root.string() << endl;
 
         // skip hidden files and directories
@@ -238,7 +141,6 @@ public:
         if ( is_directory( root ) ) {
             boost::filesystem::directory_iterator end;
             boost::filesystem::directory_iterator i(root);
-            boost::filesystem::path indexes;
             while ( i != end ) {
                 boost::filesystem::path p = *i;
                 i++;
@@ -265,15 +167,10 @@ public:
                 if (top_level && !use_db && p.leaf() == "oplog.bson")
                     continue;
 
-                if ( p.leaf() == "system.indexes.bson" ) {
-                    indexes = p;
-                } else {
-                    drillDown(p, use_db, use_coll, oplogReplayLimit);
+                // Only restore indexes from a corresponding .metadata.json file.
+                if ( p.leaf() != "system.indexes.bson" ) {
+                    drillDown(p, use_db, use_coll);
                 }
-            }
-
-            if (!indexes.empty() && !json_metadata) {
-                drillDown(indexes, use_db, use_coll, oplogReplayLimit);
             }
 
             return;
@@ -323,13 +220,6 @@ public:
             ns += "." + oldCollName;
         }
 
-        if (oplogReplayLimit) {
-            error() << "The oplogLimit option cannot be used if "
-                    << "normal databases/collections exist in the dump directory."
-                    << endl;
-            exit(EXIT_FAILURE);
-        }
-
         log() << "\tgoing into namespace [" << ns << "]" << endl;
 
         if ( _drop ) {
@@ -366,23 +256,40 @@ public:
         _curcoll = NamespaceString(_curns).coll;
 
         // If drop is not used, warn if the collection exists.
-         if (!_drop) {
-             scoped_ptr<DBClientCursor> cursor(conn().query(_curdb + ".system.namespaces",
-                                                             Query(BSON("name" << ns))));
-             if (cursor->more()) {
-                 // collection already exists show warning
-                 warning() << "Restoring to " << ns << " without dropping. Restored data "
-                              "will be inserted without raising errors; check your server log"
-                              << endl;
-             }
-         }
-
-        if (_restoreOptions && metadataObject.hasField("options")) {
-            // Try to create collection with given options
-            createCollectionWithOptions(metadataObject["options"].Obj());
+        if (!_drop) {
+            scoped_ptr<DBClientCursor> cursor(conn().query(_curdb + ".system.namespaces",
+                                                            Query(BSON("name" << ns))));
+            if (cursor->more()) {
+                // collection already exists show warning
+                warning() << "Restoring to " << ns << " without dropping. Restored data "
+                             "will be inserted without raising errors; check your server log"
+                             << endl;
+            }
         }
 
-        processFile( root );
+        vector<BSONObj> indexes;
+        if (_restoreIndexes && metadataObject.hasField("indexes")) {
+            const vector<BSONElement> indexElements = metadataObject["indexes"].Array();
+            for (vector<BSONElement>::const_iterator it = indexElements.begin(); it != indexElements.end(); ++it) {
+                indexes.push_back(it->Obj());
+            }
+        }
+        const BSONObj options = _restoreOptions && metadataObject.hasField("options") ?
+                                metadataObject["options"].Obj() : BSONObj();
+
+        if (_doBulkLoad) {
+            ClientBulkLoad bulkLoad(conn(), _curdb, _curcoll, indexes, options);
+            processFile( root );
+            bulkLoad.commit();
+        } else {
+            // No bulk load. Create collection and indexes manually.
+            createCollectionWithOptions(options);
+            for (vector<BSONObj>::iterator it = indexes.begin(); it != indexes.end(); ++it) {
+                createIndex(*it, false);
+            }
+            processFile( root );
+        }
+
         if (_drop && root.leaf() == "system.users.bson") {
             // Delete any users that used to exist but weren't in the dump file
             for (set<string>::iterator it = _users.begin(); it != _users.end(); ++it) {
@@ -391,44 +298,12 @@ public:
             }
             _users.clear();
         }
-
-        if (_restoreIndexes && metadataObject.hasField("indexes")) {
-            vector<BSONElement> indexes = metadataObject["indexes"].Array();
-            for (vector<BSONElement>::iterator it = indexes.begin(); it != indexes.end(); ++it) {
-                createIndex((*it).Obj(), false);
-            }
-        }
     }
 
     virtual void gotObject( const BSONObj& obj ) {
-        if (_curns == OPLOG_SENTINEL) { // intentional ptr compare
-            if (obj["op"].valuestr()[0] == 'n') // skip no-ops
-                return;
-            
-            // exclude operations that don't meet (timestamp) criteria
-            if ( _opmatcher.get() && ! _opmatcher->matches ( obj ) ) {
-                _oplogEntrySkips++;
-                return;
-            }
-
-            string db = obj["ns"].valuestr();
-            db = db.substr(0, db.find('.'));
-
-            msgasserted(16752, "TODO(leif): applyOps is deprecated, replace with transactions");
-            BSONObj cmd = BSON( "applyOps" << BSON_ARRAY( obj ) );
-            BSONObj out;
-            conn().runCommand(db, cmd, out);
-            _oplogEntryApplies++;
-
-            // wait for ops to propagate to "w" nodes (doesn't warn if w used without replset)
-            if ( _w > 1 ) {
-                conn().getLastError(db, false, false, _w);
-            }
-        }
-        else if ( endsWith( _curns.c_str() , ".system.indexes" )) {
-            createIndex(obj, true);
-        }
-        else if (_drop && endsWith(_curns.c_str(), ".system.users") && _users.count(obj["user"].String())) {
+        massert( 16910, "Shouldn't be inserting into system.indexes directly",
+                        !endsWith( _curns.c_str() , ".system.indexes" ));
+        if (_drop && endsWith(_curns.c_str(), ".system.users") && _users.count(obj["user"].String())) {
             // Since system collections can't be dropped, we have to manually
             // replace the contents of the system.users collection
             BSONObj userMatch = BSON("user" << obj["user"].String());
@@ -439,6 +314,7 @@ public:
 
             // wait for insert to propagate to "w" nodes (doesn't warn if w used without replset)
             if ( _w > 1 ) {
+                verify( !_doBulkLoad );
                 conn().getLastErrorDetailed(_curdb, false, false, _w);
             }
         }
@@ -537,7 +413,7 @@ private:
                 string s = _curdb + "." + (keepCollName ? n.coll : _curcoll);
                 bo.append("ns", s);
             }
-            else if (strcmp(e.fieldName(), "v") != 0 || _keepIndexVersion) { // Remove index version number
+            else if (strcmp(e.fieldName(), "v") != 0) { // Remove index version number
                 bo.append(e);
             }
         }

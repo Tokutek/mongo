@@ -318,6 +318,7 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/pipeline/document_source_cursor.cpp",
                     "db/commands/txn_commands.cpp",
                     "db/commands/load.cpp",
+                    "db/commands/testhooks.cpp",
                     "db/driverHelpers.cpp",
 
                     # Most storage/ files are in coredb, but this is server-only.
@@ -654,16 +655,18 @@ if not has_option("skip-tarballs"):
     for d in ['/', '/usr/local/gcc-4.7', '/usr/local/gcc-4.7.3']:
         for lib64, lib32 in [('lib64', 'lib'), ('lib/x86_64-linux-gnu', 'lib/i386-linux-gnu')]:
             libdir = os.path.join(d, lib64)
-            if os.path.exists(libdir):
-                libgcc_s = os.path.join(libdir, 'libgcc_s.so.1')
+            libfile = os.path.join(libdir, 'libgcc_s.so.1')
+            if os.path.exists(libfile):
+                libgcc_s = libfile
                 libgcc_s_base64 = libdir
                 libgcc_s_base32 = os.path.join(d, lib32)
                 break
     for d in ['/usr', '/usr/local/gcc-4.7', '/usr/local/gcc-4.7.3']:
         for lib64, lib32 in [('lib64', 'lib'), ('lib/x86_64-linux-gnu', 'lib/i386-linux-gnu')]:
             libdir = os.path.join(d, lib64)
-            if os.path.exists(libdir):
-                libstdcxx = os.path.join(libdir, 'libstdc++.so.6')
+            libfile = os.path.join(libdir, 'libstdc++.so.6')
+            if os.path.exists(libfile):
+                libstdcxx = libfile
                 libstdcxx_base64 = libdir
                 libstdcxx_base32 = os.path.join(d, lib32)
                 break

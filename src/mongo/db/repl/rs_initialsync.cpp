@@ -499,6 +499,7 @@ namespace mongo {
             }
             catch (DBException &e) {
                 sethbmsg("exception trying to copy data", 0);
+                LOG(0) << e.getCode() << ": " << e.what() << endl;
                 sleepsecs(1);
                 return false;
             }

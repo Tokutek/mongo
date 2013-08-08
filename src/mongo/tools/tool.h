@@ -29,6 +29,7 @@
 #include "db/instance.h"
 #include "db/matcher.h"
 #include "db/security.h"
+#include "client/remote_transaction.h"
 
 using std::string;
 
@@ -155,6 +156,56 @@ namespace mongo {
 
         long long processFile( const boost::filesystem::path& file );
 
+    };
+
+    class ClientBulkLoad : boost::noncopyable {
+    public:
+        ClientBulkLoad(DBClientBase &conn,
+                       const string &dbname, const string &ns,
+                       const vector<BSONObj> &indexes,
+                       const BSONObj &options) :
+            _conn(conn),
+            _remoteTransaction(_conn),
+            _dbname(dbname), _committed(false) {
+            BSONArrayBuilder arrayBuilder;
+            for (vector<BSONObj>::const_iterator i = indexes.begin(); i != indexes.end(); i++) {
+                arrayBuilder << *i;
+            }
+            BSONObj result;
+            BSONObjBuilder cmd;
+            cmd << "beginLoad" << 1;
+            cmd << "ns" << ns;
+            cmd.appendArray("indexes", arrayBuilder.done());
+            cmd << "options" << options;
+            _conn.runCommand(dbname, cmd.done(), result);
+            if (!result["ok"].trueValue()) {
+                log() << "Begin bulk load failed: " << result << endl;
+            }
+        }
+        ~ClientBulkLoad() {
+            if (!_committed) {
+                BSONObj result;
+                _conn.runCommand(_dbname, BSON( "abortLoad" << 1 ), result);
+                if (!result["ok"].trueValue()) {
+                    log() << "Abort bulk load failed: " << result << endl;
+                }
+                _remoteTransaction.rollback();
+            }
+        }
+        void commit() {
+            BSONObj result;
+            _committed = true;
+            _conn.runCommand(_dbname, BSON( "commitLoad" << 1 ), result);
+            if (!result["ok"].trueValue()) {
+                log() << "Commit bulk load failed: " << result << endl;
+            }
+            _remoteTransaction.commit();
+        }
+    private:
+        DBClientBase &_conn;
+        RemoteTransaction _remoteTransaction;
+        const string _dbname;
+        bool _committed;
     };
 
 }

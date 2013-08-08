@@ -279,7 +279,7 @@ namespace mongo {
         int retval = 0;
         uint64_t iter = *(uint64_t *)extra;
         try {
-            killCurrentOp.checkForInterrupt(false); // uasserts if we should stop
+            killCurrentOp.checkForInterrupt(); // uasserts if we should stop
         } catch (DBException &e) {
             retval = 1;
         }

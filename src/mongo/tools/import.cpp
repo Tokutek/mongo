@@ -17,11 +17,11 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "db/json.h"
-
-#include "tool.h"
-#include "../util/text.h"
+#include "mongo/pch.h"
+#include "mongo/db/json.h"
+#include "mongo/db/namespacestring.h"
+#include "mongo/tools/tool.h"
+#include "mongo/util/text.h"
 #include "mongo/base/initializer.h"
 
 #include <fstream>
@@ -48,6 +48,7 @@ class Import : public Tool {
     bool _upsert;
     bool _doimport;
     bool _jsonArray;
+    bool _doBulkLoad;
     vector<string> _upsertFields;
     static const int BUF_SIZE;
 
@@ -337,6 +338,7 @@ public:
         if ( hasParam( "drop" ) ) {
             log() << "dropping: " << ns << endl;
             conn().dropCollection( ns.c_str() );
+            _doBulkLoad = true;
         }
 
         if ( hasParam( "ignoreBlanks" ) ) {
@@ -345,6 +347,7 @@ public:
 
         if ( hasParam( "upsert" ) || hasParam( "upsertFields" )) {
             _upsert = true;
+            _doBulkLoad = false;
 
             string uf = getParam("upsertFields");
             if (uf.empty()) {
@@ -353,6 +356,10 @@ public:
             else {
                 StringSplitter(uf.c_str(), ",").split(_upsertFields);
             }
+        }
+
+        if (!_doBulkLoad) {
+            log() << "warning: not using bulk load due to upsert/upsertFields = true or drop = false" << endl;
         }
 
         if ( hasParam( "noimport" ) ) {
@@ -401,6 +408,13 @@ public:
         boost::scoped_array<char> buffer(new char[BUF_SIZE+2]);
         char* line = buffer.get();
 
+        scoped_ptr<ClientBulkLoad> bulkLoad;
+        if (_doBulkLoad) {
+            // Pass no indexes or collection options, since this tool has no
+            // way of specifying either.
+            NamespaceString n(ns);
+            bulkLoad.reset(new ClientBulkLoad(conn(), n.db, n.coll, vector<BSONObj>(), BSONObj()));
+        }
         while ( _jsonArray || in->rdstate() == 0 ) {
             try {
                 BSONObj o;
@@ -463,6 +477,9 @@ public:
             if ( pm.hit( len + 1 ) ) {
                 log() << "\t\t\t" << num << "\t" << ( num / ( time(0) - start ) ) << "/second" << endl;
             }
+        }
+        if (bulkLoad.get() != NULL) {
+            bulkLoad->commit();
         }
 
         log() << "imported " << ( num - headerRows ) << " objects" << endl;

@@ -42,7 +42,7 @@ namespace mongo {
 
     void mayInterrupt( bool mayBeInterrupted ) {
         if ( mayBeInterrupted ) {
-            killCurrentOp.checkForInterrupt( false );   
+            killCurrentOp.checkForInterrupt();   
         }
     }
 
