@@ -106,15 +106,12 @@ public:
         }
         if (hasParam( "keepIndexVersion" )) {
             log() << "warning: --keepIndexVersion is deprecated in TokuMX" << endl;
-            return -1;
         }
         if (hasParam( "oplogReplay" )) {
             log() << "warning: --oplogReplay is deprecated in TokuMX" << endl;
-            return -1;
         }
         if (hasParam( "oplogLimit" )) {
             log() << "warning: --oplogLimit is deprecated in TokuMX" << endl;
-            return -1;
         }
 
         /* If _db is not "" then the user specified a db name to restore as.
