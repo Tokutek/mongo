@@ -97,9 +97,9 @@ namespace mongo {
     } cmdCloud;
 #endif
 
-    class CmdBuildInfo : public InformationCommand {
+    class CmdBuildInfo : public WebInformationCommand {
     public:
-        CmdBuildInfo() : InformationCommand("buildInfo", true, "buildinfo") {}
+        CmdBuildInfo() : WebInformationCommand("buildInfo", true, "buildinfo") {}
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return false; }
         virtual void help( stringstream &help ) const {
@@ -129,7 +129,7 @@ namespace mongo {
 
     class CmdGet : public InformationCommand {
     public:
-        CmdGet() : InformationCommand("getParameter", false) {}
+        CmdGet() : InformationCommand("getParameter") {}
         virtual bool adminOnly() const { return true; }
         virtual void help( stringstream &help ) const {
             help << "get administrative option(s)\nexample:\n";
@@ -181,7 +181,7 @@ namespace mongo {
 
     class CmdSet : public InformationCommand {
     public:
-        CmdSet() : InformationCommand("setParameter", false) {}
+        CmdSet() : InformationCommand("setParameter") {}
         virtual bool adminOnly() const { return true; }
         virtual void help( stringstream &help ) const {
             help << "set administrative option(s)\n";
@@ -307,9 +307,9 @@ namespace mongo {
         }
     } pingCmd;
 
-    class FeaturesCmd : public InformationCommand {
+    class FeaturesCmd : public WebInformationCommand {
     public:
-        FeaturesCmd() : InformationCommand("features") {}
+        FeaturesCmd() : WebInformationCommand("features") {}
         void help(stringstream& h) const { h << "return build level feature settings"; }
         virtual bool run(const string& ns, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if ( globalScriptEngine ) {
@@ -327,9 +327,9 @@ namespace mongo {
 
     } featuresCmd;
 
-    class HostInfoCmd : public InformationCommand {
+    class HostInfoCmd : public WebInformationCommand {
     public:
-        HostInfoCmd() : InformationCommand("hostInfo") {}
+        HostInfoCmd() : WebInformationCommand("hostInfo") {}
         virtual void help( stringstream& help ) const {
             help << "returns information about the daemon's host";
         }
@@ -361,7 +361,7 @@ namespace mongo {
     class ListCommandsCmd : public InformationCommand {
     public:
         virtual void help( stringstream &help ) const { help << "get a list of all db commands"; }
-        ListCommandsCmd() : InformationCommand("listCommands", false) {}
+        ListCommandsCmd() : InformationCommand("listCommands") {}
         virtual bool adminOnly() const { return false; }
         virtual bool run(const string& ns, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             BSONObjBuilder b( result.subobjStart( "commands" ) );
@@ -412,7 +412,7 @@ namespace mongo {
         virtual void help( stringstream& help ) const {
             help << "for testing purposes only.  forces a user assertion exception";
         }
-        CmdForceError() : InformationCommand("forceerror", false) {}
+        CmdForceError() : InformationCommand("forceerror") {}
         bool run(const string& dbnamne, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             uassert( 10038 , "forced error", false);
             return true;
@@ -430,7 +430,7 @@ namespace mongo {
 
     class GetLogCmd : public InformationCommand {
     public:
-        GetLogCmd() : InformationCommand("getLog", false) {}
+        GetLogCmd() : InformationCommand("getLog") {}
         virtual bool adminOnly() const { return true; }
         virtual void help( stringstream& help ) const {
             help << "{ getLog : '*' }  OR { getLog : 'global' }";

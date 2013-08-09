@@ -50,7 +50,7 @@ namespace mongo {
 
     class CmdAuthenticate : public InformationCommand {
     public:
-        CmdAuthenticate() : InformationCommand("authenticate", false) {}
+        CmdAuthenticate() : InformationCommand("authenticate") {}
         virtual bool requiresAuth() { return false; }
         virtual void help(stringstream& ss) const { ss << "internal"; }
         bool run(const string& dbname , BSONObj& cmdObj, int options, string& errmsg, BSONObjBuilder& result, bool fromRepl);
@@ -63,7 +63,7 @@ namespace mongo {
 
     class CmdLogout : public InformationCommand {
     public:
-        CmdLogout() : InformationCommand("logout", false) {}
+        CmdLogout() : InformationCommand("logout") {}
         void help(stringstream& h) const { h << "de-authenticate"; }
         bool run(const string& dbname , BSONObj& cmdObj, int options, string& errmsg, BSONObjBuilder& result, bool fromRepl);
     };

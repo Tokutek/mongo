@@ -584,7 +584,7 @@ namespace mongo {
 
     class CmdGetCmdLineOpts : InformationCommand {
     public:
-        CmdGetCmdLineOpts(): InformationCommand("getCmdLineOpts", false) {}
+        CmdGetCmdLineOpts(): InformationCommand("getCmdLineOpts") {}
         void help(stringstream& h) const { h << "get argv"; }
         virtual bool adminOnly() const { return true; }
 
