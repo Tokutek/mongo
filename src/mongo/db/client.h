@@ -51,6 +51,7 @@ namespace mongo {
     class Command;
     class Client;
     class AbstractMessagingPort;
+    class LoadInfo;
     class LockCollectionForReading;
     class DBClientConnection;
     class ReplSet;
@@ -279,7 +280,7 @@ namespace mongo {
 
         // HACK we need this until upserts go through the NamespaceDetails class
         //      and can prevent writes on a bulk loaded collection automatically.
-        string bulkLoadNS() const { return _bulkLoadNS; }
+        string bulkLoadNS() const { return _loadInfo ? _loadInfo->bulkLoadNS() : ""; }
 
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
@@ -289,7 +290,7 @@ namespace mongo {
         CurOp * _curOp;
         Context * _context;
         shared_ptr<TransactionStack> _transactions;
-        string _bulkLoadNS; // the ns currently under-going bulk load by this client
+        shared_ptr<LoadInfo> _loadInfo; // the txn and ns currently under-going bulk load by this client
         bool _shutdown; // to track if Client::shutdown() gets called
         std::string _desc;
         bool _god;
