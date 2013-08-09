@@ -14,10 +14,6 @@ assert( !db.getLastError() );
 t.ensureIndex( {'a.0':1} );
 assert( db.getLastError() );
 
-// TODO: Bug: The hot indexer will generate keys for the provisionally deleted
-//            old row and cause the ensure index to fail. Need to garbage collect.
-assert(false);
-
 t.remove();
 assert.eq( 0, t.count() );
 t.ensureIndex( {'a.0':1} );

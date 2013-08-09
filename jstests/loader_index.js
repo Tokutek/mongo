@@ -49,3 +49,39 @@ var testMultiKey = function() {
     assert.eq(1, t.find({ a: 4 }).hint({ a: 1 }).itcount(), "finding 4" );
     assert.eq(1, t.find({ a: 5 }).hint({ a: 1 }).itcount(), "finding 5" );
 }();
+
+var testHashed = function() {
+    t = db.loaderhashedidx;
+    t.drop();
+    begin();
+    beginLoad('loaderhashedidx', [ { key: { a: 'hashed' }, name: "a_hashed" } ], { });
+    t.insert({ a: 1 });
+    t.insert({ a: 10 });
+    t.insert({ b: 2 });
+    commitLoad();
+    commit();
+    assert.eq(3, t.count());
+    assert.eq(1, t.find({ a: 1 }).hint({ a: 'hashed' }).itcount(), "finding 1" );
+    assert.eq(1, t.find({ a: 10 }).hint({ a: 'hashed' }).itcount(), "finding 10" );
+
+    t.drop();
+    begin();
+    beginLoad('loaderhashedidx', [ { key: { a: 'hashed' }, name: "a_hashed" } ], { });
+    // Cannot hash arrays
+    t.insert({ a: [ 1, 10 ] });
+    t.insert({ b: 2 });
+    commitLoadShouldFail();
+    commit();
+    assert.eq(0, t.count());
+}();
+
+var testAmbiguousFieldNames = function() {
+    t = db.loaderambiguousfieldnames;
+    t.drop();
+    begin();
+    beginLoad('loaderambiguousfieldnames', [ { key: { 'a.0': 1 }, name: "a_1" } ], { });
+    t.insert( {a:[{'0':[{'0':1}]}]} );
+    commitLoadShouldFail();
+    commit();
+    assert.eq(0, t.count());
+}();

@@ -35,11 +35,11 @@ var testUsableAfterAbort = function() {
     assert.eq(0, t.count());
 }();
 
-var testExternallyUsableAfterCommit = function() {
-    t = db.loaderusablecommit1;
+var testExternallyUsableAfterAbort = function() {
+    t = db.loaderusableabort1;
     t.drop();
     begin();
-    beginLoad('loaderusablecommit1', [ ], { });
+    beginLoad('loaderusableabort1', [ ], { });
     t.insert({ duringLoad: 1 });
     assert(!db.getLastError());
     abortLoad();
@@ -47,7 +47,7 @@ var testExternallyUsableAfterCommit = function() {
     assert.eq(0, t.count());
     assert.eq(0, t.count({ duringLoad: 1 }));
 
-    s = startParallelShell('k = db.loaderusablecommit1.count(); assert.eq(0, k); db.loaderusablecommit1.insert({ success: 1 });')
+    s = startParallelShell('k = db.loaderusableabort1.count(); assert.eq(0, k); db.loaderusableabort1.insert({ success: 1 });')
     s();
     assert.eq(1, t.count({ success: 1 }));
 }();
