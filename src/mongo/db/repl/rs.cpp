@@ -1063,12 +1063,22 @@ namespace mongo {
         _replKeepOplogAliveRunning = false;
     }
 
+    void ReplSetImpl::changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours) {
+        boost::unique_lock<boost::mutex> lock(_purgeMutex);
+        cmdLine.expireOplogDays = expireOplogDays;
+        cmdLine.expireOplogHours = expireOplogHours;
+        _purgeCond.notify_all();
+    }
+
     void ReplSetImpl::purgeOplogThread() {
         _replOplogPurgeRunning = true;
         GTID lastTimeRead;
         Client::initThread("purgeOplog");
         replLocalAuth();
         while (_replBackgroundShouldRun) {
+            // need to grab _purgeMutex here to protect against races
+            // of expireOplogMilliseconds() changing
+            boost::unique_lock<boost::mutex> lock(_purgeMutex);
             const uint64_t expireMillis = expireOplogMilliseconds();
             if (expireMillis) {
                 // Allow an additional slack period of one hour.
@@ -1118,15 +1128,13 @@ namespace mongo {
                 }
                 // do a timed_wait, if necessary
                 if (millisToWait > 0) {
-                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
                     _purgeCond.timed_wait(
                         _purgeMutex, 
                         boost::posix_time::milliseconds(millisToWait)
                         );
                 }
             }
-            else {                
-                boost::unique_lock<boost::mutex> lock(_purgeMutex);
+            else {
                 _purgeCond.wait(_purgeMutex);
             }
         }        
