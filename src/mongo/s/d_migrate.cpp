@@ -31,6 +31,7 @@
 #include <boost/thread/thread.hpp>
 
 #include "mongo/pch.h"
+#include "mongo/db/client.h"
 #include "mongo/db/database.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/commands.h"
@@ -250,7 +251,7 @@ namespace mongo {
         }
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
-        virtual LockType locktype() const { return OPLOCK; }
+        virtual LockType locktype() const { return NONE; }
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
@@ -331,6 +332,7 @@ namespace mongo {
             _memoryUsed = 0;
 
             scoped_lock l(_m);
+            RWLockRecursive::Exclusive e(operationLock);
             disableLogTxnOpsForSharding();
             _snapshotTaken = false;
             clearMigrateLog();
@@ -524,7 +526,7 @@ namespace mongo {
             NamespaceDetails *d;
             if (_cc.get() == NULL) {
                 dassert(!_txn);
-                Client::WriteContext ctx(_ns);
+                RWLockRecursive::Exclusive e(operationLock);
                 enableLogTxnOpsForSharding(mongo::shouldLogOpForSharding,
                                            mongo::shouldLogUpdateOpForSharding,
                                            mongo::startObjForMigrateLog,
@@ -601,10 +603,7 @@ namespace mongo {
                 }
                 scoped_lock ll(_workLock);
                 if ( ! _active ) {
-                    Client::ReadContext ctx(cleanup.ns);
-                    Client::Transaction txn(DB_SERIALIZABLE);
                     cleanup.doRemove();
-                    txn.commit();
                     return;
                 }
                 sleepmillis( 1000 );
