@@ -68,7 +68,7 @@ namespace mongo {
      */
     class ShardedPoolStats : public InformationCommand {
       public:
-        ShardedPoolStats() : InformationCommand("shardConnPoolStats", false) {}
+        ShardedPoolStats() : InformationCommand("shardConnPoolStats") {}
         virtual void help( stringstream &help ) const { help << "stats about the shard connection pool"; }
         virtual bool run ( const string&, mongo::BSONObj&, int, std::string&, mongo::BSONObjBuilder& result, bool ) {
             // Base pool info

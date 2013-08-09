@@ -45,7 +45,7 @@ namespace mongo {
 
     class CmdMedianKey : public InformationCommand {
     public:
-        CmdMedianKey() : InformationCommand("medianKey", false) {}
+        CmdMedianKey() : InformationCommand("medianKey") {}
         virtual void help( stringstream &help ) const {
             help << "Deprecated internal command. Use splitVector command instead. \n";
         }

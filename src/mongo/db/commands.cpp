@@ -193,7 +193,7 @@ namespace mongo {
 
     class PoolStats : public InformationCommand {
     public:
-        PoolStats() : InformationCommand( "connPoolStats", false ) {}
+        PoolStats() : InformationCommand( "connPoolStats" ) {}
         virtual void help( stringstream &help ) const { help<<"stats about connection pool"; }
         virtual bool run(const string&, mongo::BSONObj&, int, std::string&, mongo::BSONObjBuilder& result, bool) {
             pool.appendInfo( result );

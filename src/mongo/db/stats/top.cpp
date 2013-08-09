@@ -148,9 +148,9 @@ namespace mongo {
         bb.done();
     }
 
-    class TopCmd : public InformationCommand {
+    class TopCmd : public WebInformationCommand {
     public:
-        TopCmd() : InformationCommand("top") {}
+        TopCmd() : WebInformationCommand("top") {}
 
         virtual bool adminOnly() const { return true; }
         virtual void help( stringstream& help ) const { help << "usage by collection, in micros "; }
