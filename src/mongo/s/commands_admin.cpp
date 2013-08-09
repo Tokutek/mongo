@@ -108,9 +108,9 @@ namespace mongo {
         } flushRouterConfigCmd;
 
 
-        class ServerStatusCmd : public InformationCommand {
+        class ServerStatusCmd : public WebInformationCommand {
         public:
-            ServerStatusCmd() : InformationCommand( "serverStatus" , true ) {
+            ServerStatusCmd() : WebInformationCommand( "serverStatus" ) {
                 _started = time(0);
             }
 
@@ -1263,7 +1263,7 @@ namespace mongo {
         class IsDbGridCmd : public InformationCommand {
         public:
             virtual bool requiresAuth() { return false; }
-            IsDbGridCmd() : InformationCommand("isdbgrid", false) { }
+            IsDbGridCmd() : InformationCommand("isdbgrid") { }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 result.append("isdbgrid", 1);
                 result.append("hostname", getHostNameCached());
@@ -1288,7 +1288,7 @@ namespace mongo {
 
         class CmdWhatsMyUri : public InformationCommand {
         public:
-            CmdWhatsMyUri() : InformationCommand("whatsmyuri", false) { }
+            CmdWhatsMyUri() : InformationCommand("whatsmyuri") { }
             virtual void help( stringstream &help ) const {
                 help << "{whatsmyuri:1}";
             }
@@ -1361,9 +1361,9 @@ namespace mongo {
         }
     } cmdShardingResetError;
 
-    class CmdListDatabases : public InformationCommand {
+    class CmdListDatabases : public WebInformationCommand {
     public:
-        CmdListDatabases() : InformationCommand("listDatabases", true, "listdatabases") {}
+        CmdListDatabases() : WebInformationCommand("listDatabases", true, "listdatabases") {}
 
         virtual bool logTheOp() { return false; }
         virtual bool adminOnly() const { return true; }
@@ -1486,7 +1486,7 @@ namespace mongo {
 
     class CmdCloseAllDatabases : public InformationCommand {
     public:
-        CmdCloseAllDatabases() : InformationCommand("closeAllDatabases", false) {}
+        CmdCloseAllDatabases() : InformationCommand("closeAllDatabases") {}
         virtual bool logTheOp() { return false; }
         virtual bool adminOnly() const { return true; }
         virtual void help( stringstream& help ) const { help << "Not supported sharded"; }
@@ -1500,7 +1500,7 @@ namespace mongo {
 
     class CmdReplSetGetStatus : public InformationCommand {
     public:
-        CmdReplSetGetStatus() : InformationCommand("replSetGetStatus", false){}
+        CmdReplSetGetStatus() : InformationCommand("replSetGetStatus"){}
         virtual bool logTheOp() { return false; }
         virtual bool adminOnly() const { return true; }
         virtual void help( stringstream& help ) const { help << "Not supported through mongos"; }

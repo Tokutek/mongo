@@ -435,10 +435,10 @@ namespace mongo {
 
     void reportLockStats(BSONObjBuilder& result);
     
-    class CmdServerStatus : public InformationCommand {
+    class CmdServerStatus : public WebInformationCommand {
         unsigned long long _started;
     public:
-        CmdServerStatus() : InformationCommand("serverStatus") {
+        CmdServerStatus() : WebInformationCommand("serverStatus") {
             _started = curTimeMillis64();
         }
 
@@ -593,9 +593,9 @@ namespace mongo {
         }
     } cmdServerStatus;
 
-    class CmdEngineStatus : public InformationCommand {
+    class CmdEngineStatus : public WebInformationCommand {
     public:
-        CmdEngineStatus() : InformationCommand("engineStatus") {}
+        CmdEngineStatus() : WebInformationCommand("engineStatus") {}
 
         virtual void help( stringstream& help ) const {
             help << "returns TokuMX engine statistics";
@@ -630,7 +630,7 @@ namespace mongo {
 
     class CmdDiagLogging : public InformationCommand {
     public:
-        CmdDiagLogging() : InformationCommand("diagLogging", false) { }
+        CmdDiagLogging() : InformationCommand("diagLogging") { }
         // Vanilla mongo had this, I don't know why.  Seems like if they need a write lock it should be global?
         virtual LockType locktype() const { return WRITE; }
         bool adminOnly() const { return true; }
@@ -1334,7 +1334,7 @@ namespace mongo {
     /* Returns client's uri */
     class CmdWhatsMyUri : public InformationCommand {
     public:
-        CmdWhatsMyUri() : InformationCommand("whatsmyuri", false) { }
+        CmdWhatsMyUri() : InformationCommand("whatsmyuri") { }
         virtual void help( stringstream &help ) const {
             help << "{whatsmyuri:1}";
         }
@@ -1415,7 +1415,7 @@ namespace mongo {
     /* for diagnostic / testing purposes. */
     class CmdSleep : public InformationCommand {
     public:
-        CmdSleep() : InformationCommand("sleep", false) { }
+        CmdSleep() : InformationCommand("sleep") { }
         virtual bool adminOnly() const { return true; }
         virtual void help( stringstream& help ) const {
             help << "internal testing command.  Makes db block (in a read lock) for 100 seconds\n";
