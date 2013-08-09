@@ -47,7 +47,7 @@ namespace mongo {
 
     class CmdGetNonce : public InformationCommand {
     public:
-        CmdGetNonce() : InformationCommand("getnonce", false) {}
+        CmdGetNonce() : InformationCommand("getnonce") {}
         virtual bool requiresAuth() { return false; }
         void help(stringstream& h) const { h << "internal"; }
         bool run(const string&, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {

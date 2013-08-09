@@ -385,9 +385,9 @@ namespace mongo {
 
     // QUESTION: Restrict to the namespace from which this command was issued?
     // Alternatively, make this command admin-only?
-    class CmdCursorInfo : public InformationCommand {
+    class CmdCursorInfo : public WebInformationCommand {
     public:
-        CmdCursorInfo() : InformationCommand("cursorInfo") {}
+        CmdCursorInfo() : WebInformationCommand("cursorInfo") {}
         virtual void help( stringstream& help ) const {
             help << " example: { cursorInfo : 1 }";
         }
