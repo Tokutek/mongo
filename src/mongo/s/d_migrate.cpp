@@ -1330,18 +1330,10 @@ namespace mongo {
                 c.min = min.getOwned();
                 c.max = max.getOwned();
                 c.shardKeyPattern = shardKeyPattern.getOwned();
-                ClientCursor::find( ns , c.initial );
-                if ( c.initial.size() ) {
-                    log() << "forking for cleaning up chunk data" << migrateLog;
-                    boost::thread t( boost::bind( &cleanupOldData , c ) );
-                }
-                else {
-                    log() << "doing delete inline" << migrateLog;
-                    // 7.
-                    c.doRemove();
-                }
-
-
+                // Vanilla MongoDB checks for cursors in the chunk, and if any exist, it starts a background thread that waits for those cursors to leave before doing the delete.
+                // We have MVCC so we don't need to wait, we can just do the delete.
+                // TODO: get rid of the OldDataCleanup class and just do the removeRange right here.
+                c.doRemove();
             }
             timing.done(6);
 
