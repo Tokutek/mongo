@@ -140,6 +140,12 @@ namespace mongo {
         GTID getLiveState();
         uint64_t getCurrTimestamp();
 
+        void getGTIDs(
+            GTID* lastLiveGTID,
+            GTID* lastUnappliedGTID,
+            GTID* minLiveGTID,
+            GTID* minUnappliedGTID
+            );
         void getLiveGTIDs(GTID* lastLiveGTID, GTID* lastUnappliedGTID);
         void verifyReadyToBecomePrimary();
 
