@@ -276,12 +276,25 @@ namespace mongo {
         return ret;
     }
 
-    void GTIDManager::getLiveGTIDs(GTID* lastLiveGTID, GTID* lastUnappliedGTID) {
+    void GTIDManager::getGTIDs(
+        GTID* lastLiveGTID, 
+        GTID* lastUnappliedGTID, 
+        GTID* minLiveGTID, 
+        GTID* minUnappliedGTID
+        ) 
+    {
         boost::unique_lock<boost::mutex> lock(_lock);
         *lastLiveGTID = _lastLiveGTID;
         *lastUnappliedGTID = _lastUnappliedGTID;
+        *minLiveGTID = _minLiveGTID;
+        *minUnappliedGTID = _minUnappliedGTID;
     }
-
+    void GTIDManager::getLiveGTIDs(GTID* lastLiveGTID, GTID* lastUnappliedGTID) {
+        GTID minLiveGTID;
+        GTID minUnappliedGTID;
+        getGTIDs(lastLiveGTID, lastUnappliedGTID, &minLiveGTID, &minUnappliedGTID);
+    }
+    
     // does some sanity checks to make sure the GTIDManager
     // is in a state where it can become primary
     void GTIDManager::verifyReadyToBecomePrimary() {
