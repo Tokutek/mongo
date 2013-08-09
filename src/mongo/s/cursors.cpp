@@ -320,9 +320,9 @@ namespace mongo {
         task::repeat( new CursorTimeoutTask , 400 );
     }
 
-    class CmdCursorInfo : public InformationCommand {
+    class CmdCursorInfo : public WebInformationCommand {
     public:
-        CmdCursorInfo() : InformationCommand("cursorInfo") {}
+        CmdCursorInfo() : WebInformationCommand("cursorInfo") {}
         virtual void help( stringstream& help ) const {
             help << " example: { cursorInfo : 1 }";
         }

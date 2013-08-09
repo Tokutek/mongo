@@ -258,7 +258,7 @@ namespace mongo {
 
     class CmdGetShardMap : public InformationCommand {
       public:
-        CmdGetShardMap() : InformationCommand("getShardMap", false) {}
+        CmdGetShardMap() : InformationCommand("getShardMap") {}
         virtual void help( stringstream &help ) const { help<<"internal"; }
         virtual bool adminOnly() const { return true; }
         virtual bool run(const string&, mongo::BSONObj&, int, std::string& errmsg , mongo::BSONObjBuilder& result, bool) {
