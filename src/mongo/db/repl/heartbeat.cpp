@@ -128,9 +128,34 @@ namespace mongo {
             result.append("hbmsg", theReplSet->hbmsg());
             result.append("time", (long long) time(0));
             result.appendDate("opTime", theReplSet->gtidManager->getCurrTimestamp());
+            GTID lastLive;
+            GTID lastUnapplied;
+            GTID minLive;
+            GTID minUnapplied;
+            theReplSet->gtidManager->getGTIDs(
+                &lastLive,
+                &lastUnapplied,
+                &minLive,
+                &minUnapplied
+                );
             addGTIDToBSON(
                 "GTID", 
-                theReplSet->gtidManager->getLiveState(), 
+                lastLive, 
+                result
+                );
+            addGTIDToBSON(
+                "lastUnappliedGTID", 
+                lastUnapplied,
+                result
+                );
+            addGTIDToBSON(
+                "minLiveGTID", 
+                minLive, 
+                result
+                );
+            addGTIDToBSON(
+                "minUnappliedGTID", 
+                minUnapplied,
                 result
                 );
             int v = theReplSet->config().version;
@@ -416,6 +441,15 @@ namespace mongo {
             }
             if ( info.hasElement("GTID")) {
                 mem.gtid = getGTIDFromBSON("GTID", info);
+            }
+            if ( info.hasElement("lastUnappliedGTID")) {
+                mem.lastUnappliedGTID = getGTIDFromBSON("lastUnappliedGTID", info);
+            }
+            if ( info.hasElement("minLiveGTID")) {
+                mem.minLiveGTID= getGTIDFromBSON("minLiveGTID", info);
+            }
+            if ( info.hasElement("minUnappliedGTID")) {
+                mem.minUnappliedGTID= getGTIDFromBSON("minUnappliedGTID", info);
             }
             // see if this member is in the electable set
             if( info["e"].eoo() ) {

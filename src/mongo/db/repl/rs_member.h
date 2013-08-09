@@ -91,6 +91,9 @@ namespace mongo {
         DiagStr lastHeartbeatMsg;
         uint64_t opTime;
         GTID gtid;
+        GTID lastUnappliedGTID;
+        GTID minLiveGTID;
+        GTID minUnappliedGTID;
         int skew;
         bool authIssue;
         unsigned int ping; // milliseconds
