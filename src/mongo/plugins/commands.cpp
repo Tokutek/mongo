@@ -39,7 +39,7 @@ namespace mongo {
             h << "Load a plugin into mongod." << endl
               << "{ loadPlugin : <name> [, checksum: <md5 checksum>] }" << endl;
         }
-        LoadPluginCommand() : InformationCommand("loadPlugin", false) {}
+        LoadPluginCommand() : InformationCommand("loadPlugin") {}
 
         virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
             BSONElement e = cmdObj.firstElement();
@@ -85,7 +85,7 @@ namespace mongo {
             h << "List plugins currently loaded into mongod." << endl
               << "{ listPlugins : 1 }" << endl;
         }
-        ListPluginsCommand() : InformationCommand("listPlugins", false) {}
+        ListPluginsCommand() : InformationCommand("listPlugins") {}
 
         virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
             return plugins::loader.list(errmsg, result);
@@ -106,7 +106,7 @@ namespace mongo {
             h << "Unload a plugin from mongod." << endl
               << "{ unloadPlugin : <name> }" << endl;
         }
-        UnloadPluginCommand() : InformationCommand("unloadPlugin", false) {}
+        UnloadPluginCommand() : InformationCommand("unloadPlugin") {}
 
         virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
             BSONElement e = cmdObj.firstElement();
