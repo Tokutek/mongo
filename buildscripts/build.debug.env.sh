@@ -36,7 +36,7 @@ pushd ft-index
 popd
 
 echo "Checking out backup"
-git clone git@github.com:Tokutek/backup-community.get
+git clone git@github.com:Tokutek/backup-community.git
 
 mkdir ft-index/dbg
 pushd ft-index/dbg

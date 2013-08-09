@@ -359,14 +359,18 @@ namespace mongo {
         // for replInfoUpdate
         boost::mutex _replInfoMutex;
         bool _replInfoUpdateRunning;
-        // for oplog purge
+        // for oplog purge thread
         bool _replOplogPurgeRunning;
-        bool _replBackgroundShouldRun;
-
-        // for purge thread
         boost::mutex _purgeMutex;
         boost::condition _purgeCond;
+        // for keepOplogAlive
+        bool _replKeepOplogAliveRunning;
+        uint64_t _keepOplogPeriodMillis;
+        boost::mutex _keepOplogAliveMutex;
+        boost::condition _keepOplogAliveCond;
 
+        bool _replBackgroundShouldRun;
+        
         set<ReplSetHealthPollTask*> healthTasks;
         void endOldHealthTasks();
         void startHealthTaskFor(Member *m);
@@ -514,10 +518,13 @@ namespace mongo {
         const Member* findById(unsigned id) const;
         void stopReplInfoThread();
         Member* findByName(const std::string& hostname) const;
+        // for testing
+        void setKeepOplogAlivePeriod(uint64_t val);
     private:
         void _getTargets(list<Target>&, int &configVersion);
         void getTargets(list<Target>&, int &configVersion);
         void startThreads();
+        void keepOplogAliveThread();
         void purgeOplogThread();
         void updateReplInfoThread();
         friend class FeedbackThread;

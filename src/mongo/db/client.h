@@ -124,10 +124,6 @@ namespace mongo {
         AbstractMessagingPort * port() const { return _mp; }
         ConnectionId getConnectionId() const { return _connectionId; }
 
-        bool hasWrittenThisPass() const { return _hasWrittenThisPass; }
-        void writeHappened() { _hasWrittenThisPass = true; }
-        void newTopLevelRequest() { _hasWrittenThisPass = false; }
-        
         LockState& lockState() { return _ls; }
 
         /**
@@ -306,8 +302,6 @@ namespace mongo {
 
         // for CmdCopyDb and CmdCopyDbGetNonce
         shared_ptr< DBClientConnection > _authConn;
-
-        bool _hasWrittenThisPass;
 
         LockState _ls;
         

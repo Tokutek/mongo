@@ -174,17 +174,15 @@ namespace mongo {
         return b.obj();
     }
 
-    void KillCurrentOp::checkForInterrupt( bool heedMutex ) {
-        return _checkForInterrupt( cc(), heedMutex );
+    void KillCurrentOp::checkForInterrupt() {
+        return _checkForInterrupt( cc() );
     }
 
     void KillCurrentOp::checkForInterrupt( Client &c ) {
-        return _checkForInterrupt( c, false );
+        return _checkForInterrupt( c );
     }
 
-    void KillCurrentOp::_checkForInterrupt( Client &c, bool heedMutex ) {
-        if ( heedMutex && Lock::somethingWriteLocked() && c.hasWrittenThisPass() )
-            return;
+    void KillCurrentOp::_checkForInterrupt( Client &c ) {
         if (_killForTransition > 0) {
             uasserted(16809, "interrupted due to state transition");
         }

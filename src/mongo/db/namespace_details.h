@@ -503,8 +503,12 @@ namespace mongo {
 
             // The ns doesn't exist, or it's not opened. Grab an exclusive lock
             // and do the open if we still can't find it.
-            SimpleRWLock::Exclusive lk(_openRWLock);
-            NamespaceDetails *d = find_ns_locked(ns);
+            SimpleMutex::scoped_lock lk(_initLock);
+            NamespaceDetails *d = NULL;
+            {
+                SimpleRWLock::Exclusive lk(_openRWLock);
+                d = find_ns_locked(ns);
+            }
             return d != NULL ? d->validateConnectionId(cc().getConnectionId()), d :
                                open_ns(ns);
         }
@@ -545,9 +549,15 @@ namespace mongo {
         const string _dir;
         const string _nsdbFilename;
         const string _database;
-        // This rwlock serializes _nsdb/_namespaces opens and lookups in a DBRead lock.
-        // It isn't necessary to hold this rwlock in a a DBWrite lock.
+        // It isn't necessary to hold either of these rwlock in a a DBWrite lock.
+
+
+        // This lock protects access to the _namespaces variable
+        // With a DBRead lock and this shared lock, one can retrieve
+        // a NamespaceDetails that has already been opened
         SimpleRWLock _openRWLock;
+        // This rwlock serializes opens of a NamespaceDetails in a DBRead lock.
+        SimpleMutex _initLock;
     };
 
     // Gets the namespace objects for this client threads' current database.
