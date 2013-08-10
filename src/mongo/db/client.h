@@ -271,7 +271,7 @@ namespace mongo {
             Client::Transaction _txn;
             string _bulkLoadNS;
           public:
-            LoadInfo(const StringData &ns) : _txn(DB_SERIALIZABLE), _bulkLoadNS(ns) {}
+            LoadInfo(const StringData &ns) : _txn(DB_SERIALIZABLE), _bulkLoadNS(ns.toString()) {}
             void commitTxn() { _txn.commit(); }
             const string &bulkLoadNS() const { return _bulkLoadNS; }
         };
