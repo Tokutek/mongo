@@ -264,6 +264,18 @@ namespace mongo {
             }
         };
 
+        /**
+         * Info about the load currently in progress for this client, if one exists.
+         */
+        class LoadInfo : boost::noncopyable {
+            Client::Transaction _txn;
+            string _bulkLoadNS;
+          public:
+            LoadInfo(const StringData &ns) : _txn(DB_SERIALIZABLE), _bulkLoadNS(ns.toString()) {}
+            void commitTxn() { _txn.commit(); }
+            const string &bulkLoadNS() const { return _bulkLoadNS; }
+        };
+
         /** Enter load mode for a particular namespace, given indexes and options. */
         void beginClientLoad(const StringData &ns, const vector<BSONObj> &indexes,
                              const BSONObj &options);
@@ -279,7 +291,7 @@ namespace mongo {
 
         // HACK we need this until upserts go through the NamespaceDetails class
         //      and can prevent writes on a bulk loaded collection automatically.
-        string bulkLoadNS() const { return _bulkLoadNS; }
+        string bulkLoadNS() const { return _loadInfo ? _loadInfo->bulkLoadNS() : ""; }
 
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
@@ -289,7 +301,7 @@ namespace mongo {
         CurOp * _curOp;
         Context * _context;
         shared_ptr<TransactionStack> _transactions;
-        string _bulkLoadNS; // the ns currently under-going bulk load by this client
+        shared_ptr<LoadInfo> _loadInfo; // the txn and ns currently under-going bulk load by this client
         bool _shutdown; // to track if Client::shutdown() gets called
         std::string _desc;
         bool _god;

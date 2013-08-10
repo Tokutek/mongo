@@ -1853,7 +1853,7 @@ namespace mongo {
 
     void beginBulkLoad(const StringData &ns, const vector<BSONObj> &indexes,
                        const BSONObj &options) {
-        uassert( 16873, "Cannot bulk load a collection that alreadly exists.", nsdetails(ns) == NULL );
+        uassert( 16873, "Cannot bulk load a collection that already exists.", nsdetails(ns) == NULL );
 
         string errmsg;
         const bool created = userCreateNS(ns, options, errmsg, true);
