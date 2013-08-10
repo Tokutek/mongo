@@ -56,8 +56,10 @@ namespace mongo {
         _loadInfo.reset();
         const string &ns = loadInfo->bulkLoadNS();
 
-        Client::WriteContext ctx(ns);
-        commitBulkLoad(ns);
+        {
+            Client::WriteContext ctx(ns);
+            commitBulkLoad(ns);
+        }
         loadInfo->commitTxn();
     }
 
