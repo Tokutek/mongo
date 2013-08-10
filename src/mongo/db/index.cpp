@@ -199,41 +199,6 @@ namespace mongo {
                                     << " already exists in unique index");
     }
 
-    void IndexDetails::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, uint64_t flags) {
-        if (unique() && !(flags & NamespaceDetails::NO_UNIQUE_CHECKS)) {
-            uniqueCheck(key, pk);
-        }
-
-        storage::Key skey(key, pk);
-        DBT kdbt = skey.dbt();
-        DBT vdbt = storage::make_dbt(NULL, 0);
-        if (clustering()) {
-            vdbt = storage::make_dbt(val.objdata(), val.objsize());
-        }
-
-        // We already did the unique check above. We can just pass flags of zero.
-        const int put_flags = (flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0;
-        const int r = _db->put(_db, cc().txn().db_txn(), &kdbt, &vdbt, put_flags);
-        if (r == EINVAL) {
-            uasserted( 16861, str::stream() << "Indexed insertion failed." <<
-                          " This may be due to keys > 32kb. Check the error log." );
-        } else if (r != 0) {
-            storage::handle_ydb_error(r);
-        }
-        TOKULOG(3) << "index " << info()["key"].Obj() << ": inserted " << key << ", pk " << (pk ? *pk : BSONObj()) << ", val " << val << endl;
-    }
-
-    void IndexDetails::deletePair(const BSONObj &key, const BSONObj *pk, uint64_t flags) {
-        storage::Key skey(key, pk);
-        DBT kdbt = skey.dbt();
-
-        const int del_flags = ((flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0) | DB_DELETE_ANY;
-        int r = _db->del(_db, cc().txn().db_txn(), &kdbt, del_flags);
-        if (r != 0) {
-            storage::handle_ydb_error(r);
-        }
-    }
-
     void IndexDetails::acquireTableLock() {
         const int r = _db->pre_acquire_table_lock(_db, cc().txn().db_txn());
         if (r != 0) {

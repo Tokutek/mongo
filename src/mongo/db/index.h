@@ -150,15 +150,12 @@ namespace mongo {
             return _info;
         }
 
-        void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, uint64_t flags);
-        void deletePair(const BSONObj &key, const BSONObj *pk, uint64_t flags);
-        void acquireTableLock();
-
         enum toku_compression_method getCompressionMethod() const;
         uint32_t getPageSize() const;
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
         void optimize();
+        void acquireTableLock();
 
         struct UniqueCheckExtra : public ExceptionSaver {
             const storage::Key &newKey;
