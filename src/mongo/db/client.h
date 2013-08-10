@@ -51,7 +51,6 @@ namespace mongo {
     class Command;
     class Client;
     class AbstractMessagingPort;
-    class LoadInfo;
     class LockCollectionForReading;
     class DBClientConnection;
     class ReplSet;
@@ -263,6 +262,18 @@ namespace mongo {
             void release() {
                 _released = true;
             }
+        };
+
+        /**
+         * Info about the load currently in progress for this client, if one exists.
+         */
+        class LoadInfo : boost::noncopyable {
+            Client::Transaction _txn;
+            string _bulkLoadNS;
+          public:
+            LoadInfo(const StringData &ns) : _txn(DB_SERIALIZABLE), _bulkLoadNS(ns) {}
+            void commitTxn() { _txn.commit(); }
+            const string &bulkLoadNS() const { return _bulkLoadNS; }
         };
 
         /** Enter load mode for a particular namespace, given indexes and options. */

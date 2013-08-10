@@ -29,15 +29,6 @@
 
 namespace mongo {
 
-    class LoadInfo : boost::noncopyable {
-        Client::Transaction _txn;
-        string _bulkLoadNS;
-      public:
-        LoadInfo(const StringData &ns) : _txn(DB_SERIALIZABLE), _bulkLoadNS(ns) {}
-        void commitTxn() { _txn.commit(); }
-        const string &bulkLoadNS() const { return _bulkLoadNS; }
-    };
-
     // The client begin/commit/abort load functions handle locking/context,
     // creating a child transaction for the load, and ensuring that this client
     // only loads one ns at a time.
@@ -51,7 +42,7 @@ namespace mongo {
         uassert( 16864, "Cannot begin load, one is already in progress",
                         !loadInProgress() );
 
-        shared_ptr<LoadInfo> loadInfo(new LoadInfo(ns));
+        shared_ptr<Client::LoadInfo> loadInfo(new Client::LoadInfo(ns));
         Client::WriteContext ctx(ns);
         beginBulkLoad(ns, indexes, options);
         _loadInfo = loadInfo;
@@ -61,7 +52,7 @@ namespace mongo {
         uassert( 16876, "Cannot commit client load, none in progress.",
                         loadInProgress() );
 
-        shared_ptr<LoadInfo> loadInfo = _loadInfo;
+        shared_ptr<Client::LoadInfo> loadInfo = _loadInfo;
         _loadInfo.reset();
         const string &ns = loadInfo->bulkLoadNS();
 
@@ -74,7 +65,7 @@ namespace mongo {
         uassert( 16888, "Cannot abort client load, none in progress.",
                         loadInProgress() );
 
-        shared_ptr<LoadInfo> loadInfo = _loadInfo;
+        shared_ptr<Client::LoadInfo> loadInfo = _loadInfo;
         _loadInfo.reset();
         const string &ns = loadInfo->bulkLoadNS();
         Client::WriteContext ctx(ns);
