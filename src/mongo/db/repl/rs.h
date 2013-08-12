@@ -359,11 +359,14 @@ namespace mongo {
         bool _replOplogPurgeRunning;
         boost::mutex _purgeMutex;
         boost::condition _purgeCond;
+        GTID _lastPurgedGTID;
         // for keepOplogAlive
         bool _replKeepOplogAliveRunning;
         uint64_t _keepOplogPeriodMillis;
         boost::mutex _keepOplogAliveMutex;
         boost::condition _keepOplogAliveCond;
+        // for optimize oplog thread, uses same _purgeMutex
+        bool _replOplogOptimizeRunning;
 
         bool _replBackgroundShouldRun;
         
@@ -523,6 +526,7 @@ namespace mongo {
         void startThreads();
         void keepOplogAliveThread();
         void purgeOplogThread();
+        void optimizeOplogThread();
         void updateReplInfoThread();
         friend class FeedbackThread;
         friend class CmdReplSetElect;

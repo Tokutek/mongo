@@ -525,6 +525,7 @@ namespace mongo {
         boost::thread replInfoUpdater(boost::bind(&ReplSetImpl::updateReplInfoThread, this));
         boost::thread replPurgeOplog(boost::bind(&ReplSetImpl::purgeOplogThread, this));
         boost::thread replKeepOplogAlive(boost::bind(&ReplSetImpl::keepOplogAliveThread, this));
+        boost::thread optimizeOplog(boost::bind(&ReplSetImpl::optimizeOplogThread, this));
 
         task::fork(ghost);
 

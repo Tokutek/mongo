@@ -154,6 +154,7 @@ namespace mongo {
         void uniqueCheckCallback(const BSONObj &newkey, const BSONObj &oldkey, bool &isUnique) const;
         void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
         void optimize();
+        void hotOptimizeRange(const BSONObj* leftKey, const BSONObj *leftPK, const BSONObj* rightKey, const BSONObj *rightPK);
 
         void uassertedDupKey(const BSONObj &key) const;
 

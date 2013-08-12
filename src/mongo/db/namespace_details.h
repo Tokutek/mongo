@@ -307,6 +307,11 @@ namespace mongo {
             massert( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection", false );
         }
 
+        virtual void hotOptimizeOplog(GTID end) {
+            massert( 16865, "bug: should not call hotOptimizeOplog on non-oplog collection", false );
+        }
+
+
     protected:
         NamespaceDetails(const string &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit NamespaceDetails(const BSONObj &serialized);
