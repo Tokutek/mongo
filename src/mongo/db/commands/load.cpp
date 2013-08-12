@@ -38,7 +38,7 @@ namespace mongo {
                 "Must be inside an existing multi-statement transaction." << endl <<
                 "{ beginLoad: 1, ns : collName, indexes: [ { ... }, ... ], options: { ... }  }" << endl;
         }
-        BeginLoadCmd() : InformationCommand("beginLoad", false) {}
+        BeginLoadCmd() : InformationCommand("beginLoad") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
@@ -89,7 +89,7 @@ namespace mongo {
                 "Commits a load in progress." << endl <<
                 "{ commitLoad }" << endl;
         }
-        CommitLoadCmd() : InformationCommand("commitLoad", false) {}
+        CommitLoadCmd() : InformationCommand("commitLoad") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
@@ -118,7 +118,7 @@ namespace mongo {
                 "Aborts a load in progress." << endl <<
                 "{ abortLoad }" << endl;
         }
-        AbortLoadCmd() : InformationCommand("abortLoad", false) {}
+        AbortLoadCmd() : InformationCommand("abortLoad") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 

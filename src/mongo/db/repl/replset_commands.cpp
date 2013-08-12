@@ -435,4 +435,51 @@ namespace mongo {
 
     } replSetHandler;
 
+    class CmdReplSetExpireOplog : public ReplSetCommand {
+    public:
+        virtual void help( stringstream &help ) const {
+            help << "set expireOplogDays and expireOplogHours";
+        }
+
+        CmdReplSetExpireOplog() : ReplSetCommand("replSetExpireOplog") { }
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            if( cmdObj.hasElement("expireOplogDays") || cmdObj.hasElement("expireOplogHours") ) {
+                uint32_t expireOplogDays = cmdLine.expireOplogDays;
+                uint32_t expireOplogHours = cmdLine.expireOplogHours;
+                if (cmdObj.hasElement("expireOplogHours")) {
+                    BSONElement e = cmdObj["expireOplogHours"];
+                    if (!e.isNumber()) {
+                        errmsg = "bad expireOplogHours";
+                        return false;
+                    }
+                    expireOplogHours = e.numberLong();
+                }
+                if (cmdObj.hasElement("expireOplogDays")) {
+                    BSONElement e = cmdObj["expireOplogDays"];
+                    if (!e.isNumber()) {
+                        errmsg = "bad expireOplogDays";
+                        return false;
+                    }
+                    expireOplogDays = e.numberLong();
+                }
+                theReplSet->changeExpireOplog(expireOplogDays, expireOplogHours);
+            }
+            return true;
+        }
+    } cmdReplSetExpireOplog;
+
+    class CmdReplGetExpireOplog : public ReplSetCommand {
+    public:
+        virtual void help( stringstream &help ) const {
+            help << "retrieve settings for expire oplog";
+        }
+
+        CmdReplGetExpireOplog() : ReplSetCommand("replGetExpireOplog") { }
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            // these reads can be racy. It does not matter
+            result.append("expireOplogDays", cmdLine.expireOplogDays);
+            result.append("expireOplogHours", cmdLine.expireOplogHours);
+            return true;
+        }
+    } cmdReplGetExpireOplog;
 }

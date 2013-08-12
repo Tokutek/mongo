@@ -520,6 +520,7 @@ namespace mongo {
         Member* findByName(const std::string& hostname) const;
         // for testing
         void setKeepOplogAlivePeriod(uint64_t val);
+        void changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours);
     private:
         void _getTargets(list<Target>&, int &configVersion);
         void getTargets(list<Target>&, int &configVersion);

@@ -34,7 +34,7 @@ namespace mongo {
 
     class BasicDriverHelper : public InformationCommand {
     public:
-        BasicDriverHelper(const char *name) : InformationCommand(name, false) {}
+        BasicDriverHelper(const char *name) : InformationCommand(name) {}
     };
 
     class ObjectIdTest : public BasicDriverHelper {

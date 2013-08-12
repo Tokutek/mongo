@@ -385,7 +385,7 @@ namespace mongo {
     class HandshakeCmd : public InformationCommand {
       public:
         void help(stringstream& h) const { h << "internal"; }
-        HandshakeCmd() : InformationCommand("handshake", false) {}
+        HandshakeCmd() : InformationCommand("handshake") {}
         virtual bool adminOnly() const { return false; }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             Client& c = cc();

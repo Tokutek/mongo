@@ -221,7 +221,7 @@ namespace mongo {
     /** A command that doesn't read or write anything from Toku dictionaries, and just looks at some memory (like engine status) */
     class InformationCommand : public Command {
       public:
-        InformationCommand(const char *name, bool webUI=true, const char *oldName=NULL) : Command(name, webUI, oldName) {}
+        InformationCommand(const char *name, bool webUI=false, const char *oldName=NULL) : Command(name, webUI, oldName) {}
         virtual bool slaveOk() const { return true; }
         virtual bool slaveOverrideOk() const { return true; }
         virtual LockType locktype() const { return NONE; }
@@ -230,6 +230,11 @@ namespace mongo {
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
+    };
+
+    class WebInformationCommand : public InformationCommand {
+      public:
+        WebInformationCommand(const char *name, bool webUI=true, const char *oldName=NULL) : InformationCommand(name, webUI, oldName) {}
     };
 
     /** deprecated in tokuds */
