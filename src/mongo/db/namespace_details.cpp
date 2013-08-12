@@ -738,9 +738,9 @@ namespace mongo {
         }
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized) {
-        if (isOplog(serialized["ns"])) {
+        if (isOplog(serialized["ns"].String())) {
             return shared_ptr<NamespaceDetails>(new OplogCollection(serialized));
-        } else if (isSystemCatalog(serialized["ns"])) {
+        } else if (isSystemCatalog(serialized["ns"].String())) {
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(serialized));
         } else if (serialized["options"]["capped"].trueValue()) {
             return shared_ptr<NamespaceDetails>(new CappedCollection(serialized));
