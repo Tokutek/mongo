@@ -211,10 +211,8 @@ namespace mongo {
         _d(d),
         _idx(idx),
         _ordering(Ordering::make(_idx.keyPattern())),
-        _startKey(_idx.getSpec().getType() ?
-                _idx.getSpec().getType()->fixKey( startKey ) : startKey),
-        _endKey(_idx.getSpec().getType() ?
-                _idx.getSpec().getType()->fixKey( endKey ) : endKey),
+        _startKey(startKey),
+        _endKey(endKey),
         _endKeyInclusive(endKeyInclusive),
         _multiKey(_d->isMultikey(_d->idxNo(_idx))),
         _direction(direction),

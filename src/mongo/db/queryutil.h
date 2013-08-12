@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "jsobj.h"
-#include "indexkey.h"
-#include "projection.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/keygenerator.h"
+#include "mongo/db/projection.h"
 
 namespace mongo {
     
@@ -593,8 +593,6 @@ namespace mongo {
         friend struct QueryUtilIndexed;
     };
     
-    class IndexSpec;
-
     /**
      * An ordered list of fields and their FieldRanges, corresponding to valid
      * index keys for a given index spec.
@@ -603,11 +601,11 @@ namespace mongo {
     public:
         /**
          * @param frs The valid ranges for all fields, as defined by the query spec.  None of the
-         * fields in indexSpec may be empty() ranges of frs.
-         * @param indexSpec The index spec (key pattern and info)
+         * fields in the index's keyPattern may be empty() ranges of frs.
+         * @param keyPattern The index key pattern
          * @param direction The direction of index traversal
          */
-        FieldRangeVector( const FieldRangeSet &frs, const IndexSpec &indexSpec, int direction );
+        FieldRangeVector( const FieldRangeSet &frs, const BSONObj &keyPattern, int direction );
 
         /** @return the number of index ranges represented by 'this' */
         unsigned size();
@@ -618,8 +616,6 @@ namespace mongo {
         /** @return a client readable representation of 'this' */
         BSONObj obj() const;
         
-        const IndexSpec& getSpec(){ return _indexSpec; }
-
         /**
          * @return true iff the provided document matches valid ranges on all
          * of this FieldRangeVector's fields, which is the case iff this document
@@ -665,11 +661,14 @@ namespace mongo {
         int matchingLowElement( const BSONElement &e, int i, bool direction, bool &lowEquality ) const;
         bool matchesElement( const BSONElement &e, int i, bool direction ) const;
         vector<FieldRange> _ranges;
-        const IndexSpec _indexSpec;
+        const BSONObj _keyPattern;
         int _direction;
         vector<BSONObj> _queries; // make sure mem owned
         bool _hasAllIndexedRanges;
         friend class FieldRangeVectorIterator;
+
+        vector<const char *> _fieldNames;
+        scoped_ptr<KeyGenerator> _keyGenerator;
     };
     
     /**

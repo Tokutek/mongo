@@ -1,4 +1,4 @@
-// index_key.cpp
+// keygenerator.cpp
 
 /**
 *    Copyright (C) 2008 10gen Inc.
@@ -18,10 +18,8 @@
 */
 
 #include "mongo/pch.h"
-#include "mongo/db/index.h"
-#include "mongo/db/background.h"
-#include "mongo/db/jsobj.h"
 #include "mongo/db/hasher.h"
+#include "mongo/db/keygenerator.h"
 #include "mongo/db/storage/assert_ids.h"
 #include "mongo/util/stringutils.h"
 #include "mongo/util/mongoutils/str.h"
@@ -29,137 +27,37 @@
 
 namespace mongo {
 
-    map<string,IndexPlugin*> * IndexPlugin::_plugins;
-
-    IndexType::IndexType( const IndexPlugin * plugin , const IndexSpec * spec )
-        : _plugin( plugin ) , _spec( spec ) {
-
+    /* Takes a BSONElement, seed and hashVersion, and outputs the
+     * 64-bit hash used for this index
+     * E.g. if the element is {a : 3} this outputs v1-hash(3)
+     * */
+    long long int HashKeyGenerator::makeSingleKey(const BSONElement &e,
+                                                  const HashSeed &seed,
+                                                  const HashVersion &v) {
+        massert( 16245, "Only HashVersion 0 has been defined", v == 0 );
+        return BSONElementHasher::hash64( e , seed );
     }
 
-    IndexType::~IndexType() {
-    }
-
-    const BSONObj& IndexType::keyPattern() const {
-        return _spec->keyPattern;
-    }
-
-    IndexPlugin::IndexPlugin( const string& name )
-        : _name( name ) {
-        if ( ! _plugins )
-            _plugins = new map<string,IndexPlugin*>();
-        (*_plugins)[name] = this;
-    }
-
-    string IndexPlugin::findPluginName( const BSONObj& keyPattern ) {
-        string pluginName = "";
-
-        BSONObjIterator i( keyPattern );
-
-        while( i.more() ) {
-            BSONElement e = i.next();
-            if ( e.type() != String )
-                continue;
-
-            uassert( 13007 , "can only have 1 index plugin / bad index key pattern" , pluginName.size() == 0 || pluginName == e.String() );
-            pluginName = e.String();
-        }
-
-        return pluginName;
-    }
-
-    int IndexType::compare( const BSONObj& l , const BSONObj& r ) const {
-        return l.woCompare( r , _spec->keyPattern );
-    }
-
-    void IndexSpec::_init() {
-        verify( keyPattern.objsize() );
-
-        // some basics
-        _nFields = keyPattern.nFields();
-        _sparse = info["sparse"].trueValue();
-        uassert( 13529 , "sparse only works for single field keys" , ! _sparse || _nFields );
-
-
-        {
-            // build _nullKey
-
-            BSONObjBuilder b;
-            BSONObjIterator i( keyPattern );
-
-            while( i.more() ) {
-                BSONElement e = i.next();
-                _fieldNames.push_back( e.fieldName() );
-                _fixed.push_back( BSONElement() );
-                b.appendNull( "" );
-            }
-            _nullKey = b.obj();
-        }
-
-        {
-            // _nullElt
-            BSONObjBuilder b;
-            b.appendNull( "" );
-            _nullObj = b.obj();
-            _nullElt = _nullObj.firstElement();
-        }
-
-        {
-            // _undefinedElt
-            BSONObjBuilder b;
-            b.appendUndefined( "" );
-            _undefinedObj = b.obj();
-            _undefinedElt = _undefinedObj.firstElement();
-        }
-        
-        {
-            // handle plugins
-            string pluginName = IndexPlugin::findPluginName( keyPattern );
-            if ( pluginName.size() ) {
-                IndexPlugin * plugin = IndexPlugin::get( pluginName );
-                if ( ! plugin ) {
-                    log() << "warning: can't find plugin [" << pluginName << "]" << endl;
-                }
-                else {
-                    _indexType.reset( plugin->generate( this ) );
-                }
-            }
-        }
-
-        _finishedInit = true;
-    }
-
-    void assertParallelArrays( const char *first, const char *second ) {
-        stringstream ss;
-        ss << "cannot index parallel arrays [" << first << "] [" << second << "]";
-        uasserted( ParallelArraysCode ,  ss.str() );
-    }
-
-    void KeyGenerator::getKeys( const BSONObj &obj, BSONObjSet &keys ) const {
-        if ( _spec._indexType.get() ) { //plugin (eg geo)
-            _spec._indexType->getKeys( obj , keys );
-            return;
-        }
-        vector<const char*> fieldNames( _spec._fieldNames );
-        getKeys(obj, fieldNames, _spec._sparse, keys);
-    }     
-
-    // Taken from hashindex.cpp more or less.
-    void KeyGenerator::getHashedKey(const BSONObj &obj, const char *hashedField,
-                                    const int seed, const bool sparse,
-                                    BSONObjSet &keys) {
-        const BSONElement &fieldVal = obj.getFieldDottedOrArray( hashedField );
+    void HashKeyGenerator::getKeys(const BSONObj &obj, BSONObjSet &keys) {
+        const char *hashedFieldPtr = _hashedField;
+        const BSONElement &fieldVal = obj.getFieldDottedOrArray( hashedFieldPtr );
         uassert( storage::ASSERT_IDS::CannotHashArrays,
                  "Error: hashed indexes do not currently support array values",
                  fieldVal.type() != Array );
 
-        if ( ! fieldVal.eoo() ) {
-            BSONObj key = BSON( "" << BSONElementHasher::hash64( fieldVal , seed ) );
-            keys.insert( key );
-        } else if (! sparse ) {
-            BSONObj key = BSON( "" << BSONElementHasher::hash64( nullElt , seed ) );
-            keys.insert( key );
+        if (!fieldVal.eoo()) {
+            BSONObj key = BSON("" << makeSingleKey(fieldVal, _seed, _hashVersion));
+            keys.insert(key);
+        } else if (!_sparse) {
+            BSONObj key = BSON("" << makeSingleKey(nullElt, _seed, _hashVersion));
+            keys.insert(key);
         }
     }
+
+    void KeyGenerator::getKeys(const BSONObj &obj, BSONObjSet &keys) const {
+        vector<const char *> fieldNames(_fieldNames);
+        getKeys(obj, fieldNames, _sparse, keys);
+    }     
 
     void KeyGenerator::getKeys(const BSONObj &obj, vector<const char *> &fieldNames,
                                const bool sparse, BSONObjSet &keys) {
@@ -249,7 +147,9 @@ namespace mongo {
                 }
                 else if ( e.rawdata() != arrElt.rawdata() ) {
                     // enforce single array path here
-                    assertParallelArrays( e.fieldName(), arrElt.fieldName() );
+                    uasserted( storage::ASSERT_IDS::ParallelArrays, 
+                               mongoutils::str::stream() << "cannot index parallel arrays "
+                               << "[" << e.fieldName() << "] [" << arrElt.fieldName() << "]" );
                 }
                 if ( arrayNestedArray ) {
                     mayExpandArrayUnembedded = false;   
@@ -285,47 +185,5 @@ namespace mongo {
             }
         }
     }
-    
-    void IndexSpec::getKeys( const BSONObj &obj, BSONObjSet &keys ) const {
-        KeyGenerator g( *this );
-        g.getKeys( obj, keys );
-    }
 
-    bool anyElementNamesMatch( const BSONObj& a , const BSONObj& b ) {
-        BSONObjIterator x(a);
-        while ( x.more() ) {
-            BSONElement e = x.next();
-            BSONObjIterator y(b);
-            while ( y.more() ) {
-                BSONElement f = y.next();
-                FieldCompareResult res = compareDottedFieldNames( e.fieldName() , f.fieldName() ,
-                                                                 LexNumCmp( true ) );
-                if ( res == SAME || res == LEFT_SUBFIELD || res == RIGHT_SUBFIELD )
-                    return true;
-            }
-        }
-        return false;
-    }
-
-    IndexSuitability IndexSpec::suitability( const BSONObj& query , const BSONObj& order ) const {
-        if ( _indexType.get() )
-            return _indexType->suitability( query , order );
-        return _suitability( query , order );
-    }
-
-    IndexSuitability IndexSpec::_suitability( const BSONObj& query , const BSONObj& order ) const {
-        // TODO: optimize
-        if ( anyElementNamesMatch( keyPattern , query ) == 0 && anyElementNamesMatch( keyPattern , order ) == 0 )
-            return USELESS;
-        return HELPFUL;
-    }
-
-    IndexSuitability IndexType::suitability( const BSONObj& query , const BSONObj& order ) const {
-        return _spec->_suitability( query , order );
-    }
-    
-    bool IndexType::scanAndOrderRequired( const BSONObj& query , const BSONObj& order ) const {
-        return ! order.isEmpty();
-    }
-
-}
+} // namespace mongo

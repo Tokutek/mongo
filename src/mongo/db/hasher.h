@@ -30,6 +30,7 @@
 namespace mongo {
 
     typedef int HashSeed;
+    typedef int HashVersion;
     typedef unsigned char HashDigest[16];
 
     class Hasher : private boost::noncopyable {

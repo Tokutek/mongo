@@ -106,7 +106,6 @@ namespace mongo {
         _endKeyInclusive(),
         _utility( Helpful ),
         _special( special ),
-        _type(0),
         _startOrEndSpec() {
     }
     
@@ -131,25 +130,24 @@ namespace mongo {
         }
 
         _index = &_d->idx(_idxNo);
-        const BSONObj &pkPattern = _d->pkPattern();
-        const BSONObj &keyPattern = _index->keyPattern();
 
         // If the parsing or index indicates this is a special query, don't continue the processing
         if ( _special.size() ||
-            ( _index->getSpec().getType() &&
-             _index->getSpec().getType()->suitability( _originalQuery, _order ) != USELESS ) ) {
+            ( _index->special() &&
+              _index->suitability( _originalQuery, _order ) != IndexDetails::USELESS ) ) {
 
-            _type  = _index->getSpec().getType();
-            if( !_special.size() ) _special = _index->getSpec().getType()->getPlugin()->getName();
+            if ( _special.empty() ) {
+                _special = _index->getSpecialIndexName();
+            }
+            massert( 13040 , str::stream() << "no type for special: " + _special,
+                             !_special.empty() );
 
-            massert( 13040 , (string)"no type for special: " + _special , _type );
             // hopefully safe to use original query in these contexts;
             // don't think we can mix special with $or clause separation yet
-            _scanAndOrderRequired = _type->scanAndOrderRequired( _originalQuery , _order );
+            _scanAndOrderRequired = !_order.isEmpty();
             return;
         }
 
-        const IndexSpec &idxSpec = _index->getSpec();
         BSONObjIterator o( _order );
         BSONObjIterator k( idxKey );
         if ( !o.moreWithEOO() )
@@ -212,7 +210,7 @@ doneCheckOrder:
         if ( !_scanAndOrderRequired &&
                 ( optimalIndexedQueryCount == _frs.numNonUniversalRanges() ) )
             _utility = Optimal;
-        _frv.reset( new FieldRangeVector( _frs, idxSpec, _direction ) );
+        _frv.reset( new FieldRangeVector( _frs, idxKey, _direction ) );
 
         if ( // If all field range constraints are on indexed fields and ...
              _utility == Optimal &&
@@ -228,7 +226,7 @@ doneCheckOrder:
 
         if ( originalFrsp ) {
             _originalFrv.reset( new FieldRangeVector( originalFrsp->frsForIndex( _d, _idxNo ),
-                                                     idxSpec, _direction ) );
+                                                      idxKey, _direction ) );
         }
         else {
             _originalFrv = _frv;
@@ -250,12 +248,12 @@ doneCheckOrder:
             _utility = Unhelpful;
         }
             
-        if ( idxSpec.isSparse() && hasPossibleExistsFalsePredicate() ) {
+        if ( _index->sparse() && hasPossibleExistsFalsePredicate() ) {
             _utility = Disallowed;
         }
 
         if ( _parsedQuery && _parsedQuery->getFields() && !_d->isMultikey( _idxNo ) ) { // Does not check modifiedKeys()
-            _keyFieldsOnly.reset( _parsedQuery->getFields()->checkKey( keyPattern, pkPattern ) );
+            _keyFieldsOnly.reset( _parsedQuery->getFields()->checkKey( idxKey, _d->pkPattern() ) );
         }
     }
 
@@ -271,8 +269,8 @@ doneCheckOrder:
             numWanted = _parsedQuery->getSkip() + _parsedQuery->getNumToReturn();
         }
 
-        if ( _type ) {
-            return _type->newCursor( _originalQuery , _order , numWanted );
+        if ( _index != NULL && _index->special() ) {
+            return _index->newCursor( _originalQuery , _order , numWanted );
         }
 
         if ( _utility == Impossible ) {
@@ -287,11 +285,12 @@ doneCheckOrder:
             return shared_ptr<Cursor>( BasicCursor::make( d, direction ) );
         }
                 
+        verify( _index != NULL );
         if ( _startOrEndSpec ) {
             // we are sure to spec _endKeyInclusive
             return shared_ptr<Cursor>( IndexCursor::make( _d, *_index, _startKey, _endKey, _endKeyInclusive, _direction >= 0 ? 1 : -1, numWanted ) );
         }
-        else if ( _index->getSpec().getType() ) {
+        else if ( _index->special() ) {
             return shared_ptr<Cursor>( IndexCursor::make( _d, *_index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1, numWanted ) );
         }
         else {
@@ -645,9 +644,8 @@ doneCheckOrder:
             while( i.more() ) {
                 int j = i.pos();
                 IndexDetails& ii = i.next();
-                const IndexSpec& spec = ii.getSpec();
-                if ( spec.getTypeName() == special &&
-                    spec.suitability( _qps.originalQuery(), _qps.order() ) ) {
+                if ( ii.getSpecialIndexName() == special &&
+                     ii.suitability( _qps.originalQuery(), _qps.order() ) ) {
                     uassert( 16330, "'special' query operator not allowed", _allowSpecial );
                     _qps.setSinglePlan( newPlan( d, j, BSONObj(), BSONObj(), special ) );
                     return true;
@@ -1489,7 +1487,7 @@ doneCheckOrder:
             while( i.more() ) {
                 IndexDetails& ii = i.next();
                 if ( indexWorks( ii.keyPattern(), min.isEmpty() ? max : min, ret.first, ret.second ) ) {
-                    if ( ii.getSpec().getType() == 0 ) {
+                    if ( !ii.special() ) {
                         id = &ii;
                         keyPattern = ii.keyPattern();
                         break;
@@ -1570,7 +1568,7 @@ doneCheckOrder:
             // No matches are possible in the index so the index may be useful.
             return true;   
         }
-        return d->idx( idxNo ).getSpec().suitability( frsp.simplifiedQueryForIndex( d, idxNo, keyPattern ), order ) != USELESS;
+        return d->idx( idxNo ).suitability( frsp.simplifiedQueryForIndex( d, idxNo, keyPattern ), order ) != IndexDetails::USELESS;
     }
     
     void QueryUtilIndexed::clearIndexesForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {

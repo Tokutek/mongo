@@ -29,7 +29,6 @@
 namespace mongo {
 
     class IndexDetails;
-    class IndexType;
     class QueryPlanSummary;
     
     /**
@@ -154,7 +153,6 @@ namespace mongo {
         bool _endKeyInclusive;
         Utility _utility;
         string _special;
-        IndexType * _type;
         bool _startOrEndSpec;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
         mutable shared_ptr<CoveredIndexMatcher> _matcher; // Lazy initialization.

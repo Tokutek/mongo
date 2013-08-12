@@ -25,60 +25,189 @@
 #include "mongo/db/index.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
-#include "mongo/db/background.h"
+#include "mongo/db/keygenerator.h"
+#include "mongo/db/queryutil.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/mongoutils/str.h"
-#include "mongo/util/scopeguard.h"
+#include "mongo/util/stringutils.h"
 
 namespace mongo {
 
-    // What a mess:
-    // - Only the hashed plugin exists. Therefore if we find a plugin
-    //   for the key pattern and it's "hashed", you're good.
-    // - If it's anything else, there's no such plugin.
-    // - If/when we add other plugins, we'll migrate to a better
-    //   Index architecture that looks more like Mongo 2.4+
-    static bool checkForHashedPlugin(const BSONObj &keyPattern) {
-        string pluginName = IndexPlugin::findPluginName( keyPattern );
-        if (pluginName == "hashed") {
-            return true;
-        } else if (pluginName != "") {
-            log() << "warning: can't find plugin [" << pluginName << "]" << endl;
+    /* This is an index where the keys are hashes of a given field.
+     *
+     * Optional arguments:
+     *  "seed" : int (default = 0, a seed for the hash function)
+     *  "hashVersion : int (default = 0, determines which hash function to use)
+     *
+     * Example use in the mongo shell:
+     * > db.foo.ensureIndex({a : "hashed"}, {seed : 3, hashVersion : 0})
+     *
+     * LIMITATION: Only works with a single field. The HashedIndex
+     * constructor uses uassert to ensure that the spec has the form
+     * {<fieldname> : "hashed"}, and not, for example,
+     * { a : "hashed" , b : 1}
+     *
+     * LIMITATION: Cannot be used as a unique index.
+     * The HashedIndex constructor uses uassert to ensure that
+     * the spec does not contain {"unique" : true}
+     *
+     * LIMITATION: Cannot be used to index arrays.
+     * The getKeys function uasserts that value being inserted
+     * is not an array.  This index will not be built if any
+     * array values of the hashed field exist.
+     */
+    class HashedIndex : public IndexDetails {
+    public:
+        HashedIndex(const BSONObj &info) :
+            IndexDetails(info),
+            _hashedField(_keyPattern.firstElement().fieldName()),
+            // Default seed/version to 0 if not specified or not an integer.
+            _seed(_info["seed"].numberInt()),
+            _hashVersion(_info["hashVersion"].numberInt()) {
+
+            // change these if single-field limitation lifted later
+            uassert( 16241, "Currently only single field hashed index supported.",
+                            _keyPattern.nFields() == 1 );
+            uassert( 16242, "Currently hashed indexes cannot guarantee uniqueness. Use a regular index.",
+                            !unique() );
+
+            // Create a descriptor with hashed = true and the appropriate hash seed.
+            _descriptor.reset(new Descriptor(_keyPattern, true, _seed, _sparse, _clustering));
         }
-        return false;
+
+        // @return the "special" name for this index.
+        const string &getSpecialIndexName() const {
+            static string name = "hashed";
+            return name;
+        }
+
+        bool special() const {
+            return true;
+        }
+
+        Suitability suitability(const BSONObj &query, const BSONObj &order) const {
+            FieldRangeSet frs( "" , query , true, true );
+            if (frs.isPointIntervalSet(_hashedField)) {
+                return HELPFUL;
+            }
+            return USELESS;
+        }
+
+        /* The newCursor method works for suitable queries by generating a IndexCursor
+         * using the hash of point-intervals parsed by FieldRangeSet.
+         * For unsuitable queries it just instantiates a cursor over the whole index.
+         */
+        shared_ptr<mongo::Cursor> newCursor(const BSONObj &query,
+                                            const BSONObj &order,
+                                            const int numWanted = 0) const {
+
+            // Use FieldRangeSet to parse the query into a vector of intervals
+            // These should be point-intervals if this cursor is ever used
+            // So the FieldInterval vector will be, e.g. <[1,1], [3,3], [6,6]>
+            FieldRangeSet frs("" , query , true, true);
+            const vector<FieldInterval> &intervals = frs.range(_hashedField.c_str()).intervals();
+
+            // Force a match of the query against the actual document by giving
+            // the cursor a matcher with an empty indexKeyPattern.  This insures the
+            // index is not used as a covered index.
+            // NOTE: this forcing is necessary due to potential hash collisions
+            const shared_ptr<CoveredIndexMatcher> forceDocMatcher(
+                    new CoveredIndexMatcher(query, BSONObj()));
+
+            NamespaceDetails *d = nsdetails(parentNS());
+
+            // Construct a new query based on the hashes of the previous point-intervals
+            // e.g. {a : {$in : [ hash(1) , hash(3) , hash(6) ]}}
+            BSONObjBuilder newQueryBuilder;
+            BSONObjBuilder inObj(newQueryBuilder.subobjStart(_hashedField));
+            BSONArrayBuilder inArray(inObj.subarrayStart("$in"));
+            for (vector<FieldInterval>::const_iterator i = intervals.begin();
+                 i != intervals.end(); ++i ){
+                if (!i->equality()){
+                    const shared_ptr<mongo::Cursor> exhaustiveCursor(
+                            new IndexScanCursor(d, *this, 1));
+                    exhaustiveCursor->setMatcher(forceDocMatcher);
+                    return exhaustiveCursor;
+                }
+                inArray.append(HashKeyGenerator::makeSingleKey(i->_lower._bound, _seed, _hashVersion));
+            }
+            inArray.done();
+            inObj.done();
+
+            // Use the point-intervals of the new query to create an index cursor
+            const BSONObj newQuery = newQueryBuilder.obj();
+            FieldRangeSet newfrs("" , newQuery, true, true);
+            shared_ptr<FieldRangeVector> newVector(
+                    new FieldRangeVector(newfrs, _keyPattern, 1));
+            const shared_ptr<mongo::Cursor> cursor(
+                    IndexCursor::make(d, *this, newVector, false, 1, numWanted));
+            cursor->setMatcher(forceDocMatcher);
+            return cursor;
+        }
+
+    private:
+        const string _hashedField;
+        const HashSeed _seed;
+        // In case we have hashed indexes based on other hash functions in
+        // the future, we store a hashVersion number.
+        const HashVersion _hashVersion;
+    };
+
+    static string findSpecialIndexName(const BSONObj &keyPattern) {
+        string special = "";
+        for (BSONObjIterator i(keyPattern); i.more(); ) {
+            const BSONElement &e = i.next();
+            if (e.type() == String) {
+                uassert( 13007, "can only have 1 special index / bad index key pattern" ,
+                                special.size() == 0 || special == e.String() );
+                special = e.String();
+            }
+        }
+        return special;
     }
 
-    IndexDetails::IndexDetails(const BSONObj &info, bool may_create) :
+    shared_ptr<IndexDetails> IndexDetails::make(const BSONObj &info, const bool may_create) {
+        shared_ptr<IndexDetails> idx;
+        const string special = findSpecialIndexName(info["key"].Obj());
+        if (special == "hashed") {
+            idx.reset(new HashedIndex(info));
+        } else {
+            if (special != "") {
+                warning() << "cannot find special index [" << special << "]" << endl;
+            }
+            idx.reset(new IndexDetails(info));
+        }
+        idx->open(may_create);
+        return idx;
+    }
+
+    IndexDetails::IndexDetails(const BSONObj &info) :
         _db(NULL),
         _info(info.copy()),
         _keyPattern(info["key"].Obj().copy()),
         _unique(info["unique"].trueValue()),
-        _hashed(checkForHashedPlugin(_keyPattern)),
         _sparse(info["sparse"].trueValue()),
         _clustering(info["clustering"].trueValue()),
-        _descriptor(_keyPattern, _hashed, info["seed"].numberInt(), _sparse, _clustering) {
+        _descriptor(new Descriptor(_keyPattern, false, 0, _sparse, _clustering)) {
+        verify(!_info.isEmpty());
+        verify(!_keyPattern.isEmpty());
+    }
 
-        // Throws if the index spec is invalid.
-        _spec.reset(this);
+    // Open the dictionary. Creates it if necessary.
+    void IndexDetails::open(const bool may_create) {
+        const string dbname = indexNamespace();
+        if (may_create) {
+            addNewNamespaceToCatalog(dbname);
+        }
 
-        string dbname = indexNamespace();
         TOKULOG(1) << "Opening IndexDetails " << dbname << endl;
-        // Open the dictionary. Creates it if necessary.
-        const int r = storage::db_open(&_db, dbname, info, _descriptor,
-                                       may_create, info["background"].trueValue());
+        const int r = storage::db_open(&_db, dbname, _info, *_descriptor,
+                                       may_create, _info["background"].trueValue());
         if (r != 0) {
             storage::handle_ydb_error(r);
-        }
-        try {
-            if (may_create) {
-                addNewNamespaceToCatalog(dbname);
-            }
-        } catch (...) {
-            close();
-            throw;
         }
     }
 
@@ -109,7 +238,7 @@ namespace mongo {
     void IndexDetails::kill_idx() {
         string ns = indexNamespace(); // e.g. foo.coll.$ts_1
         try {
-            string pns = parentNS(); // note we need a copy, as parentNS() won't work after the drop() below
+            string pns = parentNS();
 
             storage::db_close(_db);
             _db = NULL;
@@ -119,8 +248,9 @@ namespace mongo {
             try {
                 removeNamespaceFromCatalog(ns);
             }
-            catch(DBException& ) {
-                LOG(2) << "IndexDetails::kill(): couldn't drop ns " << ns << endl;
+            catch (DBException &e) {
+                LOG(0) << "IndexDetails::kill(): couldn't remove ns from system.namespaces"
+                       << ns << endl;
             }
 
             if (!StringData(pns).endsWith(".system.indexes")) {
@@ -128,13 +258,37 @@ namespace mongo {
                 wassert( n == 1 );
             }
         }
-        catch ( DBException &e ) {
+        catch (DBException &e) {
             log() << "exception in kill_idx: " << e << ", ns: " << ns << endl;
         }
     }
 
-    void IndexDetails::getKeysFromObject(const BSONObj& obj, BSONObjSet& keys) const {
-        _descriptor.generateKeys( obj, keys );
+    void IndexDetails::getKeysFromObject(const BSONObj &obj, BSONObjSet &keys) const {
+        _descriptor->generateKeys(obj, keys);
+    }
+
+    static bool anyElementNamesMatch( const BSONObj& a , const BSONObj& b ) {
+        BSONObjIterator x(a);
+        while ( x.more() ) {
+            BSONElement e = x.next();
+            BSONObjIterator y(b);
+            while ( y.more() ) {
+                BSONElement f = y.next();
+                FieldCompareResult res = compareDottedFieldNames( e.fieldName() , f.fieldName() ,
+                                                                 LexNumCmp( true ) );
+                if ( res == SAME || res == LEFT_SUBFIELD || res == RIGHT_SUBFIELD )
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    IndexDetails::Suitability IndexDetails::suitability(const BSONObj &query, const BSONObj &order) const {
+        if (anyElementNamesMatch( _keyPattern , query ) == 0 &&
+            anyElementNamesMatch( _keyPattern , order ) == 0)  {
+            return USELESS;
+        }
+        return HELPFUL;
     }
 
     int IndexDetails::uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
@@ -178,7 +332,7 @@ namespace mongo {
         DBT kdbt = sKey.dbt();
 
         bool isUnique = true;
-        UniqueCheckExtra extra(sKey, _descriptor, isUnique);
+        UniqueCheckExtra extra(sKey, *_descriptor, isUnique);
         // If the key has a PK, we need to set range in order to find the first
         // key greater than { key, minKey }. If there is no pk then there's
         // just one component to the key, so we can just getf_set to that point.
@@ -262,18 +416,6 @@ namespace mongo {
         if (r != 0) {
             uassert(16810, mongoutils::str::stream() << "reIndex query killed ", false);
         }
-    }
-
-    void IndexSpec::reset( const IndexDetails * details ) {
-        _details = details;
-        reset( details->info() );
-    }
-
-    void IndexSpec::reset( const BSONObj& _info ) {
-        info = _info;
-        keyPattern = info["key"].Obj();
-        verify( keyPattern.objsize() != 0 );
-        _init();
     }
 
     IndexStats::IndexStats(const IndexDetails &idx)

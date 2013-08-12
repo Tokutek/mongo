@@ -21,9 +21,9 @@
 
 #pragma once
 
-#include "indexkey.h"
-#include "queryutil.h"
-#include "projection.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/queryutil.h"
+#include "mongo/db/projection.h"
 
 namespace mongo {
 
@@ -31,12 +31,12 @@ namespace mongo {
 
     class KeyType : boost::noncopyable {
     public:
-        IndexSpec _spec;
+        BSONObj _keyPattern;
         FieldRangeVector _keyCutter;
-    public:
-        KeyType(const BSONObj &pattern, const FieldRangeSet &frs):
-        _spec((verify(!pattern.isEmpty()),pattern)),
-        _keyCutter(frs, _spec, 1) {
+        KeyType(const BSONObj &pattern, const FieldRangeSet &frs) :
+            _keyPattern(pattern),
+            _keyCutter(frs, _keyPattern, 1) {
+            verify(!_keyPattern.isEmpty());
         }
 
         /**

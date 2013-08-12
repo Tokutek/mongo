@@ -19,9 +19,10 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-#include "scanandorder.h"
+#include "mongo/pch.h"
+#include "mongo/db/scanandorder.h"
 #include "mongo/db/matcher.h"
+#include "mongo/db/storage/assert_ids.h"
 #include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
@@ -35,7 +36,7 @@ namespace mongo {
             k = _order.getKeyFromObject(o);
         }
         catch (UserException &e) {
-            if ( e.getCode() == ParallelArraysCode ) { // cannot get keys for parallel arrays
+            if ( e.getCode() == storage::ASSERT_IDS::ParallelArrays ) { // cannot get keys for parallel arrays
                 // fix lasterror text to be more accurate.
                 uasserted( 15925, "cannot sort with keys that are parallel arrays" );
             }
@@ -93,7 +94,7 @@ namespace mongo {
     
     void ScanAndOrder::_addIfBetter(const BSONObj& k, const BSONObj& o, const BestMap::iterator& i) {
         const BSONObj& worstBestKey = i->first;
-        int cmp = worstBestKey.woCompare(k, _order._spec.keyPattern);
+        int cmp = worstBestKey.woCompare(k, _order._keyPattern);
         if ( cmp > 0 ) {
             // k is better, 'upgrade'
             _validateAndUpdateApproxSize( -i->first.objsize() + -i->second.objsize() );

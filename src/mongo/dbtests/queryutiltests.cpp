@@ -1723,8 +1723,7 @@ namespace QueryUtilTests {
             void run() {
                 BSONObj obj = BSON( "a" << 1 );
                 FieldRangeSet fieldRangeSet( "", obj, true, true );
-                IndexSpec indexSpec( BSON( "a" << 1 ) );
-                FieldRangeVector fieldRangeVector( fieldRangeSet, indexSpec, 1 );
+                FieldRangeVector fieldRangeVector( fieldRangeSet, BSON( "a" << 1 ), 1 );
                 fieldRangeVector.toString(); // Just test that we don't crash.
             }
         };
@@ -1769,8 +1768,7 @@ namespace QueryUtilTests {
         private:
             bool rangesRepresented( const BSONObj& index, bool singleKey, const BSONObj& query ) {
                 FieldRangeSet fieldRangeSet( "", query, singleKey, true );
-                IndexSpec indexSpec( index );
-                FieldRangeVector fieldRangeVector( fieldRangeSet, indexSpec, 1 );
+                FieldRangeVector fieldRangeVector( fieldRangeSet, index, 1 );
                 return fieldRangeVector.hasAllIndexedRanges();
             }
         };
@@ -1785,8 +1783,7 @@ namespace QueryUtilTests {
             virtual ~Base() {}
             void run() {
                 FieldRangeSet fieldRangeSet( "", query(), true, true );
-                IndexSpec indexSpec( index(), BSONObj() );
-                FieldRangeVector fieldRangeVector( fieldRangeSet, indexSpec, 1 );
+                FieldRangeVector fieldRangeVector( fieldRangeSet, index(), 1 );
                 _iterator.reset( new FieldRangeVectorIterator( fieldRangeVector,
                                                               singleIntervalLimit() ) );
                 _iterator->advance( fieldRangeVector.startKey() );

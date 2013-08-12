@@ -919,7 +919,7 @@ namespace mongo {
 
         std::vector<BSONElement> index_array = serialized["indexes"].Array();
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
-            shared_ptr<IndexDetails> idx(new IndexDetails(it->Obj(), false));
+            shared_ptr<IndexDetails> idx(IndexDetails::make(it->Obj(), false));
             _indexes.push_back(idx);
         }
         computeIndexKeys();

@@ -217,15 +217,6 @@ namespace mongo {
         // @return offset in indexes[]
         int findIndexByKeyPattern(const BSONObj& keyPattern) const;
 
-        void findIndexByType( const StringData& name , vector<int> &matches ) const {
-            for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
-                const IndexDetails *index = it->get();
-                if (index->getSpec().getTypeName() == name) {
-                    matches.push_back(it - _indexes.begin());
-                }
-            }
-        }
-
         /* Returns the index entry for the first index whose prefix contains
          * 'keyPattern'. If 'requireSingleKey' is true, skip indices that contain
          * array attributes. Otherwise, returns NULL.

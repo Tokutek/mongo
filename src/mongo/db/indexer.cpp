@@ -88,7 +88,7 @@ namespace mongo {
 
         // Store the index in the _indexes array so that others know an
         // index with this name / key pattern exists and is being built.
-        _idx.reset(new IndexDetails(_info));
+        _idx = IndexDetails::make(_info);
         _d->_indexes.push_back(_idx);
         _d->_indexBuildInProgress = true;
 
