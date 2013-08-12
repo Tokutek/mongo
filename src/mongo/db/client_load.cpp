@@ -39,7 +39,7 @@ namespace mongo {
 
     void Client::beginClientLoad(const StringData &ns, const vector<BSONObj> &indexes,
                                  const BSONObj &options) {
-        uassert( 16864, "Cannot begin load, one is already in progress",
+        uassert( 16915, "Cannot begin load, one is already in progress",
                         !loadInProgress() );
 
         shared_ptr<Client::LoadInfo> loadInfo(new Client::LoadInfo(ns));
