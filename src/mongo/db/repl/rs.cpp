@@ -1099,7 +1099,7 @@ namespace mongo {
                     }
                     else {
                         BSONObjBuilder q;
-                        addGTIDToBSON("$gt", _lastPurgedGTID, q);
+                        addGTIDToBSON("$gte", _lastPurgedGTID, q);
                         BSONObjBuilder query;
                         query.append("_id", q.done());
                         ret = Helpers::findOne(rsoplog, query.done(), result, false);
