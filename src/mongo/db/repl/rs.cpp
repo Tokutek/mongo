@@ -428,6 +428,7 @@ namespace mongo {
         _replOplogPurgeRunning(false),
         _replKeepOplogAliveRunning(false),
         _keepOplogPeriodMillis(600*1000), // 10 minutes
+        _replOplogOptimizeRunning(false),
         _replBackgroundShouldRun(true),
         elect(this),
         _forceSyncTarget(0),
@@ -1073,7 +1074,6 @@ namespace mongo {
 
     void ReplSetImpl::purgeOplogThread() {
         _replOplogPurgeRunning = true;
-        GTID lastTimeRead;
         Client::initThread("purgeOplog");
         replLocalAuth();
         while (_replBackgroundShouldRun) {
@@ -1098,19 +1098,19 @@ namespace mongo {
                     Client::Transaction transaction(DB_SERIALIZABLE);
                     NamespaceDetails *d = nsdetails(rsoplog);
                     if (d != NULL) {
-                        if (lastTimeRead.isInitial()) {
+                        if (_lastPurgedGTID.isInitial()) {
                             found = d->findOne(BSONObj(), result);
                         }
                         else {
                             BSONObjBuilder query;
                             BSONObjBuilder q(query.subobjStart("_id"));
-                            addGTIDToBSON("$gt", lastTimeRead, q);
+                            addGTIDToBSON("$gt", _lastPurgedGTID, q);
                             q.doneFast();
                             found = d->findOne(query.done(), result, false);
                         }
                     }
                     if (found) {
-                        lastTimeRead = getGTIDFromBSON("_id", result);                    
+                        _lastPurgedGTID = getGTIDFromBSON("_id", result);                    
                         uint64_t ts = result["ts"]._numberLong();
                         if (ts < minTime) {
                             // delete the row "result"
@@ -1145,6 +1145,30 @@ namespace mongo {
         }        
         cc().shutdown();
         _replOplogPurgeRunning = false;
+    }
+    
+    void ReplSetImpl::optimizeOplogThread() {
+        _replOplogOptimizeRunning = true;
+        Client::initThread("optimizeOplog");
+        replLocalAuth();
+        while (_replBackgroundShouldRun) {
+            GTID gtid;
+            {
+                boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                gtid = _lastPurgedGTID;
+            }
+            if (!gtid.isInitial()) {
+                hotOptimizeOplogTo(gtid);
+            }
+            {
+                boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                _purgeCond.timed_wait(
+                    _purgeMutex, 
+                    boost::posix_time::milliseconds(5000)
+                    );                
+            }
+        }
+        _replOplogOptimizeRunning = false;
     }
 
     void ReplSetImpl::forceUpdateReplInfo() {

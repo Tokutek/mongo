@@ -192,6 +192,14 @@ namespace mongo {
                 return minKey;
             }
         }
+        void hotOptimizeOplog(GTID end) {
+            // do a hot optimize up until gtid;
+            BSONObjBuilder q;
+            addGTIDToBSON("", end, q);
+            IndexDetails &pkIdx = getPKIndex();
+            BSONObj done = q.done();
+            pkIdx.hotOptimizeRange(NULL, NULL, &done, NULL);
+        }
     };
 
     class NaturalOrderCollection : public NamespaceDetails {

@@ -412,9 +412,39 @@ namespace mongo {
             storage::handle_ydb_error(r);
         }
         uint64_t iter = 0;
-        r = _db->hot_optimize(_db, hot_opt_callback, &iter);
+        r = _db->hot_optimize(_db, NULL, NULL, hot_opt_callback, &iter);
         if (r != 0) {
             uassert(16810, mongoutils::str::stream() << "reIndex query killed ", false);
+        }
+    }
+
+    void IndexDetails::hotOptimizeRange(const BSONObj* leftKey, const BSONObj *leftPK, const BSONObj* rightKey, const BSONObj *rightPK) {
+        uint64_t iter = 0;
+        DBT left;
+        DBT right;
+        int r = 0;
+        if (leftKey != NULL && rightKey != NULL) {
+            storage::Key skey1(*leftKey, leftPK);
+            left = skey1.dbt();
+            storage::Key skey2(*rightKey, rightPK);
+            right = skey2.dbt();
+            r = _db->hot_optimize(_db, &left, &right, hot_opt_callback, &iter);
+        }
+        if (leftKey != NULL) {
+            storage::Key skey1(*leftKey, leftPK);
+            left = skey1.dbt();
+            r = _db->hot_optimize(_db, &left, NULL, hot_opt_callback, &iter);
+        }
+        if (rightKey != NULL) {
+            storage::Key skey2(*rightKey, rightPK);
+            right = skey2.dbt();
+            r = _db->hot_optimize(_db, NULL, &right, hot_opt_callback, &iter);
+        }
+        else {
+            r = _db->hot_optimize(_db, NULL, NULL, hot_opt_callback, &iter);
+        }
+        if (r != 0) {
+            uassert(16866, mongoutils::str::stream() << "hotOptimizeRange killed", false);
         }
     }
 

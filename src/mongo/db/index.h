@@ -186,6 +186,7 @@ namespace mongo {
         void getStat64(DB_BTREE_STAT64* stats) const;
         void optimize();
         void acquireTableLock();
+        void hotOptimizeRange(const BSONObj* leftKey, const BSONObj *leftPK, const BSONObj* rightKey, const BSONObj *rightPK);
 
         struct UniqueCheckExtra : public ExceptionSaver {
             const storage::Key &newKey;
