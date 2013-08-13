@@ -26,7 +26,6 @@
 #include "mongo/server.h"
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/databaseholder.h"
-#include "mongo/db/background.h"
 #include "mongo/db/client.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/introspect.h"
@@ -787,8 +786,6 @@ namespace mongo {
             string toDeleteNs = dbname + '.' + e.valuestr();
             NamespaceDetails *d = nsdetails(toDeleteNs.c_str());
             tlog() << "CMD: reIndex " << toDeleteNs << endl;
-            // TokuMX: Do we care?
-            //BackgroundOperation::assertNoBgOpInProgForNs(toDeleteNs.c_str());
 
             if ( ! d ) {
                 errmsg = "ns not found";

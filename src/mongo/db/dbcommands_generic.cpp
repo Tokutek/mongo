@@ -31,7 +31,6 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/db/security.h"
-#include "mongo/db/background.h"
 #include "mongo/db/repl/multicmd.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/s/shard.h"

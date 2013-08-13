@@ -27,7 +27,6 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/security.h"
 #include "mongo/db/stats/snapshots.h"
-#include "mongo/db/background.h"
 #include "mongo/db/commands.h"
 #include "mongo/util/version.h"
 #include "mongo/util/ramlog.h"

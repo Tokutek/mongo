@@ -31,7 +31,6 @@
 #include "mongo/db/repl.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/background.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/restapi.h"
 
@@ -309,8 +308,6 @@ namespace mongo {
             if ( replAllDead ) {
                 ss << "\n<b>replication replAllDead=" << replAllDead << "</b>\n";
             }
-            // TokuMX: Do we care?
-            //BackgroundOperation::dump(ss);
             ss << "</pre>\n";
         }
 

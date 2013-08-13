@@ -39,7 +39,6 @@
 #include "mongo/db/json.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/cmdline.h"
-#include "mongo/db/background.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/commands/fsync.h"
 #include "mongo/db/index.h"
