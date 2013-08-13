@@ -152,6 +152,7 @@ namespace mongo {
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
         void optimize();
+        void hotOptimizeRange(const BSONObj* leftKey, const BSONObj *leftPK, const BSONObj* rightKey, const BSONObj *rightPK);
 
         struct UniqueCheckExtra {
             const BSONObj &newkey;

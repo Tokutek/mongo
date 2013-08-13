@@ -398,4 +398,9 @@ namespace mongo {
         const uint64_t millisPerHour = 3600 * 1000;
         return hours * millisPerHour;
     }
+
+    void hotOptimizeOplogTo(GTID gtid) {
+        Client::ReadContext ctx(rsoplog);
+        rsOplogDetails->hotOptimizeOplog(gtid);
+    }
 }
