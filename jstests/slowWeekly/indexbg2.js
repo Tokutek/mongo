@@ -47,7 +47,7 @@ doTest = function(dropDups) {
         doParallel(fullName + ".ensureIndex( {i:1}, {background:true, unique:true, dropDups:" + dropDups + "} )");
         try {
             // wait for indexing to start
-            assert.soon(function() { return 2 == db.system.indexes.count({ ns: "test." + baseName }) }, "no index created", 30000, 50);
+            assert.soon(function() { return 2 == t.stats().nindexesbeingbuilt; }, "no index created", 30000, 50);
             t.save({ i: 0, n: true });
             //printjson(db.getLastError());
             t.save({ i: size - 1, n: true });
@@ -85,6 +85,7 @@ doTest = function(dropDups) {
 }
 
 doTest( "false" );
-doTest( "true" );
+// No drop dups in TokuMX
+//doTest( "true" );
 
 testServer.stop();

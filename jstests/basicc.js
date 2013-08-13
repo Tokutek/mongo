@@ -1,22 +1,23 @@
 // test writing to two db's at the same time.
 
-t1 = db.jstests_basicc;
-var db = db.getSisterDB("test_basicc");
-t2 = db.jstests_basicc;
+t1 = db.jstests_basicc1;
+t2 = db.jstests_basicc2;
 t1.drop();
 t2.drop();
 
-js = "while( 1 ) { db.jstests.basicc1.save( {} ); }";
+var db = db.getSisterDB("test_basicc");
+js = "for (i = 0; i < 50000; i++) { db.jstests_basicc1.save( {} ); }";
 pid = startMongoProgramNoConnect( "mongo" , "--eval" , js , db.getMongo().host );
-
-for( var i = 0; i < 1000; ++i ) {
+for( var i = 0; i < 50000; ++i ) {
     t2.save( {} );
 }
 assert.automsg( "!db.getLastError()" );
-stopMongoProgramByPid( pid );
+assert.soon( function() { return t1.count() == 50000 && t2.count() == 50000 }, 30, 1000 );
+
 // put things back the way we found it
 t1.drop();
 t2.drop();
 db.dropDatabase();
 db = db.getSisterDB("test");
+print('Done.');
 

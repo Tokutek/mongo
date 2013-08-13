@@ -14,10 +14,7 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mongo/pch.h"
-
 #include "mongo/db/curop.h"
-#include "mongo/db/interrupt_status.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/builder.h"
 
@@ -25,62 +22,60 @@ namespace mongo {
 
     namespace storage {
 
-        // TODO: Use a command line option for LOADER_COMPRESS_INTERMEDIATES
-
-        Loader::Loader(DB **dbs, const int n) :
-            _dbs(dbs), _n(n),
-            _loader(NULL), _closed(false) {
-
+        Indexer::Indexer(DB *src_db, DB *dest_db) :
+            _dest_db(dest_db), _indexer(NULL), _closed(false) {
             uint32_t db_flags = 0;
-            uint32_t dbt_flags = 0;
-            const int loader_flags = 0; 
-            int r = storage::env->create_loader(storage::env, cc().txn().db_txn(),
-                                                &_loader, _dbs[0], _n, _dbs,
-                                                &db_flags, &dbt_flags, loader_flags);
+            uint32_t indexer_flags = 0;
+            DB_ENV *env = storage::env;
+            int r = env->create_indexer(env, cc().txn().db_txn(), &_indexer,
+                                        src_db, 1, &_dest_db,
+                                        &db_flags, indexer_flags);
             if (r != 0) {
-                handle_ydb_error(r);
+                storage::handle_ydb_error(r);
             }
-            r = _loader->set_poll_function(_loader, BuilderBase::poll_function, &_poll_extra);
+            r = _indexer->set_poll_function(_indexer, BuilderBase::poll_function, &_poll_extra);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            r = _loader->set_error_callback(_loader, BuilderBase::error_callback, &_error_extra);
+            r = _indexer->set_error_callback(_indexer, BuilderBase::error_callback, &_error_extra);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
         }
 
-        Loader::~Loader() {
-            if (!_closed && _loader != NULL) {
-                const int r = _loader->abort(_loader);
+        Indexer::~Indexer() {
+            if (!_closed && _indexer != NULL) {
+                const int r = _indexer->abort(_indexer);
                 if (r != 0) {
-                    problem() << "storage::~Loader, failed to close DB_LOADER, error: "
+                    problem() << "storage::~Indexer, failed to close DB_INDEXER, error: "
                               << r << endl;
                 }
             }
         }
 
-        int Loader::put(DBT *key, DBT *val) {
-            return _loader->put(_loader, key, val);
-        }
-
-        int Loader::close() {
-            const int r = _loader->close(_loader);
-
-            // Doesn't matter if the close succeded or not. It's dead to us now.
-            _closed = true;
+        int Indexer::build() {
+            const int r = _indexer->build(_indexer);
             if (r == -1) {
                 _poll_extra.throwException();
             }
             // Forward any callback-generated exception. Could be an error
             // from the error callback or an interrupt from the poll function.
-            uassert( 16860, _error_extra.errmsg, _error_extra.errmsg.empty() );
+            uassert( 16911, _error_extra.errmsg, _error_extra.errmsg.empty() );
             // Any other non-zero error code that didn't trigger the error
             // callback or come from the poll function should be handled
             // in some generic fashion by the caller.
             return r;
         }
 
+        int Indexer::close() {
+            // Doesn't matter if the close succeeds or not.
+            _closed = true;
+            return _indexer->close(_indexer);
+        }
+
     } // namespace storage
 
 } // namespace mongo
+
+
+

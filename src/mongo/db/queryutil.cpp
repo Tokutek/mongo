@@ -1148,14 +1148,22 @@ namespace mongo {
         }
     }
 
-    FieldRangeVector::FieldRangeVector( const FieldRangeSet &frs, const IndexSpec &indexSpec,
+    FieldRangeVector::FieldRangeVector( const FieldRangeSet &frs, const BSONObj &keyPattern,
                                         int direction ) :
-        _indexSpec( indexSpec ),
+        _keyPattern( keyPattern.getOwned() ),
         _direction( direction >= 0 ? 1 : -1 ),
         _hasAllIndexedRanges( true ) {
-        verify(  frs.matchPossibleForIndex( _indexSpec.keyPattern ) );
+        verify(  frs.matchPossibleForIndex( _keyPattern ) );
         _queries = frs._queries;
-        BSONObjIterator i( _indexSpec.keyPattern );
+
+        // For key generation
+        for (BSONObjIterator it(_keyPattern); it.more(); ) {
+            const BSONElement &e = it.next();
+            _fieldNames.push_back(e.fieldName());
+        }    
+        _keyGenerator.reset(new KeyGenerator(_fieldNames, false));
+
+        BSONObjIterator i( _keyPattern );
         set< string > baseObjectNonUniversalPrefixes;
         while( i.more() ) {
             BSONElement e = i.next();
@@ -1209,7 +1217,7 @@ namespace mongo {
 
     BSONObj FieldRangeVector::obj() const {
         BSONObjBuilder b;
-        BSONObjIterator k( _indexSpec.keyPattern );
+        BSONObjIterator k( _keyPattern );
         for( int i = 0; i < (int)_ranges.size(); ++i ) {
             BSONArrayBuilder a( b.subarrayStart( k.next().fieldName() ) );
             for( vector<FieldInterval>::const_iterator j = _ranges[ i ].intervals().begin();
@@ -1429,7 +1437,7 @@ namespace mongo {
 
     bool FieldRangeVector::matchesKey( const BSONObj &key ) const {
         BSONObjIterator j( key );
-        BSONObjIterator k( _indexSpec.keyPattern );
+        BSONObjIterator k( _keyPattern );
         for( int l = 0; l < (int)_ranges.size(); ++l ) {
             int number = (int) k.next().number();
             bool forward = ( number >= 0 ? 1 : -1 ) * ( _direction >= 0 ? 1 : -1 ) > 0;
@@ -1447,10 +1455,10 @@ namespace mongo {
         // TODO The representation of matching keys could potentially be optimized
         // more for the case at hand.  (For example, we can potentially consider
         // fields individually instead of constructing several bson objects using
-        // multikey arrays.)  But getKeys() canonically defines the key set for a
+        // multikey arrays.)  But getKeysFromObject() canonically defines the key set for a
         // given object and for now we are using it as is.
         BSONObjSet keys;
-        _indexSpec.getKeys( obj, keys );
+        _keyGenerator->getKeys(obj, keys);
         for( BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); ++i ) {
             if ( matchesKey( *i ) ) {
                 ok = true;
@@ -1466,8 +1474,9 @@ namespace mongo {
     BSONObj FieldRangeVector::firstMatch( const BSONObj &obj ) const {
         // NOTE Only works in forward direction.
         verify( _direction >= 0 );
-        BSONObjSet keys( BSONObjCmp( _indexSpec.keyPattern ) );
-        _indexSpec.getKeys( obj, keys );
+        BSONObjCmp cmp( _keyPattern );
+        BSONObjSet keys( cmp );
+        _keyGenerator->getKeys(obj, keys);
         for( BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); ++i ) {
             if ( matchesKey( *i ) ) {
                 return *i;
@@ -1478,7 +1487,7 @@ namespace mongo {
     
     string FieldRangeVector::toString() const {
         BSONObjBuilder bob;
-        BSONObjIterator i( _indexSpec.keyPattern );
+        BSONObjIterator i( _keyPattern );
         for( vector<FieldRange>::const_iterator r = _ranges.begin();
             r != _ranges.end() && i.more(); ++r ) {
             BSONElement e = i.next();
@@ -1508,7 +1517,7 @@ namespace mongo {
     // TODO optimize more SERVER-5450.
     int FieldRangeVectorIterator::advance( const BSONObj &curr ) {
         BSONObjIterator j( curr );
-        BSONObjIterator o( _v._indexSpec.keyPattern );
+        BSONObjIterator o( _v._keyPattern );
         // track first field for which we are not at the end of the valid values,
         // since we may need to advance from the key prefix ending with this field
         int latestNonEndpoint = -1;
@@ -1757,9 +1766,8 @@ namespace mongo {
         assertMayPopOrClause();
         auto_ptr<FieldRangeSet> holder;
         const FieldRangeSet *toDiff = &_originalOrSets.front().frsForIndex( nsd, idxNo );
-        BSONObj indexSpec = keyPattern;
-        if ( !indexSpec.isEmpty() && toDiff->matchPossibleForIndex( indexSpec ) ) {
-            holder.reset( toDiff->subset( indexSpec ) );
+        if ( !keyPattern.isEmpty() && toDiff->matchPossibleForIndex( keyPattern ) ) {
+            holder.reset( toDiff->subset( keyPattern ) );
             toDiff = holder.get();
         }
         _popOrClause( toDiff, nsd, idxNo, keyPattern );
@@ -1776,7 +1784,7 @@ namespace mongo {
      * removes the field ranges it covers from all subsequent or clauses.  As a
      * side effect, this function may invalidate the return values of topFrs()
      * calls made before this function was called.
-     * @param indexSpec - Keys of the index that was used to satisfy the last or
+     * @param keyPattern - Keys of the index that was used to satisfy the last or
      * clause.  Used to determine the range of keys that were scanned.  If
      * empty we do not constrain the previous clause's ranges using index keys,
      * which may reduce opportunities for range elimination.

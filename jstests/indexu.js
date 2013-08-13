@@ -15,6 +15,7 @@ t.ensureIndex( {'a.0':1} );
 assert( db.getLastError() );
 
 t.remove();
+assert.eq( 0, t.count() );
 t.ensureIndex( {'a.0':1} );
 assert( !db.getLastError() );
 t.save( dupDoc );

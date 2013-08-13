@@ -25,37 +25,65 @@
 #include <vector>
 
 #include "mongo/db/client.h"
-#include "mongo/db/indexkey.h"
-#include "mongo/db/jsobj.h"
 #include "mongo/db/descriptor.h"
+#include "mongo/db/keygenerator.h"
+#include "mongo/db/storage/builder.h"
 #include "mongo/db/storage/cursor.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/db/storage/txn.h"
-#include "mongo/db/storage/loader.h"
 
 namespace mongo {
 
+    class Cursor; 
     class NamespaceDetails;
 
-    /* Details about a particular index. There is one of these effectively for each object in
-       system.namespaces (although this also includes the head pointer, which is not in that
-       collection).
-     */
+    // Represents an index of a collection.
     class IndexDetails : boost::noncopyable {
     public:
-        explicit IndexDetails(const BSONObj &info, bool may_create=true);
+        // Only creates internals, useful for tests.
+        IndexDetails(const BSONObj &info);
 
-        ~IndexDetails();
+        // Creates an IndexDetails subclass of the appropriate type.
+        //
+        // Currently, we have:
+        // - Regular indexes
+        // - Hashed indexes
+        // In the future:
+        // - Geo indexes?
+        // - FTS indexes?
+        static shared_ptr<IndexDetails> make(const BSONObj &info, const bool may_create = true);
+        virtual ~IndexDetails();
+
+        // @return the "special" name for this index.
+        virtual const string &getSpecialIndexName() const {
+            static string name = "";
+            return name;
+        }
+
+        // Is this index special? True for subclasses of IndexDetails.
+        virtual bool special() const {
+            return false;
+        }
+
+        // How suitable is this index for a given query and sort order?
+        enum Suitability {
+            USELESS = 0,
+            HELPFUL = 1,
+            OPTIMAL = 2
+        };
+        virtual Suitability suitability(const BSONObj &query, const BSONObj &order) const;
+
+        virtual shared_ptr<mongo::Cursor> newCursor(const BSONObj &query,
+                                                    const BSONObj &order,
+                                                    const int numWanted = 0) const {
+            msgasserted( 16912, str::stream() << 
+                                "Should not have called newCursor on a non-special index: " <<
+                                indexNamespace() );
+        }
 
         // Closes the underlying DB *.  In case that throws, we can't do it in the destructor.
         void close();
-
-        BSONObj getKeyFromQuery(const BSONObj& query) const {
-            BSONObj k = keyPattern();
-            BSONObj res = query.extractFieldsUnDotted(k);
-            return res;
-        }
 
         /* pull out the relevant key objects from obj, so we
            can index them.  Note that the set is multiple elements
@@ -64,10 +92,14 @@ namespace mongo {
         */
         void getKeysFromObject(const BSONObj &obj, BSONObjSet &keys) const;
 
+        BSONObj getKeyFromQuery(const BSONObj& query) const {
+            return query.extractFieldsUnDotted(_keyPattern);
+        }
+
         /* get the key pattern for this object.
            e.g., { lastname:1, firstname:1 }
         */
-        BSONObj keyPattern() const {
+        const BSONObj &keyPattern() const {
             dassert(_info["key"].Obj() == _keyPattern);
             return _keyPattern;
         }
@@ -78,9 +110,6 @@ namespace mongo {
          */
         int keyPatternOffset( const StringData& key ) const;
         bool inKeyPattern( const StringData& key ) const { return keyPatternOffset( key ) >= 0; }
-
-        /* true if the specified key is in the index */
-        bool hasKey(const BSONObj& key);
 
         static string indexNamespace(const StringData& ns, const StringData& idxName) {
             dassert(ns != "" && idxName != "");
@@ -129,17 +158,15 @@ namespace mongo {
             return _unique;
         }
 
+        bool sparse() const {
+            dassert(_info["sparse"].trueValue() == _sparse);
+            return _sparse;
+        }
+
         /** @return true if index is clustering */
         bool clustering() const {
             dassert(_info["clustering"].trueValue() == _clustering);
             return _clustering;
-        }
-
-        /** delete this index. */
-        void kill_idx();
-
-        const IndexSpec &getSpec() const {
-            return _spec;
         }
 
         string toString() const {
@@ -150,15 +177,15 @@ namespace mongo {
             return _info;
         }
 
-        void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val, uint64_t flags);
-        void deletePair(const BSONObj &key, const BSONObj *pk, uint64_t flags);
-        void acquireTableLock();
+        /** delete this index. */
+        void kill_idx();
 
         enum toku_compression_method getCompressionMethod() const;
         uint32_t getPageSize() const;
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
         void optimize();
+        void acquireTableLock();
 
         struct UniqueCheckExtra : public ExceptionSaver {
             const storage::Key &newKey;
@@ -196,7 +223,7 @@ namespace mongo {
             storage::Loader _loader;
         };
 
-    private:
+    protected:
         // Open dictionary representing the index on disk.
         DB *_db;
 
@@ -213,18 +240,25 @@ namespace mongo {
         // Precomputed values from _info, for speed.
         const BSONObj _keyPattern;
         const bool _unique;
-        const bool _hashed;
         const bool _sparse;
         const bool _clustering;
 
-        // Used to describe the index to the ydb layer, for key
-        // comparisons and, later, for key generation.
-        Descriptor _descriptor;
+        // Used to describe the index to the ydb layer.
+        //
+        // A default descriptor is generated by the IndexDetails constructor.
+        // The scoped pointer is possibly reset() to a different descriptor
+        // in by subclass constructors.
+        scoped_ptr<Descriptor> _descriptor;
 
-        // The index spec describes the index (if it's special, etc)
-        IndexSpec _spec;
+    private:
+        // Must be called after constructor. Opens the ydb dictionary
+        // using _descriptor, which is set by subclass constructors.
+        //
+        // Only IndexDetails::make() calls the constructor / open.
+        void open(const bool may_create);
 
         friend class NamespaceDetails;
+        friend class BulkLoadedCollection;
     };
 
     // class to store statistics about an IndexDetails
@@ -288,6 +322,30 @@ namespace mongo {
             throw *cbw.ex;
         }
     }
+
+    // Sets db->app_private to a bool that gets set
+    // if storage::generate_keys() generates multikeys.
+    // On destruction, safely unsets db->app_private.
+    //
+    // Used by the hot indexer and loader to track
+    // which indexes are multikey.
+    class MultiKeyTracker : boost::noncopyable {
+    public:
+        MultiKeyTracker(DB *db) :
+            _db(db) {
+            _db->app_private = &_multiKey;
+        }
+        ~MultiKeyTracker() {
+            _db->app_private = NULL;
+        }
+        bool isMultiKey() const {
+            return _multiKey;
+        }
+
+    private:
+        DB *_db;
+        bool _multiKey;
+    };
 
 } // namespace mongo
 

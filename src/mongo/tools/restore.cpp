@@ -286,10 +286,11 @@ public:
             if (!options.isEmpty()) {
                 createCollectionWithOptions(options);
             }
+            // Build indexes last - it's a little faster.
+            processFile( root );
             for (vector<BSONObj>::iterator it = indexes.begin(); it != indexes.end(); ++it) {
                 createIndex(*it, false);
             }
-            processFile( root );
         }
 
         if (_drop && root.leaf() == "system.users.bson") {

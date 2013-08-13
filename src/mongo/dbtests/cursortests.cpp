@@ -51,9 +51,7 @@ namespace CursorTests {
                         s.range( "a" ) |= s2.range( "a" );
                     }
                 }
-                // orphan idxSpec for this test
-                IndexSpec *idxSpec = new IndexSpec( BSON( "a" << 1 ) );
-                return new FieldRangeVector( s, *idxSpec, direction );
+                return new FieldRangeVector( s, BSON( "a" << 1 ), direction );
             }
             DBDirectClient _c;
         private:
@@ -174,9 +172,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns() );
                 FieldRangeSet frs( ns(), spec, true, true );
-                // orphan spec for this test.
-                IndexSpec *idxSpec = new IndexSpec( idx() );
-                boost::shared_ptr< FieldRangeVector > frv( new FieldRangeVector( frs, *idxSpec, direction() ) );
+                boost::shared_ptr< FieldRangeVector > frv( new FieldRangeVector( frs, idx(), direction() ) );
                 {
                     NamespaceDetails *d = nsdetails(ns());
                     int i = d->findIndexByKeyPattern(idx());
@@ -290,8 +286,8 @@ namespace CursorTests {
             void run() {
                 _c.dropCollection( ns() );
                 // Set up a compound index with some data.
-                IndexSpec idx( BSON( "a" << 1 << "b" << 1 ) );
-                _c.ensureIndex( ns(), idx.keyPattern );
+                BSONObj idxPattern( BSON( "a" << 1 << "b" << 1 ) );
+                _c.ensureIndex( ns(), idxPattern );
                 for( int i = 0; i < 300; ++i ) {
                     _c.insert( ns(), BSON( "a" << i << "b" << i ) );
                 }
@@ -303,7 +299,7 @@ namespace CursorTests {
                 // of 'a' in the index and check for an index key with that value for 'a' and 'b'
                 // equal to 30.
                 FieldRangeSet frs( ns(), BSON( "b" << 30 ), true, true );
-                boost::shared_ptr<FieldRangeVector> frv( new FieldRangeVector( frs, idx, 1 ) );
+                boost::shared_ptr<FieldRangeVector> frv( new FieldRangeVector( frs, idxPattern, 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns() );
                 {

@@ -71,7 +71,7 @@ namespace mongo {
         // Try first without the create flag, because we're not sure if we
         // have a write lock just yet. It won't matter if the nsdb exists.
         Descriptor descriptor(keyPattern);
-        int r = storage::db_open(&_nsdb, _nsdbFilename, info, descriptor, false);
+        int r = storage::db_open(&_nsdb, _nsdbFilename, info, descriptor, false, false);
         if (r == ENOENT) {
             if (!may_create) {
                 // didn't find on disk and we can't create it
@@ -83,7 +83,7 @@ namespace mongo {
             NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
             rollback.noteCreate(_database);
             // Try opening again with may_create = true
-            r = storage::db_open(&_nsdb, _nsdbFilename, info, descriptor, true);
+            r = storage::db_open(&_nsdb, _nsdbFilename, info, descriptor, true, false);
         } else if (r != 0) {
             storage::handle_ydb_error_fatal(r);
         }

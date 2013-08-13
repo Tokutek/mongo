@@ -18,7 +18,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/descriptor.h"
-#include "mongo/db/indexkey.h"
+#include "mongo/db/keygenerator.h"
 
 namespace mongo {
 
@@ -107,7 +107,10 @@ namespace mongo {
             fieldNames[i] = fieldsBase + offsetsBase[i];
         }
         if (h.hashed) {
-            KeyGenerator::getHashedKey(obj, fieldNames[0], h.hashSeed, h.sparse, keys);
+            // TODO: Add hashVersion to descriptor
+            const HashVersion hashVersion = 0;
+            HashKeyGenerator generator(fieldNames[0], h.hashSeed, hashVersion, h.sparse);
+            generator.getKeys(obj, keys);
         } else {
             KeyGenerator::getKeys(obj, fieldNames, h.sparse, keys);
         }

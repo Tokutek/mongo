@@ -29,30 +29,34 @@ waitParallel = function() {
 
 // waiting on SERVER-620
 
-print( "index11.js host:" );
+print( "indexbg1.js host:" );
 print( db.getMongo().host );
 
-size = 500000;
+size = 300000;
 while( 1 ) { // if indexing finishes before we can run checks, try indexing w/ more data
     print( "size: " + size );
-    baseName = "jstests_index11";
+    baseName = "jstests_indexbg1";
     fullName = "db." + baseName;
     t = db[ baseName ];
     t.drop();
 
     for( i = 0; i < size; ++i ) {
-        db.jstests_index11.save( {i:i} );
+        db.jstests_indexbg1.save( {i:i} );
+        if (i > 0 && i % 50000 == 0) {
+            print(" inserted " + i + " docs...");
+        }
     }
     db.getLastError();
     assert.eq( size, t.count() );
     
     doParallel( fullName + ".ensureIndex( {i:1}, {background:true} )" );
     try {
+        t = db[ baseName ];
+
         // wait for indexing to start
         print("wait for indexing to start");
-        assert.soon( function() { return 2 == db.system.indexes.count( {ns:"test."+baseName} ) }, "no index created", 30000, 50 );
+        assert.soon( function() { return 2 == t.stats().nindexesbeingbuilt }, "no index created", 30000, 50 );
         print("started.");
-        assert.eq( size, t.count() );
         assert.eq( 100, t.findOne( {i:100} ).i );
         q = t.find();
         for( i = 0; i < 120; ++i ) { // getmore
@@ -71,18 +75,6 @@ while( 1 ) { // if indexing finishes before we can run checks, try indexing w/ m
         t.save( {i:size+2} );
         assert( !db.getLastError() );
 
-        print("calling ensureIndex");
-        t.ensureIndex( {i:1} );
-
-        printjson( db.getLastError() );
-        assert( db.getLastError() );
-        assert.eq( size + 1, t.count() );
-        assert( !db.getLastError() );
-
-        print("calling dropIndex");
-        t.dropIndex( {i:1} );
-        printjson( db.getLastError() );
-        assert( db.getLastError() );        
     } catch( e ) {
         // only a failure if we're still indexing
         // wait for parallel status to update to reflect indexing status

@@ -35,6 +35,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/descriptor.h"
+#include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/storage/exception.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/util/assert_util.h"
@@ -73,62 +74,113 @@ namespace mongo {
             }
         }
 
-        static void dbt_realloc(DBT *dbt, const void *data, const size_t size) {
-            if (dbt->ulen < size) {;
+        inline static void dbt_set(DBT *dbt, const void *data, const size_t size) {
+            dbt->data = const_cast<void *>(data);
+            dbt->size = size;
+            dbt->ulen = size;
+            dbt->flags = 0;
+        }
+
+        inline static void dbt_realloc(DBT *dbt, const void *data, const size_t size) {
+            if (dbt->flags != DB_DBT_REALLOC || dbt->ulen < size) {
                 dbt->ulen = size;
-                dbt->data = realloc(dbt->data, dbt->ulen);
-                verify(dbt->flags == DB_DBT_REALLOC);
+                dbt->data = realloc(dbt->flags == DB_DBT_REALLOC ? dbt->data : NULL, dbt->ulen);
+                dbt->flags = DB_DBT_REALLOC;
                 verify(dbt->data != NULL);
             }
             dbt->size = size;
             memcpy(dbt->data, data, size);
         }
 
-        static void generate_key(DB *dest_db, DB *src_db, DBT *dest_key,
-                                 const DBT *src_key, const DBT *src_val) {
-            const DBT *desc = &dest_db->cmp_descriptor->dbt;
-            Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
-
-            const Key sPK(src_key);
-            dassert(sPK.pk().isEmpty());
-            const BSONObj pk(sPK.key());
-            const BSONObj obj(reinterpret_cast<const char *>(src_val->data));
-
-            if (dest_db == src_db) {
-                dbt_realloc(dest_key, src_key->data, src_key->size);
-            } else {
-                // Generate keys for a secondary index.
-                //
-                // Higher layers of code should prevent the put multiple API from
-                // getting called on a multi-key index.
-                BSONObjSet keys;
-                descriptor.generateKeys(obj, keys);
-                if (keys.size() == 1) {
-                    const Key sKey(*keys.begin(), &pk);
-                    dbt_realloc(dest_key, sKey.buf(), sKey.size());
-                } else {
-                    verify(keys.size() == 0);
-                    dbt_realloc(dest_key, NULL, 0);
-                }
+        inline static void dbt_array_clear_and_resize(DBT_ARRAY *dbt_array, const size_t new_capacity,
+                                                      const int flags = DB_DBT_REALLOC) {
+            const size_t old_capacity = dbt_array->capacity;
+            if (old_capacity < new_capacity) {
+                dbt_array->capacity = new_capacity;
+                dbt_array->dbts = static_cast<DBT *>(
+                                  realloc(dbt_array->dbts, new_capacity * sizeof(DBT)));
+                memset(&dbt_array->dbts[old_capacity], 0, (new_capacity - old_capacity) * sizeof(DBT));
             }
+            dbt_array->size = 0;
         }
 
-        static int generate_row_for_del(DB *dest_db, DB *src_db, DBT *dest_key,
-                                        const DBT *src_key, const DBT *src_val) {
-            // Delete just needs a key, generate it.
-            generate_key(dest_db, src_db, dest_key, src_key, src_val);
+        inline static void dbt_array_push(DBT_ARRAY *dbt_array, const void *data, const size_t size) {
+            verify(dbt_array->size < dbt_array->capacity);
+            dbt_realloc(&dbt_array->dbts[dbt_array->size], data, size);
+            dbt_array->size++;
+        }
+
+        static int generate_keys(DB *dest_db, DB *src_db,
+                                 DBT_ARRAY *dest_keys,
+                                 const DBT *src_key, const DBT *src_val) {
+            try {
+                const DBT *desc = &dest_db->cmp_descriptor->dbt;
+                Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+
+                const Key sPK(src_key);
+                dassert(sPK.pk().isEmpty());
+                const BSONObj pk(sPK.key());
+                const BSONObj obj(reinterpret_cast<const char *>(src_val->data));
+
+                if (dest_db == src_db) {
+                    dbt_array_clear_and_resize(dest_keys, 1);
+                    dbt_array_push(dest_keys, src_key->data, src_key->size);
+                } else {
+                    // Generate keys for a secondary index.
+                    BSONObjSet keys;
+                    descriptor.generateKeys(obj, keys);
+                    dbt_array_clear_and_resize(dest_keys, keys.size());
+                    for (BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); i++) {
+                        const Key sKey(*i, &pk);
+                        dbt_array_push(dest_keys, sKey.buf(), sKey.size());
+                    }
+                    // Set the multiKey bool if it's provided and we generated multiple keys.
+                    // See NamespaceDetails::Indexer::Indexer()
+                    if (dest_db->app_private != NULL && keys.size() > 1) {
+                        bool *multiKey = reinterpret_cast<bool *>(dest_db->app_private);
+                        if (!*multiKey) {
+                            *multiKey = true;
+                        }
+                    }
+                }
+            } catch (const DBException &ex) {
+                verify(ex.getCode() > 0);
+                return ex.getCode();
+            } catch (const std::exception &ex) {
+                problem() << "Unhandled std::exception in storage::generate_keys()" << endl;
+                verify(false);
+            }
             return 0;
         }
 
-        static int generate_row_for_put(DB *dest_db, DB *src_db, DBT *dest_key, DBT *dest_val,
+        static int generate_row_for_del(DB *dest_db, DB *src_db,
+                                        DBT_ARRAY *dest_keys,
                                         const DBT *src_key, const DBT *src_val) {
-            // Put needs a key and possible a val (for clustering indexes.)
-            generate_key(dest_db, src_db, dest_key, src_key, src_val);
+            // Delete just needs keys, generate them.
+            return generate_keys(dest_db, src_db, dest_keys, src_key, src_val);
+        }
+
+        static int generate_row_for_put(DB *dest_db, DB *src_db,
+                                        DBT_ARRAY *dest_keys, DBT_ARRAY *dest_vals,
+                                        const DBT *src_key, const DBT *src_val) {
+            // Put needs keys and possibly vals (for clustering indexes.)
+            const int r = generate_keys(dest_db, src_db, dest_keys, src_key, src_val);
+            if (r != 0) {
+                return r;
+            }
 
             const DBT *desc = &dest_db->cmp_descriptor->dbt;
             Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
-            if (dest_val != NULL && descriptor.clustering()) {
-                dbt_realloc(dest_val, src_val->data, src_val->size);
+            if (dest_vals != NULL) {
+                // TODO: This copies each value once, which is not good. Find a way to avoid that.
+                dbt_array_clear_and_resize(dest_vals, dest_keys->size);
+                for (size_t i = 0; i < dest_keys->size; i++) {
+                    if (descriptor.clustering()) {
+                        dbt_array_push(dest_vals, src_val->data, src_val->size);
+                    } else {
+                        dbt_array_push(dest_vals, NULL, 0);
+                    }
+                }
             }
             return 0; 
         }
@@ -277,8 +329,9 @@ namespace mongo {
         }
 
         // set a descriptor for the given dictionary.
-        static void set_db_descriptor(DB *db, const Descriptor &descriptor) {
-            const int flags = DB_UPDATE_CMP_DESCRIPTOR;
+        static void set_db_descriptor(DB *db, const Descriptor &descriptor,
+                                      const bool hot_index) {
+            const int flags = DB_UPDATE_CMP_DESCRIPTOR | (hot_index ? DB_IS_HOT_INDEX : 0);
             DBT desc = descriptor.dbt();
             const int r = db->change_descriptor(db, cc().txn().db_txn(), &desc, flags);
             if (r != 0) {
@@ -286,7 +339,8 @@ namespace mongo {
             }
         }
 
-        static void verify_or_upgrade_db_descriptor(DB *db, const Descriptor &descriptor) {
+        static void verify_or_upgrade_db_descriptor(DB *db, const Descriptor &descriptor,
+                                                    const bool hot_index) {
             const DBT *desc = &db->cmp_descriptor->dbt;
             verify(desc->data != NULL && desc->size >= 4);
 
@@ -296,12 +350,12 @@ namespace mongo {
                 const Ordering &ordering(*reinterpret_cast<const Ordering *>(desc->data));
                 const Ordering &expected(descriptor.ordering());
                 verify(memcmp(&ordering, &expected, 4) == 0);
-                set_db_descriptor(db, descriptor);
+                set_db_descriptor(db, descriptor, hot_index);
             } else {
                 const Descriptor existing(reinterpret_cast<const char *>(desc->data), desc->size);
                 if (existing.version() < descriptor.version()) {
                     // existing descriptor is out-dated. upgrade to the current version.
-                    set_db_descriptor(db, descriptor);
+                    set_db_descriptor(db, descriptor, hot_index);
                 } else if (existing.version() > descriptor.version()) {
                     problem() << "Detected a \"dictionary descriptor\" version that is too new: "
                               << existing.version() << ". The highest known version is " << descriptor.version()
@@ -319,7 +373,8 @@ namespace mongo {
         }
 
         int db_open(DB **dbp, const string &name, const BSONObj &info,
-                    const Descriptor &descriptor, bool may_create) {
+                    const Descriptor &descriptor, const bool may_create,
+                    const bool hot_index) {
             // TODO: Refactor this option setting code to someplace else. It's here because
             // the YDB api doesn't allow a db->close to be called before db->open, and we
             // would leak memory if we chose to do nothing. So we validate all the
@@ -399,9 +454,9 @@ namespace mongo {
                 handle_ydb_error(r);
             }
             if (may_create) {
-                set_db_descriptor(db, descriptor);
+                set_db_descriptor(db, descriptor, hot_index);
             }
-            verify_or_upgrade_db_descriptor(db, descriptor);
+            verify_or_upgrade_db_descriptor(db, descriptor, hot_index);
 
             if (altTxn.get() != NULL) {
                 altTxn->commit();
@@ -565,6 +620,12 @@ namespace mongo {
             switch (error) {
                 case ENOENT:
                     throw SystemException::Enoent();
+                case ASSERT_IDS::AmbiguousFieldNames:
+                    uasserted( storage::ASSERT_IDS::AmbiguousFieldNames,
+                               mongoutils::str::stream() << "Ambiguous field name found in array" );
+                case ASSERT_IDS::CannotHashArrays:
+                    uasserted( storage::ASSERT_IDS::CannotHashArrays,
+                               "Error: hashed indexes do not currently support array values" );
                 default:
                     // fall through
                     ;
