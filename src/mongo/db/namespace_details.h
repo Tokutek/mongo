@@ -352,7 +352,7 @@ namespace mongo {
             msgasserted( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection" );
         }
         virtual void hotOptimizeOplog(GTID end) {
-            massert( 16865, "bug: should not call hotOptimizeOplog on non-oplog collection", false );
+            massert( 16914, "bug: should not call hotOptimizeOplog on non-oplog collection", false );
         }
 
         class Indexer : boost::noncopyable {

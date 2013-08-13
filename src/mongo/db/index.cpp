@@ -444,7 +444,7 @@ namespace mongo {
             r = _db->hot_optimize(_db, NULL, NULL, hot_opt_callback, &iter);
         }
         if (r != 0) {
-            uassert(16866, mongoutils::str::stream() << "hotOptimizeRange killed", false);
+            uassert(16913, mongoutils::str::stream() << "hotOptimizeRange killed", false);
         }
     }
 
