@@ -81,8 +81,8 @@ namespace mongo {
         // and ownership of the user stays with the AuthorizationManager
         User* lookupUser(const UserName& name);
 
-        // Gets an iterator over the names of all authenticated principals stored in this manager.
-        PrincipalSet::NameIterator getAuthenticatedPrincipalNames();
+        // Gets an iterator over the names of all authenticated users stored in this manager.
+        UserSet::NameIterator getAuthenticatedUserNames();
 
         // Returns a string representing all logged-in users on the current session.
         // WARNING: this string will contain NUL bytes so don't call c_str()!

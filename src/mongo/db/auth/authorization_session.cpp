@@ -146,8 +146,8 @@ namespace {
         }
     }
 
-    PrincipalSet::NameIterator AuthorizationSession::getAuthenticatedPrincipalNames() {
-        return _authenticatedPrincipals.getNames();
+    UserSet::NameIterator AuthorizationSession::getAuthenticatedUserNames() {
+        return _authenticatedUsers.getNames();
     }
 
     Status AuthorizationSession::acquirePrivilege(const Privilege& privilege,
