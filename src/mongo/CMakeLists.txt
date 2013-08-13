@@ -675,8 +675,6 @@ if (BUILD_TESTING)
 
   foreach (test
       action_set_test
-      principal_set_test
-      privilege_set_test
       role_graph_test
       user_set_test
       ## TODO: re-enable after bringing in new matcher
@@ -1135,9 +1133,8 @@ if (BUILD_TESTING)
 
   foreach (test
       action_set_test
-      principal_set_test
-      privilege_set_test
       role_graph_test
+      user_set_test
       authorization_manager_test
       authorization_session_test
       )

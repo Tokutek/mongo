@@ -32,10 +32,7 @@ add_library(authcore STATIC
   authorization_session
   authz_manager_external_state
   authz_session_external_state
-  principal
-  principal_set
   privilege
-  privilege_set
   role_graph
   role_name
   user

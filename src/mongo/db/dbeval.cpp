@@ -24,7 +24,6 @@
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/authorization_manager_global.h"
 #include "mongo/db/auth/authorization_session.h"
-#include "mongo/db/auth/privilege_set.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/jsobj.h"
@@ -60,7 +59,7 @@ namespace mongo {
         }
 
         const string userToken = ClientBasic::getCurrent()->getAuthorizationSession()
-                                                          ->getAuthenticatedPrincipalNamesToken();
+                                                          ->getAuthenticatedUserNamesToken();
         auto_ptr<Scope> s = globalScriptEngine->getPooledScope( dbName, "dbeval" + userToken );
         ScriptingFunction f = s->createFunction(code);
         if ( f == 0 ) {
