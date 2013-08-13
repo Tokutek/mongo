@@ -438,7 +438,8 @@ namespace mongo {
     class CmdReplSetExpireOplog : public ReplSetCommand {
     public:
         virtual void help( stringstream &help ) const {
-            help << "set expireOplogDays and expireOplogHours";
+            help << "set expireOplogDays and expireOplogHours\n";
+            help << "{ replSetExpireOplog : 1, expireOplogDays:new_val, expireOplogHours:new_val }";
         }
 
         CmdReplSetExpireOplog() : ReplSetCommand("replSetExpireOplog") { }
@@ -471,7 +472,8 @@ namespace mongo {
     class CmdReplGetExpireOplog : public ReplSetCommand {
     public:
         virtual void help( stringstream &help ) const {
-            help << "retrieve settings for expire oplog";
+            help << "retrieve settings for expire oplog.\n";
+            help << "{ replGetExpireOplog : 1 }";
         }
 
         CmdReplGetExpireOplog() : ReplSetCommand("replGetExpireOplog") { }
