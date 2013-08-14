@@ -567,7 +567,8 @@ namespace mongo {
                 bool empty = true;
                 for (; _cc->ok(); _cc->advance()) {
                     BSONObj obj = _cc->current();
-                    if (result.len() + obj.objsize() + 1024 >= BSONObjMaxUserSize) {
+                    if (a.arrSize() > 0 &&
+                        result.len() + obj.objsize() + 1024 >= BSONObjMaxUserSize) {
                         // have to do another batch after this
                         break;
                     }
