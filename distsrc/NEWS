@@ -64,6 +64,12 @@ Bug fixes
     - Fixed a bug that prevented the oplog from getting trimmed properly
       in certain cases. (#435)
 
+    - Backported fixes for
+      https://jira.mongodb.org/browse/SERVER-10458[SERVER-10458],
+      https://jira.mongodb.org/browse/SERVER-10478[SERVER-10478], and
+      https://jira.mongodb.org/browse/SERVER-10498[SERVER-10498] from
+      upstream.  This brings tokumx current with mongodb 2.2.6. (#436)
+
 
 tokumx 1.0.3
 ------------
