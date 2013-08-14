@@ -1,6 +1,76 @@
 tokumx news
 ===========
 
+tokumx 1.0.4
+------------
+Release date: 2013-08-14
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.0.3.
+
+    - This release fixes a critical bug in replication present in all
+      versions up to and including 1.0.3.  See below for details.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added a thread to do periodic optimization of the oplog, which
+      should clear space from it more aggressively. (#399)
+
+    - Added new commands `replGetExpireOplog` and `replSetExpireOplog` for
+      dynamically controlling the size of the oplog. (#415)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Backported https://jira.mongodb.org/browse/SERVER-1929[SERVER-1929]
+      from mongodb 2.4 to prevent replica set failover thrashing. (#344)
+
+    - Prevented the oplog purging thread from completely emptying the
+      oplog during long idle periods. (#345)
+
+    - Backported https://jira.mongodb.org/browse/SERVER-7951[SERVER-7951]
+      from mongodb 2.4 to allow replace-style updates when using hashed
+      shard keys. (#347)
+
+    - Improved the concurrency model used by authentication.  This also
+      fixes a deadlock that can occur most often when running with
+      authentication but without any admin users declared. (#366, #375,
+      #401)
+
+    - Resolved a crash when using the web UI on a server running with
+      authentication. (#378)
+
+    - Data cleanup after a successful chunk migration no longer happens on
+      a background thread.  This fixes some performance issues triggered
+      by a large number of migrations piling up. (#379, #393)
+
+    - Improved reliability of the distributed locking used by
+      sharding. (#413)
+
+    - Fixed a race condition that could result in data loss on
+      secondaries, under multi-threaded workloads.  This bug can produce a
+      secondary that appears to be fully synced but is missing some data,
+      and if this secondary is ever elected primary, could result in the
+      permanent loss of that data.  All servers should immediately be
+      upgraded to 1.0.4 or greater, all secondaries should be re-synced
+      from an empty state, and any possible internal consistency
+      invariants should be checked. (#433)
+
+    - Fixed a bug that prevented the oplog from getting trimmed properly
+      in certain cases. (#435)
+
+    - Backported fixes for
+      https://jira.mongodb.org/browse/SERVER-10458[SERVER-10458],
+      https://jira.mongodb.org/browse/SERVER-10478[SERVER-10478], and
+      https://jira.mongodb.org/browse/SERVER-10498[SERVER-10498] from
+      upstream.  This brings tokumx current with mongodb 2.2.6. (#436)
+
+
 tokumx 1.0.3
 ------------
 Release date: 2013-07-23
@@ -64,6 +134,29 @@ Bug fixes
       loader. (#295, #296)
 
 
+tokumx 1.0.1
+------------
+Release date: 2013-06-26
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The default compression method is now zlib. (#189)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a bug causing concurrent insertions on different keys in
+      certain (typically nearly-sequential insertion order) scenarios to
+      block.  This should improve the performance of workloads with
+      multiple writers.  (#273)
+
+    - The code that takes distributed locks in a cluster now correctly
+      handles row lock error codes.  This eliminates what were previously
+      rare crashes.  (#249)
+
+
 tokumx 1.0.0
 ------------
 Release date: 2013-06-19
@@ -106,6 +199,12 @@ Bug fixes
       fixed. (#212)
 
     - Calls to db.eval() are now properly profiled. (#16)
+
+
+Miscellaneous
+~~~~~~~~~~~~~
+
+    - The mongoperf tool has been deprecated. (#174)
 
 
 tokumx 1.0.0-rc.0
