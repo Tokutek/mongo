@@ -1401,13 +1401,6 @@ namespace mongo {
                 _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << idxNum) - 1)) |
                                      ((_multiKeyIndexBits >> (idxNum + 1)) << idxNum));
             } else {
-                // theoretically, this should not be needed, as we do all of our fileops
-                // transactionally, but keeping this here just in case at the moment
-                // just in case an orphaned listing there - i.e. should have been repaired but wasn't
-                int n = removeFromSysIndexes(ns, name);
-                if (n) {
-                    log() << "info: removeFromSysIndexes cleaned up " << n << " entries" << endl;
-                }
                 log() << "dropIndexes: " << name << " not found" << endl;
                 errmsg = "index not found";
                 return false;
@@ -1659,15 +1652,18 @@ namespace mongo {
     void removeNamespaceFromCatalog(const StringData& ns) {
         if (ns.find(".system.namespaces") == string::npos) {
             string system_namespaces = cc().database()->name() + ".system.namespaces";
-            _deleteObjects(system_namespaces.c_str(), BSON("name" << ns), false, false);
+            const int n = _deleteObjects(system_namespaces.c_str(),
+                                         BSON("name" << ns), false, false);
+            verify(n == 1);
         }
     }
 
-    int removeFromSysIndexes(const StringData& ns, const StringData& name) {
+    void removeFromSysIndexes(const StringData& ns, const StringData& name) {
         string system_indexes = cc().database()->name() + ".system.indexes";
         BSONObj obj = BSON("ns" << ns << "name" << name);
         TOKULOG(2) << "removeFromSysIndexes removing " << obj << endl;
-        return (int) _deleteObjects(system_indexes.c_str(), obj, false, false);
+        const int n = _deleteObjects(system_indexes.c_str(), obj, false, false);
+        verify(n == 1);
     }
 
     static BSONObj replaceNSField(const BSONObj &obj, const StringData &to) {
