@@ -32,6 +32,7 @@
 #pragma once
 
 #include "mongo/db/jsobj.h"
+#include "mongo/db/auth/user_name.h"
 
 namespace mongo {
 
@@ -52,7 +53,7 @@ namespace mongo {
         /** @return privileged user with this name. This should not block
          *          for long and throw if can't get a lock if needed
          */
-        virtual BSONObj getAdminUser( const string& username ) const = 0;
+        virtual BSONObj getAdminUser(const UserName& username) const = 0;
     };
 
     class NoAdminAccess : public AdminAccess {
@@ -60,7 +61,7 @@ namespace mongo {
         virtual ~NoAdminAccess() { }
 
         virtual bool haveAdminUsers() const { return false; }
-        virtual BSONObj getAdminUser( const string& username ) const { return BSONObj(); }
+        virtual BSONObj getAdminUser(const UserName& username) const { return BSONObj(); }
     };
 
 }  // namespace mongo

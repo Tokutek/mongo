@@ -22,18 +22,20 @@
 
 #include <db.h>
 
-#include "mongo/util/net/miniwebserver.h"
-#include "mongo/util/mongoutils/html.h"
-#include "mongo/util/md5.hpp"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/auth/user_name.h"
 #include "mongo/db/client.h"
-#include "mongo/db/instance.h"
+#include "mongo/db/databaseholder.h"
 #include "mongo/db/dbwebserver.h"
+#include "mongo/db/instance.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/replutil.h"
-#include "mongo/db/clientcursor.h"
-#include "mongo/db/databaseholder.h"
 #include "mongo/db/restapi.h"
 #include "mongo/db/storage_options.h"
+#include "mongo/util/md5.hpp"
+#include "mongo/util/mongoutils/html.h"
+#include "mongo/util/net/miniwebserver.h"
 
 namespace mongo {
 
@@ -248,32 +250,23 @@ namespace mongo {
     } restHandler;
 
     bool RestAdminAccess::haveAdminUsers() const {
-        LOCK_REASON(lockReason, "restapi: getting admin auth credentials");
-        readlocktry rl(10000, lockReason);
-        uassert( 16173 , "couldn't get read lock to get admin auth credentials" , rl.got() );
-        Client::Context cx("admin.system.users", storageGlobalParams.dbpath);
-        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
-
-        BSONObj o;
-        const bool ok = Collection::findOne("admin.system.users", BSONObj(), o);
-        txn.commit();
-        return ok;
+        AuthorizationSession* authzSession = cc().getAuthorizationSession();
+        return authzSession->getAuthorizationManager().hasPrivilegeDocument("admin");
     }
 
-    BSONObj RestAdminAccess::getAdminUser( const string& username ) const {
-        Client::GodScope gs;
-        LOCK_REASON(lockReason, "restapi: checking admin user");
-        readlocktry rl(10000, lockReason);
-        uassert( 16174 , "couldn't get read lock to check admin user" , rl.got() );
-        Client::Context cx( "admin.system.users" );
-        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
-
+    BSONObj RestAdminAccess::getAdminUser(const UserName& username) const {
+        AuthorizationSession* authzSession = cc().getAuthorizationSession();
         BSONObj user;
-        if (Collection::findOne("admin.system.users", BSON("user" << username), user)) {
-            txn.commit();
-            return user.getOwned();
+        Status status = authzSession->getAuthorizationManager().getPrivilegeDocument("admin",
+                                                                                     username,
+                                                                                     &user);
+        if (status.isOK()) {
+            return user;
         }
-        return BSONObj();
+        if (status.code() == ErrorCodes::UserNotFound) {
+            return BSONObj();
+        }
+        uasserted(17050, status.reason());
     }
 
     class LowLevelMongodStatus : public WebStatusPlugin {

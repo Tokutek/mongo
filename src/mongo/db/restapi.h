@@ -19,7 +19,11 @@
 
 #pragma once
 
-#include "../util/admin_access.h"
+#include <string>
+
+#include "mongo/db/auth/user_name.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/util/admin_access.h"
 
 namespace mongo {
 
@@ -28,7 +32,7 @@ namespace mongo {
         virtual ~RestAdminAccess() { }
 
         virtual bool haveAdminUsers() const;
-        virtual BSONObj getAdminUser( const string& username ) const;
+        virtual BSONObj getAdminUser(const UserName& username) const;
     };
 
 } // namespace mongo
