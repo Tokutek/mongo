@@ -933,7 +933,7 @@ namespace mongo {
         computeIndexKeys();
     }
     shared_ptr<NamespaceDetails> NamespaceDetails::make(const BSONObj &serialized, const bool bulkLoad) {
-        const string ns = serialized["ns"].String();
+        const StringData ns = serialized["ns"].Stringdata();
         if (isOplogCollection(ns)) {
             // We may bulk load the oplog since it's an IndexedCollection
             return bulkLoad ? shared_ptr<NamespaceDetails>(new BulkLoadedCollection(serialized)) :
