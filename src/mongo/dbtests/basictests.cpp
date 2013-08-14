@@ -563,24 +563,6 @@ namespace BasicTests {
         }
     };
 
-    class CmdLineParseConfigTest {
-    public:
-        void run() {
-            stringstream ss1;
-            istringstream iss1("");
-            CmdLine::parseConfigFile( iss1, ss1 );
-            stringstream ss2;
-            istringstream iss2("password=\'foo bar baz\'");
-            CmdLine::parseConfigFile( iss2, ss2 );
-            stringstream ss3;
-            istringstream iss3("\t    this = false  \n#that = true\n  #another = whocares\n\n  other = monkeys  ");
-            CmdLine::parseConfigFile( iss3, ss3 );
-
-            ASSERT_EQUALS( ss1.str(), "\n" );
-            ASSERT_EQUALS( ss2.str(), "password=\'foo bar baz\'\n" );
-            ASSERT_EQUALS( ss3.str(), "\n  other = monkeys  \n" );
-        }
-    };
 
     class All : public Suite {
     public:
@@ -615,7 +597,6 @@ namespace BasicTests {
 
             add< HostAndPortTests >();
             add< RelativePathTest >();
-            add< CmdLineParseConfigTest >();
 
         }
     } myall;

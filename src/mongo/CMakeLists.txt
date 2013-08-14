@@ -411,7 +411,7 @@ if (BUILD_TESTING)
       )
   endforeach ()
 
-  target_link_whole_libraries(cmdline_test dbcmdline)
+  target_link_whole_libraries(cmdline_test bson dbcmdline options_parser)
   target_link_whole_libraries(index_set_test bson index_set)
   target_link_whole_libraries(server_parameters_test server_parameters)
 
@@ -601,6 +601,7 @@ endif ()
 add_executable(mongod
   db/db
   db/commands/touch
+  db/mongod_options
   )
 add_dependencies(mongod generate_error_codes generate_action_types install_tdb_h)
 
@@ -685,6 +686,7 @@ target_link_libraries(mongofiles gridfs)
 
 add_executable(mongos
   s/server
+  s/mongos_options
   )
 add_dependencies(mongos generate_error_codes generate_action_types)
 if (NOT APPLE)

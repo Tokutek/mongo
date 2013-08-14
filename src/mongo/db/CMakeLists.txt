@@ -18,10 +18,12 @@ add_dependencies(index_set generate_error_codes generate_action_types)
 
 add_library(dbcmdline STATIC
   cmdline
+  server_options
   )
 target_link_libraries(dbcmdline LINK_PUBLIC
   bson
   server_parameters
+  options_parser
   )
 
 add_library(db_common STATIC
