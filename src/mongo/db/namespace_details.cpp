@@ -1652,7 +1652,6 @@ namespace mongo {
     void removeNamespaceFromCatalog(const StringData& ns) {
         if (ns.find(".system.namespaces") == string::npos) {
             string system_namespaces = cc().database()->name() + ".system.namespaces";
-            log() << "Deleting " << BSON("name" << ns) << " from " << system_namespaces << endl;
             _deleteObjects(system_namespaces.c_str(),
                            BSON("name" << ns), false, false);
         }
