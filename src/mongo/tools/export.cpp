@@ -24,28 +24,44 @@
 #include <fstream>
 #include <iostream>
 
+#include "mongo/base/init.h"
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/json.h"
 #include "mongo/tools/tool.h"
+#include "mongo/tools/tool_options.h"
+#include "mongo/util/options_parser/option_section.h"
+#include "mongo/util/options_parser/options_parser.h"
 
 using namespace mongo;
 
-namespace po = boost::program_options;
+namespace mongo {
+    MONGO_INITIALIZER_GENERAL(ParseStartupConfiguration,
+                              MONGO_NO_PREREQUISITES,
+                              ("default"))(InitializerContext* context) {
+
+        options = moe::OptionSection( "options" );
+        moe::OptionsParser parser;
+
+        Status retStatus = addMongoExportOptions(&options);
+        if (!retStatus.isOK()) {
+            return retStatus;
+        }
+
+        retStatus = parser.run(options, context->args(), context->env(), &_params);
+        if (!retStatus.isOK()) {
+            std::ostringstream oss;
+            oss << retStatus.toString() << "\n";
+            printMongoExportHelp(options, &oss);
+            return Status(ErrorCodes::FailedToParse, oss.str());
+        }
+
+        return Status::OK();
+    }
+} // namespace mongo
 
 class Export : public Tool {
 public:
-    Export() : Tool( "export" ) {
-        addFieldOptions();
-        add_options()
-        ("query,q" , po::value<string>() , "query filter, as a JSON string" )
-        ("csv","export to csv instead of json")
-        ("out,o", po::value<string>(), "output file; if not specified, stdout is used")
-        ("jsonArray", "output to a json array rather than one object per line")
-        ("slaveOk,k", po::value<bool>()->default_value(true) , "use secondaries for export if available, default true")
-        ("forceTableScan", "deprecated" )
-        ;
-        _usesstdout = false;
-    }
+    Export() : Tool( "export" ) { }
 
     virtual void preSetup() {
         if ( hasParam("out") ) {
@@ -59,8 +75,8 @@ public:
         }
     }
 
-    virtual void printExtraHelp( ostream & out ) {
-        out << "Export MongoDB data to CSV, TSV or JSON files.\n" << endl;
+    virtual void printHelp( ostream & out ) {
+        printMongoExportHelp(options, &out);
     }
 
     // Turn every double quote character into two double quote characters

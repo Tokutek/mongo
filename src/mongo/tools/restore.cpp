@@ -21,23 +21,49 @@
 
 #include <boost/filesystem/convenience.hpp>
 #include <boost/filesystem/operations.hpp>
-#include <boost/program_options.hpp>
-#include <boost/scoped_ptr.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/scoped_ptr.hpp>
 #include <fcntl.h>
 #include <fstream>
 #include <set>
 
+#include "mongo/base/init.h"
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/client/remote_loader.h"
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/tools/tool.h"
+#include "mongo/tools/tool_options.h"
+#include "mongo/util/options_parser/option_section.h"
+#include "mongo/util/options_parser/options_parser.h"
 #include "mongo/util/stringutils.h"
 
 using namespace mongo;
 
-namespace po = boost::program_options;
+namespace mongo {
+    MONGO_INITIALIZER_GENERAL(ParseStartupConfiguration,
+                              MONGO_NO_PREREQUISITES,
+                              ("default"))(InitializerContext* context) {
+
+        options = moe::OptionSection( "options" );
+        moe::OptionsParser parser;
+
+        Status retStatus = addMongoRestoreOptions(&options);
+        if (!retStatus.isOK()) {
+            return retStatus;
+        }
+
+        retStatus = parser.run(options, context->args(), context->env(), &_params);
+        if (!retStatus.isOK()) {
+            std::ostringstream oss;
+            oss << retStatus.toString() << "\n";
+            printMongoRestoreHelp(options, &oss);
+            return Status(ErrorCodes::FailedToParse, oss.str());
+        }
+
+        return Status::OK();
+    }
+} // namespace mongo
 
 class Restore : public BSONTool {
 public:
@@ -53,37 +79,13 @@ public:
     set<string> _users; // For restoring users with --drop
 
     std::string _defaultCompression;
-    BytesQuantity<int> _defaultPageSize;
-    BytesQuantity<int> _defaultReadPageSize;
+    int _defaultPageSize;
+    int _defaultReadPageSize;
 
-    Restore() : BSONTool( "restore" ),
-        _drop(false), _restoreOptions(false), _restoreIndexes(false),
-        _w(0), _doBulkLoad(false) {
-        // Default values set here will show up in help text, but will supercede any default value
-        // used when calling getParam below.
-        add_options()
-        ("drop" , "drop each collection before import. RECOMMENDED, since only non-existent collections are eligible for the bulk load optimization.")
-        ("oplogReplay", "deprecated")
-        ("oplogLimit", po::value<string>(), "deprecated")
-        ("keepIndexVersion" , "deprecated")
-        ("noOptionsRestore" , "don't restore collection options")
-        ("noIndexRestore" , "don't restore indexes")
-        ("w" , po::value<int>()->default_value(0) , "minimum number of replicas per write. WARNING, setting w > 1 prevents the bulk load optimization." )
-        ("noLoader", "don't use bulk loader")
-        ("defaultCompression", po::value(&_defaultCompression)->default_value(""), "default compression method to use for collections and indexes (unless otherwise specified in metadata.json)")
-        ("defaultPageSize", po::value(&_defaultPageSize)->default_value(0), "default pageSize value to use for collections and indexes (unless otherwise specified in metadata.json)")
-        ("defaultReadPageSize", po::value(&_defaultReadPageSize)->default_value(0), "default readPageSize value to use for collections and indexes (unless otherwise specified in metadata.json)")
-        ;
-        add_hidden_options()
-        ("dir", po::value<string>()->default_value("dump"), "directory to restore from")
-        ("indexesLast" , "deprecated") // left in for backwards compatibility
-        ;
-        addPositionArg("dir", 1);
-    }
+    Restore() : BSONTool( "restore" ) , _drop(false) { }
 
-    virtual void printExtraHelp(ostream& out) {
-        out << "Import BSON files into MongoDB.\n" << endl;
-        out << "usage: " << _name << " [options] [directory or filename to restore from]" << endl;
+    virtual void printHelp(ostream& out) {
+        printMongoRestoreHelp(options, &out);
     }
 
     virtual int doRun() {
@@ -120,6 +122,16 @@ public:
         }
         if (hasParam( "oplogLimit" )) {
             log() << "warning: --oplogLimit is deprecated in TokuMX" << endl;
+        }
+
+        if (hasParam("defaultCompression")) {
+            _defaultCompression = getParam("defaultCompression");
+        }
+        if (hasParam("defaultPageSize")) {
+            _defaultPageSize = getParam("defaultPageSize", 0);
+        }
+        if (hasParam("defaultReadPageSize")) {
+            _defaultReadPageSize = getParam("defaultReadPageSize", 0);
         }
 
         /* If _db is not "" then the user specified a db name to restore as.
@@ -362,11 +374,11 @@ private:
         if (!compressionSpecified && !_defaultCompression.empty()) {
             newOptsBuilder.append("compression", _defaultCompression);
         }
-        if (!pageSizeSpecified && ((int) _defaultPageSize) != 0) {
-            newOptsBuilder.append("pageSize", (int) _defaultPageSize);
+        if (!pageSizeSpecified && _defaultPageSize != 0) {
+            newOptsBuilder.append("pageSize", _defaultPageSize);
         }
-        if (!readPageSizeSpecified && ((int) _defaultReadPageSize) != 0) {
-            newOptsBuilder.append("readPageSize", (int) _defaultReadPageSize);
+        if (!readPageSizeSpecified && _defaultReadPageSize != 0) {
+            newOptsBuilder.append("readPageSize", _defaultReadPageSize);
         }
         return newOptsBuilder.obj();
     }

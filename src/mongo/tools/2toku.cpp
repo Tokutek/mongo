@@ -24,20 +24,46 @@
 #include <signal.h>
 #include <string.h>
 
-#include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
 #include "mongo/base/error_codes.h"
+#include "mongo/base/init.h"
 #include "mongo/base/string_data.h"
 #include "mongo/client/connpool.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/tools/tool.h"
+#include "mongo/tools/tool_options.h"
+#include "mongo/util/options_parser/option_section.h"
+#include "mongo/util/options_parser/options_parser.h"
 #include "mongo/util/password.h"
 #include "mongo/util/timer.h"
 
 using namespace mongo;
 
-namespace po = boost::program_options;
+namespace mongo {
+    MONGO_INITIALIZER_GENERAL(ParseStartupConfiguration,
+                              MONGO_NO_PREREQUISITES,
+                              ("default"))(InitializerContext* context) {
+
+        options = moe::OptionSection( "options" );
+        moe::OptionsParser parser;
+
+        Status retStatus = addMongo2TokuOptions(&options);
+        if (!retStatus.isOK()) {
+            return retStatus;
+        }
+
+        retStatus = parser.run(options, context->args(), context->env(), &_params);
+        if (!retStatus.isOK()) {
+            std::ostringstream oss;
+            oss << retStatus.toString() << "\n";
+            printMongo2TokuHelp(options, &oss);
+            return Status(ErrorCodes::FailedToParse, oss.str());
+        }
+
+        return Status::OK();
+    }
+} // namespace mongo
 
 static string fmtOpTime(const OpTime &t) {
     stringstream ss;
@@ -286,9 +312,6 @@ class OplogTool : public Tool {
     scoped_ptr<VanillaOplogPlayer> _player;
     string _oplogns;
     string _rpass;
-    string _rauthenticationDatabase;
-    string _rauthenticationMechanism;
-    int _reportingPeriod;
     mutable Timer _reportingTimer;
 
     class CantFindTimestamp {
@@ -327,26 +350,10 @@ public:
     }
     static volatile bool running;
 
-    OplogTool() : Tool("2toku", (DBAccess) (REMOTE_SERVER | LOCAL_SERVER), "admin"), _logAtExit(true), _player(), _reportingTimer() {
-        addFieldOptions();
-        add_options()
-        ("ts" , po::value<string>() , "max OpTime already applied (secs:inc)" )
-        ("from", po::value<string>() , "host to pull from" )
-        ("ruser", po::value<string>(), "username on source host if auth required" )
-        ("rpass", new PasswordValue( &_rpass ), "password on source host" )
-        ("rauthenticationDatabase",
-         po::value<string>(&_rauthenticationDatabase)->default_value("admin"),
-         "user source on source host (defaults to \"admin\")" )
-        ("rauthenticationMechanism",
-         po::value<string>(&_rauthenticationMechanism)->default_value("MONGODB-CR"),
-         "authentication mechanism on source host")
-        ("oplogns", po::value<string>()->default_value( "local.oplog.rs" ) , "ns to pull from" )
-        ("reportingPeriod", po::value<int>(&_reportingPeriod)->default_value(10) , "seconds between progress reports" )
-        ;
-    }
+    OplogTool() : Tool("2toku", "admin"), _logAtExit(true), _player(), _reportingTimer() {}
 
-    virtual void printExtraHelp(ostream& out) {
-        out << "Pull and replay a remote MongoDB oplog.\n" << endl;
+    virtual void printHelp( ostream& out ) {
+        printMongo2TokuHelp(options, &out);
     }
 
     void report() const {
@@ -395,12 +402,12 @@ public:
             }
             try {
                 conn->auth(BSON("user" << getParam("ruser") <<
-                                "userSource" << _rauthenticationDatabase <<
+                                "userSource" << getParam("rauthenticationDatabase") <<
                                 "pwd" << _rpass <<
-                                "mechanism" << _authenticationMechanism));
+                                "mechanism" << getParam("authenticationMechanism")));
             } catch (DBException &e) {
                 if (e.getCode() == ErrorCodes::AuthenticationFailed) {
-                    error() << "error authenticating to " << _rauthenticationDatabase << " on source: "
+                    error() << "error authenticating to " << getParam("rauthenticationDatabase") << " on source: "
                             << e.what() << endl;
                     return false;
                 }
@@ -420,6 +427,13 @@ public:
         }
 
         _oplogns = getParam("oplogns");
+
+        if ( _params.count( "rpass" ) ) {
+            _rpass = _params["rpass"].as<string>();
+            if ( _rpass.empty() ) {
+                _rpass = askPassword();
+            }
+        }
 
         if (currentClient.get() == 0) {
             Client::initThread( "mongo2toku" );
@@ -565,7 +579,7 @@ public:
             }
             _player->flushInserts();
 
-            if (_reportingTimer.seconds() >= _reportingPeriod) {
+            if (_reportingTimer.seconds() >= getParam("reportingPeriod", 10)) {
                 report();
             }
         }
@@ -614,6 +628,8 @@ MONGO_INITIALIZER(setupMongo2TokuSignalHandler)(
     signal(SIGTERM, proc_mgmt::exit_handler);
     signal(SIGUSR1, SIG_IGN);
     signal(SIGUSR2, SIG_IGN);
+
+    return Status::OK();
 }
 
 REGISTER_MONGO_TOOL(OplogTool);
