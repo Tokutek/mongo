@@ -83,7 +83,7 @@ namespace mongo {
 
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
-        b.appendTimestamp("ts", timestamp);
+        b.appendDate("ts", timestamp);
         b.append("h", (long long)hash);
         b.append("a", true);
         b.append("ops", opInfo);
@@ -120,7 +120,7 @@ namespace mongo {
         Lock::DBRead lk1("local");
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
-        b.appendTimestamp("ts", timestamp);
+        b.appendDate("ts", timestamp);
         b.append("h", (long long)hash);
         b.append("a", true);
         b.append("ref", oid);
