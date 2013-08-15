@@ -33,6 +33,7 @@ add_library(authcore STATIC
   authz_manager_external_state
   authz_session_external_state
   privilege
+  privilege_document_parser
   role_graph
   role_name
   user
