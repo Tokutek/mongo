@@ -301,7 +301,6 @@ public:
                 return -1;
             }
 
-            verify(op["ts"].type() == Timestamp);
             opLogStart = op["ts"]._numberLong();
         }
 
