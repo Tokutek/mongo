@@ -8,7 +8,29 @@ Release date: TBD
 General
 ~~~~~~~
 
-    - 
+    - This release introduces background indexing support and a fast bulk
+      loader for `mongoimport` and `mongorestore`.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Background indexing is now supported. (#9, #372)
+
+    - A bulk load API has been introduced (`beginLoad`, `commitLoad`, and
+      `abortLoad` commands) that increases the throughput of initial bulk
+      collection loading.  This API is used automatically by `mongoimport`
+      and `mongorestore` when loading into a non-existent collection or
+      when using the `--drop` option, and is documented in the User's
+      Guide. (#287, #288, #313, #371, #386, #387)
+
+    - Reduced the recovery logging overhead of insert/update/delete
+      workloads. (#10, #370)
+
+    - Improved the reliability of index builds. (#290, #295, #296)
+
+    - Improved the concurrency of certain highly multi-threaded
+      modification workloads. (#342, #343, #358, #432)
 
 
 tokumx 1.0.4
