@@ -481,6 +481,43 @@ namespace mongo {
         return true;
     }
 
+    // DBClientCursor::nextSafe (inside DBClientInterface::findOne) throws exceptions with the code
+    // 13106 and the string "nextSafe(): " concatenated with the BSONObj returned by the query.  We
+    // need to look at this string to figure out the original error code.  This is not ideal, but we
+    // have to deal with the C++ driver's weirdness here.  We use findOne a lot in lock_try so the
+    // right way to handle these types of problems is a construct like the following:
+    //
+    //     catch (UserException &e) {
+    //         if (nextSafeExceptionIsRetryable(e)) {
+    //             conn.done();
+    //             return false;
+    //         }
+    //         throw;
+    //     }
+    static bool nextSafeExceptionIsRetryable(const UserException &e) {
+        int code = e.getCode();
+        if (code == 13106) {
+            // Expected format:
+            // nextSafe(): { $err: "Lock not granted. Try restarting the transaction.", code: 16759 }
+            StringData err = e.what();
+            StringData prefix("nextSafe(): ");
+            if (!err.startsWith(prefix)) {
+                return false;
+            }
+            StringData objStr = err.substr(prefix.size(), string::npos);
+            BSONObj errObj = fromjson(objStr.toString());
+            BSONElement codeElt = errObj["code"];
+            if (!codeElt.ok() || !codeElt.isNumber()) {
+                return false;
+            }
+            long long wrappedCode = codeElt.numberLong();
+            if (wrappedCode == 16759 || wrappedCode == 16760 || wrappedCode == 16768) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Semantics of this method are basically that if the lock cannot be acquired, returns false, can be retried.
     // If the lock should not be tried again (some unexpected error) a LockException is thrown.
     // If we are only trying to re-enter a currently held lock, reenter should be true.
@@ -729,32 +766,9 @@ namespace mongo {
             return false;
         }
         catch (UserException &e) {
-            int code = e.getCode();
-            if (code == 13106) {
-                // DBClientCursor::nextSafe (inside DBClientInterface::findOne) throws exceptions
-                // with the code 13106 and the string "nextSafe(): " concatenated with the BSONObj
-                // returned by the query.  We need to look at this string to figure out the original
-                // error code.  This is not ideal, but we have to deal with the C++ driver's
-                // weirdness here.
-
-                // Expected format:
-                // nextSafe(): { $err: "Lock not granted. Try restarting the transaction.", code: 16759 }
-                StringData err = e.what();
-                StringData prefix("nextSafe(): ");
-                if (!err.startsWith(prefix)) {
-                    throw;
-                }
-                StringData objStr = err.substr(prefix.size(), string::npos);
-                BSONObj errObj = fromjson(objStr.toString());
-                BSONElement codeElt = errObj["code"];
-                if (!codeElt.ok() || !codeElt.isNumber()) {
-                    throw;
-                }
-                long long wrappedCode = codeElt.numberLong();
-                if (wrappedCode == 16759 || wrappedCode == 16760 || wrappedCode == 16768) {
-                    conn.done();
-                    return false;
-                }
+            if (nextSafeExceptionIsRetryable(e)) {
+                conn.done();
+                return false;
             }
             throw;
         }
@@ -890,6 +904,13 @@ namespace mongo {
             conn.done();
             return false;
         }
+        catch (UserException &e) {
+            if (nextSafeExceptionIsRetryable(e)) {
+                conn.done();
+                return false;
+            }
+            throw;
+        }
         catch( std::exception& e ) {
             conn.done();
             throw LockException( str::stream() << "exception creating distributed lock "
@@ -936,6 +957,13 @@ namespace mongo {
             catch (storage::RetryableException) {
                 conn.done();
                 return false;
+            }
+            catch (UserException &e) {
+                if (nextSafeExceptionIsRetryable(e)) {
+                    conn.done();
+                    return false;
+                }
+                throw;
             }
             catch( std::exception& e ) {
                 conn.done();
@@ -1019,6 +1047,17 @@ namespace mongo {
                 LOG( logLvl - 1 ) << "distributed lock '" << lockName << "' unlocked (messily). " << endl;
                 conn.done();
                 break;
+            }
+            catch (storage::RetryableException) {
+                conn.done();
+                continue;
+            }
+            catch (UserException &e) {
+                if (nextSafeExceptionIsRetryable(e)) {
+                    conn.done();
+                    continue;
+                }
+                throw;
             }
             catch ( std::exception& e) {
                 warning() << "distributed lock '" << lockName << "' failed unlock attempt."
