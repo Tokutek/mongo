@@ -129,8 +129,8 @@ namespace {
         ("config,f", po::value<string>(), "configuration file specifying additional options")
         ("verbose,v", "be more verbose (include multiple times for more verbosity e.g. -vvvvv)")
         ("quiet", "quieter output")
-        ("port", po::value<int>(&cmdLine.port), portInfoBuilder.str().c_str())
-        ("bind_ip", po::value<string>(&cmdLine.bind_ip), "comma separated list of ip addresses to listen on - all local ips by default")
+        ("port", po::value<int>(), portInfoBuilder.str().c_str())
+        ("bind_ip", po::value<string>(), "comma separated list of ip addresses to listen on - all local ips by default")
         ("maxConns",po::value<int>(), maxConnInfoBuilder.str().c_str())
         ("logpath", po::value<string>() , "log file to send write to instead of stdout - has to be a file, not directory" )
         ("logappend" , "append to logpath instead of over-writing" )
@@ -155,15 +155,16 @@ namespace {
 #ifdef MONGO_SSL
         ssl_options.add_options()
         ("sslOnNormalPorts" , "use ssl on configured ports" )
-        ("sslPEMKeyFile" , po::value<string>(&cmdLine.sslPEMKeyFile), "PEM file for ssl" )
-        ("sslPEMKeyPassword" , new PasswordValue(&cmdLine.sslPEMKeyPassword) , "PEM file password" )
-        ("sslClusterFile", po::value<string>(&cmdLine.sslClusterFile), 
+        ("sslPEMKeyFile" , po::value<string>(), "PEM file for ssl" )
+        ("sslPEMKeyPassword" , po::value<string>()->implicit_value(""),
+         "PEM file password" )
+        ("sslClusterFile", po::value<string>(),
          "Key file for internal SSL authentication" )
-        ("sslClusterPassword", new PasswordValue(&cmdLine.sslClusterPassword), 
+        ("sslClusterPassword", po::value<string>()->implicit_value(""),
          "Internal authentication key file password" )
-        ("sslCAFile", po::value<std::string>(&cmdLine.sslCAFile), 
+        ("sslCAFile", po::value<std::string>(),
          "Certificate Authority file for SSL")
-        ("sslCRLFile", po::value<std::string>(&cmdLine.sslCRLFile),
+        ("sslCRLFile", po::value<std::string>(),
          "Certificate Revocation List file for SSL")
         ("sslWeakCertificateValidation", "allow client to connect without presenting a certificate")
         ("sslFIPSMode", "activate FIPS 140-2 mode at startup")
@@ -290,8 +291,6 @@ namespace {
                 po::store( po::parse_config_file( ss , all ) , params );
                 f.close();
             }
-
-            po::notify(params);
         }
         catch (po::error &e) {
             cout << "error command line: " << e.what() << endl;
@@ -372,6 +371,25 @@ namespace {
                 logger::globalLogDomain()->setMinimumLoggedSeverity(
                         logger::LogSeverity::Debug(s.length()));
             }
+        }
+
+        if (params.count("enableExperimentalIndexStatsCmd")) {
+            std::cerr << "enableExperimentalIndexStatsCmd unsupported" << std::endl;
+        }
+        if (params.count("enableExperimentalStorageDetailsCmd")) {
+            std::cerr << "enableExperimentalStorageDetailsCmd unsupported" << std::endl;
+        }
+
+        if (params.count("port")) {
+            cmdLine.port = params["port"].as<int>();
+        }
+
+        if (params.count("bind_ip")) {
+            cmdLine.bind_ip = params["bind_ip"].as<std::string>();
+        }
+
+        if (params.count("clusterAuthMode")) {
+            std::cerr << "clusterAuthMode unsupported" << std::endl;
         }
 
         if (params.count("quiet")) {
@@ -516,6 +534,31 @@ namespace {
         }
 
 #ifdef MONGO_SSL
+
+        if (params.count("sslPEMKeyFile")) {
+            cmdLine.sslPEMKeyFile = params["sslPEMKeyFile"].as<string>();
+        }
+
+        if (params.count("sslPEMKeyPassword")) {
+            cmdLine.sslPEMKeyPassword = params["sslPEMKeyPassword"].as<string>();
+        }
+
+        if (params.count("sslClusterFile")) {
+            cmdLine.sslClusterFile = params["sslClusterFile"].as<string>();
+        }
+
+        if (params.count("sslClusterPassword")) {
+            cmdLine.sslClusterPassword = params["sslClusterPassword"].as<string>();
+        }
+
+        if (params.count("sslCAFile")) {
+            cmdLine.sslCAFile = params["sslCAFile"].as<std::string>();
+        }
+
+        if (params.count("sslCRLFile")) {
+            cmdLine.sslCRLFile = params["sslCRLFile"].as<std::string>();
+        }
+
         if (params.count("sslWeakCertificateValidation")) {
             cmdLine.sslWeakCertificateValidation = true;
         }
