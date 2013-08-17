@@ -32,6 +32,9 @@ New features and improvements
     - Improved the concurrency of certain highly multi-threaded
       modification workloads. (#342, #343, #358, #432)
 
+    - Improved the reliability of distributed locks used in
+      sharding. (#451)
+
 
 tokumx 1.0.4
 ------------
