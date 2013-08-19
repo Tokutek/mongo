@@ -133,8 +133,7 @@ namespace mongo {
          * It is possible for one of these to get stolen from a Client, for example, if a cursor needs to persist it between requests.
          */
         class TransactionStack : boost::noncopyable {
-            // If we had emplace we wouldn't need a shared_ptr...
-            std::stack<shared_ptr<TxnContext> > _txns;
+            std::deque<shared_ptr<TxnContext> > _txns;
           public:
             TransactionStack() {}
             ~TransactionStack() {
@@ -157,6 +156,8 @@ namespace mongo {
             bool hasLiveTxn() const;
             /** @return the innermost transaction. */
             TxnContext &txn() const;
+            /** @return the outermost transaction. */
+            TxnContext &rootTxn() const;
         };
 
         /**
@@ -193,6 +194,11 @@ namespace mongo {
                 return false;
             }
             return _transactions->hasLiveTxn();
+        }
+
+        long long rootTransactionId() const {
+            dassert(hasTxn());
+            return _transactions->rootTxn().id64();
         }
 
         const shared_ptr<TransactionStack> &txnStack() const {

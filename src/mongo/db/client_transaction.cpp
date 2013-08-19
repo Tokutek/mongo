@@ -33,14 +33,14 @@ namespace mongo {
                                           ? &txn()
                                           : NULL);
         shared_ptr<TxnContext> newTxn(new TxnContext(currentTxn, flags));
-        _txns.push(newTxn);
+        _txns.push_back(newTxn);
     }
 
     void Client::TransactionStack::commitTxn(int flags) {
         DEV { LOG(3) << "commit transaction(" << _txns.size() - 1 << ") " << flags << endl; }
-        shared_ptr<TxnContext> txn_to_commit = _txns.top();
+        shared_ptr<TxnContext> txn_to_commit = _txns.back();
         txn_to_commit->commit(flags);
-        _txns.pop();
+        _txns.pop_back();
     }
 
     void Client::TransactionStack::commitTxn() {
@@ -50,8 +50,8 @@ namespace mongo {
 
     void Client::TransactionStack::abortTxn() {
         DEV { LOG(3) << "abort transaction(" << _txns.size() - 1 << ")" << endl; }
-        _txns.top()->abort();
-        _txns.pop();
+        _txns.back()->abort();
+        _txns.pop_back();
     }
     uint32_t Client::TransactionStack::numLiveTxns() {
         return _txns.size();
@@ -69,7 +69,12 @@ namespace mongo {
 
     TxnContext &Client::TransactionStack::txn() const {
         dassert(!_txns.empty());
-        return *(_txns.top());
+        return *(_txns.back());
+    }
+
+    TxnContext &Client::TransactionStack::rootTxn() const {
+        dassert(!_txns.empty());
+        return *(_txns.front());
     }
 
     Client::Transaction::Transaction(int flags) {
