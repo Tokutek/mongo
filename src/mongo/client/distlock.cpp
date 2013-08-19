@@ -553,6 +553,11 @@ namespace mongo {
         queryBuilder.appendElements( _id );
         queryBuilder.append( "state" , 0 );
 
+        // We're going to make sure all modifications happen in a transaction so that if something
+        // fails on one of the config servers, it'll get rolled back on all of the config servers.
+        // We have to call rtxn.abort() before conn.done() in all cases below.
+        RemoteTransaction rtxn(conn.conn());
+
         try {
             // make sure its there so we can use simple update logic below
             BSONObj o = conn->findOne( locksNS , _id ).getOwned();
@@ -583,6 +588,7 @@ namespace mongo {
                     // reset since we've been bounced by a previous lock not being where we thought it was,
                     // and should go through full forcing process if required.
                     // (in theory we should never see a ping here if used correctly)
+                    rtxn.abort();
                     *other = o; other->getOwned(); conn.done(); resetLastPing();
                     return false;
                 }
@@ -636,11 +642,13 @@ namespace mongo {
 
                 if ( elapsed <= takeover && ! canReenter ) {
                     LOG( logLvl ) << "could not force lock '" << lockName << "' because elapsed time " << elapsed << " <= takeover time " << takeover << endl;
+                    rtxn.abort();
                     *other = o; other->getOwned(); conn.done();
                     return false;
                 }
                 else if( elapsed > takeover && canReenter ) {
                     LOG( logLvl - 1 ) << "not re-entering distributed lock " << lockName << "' because elapsed time " << elapsed << " > takeover time " << takeover << endl;
+                    rtxn.abort();
                     *other = o; other->getOwned(); conn.done();
                     return false;
                 }
@@ -676,6 +684,7 @@ namespace mongo {
                         if ( !errMsg.empty() || !err["n"].type() || err["n"].numberInt() < 1 ) {
                             ( errMsg.empty() ? LOG( logLvl - 1 ) : warning() ) << "Could not force lock '" << lockName << "' "
                                     << ( !errMsg.empty() ? causedBy(errMsg) : string("(another force won)") ) << endl;
+                            rtxn.abort();
                             *other = o; other->getOwned(); conn.done();
                             return false;
                         }
@@ -687,10 +696,12 @@ namespace mongo {
                         warning() << "lock forcing " << lockName << " inconsistent" << endl;
                     }
                     catch (storage::RetryableException) {
+                        rtxn.abort();
                         conn.done();
                         return false;
                     }
                     catch( std::exception& e ) {
+                        rtxn.abort();
                         conn.done();
                         throw LockException( str::stream() << "exception forcing distributed lock "
                                              << lockName << causedBy( e ), 13660);
@@ -724,6 +735,7 @@ namespace mongo {
                                                                                << ( !errMsg.empty() ? causedBy(errMsg) : string("(not sure lock is held)") ) 
                                                                                << " gle: " << err
                                                                                << endl;
+                            rtxn.abort();
                             *other = o; other->getOwned(); conn.done();
                             return false;
                         }
@@ -732,19 +744,24 @@ namespace mongo {
                     catch( UpdateNotTheSame& ) {
                         // NOT ok to continue since our lock isn't held by all servers, so isn't valid.
                         warning() << "inconsistent state re-entering lock, lock " << lockName << " not held" << endl;
+                        rtxn.abort();
                         *other = o; other->getOwned(); conn.done();
                         return false;
                     }
                     catch (storage::RetryableException) {
+                        rtxn.abort();
                         conn.done();
                         return false;
                     }
                     catch( std::exception& e ) {
+                        rtxn.abort();
                         conn.done();
                         throw LockException( str::stream() << "exception re-entering distributed lock "
                                              << lockName << causedBy( e ), 13660);
                     }
 
+                    bool ok = rtxn.commit();
+                    verify(ok);
                     LOG( logLvl - 1 ) << "re-entered distributed lock '" << lockName << "'" << endl;
                     *other = o.getOwned(); 
                     conn.done();
@@ -762,11 +779,13 @@ namespace mongo {
             }
         }
         catch (storage::RetryableException) {
+            rtxn.abort();
             conn.done();
             return false;
         }
         catch (UserException &e) {
             if (nextSafeExceptionIsRetryable(e)) {
+                rtxn.abort();
                 conn.done();
                 return false;
             }
@@ -863,10 +882,12 @@ namespace mongo {
 
                 }
                 catch (storage::RetryableException) {
+                    rtxn.abort();
                     conn.done();
                     return false;
                 }
                 catch( std::exception& e ) {
+                    rtxn.abort();
                     conn.done();
                     throw LockException( str::stream() << "distributed lock " << lockName
                                          << " had errors communicating with individual server "
@@ -901,11 +922,13 @@ namespace mongo {
             }
         }
         catch (storage::RetryableException) {
+            rtxn.abort();
             conn.done();
             return false;
         }
         catch (UserException &e) {
             if (nextSafeExceptionIsRetryable(e)) {
+                rtxn.abort();
                 conn.done();
                 return false;
             }
@@ -914,6 +937,7 @@ namespace mongo {
             throw;
         }
         catch( std::exception& e ) {
+            rtxn.abort();
             conn.done();
             throw LockException( str::stream() << "exception creating distributed lock "
                                  << lockName << causedBy( e ), 13663 );
@@ -951,23 +975,28 @@ namespace mongo {
                     gotLock = false;
                 }
                 else {
+                    bool ok = rtxn.commit();
+                    verify(ok);
                     // SUCCESS!
                     gotLock = true;
                 }
 
             }
             catch (storage::RetryableException) {
+                rtxn.abort();
                 conn.done();
                 return false;
             }
             catch (UserException &e) {
                 if (nextSafeExceptionIsRetryable(e)) {
+                    rtxn.abort();
                     conn.done();
                     return false;
                 }
                 throw;
             }
             catch( std::exception& e ) {
+                rtxn.abort();
                 conn.done();
 
                 // Register the bad final lock for deletion, in case it exists
@@ -1014,6 +1043,8 @@ namespace mongo {
                     ScopedDbConnection::getInternalScopedDbConnection( _conn.toString() ) );
             ScopedDbConnection& conn = *connPtr;
 
+            RemoteTransaction rtxn(conn.conn());
+
             try {
 
                 if( oldLock.isEmpty() )
@@ -1021,6 +1052,7 @@ namespace mongo {
 
                 if( oldLock["state"].eoo() || oldLock["state"].numberInt() != 2 || oldLock["ts"].eoo() ) {
                     warning() << "cannot unlock invalid distributed lock " << oldLock << endl;
+                    rtxn.abort();
                     conn.done();
                     break;
                 }
@@ -1037,25 +1069,30 @@ namespace mongo {
                 if ( !errMsg.empty() || !err["n"].type() || err["n"].numberInt() < 1 ){
                     warning() << "distributed lock unlock update failed, retrying "
                               << ( errMsg.empty() ? causedBy( "( update not registered )" ) : causedBy( errMsg ) ) << endl;
+                    rtxn.abort();
                     conn.done();
                     continue;
                 }
 
                 LOG( logLvl - 1 ) << "distributed lock '" << lockName << "' unlocked. " << endl;
+                rtxn.commit();
                 conn.done();
                 return;
             }
             catch( UpdateNotTheSame& ) {
                 LOG( logLvl - 1 ) << "distributed lock '" << lockName << "' unlocked (messily). " << endl;
+                rtxn.commit();
                 conn.done();
                 break;
             }
             catch (storage::RetryableException) {
+                rtxn.abort();
                 conn.done();
                 continue;
             }
             catch (UserException &e) {
                 if (nextSafeExceptionIsRetryable(e)) {
+                    rtxn.abort();
                     conn.done();
                     continue;
                 }
@@ -1065,6 +1102,7 @@ namespace mongo {
                 warning() << "distributed lock '" << lockName << "' failed unlock attempt."
                           << causedBy( e ) <<  endl;
 
+                rtxn.abort();
                 conn.done();
                 // TODO:  If our lock timeout is small, sleeping this long may be unsafe.
                 if( attempted != maxAttempts) sleepsecs(1 << attempted);
