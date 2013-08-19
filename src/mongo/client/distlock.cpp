@@ -23,6 +23,7 @@
 #include <boost/thread/thread.hpp>
 
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/client/remote_transaction.h"
 #include "mongo/db/storage/exception.h"
 
 namespace mongo {
