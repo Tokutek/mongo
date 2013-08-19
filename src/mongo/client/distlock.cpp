@@ -909,6 +909,8 @@ namespace mongo {
                 conn.done();
                 return false;
             }
+            LOG(0) << "DISTLOCK ERROR: " << e.getCode() << ": " << e.what() << endl
+                   << "didn't detect a retryable exception, rethrowing now." << endl;
             throw;
         }
         catch( std::exception& e ) {
