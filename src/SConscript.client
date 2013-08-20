@@ -36,6 +36,7 @@ clientSource = [
     'mongo/client/distlock.cpp',
     'mongo/client/gridfs.cpp',
     'mongo/client/model.cpp',
+    'mongo/client/remote_loader.cpp',
     'mongo/client/remote_transaction.cpp',
     'mongo/client/syncclusterconnection.cpp',
     'mongo/db/jsobj.cpp',
