@@ -19,6 +19,7 @@
 #pragma once
 
 #include <boost/cstdint.hpp>
+#include <stdint.h> // uint32_t with glibc 2.18
 #include <string.h> // strlen
 #include <string>
 #include <vector>
