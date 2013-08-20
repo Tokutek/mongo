@@ -197,7 +197,9 @@ namespace mongo {
         }
 
         long long rootTransactionId() const {
-            dassert(hasTxn());
+            if (!hasTxn()) {
+                return 0;
+            }
             return _transactions->rootTxn().id64();
         }
 
