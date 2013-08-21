@@ -38,9 +38,9 @@ namespace mongo {
 
     void Client::TransactionStack::commitTxn(int flags) {
         DEV { LOG(3) << "commit transaction(" << _txns.size() - 1 << ") " << flags << endl; }
-        shared_ptr<TxnContext> txn_to_commit = _txns.top();
-        txn_to_commit->commit(flags);
+        shared_ptr<TxnContext> txnToCommit = _txns.top();
         _txns.pop();
+        txnToCommit->commit(flags);
     }
 
     void Client::TransactionStack::commitTxn() {
@@ -50,8 +50,9 @@ namespace mongo {
 
     void Client::TransactionStack::abortTxn() {
         DEV { LOG(3) << "abort transaction(" << _txns.size() - 1 << ")" << endl; }
-        _txns.top()->abort();
+        shared_ptr<TxnContext> txnToAbort = _txns.top();
         _txns.pop();
+        txnToAbort->abort();
     }
     uint32_t Client::TransactionStack::numLiveTxns() {
         return _txns.size();
