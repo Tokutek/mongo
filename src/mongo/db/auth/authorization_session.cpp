@@ -126,6 +126,18 @@ namespace {
                                     principal->getName()).isOK());
     }
 
+    std::string AuthorizationSession::getAuthenticatedPrincipalNamesToken() {
+        std::string ret;
+        for (PrincipalSet::NameIterator nameIter = getAuthenticatedPrincipalNames();
+                nameIter.more();
+                nameIter.next()) {
+            ret += '\0'; // Using a NUL byte which isn't valid in usernames to separate them.
+            ret += nameIter->getFullName();
+        }
+
+        return ret;
+    }
+
     bool AuthorizationSession::hasInternalAuthorization() {
         ActionSet allActions;
         allActions.addAllActions();

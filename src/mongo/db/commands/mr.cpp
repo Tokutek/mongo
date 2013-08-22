@@ -24,7 +24,7 @@
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/parallel.h"
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
