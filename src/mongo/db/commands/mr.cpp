@@ -21,6 +21,8 @@
 #include "mongo/client/connpool.h"
 #include "mongo/client/parallel.h"
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/db.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/matcher.h"
