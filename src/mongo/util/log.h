@@ -119,7 +119,6 @@ namespace logger {
 
     inline LogstreamBuilder problem() {
         std::string curns = getcurns();
-        curns.push_back(' ');
         return log().setBaseMessage(curns);
     }
 
