@@ -71,9 +71,13 @@ namespace mongo {
 
 
     Status AuthzManagerExternalStateMock::_findUser(const std::string& usersNamespace,
-                           const BSONObj& query,
-                           BSONObj* result) const {
-        Matcher matcher(query);
+                                                    const BSONObj& query,
+                                                    BSONObj* result) const {
+        StatusWithMatchExpression parseResult = MatchExpressionParser::parse(query);
+        if (!parseResult.isOK()) {
+            return parseResult.getStatus();
+        }
+        MatchExpression* matcher = parseResult.getValue();
 
         unordered_map<std::string, std::vector<BSONObj> >::const_iterator mapIt;
         for (mapIt = _userDocuments.begin(); mapIt != _userDocuments.end(); ++mapIt) {

@@ -2129,18 +2129,16 @@ namespace mongo {
     BSONObj oldSystemUsersKeyPattern;
     BSONObj extendedSystemUsersKeyPattern;
     std::string extendedSystemUsersIndexName;
-    namespace {
-        MONGO_INITIALIZER(AuthIndexKeyPatterns)(InitializerContext*) {
-            oldSystemUsersKeyPattern = BSON(AuthorizationManager::USER_NAME_FIELD_NAME << 1);
-            extendedSystemUsersKeyPattern = BSON(AuthorizationManager::USER_NAME_FIELD_NAME << 1 <<
-                                                 AuthorizationManager::USER_SOURCE_FIELD_NAME << 1);
-            extendedSystemUsersIndexName = std::string(str::stream() <<
-                                                       AuthorizationManager::USER_NAME_FIELD_NAME <<
-                                                       "_1_" <<
-                                                       AuthorizationManager::USER_SOURCE_FIELD_NAME <<
-                                                       "_1");
-            return Status::OK();
-        }
+
+    MONGO_INITIALIZER(AuthIndexKeyPatterns)(InitializerContext*) {
+        oldSystemUsersKeyPattern = BSON(AuthorizationManager::V1_USER_NAME_FIELD_NAME << 1);
+        extendedSystemUsersKeyPattern = BSON(AuthorizationManager::V1_USER_NAME_FIELD_NAME << 1 <<
+                                             AuthorizationManager::V1_USER_SOURCE_FIELD_NAME << 1);
+        extendedSystemUsersIndexName = std::string(
+                str::stream() <<
+                        AuthorizationManager::V1_USER_NAME_FIELD_NAME << "_1_" <<
+                        AuthorizationManager::V1_USER_SOURCE_FIELD_NAME << "_1");
+        return Status::OK();
     }
 
     BSONObj SystemUsersCollection::extendedSystemUsersIndexInfo(const StringData &ns) {
