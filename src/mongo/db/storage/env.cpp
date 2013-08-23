@@ -224,12 +224,14 @@ namespace mongo {
             TOKULOG(1) << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
 
             // Use 10% the size of the cachetable for lock tree memory
-            const uint64_t lock_memory = cachesize / 10;
+            // if no value was specified on the command line.
+            const uint64_t lock_memory = cmdLine.locktreeMaxMemory > 0 ?
+                                         cmdLine.locktreeMaxMemory : (cachesize / 10);
             r = env->set_lk_max_memory(env, lock_memory);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            tokulog() << "locktree max memory set to " << lock_memory << " bytes." << endl;
+            TOKULOG(1) << "locktree max memory set to " << lock_memory << " bytes." << endl;
 
             const uint64_t lock_timeout = cmdLine.lockTimeout;
             r = env->set_lock_timeout(env, lock_timeout);

@@ -507,6 +507,7 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     ("journalOptions", po::value<int>(), "DEPRECATED")
     ("jsonp","allow JSONP access via http (has security implications)")
     ("lockTimeout", po::value<uint64_t>(), "tokumx row lock wait timeout (in ms), 0 means wait as long as necessary")
+    ("locktreeMaxMemory", po::value<uint64_t>(), "tokumx memory limit (in bytes) for storing transactions' row locks.")
     ("noauth", "run without security")
     ("nohttpinterface", "disable http interface")
     ("nojournal", "DEPRECATED)")
@@ -722,6 +723,9 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
         if (params.count("cacheSize")) {
             cmdLine.cacheSize = params["cacheSize"].as<uint64_t>();
         }
+        if (params.count("locktreeMaxMemory")) {
+            cmdLine.locktreeMaxMemory = params["locktreeMaxMemory"].as<uint64_t>();
+        }
         if (params.count("fsRedzone")) {
             cmdLine.fsRedzone = params["fsRedzone"].as<int>();
             if (cmdLine.fsRedzone < 1 || cmdLine.fsRedzone > 99) {
@@ -856,6 +860,13 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
             long x = params["cacheSize"].as<uint64_t>();
             if (x <= 0) {
                 out() << "bad --cacheSize arg" << endl;
+                dbexit( EXIT_BADOPTIONS );
+            }
+        }
+        if (params.count("locktreeMaxMemory")) {
+            long x = params["locktreeMaxMemory"].as<uint64_t>();
+            if (x < 65536) {
+                out() << "bad --locktreeMaxMemory arg (should never be less than 64kb)" << endl;
                 dbexit( EXIT_BADOPTIONS );
             }
         }
