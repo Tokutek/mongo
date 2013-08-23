@@ -81,7 +81,9 @@ add_library(authmocks STATIC
   )
 add_dependencies(authmocks generate_error_codes generate_action_types)
 target_link_libraries(authmocks
-  coredb
+  ## TODO: use update driver in authmocks once it's merged
+  # update_driver
+  expressions
   )
 
 install(FILES generate_action_types.py action_types.txt

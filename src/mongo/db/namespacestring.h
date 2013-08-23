@@ -97,6 +97,8 @@ namespace mongo {
         bool operator!=( const char* nsIn ) const { return (string)nsIn != ns(); }
         bool operator!=( const NamespaceString& nsIn ) const { return nsIn.db != db || nsIn.coll != coll; }
 
+        bool operator<( const NamespaceString& rhs ) const { return ns() < rhs.ns(); }
+
         size_t size() const { return ns().size(); }
 
         string toString() const { return ns(); }
