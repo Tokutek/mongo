@@ -1,6 +1,22 @@
 tokumx news
 ===========
 
+tokumx 1.1.1
+------------
+Release date: 2013-08-23
+
+General
+~~~~~~~
+
+    - This release fixes a memory leak introduced in 1.1.0
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a memory leak in insert/update/delete workloads.  #465
+
+
 tokumx 1.1.0
 ------------
 Release date: 2013-08-21
