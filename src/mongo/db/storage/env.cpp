@@ -620,6 +620,8 @@ namespace mongo {
             switch (error) {
                 case ENOENT:
                     throw SystemException::Enoent();
+                case ENAMETOOLONG:
+                    throw UserException(16917, "Index name too long (must be shorter than the filesystem's max path)");
                 case ASSERT_IDS::AmbiguousFieldNames:
                     uasserted( storage::ASSERT_IDS::AmbiguousFieldNames,
                                mongoutils::str::stream() << "Ambiguous field name found in array" );
