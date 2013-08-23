@@ -1089,7 +1089,7 @@ namespace mongo {
     // TODO: Cache two of these in the client object so they're not created/destroyed
     //       every time a connection/transaction does a single write. (multi inserts,
     //       updates, deletes should come to mind)
-    class DBTArraysHolder {
+    class DBTArraysHolder : boost::noncopyable {
     public:
         DBTArraysHolder(DBT_ARRAY *dbt_arrays, const size_t n) :
             _dbt_arrays(dbt_arrays),
@@ -1105,6 +1105,10 @@ namespace mongo {
                         free(dbt->data);
                         dbt->data = NULL;
                     }
+                }
+                if (dbt_array->dbts != NULL) {
+                    free(dbt_array->dbts);
+                    dbt_array->dbts = NULL;
                 }
             }
         }
