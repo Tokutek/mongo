@@ -78,7 +78,22 @@ namespace mongo {
          * Returns a copy of the full dotted field in its current state (i.e., some parts may
          * have been replaced since the parse() call).
          */
+<<<<<<< HEAD
         std::string dottedField() const;
+=======
+        StringData dottedField( size_t offsetFromStart = 0 ) const;
+
+        /**
+         * Compares the full dotted path represented by this FieldRef to other
+         */
+        bool equalsDottedField( const StringData& other ) const;
+
+        /**
+         * Return 0 if 'this' is equal to 'other' lexicographically, -1 if is it less than or
+         * +1 if it is greater than.
+         */
+        int compare( const FieldRef& other ) const;
+>>>>>>> 4616eae... SERVER-10159 Re-serialize and cache dotted form in FieldRef on request
 
         /**
          * Resets the internal state. See note in parse() call.
@@ -93,12 +108,6 @@ namespace mongo {
          * Returns the number of parts in this FieldRef.
          */
         size_t numParts() const { return _size; }
-
-        /**
-         * Returns the number of fields parts that were replaced so far. Replacing the same
-         * fields several times only counts for 1.
-         */
-        size_t numReplaced() const;
 
     private:
         // Dotted fields are most often not longer than three parts. We use a mixed structure
@@ -124,6 +133,32 @@ namespace mongo {
          */
         size_t appendPart(const StringData& part);
 
+<<<<<<< HEAD
+=======
+        /**
+         * Re-assemble _dotted from components, including any replacements in _replacements,
+         * and update the StringData components in _fixed and _variable to refer to the parts
+         * of the new _dotted. This is used to make the storage for the current value of this
+         * FieldRef contiguous so it can be returned as a StringData from the dottedField
+         * method above.
+         */
+        void reserialize() const;
+
+        // number of field parts stored
+        size_t _size;
+
+        // first kResevedAhead field components
+        mutable StringData _fixed[kReserveAhead];
+
+         // remaining field components
+        mutable std::vector<StringData> _variable;
+
+        // cached dotted name
+        mutable std::string _dotted;
+
+        // back memory added with the setPart call pointed to by _fized and _variable
+        mutable std::vector<std::string> _replacements;
+>>>>>>> 4616eae... SERVER-10159 Re-serialize and cache dotted form in FieldRef on request
     };
 
 } // namespace mongo
