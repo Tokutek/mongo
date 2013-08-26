@@ -126,6 +126,7 @@ namespace mongo {
         int fsRedzone;
         string logDir;
         string tmpDir;
+        string gdbPath;
         uint64_t txnMemLimit;
 
         string pluginsDir;
@@ -165,7 +166,7 @@ namespace mongo {
         slowMS(100), defaultLocalThresholdMillis(15), moveParanoia( true ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"),
         directio(false), cacheSize(0), locktreeMaxMemory(0), checkpointPeriod(60), cleanerPeriod(2),
-        cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""),
+        cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""), gdbPath(""),
         txnMemLimit(1ULL<<20), pluginsDir(), plugins()
     {
         started = time(0);

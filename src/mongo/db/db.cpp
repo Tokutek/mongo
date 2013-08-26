@@ -497,7 +497,8 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
     ("logDir", po::value<string>(), "directory to store transaction log files (default is --dbpath)")
     ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
-    ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers")
+    ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers (development use only).")
+    ("gdbPath", po::value<string>(), "if specified, debugging information will be gathered on fatal error by launching gdb at the given path")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
     ("journalCommitInterval", po::value<uint32_t>(), "how often to fsync recovery log (same as logFlushPeriod)")
@@ -752,6 +753,9 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
                 // so '/' is safe
                 cmdLine.tmpDir = cmdLine.cwd + "/" + cmdLine.tmpDir;
             }
+        }
+        if (params.count("gdbPath")) {
+            cmdLine.gdbPath = params["gdbPath"].as<string>();
         }
         if (params.count("txnMemLimit")) {
             cmdLine.txnMemLimit = params["txnMemLimit"].as<uint64_t>();
@@ -1028,16 +1032,15 @@ namespace mongo {
         ossSig << "Got signal: " << x << " (" << strsignal( x ) << ")." << endl;
         rawOut( ossSig.str() );
 
-        /*
-        ostringstream ossOp;
-        ossOp << "Last op: " << currentOp.infoNoauth() << endl;
-        rawOut( ossOp.str() );
-        */
-
         ostringstream oss;
         oss << "Backtrace:" << endl;
         printStackTrace( oss );
         rawOut( oss.str() );
+
+        // Try to get even more information if gdbPath was set to a gdb executable.
+        if (cmdLine.gdbPath != "") {
+            db_env_try_gdb_stack_trace(cmdLine.gdbPath.c_str());
+        }
 
         // Reinstall default signal handler, to generate core if necessary.
         signal(x, SIG_DFL);
