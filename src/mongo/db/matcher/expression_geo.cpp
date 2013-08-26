@@ -39,7 +39,13 @@ namespace mongo {
 
     void GeoMatchExpression::debugString( StringBuilder& debug, int level ) const {
         _debugAddSpace( debug, level );
-        debug << "GEO\n";
+        debug << "GEO";
+        MatchExpression::TagData* td = getTag();
+        if (NULL != td) {
+            debug << " ";
+            td->debugString(&debug);
+        }
+        debug << "\n";
     }
 
     bool GeoMatchExpression::equivalent( const MatchExpression* other ) const {
@@ -62,4 +68,53 @@ namespace mongo {
         return next;
     }
 
+<<<<<<< HEAD
+=======
+    //
+    // Parse-only geo expressions: geoNear (formerly known as near).
+    //
+
+    Status GeoNearMatchExpression::init( const StringData& path, const NearQuery& query ) {
+        _query = query;
+        return initPath( path );
+    }
+
+    bool GeoNearMatchExpression::matchesSingleElement( const BSONElement& e ) const {
+        // This shouldn't be called.
+        verify(0);
+        return false;
+    }
+
+    void GeoNearMatchExpression::debugString( StringBuilder& debug, int level ) const {
+        _debugAddSpace( debug, level );
+        debug << "GEONEAR";
+        MatchExpression::TagData* td = getTag();
+        if (NULL != td) {
+            debug << " ";
+            td->debugString(&debug);
+        }
+        debug << "\n";
+    }
+
+    bool GeoNearMatchExpression::equivalent( const MatchExpression* other ) const {
+        if ( matchType() != other->matchType() )
+            return false;
+
+        const GeoNearMatchExpression* realOther = static_cast<const GeoNearMatchExpression*>(other);
+
+        if ( path() != realOther->path() )
+            return false;
+
+        // TODO:
+        // return _query == realOther->_query;
+        return false;
+    }
+
+    LeafMatchExpression* GeoNearMatchExpression::shallowClone() const {
+        GeoNearMatchExpression* next = new GeoNearMatchExpression();
+        next->init( path(), _query );
+        return next;
+    }
+
+>>>>>>> 399c4e2... SERVER-10026 SERVER-10471 begin more sustainable planning approach
 }
