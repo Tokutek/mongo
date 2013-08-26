@@ -333,7 +333,7 @@ namespace mongo {
     class MultiKeyTracker : boost::noncopyable {
     public:
         MultiKeyTracker(DB *db) :
-            _db(db) {
+            _db(db), _multiKey(false) {
             _db->app_private = &_multiKey;
         }
         ~MultiKeyTracker() {
