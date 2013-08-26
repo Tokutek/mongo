@@ -333,6 +333,11 @@ namespace mongo {
                 // create the inc collection and make sure we have index on "0" key
                 _db.dropCollection( _config.incLong );
                 {
+                    // Creating a collection must be done in a child transaction,
+                    // which aborts if the create fails.
+                    // If the create fails, the child's abort hooks will clean up
+                    // the nsindex inside mongod (therefore not leaving a
+                    Client::Transaction transaction(0);
                     Client::WriteContext ctx( _config.incLong );
                     string err;
                     // Specifying { natural : 1 } creates a "natural order" collection,
@@ -342,6 +347,7 @@ namespace mongo {
                     if ( ! userCreateNS( _config.incLong.c_str() , BSON( "natural" << 1 << "temp" << true ) , err , true ) ) {
                         uasserted( 13631 , str::stream() << "userCreateNS failed for mr incLong ns: " << _config.incLong << " err: " << err );
                     }
+                    transaction.commit();
                 }
 
                 BSONObj sortKey = BSON( "0" << 1 );
@@ -351,11 +357,14 @@ namespace mongo {
             // create temp collection
             _db.dropCollection( _config.tempLong );
             {
+                // See above for why userCreateNS must be called in its own child transaction.
+                Client::Transaction transaction(0);
                 Client::WriteContext ctx( _config.tempLong.c_str() );
                 string errmsg;
                 if ( ! userCreateNS( _config.tempLong.c_str() , BSON("temp" << true) , errmsg , true ) ) {
                     uasserted( 13630 , str::stream() << "userCreateNS failed for mr tempLong ns: " << _config.tempLong << " err: " << errmsg );
                 }
+                transaction.commit();
             }
 
             {
