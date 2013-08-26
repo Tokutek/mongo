@@ -112,6 +112,7 @@ quiet = False
 _debug = False
 
 all_test_results = []
+report_file = None
 
 # This class just implements the with statement API, for a sneaky
 # purpose below.
@@ -132,7 +133,6 @@ def buildlogger(cmd, is_global=False):
         else:
             return [utils.find_python(), 'buildscripts/buildlogger.py'] + cmd
     return cmd
-
 
 class mongod(object):
     def __init__(self, **kwargs):
@@ -375,8 +375,8 @@ class TestFailure(Exception):
 class TestExitFailure(TestFailure):
     def __init__(self, *args):
         self.path = args[0]
-
         self.status=args[1]
+
     def __str__(self):
         return "test %s exited with status %d" % (self.path, self.status)
 
@@ -492,7 +492,9 @@ def skipTest(path):
 
     return False
 
-def runTest(test, testnum):
+def runTest(test, testnum, result):
+    # result is a map containing test result details, like result["url"]
+
     # test is a tuple of ( filename , usedb<bool> )
     # filename should be a js file to run
     # usedb is true if the test expects a mongod to be running
@@ -638,6 +640,9 @@ def runTest(test, testnum):
                     for line in tempfile:
                         tlog.write(line)
                     tlog.flush()
+
+        result["exit_code"] = r
+
         if r != 0:
             raise TestExitFailure(path, r)
     finally:
@@ -709,24 +714,31 @@ def run_tests(tests):
             if quiet:
                 sys.stdout.write('1..%d\n' % len(tests))
             for tests_run, test in enumerate(tests):
-                test_result = { "test": test[0], "start": time.time() }
+                test_result = { "start": time.time() }
+
+                if test[0].startswith(mongo_repo + os.path.sep):
+                    test_result["test_file"] = test[0][len(mongo_repo)+1:]
+                else:
+                    # user could specify a file not in repo. leave it alone.
+                    test_result["test_file"] = test[0]
+
                 try:
                     fails.append(test)
-                    runTest(test, tests_run + 1)
+                    runTest(test, tests_run + 1, test_result)
                     fails.pop()
                     winners.append(test)
 
-                    test_result["passed"] = True
                     test_result["end"] = time.time()
+                    test_result["status"] = "pass"
                     all_test_results.append( test_result )
 
                     if small_oplog or small_oplog_rs:
                         master.wait_for_repl()
 
                 except TestFailure, f:
-                    test_result["passed"] = False
                     test_result["end"] = time.time()
                     test_result["error"] = str(f)
+                    test_result["status"] = "fail"
                     all_test_results.append( test_result )
                     try:
                         if not quiet:
@@ -889,6 +901,7 @@ def set_globals(options, tests):
     global use_ssl
     global file_of_commands_mode
     global valgrind, drd
+    global report_file
     start_mongod = options.start_mongod
     if hasattr(options, 'use_ssl'):
         use_ssl = options.use_ssl
@@ -934,6 +947,8 @@ def set_globals(options, tests):
     # if smoke.py is running a list of commands read from a
     # file (or stdin) rather than running a suite of js tests
     file_of_commands_mode = options.File and options.mode == 'files'
+    # generate json report
+    report_file = options.report_file
 
     quiet = options.quiet
     if options.tests_log_file is not None and len(options.tests_log_file) > 0:
@@ -1124,6 +1139,10 @@ def main():
                       action="store", help='Path to Python file containing buildlogger credentials')
     parser.add_option('--buildlogger-phase', dest='buildlogger_phase', default=None,
                       action="store", help='Set the "phase" for buildlogger (e.g. "core", "auth") for display in the webapp (optional)')
+    parser.add_option('--report-file', dest='report_file', default=None,
+                      action='store',
+                      help='Path to generate detailed json report containing all test details')
+
 
     global tests
     (options, tests) = parser.parse_args()
@@ -1208,9 +1227,10 @@ def main():
     finally:
         add_to_failfile(fails, options)
 
-        f = open( "smoke-last.json", "wb" )
-        f.write( json.dumps( { "results" : all_test_results } ) )
-        f.close()
+        if report_file:
+            f = open( report_file, "wb" )
+            f.write( json.dumps( { "results" : all_test_results } ) )
+            f.close()
 
         report()
 
