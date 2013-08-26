@@ -272,7 +272,7 @@ class mongod(object):
                      '--sslPEMKeyFile', 'jstests/libs/server.pem',
                      '--sslCAFile', 'jstests/libs/ca.pem',
                      '--sslWeakCertificateValidation']
-        
+
         if not quiet:
             print "running " + " ".join(argv)
         self.proc = self._start(buildlogger(argv, is_global=True))
@@ -351,7 +351,7 @@ class mongod(object):
                 win32job.TerminateJobObject(self.job_object, -1)
                 import time
                 # Windows doesn't seem to kill the process immediately, so give it some time to die
-                time.sleep(5) 
+                time.sleep(5)
             else:
                 # This function not available in Python 2.5
                 self.proc.terminate()
@@ -405,7 +405,7 @@ def check_db_hashes(master, slave):
     global lost_in_slave, lost_in_master, screwy_in_slave, replicated_collections
 
     replicated_collections += master.dict.keys()
-    
+
     for coll in replicated_collections:
         if coll not in slave.dict:
             lost_in_slave.append(coll)
@@ -599,11 +599,10 @@ def runTest(test, testnum):
             evalString += 'jsTest.authenticate(db.getMongo());'
 
         argv = argv + [ '--eval', evalString]
-    
+
     if argv[0].endswith( 'test' ) and no_preallocj :
         argv = argv + [ '--nopreallocj' ]
-    
-    
+
     vlog.write("      Command : %s\n" % ' '.join(argv))
     vlog.write("         Date : %s\n" % datetime.now().ctime())
     vlog.flush()
@@ -646,7 +645,7 @@ def runTest(test, testnum):
 
     if r != 0:
         raise TestExitFailure(path, r)
-    
+
     if start_mongod:
         try:
             c = Connection(host="127.0.0.1", port=int(mongod_port), ssl=use_ssl)
@@ -659,7 +658,7 @@ def run_tests(tests):
     # need this.  (So long as there are no conflicts with port,
     # dbpath, etc., and so long as we shut ours down properly,
     # starting this mongod shouldn't break anything, though.)
-    
+
     # The reason we want to use "with" is so that we get __exit__ semantics
     # but "with" is only supported on Python 2.5+
 
@@ -866,7 +865,7 @@ def expand_suites(suites,expandUseDB=True):
         if globstr:
             if usedb and not expandUseDB:
                 tests += [ (suite,False) ]
-            else:                
+            else:
                 if globstr.endswith('.js'):
                     loc = 'jstests/'
                 else:
@@ -1108,7 +1107,7 @@ def main():
     parser.add_option('--skip-until', dest='skip_tests_until', default="",
                       action="store",
                       help='Skip all tests alphabetically less than the given name.')
-    parser.add_option('--dont-start-mongod', dest='start_mongod', default=True, 
+    parser.add_option('--dont-start-mongod', dest='start_mongod', default=True,
                       action='store_false',
                       help='Do not start mongod before commencing test running')
     parser.add_option('--use-ssl', dest='use_ssl', default=False,
@@ -1167,7 +1166,7 @@ def main():
     if options.ignore_files != None :
         ignore_patt = re.compile( options.ignore_files )
         print "Ignoring files with pattern: ", ignore_patt
-	
+
         def ignore_test( test ):
             if ignore_patt.search( test[0] ) != None:
                 print "Ignoring test ", test[0]
