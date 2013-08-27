@@ -117,6 +117,7 @@ set(client_sources
   bson/bson_validate.cpp
   bson/oid.cpp
   bson/util/bson_extract.cpp
+  client/auth_helpers.cpp
   client/clientAndShell.cpp
   client/clientOnly.cpp
   client/connpool.cpp

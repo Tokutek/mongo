@@ -1,4 +1,5 @@
 set(common_files
+  auth_helpers
   connpool
   dbclient
   dbclient_rs
