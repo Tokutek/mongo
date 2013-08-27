@@ -51,6 +51,7 @@ tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
 
 env.SConscript(['base/SConscript',
                 'db/auth/SConscript',
+                'db/commands/SConscript',
                 'db/ops/SConscript',
                 'db/SConscript',
                 'logger/SConscript',
@@ -463,6 +464,7 @@ env.StaticLibrary("coredb", [
         + tcmallocServerStatus
         ,
                   LIBDEPS=['db/auth/serverauth',
+                           'db/commands/usercommandsparser',
                            'db/common',
                            'plugins/plugins',
                            'server_parameters',

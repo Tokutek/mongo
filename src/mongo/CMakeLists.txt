@@ -678,7 +678,7 @@ if (BUILD_TESTING)
       privilege_document_parser_test
       role_graph_test
       user_set_test
-      ## TODO: re-enable after bringing in new matcher
+      ## TODO: re-enable after bringing in updates
       #authorization_manager_test
       #authorization_session_test
       )
@@ -694,6 +694,22 @@ if (BUILD_TESTING)
   endforeach ()
   #target_link_libraries(authorization_manager_test authmocks)
   #target_link_libraries(authorization_session_test authmocks)
+
+  ## TODO: re-enable after bringing in updates
+  # foreach (test
+  #     user_management_commands_parser_test
+  #     )
+  #   add_executable(${test} db/commands/${test})
+  #   add_dependencies(${test} generate_error_codes generate_action_types)
+  #   link_recursive_deps(${test}
+  #     COMBINED_LIBNAME commands_unittest_deps
+  #     unittest_main
+  #     usercommandsparser
+  #     mongocommon
+  #     authmocks
+  #     ${TOKUMX_SSL_LIBRARIES}
+  #     )
+  # endforeach ()
 
   add_executable(hash_test db/geo/hash_test)
   add_dependencies(hash_test generate_error_codes generate_action_types)
@@ -1137,11 +1153,19 @@ if (BUILD_TESTING)
       privilege_document_parser_test
       role_graph_test
       user_set_test
-      authorization_manager_test
-      authorization_session_test
+      ## TODO: re-enable after bringing in updates
+      # authorization_manager_test
+      # authorization_session_test
       )
     add_mongo_test(db/auth ${test} ${test})
   endforeach ()
+
+  ## TODO: re-enable after bringing in updates
+  # foreach (test
+  #     user_management_commands_parser_test
+  #     )
+  #   add_mongo_test(db/commands ${test} ${test})
+  # endforeach ()
 
   foreach (test
       hash_test

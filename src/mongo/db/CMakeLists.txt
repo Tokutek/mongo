@@ -1,4 +1,5 @@
 add_subdirectory(auth)
+add_subdirectory(commands)
 add_subdirectory(geo)
 add_subdirectory(matcher)
 add_subdirectory(ops)
@@ -150,6 +151,7 @@ add_library(coredb STATIC
 add_dependencies(coredb generate_error_codes generate_action_types install_tdb_h)
 target_link_libraries(coredb LINK_PUBLIC
   serverauth
+  usercommandsparser
   db_common
   mongocommon
   coreserver
