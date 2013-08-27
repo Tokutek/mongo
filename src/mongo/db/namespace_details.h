@@ -370,7 +370,7 @@ namespace mongo {
             //
             // If commit() succeeds (ie: does not throw), the destructor must be called in
             // the same write lock section to prevent a race condition where another thread
-            // sets _indedBuildInProgress back to true.
+            // sets _indexBuildInProgress back to true.
             virtual void commit();
 
         protected:

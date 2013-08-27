@@ -1142,7 +1142,7 @@ namespace mongo {
             put_flags[i] = (isPK && !noUniqueChecks ? DB_NOOVERWRITE : 0) |
                            (prelocked ? DB_PRELOCKED_WRITE : 0);
 
-            // TODO: We need to generate keys here to check uniqueness and possible
+            // TODO: We need to generate keys here to check uniqueness and possibly
             //       set the multikey bit for an index. Find a way to store the keys
             //       generated in the above DBT_ARRAYs in such a way that the we can
             //       detect in the generate_row_for_put callback that keys do not
