@@ -39,7 +39,7 @@ namespace mongo {
         // size h.numFields, where each element is sizeof(uint32_t) bytes.
         // The fields array is based after the offsets array.
         uint32_t *const offsetsBase = reinterpret_cast<uint32_t *>(_dataOwned.get() + sizeof(Header));
-        char *const fieldsBase = reinterpret_cast<char *>(offsetsBase + h.numFields);
+        char *const fieldsBase = reinterpret_cast<char *>(&offsetsBase[h.numFields]);
 
         // Write each field's offset and value into each array, respectively.
         int i = 0, offset = 0;
@@ -94,8 +94,7 @@ namespace mongo {
     }
 
     int Descriptor::compareKeys(const storage::Key &key1, const storage::Key &key2) const {
-        const Header &h(*reinterpret_cast<const Header *>(_data));
-        return key1.woCompare(key2, h.ordering);
+        return key1.woCompare(key2, ordering());
     }
 
     void Descriptor::generateKeys(const BSONObj &obj, BSONObjSet &keys) const {
@@ -107,7 +106,8 @@ namespace mongo {
             fieldNames[i] = fieldsBase + offsetsBase[i];
         }
         if (h.hashed) {
-            // TODO: Add hashVersion to descriptor
+            // If we ever add new hash versions in the future, we'll need to add
+            // a hashVersion field to the descriptor and up the descriptor version.
             const HashVersion hashVersion = 0;
             HashKeyGenerator generator(fieldNames[0], h.hashSeed, hashVersion, h.sparse);
             generator.getKeys(obj, keys);

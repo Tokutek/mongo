@@ -805,9 +805,6 @@ namespace mongo {
 
             Client::Context ctx(ns);
             NamespaceDetails *d = getAndMaybeCreateNS(coll, true);
-            uassert(16903, str::stream() << "Cannot build an index on a namespace under-going bulk load: " << ns,
-                           cc().bulkLoadNS() != coll);
-
             if (d->findIndexByKeyPattern(info["key"].Obj()) >= 0) {
                 // No error or action if the index already exists. We need to commit
                 // the transaction in case this is an ensure index on the _id field

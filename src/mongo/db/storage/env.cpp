@@ -79,14 +79,15 @@ namespace mongo {
                 dbt->ulen = size;
                 dbt->data = realloc(dbt->flags == DB_DBT_REALLOC ? dbt->data : NULL, dbt->ulen);
                 dbt->flags = DB_DBT_REALLOC;
-                verify(dbt->data != NULL);
+                // Calling realloc() with a size of 0 may return NULL on some platforms
+                verify(dbt->ulen == 0 || dbt->data != NULL);
             }
             dbt->size = size;
             memcpy(dbt->data, data, size);
         }
 
-        static void dbt_array_clear_and_resize(DBT_ARRAY *dbt_array, const size_t new_capacity,
-                                                      const int flags = DB_DBT_REALLOC) {
+        static void dbt_array_clear_and_resize(DBT_ARRAY *dbt_array,
+                                               const size_t new_capacity) {
             const size_t old_capacity = dbt_array->capacity;
             if (old_capacity < new_capacity) {
                 dbt_array->capacity = new_capacity;

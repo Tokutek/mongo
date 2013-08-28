@@ -361,7 +361,7 @@ namespace mongo {
             //
             // Must ensure the given NamespaceDetails will remain valid for
             // the lifetime of the indexer.
-            virtual void prepare();
+            void prepare();
 
             // Perform the index build. May be read or write locked depending on implementation.
             virtual void build() = 0;
@@ -371,7 +371,7 @@ namespace mongo {
             // If commit() succeeds (ie: does not throw), the destructor must be called in
             // the same write lock section to prevent a race condition where another thread
             // sets _indexBuildInProgress back to true.
-            virtual void commit();
+            void commit();
 
         protected:
             Indexer(NamespaceDetails *d, const BSONObj &info);
@@ -537,8 +537,11 @@ namespace mongo {
                 SimpleRWLock::Exclusive lk(_openRWLock);
                 d = find_ns_locked(ns);
             }
-            return d != NULL ? d->validateConnectionId(cc().getConnectionId()), d :
-                               open_ns(ns);
+            if (d != NULL) {
+                d->validateConnectionId(cc().getConnectionId());
+                return d;
+            }
+            return open_ns(ns);
         }
 
         bool allocated() const { return _nsdb != NULL; }
