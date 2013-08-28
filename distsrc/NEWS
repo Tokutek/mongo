@@ -11,6 +11,20 @@ General
     - This release is focused on bug fixes since 1.1.1.
 
 
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The maximum amount of memory that will be used by the document-level
+      locking data structures is now configurable with the parameter
+      `locktreeMaxMemory=<bytes>`, which defaults to 10% of
+      `cacheSize`. (#340)
+
+    - It is now possible to get more debugging information in the log
+      during a crash.  To use this, download and unpack the `-debuginfo`
+      tarball along with the binary tarball, and run with
+      `--gdbPath=/path/to/gdb`.
+
+
 Bug fixes
 ~~~~~~~~~
 
