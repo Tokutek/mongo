@@ -1,6 +1,26 @@
 tokumx news
 ===========
 
+tokumx 1.1.2
+------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.1.1.
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a bug in background indexing and the bulk loader that caused
+      indexes to be built as multi-key indexes, which causes the query
+      planner to create non-optimal query plans. (#469)
+
+    - Optimized deletes, especially those performed on the oplog. (#471)
+
+
 tokumx 1.1.1
 ------------
 Release date: 2013-08-23
