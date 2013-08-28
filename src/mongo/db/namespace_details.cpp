@@ -1199,7 +1199,7 @@ namespace mongo {
             const bool prelocked = flags & NamespaceDetails::NO_LOCKTREE;
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
-            del_flags[i] = prelocked ? DB_PRELOCKED_WRITE : 0;
+            del_flags[i] = DB_DELETE_ANY | (prelocked ? DB_PRELOCKED_WRITE : 0);
         }
 
         DB_ENV *env = storage::env;
