@@ -4,6 +4,7 @@ add_library(testframework STATIC
 add_dependencies(testframework generate_error_codes generate_action_types)
 target_link_libraries(testframework LINK_PUBLIC
   unittest
+  options_parser
   )
 
 add_library(mocklib STATIC

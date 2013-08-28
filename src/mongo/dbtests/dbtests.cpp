@@ -33,6 +33,12 @@
 // This is kind of secret, see collection.cpp.
 void turnOnAllowSetMultiKeyInMSTForTests();
 
+namespace mongo {
+    // This specifies default dbpath for our testing framework
+    const std::string default_test_dbpath = "/tmp/unittest";
+} // namespace mongo
+
+
 int main( int argc, char** argv, char** envp ) {
     static StaticObserver StaticObserver;
     setWindowsUnhandledExceptionFilter();
@@ -41,5 +47,5 @@ int main( int argc, char** argv, char** envp ) {
     CollectionBase::turnOnAllowSetMultiKeyInMSTForTests();
     mongo::runGlobalInitializersOrDie(argc, argv, envp);
     StartupTest::runTests();
-    _exit(mongo::dbtests::runDbTests( argc, argv, "/tmp/unittest" ));
+    _exit(mongo::dbtests::runDbTests(argc, argv));
 }
