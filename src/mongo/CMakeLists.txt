@@ -749,6 +749,7 @@ link_recursive_deps(mongo
   clientandshell
   mongocommon
   scripting
+  options_parser
   ${PCRE_LIBRARIES}
   ${TOKUMX_SSL_LIBRARIES}
   )

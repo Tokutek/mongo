@@ -721,6 +721,7 @@ if shellEnv is not None:
         "mongo",
         coreShellFiles,
         LIBDEPS=[ "db/auth/authcore","clientandshell", "mongocommon", "scripting", 
+                 "$BUILD_DIR/mongo/util/options_parser/options_parser",
                  "$BUILD_DIR/third_party/pcrecpp"] + env['MODULE_LIBDEPS_MONGOSHELL'] )
 
     shellEnv.Install( '#/', mongo_shell )
