@@ -20,6 +20,8 @@
 #include "mongo/pch.h"
 #include "jsobj.h"
 
+#include "mongo/base/units.h"
+
 namespace boost {
     namespace program_options {
         class options_description;
@@ -117,8 +119,8 @@ namespace mongo {
         // TokuMX variables
         bool directio;
         bool gdb;
-        uint64_t cacheSize;
-        uint64_t locktreeMaxMemory;
+        BytesQuantity<uint64_t> cacheSize;
+        BytesQuantity<uint64_t> locktreeMaxMemory;
         uint32_t checkpointPeriod;
         uint32_t cleanerPeriod;
         uint32_t cleanerIterations;
@@ -127,7 +129,7 @@ namespace mongo {
         string logDir;
         string tmpDir;
         string gdbPath;
-        uint64_t txnMemLimit;
+        BytesQuantity<uint64_t> txnMemLimit;
 
         string pluginsDir;
         vector<string> plugins;

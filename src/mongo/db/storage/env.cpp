@@ -214,7 +214,7 @@ namespace mongo {
             env->set_errpfx(env, "TokuMX");
 
             const uint64_t cachesize = (cmdLine.cacheSize > 0
-                                        ? cmdLine.cacheSize
+                                        ? (uint64_t) cmdLine.cacheSize
                                         : calculate_cachesize());
             const uint32_t bytes = cachesize % (1024L * 1024L * 1024L);
             const uint32_t gigabytes = cachesize >> 30;
@@ -226,8 +226,9 @@ namespace mongo {
 
             // Use 10% the size of the cachetable for lock tree memory
             // if no value was specified on the command line.
-            const uint64_t lock_memory = cmdLine.locktreeMaxMemory > 0 ?
-                                         cmdLine.locktreeMaxMemory : (cachesize / 10);
+            const uint64_t lock_memory = (cmdLine.locktreeMaxMemory > 0
+                                          ? (uint64_t) cmdLine.locktreeMaxMemory
+                                          : (cachesize / 10));
             r = env->set_lk_max_memory(env, lock_memory);
             if (r != 0) {
                 handle_ydb_error_fatal(r);

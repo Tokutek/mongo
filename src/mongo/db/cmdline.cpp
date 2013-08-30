@@ -548,6 +548,16 @@ namespace mongo {
                         b.appendNumber(key, (unsigned long)value.as<unsigned long>());
                     else if (type == typeid(unsigned long long))
                         b.appendNumber(key, (long long)value.as<unsigned long long>());
+                    else if (type == typeid(BytesQuantity<int>))
+                        b.append(key, value.as<BytesQuantity<int> >());
+                    else if (type == typeid(BytesQuantity<long>))
+                        b.appendNumber(key, (long long)value.as<BytesQuantity<long> >());
+                    else if (type == typeid(BytesQuantity<unsigned>))
+                        b.appendNumber(key, (long long)value.as<BytesQuantity<unsigned> >());
+                    else if (type == typeid(BytesQuantity<unsigned long>))
+                        b.appendNumber(key, (unsigned long)value.as<BytesQuantity<unsigned long> >());
+                    else if (type == typeid(BytesQuantity<unsigned long long>))
+                        b.appendNumber(key, (long long)value.as<BytesQuantity<unsigned long long> >());
                     else if (type == typeid(vector<string>))
                         b.append(key, value.as<vector<string> >());
                     else
