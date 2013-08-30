@@ -87,7 +87,7 @@ namespace mongo {
             }
             void *getInterfacev = _dl.sym("TokuMX_Plugin__getInterface");
             if (getInterfacev == NULL) {
-                errmsg += "error finding symbol `getInterface' in file " + _filename + ": " + _dl.error();
+                errmsg += "error finding symbol `TokuMX_Plugin__getInterface' in file " + _filename + ": " + _dl.error();
                 return false;
             }
 
