@@ -24,6 +24,7 @@
 
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/storage/exception.h"
+#include "mongo/util/stacktrace.h"
 
 namespace mongo {
 
