@@ -49,6 +49,8 @@ namespace mongo {
 
         const Ordering &ordering() const;
 
+        void fieldNames(vector<const char *> &fields) const;
+
         DBT dbt() const;
 
         int compareKeys(const storage::Key &key1, const storage::Key &key2) const;

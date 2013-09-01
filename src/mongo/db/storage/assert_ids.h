@@ -25,6 +25,7 @@ namespace mongo {
             static const int AmbiguousFieldNames = 15855;
             static const int CannotHashArrays = 16897;
             static const int ParallelArrays = 10888;
+            static const int LockDeadlock = 16760;
         };
 
     } // namespace storage

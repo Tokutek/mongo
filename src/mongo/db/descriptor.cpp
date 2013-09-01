@@ -89,6 +89,16 @@ namespace mongo {
         return h.ordering;
     }
 
+    void Descriptor::fieldNames(vector<const char *> &fields) const {
+        const Header &h(*reinterpret_cast<const Header *>(_data));
+        const uint32_t *const offsetsBase = reinterpret_cast<const uint32_t *>(_data + sizeof(Header));
+        const char *const fieldsBase = reinterpret_cast<const char *>(offsetsBase + h.numFields);
+        fields.resize(h.numFields);
+        for (uint32_t i = 0; i < h.numFields; i++) {
+            fields[i] = fieldsBase + offsetsBase[i];
+        }
+    }
+
     DBT Descriptor::dbt() const {
         return storage::make_dbt(_data, _size);
     }
@@ -100,19 +110,15 @@ namespace mongo {
 
     void Descriptor::generateKeys(const BSONObj &obj, BSONObjSet &keys) const {
         const Header &h(*reinterpret_cast<const Header *>(_data));
-        const uint32_t *const offsetsBase = reinterpret_cast<const uint32_t *>(_data + sizeof(Header));
-        const char *const fieldsBase = reinterpret_cast<const char *>(offsetsBase + h.numFields);
-        vector<const char *> fieldNames(h.numFields);
-        for (uint32_t i = 0; i < h.numFields; i++) {
-            fieldNames[i] = fieldsBase + offsetsBase[i];
-        }
+        vector<const char *> fields;
+        fieldNames(fields);
         if (h.hashed) {
             // TODO: Add hashVersion to descriptor
             const HashVersion hashVersion = 0;
-            HashKeyGenerator generator(fieldNames[0], h.hashSeed, hashVersion, h.sparse);
+            HashKeyGenerator generator(fields[0], h.hashSeed, hashVersion, h.sparse);
             generator.getKeys(obj, keys);
         } else {
-            KeyGenerator::getKeys(obj, fieldNames, h.sparse, keys);
+            KeyGenerator::getKeys(obj, fields, h.sparse, keys);
         }
     }
 

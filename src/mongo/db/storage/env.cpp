@@ -32,6 +32,7 @@
 #endif
 #include <fcntl.h>
 
+#include "mongo/db/curop.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/descriptor.h"
@@ -194,6 +195,10 @@ namespace mongo {
             tokulog() << db_errpfx << ": " << buffer << endl;
         }
 
+        static void lock_not_granted_callback(DB *db, uint64_t requesting_txnid,
+                                              const DBT *left_key, const DBT *right_key,
+                                              uint64_t blocking_txnid);
+
         void startup(void) {
             tokulog() << "startup" << endl;
 
@@ -249,6 +254,11 @@ namespace mongo {
             }
             
             r = env->set_generate_row_callback_for_del(env, generate_row_for_del);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
+
+            r = env->set_lock_timeout_callback(env, lock_not_granted_callback);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
@@ -558,6 +568,156 @@ namespace mongo {
             }
         }
 
+        static BSONObj pretty_key(const DBT *key, DB *db) {
+            BSONObjBuilder b;
+            const Key sKey(key);
+            const DBT *desc = (db != NULL && db->cmp_descriptor != NULL)
+                              ? &db->cmp_descriptor->dbt
+                              : NULL;
+            if (desc != NULL && desc->data != NULL) {
+                Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+                const BSONObj key = sKey.key();
+
+                // Use the descriptor to match key parts with field names
+                vector<const char *> fields;
+                descriptor.fieldNames(fields);
+                BSONObjIterator o(key);
+                for (vector<const char *>::const_iterator i = fields.begin();
+                     i != fields.end(); i++) {
+                    b.appendAs(o.next(), *i);
+                }
+                // The primary key itself will have its value in sKey.key(),
+                // but fields will be empty so nothing is in the bsonobj yet.
+                const BSONObj pk = fields.empty() ? key : sKey.pk();
+                if (!pk.isEmpty()) {
+                    b.appendAs(pk.firstElement(), "$primaryKey");
+                }
+            } else {
+                b.append("$key", string(reinterpret_cast<const char *>(key->data), key->size));
+            }
+            return b.obj();
+        }
+
+        static const char *get_index_name(DB *db) {
+            if (db != NULL) {
+                return db->get_dname(db);
+            } else {
+                return "$ydb_internal";
+            }
+        }
+
+        static void pretty_bounds(DB *db, const DBT *left_key, const DBT *right_key,
+                                  BSONArrayBuilder &bounds) {
+            if (left_key->data == NULL) {
+                bounds.append("-infinity");
+            } else {
+                bounds.append(pretty_key(left_key, db));
+            }
+
+            if (right_key->data == NULL) {
+                bounds.append("+infinity");
+            } else {
+                bounds.append(pretty_key(right_key, db));
+            }
+        }
+
+        static void lock_not_granted_callback(DB *db, uint64_t requesting_txnid,
+                                              const DBT *left_key, const DBT *right_key,
+                                              uint64_t blocking_txnid) {
+            CurOp *op = cc().curop();
+            if (op != NULL) {
+                BSONObjBuilder info;
+                info.append("index", get_index_name(db));
+                info.appendNumber("requestingTxnid", requesting_txnid);
+                info.appendNumber("blockingTxnid", blocking_txnid);
+                BSONArrayBuilder bounds(info.subarrayStart("bounds"));
+                pretty_bounds(db, left_key, right_key, bounds);
+                bounds.done();
+                op->debug().lockNotGrantedInfo = info.obj();
+            }
+        }
+
+        void get_pending_lock_request_status(BSONObjBuilder &status) {
+            struct iterate_lock_requests : public ExceptionSaver {
+                iterate_lock_requests() { }
+                static int callback(DB *db, uint64_t requesting_txnid,
+                                    const DBT *left_key, const DBT *right_key,
+                                    uint64_t blocking_txnid, uint64_t start_time,
+                                    void *extra) {
+                    iterate_lock_requests *info = reinterpret_cast<iterate_lock_requests *>(extra);
+                    try {
+                        BSONObjBuilder status;
+                        status.append("index", get_index_name(db));
+                        status.appendNumber("requestingTxnid", requesting_txnid);
+                        status.appendNumber("blockingTxnid", blocking_txnid);
+                        status.appendDate("started", start_time);
+                        {
+                            BSONArrayBuilder bounds(status.subarrayStart("bounds"));
+                            pretty_bounds(db, left_key, right_key, bounds);
+                            bounds.done();
+                        }
+                        info->array.append(status.done());
+                        return 0;
+                    } catch (const std::exception &ex) {
+                        info->saveException(ex);
+                    }
+                    return -1;
+                }
+                BSONArrayBuilder array;
+            } e;
+            const int r = env->iterate_pending_lock_requests(env, iterate_lock_requests::callback, &e);
+            if (r != 0) {
+                e.throwException();
+                handle_ydb_error(r);
+            }
+            status.appendArray("requests", e.array.done());
+        }
+
+        void get_live_transaction_status(BSONObjBuilder &status) {
+            struct iterate_transactions : public ExceptionSaver {
+                iterate_transactions() { }
+                static int callback(uint64_t txnid, uint64_t client_id,
+                                    iterate_row_locks_callback iterate_locks,
+                                    void *locks_extra, void *extra) {
+                    iterate_transactions *info = reinterpret_cast<iterate_transactions *>(extra);
+                    try {
+                        // We ignore client_id because txnid is sufficient for finding
+                        // the associated operation in db.currentOp()
+                        BSONObjBuilder status;
+                        status.appendNumber("txnid", txnid);
+                        BSONArrayBuilder locks(status.subarrayStart("rowLocks"));
+                        {
+                            DB *db;
+                            DBT left_key, right_key;
+                            while (iterate_locks(&db, &left_key, &right_key, locks_extra) == 0) {
+                                BSONObjBuilder row_lock;
+                                row_lock.append("index", get_index_name(db));
+                                BSONArrayBuilder bounds(row_lock.subarrayStart("bounds"));
+                                pretty_bounds(db, &left_key, &right_key, bounds);
+                                bounds.done();
+                                locks.append(row_lock.done());
+
+                            }
+                            locks.done();
+                        }
+                        info->array.append(status.done());
+                        return 0;
+                    } catch (const std::exception &ex) {
+                        info->saveException(ex);
+                    }
+                    return -1;
+                }
+                BSONArrayBuilder array;
+            } e;
+            const int r = env->iterate_live_transactions(env, iterate_transactions::callback, &e);
+            if (r != 0) {
+                e.throwException();
+                handle_ydb_error(r);
+            }
+            status.appendArray("transactions", e.array.done());
+
+        }
+
         void log_flush() {
             // Flush the recovery log to disk, ensuring crash safety up until
             // the most recently committed transaction's LSN.
@@ -629,7 +789,8 @@ namespace mongo {
                 case DB_LOCK_NOTGRANTED:
                     throw LockException(16759, "Lock not granted. Try restarting the transaction.");
                 case DB_LOCK_DEADLOCK:
-                    throw LockException(16760, "Deadlock detected during lock acquisition. Try restarting the transaction.");
+                    throw LockException(storage::ASSERT_IDS::LockDeadlock,
+                                        "Deadlock detected during lock acquisition. Try restarting the transaction.");
                 case DB_KEYEXIST:
                     throw UserException(ASSERT_ID_DUPKEY, "E11000 duplicate key error.");
                 case DB_NOTFOUND:
