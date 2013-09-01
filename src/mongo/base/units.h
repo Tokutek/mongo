@@ -18,9 +18,9 @@
 
 #include "mongo/pch.h"
 
-//#include <istream>
+#include <istream>
 #include <limits>
-//#include <string>
+#include <string>
 
 #include "mongo/base/parse_number.h"
 #include "mongo/base/status.h"
@@ -45,6 +45,9 @@ namespace mongo {
             if (numberPart.endsWith("b") || numberPart.endsWith("B")) {
                 numberPart = numberPart.substr(0, numberPart.size() - 1);
             }
+            if (numberPart.size() < 1) {
+                return Status(ErrorCodes::BadValue, mongoutils::str::stream() << "invalid number: " << s);
+            }
             char c = numberPart[numberPart.size() - 1];
             switch (c) {
                 case 't':
@@ -65,6 +68,9 @@ namespace mongo {
                     if (c < '0' || c > '9') {
                         return Status(ErrorCodes::BadValue, mongoutils::str::stream() << "invalid number: " << s);
                     }
+            }
+            if (numberPart.empty() || numberPart == "-") {
+                return Status(ErrorCodes::BadValue, mongoutils::str::stream() << "invalid number: " << s);
             }
             T value;
             Status status = parseNumberFromString(numberPart, &value);
