@@ -96,7 +96,10 @@ namespace mongo {
             return Status::OK();
         }
         static T fromString(const StringData &s) {
-            T result;
+            // Some compilers are not smart enough to realize that we can't return unless we've
+            // assigned to this (because otherwise we would throw at massert).  Those compilers
+            // think this is maybe-uninitialized unless we do this:
+            T result(0);
             Status status = fromString(s, result);
             massert(16919, mongoutils::str::stream() << "error parsing " << s << ": " << status.codeString() << " " << status.reason(), status.isOK());
             return result;
