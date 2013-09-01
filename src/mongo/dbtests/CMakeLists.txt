@@ -1,5 +1,6 @@
 add_library(testframework STATIC
   framework
+  framework_options
   )
 add_dependencies(testframework generate_error_codes generate_action_types)
 target_link_libraries(testframework LINK_PUBLIC
@@ -20,12 +21,18 @@ target_link_libraries(mocklib LINK_PUBLIC
   )
 
 file(GLOB testfiles *.cpp)
-foreach (testfile ${testfiles})
-  if (testfile MATCHES "framework.cpp$")
-    set(framework_fullpath "${testfile}")
-  endif ()
+foreach (framework_filename
+    framework.cpp
+    framework_options.cpp
+    )
+  set(_framework_fullpath)
+  foreach (testfile ${testfiles})
+    if (testfile MATCHES "${framework_filename}$")
+      set(_framework_fullpath "${testfile}")
+    endif ()
+  endforeach ()
+  list(REMOVE_ITEM testfiles ${_framework_fullpath})
 endforeach ()
-list(REMOVE_ITEM testfiles ${framework_fullpath})
 add_executable(smokeTest ${testfiles})
 add_dependencies(smokeTest generate_error_codes generate_action_types install_tdb_h)
 if (NOT APPLE)
