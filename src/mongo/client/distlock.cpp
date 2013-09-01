@@ -963,6 +963,8 @@ namespace mongo {
                     conn.done();
                     return false;
                 }
+                LOG(0) << "SYNC3 got UserException, not a wrapped retryable: " << e.getCode() << ": " << e.what() << endl;
+                printStackTrace();
                 throw;
             }
             catch( std::exception& e ) {
