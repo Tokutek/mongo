@@ -557,7 +557,7 @@ namespace mongo {
 #else
                 errno = ENETUNREACH;
 #endif
-                _handleSendError(ret, context);
+                handleSendError(ret, context);
             }
             else {
                 ret = _send(data, len, context);
@@ -669,7 +669,7 @@ namespace mongo {
                 errno = ENETUNREACH;
 #endif
                 if (ret <= 0) {
-                    _handleRecvError(ret, len, &retries);
+                    handleRecvError(ret, len);
                     continue;
                 }
             }
