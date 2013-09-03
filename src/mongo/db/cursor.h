@@ -344,7 +344,16 @@ namespace mongo {
         shared_ptr< CoveredIndexMatcher > _matcher;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
         long long _nscanned;
-        const int _numWanted;
+
+        // Prelock is true if the caller does not want a limited result set from the cursor.
+        // Even if the query looks like { a: { $gte: 5 } }, the caller may want limited results for:
+        // - a delete has justOne = true
+        // - an update has multi = false
+        // - any findAndModify (since it's implemented as an update with multi = false)
+        // The caller can let us know a limited result set is requested when all of these are true:
+        // - the numWanted parameter is not zero (zero means "unlimited want", in the constructor)
+        // - cc().opSettings().justOne() is false.
+        const bool _prelock;
 
         IndexDetails::Cursor _cursor;
         // An exhausted cursor has no more rows and is done iterating,

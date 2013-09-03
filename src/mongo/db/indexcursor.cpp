@@ -150,59 +150,22 @@ namespace mongo {
 
     /* ---------------------------------------------------------------------- */
 
-    // Cursor for findOne queries, justOne deletes, !multi updates, etc.
-    // Skip prelocking, get row locks on getf if necessary, and don't prefetch.
-    class FindOneCursor : public IndexCursor {
-    public:
-        FindOneCursor( NamespaceDetails *d, const IndexDetails &idx,
-                       const BSONObj &startKey, const BSONObj &endKey,
-                       bool endKeyInclusive, int direction ) :
-            IndexCursor( d, idx, startKey, endKey, endKeyInclusive, direction, 1 ) {
-        }
-        FindOneCursor( NamespaceDetails *d, const IndexDetails &idx,
-                       const shared_ptr< FieldRangeVector > &bounds,
-                       int singleIntervalLimit, int direction ) :
-            IndexCursor( d, idx, bounds, singleIntervalLimit, direction, 1 ) {
-        }
-        void prelock() {
-        }
-        int cursor_flags() {
-            return 0;
-        }
-        int getf_flags() {
-            const int idxCursorFlags = IndexCursor::cursor_flags();
-            return idxCursorFlags | DBC_DISABLE_PREFETCHING;
-        }
-    };
-
-    /* ---------------------------------------------------------------------- */
-
     shared_ptr<IndexCursor> IndexCursor::make( NamespaceDetails *d, const IndexDetails &idx,
                                                const BSONObj &startKey, const BSONObj &endKey,
                                                bool endKeyInclusive, int direction,
                                                int numWanted ) {
-        if (cc().opSettings().getJustOne() || numWanted == 1) {
-            return shared_ptr<IndexCursor>( new FindOneCursor( d, idx, startKey, endKey,
-                                                               endKeyInclusive, direction ) );
-        } else {
-            return shared_ptr<IndexCursor>( new IndexCursor( d, idx, startKey, endKey,
-                                                             endKeyInclusive, direction,
-                                                             numWanted ) );
-        }
+        return shared_ptr<IndexCursor>( new IndexCursor( d, idx, startKey, endKey,
+                                                         endKeyInclusive, direction,
+                                                         numWanted ) );
     }
 
     shared_ptr<IndexCursor> IndexCursor::make( NamespaceDetails *d, const IndexDetails &idx,
                                                const shared_ptr< FieldRangeVector > &bounds,
                                                int singleIntervalLimit, int direction,
                                                int numWanted ) {
-        if (cc().opSettings().getJustOne() || numWanted == 1) {
-            return shared_ptr<IndexCursor>( new FindOneCursor( d, idx, bounds,
-                                                               singleIntervalLimit, direction ) );
-        } else {
-            return shared_ptr<IndexCursor>( new IndexCursor( d, idx, bounds,
-                                                             singleIntervalLimit, direction,
-                                                             numWanted ) );
-        }
+        return shared_ptr<IndexCursor>( new IndexCursor( d, idx, bounds,
+                                                         singleIntervalLimit, direction,
+                                                         numWanted ) );
     }
 
     IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
@@ -219,7 +182,7 @@ namespace mongo {
         _bounds(),
         _boundsMustMatch(true),
         _nscanned(0),
-        _numWanted(numWanted),
+        _prelock(!cc().opSettings().getJustOne() && numWanted == 0),
         _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
@@ -244,7 +207,7 @@ namespace mongo {
         _bounds(bounds),
         _boundsMustMatch(true),
         _nscanned(0),
-        _numWanted(numWanted),
+        _prelock(!cc().opSettings().getJustOne() && numWanted == 0),
         _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
@@ -432,8 +395,10 @@ namespace mongo {
     }
 
     void IndexCursor::initializeDBC() {
-        // We need to prelock first, then position the cursor.
-        prelock();
+        if (_prelock) {
+            // We need to prelock first, then position the cursor.
+            prelock();
+        }
 
         if ( _bounds != NULL ) {
             const int r = skipToNextKey( _startKey );
@@ -452,26 +417,28 @@ namespace mongo {
     }
 
     int IndexCursor::cursor_flags() {
-        QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
-        switch ( mode ) {
-            // All locks are grabbed up front, during initializeDBC().
-            // These flags determine the type of lock. Serializable
-            // gets you a read lock. Both serializable and rmw gets
-            // you a write lock.
-            case WRITE_LOCK_CURSOR:
-                return DB_SERIALIZABLE | DB_RMW;
-            case READ_LOCK_CURSOR:
-                return DB_SERIALIZABLE;
-            default:
-                return 0;
-        }
+        if (_prelock) {
+            QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
+            switch ( mode ) {
+                // These flags determine the type of lock. Serializable
+                // gets you a read lock. Both serializable and rmw gets
+                // you a write lock.
+                case WRITE_LOCK_CURSOR:
+                    return DB_SERIALIZABLE | DB_RMW;
+                case READ_LOCK_CURSOR:
+                    return DB_SERIALIZABLE;
+                default:
+                    return 0;
+            }
+        } 
+        return 0;
     }
 
     int IndexCursor::getf_flags() {
-        // Since all locktree locks are acquired on cursor creation,
-        // we should pass DB_PRELOCKED | DB_PRELOCKED_WRITE (see cursor_flags()).
-        const int lockFlags = DB_PRELOCKED | DB_PRELOCKED_WRITE;
-        const int prefetchFlags = _numWanted > 0 ? DBC_DISABLE_PREFETCHING : 0;
+        // Prelocked cursors do not need locks on getf().
+        // Prelocked cursors should prefetch.
+        const int lockFlags = _prelock ? (DB_PRELOCKED | DB_PRELOCKED_WRITE) : 0;
+        const int prefetchFlags = _prelock ? 0 : DBC_DISABLE_PREFETCHING;
         return lockFlags | prefetchFlags;
     }
 
