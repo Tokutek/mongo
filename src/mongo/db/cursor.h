@@ -352,7 +352,7 @@ namespace mongo {
         // - any findAndModify (since it's implemented as an update with multi = false)
         // The caller can let us know a limited result set is requested when all of these are true:
         // - the numWanted parameter is not zero (zero means "unlimited want", in the constructor)
-        // - cc().opSettings().justOne() is false.
+        // - cc().opSettings().justOne() is true.
         const bool _prelock;
 
         IndexDetails::Cursor _cursor;
