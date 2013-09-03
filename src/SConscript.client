@@ -43,7 +43,6 @@ clientSourceBasic = [
     'mongo/client/dbclient_rs.cpp',
     'mongo/client/dbclientcursor.cpp',
     'mongo/client/gridfs.cpp',
-    'mongo/client/model.cpp',
     'mongo/client/remote_loader.cpp',
     'mongo/client/remote_transaction.cpp',
     'mongo/client/sasl_client_authenticate.cpp',
@@ -219,11 +218,7 @@ if buildShared:
     mongoClientInstalls.append(mongoClientSharedLibInstall)
 
     if installSetup.libraries:
-<<<<<<< HEAD
-        mongoClientSharedLibPrefixInstall = sharedLibEnv.Install(
-=======
         mongoClientSharedLibPrefixInstall = sharedLibEnv.InstallVersionedLib(
->>>>>>> da8c0fa... SERVER-6514 Re-add support for building the C++ driver shared library
             '$INSTALL_DIR/lib', mongoClientSharedLib)
         if darwin:
             sharedLibEnv.AddPostAction(
@@ -293,12 +288,6 @@ if buildShared:
 
     sharedClientProgramInstalls = sharedClientEnv.Install("#/sharedclient", sharedClientPrograms)
     clientTests.append(sharedClientProgramInstalls)
-<<<<<<< HEAD
-
-clientTests.append(
-    clientEnv.Install('#/', clientEnv.Program('bsondemo', 'mongo/bson/bsondemo/bsondemo.cpp')))
-=======
->>>>>>> da8c0fa... SERVER-6514 Re-add support for building the C++ driver shared library
 
 clientEnv.Alias('clientTests', clientTests, [])
 

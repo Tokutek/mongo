@@ -23,7 +23,6 @@
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/dbclientcursor.h"
-#include "mongo/client/model.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/s/chunk.h"
