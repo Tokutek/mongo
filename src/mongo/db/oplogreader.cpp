@@ -86,6 +86,13 @@ namespace mongo {
                           !me.hasField("host") ||
              me["host"].String() != myname ) {
         
+            // cleaning out local.me requires write
+            // lock. This is a rare operation, so it should
+            // be ok
+            if (!Lock::isWriteLocked("local")) {
+                throw RetryWithWriteLock();
+            }
+
             // clean out local.me
             if (d != NULL) {
                 d->empty();
