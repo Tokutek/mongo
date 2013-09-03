@@ -83,10 +83,11 @@ namespace mongo {
     void abortBulkLoad(const StringData &ns);
 
     // Because of #673 we need to detect if we're missing this index and to ignore that error.
-    extern BSONObj oldSystemUsersKeyPattern;
+    extern BSONObj v0SystemUsersKeyPattern;
     // These are just exposed for tests.
-    extern BSONObj extendedSystemUsersKeyPattern;
-    extern std::string extendedSystemUsersIndexName;
+    extern BSONObj v1SystemUsersKeyPattern;
+    extern BSONObj v2SystemUsersKeyPattern;
+    extern std::string v2SystemUsersIndexName;
 
     bool isSystemUsersCollection(const StringData &ns);
 
@@ -1125,7 +1126,7 @@ namespace mongo {
     // - db.system.namespaces
     class SystemUsersCollection : public IndexedCollection {
     public:
-        static BSONObj extendedSystemUsersIndexInfo(const StringData &ns);
+        static BSONObj v2SystemUsersIndexInfo(const StringData &ns);
         SystemUsersCollection(const StringData &ns, const BSONObj &options);
         SystemUsersCollection(const BSONObj &serialized, bool* reserializeNeeded);
         void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);

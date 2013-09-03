@@ -719,6 +719,8 @@ namespace mongo {
 
         AuthorizationManager* authzManager = getGlobalAuthorizationManager();
         if (authzManager->isAuthEnabled()) {
+            LOCK_REASON(lockReason, "startup: initializing auth (may build indexes on system.users)");
+            Lock::GlobalWrite lk(lockReason);
             Status status = getGlobalAuthorizationManager()->initialize();
             uassertStatusOK(status);
         }

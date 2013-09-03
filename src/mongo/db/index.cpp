@@ -240,7 +240,7 @@ namespace mongo {
         } catch (storage::Dictionary::NeedsCreate) {
             if (cc().upgradingSystemUsers() &&
                 isSystemUsersCollection(parentNS()) &&
-                keyPattern() == oldSystemUsersKeyPattern) {
+                keyPattern() == v0SystemUsersKeyPattern) {
                 // We're upgrading the system.users collection, and we are missing the old index.
                 // That's ok, we'll signal the caller about this by returning a NULL pointer from
                 // IndexDetailsBase::make.  See #673

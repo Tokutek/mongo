@@ -272,27 +272,28 @@ namespace mongo {
             creatingSystemUsersScope.reset(new Client::CreatingSystemUsersScope());
             _cd.reset(new SystemUsersCollection(serialized, &reserializeNeeded));
 
-            int idx = _cd->findIndexByKeyPattern(extendedSystemUsersKeyPattern);
+            int idx = _cd->findIndexByKeyPattern(v2SystemUsersKeyPattern);
             if (idx < 0) {
-                BSONObj info = SystemUsersCollection::extendedSystemUsersIndexInfo(_ns);
+                BSONObj info = SystemUsersCollection::v2SystemUsersIndexInfo(_ns);
                 try {
                     _cd->ensureIndex(info);
                 } catch (const DBException& e) {
                     if (e.getCode() == ASSERT_ID_DUPKEY) {
                         log() << "Duplicate key exception while trying to build unique index on " <<
-                                ns << ".  You most likely have user documents with duplicate \"user\" "
-                                "fields.  To resolve this, start up with a version of MongoDB prior to "
-                                "2.4, drop the duplicate user documents, then start up again with the "
-                                "current version." << endl;
+                                ns << ".  This is likely due to upgrade process shenanigans" << endl;
                     }
                     throw;
                 }
                 addToIndexesCatalog(info);
                 reserializeNeeded = true;
             }
-            idx = findIndexByKeyPattern(oldSystemUsersKeyPattern);
+            idx = findIndexByKeyPattern(v0SystemUsersKeyPattern);
             if (idx >= 0) {
-                // Just to get compile going
+                dropIndex(idx);
+                reserializeNeeded = true;
+            }
+            idx = findIndexByKeyPattern(v1SystemUsersKeyPattern);
+            if (idx >= 0) {
                 dropIndex(idx);
                 reserializeNeeded = true;
             }
@@ -482,7 +483,7 @@ namespace mongo {
             const BSONObj &info = it->Obj();
             shared_ptr<IndexDetailsBase> idx(IndexDetailsBase::make(info, false));
             if (!idx && cc().upgradingSystemUsers() && isSystemUsersCollection(_ns) &&
-                oldSystemUsersKeyPattern == info["key"].Obj()) {
+                v0SystemUsersKeyPattern == info["key"].Obj()) {
                 // This was already dropped, but because of #673 we held on to the info.
                 // To fix it, just drop the index info on the floor.
                 LOG(0) << "Incomplete upgrade of " << _ns << " indexes detected.  Repairing." << endl;
@@ -2126,33 +2127,36 @@ namespace mongo {
 
     // ------------------------------------------------------------------------
 
-    BSONObj oldSystemUsersKeyPattern;
-    BSONObj extendedSystemUsersKeyPattern;
-    std::string extendedSystemUsersIndexName;
+    BSONObj v0SystemUsersKeyPattern;
+    BSONObj v1SystemUsersKeyPattern;
+    BSONObj v2SystemUsersKeyPattern;
+    std::string v2SystemUsersIndexName;
 
     MONGO_INITIALIZER(AuthIndexKeyPatterns)(InitializerContext*) {
-        oldSystemUsersKeyPattern = BSON(AuthorizationManager::V1_USER_NAME_FIELD_NAME << 1);
-        extendedSystemUsersKeyPattern = BSON(AuthorizationManager::V1_USER_NAME_FIELD_NAME << 1 <<
-                                             AuthorizationManager::V1_USER_SOURCE_FIELD_NAME << 1);
-        extendedSystemUsersIndexName = std::string(
+        v0SystemUsersKeyPattern = BSON(AuthorizationManager::V1_USER_NAME_FIELD_NAME << 1);
+        v1SystemUsersKeyPattern = BSON(AuthorizationManager::V1_USER_NAME_FIELD_NAME << 1 <<
+                                       AuthorizationManager::V1_USER_SOURCE_FIELD_NAME << 1);
+        v2SystemUsersKeyPattern = BSON(AuthorizationManager::USER_NAME_FIELD_NAME << 1 <<
+                                       AuthorizationManager::USER_SOURCE_FIELD_NAME << 1);
+        v2SystemUsersIndexName = std::string(
                 str::stream() <<
-                        AuthorizationManager::V1_USER_NAME_FIELD_NAME << "_1_" <<
-                        AuthorizationManager::V1_USER_SOURCE_FIELD_NAME << "_1");
+                        AuthorizationManager::USER_NAME_FIELD_NAME << "_1_" <<
+                        AuthorizationManager::USER_SOURCE_FIELD_NAME << "_1");
         return Status::OK();
     }
 
-    BSONObj SystemUsersCollection::extendedSystemUsersIndexInfo(const StringData &ns) {
+    BSONObj SystemUsersCollection::v2SystemUsersIndexInfo(const StringData &ns) {
         BSONObjBuilder indexBuilder;
-        indexBuilder.append("key", extendedSystemUsersKeyPattern);
+        indexBuilder.append("key", v2SystemUsersKeyPattern);
         indexBuilder.appendBool("unique", true);
         indexBuilder.append("ns", ns);
-        indexBuilder.append("name", extendedSystemUsersIndexName);
+        indexBuilder.append("name", v2SystemUsersIndexName);
         return indexBuilder.obj();
     }
 
     SystemUsersCollection::SystemUsersCollection(const StringData &ns, const BSONObj &options) :
         IndexedCollection(ns, options) {
-        BSONObj info = extendedSystemUsersIndexInfo(ns);
+        BSONObj info = v2SystemUsersIndexInfo(ns);
         createIndex(info);
         uassert(17207, "must not define a primary key for the system.users collection",
                        !options["primaryKey"].ok());

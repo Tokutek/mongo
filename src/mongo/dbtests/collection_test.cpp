@@ -68,7 +68,7 @@ namespace {
 
             ASSERT_TRUE(cur->more());
             idx = cur->next();
-            ASSERT_EQUALS(idx["key"].Obj(), mongo::extendedSystemUsersKeyPattern);
+            ASSERT_EQUALS(idx["key"].Obj(), mongo::v2SystemUsersKeyPattern);
 
             ASSERT_FALSE(cur->more());
         }
@@ -131,7 +131,7 @@ namespace {
         }
         {
             BSONObjBuilder userBuilder(b.subobjStart());
-            userBuilder.append("key", mongo::oldSystemUsersKeyPattern);
+            userBuilder.append("key", mongo::v0SystemUsersKeyPattern);
             userBuilder.appendBool("unique", true);
             userBuilder.append("ns", _ns);
             userBuilder.append("name", "user_1");
@@ -139,10 +139,10 @@ namespace {
         }
         {
             BSONObjBuilder userBuilder(b.subobjStart());
-            userBuilder.append("key", mongo::extendedSystemUsersKeyPattern);
+            userBuilder.append("key", mongo::v2SystemUsersKeyPattern);
             userBuilder.appendBool("unique", true);
             userBuilder.append("ns", _ns);
-            userBuilder.append("name", mongo::extendedSystemUsersIndexName);
+            userBuilder.append("name", mongo::v2SystemUsersIndexName);
             userBuilder.done();
         }
         shared_ptr<mongo::Collection> d;
@@ -153,8 +153,8 @@ namespace {
             // This would throw if we didn't handle the corruption fix properly
             d = mongo::Collection::make(mongo::Collection::serialize(_ns, BSONObj(), BSON("_id" << 1), 0ULL, b.arr()));
             ASSERT(d);
-            ASSERT_GREATER_THAN(d->findIndexByKeyPattern(mongo::extendedSystemUsersKeyPattern), 0);
-            ASSERT_LESS_THAN(d->findIndexByKeyPattern(mongo::oldSystemUsersKeyPattern), 0);
+            ASSERT_GREATER_THAN(d->findIndexByKeyPattern(mongo::v2SystemUsersKeyPattern), 0);
+            ASSERT_LESS_THAN(d->findIndexByKeyPattern(mongo::v0SystemUsersKeyPattern), 0);
             txn.commit();
         }
         printAllUsers();

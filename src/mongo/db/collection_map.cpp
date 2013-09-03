@@ -208,10 +208,12 @@ namespace mongo {
         // hold a lock in the metadb and we certainly don't need to hold one
         // for the duration of this operation. So we use an alternate txn stack.
         const bool needAltTxn = !cc().hasTxn() || cc().txn().readOnly();
-        scoped_ptr<Client::AlternateTransactionStack> altStack(!needAltTxn ? NULL :
-                                                               new Client::AlternateTransactionStack());
-        scoped_ptr<Client::Transaction> altTxn(!needAltTxn ? NULL :
-                                               new Client::Transaction(0));
+        scoped_ptr<Client::AlternateTransactionStack> altStack(needAltTxn
+                                                               ? new Client::AlternateTransactionStack()
+                                                               : NULL);
+        scoped_ptr<Client::Transaction> altTxn(needAltTxn
+                                               ? new Client::Transaction(0)
+                                               : NULL);
 
         // Pass flags that get us a write lock on the metadb row
         // for the ns we'd like to open.
@@ -233,6 +235,9 @@ namespace mongo {
             SimpleRWLock::Exclusive lk(_openRWLock);
             verify(!_collections[ns]);
             _collections[ns] = details;
+            if (needAltTxn) {
+                altTxn->commit();
+            }
             return details.get();
         } else if (r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);
