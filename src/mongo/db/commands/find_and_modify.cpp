@@ -237,6 +237,12 @@ namespace mongo {
         }
 
         virtual bool run(const string& dbname, BSONObj& cmdObj, int x, string& errmsg, BSONObjBuilder& result, bool y) {
+            // We set justOne to true because findAndModify modifies at most one document.
+            OpSettings settings;
+            settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+            settings.setJustOne(true);
+            cc().setOpSettings(settings);
+
             if ( cmdObj["sort"].eoo() )
                 return runNoDirectClient( dbname , cmdObj , x, errmsg , result, y );
 
