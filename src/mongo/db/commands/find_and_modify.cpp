@@ -46,7 +46,13 @@ namespace mongo {
         virtual bool requiresSync() const { return true; }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return DB_SERIALIZABLE; }
-        virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual OpSettings getOpSettings() const {
+            // We set justOne to true because findAndModify modifies at most one document.
+            OpSettings settings;
+            settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+            settings.setJustOne(true);
+            return settings;
+        }
         
         /* this will eventually replace run,  once sort is handled */
         bool runNoDirectClient( const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
@@ -237,12 +243,6 @@ namespace mongo {
         }
 
         virtual bool run(const string& dbname, BSONObj& cmdObj, int x, string& errmsg, BSONObjBuilder& result, bool y) {
-            // We set justOne to true because findAndModify modifies at most one document.
-            OpSettings settings;
-            settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
-            settings.setJustOne(true);
-            cc().setOpSettings(settings);
-
             if ( cmdObj["sort"].eoo() )
                 return runNoDirectClient( dbname , cmdObj , x, errmsg , result, y );
 
