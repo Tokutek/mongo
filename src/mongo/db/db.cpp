@@ -717,6 +717,13 @@ namespace mongo {
             globalScriptEngine->setGetCurrentOpIdCallback( jsGetCurrentOpIdCallback );
         }
 
+        AuthorizationManager* authzManager = getGlobalAuthorizationManager();
+        if (authzManager->isAuthEnabled()) {
+            Status status = getGlobalAuthorizationManager()->initialize();
+            uassertStatusOK(status);
+        }
+
+
         /* this is for security on certain platforms (nonce generation) */
         srand((unsigned) (curTimeMicros() ^ startupSrandTimer.micros()));
 
