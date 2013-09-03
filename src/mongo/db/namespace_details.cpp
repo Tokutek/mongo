@@ -1258,9 +1258,7 @@ namespace mongo {
             const bool noUniqueChecks = flags & NamespaceDetails::NO_UNIQUE_CHECKS;
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
-            // The pk doesn't change - always skip uniqueness checks.
-            update_flags[i] = (isPK || !noUniqueChecks ? DB_NOOVERWRITE : 0) |
-                              (prelocked ? DB_PRELOCKED_WRITE : 0);
+            update_flags[i] = prelocked ? DB_PRELOCKED_WRITE : 0;
 
             if (!isPK) {
                 BSONObjSet oldIdxKeys;
