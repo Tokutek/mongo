@@ -2163,8 +2163,8 @@ namespace mongo {
     }
 
     void SystemUsersCollection::insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
-        V1PrivilegeDocumentParser parser;
-        uassertStatusOK(parser.checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), obj));
+        V2PrivilegeDocumentParser parser;
+        uassertStatusOK(parser.checkValidPrivilegeDocument(obj));
         IndexedCollection::insertObject(obj, flags, indexBitChanged);
     }
     
@@ -2172,8 +2172,8 @@ namespace mongo {
                       const bool fromMigrate,
                       uint64_t flags, bool* indexBitChanged)
     {
-        V1PrivilegeDocumentParser parser;
-        uassertStatusOK(parser.checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), newObj));
+        V2PrivilegeDocumentParser parser;
+        uassertStatusOK(parser.checkValidPrivilegeDocument(newObj));
         IndexedCollection::updateObject(pk, oldObj, newObj, fromMigrate, flags, indexBitChanged);
     }
 
