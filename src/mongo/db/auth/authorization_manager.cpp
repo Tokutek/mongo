@@ -284,7 +284,7 @@ namespace {
 
     AuthorizationManager::AuthorizationManager(AuthzManagerExternalState* externalState) :
             _externalState(externalState) {
-        setAuthorizationVersion(1);
+        setAuthorizationVersion(2);
     }
 
     AuthorizationManager::~AuthorizationManager() {
