@@ -177,6 +177,7 @@ int main( int argc, char **argv, char** envp ) {
     check( port != 0 && !destUri.empty() );
 
     listener.reset( new MyListener( port ) );
+    listener->setupSockets();
     listener->initAndListen();
 
     return 0;
