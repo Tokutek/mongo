@@ -681,9 +681,16 @@ namespace mongo {
         return eval(dbname, jscode, info, retValue);
     }
 
-    list<string> DBClientWithCommands::getDatabaseNames() {
+    list<string> DBClientWithCommands::getDatabaseNames(bool onDiskOnly) {
         BSONObj info;
-        uassert( 10005 ,  "listdatabases failed" , runCommand( "admin" , BSON( "listDatabases" << 1 ) , info ) );
+        bool ret;
+        if (onDiskOnly) {
+            ret = runCommand( "admin" , BSON( "listDatabases" << 1 << "onDiskOnly" << 1 ) , info );
+        }
+        else {
+            ret = runCommand( "admin" , BSON( "listDatabases" << 1 ) , info );
+        }
+        uassert( 10005 ,  "listdatabases failed" , ret );
         uassert( 10006 ,  "listDatabases.databases not array" , info["databases"].type() == Array );
 
         list<string> names;
@@ -695,7 +702,12 @@ namespace mongo {
 
         return names;
     }
-
+    list<string> DBClientWithCommands::getDatabaseNames() {
+        return getDatabaseNames(false);
+    }
+    list<string> DBClientWithCommands::getDatabaseNamesForRepl() {
+        return getDatabaseNames(true);
+    }
     list<string> DBClientWithCommands::getCollectionNames( const string& db ) {
         list<string> names;
 

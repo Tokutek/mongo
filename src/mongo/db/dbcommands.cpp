@@ -977,7 +977,7 @@ namespace mongo {
 
             // TODO: erh 1/1/2010 I think this is broken where path != dbpath ??
             set<string> allShortNames;
-            if (1) {
+            if (!jsobj.hasElement( "onDiskOnly" )) {
                 Lock::GlobalRead lk;
                 dbHolder().getAllShortNames( allShortNames );
             }

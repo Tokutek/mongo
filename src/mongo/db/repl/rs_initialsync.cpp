@@ -439,7 +439,7 @@ namespace mongo {
                 shared_ptr<DBClientConnection> conn(r.conn_shared());
                 RemoteTransaction rtxn(*conn, "mvcc");
 
-                list<string> dbs = conn->getDatabaseNames();
+                list<string> dbs = conn->getDatabaseNamesForRepl();
 
                 //
                 // Not sure if it is necessary to have a separate fileOps 

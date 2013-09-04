@@ -877,6 +877,8 @@ namespace mongo {
            throws on error
          */
         list<string> getDatabaseNames();
+        list<string> getDatabaseNamesForRepl();
+        list<string> getDatabaseNames(bool onDiskOnly);
 
         /**
            get a list of all the current collections in db
