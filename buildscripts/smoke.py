@@ -198,19 +198,20 @@ class mongod(object):
         return False
 
     def setup_admin_user(self, port=mongod_port):
-        db = Connection( "localhost" , int(port) ).admin
         try:
-            db.authenticate("admin","password")
+            Connection( "localhost" , int(port) ).admin.command("createUser", "admin",
+                                                                pwd="password",
+                                                                roles=["readWriteAnyDatabase",
+                                                                       "dbAdminAnyDatabase",
+                                                                       "userAdminAnyDatabase",
+                                                                       "clusterAdmin"])
         except OperationFailure, e:
-            try:
-                db.command("createUser",
-                           user="admin",
-                           pwd="password")
-            except OperationFailure, e:
-                if e.message == 'need to login':
-                    pass # SERVER-4225
-                else:
-                    raise e
+            if e.message == 'need to login':
+                pass # SERVER-4225
+            elif 'not authorized on admin to execute command' in e.message:
+                pass
+            else:
+                raise e
 
     def start(self):
         global mongod_port

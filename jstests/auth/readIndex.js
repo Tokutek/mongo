@@ -10,14 +10,10 @@ testDB.addUser({user:'dbAdmin',
                  pwd:'password',
                  roles:['dbAdmin']});
 
-adminDB.addUser({user:'admin',
-                 pwd:'password',
-                 roles:['userAdminAnyDatabase']}); // To disable localhost auth bypass
-
 testDB.auth('dbAdmin', 'password');
 testDB.foo.ensureIndex({a:1});
-assert.eq(5, testDB.system.indexes.count()); // 2 for system.users, 2 for foo, 1 for system.namespaces.$_id_
+assert.eq(3, testDB.system.indexes.count()); // index on 'a' plus default _id index
 var indexDoc = testDB.system.indexes.findOne({key:{a:1}});
 printjson(indexDoc);
 assert.neq(null, indexDoc);
-assert.eq(5, testDB.system.indexes.stats().count);
+assert.eq(3, testDB.system.indexes.stats().count);

@@ -14,27 +14,41 @@ function assertGLENotOK(status) {
 }
 
 mydb.dropDatabase();
+mydb.removeAllUsers();
 
 //
 // Tests of the insert path
 //
 
-// Valid compatibility document; insert should succeed.
-mydb.system.users.insert({ user: "spencer", pwd: hex_md5("spencer:mongo:a"), readOnly: true });
-assertGLEOK(mydb.getLastErrorObj());
+// V0 user document document; insert should fail.
+assert.commandFailed(mydb.runCommand({ createUser:1,
+                                       user: "spencer",
+                                       pwd: "password",
+                                       readOnly: true }));
 
-// Invalid compatibility document; insert should fail.
-mydb.system.users.insert({ user: "andy", readOnly: true });
-assertGLENotOK(mydb.getLastErrorObj());
+// V1 user document; insert should fail.
+assert.commandFailed(mydb.runCommand({ createUser:1,
+                                       user: "spencer",
+                                       userSource: "test2",
+                                       roles: ["dbAdmin"] }));
 
-// Valid extended document; insert should succeed.
-mydb.system.users.insert({ user: "spencer", userSource: "test2", roles: ["dbAdmin"] });
-assertGLEOK(mydb.getLastErrorObj());
+// Valid V2 user document; insert should succeed.
+assert.commandWorked(mydb.runCommand({ createUser: "spencer",
+                                       pwd: "password",
+                                       roles: ["dbAdmin"] }));
 
-// Invalid extended document; insert should fail.
-mydb.system.users.insert({ user: "andy", userSource: "test2", roles: ["dbAdmin", 15] });
-assertGLENotOK(mydb.getLastErrorObj());
+// Valid V2 user document; insert should succeed.
+assert.commandWorked(mydb.runCommand({ createUser: "andy",
+                                       pwd: "password",
+                                       roles: [{name: "dbAdmin",
+                                                source: "validate_user_documents",
+                                                hasRole: true,
+                                                canDelegate: false}] }));
 
+// Non-existent role; insert should fail
+assert.commandFailed(mydb.runCommand({ createUser: "bob",
+                                       pwd: "password",
+                                       roles: ["fakeRole123"] }));
 
 //
 // Tests of the update path
