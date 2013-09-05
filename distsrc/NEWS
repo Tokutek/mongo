@@ -22,7 +22,8 @@ New features and improvements
 Bug fixes
 ~~~~~~~~~
 
-    - Optimized certain update statements to do require CPU work.  (#483)
+    - Removed unnecessary unique checks done for updates and deletes.
+      (#483)
 
     - Prevent overlocking on findAndModify and point update/delete
       operations.  (#485)
