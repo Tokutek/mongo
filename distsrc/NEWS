@@ -1,6 +1,34 @@
 tokumx news
 ===========
 
+tokumx 1.2.0
+------------
+Release date: 2013-09-05
+
+General
+~~~~~~~
+
+    - This release adds a hot backup tool as an enterprise component.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The enterprise version of TokuMX now comes with a hot backup plugin
+      that offers fast, non-blocking backup of a live running system.  See
+      the user's guide for more details.
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Removed unnecessary unique checks done for updates and deletes.
+      (#483)
+
+    - Prevent overlocking on findAndModify and point update/delete
+      operations.  (#485)
+
+
 tokumx 1.1.2
 ------------
 Release date: TBD
