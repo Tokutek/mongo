@@ -173,14 +173,7 @@ namespace mongo {
             @param name field to find. supports dot (".") notation to reach into embedded objects.
              for example "x.y" means "in the nested object in field x, retrieve field y"
         */
-        BSONElement getFieldDotted(const char *name) const;
-        /** @return the specified element.  element.eoo() will be true if not found.
-            @param name field to find. supports dot (".") notation to reach into embedded objects.
-             for example "x.y" means "in the nested object in field x, retrieve field y"
-        */
-        BSONElement getFieldDotted(const std::string& name) const {
-            return getFieldDotted( name.c_str() );
-        }
+        BSONElement getFieldDotted(const StringData &name) const;
 
         /** Like getFieldDotted(), but expands arrays and returns all matching objects.
          *  Turning off expandLastArray allows you to retrieve nested array objects instead of
@@ -210,11 +203,7 @@ namespace mongo {
         /** Get the field of the specified name. eoo() is true on the returned
             element if not found.
         */
-        BSONElement operator[] (const char *field) const {
-            return getField(field);
-        }
-
-        BSONElement operator[] (const std::string& field) const {
+        BSONElement operator[] (const StringData& field) const {
             return getField(field);
         }
 
@@ -231,18 +220,18 @@ namespace mongo {
         bool hasElement(const char *name) const { return hasField(name); }
 
         /** @return "" if DNE or wrong type */
-        const char * getStringField(const char *name) const;
+        const char * getStringField(const StringData& name) const;
 
         /** @return subobject of the given name */
-        BSONObj getObjectField(const char *name) const;
+        BSONObj getObjectField(const StringData& name) const;
 
         /** @return INT_MIN if not present - does some type conversions */
-        int getIntField(const char *name) const;
+        int getIntField(const StringData& name) const;
 
         /** @return false if not present 
             @see BSONElement::trueValue()
          */
-        bool getBoolField(const char *name) const;
+        bool getBoolField(const StringData& name) const;
 
         /** @param pattern a BSON obj indicating a set of (un-dotted) field
          *  names.  Element values are ignored.
@@ -267,7 +256,8 @@ namespace mongo {
 
         BSONObj filterFieldsUndotted(const BSONObj &filter, bool inFilter) const;
 
-        BSONElement getFieldUsingIndexNames(const char *fieldName, const BSONObj &indexKey) const;
+        BSONElement getFieldUsingIndexNames(const StringData& fieldName,
+                                            const BSONObj &indexKey) const;
 
         /** arrays are bson objects with numeric and increasing field names
             @return true if field names are numeric and increasing
