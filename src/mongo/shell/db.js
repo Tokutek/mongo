@@ -842,6 +842,26 @@ DB.prototype.printSlaveReplicationInfo = function() {
     }
 }
 
+DB.prototype.engineStatus = function(){
+    return this.runCommand('engineStatus');
+}
+
+DB.prototype.beginTransaction = function(iso){
+    var cmd = {beginTransaction: 1};
+    if (iso) {
+        cmd.isolation = iso;
+    }
+    return this.runCommand(cmd);
+}
+
+DB.prototype.commitTransaction = function(){
+    return this.runCommand('commitTransaction');
+}
+
+DB.prototype.rollbackTransaction = function(){
+    return this.runCommand('rollbackTransaction');
+}
+
 DB.prototype.serverBuildInfo = function(){
     return this._adminCommand( "buildinfo" );
 }
