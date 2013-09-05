@@ -100,9 +100,9 @@ public:
         _restoreOptions = !hasParam("noOptionsRestore");
         _restoreIndexes = !hasParam("noIndexRestore");
         _w = getParam( "w" , 1 );
-        _doBulkLoad = _w == 0;
+        _doBulkLoad = _w <= 1;
         if (!_doBulkLoad) {
-            log() << "WARNING! not using bulk load due to w > 0" << endl;
+            log() << "warning: not using bulk loader due to --w > 1" << endl;
         }
         if (hasParam( "keepIndexVersion" )) {
             log() << "warning: --keepIndexVersion is deprecated in TokuMX" << endl;
