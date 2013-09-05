@@ -21,6 +21,7 @@
 
 #include "mongo/base/status.h"
 #include "mongo/bson/util/builder.h"
+#include "mongo/db/module.h"
 #include "mongo/db/server_options.h"
 #include "mongo/util/options_parser/option_description.h"
 #include "mongo/util/options_parser/option_section.h"
@@ -466,6 +467,16 @@ namespace mongo {
             return ret;
         }
 
+        ret = addModuleOptions(options);
+        if (!ret.isOK()) {
+            return ret;
+        }
+
+        return Status::OK();
+    }
+
+    Status addModuleOptions(moe::OptionSection* options) {
+        Module::addAllOptions(options);
         return Status::OK();
     }
 
