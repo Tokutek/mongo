@@ -36,6 +36,7 @@ add_library(authcore STATIC
   privilege_document_parser
   role_graph
   role_name
+  role_graph_builtin_roles
   user
   user_name
   user_set

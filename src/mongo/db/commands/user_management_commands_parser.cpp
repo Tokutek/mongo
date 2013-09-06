@@ -38,7 +38,7 @@ namespace auth {
      */
     Status _validateAndModifyRolesArray(const BSONElement& rolesElement,
                                         const std::string& dbname,
-                                        const AuthorizationManager* authzManager,
+                                        AuthorizationManager* authzManager,
                                         BSONArray* modifiedRolesArray) {
         BSONArrayBuilder rolesBuilder;
 
@@ -97,7 +97,7 @@ namespace auth {
 
     Status parseAndValidateCreateUserCommand(const BSONObj& cmdObj,
                                              const std::string& dbname,
-                                             const AuthorizationManager* authzManager,
+                                             AuthorizationManager* authzManager,
                                              BSONObj* parsedUserObj) {
         unordered_set<std::string> validFieldNames;
         validFieldNames.insert("createUser");
@@ -198,7 +198,7 @@ namespace auth {
 
     Status parseAndValidateUpdateUserCommand(const BSONObj& cmdObj,
                                              const std::string& dbname,
-                                             const AuthorizationManager* authzManager,
+                                             AuthorizationManager* authzManager,
                                              BSONObj* parsedUpdateObj,
                                              UserName* parsedUserName) {
         unordered_set<std::string> validFieldNames;
