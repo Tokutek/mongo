@@ -15,6 +15,7 @@ function rollback() {
 // a cursor that reads more than one batchSize() and also
 // does writes to the same and other collections.
 
+db.dropDatabase();
 t = db.txncursor;
 
 function checkLiveCursors(n) {
