@@ -28,8 +28,6 @@
 namespace mongo {
 
     NamespaceIndex::NamespaceIndex(const string &dir, const StringData& database) :
-            _nsdb(NULL),
-            _namespaces(),
             _dir(dir),
             _nsdbFilename(database.toString() + ".ns"),
             _database(database.toString()),
@@ -50,7 +48,11 @@ namespace mongo {
         }
         if (_nsdb != NULL) {
             TOKULOG(1) << "Closing NamespaceIndex " << _database << endl;
-            storage::db_close(_nsdb);
+            const int r = _nsdb->close();
+            _nsdb.reset();
+            if (r != 0) {
+                msgasserted(16920, mongoutils::str::stream() << "failed to close nsdb for NamespaceIndex " << _database);
+            }
         }
     }
 
@@ -64,28 +66,40 @@ namespace mongo {
         }
     }
 
-    NOINLINE_DECL void NamespaceIndex::_init(bool may_create) {
+    NOINLINE_DECL int NamespaceIndex::_openNsdb(bool may_create) {
         const BSONObj keyPattern = BSON("ns" << 1 );
         const BSONObj info = BSON("key" << keyPattern);
+        Descriptor descriptor(keyPattern);
 
+        _nsdb.reset(new storage::Dictionary(_nsdbFilename));
+        int r = _nsdb->open(info, descriptor, may_create, false);
+        if (r != 0) {
+            _nsdb.reset();
+        }
+        return r;
+    }
+
+    NOINLINE_DECL void NamespaceIndex::_init(bool may_create) {
         // Try first without the create flag, because we're not sure if we
         // have a write lock just yet. It won't matter if the nsdb exists.
-        Descriptor descriptor(keyPattern);
-        int r = storage::db_open(&_nsdb, _nsdbFilename, info, descriptor, false, false);
-        if (r == ENOENT) {
-            if (!may_create) {
-                // didn't find on disk and we can't create it
-                return;
-            } else if (!Lock::isWriteLocked(_database)) {
-                // We would create it, but we're not write locked. Retry.
-                throw RetryWithWriteLock("creating new database " + _database);
+        int r = _openNsdb(false);
+        if (r != 0) {
+            if (r == ENOENT) {
+                if (!may_create) {
+                    // didn't find on disk and we can't create it
+                    return;
+                } else if (!Lock::isWriteLocked(_database)) {
+                    // We would create it, but we're not write locked. Retry.
+                    throw RetryWithWriteLock("creating new database " + _database);
+                }
+                NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+                rollback.noteCreate(_database);
+                // Try opening again with may_create = true
+                r = _openNsdb(true);
             }
-            NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-            rollback.noteCreate(_database);
-            // Try opening again with may_create = true
-            r = storage::db_open(&_nsdb, _nsdbFilename, info, descriptor, true, false);
-        } else if (r != 0) {
-            storage::handle_ydb_error_fatal(r);
+            if (r != 0) {
+                storage::handle_ydb_error_fatal(r);
+            }
         }
     }
 
@@ -100,8 +114,11 @@ namespace mongo {
         verify(_namespaces.empty());
 
         // Closing the DB before the transaction aborts will allow the abort to do the dbremove for us.
-        storage::db_close(_nsdb);
-        _nsdb = NULL;
+        const int r = _nsdb->close();
+        _nsdb.reset();
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
     }
 
     struct getNamespacesExtra {
@@ -135,7 +152,7 @@ namespace mongo {
         }
 
         getNamespacesExtra extra(tofill);
-        storage::Cursor c(_nsdb);
+        storage::Cursor c(_nsdb->db());
         int r = 0;
         while (r != DB_NOTFOUND) {
             r = c.dbc()->c_getf_next(c.dbc(), 0, getNamespacesCallback, &extra);
@@ -173,7 +190,8 @@ namespace mongo {
         BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
-        int r = _nsdb->del(_nsdb, cc().txn().db_txn(), &ndbt, 0);
+        DB *db = _nsdb->db();
+        int r = db->del(db, cc().txn().db_txn(), &ndbt, 0);
         if (r != 0) {
             storage::handle_ydb_error_fatal(r);
         }
@@ -198,7 +216,8 @@ namespace mongo {
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
         DB_TXN *db_txn = cc().hasTxn() ? cc().txn().db_txn() : NULL;
-        int r = _nsdb->getf_set(_nsdb, db_txn, 0, &ndbt, getf_serialized, &serialized);
+        DB *db = _nsdb->db();
+        const int r = db->getf_set(db, db_txn, 0, &ndbt, getf_serialized, &serialized);
         if (r == 0) {
             shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized, bulkLoad );
             {
@@ -267,8 +286,9 @@ namespace mongo {
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
         DBT ddbt = storage::make_dbt(serialized.objdata(), serialized.objsize());
+        DB *db = _nsdb->db();
         const int flags = overwrite ? 0 : DB_NOOVERWRITE;
-        int r = _nsdb->put(_nsdb, cc().txn().db_txn(), &ndbt, &ddbt, flags);
+        const int r = db->put(db, cc().txn().db_txn(), &ndbt, &ddbt, flags);
         if (r != 0) {
             storage::handle_ydb_error_fatal(r);
         }
@@ -319,8 +339,11 @@ namespace mongo {
         // Everything that was open should have been closed due to drop.
         verify(_namespaces.empty());
 
-        storage::db_close(_nsdb);
-        _nsdb = NULL;
+        const int r = _nsdb->close();
+        _nsdb.reset();
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
         storage::db_remove(_nsdbFilename);
     }
 

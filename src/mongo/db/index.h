@@ -29,6 +29,7 @@
 #include "mongo/db/keygenerator.h"
 #include "mongo/db/storage/builder.h"
 #include "mongo/db/storage/cursor.h"
+#include "mongo/db/storage/dictionary.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/db/storage/txn.h"
@@ -82,7 +83,7 @@ namespace mongo {
                                 indexNamespace() );
         }
 
-        // Closes the underlying DB *.  In case that throws, we can't do it in the destructor.
+        // Closes the underlying ydb dictionary.
         void close();
 
         /* pull out the relevant key objects from obj, so we
@@ -207,7 +208,7 @@ namespace mongo {
         class Cursor : public storage::Cursor {
         public:
             Cursor(const IndexDetails &idx, const int flags = 0) :
-                storage::Cursor(idx._db, flags) {
+                storage::Cursor(idx.db(), flags) {
             }
         };
 
@@ -221,15 +222,16 @@ namespace mongo {
 
         private:
             IndexDetails &_idx;
+            DB *_db;
             storage::Loader _loader;
         };
 
     protected:
-        // Open dictionary representing the index on disk.
-        DB *_db;
+        // Open ydb dictionary representing the index on disk.
+        scoped_ptr<storage::Dictionary> _db;
 
         DB *db() const {
-            return _db;
+            return _db->db();
         }
 
         static int hot_opt_callback(void *extra, float progress);
@@ -315,7 +317,7 @@ namespace mongo {
         };
         DBT startDBT = startKey.dbt();
         CallbackWrapper cbw(cb);
-        int r = _db->get_key_after_bytes(_db, cc().txn().db_txn(), &startDBT, skipLen, &CallbackWrapper::call, &cbw, 0);
+        int r = db()->get_key_after_bytes(db(), cc().txn().db_txn(), &startDBT, skipLen, &CallbackWrapper::call, &cbw, 0);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
