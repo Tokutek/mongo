@@ -395,6 +395,9 @@ namespace mongo {
     }
 
     void IndexCursor::initializeDBC() {
+        // Book-keeping for index access patterns.
+        _idx.accessed();
+
         if (_prelock) {
             // We need to prelock first, then position the cursor.
             prelock();
