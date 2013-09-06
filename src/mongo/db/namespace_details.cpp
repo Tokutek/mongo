@@ -1012,23 +1012,16 @@ namespace mongo {
     }
 
     bool NamespaceDetails::findByPK(const BSONObj &key, BSONObj &result) const {
-
-        // get a cursor over the primary key index
-        IndexDetails &pkIdx = getPKIndex();
-        IndexDetails::Cursor c(pkIdx);
-        DBC *cursor = c.dbc();
-
-        // create an index key
-        storage::Key sKey(key, NULL);
-        DBT key_dbt = sKey.dbt();
-
         TOKULOG(3) << "NamespaceDetails::findByPK looking for " << key << endl;
 
-        // TODO: Use db->getf_set which does less malloc and free.
-        // Try to find it.
-        BSONObj obj = BSONObj();
+        storage::Key sKey(key, NULL);
+        DBT key_dbt = sKey.dbt();
+        DB *db = getPKIndex().db();
+
+        BSONObj obj;
         struct findByPKCallbackExtra extra(obj);
-        const int r = cursor->c_getf_set(cursor, 0, &key_dbt, findByPKCallback, &extra);
+        const int r = db->getf_set(db, cc().txn().db_txn(), 0, &key_dbt,
+                                   findByPKCallback, &extra);
         if (extra.ex != NULL) {
             throw *extra.ex;
         }
@@ -1039,9 +1032,8 @@ namespace mongo {
         if (!obj.isEmpty()) {
             result = obj;
             return true;
-        } else {
-            return false;
         }
+        return false;
     }
 
     // Manages an array of DBT_ARRAYs and the lifetime of the objects they store.
