@@ -211,24 +211,12 @@ namespace mongo {
         NaturalOrderCollection(const BSONObj &serialized) :
             NamespaceDetails(serialized),
             _nextPK(0) {
-
-            // the next PK, if it exists, is the last key + 1
-            IndexDetails &pkIdx = getPKIndex();
             Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             {
-                IndexDetails::Cursor c(pkIdx);
-                DBC *cursor = c.dbc();
-
-                BSONObj key = BSONObj();
-                struct getfLastExtra extra(key);
-                const int r = cursor->c_getf_last(cursor, 0, getfLastCallback, &extra);
-                if (extra.ex != NULL) {
-                    throw *extra.ex;
-                }
-                if (r != 0 && r != DB_NOTFOUND) {
-                    storage::handle_ydb_error(r);
-                }
-                if (!key.isEmpty()) {
+                // The next PK, if it exists, is the last pk + 1
+                shared_ptr<Cursor> cursor = BasicCursor::make(this, -1);
+                if (cursor->ok()) {
+                    const BSONObj key = cursor->currPK();
                     dassert(key.nFields() == 1);
                     _nextPK = AtomicWord<long long>(key.firstElement().Long() + 1);
                 }
@@ -245,27 +233,6 @@ namespace mongo {
 
     protected:
         AtomicWord<long long> _nextPK;
-
-    private:
-        struct getfLastExtra {
-            BSONObj &key;
-            std::exception *ex;
-            getfLastExtra(BSONObj &k) : key(k), ex(NULL) { }
-        };
-
-        static int getfLastCallback(const DBT *key, const DBT *value, void *extra) {
-            struct getfLastExtra *info = reinterpret_cast<struct getfLastExtra *>(extra);
-            try {
-                if (key != NULL) {
-                    const storage::Key sKey(key);
-                    info->key = sKey.key().getOwned();
-                }
-                return 0;
-            } catch (std::exception &e) {
-                info->ex = &e;
-            }
-            return -1;
-        }
     };
 
     class SystemCatalogCollection : public NaturalOrderCollection {
