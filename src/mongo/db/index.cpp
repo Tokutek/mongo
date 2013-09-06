@@ -446,7 +446,8 @@ namespace mongo {
             : _name(idx.indexName()),
               _compressionMethod(idx.getCompressionMethod()),
               _readPageSize(idx.getReadPageSize()),
-              _pageSize(idx.getPageSize()) {
+              _pageSize(idx.getPageSize()),
+              _accessCount(idx.getAccessCount()) {
         idx.getStat64(&_stats);
     }
     
@@ -491,6 +492,7 @@ namespace mongo {
             b.append("compression", "unknown");
             break;
         }
+        b.appendNumber("accessCount", _accessCount);
         return b.obj();
         // TODO: (Zardosht) Need to figure out how to display these dates
         /*
