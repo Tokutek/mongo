@@ -31,6 +31,7 @@
 #include "mongo/db/querypattern.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/db/storage/dictionary.h"
 #include "mongo/db/storage/builder.h"
 #include "mongo/util/concurrency/simplerwlock.h"
 #include "mongo/util/string_map.h"
@@ -544,7 +545,7 @@ namespace mongo {
             return open_ns(ns);
         }
 
-        bool allocated() const { return _nsdb != NULL; }
+        bool allocated() const { return _nsdb.get() != NULL; }
 
         void getNamespaces( list<string>& tofill );
 
@@ -556,6 +557,7 @@ namespace mongo {
         typedef StringMap<shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
 
     private:
+        int _openNsdb(bool may_create);
         void _init(bool may_create);
 
         // @return NamespaceDetails object is the ns is currently open, NULL otherwise.
@@ -575,13 +577,15 @@ namespace mongo {
         // Only beginBulkLoad may call open_ns with bulkLoad = true.
         friend void beginBulkLoad(const StringData &ns, const vector<BSONObj> &indexes, const BSONObj &options);
 
-        DB *_nsdb;
+        // The underlying ydb dictionary that stores namespace information.
+        scoped_ptr<storage::Dictionary> _nsdb;
+
         NamespaceDetailsMap _namespaces;
         const string _dir;
         const string _nsdbFilename;
         const string _database;
-        // It isn't necessary to hold either of these rwlock in a a DBWrite lock.
 
+        // It isn't necessary to hold either of these locks in a a DBWrite lock.
 
         // This lock protects access to the _namespaces variable
         // With a DBRead lock and this shared lock, one can retrieve

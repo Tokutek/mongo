@@ -185,7 +185,6 @@ namespace mongo {
     }
 
     IndexDetails::IndexDetails(const BSONObj &info) :
-        _db(NULL),
         _info(info.copy()),
         _keyPattern(info["key"].Obj().copy()),
         _unique(info["unique"].trueValue()),
@@ -198,28 +197,37 @@ namespace mongo {
 
     // Open the dictionary. Creates it if necessary.
     void IndexDetails::open(const bool may_create) {
-        const string dbname = indexNamespace();
+        const string dname = indexNamespace();
         if (may_create) {
-            addNewNamespaceToCatalog(dbname);
+            addNewNamespaceToCatalog(dname);
         }
 
-        TOKULOG(1) << "Opening IndexDetails " << dbname << endl;
-        const int r = storage::db_open(&_db, dbname, _info, *_descriptor,
-                                       may_create, _info["background"].trueValue());
+        TOKULOG(1) << "Opening IndexDetails " << dname << endl;
+        _db.reset(new storage::Dictionary(dname));
+        const int r = _db->open(_info, *_descriptor,
+                                may_create, _info["background"].trueValue());
         if (r != 0) {
+            _db.reset();
             storage::handle_ydb_error(r);
         }
     }
 
     IndexDetails::~IndexDetails() {
-        verify(_db == NULL);
+        try {
+            close();
+        } catch (DBException &ex) {
+            problem() << "~IndexDetails " << _keyPattern
+                      << ": Caught exception: " << ex.what() << endl;
+        }
     }
 
     void IndexDetails::close() {
-        TOKULOG(1) << "Closing IndexDetails " << indexNamespace() << endl;
-        if (_db) {
-            storage::db_close(_db);
-            _db = NULL;
+        if (_db.get() != NULL) {
+            const int r = _db->close();
+            _db.reset();
+            if (r != 0) {
+                storage::handle_ydb_error(r);
+            }
         }
     }
 
@@ -239,8 +247,7 @@ namespace mongo {
         const string ns = indexNamespace();
         const string parentns = parentNS();
 
-        storage::db_close(_db);
-        _db = NULL;
+        close();
         storage::db_remove(ns);
 
         // Removing this index's ns from the system.indexes/namespaces catalog.
@@ -341,7 +348,7 @@ namespace mongo {
     }
 
     void IndexDetails::acquireTableLock() {
-        const int r = _db->pre_acquire_table_lock(_db, cc().txn().db_txn());
+        const int r = db()->pre_acquire_table_lock(db(), cc().txn().db_txn());
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
@@ -349,7 +356,7 @@ namespace mongo {
 
     enum toku_compression_method IndexDetails::getCompressionMethod() const {
         enum toku_compression_method ret;
-        int r = _db->get_compression_method(_db, &ret);
+        int r = db()->get_compression_method(db(), &ret);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
@@ -358,7 +365,7 @@ namespace mongo {
 
     uint32_t IndexDetails::getPageSize() const {
         uint32_t ret;
-        int r = _db->get_pagesize(_db, &ret);
+        int r = db()->get_pagesize(db(), &ret);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
@@ -367,7 +374,7 @@ namespace mongo {
 
     uint32_t IndexDetails::getReadPageSize() const {
         uint32_t ret;
-        int r = _db->get_readpagesize(_db, &ret);
+        int r = db()->get_readpagesize(db(), &ret);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
@@ -375,7 +382,7 @@ namespace mongo {
     }
 
     void IndexDetails::getStat64(DB_BTREE_STAT64* stats) const {
-        int r = _db->stat64(_db, NULL, stats);
+        int r = db()->stat64(db(), NULL, stats);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
@@ -394,12 +401,12 @@ namespace mongo {
     }
 
     void IndexDetails::optimize() {        
-        int r = _db->optimize(_db);
+        int r = db()->optimize(db());
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
         uint64_t iter = 0;
-        r = _db->hot_optimize(_db, NULL, NULL, hot_opt_callback, &iter);
+        r = db()->hot_optimize(db(), NULL, NULL, hot_opt_callback, &iter);
         if (r != 0) {
             uassert(16810, mongoutils::str::stream() << "reIndex query killed ", false);
         }
@@ -415,20 +422,20 @@ namespace mongo {
             left = skey1.dbt();
             storage::Key skey2(*rightKey, rightPK);
             right = skey2.dbt();
-            r = _db->hot_optimize(_db, &left, &right, hot_opt_callback, &iter);
+            r = db()->hot_optimize(db(), &left, &right, hot_opt_callback, &iter);
         }
         if (leftKey != NULL) {
             storage::Key skey1(*leftKey, leftPK);
             left = skey1.dbt();
-            r = _db->hot_optimize(_db, &left, NULL, hot_opt_callback, &iter);
+            r = db()->hot_optimize(db(), &left, NULL, hot_opt_callback, &iter);
         }
         if (rightKey != NULL) {
             storage::Key skey2(*rightKey, rightPK);
             right = skey2.dbt();
-            r = _db->hot_optimize(_db, NULL, &right, hot_opt_callback, &iter);
+            r = db()->hot_optimize(db(), NULL, &right, hot_opt_callback, &iter);
         }
         else {
-            r = _db->hot_optimize(_db, NULL, NULL, hot_opt_callback, &iter);
+            r = db()->hot_optimize(db(), NULL, NULL, hot_opt_callback, &iter);
         }
         if (r != 0) {
             uassert(16913, mongoutils::str::stream() << "hotOptimizeRange killed", false);
@@ -497,7 +504,7 @@ namespace mongo {
     /* ---------------------------------------------------------------------- */
 
     IndexDetails::Builder::Builder(IndexDetails &idx) :
-        _idx(idx), _loader(&_idx._db, 1) {
+        _idx(idx), _db(_idx.db()), _loader(&_db, 1) {
         _loader.setPollMessagePrefix(str::stream() << "Cold index build progress: "
                                                    << idx.parentNS() << ", key "
                                                    << idx.keyPattern()
