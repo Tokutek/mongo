@@ -185,9 +185,9 @@ namespace mongo {
         uint32_t getPageSize() const;
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
-        void optimize();
+        void optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
+                      const bool sendOptimizeMessage);
         void acquireTableLock();
-        void hotOptimizeRange(const BSONObj* leftKey, const BSONObj *leftPK, const BSONObj* rightKey, const BSONObj *rightPK);
 
         struct UniqueCheckExtra : public ExceptionSaver {
             const storage::Key &newKey;

@@ -192,14 +192,6 @@ namespace mongo {
                 return minKey;
             }
         }
-        void hotOptimizeOplog(GTID end) {
-            // do a hot optimize up until gtid;
-            BSONObjBuilder q;
-            addGTIDToBSON("", end, q);
-            IndexDetails &pkIdx = getPKIndex();
-            BSONObj done = q.done();
-            pkIdx.hotOptimizeRange(NULL, NULL, &done, NULL);
-        }
     };
 
     class NaturalOrderCollection : public NamespaceDetails {
@@ -758,8 +750,11 @@ namespace mongo {
         void empty() {
             uasserted( 16868, "Cannot empty a collection under-going bulk load." );
         }
-        void optimize() {
+        void optimizeAll() {
             uasserted( 16895, "Cannot optimize a collection under-going bulk load." );
+        }
+        void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK) {
+            uasserted( 16921, "Cannot optimize a collection under-going bulk load." );
         }
         bool dropIndexes(const StringData& ns, const StringData& name, string &errmsg,
                          BSONObjBuilder &result, bool mayDeleteIdIndex) {
@@ -1361,11 +1356,25 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::optimize() {
+    void NamespaceDetails::optimizeAll() {
         for (int i = 0; i < _nIndexes; i++) {
             IndexDetails &idx = *_indexes[i];
-            idx.optimize();
+            const bool ascending = Ordering::make(idx.keyPattern()).descending(0);
+            const bool isPK = isPKIndex(idx);
+
+            storage::Key leftSKey(ascending ? minKey : maxKey,
+                                  isPK ? NULL : &minKey);
+            storage::Key rightSKey(ascending ? maxKey : minKey,
+                                   isPK ? NULL : &maxKey);
+            idx.optimize(rightSKey, leftSKey, true);
         }
+    }
+
+    void NamespaceDetails::optimizePK(const BSONObj &leftKey, const BSONObj &rightKey) {
+        IndexDetails &idx = getPKIndex();
+        storage::Key leftSKey(leftKey, NULL);
+        storage::Key rightSKey(rightKey, NULL);
+        idx.optimize(leftSKey, rightSKey, false);
     }
 
     void NamespaceDetails::fillCollectionStats(

@@ -279,8 +279,12 @@ namespace mongo {
             return findIdIndex() >= 0;
         }
 
-        // Run optimize on each index.
-        virtual void optimize();
+        // send an optimize message into each index and run
+        // hot optimize over all of the keys.
+        virtual void optimizeAll();
+        // @param left/rightPK [ left, right ] primary key range to run
+        // hot optimize on. no optimize message is sent.
+        virtual void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK);
 
         virtual bool dropIndexes(const StringData& ns, const StringData& name, string &errmsg,
                                  BSONObjBuilder &result, bool mayDeleteIdIndex);
@@ -351,9 +355,6 @@ namespace mongo {
         
         virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
             msgasserted( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection" );
-        }
-        virtual void hotOptimizeOplog(GTID end) {
-            massert( 16914, "bug: should not call hotOptimizeOplog on non-oplog collection", false );
         }
 
         class Indexer : boost::noncopyable {

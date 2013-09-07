@@ -406,6 +406,10 @@ namespace mongo {
 
     void hotOptimizeOplogTo(GTID gtid) {
         Client::ReadContext ctx(rsoplog);
-        rsOplogDetails->hotOptimizeOplog(gtid);
+
+        // do a hot optimize up until gtid;
+        BSONObjBuilder q;
+        addGTIDToBSON("", gtid, q);
+        rsOplogDetails->optimizePK(minKey, q.done());
     }
 }

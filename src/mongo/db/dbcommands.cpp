@@ -802,7 +802,7 @@ namespace mongo {
             }
 
             // run optimize
-            d->optimize();
+            d->optimizeAll();
 
             result.append( "nIndexes" , (int)all.size() );
             // Vanilla mongo does a drop followed by an index build, and the drop populates this field.

@@ -400,45 +400,21 @@ namespace mongo {
         return retval;
     }
 
-    void IndexDetails::optimize() {        
-        int r = db()->optimize(db());
-        if (r != 0) {
-            storage::handle_ydb_error(r);
+    void IndexDetails::optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
+                                const bool sendOptimizeMessage) {
+        if (sendOptimizeMessage) {
+            const int r = db()->optimize(db());
+            if (r != 0) {
+                storage::handle_ydb_error(r);
+            }
         }
+
         uint64_t iter = 0;
-        r = db()->hot_optimize(db(), NULL, NULL, hot_opt_callback, &iter);
+        DBT left = leftSKey.dbt();
+        DBT right = rightSKey.dbt();
+        const int r = db()->hot_optimize(db(), &left, &right, hot_opt_callback, &iter);
         if (r != 0) {
             uassert(16810, mongoutils::str::stream() << "reIndex query killed ", false);
-        }
-    }
-
-    void IndexDetails::hotOptimizeRange(const BSONObj* leftKey, const BSONObj *leftPK, const BSONObj* rightKey, const BSONObj *rightPK) {
-        uint64_t iter = 0;
-        DBT left;
-        DBT right;
-        int r = 0;
-        if (leftKey != NULL && rightKey != NULL) {
-            storage::Key skey1(*leftKey, leftPK);
-            left = skey1.dbt();
-            storage::Key skey2(*rightKey, rightPK);
-            right = skey2.dbt();
-            r = db()->hot_optimize(db(), &left, &right, hot_opt_callback, &iter);
-        }
-        if (leftKey != NULL) {
-            storage::Key skey1(*leftKey, leftPK);
-            left = skey1.dbt();
-            r = db()->hot_optimize(db(), &left, NULL, hot_opt_callback, &iter);
-        }
-        if (rightKey != NULL) {
-            storage::Key skey2(*rightKey, rightPK);
-            right = skey2.dbt();
-            r = db()->hot_optimize(db(), NULL, &right, hot_opt_callback, &iter);
-        }
-        else {
-            r = db()->hot_optimize(db(), NULL, NULL, hot_opt_callback, &iter);
-        }
-        if (r != 0) {
-            uassert(16913, mongoutils::str::stream() << "hotOptimizeRange killed", false);
         }
     }
 
