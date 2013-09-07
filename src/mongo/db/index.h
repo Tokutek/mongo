@@ -205,6 +205,15 @@ namespace mongo {
         template<class Callback>
         void getKeyAfterBytes(const storage::Key &startKey, uint64_t skipLen, Callback &cb) const;
 
+        // Book-keeping for index access, displayed in db.stats()
+        void accessed() const {
+            _accessCount.fetchAndAdd(1);
+        }
+
+        uint64_t getAccessCount() const {
+            return _accessCount.load();
+        }
+
         class Cursor : public storage::Cursor {
         public:
             Cursor(const IndexDetails &idx, const int flags = 0) :
@@ -254,6 +263,8 @@ namespace mongo {
         scoped_ptr<Descriptor> _descriptor;
 
     private:
+        mutable AtomicWord<uint64_t> _accessCount;
+
         // Must be called after constructor. Opens the ydb dictionary
         // using _descriptor, which is set by subclass constructors.
         //
@@ -278,12 +289,16 @@ namespace mongo {
         uint64_t getStorageSize() const {
             return _stats.bt_fsize;
         }
+        uint64_t getAccessCount() const {
+            return _accessCount;
+        }
     private:
         string _name;
         DB_BTREE_STAT64 _stats;
         enum toku_compression_method _compressionMethod;
         uint32_t _readPageSize;
         uint32_t _pageSize;
+        uint64_t _accessCount;
     };
 
     template<class Callback>
