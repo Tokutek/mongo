@@ -636,7 +636,7 @@ namespace {
 }  // namespace
 
     void registerMongoFunction(const JSFunctionSpec& functionSpec) {
-        fassert(16922, mongoFunctionsVector != NULL);
+        fassert(16986, mongoFunctionsVector != NULL);
         mongoFunctionsVector->push_back(functionSpec);
     }
 

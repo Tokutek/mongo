@@ -53,7 +53,7 @@ namespace mongo {
     }  // namespace
 
     void v8RegisterMongoPrototypeManipulator(const V8FunctionPrototypeManipulatorFn& manipulator) {
-        fassert(16923, !_mongoPrototypeManipulatorsFrozen);
+        fassert(16987, !_mongoPrototypeManipulatorsFrozen);
         _mongoPrototypeManipulators.push_back(manipulator);
     }
 
