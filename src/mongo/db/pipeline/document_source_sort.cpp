@@ -89,13 +89,6 @@ namespace mongo {
         }
     }
 
-    intrusive_ptr<DocumentSourceSort> DocumentSourceSort::create(
-        const intrusive_ptr<ExpressionContext> &pExpCtx) {
-        intrusive_ptr<DocumentSourceSort> pSource(
-            new DocumentSourceSort(pExpCtx));
-        return pSource;
-    }
-
     void DocumentSourceSort::dispose() {
         documents.clear();
         pSource->dispose();

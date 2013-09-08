@@ -17,9 +17,10 @@
 
 #include "pch.h"
 
+#include "db/interrupt_status_mongod.h"
+#include "db/namespacestring.h"
 #include "db/pipeline/pipeline.h"
 #include "db/pipeline/pipeline_d.h"
-#include "db/interrupt_status_mongod.h"
 #include "db/pipeline/accumulator.h"
 #include "db/pipeline/document.h"
 #include "db/pipeline/document_source.h"

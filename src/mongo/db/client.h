@@ -339,44 +339,19 @@ namespace mongo {
             ~GodScope();
         };
 
-<<<<<<< HEAD
-=======
-        //static void assureDatabaseIsOpen(const string& ns, string path=dbpath);
-        
-        /** "read lock, and set my context, all in one operation" 
-         *  This handles (if not recursively locked) opening an unopened database.
-         */
-        class ReadContext : boost::noncopyable { 
-        public:
-            ReadContext(const std::string& ns, const std::string& path=dbpath, bool doauth=true );
-            Context& ctx() { return *c.get(); }
-        private:
-            scoped_ptr<Lock::DBRead> lk;
-            scoped_ptr<Context> c;
-        };
-
->>>>>>> 15624a7... SERVER-6908 Don't pass strings by value
         /* Set database we want to use, then, restores when we finish (are out of scope)
            Note this is also helpful if an exception happens as the state if fixed up.
         */
         class Context : boost::noncopyable {
         public:
             /** this is probably what you want */
-<<<<<<< HEAD
             Context(const StringData &ns, const StringData &path=dbpath, bool doauth=true, bool doVersion=true );
-=======
-            Context(const string& ns, const std::string& path=dbpath, bool doauth=true, bool doVersion=true );
->>>>>>> 15624a7... SERVER-6908 Don't pass strings by value
 
             /** note: this does not call finishInit -- i.e., does not call 
                       shardVersionOk() for example. 
                 see also: reset().
             */
-<<<<<<< HEAD
             Context( const StringData &ns , Database * db, bool doauth=true );
-=======
-            Context( const std::string& ns , Database * db, bool doauth=true );
->>>>>>> 15624a7... SERVER-6908 Don't pass strings by value
 
             // used by ReadContext
             Context(const StringData &path, const StringData &ns, Database *db, bool doauth);
@@ -433,11 +408,7 @@ namespace mongo {
 
         class WriteContext : boost::noncopyable {
         public:
-<<<<<<< HEAD
             WriteContext(const StringData &ns, const StringData &path=dbpath, bool doauth=true );
-=======
-            WriteContext(const string& ns, const std::string& path=dbpath, bool doauth=true );
->>>>>>> 15624a7... SERVER-6908 Don't pass strings by value
             Context& ctx() { return _c; }
         private:
             Lock::DBWrite _lk;

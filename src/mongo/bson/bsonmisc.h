@@ -209,7 +209,7 @@ namespace mongo {
 
         Labeler operator<<( const Labeler::Label &l );
 
-        void endField( const StringData &nextFieldName = StringData() );
+        void endField( const StringData& nextFieldName = StringData() );
         bool subobjStarted() const { return _fieldName != 0; }
 
         // The following methods provide API compatibility with BSONArrayBuilder
@@ -221,7 +221,7 @@ namespace mongo {
         // to provide the return value.
         BSONObjBuilder& builder() { return *_builder; }
     private:
-        const char * _fieldName;
+        StringData _fieldName;
         BSONObjBuilder * _builder;
 
         bool haveSubobj() const { return _subobj.get() != 0; }
