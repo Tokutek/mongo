@@ -774,7 +774,7 @@ namespace DocumentTests {
                 Value value() { return Value::createDate(0); }
             };
             
-            /** Coerce js literal regex to bool. */
+            /** Coerce // to bool. */
             class RegexToBool : public ToBoolTrue {
                 Value value() { return fromBson( fromjson( "{''://}" ) ); }
             };
