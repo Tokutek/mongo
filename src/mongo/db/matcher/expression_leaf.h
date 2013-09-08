@@ -67,6 +67,8 @@ namespace mongo {
 
         virtual const StringData path() const { return _path; }
 
+        virtual void resetTag() { setTag(NULL); }
+
     protected:
         Status initPath( const StringData& path );
 
@@ -108,6 +110,9 @@ namespace mongo {
         virtual LeafMatchExpression* shallowClone() const {
             ComparisonMatchExpression* e = new EqualityMatchExpression();
             e->init( path(), _rhs  );
+            if ( getTag() ) {
+                e->setTag(getTag()->clone());
+            }
             return e;
         }
     };
@@ -118,6 +123,9 @@ namespace mongo {
         virtual LeafMatchExpression* shallowClone() const {
             ComparisonMatchExpression* e = new LTEMatchExpression();
             e->init( path(), _rhs  );
+            if ( getTag() ) {
+                e->setTag(getTag()->clone());
+            }
             return e;
         }
 
@@ -129,6 +137,9 @@ namespace mongo {
         virtual LeafMatchExpression* shallowClone() const {
             ComparisonMatchExpression* e = new LTMatchExpression();
             e->init( path(), _rhs  );
+            if ( getTag() ) {
+                e->setTag(getTag()->clone());
+            }
             return e;
         }
 
@@ -140,6 +151,9 @@ namespace mongo {
         virtual LeafMatchExpression* shallowClone() const {
             ComparisonMatchExpression* e = new GTMatchExpression();
             e->init( path(), _rhs  );
+            if ( getTag() ) {
+                e->setTag(getTag()->clone());
+            }
             return e;
         }
 
@@ -151,6 +165,9 @@ namespace mongo {
         virtual LeafMatchExpression* shallowClone() const {
             ComparisonMatchExpression* e = new GTEMatchExpression();
             e->init( path(), _rhs  );
+            if ( getTag() ) {
+                e->setTag(getTag()->clone());
+            }
             return e;
         }
 
@@ -177,6 +194,9 @@ namespace mongo {
         virtual LeafMatchExpression* shallowClone() const {
             RegexMatchExpression* e = new RegexMatchExpression();
             e->init( path(), _regex, _flags );
+            if ( getTag() ) {
+                e->setTag(getTag()->clone());
+            }
             return e;
         }
 
@@ -201,6 +221,9 @@ namespace mongo {
         virtual LeafMatchExpression* shallowClone() const {
             ModMatchExpression* m = new ModMatchExpression();
             m->init( path(), _divisor, _remainder );
+            if ( getTag() ) {
+                m->setTag(getTag()->clone());
+            }
             return m;
         }
 
@@ -224,6 +247,9 @@ namespace mongo {
         virtual LeafMatchExpression* shallowClone() const {
             ExistsMatchExpression* e = new ExistsMatchExpression();
             e->init( path() );
+            if ( getTag() ) {
+                e->setTag(getTag()->clone());
+            }
             return e;
         }
 
@@ -342,6 +368,9 @@ namespace mongo {
         virtual MatchExpression* shallowClone() const {
             TypeMatchExpression* e = new TypeMatchExpression();
             e->init(_path, _type);
+            if ( getTag() ) {
+                e->setTag(getTag()->clone());
+            }
             return e;
         }
 
@@ -359,6 +388,8 @@ namespace mongo {
         int getData() const { return _type; }
 
         virtual const StringData path() const { return _path; }
+
+        virtual void resetTag() { setTag(NULL); }
 
     private:
         bool _matches( const StringData& path,

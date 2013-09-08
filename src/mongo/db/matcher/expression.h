@@ -83,7 +83,7 @@ namespace mongo {
         /**
          * Get the i-th child.
          */
-        virtual const MatchExpression* getChild( size_t i ) const { return NULL; }
+        virtual MatchExpression* getChild( size_t i ) const { return NULL; }
 
         /**
          * Get the path of the leaf.  Returns StringData() if there is no path (node is logical).
@@ -158,6 +158,7 @@ namespace mongo {
         public:
             virtual ~TagData() { }
             virtual void debugString(StringBuilder* builder) const = 0;
+            virtual TagData* clone() const = 0;
         };
 
         /**
@@ -165,6 +166,7 @@ namespace mongo {
          */
         void setTag(TagData* data) { _tagData.reset(data); }
         TagData* getTag() const { return _tagData.get(); }
+        virtual void resetTag() = 0;
 
         //
         // Debug information
@@ -207,6 +209,7 @@ namespace mongo {
             return other->matchType() == ATOMIC;
         }
 
+        virtual void resetTag() { setTag(NULL); }
     };
 
     class FalseMatchExpression : public MatchExpression {
@@ -231,5 +234,6 @@ namespace mongo {
             return other->matchType() == ALWAYS_FALSE;
         }
 
+        virtual void resetTag() { setTag(NULL); }
     };
 }
