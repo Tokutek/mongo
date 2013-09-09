@@ -857,12 +857,6 @@ namespace mongo {
 
         virtual GetDepsReturn getDependencies(set<string>& deps) const;
 
-        /*
-          TODO
-          Adjacent sorts should reduce to the last sort.
-        virtual bool coalesce(const intrusive_ptr<DocumentSource> &pNextSource);
-        */
-
         // Virtuals for SplittableDocumentSource
         // All work for sort is done in router currently if there is no limit.
         // If there is a limit, the $sort/$limit combination is performed on the

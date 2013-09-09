@@ -315,7 +315,7 @@ namespace mongo {
     void Document::hash_combine(size_t &seed) const {
         for (DocumentStorageIterator it = storage().iterator(); !it.atEnd(); it.advance()) {
             StringData name = it->nameSD();
-            boost::hash_range(seed, name.rawData(), name.rawData()+name.size());
+            boost::hash_range(seed, name.rawData(), name.rawData() + name.size());
             it->val.hash_combine(seed);
         }
     }
