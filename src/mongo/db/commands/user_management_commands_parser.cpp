@@ -104,6 +104,7 @@ namespace auth {
         validFieldNames.insert("customData");
         validFieldNames.insert("pwd");
         validFieldNames.insert("roles");
+        validFieldNames.insert("writeConcern");
 
         // Iterate through all fields in command object and make sure there are no unexpected
         // ones.
@@ -206,6 +207,7 @@ namespace auth {
         validFieldNames.insert("customData");
         validFieldNames.insert("pwd");
         validFieldNames.insert("roles");
+        validFieldNames.insert("writeConcern");
 
         // Iterate through all fields in command object and make sure there are no unexpected
         // ones.
