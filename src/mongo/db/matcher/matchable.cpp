@@ -24,6 +24,7 @@ namespace mongo {
 
     BSONMatchableDocument::BSONMatchableDocument( const BSONObj& obj )
         : _obj( obj ) {
+        _iteratorUsed = false;
     }
 
     BSONMatchableDocument::~BSONMatchableDocument() {
