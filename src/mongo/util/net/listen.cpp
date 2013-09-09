@@ -24,6 +24,7 @@
 #include "mongo/base/owned_pointer_vector.h"
 #include "mongo/util/net/message_port.h"
 #include "mongo/util/net/ssl_manager.h"
+#include "mongo/util/scopeguard.h"
 
 #ifndef _WIN32
 
@@ -124,6 +125,7 @@ namespace mongo {
             const SockAddr& me = *it;
 
             SOCKET sock = ::socket(me.getType(), SOCK_STREAM, 0);
+            ScopeGuard socketGuard = MakeGuard(&closesocket, sock);
             massert( 15863 , str::stream() << "listen(): invalid socket? " << errnoWithDescription() , sock >= 0 );
 
             if (me.getType() == AF_UNIX) {
@@ -157,7 +159,6 @@ namespace mongo {
                 error() << "listen(): bind() failed " << errnoWithDescription(x) << " for socket: " << me.toString() << endl;
                 if ( x == EADDRINUSE )
                     error() << "  addr already in use" << endl;
-                closesocket(sock);
                 return;
             }
 
@@ -172,13 +173,13 @@ namespace mongo {
             
             if ( ::listen(sock, 128) != 0 ) {
                 error() << "listen(): listen() failed " << errnoWithDescription() << endl;
-                closesocket(sock);
                 return;
             }
 
             ListeningSockets::get()->add( sock );
 
             _socks.push_back(sock);
+            socketGuard.Dismiss();
         }
         
         _setupSocketsSuccessful = true;
