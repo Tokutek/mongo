@@ -747,6 +747,7 @@ add_executable(mongo
   shell/linenoise
   shell/linenoise_utf8
   shell/mk_wcwidth
+  shell/shell_options
   )
 add_dependencies(mongo generate_mongo_server_cpp generate_error_codes generate_action_types)
 link_recursive_deps(mongo
