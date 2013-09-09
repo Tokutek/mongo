@@ -38,11 +38,8 @@ namespace mongo {
         */
         static void closeDatabase( const StringData &db, const StringData& path );
 
-        /**
-         * tries to make sure that this hasn't been deleted
-         */
-        bool isOk() const { return _magic == 781231; }
-
+        // TODO: This is wrong. The nsindex may not be initialized yet,
+        // (ie: it's not open) but that doesn't mean it's empty.
         bool isEmpty() { return !_nsIndex.allocated(); }
 
         int profile() const { return _profile; }
@@ -58,6 +55,7 @@ namespace mongo {
          */
         bool setProfilingLevel( int newLevel , string& errmsg );
 
+        // TODO: This is dead code
         /**
          * @return true if ns is part of the database
          *         ns=foo.bar, db=foo returns true

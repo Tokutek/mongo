@@ -63,7 +63,6 @@ namespace mongo {
             // The underlying dbname.ns dictionary is opend if it exists,
             // and created lazily on the next write.
             _nsIndex.init();
-            _magic = 781231;
         } catch (std::exception &e) {
             log() << "warning database " << _path << " " << _name << " could not be opened" << endl;
             DBException* dbe = dynamic_cast<DBException*>(&e);
