@@ -33,11 +33,7 @@
 #include "mongo/util/assert_util.h"
 #include "mongo/util/md5.hpp"
 #include "mongo/util/net/ssl_manager.h"
-
-#ifdef MONGO_SSL
-// TODO: Remove references to cmdline from the client.
-#include "mongo/db/cmdline.h"
-#endif  // defined MONGO_SSL
+#include "mongo/util/net/ssl_options.h"
 
 namespace mongo {
 
@@ -921,7 +917,7 @@ namespace mongo {
         }
 
 #ifdef MONGO_SSL
-        if ( cmdLine.sslOnNormalPorts ) {
+        if (sslGlobalParams.sslOnNormalPorts) {
             return p->secure( sslManager() );
         }
 #endif

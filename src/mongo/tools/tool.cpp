@@ -35,6 +35,7 @@
 #include "mongo/platform/posix_fadvise.h"
 #include "mongo/util/options_parser/option_section.h"
 #include "mongo/util/password.h"
+#include "mongo/util/net/ssl_options.h"
 #include "mongo/util/text.h"
 #include "mongo/util/version.h"
 
@@ -118,7 +119,7 @@ namespace mongo {
 
 #ifdef MONGO_SSL
         if (_params.count("ssl")) {
-            mongo::cmdLine.sslOnNormalPorts = true;
+            sslGlobalParams.sslOnNormalPorts = true;
         }
 #endif
 

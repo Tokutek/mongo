@@ -114,17 +114,6 @@ namespace mongo {
         ProcessId parentProc;      // --fork pid of initial process
         ProcessId leaderProc;      // --fork pid of leader process
 #endif
-#ifdef MONGO_SSL
-        bool sslOnNormalPorts;      // --sslOnNormalPorts
-        std::string sslPEMKeyFile;       // --sslPEMKeyFile
-        std::string sslPEMKeyPassword;   // --sslPEMKeyPassword
-        std::string sslClusterFile;       // --sslInternalKeyFile
-        std::string sslClusterPassword;   // --sslInternalKeyPassword
-        std::string sslCAFile;      // --sslCAFile
-        std::string sslCRLFile;     // --sslCRLFile
-        bool sslWeakCertificateValidation; // --sslWeakCertificateValidation
-        bool sslFIPSMode; // --sslFIPSMode
-#endif
         
         // TokuMX variables
         bool directio;
@@ -190,10 +179,6 @@ namespace mongo {
         txnMemLimit(1ULL<<20), fastupdates(false), fastupdatesIgnoreErrors(false), pluginsDir(), plugins()
     {
         started = time(0);
-
-#ifdef MONGO_SSL
-        sslOnNormalPorts = false;
-#endif
     }
 
     extern CmdLine cmdLine;

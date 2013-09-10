@@ -51,6 +51,7 @@ add_library(mongocommon_util STATIC
   stack_introspect
   net/sock
   net/ssl_manager
+  net/ssl_options
   net/httpclient
   net/message
   net/message_port
@@ -70,6 +71,7 @@ target_link_libraries(mongocommon_util LINK_PUBLIC
   stringutils
   fail_point
   thread_name
+  options_parser
   ${PCRE_LIBRARIES}
   murmurhash3
   ${Boost_LIBRARIES}
