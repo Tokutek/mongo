@@ -1127,7 +1127,7 @@ static Status processCommandLineOptions(const std::vector<std::string>& argv) {
                 ::_exit(EXIT_BADOPTIONS);
             }
         }
-        if (params.count("port") == 0 ) {
+        if (!params.count("port")) {
             if( params.count("configsvr") ) {
                 cmdLine.port = CmdLine::ConfigServerPort;
             }
@@ -1151,7 +1151,7 @@ static Status processCommandLineOptions(const std::vector<std::string>& argv) {
                 log() << "replication should not be enabled on a config server" << std::endl;
                 ::_exit(EXIT_BADOPTIONS);
             }
-            if ( params.count( "dbpath" ) == 0 )
+            if (!params.count("dbpath"))
                 dbpath = "/data/configdb";
         }
         if ( params.count( "profile" ) ) {
@@ -1161,7 +1161,7 @@ static Status processCommandLineOptions(const std::vector<std::string>& argv) {
             enableIPv6();
         }
 
-        if (params.count("noMoveParanoia") > 0 && params.count("moveParanoia") > 0) {
+        if (params.count("noMoveParanoia") && params.count("moveParanoia")) {
             std::cerr << "The moveParanoia and noMoveParanoia flags cannot both be set; "
                       << "please use only one of them." << std::endl;
             ::_exit(EXIT_BADOPTIONS);
