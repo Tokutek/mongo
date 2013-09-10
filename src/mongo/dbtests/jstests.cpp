@@ -111,22 +111,22 @@ namespace JSTests {
             ASSERT( 5 == s->getNumber( "x" ) );
 
             s->invoke( "return 17;" , 0, 0 );
-            ASSERT( 17 == s->getNumber( "return" ) );
+            ASSERT( 17 == s->getNumber( "__returnValue" ) );
 
             s->invoke( "function(){ return 17; }" , 0, 0 );
-            ASSERT( 17 == s->getNumber( "return" ) );
+            ASSERT( 17 == s->getNumber( "__returnValue" ) );
 
             s->setNumber( "x" , 1.76 );
             s->invoke( "return x == 1.76; " , 0, 0 );
-            ASSERT( s->getBoolean( "return" ) );
+            ASSERT( s->getBoolean( "__returnValue" ) );
 
             s->setNumber( "x" , 1.76 );
             s->invoke( "return x == 1.79; " , 0, 0 );
-            ASSERT( ! s->getBoolean( "return" ) );
+            ASSERT( ! s->getBoolean( "__returnValue" ) );
 
             BSONObj obj = BSON( "" << 11.0 );
             s->invoke( "function( z ){ return 5 + z; }" , &obj, 0 );
-            ASSERT_EQUALS( 16 , s->getNumber( "return" ) );
+            ASSERT_EQUALS( 16 , s->getNumber( "__returnValue" ) );
 
             delete s;
         }
@@ -194,7 +194,12 @@ namespace JSTests {
             ASSERT( !_logger.logged() );
 
             // An error is logged for an invalid statement.
-            ASSERT_NOT_EQUALS( 0, scope->invoke( "notAFunction()", 0, 0 ) );
+            try {
+                scope->invoke( "notAFunction()", 0, 0 );
+            }
+            catch(const DBException&) {
+                // ignore the exception; just test that we logged something
+            }
             ASSERT( _logger.logged() );
         }
     private:
@@ -210,45 +215,45 @@ namespace JSTests {
             s->setObject( "blah" , o );
 
             s->invoke( "return blah.x;" , 0, 0 );
-            ASSERT_EQUALS( 17 , s->getNumber( "return" ) );
+            ASSERT_EQUALS( 17 , s->getNumber( "__returnValue" ) );
             s->invoke( "return blah.y;" , 0, 0 );
-            ASSERT_EQUALS( "eliot" , s->getString( "return" ) );
+            ASSERT_EQUALS( "eliot" , s->getString( "__returnValue" ) );
 
             s->invoke( "return this.z;" , 0, &o );
-            ASSERT_EQUALS( "sara" , s->getString( "return" ) );
+            ASSERT_EQUALS( "sara" , s->getString( "__returnValue" ) );
 
             s->invoke( "return this.z == 'sara';" , 0, &o );
-            ASSERT_EQUALS( true , s->getBoolean( "return" ) );
+            ASSERT_EQUALS( true , s->getBoolean( "__returnValue" ) );
 
             s->invoke( "this.z == 'sara';" , 0, &o );
-            ASSERT_EQUALS( true , s->getBoolean( "return" ) );
+            ASSERT_EQUALS( true , s->getBoolean( "__returnValue" ) );
 
             s->invoke( "this.z == 'asara';" , 0, &o );
-            ASSERT_EQUALS( false , s->getBoolean( "return" ) );
+            ASSERT_EQUALS( false , s->getBoolean( "__returnValue" ) );
 
             s->invoke( "return this.x == 17;" , 0, &o );
-            ASSERT_EQUALS( true , s->getBoolean( "return" ) );
+            ASSERT_EQUALS( true , s->getBoolean( "__returnValue" ) );
 
             s->invoke( "return this.x == 18;" , 0, &o );
-            ASSERT_EQUALS( false , s->getBoolean( "return" ) );
+            ASSERT_EQUALS( false , s->getBoolean( "__returnValue" ) );
 
             s->invoke( "function(){ return this.x == 17; }" , 0, &o );
-            ASSERT_EQUALS( true , s->getBoolean( "return" ) );
+            ASSERT_EQUALS( true , s->getBoolean( "__returnValue" ) );
 
             s->invoke( "function(){ return this.x == 18; }" , 0, &o );
-            ASSERT_EQUALS( false , s->getBoolean( "return" ) );
+            ASSERT_EQUALS( false , s->getBoolean( "__returnValue" ) );
 
             s->invoke( "function (){ return this.x == 17; }" , 0, &o );
-            ASSERT_EQUALS( true , s->getBoolean( "return" ) );
+            ASSERT_EQUALS( true , s->getBoolean( "__returnValue" ) );
 
             s->invoke( "function z(){ return this.x == 18; }" , 0, &o );
-            ASSERT_EQUALS( false , s->getBoolean( "return" ) );
+            ASSERT_EQUALS( false , s->getBoolean( "__returnValue" ) );
 
             s->invoke( "function (){ this.x == 17; }" , 0, &o );
-            ASSERT_EQUALS( false , s->getBoolean( "return" ) );
+            ASSERT_EQUALS( false , s->getBoolean( "__returnValue" ) );
 
             s->invoke( "function z(){ this.x == 18; }" , 0, &o );
-            ASSERT_EQUALS( false , s->getBoolean( "return" ) );
+            ASSERT_EQUALS( false , s->getBoolean( "__returnValue" ) );
 
             s->invoke( "x = 5; for( ; x <10; x++){ a = 1; }" , 0, &o );
             ASSERT_EQUALS( 10 , s->getNumber( "x" ) );
@@ -399,7 +404,7 @@ namespace JSTests {
                 s->setObject( "x" , o );
 
                 s->invoke( "return x.d.getTime() != 12;" , 0, 0 );
-                ASSERT_EQUALS( true, s->getBoolean( "return" ) );
+                ASSERT_EQUALS( true, s->getBoolean( "__returnValue" ) );
 
                 s->invoke( "z = x.d.getTime();" , 0, 0 );
                 ASSERT_EQUALS( 123456789 , s->getNumber( "z" ) );
@@ -434,6 +439,19 @@ namespace JSTests {
                 ASSERT_EQUALS( (string)"^a" , out["a"].regex() );
                 ASSERT_EQUALS( (string)"i" , out["a"].regexFlags() );
 
+                // This regex used to cause a segfault because x isn't a valid flag for a js RegExp.
+                // Now it throws a JS exception.
+                BSONObj invalidRegex = BSON_ARRAY(BSON("regex" << BSONRegEx("asdf", "x")));
+                const char* code = "function (obj) {"
+                                   "    var threw = false;"
+                                   "    try {"
+                                   "        obj.regex;" // should throw
+                                   "    } catch(e) {"
+                                   "         threw = true;"
+                                   "    }"
+                                   "    assert(threw);"
+                                   "}";
+                ASSERT_EQUALS(s->invoke(code, &invalidRegex, NULL), 0);
             }
 
             // array
@@ -446,6 +464,22 @@ namespace JSTests {
                 s->setObject( "x", o, true );
                 out = s->getObject( "x" );
                 ASSERT_EQUALS( Array, out.firstElement().type() );
+            }
+
+            // symbol
+            {
+                // test mutable object with symbol type
+                BSONObjBuilder builder;
+                builder.appendSymbol("sym", "value");
+                BSONObj in = builder.done();
+                s->setObject( "x", in, false );
+                BSONObj out = s->getObject( "x" );
+                ASSERT_EQUALS( Symbol, out.firstElement().type() );
+
+                // readonly
+                s->setObject( "x", in, true );
+                out = s->getObject( "x" );
+                ASSERT_EQUALS( Symbol, out.firstElement().type() );
             }
 
             delete s;
@@ -507,7 +541,7 @@ namespace JSTests {
 
             s->setObject( "z" , o );
             s->invoke( "return z" , 0, 0 );
-            BSONObj out = s->getObject( "return" );
+            BSONObj out = s->getObject( "__returnValue" );
             ASSERT_EQUALS( 5 , out["a"].number() );
             ASSERT_EQUALS( 5.6 , out["b"].number() );
 
@@ -525,7 +559,7 @@ namespace JSTests {
 
             s->setObject( "z" , o , false );
             s->invoke( "return z" , 0, 0 );
-            out = s->getObject( "return" );
+            out = s->getObject( "__returnValue" );
             ASSERT_EQUALS( 5 , out["a"].number() );
             ASSERT_EQUALS( 5.6 , out["b"].number() );
 
@@ -575,7 +609,7 @@ namespace JSTests {
 //
 //            s->setObject( "z" , o , false );
 //            s->invoke( "return z" , BSONObj() );
-//            out = s->getObject( "return" );
+//            out = s->getObject( "__returnValue" );
 //            ASSERT_EQUALS( 3 , out["a"].number() );
 //            ASSERT_EQUALS( 4.5 , out["b"].number() );
 //
@@ -748,6 +782,74 @@ namespace JSTests {
             }
 
             delete s;
+        }
+    };
+
+    /**
+     * Test exec() timeout value terminates execution (SERVER-8053)
+     */
+    class ExecTimeout {
+    public:
+        void run() {
+            scoped_ptr<Scope> scope(globalScriptEngine->newScope());
+            scope->localConnect("ExecTimeoutDB");
+            // assert timeout occured
+            ASSERT(!scope->exec("var a = 1; while (true) { ; }",
+                                "ExecTimeout", false, true, false, 1));
+        }
+    };
+
+    /**
+     * Test exec() timeout value terminates execution (SERVER-8053)
+     */
+    class ExecNoTimeout {
+    public:
+        void run() {
+            scoped_ptr<Scope> scope(globalScriptEngine->newScope());
+            scope->localConnect("ExecNoTimeoutDB");
+            // assert no timeout occured
+            ASSERT(scope->exec("var a = function() { return 1; }",
+                               "ExecNoTimeout", false, true, false, 5 * 60 * 1000));
+        }
+    };
+
+    /**
+     * Test invoke() timeout value terminates execution (SERVER-8053)
+     */
+    class InvokeTimeout {
+    public:
+        void run() {
+            scoped_ptr<Scope> scope(globalScriptEngine->newScope());
+            scope->localConnect("InvokeTimeoutDB");
+
+            // scope timeout after 500ms
+            bool caught = false;
+            try {
+                scope->invokeSafe("function() {         "
+                                  "    while (true) { } "
+                                  "}                    ",
+                                  0, 0, 1);
+            } catch (const DBException& e) {
+                caught = true;
+            }
+            ASSERT(caught);
+        }
+    };
+
+    /**
+     * Test invoke() timeout value does not terminate execution (SERVER-8053)
+     */
+    class InvokeNoTimeout {
+    public:
+        void run() {
+            scoped_ptr<Scope> scope(globalScriptEngine->newScope());
+            scope->localConnect("InvokeTimeoutDB");
+
+            // invoke completes before timeout
+            scope->invokeSafe("function() { "
+                              "  for (var i=0; i<1; i++) { ; } "
+                              "} ",
+                              0, 0, 5 * 60 * 1000);
         }
     };
 
@@ -1023,7 +1125,7 @@ namespace JSTests {
             double n = 0;
             for ( ; n < 100000; n++ ) {
                 s->invoke( f , &empty, &start );
-                ASSERT_EQUALS( 11 , s->getNumber( "return" ) );
+                ASSERT_EQUALS( 11 , s->getNumber( "__returnValue" ) );
             }
             //cout << "speed1: " << ( n / t.millis() ) << " ops/ms" << endl;
         }
@@ -1110,6 +1212,10 @@ namespace JSTests {
             add< SimpleFunctions >();
             add< ExecLogError >();
             add< InvokeLogError >();
+            add< ExecTimeout >();
+            add< ExecNoTimeout >();
+            add< InvokeTimeout >();
+            add< InvokeNoTimeout >();
 
             add< ObjectMapping >();
             add< ObjectDecoding >();

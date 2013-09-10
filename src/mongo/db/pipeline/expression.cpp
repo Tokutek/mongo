@@ -405,6 +405,8 @@ namespace mongo {
           we can do.
         */
         const size_t n = pAnd->vpOperand.size();
+        // ExpressionNary::optimize() generates an ExpressionConstant for {$and:[]}.
+        verify(n > 0);
         intrusive_ptr<Expression> pLast(pAnd->vpOperand[n - 1]);
         const ExpressionConstant *pConst =
             dynamic_cast<ExpressionConstant *>(pLast.get());
@@ -2229,7 +2231,7 @@ namespace mongo {
         /* optimize the disjunction as much as possible */
         intrusive_ptr<Expression> pE(ExpressionNary::optimize());
 
-        /* if the result isn't a conjunction, we can't do anything */
+        /* if the result isn't a disjunction, we can't do anything */
         ExpressionOr *pOr = dynamic_cast<ExpressionOr *>(pE.get());
         if (!pOr)
             return pE;
@@ -2240,6 +2242,8 @@ namespace mongo {
           we can do.
         */
         const size_t n = pOr->vpOperand.size();
+        // ExpressionNary::optimize() generates an ExpressionConstant for {$or:[]}.
+        verify(n > 0);
         intrusive_ptr<Expression> pLast(pOr->vpOperand[n - 1]);
         const ExpressionConstant *pConst =
             dynamic_cast<ExpressionConstant *>(pLast.get());

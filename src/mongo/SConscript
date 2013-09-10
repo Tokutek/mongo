@@ -213,14 +213,15 @@ env.CppUnitTest('bson_template_evaluator_test', ['scripting/bson_template_evalua
                 LIBDEPS=['bson_template_evaluator'])
 
 if usesm:
-    env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_spidermonkey.cpp'],
+    env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_spidermonkey.cpp',
+                                                             'scripting/sm_db.cpp'],
                       LIBDEPS=['$BUILD_DIR/third_party/js-1.7/js', 'bson_template_evaluator'])
 elif usev8:
     env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_v8.cpp',
                                                              'scripting/v8_db.cpp',
                                                              'scripting/v8_utils.cpp',
-                                                             'scripting/v8_wrapper.cpp'],
-                       LIBDEPS=['bson_template_evaluator'])
+                                                             'scripting/v8_profiler.cpp'],
+                       LIBDEPS=['bson_template_evaluator', '$BUILD_DIR/third_party/shim_v8'])
 else:
     env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_none.cpp'],
                       LIBDEPS=['bson_template_evaluator'])
@@ -328,6 +329,8 @@ serverOnlyFiles = [ "db/curop.cpp",
 
 env.Library( "dbcmdline", "db/cmdline.cpp" )
 
+env.CppUnitTest('v8_deadline_monitor_test', 'scripting/v8_deadline_monitor_test.cpp', LIBDEPS=[])
+
 env.Library('stacktrace', 'util/stacktrace.cpp')
 
 env.Program('lame_stacktrace_test', 'util/lame_stacktrace_test.cpp',
@@ -411,15 +414,6 @@ env.StaticLibrary("notmongodormongos", everythingButMongodAndMongosFiles)
 
 mongodOnlyFiles = [ "db/db.cpp", "db/commands/touch.cpp" ]
 
-# create a library per module, and add it as a dependency
-# for the mongod target; as of now, modules are only included
-# in mongod, as though they were part of serverOnlyFiles
-modules = []
-for modName, modSources in env["MONGO_MODULES"].items():
-    libName = "mod%s" % modName
-    env.StaticLibrary(libName, modSources)
-    modules.append(libName)
-
 # ----- TARGETS ------
 
 env.StaticLibrary("gridfs", "client/gridfs.cpp")
@@ -434,7 +428,7 @@ env.StaticLibrary("coreserver", coreServerFiles, LIBDEPS=["mongocommon", "script
 mongod = env.Install(
     '#/', env.Program( "mongod", mongodOnlyFiles, LIBS=['HotBackup'] + env['LIBS'] + tokulibs,
                        LIBDEPS=["coreserver", "serveronly", "coredb", "ntservice",
-                                "mongodandmongos"] + modules ) )
+                                "mongodandmongos"] + env['MODULE_LIBDEPS_MONGOD'] ) )
 Default( mongod )
 
 # tools
@@ -464,7 +458,7 @@ env.Install( '#/', [
 mongos = env.Program(
     "mongos", [ "s/server.cpp"] ,
     LIBS=env['LIBS'] + tokulibs, LIBDEPS=["mongoscore", "coreserver", "coredb", "mongocommon", "coreshard", "dbcmdline", "ntservice",
-             "mongodandmongos"])
+             "mongodandmongos"] + env['MODULE_LIBDEPS_MONGOS'])
 env.Install( '#/', mongos )
 
 env.Library("clientandshell", ["client/authentication_table_client.cpp",
@@ -510,12 +504,15 @@ if darwin or env["_HAVEPCAP"]:
 # --- shell ---
 
 # if you add a file here, you need to add it in scripting/engine.cpp and shell/createCPPfromJavaScriptFiles.js as well
-env.JSHeader( "shell/mongo.cpp" , 
-              [ "shell/utils.js","shell/utils_sh.js","shell/db.js","shell/mongo.js","shell/mr.js","shell/query.js","shell/collection.js"] )
+env.JSHeader("shell/mongo.cpp",
+             ["shell/assert.js", "shell/types.js", "shell/utils.js", "shell/utils_sh.js",
+              "shell/db.js", "shell/mongo.js", "shell/mr.js", "shell/query.js",
+              "shell/collection.js"])
 
 # if you add a file here, you need to add it in shell/shell_utils.cpp and shell/createCPPfromJavaScriptFiles.js as well
-env.JSHeader( "shell/mongo-server.cpp" ,
-              ["shell/servers.js", "shell/shardingtest.js", "shell/servers_misc.js", "shell/replsettest.js", "shell/replsetbridge.js"] )
+env.JSHeader("shell/mongo-server.cpp",
+             ["shell/servers.js", "shell/shardingtest.js",
+              "shell/servers_misc.js", "shell/replsettest.js", "shell/replsetbridge.js"])
 
 coreShellFiles = [ "shell/dbshell.cpp",
                    "shell/shell_utils.cpp",
@@ -531,7 +528,7 @@ if shellEnv is not None:
         "mongo",
         coreShellFiles,
         LIBDEPS=["coreserver", "clientandshell",
-                 "$BUILD_DIR/third_party/pcrecpp"] )
+                 "$BUILD_DIR/third_party/pcrecpp"] + env['MODULE_LIBDEPS_MONGOSHELL'] )
 
     shellEnv.Install( '#/', mongo_shell )
 

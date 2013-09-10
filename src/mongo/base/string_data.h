@@ -23,6 +23,8 @@
 #include <limits>
 #include <string>
 
+#include <third_party/murmurhash3/MurmurHash3.h>
+
 namespace mongo {
 
     using std::string;
@@ -56,7 +58,7 @@ namespace mongo {
 
         /**
          * Constructs a StringData explicitly, for the case where the length of the string is
-         * already known. 'c' must be a pointer to a null-terminated string, and strlenOfc must
+         * already known. 'c' must be a pointer to a null-terminated string, and len must
          * be the length that strlen(c) would return, a.k.a the index of the terminator in c.
          */
         StringData( const char* c, size_t len )
@@ -119,8 +121,9 @@ namespace mongo {
         //
 
         /**
-         * this is not guaranteed to be null-terminated,
-         * if you use this without all using size(), you are likely doing something wrong
+         * Get the pointer to the first byte of StringData.  This is not guaranteed to be
+         * null-terminated, so if using this without checking size(), you are likely doing
+         * something wrong.
          */
         const char* rawData() const { return _data; }
 
@@ -128,6 +131,19 @@ namespace mongo {
         bool empty() const { return size() == 0; }
         string toString() const { return string(_data, size()); }
         char operator[] ( unsigned pos ) const { return _data[pos]; }
+
+        /**
+         * Functor compatible with std::hash for std::unordered_{map,set}
+         * Warning: The hash function is subject to change. Do not use in cases where hashes need
+         *          to be consistent across versions.
+         */
+        struct Hasher {
+            size_t operator() (const StringData& str) const {
+                unsigned out;
+                MurmurHash3_x86_32(str.rawData(), str.size(), 0, &out);
+                return out;
+            }
+        };
 
     private:
         const char* _data;        // is not guaranted to be null terminated (see "notes" above)

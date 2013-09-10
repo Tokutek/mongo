@@ -351,6 +351,18 @@ dodouble:
         return *_builder;
     }
 
+    inline BufBuilder& BSONObjBuilderValueStream::subobjStart() {
+        const char* tmp = _fieldName;
+        _fieldName = NULL;
+        return _builder->subobjStart(tmp);
+    }
+
+    inline BufBuilder& BSONObjBuilderValueStream::subarrayStart() {
+        const char* tmp = _fieldName;
+        _fieldName = NULL;
+        return _builder->subarrayStart(tmp);
+    }
+
     inline Labeler BSONObjBuilderValueStream::operator<<( const Labeler::Label &l ) {
         return Labeler( l, this );
     }
