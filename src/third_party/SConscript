@@ -7,15 +7,24 @@ env.SConscript( [
         ] )
 
 if use_system_version_of_library("pcre"):
-    env.StaticLibrary( "pcrecpp", ['shim_pcrecpp.cc'],
-                       SYSLIBDEPS=[ 'pcre' , 'pcrecpp' ] )
+    env.StaticLibrary( "shim_pcrecpp", ['shim_pcrecpp.cc'],
+                       SYSLIBDEPS=[
+                           env['LIBDEPS_PCRE_SYSLIBDEP'],
+                           env['LIBDEPS_PCRECPP_SYSLIBDEP']
+                       ] )
 else:
     env.SConscript('pcre-${PCRE_VERSION}/SConscript')
     env.StaticLibrary( "pcrecpp", ['shim_pcrecpp.cc'],
                        LIBDEPS=[ 'pcre-${PCRE_VERSION}/pcrecpp' ] )
 
 if use_system_version_of_library("boost"):
-    env.StaticLibrary("shim_boost", ['shim_boost.cpp'])
+    env.StaticLibrary("shim_boost", ['shim_boost.cpp'],
+                      SYSLIBDEPS=[
+                          env['LIBDEPS_BOOST_PROGRAM_OPTIONS_SYSLIBDEP'],
+                          env['LIBDEPS_BOOST_FILESYSTEM_SYSLIBDEP'],
+                          env['LIBDEPS_BOOST_THREAD_SYSLIBDEP'],
+                          env['LIBDEPS_BOOST_SYSTEM_SYSLIBDEP']
+                      ] )
 else:
     env.SConscript('boost/SConscript')
     env.StaticLibrary( "shim_boost", ['shim_boost.cpp'],
@@ -27,7 +36,8 @@ else:
 
 if usev8:
     if use_system_version_of_library("v8"):
-        env.StaticLibrary("shim_v8", ['shim_v8.cpp'], SYSLIBDEPS=['v8'])
+        env.StaticLibrary("shim_v8", ['shim_v8.cpp'], SYSLIBDEPS=[
+            env['LIBDEPS_V8_SYSLIBDEP'] ])
     else:
         env.Append(CPPPATH='$BUILD_DIR/third_party/v8/include')
         env.SConscript('v8/SConscript')

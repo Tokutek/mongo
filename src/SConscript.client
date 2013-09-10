@@ -153,16 +153,11 @@ for path in clientHeaderDirectories:
 clientObjects = [env.Object(source) for source in clientSource]
 
 mongoClientLibs = []
-mongoClientLibDeps = []
+mongoClientLibDeps = ['$BUILD_DIR/third_party/shim_boost']
 mongoClientSysLibDeps = []
 
 if usingSasl:
     mongoClientSysLibDeps += ["sasl2"]
-
-if use_system_version_of_library("boost"):
-    mongoClientLibs.append(['boost_thread-mt'])
-else:
-    mongoClientLibDeps.append(['$BUILD_DIR/third_party/shim_boost'])
 
 mongoClientInstalls = []
 mongoClientPrefixInstalls = []

@@ -955,6 +955,11 @@ def doConfigure(myenv):
         AddToCCFLAGSIfSupported(myenv, "-fno-builtin-memcmp")
 
     conf = Configure(myenv)
+    libdeps.setup_conftests(conf)
+
+    if use_system_version_of_library("pcre"):
+        conf.FindSysLibDep("pcre", ["pcre"])
+        conf.FindSysLibDep("pcrecpp", ["pcrecpp"])
 
     if use_system_version_of_library("boost"):
         if not conf.CheckCXXHeader( "boost/filesystem/operations.hpp" ):
@@ -963,9 +968,9 @@ def doConfigure(myenv):
 
         for b in boostLibs:
             l = "boost_" + b
-            if not conf.CheckLib([ l + boostCompiler + "-mt" + boostVersion,
-                                   l + boostCompiler + boostVersion ], language='C++' ):
-                Exit(1)
+            conf.FindSysLibDep(l,
+                [ l + boostCompiler + "-mt" + boostVersion,
+                  l + boostCompiler + boostVersion ], language='C++' )
 
     if conf.CheckHeader('unistd.h'):
         conf.env.Append(CPPDEFINES=['MONGO_HAVE_HEADER_UNISTD_H'])
@@ -990,13 +995,11 @@ def doConfigure(myenv):
             v8_lib_choices = ["v8_g", "v8"]
         else:
             v8_lib_choices = ["v8"]
-        if not conf.CheckLib( v8_lib_choices ):
-            Exit(1)
+        conf.FindSysLibDep( "v8", v8_lib_choices )
 
     conf.env['MONGO_BUILD_SASL_CLIENT'] = bool(has_option("use-sasl-client"))
     if conf.env['MONGO_BUILD_SASL_CLIENT'] and not conf.CheckLibWithHeader(
-        "gsasl", "gsasl.h", "C", "gsasl_check_version(GSASL_VERSION);", autoadd=False):
-
+        "sasl2", "sasl/sasl.h", "C", "sasl_version_info(0, 0, 0, 0, 0, 0);", autoadd=False ):
         Exit(1)
 
     # requires ports devel/libexecinfo to be installed
