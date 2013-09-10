@@ -30,20 +30,24 @@ namespace mongo {
         // Wrapper for a ydb dictionary
         class Dictionary : boost::noncopyable {
         public:
-            Dictionary(const string &dname);
+            Dictionary(const string &dname, const BSONObj &info,
+                       const mongo::Descriptor &descriptor, const bool may_create,
+                       const bool hot_index);
             ~Dictionary();
 
             DB *db() const {
                 return _db;
             }
 
-            int open(const BSONObj &info,
-                     const mongo::Descriptor &descriptor, const bool may_create,
-                     const bool hot_index);
-
             int close();
 
+            class NeedsCreate : std::exception {};
+
         private:
+            void open(const BSONObj &info,
+                      const mongo::Descriptor &descriptor, const bool may_create,
+                      const bool hot_index);
+
             string _dname;
             DB *_db;
         };

@@ -20,8 +20,9 @@
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/json.h"
 #include "mongo/db/relock.h"
-#include "mongo/db/storage/key.h"
+#include "mongo/db/storage/dictionary.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/db/storage/key.h"
 
 #include "mongo/util/stringutils.h"
 
@@ -49,7 +50,6 @@ namespace mongo {
         if (_nsdb != NULL) {
             TOKULOG(1) << "Closing NamespaceIndex " << _database << endl;
             const int r = _nsdb->close();
-            _nsdb.reset();
             if (r != 0) {
                 msgasserted(16920, mongoutils::str::stream() << "failed to close nsdb for NamespaceIndex " << _database);
             }
@@ -66,40 +66,26 @@ namespace mongo {
         }
     }
 
-    NOINLINE_DECL int NamespaceIndex::_openNsdb(bool may_create) {
+    NOINLINE_DECL void NamespaceIndex::_init(bool may_create) {
         const BSONObj keyPattern = BSON("ns" << 1 );
         const BSONObj info = BSON("key" << keyPattern);
         Descriptor descriptor(keyPattern);
 
-        _nsdb.reset(new storage::Dictionary(_nsdbFilename));
-        int r = _nsdb->open(info, descriptor, may_create, false);
-        if (r != 0) {
-            _nsdb.reset();
-        }
-        return r;
-    }
-
-    NOINLINE_DECL void NamespaceIndex::_init(bool may_create) {
-        // Try first without the create flag, because we're not sure if we
-        // have a write lock just yet. It won't matter if the nsdb exists.
-        int r = _openNsdb(false);
-        if (r != 0) {
-            if (r == ENOENT) {
-                if (!may_create) {
-                    // didn't find on disk and we can't create it
-                    return;
-                } else if (!Lock::isWriteLocked(_database)) {
-                    // We would create it, but we're not write locked. Retry.
-                    throw RetryWithWriteLock("creating new database " + _database);
-                }
-                NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-                rollback.noteCreate(_database);
-                // Try opening again with may_create = true
-                r = _openNsdb(true);
+        try {
+            // Try first without the create flag, because we're not sure if we
+            // have a write lock just yet. It won't matter if the nsdb exists.
+            _nsdb.reset(new storage::Dictionary(_nsdbFilename, info, descriptor, false, false));
+        } catch (storage::Dictionary::NeedsCreate) {
+            if (!may_create) {
+                // didn't find on disk and we can't create it
+                return;
+            } else if (!Lock::isWriteLocked(_database)) {
+                // We would create it, but we're not write locked. Retry.
+                throw RetryWithWriteLock("creating new database " + _database);
             }
-            if (r != 0) {
-                storage::handle_ydb_error_fatal(r);
-            }
+            NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+            rollback.noteCreate(_database);
+            _nsdb.reset(new storage::Dictionary(_nsdbFilename, info, descriptor, true, false));
         }
     }
 
@@ -114,8 +100,9 @@ namespace mongo {
         verify(_namespaces.empty());
 
         // Closing the DB before the transaction aborts will allow the abort to do the dbremove for us.
-        const int r = _nsdb->close();
+        shared_ptr<storage::Dictionary> nsdb = _nsdb;
         _nsdb.reset();
+        const int r = nsdb->close();
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
@@ -339,8 +326,9 @@ namespace mongo {
         // Everything that was open should have been closed due to drop.
         verify(_namespaces.empty());
 
-        const int r = _nsdb->close();
+        shared_ptr<storage::Dictionary> nsdb = _nsdb;
         _nsdb.reset();
+        const int r = nsdb->close();
         if (r != 0) {
             storage::handle_ydb_error(r);
         }

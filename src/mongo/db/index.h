@@ -237,7 +237,7 @@ namespace mongo {
 
     protected:
         // Open ydb dictionary representing the index on disk.
-        scoped_ptr<storage::Dictionary> _db;
+        shared_ptr<storage::Dictionary> _db;
 
         DB *db() const {
             return _db->db();

@@ -203,12 +203,16 @@ namespace mongo {
         }
 
         TOKULOG(1) << "Opening IndexDetails " << dname << endl;
-        _db.reset(new storage::Dictionary(dname));
-        const int r = _db->open(_info, *_descriptor,
-                                may_create, _info["background"].trueValue());
-        if (r != 0) {
-            _db.reset();
-            storage::handle_ydb_error(r);
+        try {
+            _db.reset(new storage::Dictionary(dname, _info, *_descriptor, may_create,
+                                              _info["background"].trueValue()));
+        } catch (storage::Dictionary::NeedsCreate) {
+            // Unlike for NamespaceIndex, this dictionary must exist on disk if we think it should
+            // exist.  This error only gets thrown if may_create is false, which happens when we're
+            // trying to open a collection for which we have serialized info.  Therefore, this is a
+            // fatal non-user error.
+            msgasserted(16922, mongoutils::str::stream() << "dictionary " << dname
+                               << " should exist, but we got ENOENT");
         }
     }
 
@@ -222,9 +226,10 @@ namespace mongo {
     }
 
     void IndexDetails::close() {
-        if (_db.get() != NULL) {
-            const int r = _db->close();
+        if (_db) {
+            shared_ptr<storage::Dictionary> db = _db;
             _db.reset();
+            const int r = db->close();
             if (r != 0) {
                 storage::handle_ydb_error(r);
             }
