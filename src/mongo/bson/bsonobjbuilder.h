@@ -414,11 +414,7 @@ namespace mongo {
         }
         /** Append a string element */
         BSONObjBuilder& append(const StringData& fieldName, const StringData& str) {
-            _b.appendNum((char) String);
-            _b.appendStr(fieldName);
-            _b.appendNum((int)str.size()+1);
-            _b.appendStr(str, true);
-            return *this;
+            return append(fieldName, str.rawData(), (int) str.size()+1);
         }
 
         BSONObjBuilder& appendSymbol(const StringData& fieldName, const StringData& symbol) {
@@ -652,24 +648,13 @@ namespace mongo {
         }
 
         /** Stream oriented way to add field names and values. */
-        BSONObjBuilderValueStream &operator<<(const char * name ) {
+        BSONObjBuilderValueStream &operator<<( const StringData& name ) {
             _s.endField( name );
             return _s;
         }
 
         /** Stream oriented way to add field names and values. */
         BSONObjBuilder& operator<<( GENOIDLabeler ) { return genOID(); }
-
-        // prevent implicit string conversions which would allow bad things like BSON( BSON( "foo" << 1 ) << 2 )
-        struct ForceExplicitString {
-            ForceExplicitString( const std::string &str ) : str_( str ) {}
-            std::string str_;
-        };
-
-        /** Stream oriented way to add field names and values. */
-        BSONObjBuilderValueStream &operator<<( const ForceExplicitString& name ) {
-            return operator<<( name.str_.c_str() );
-        }
 
         Labeler operator<<( const Labeler::Label &l ) {
             massert( 10336 ,  "No subobject started", _s.subobjStarted() );
@@ -678,13 +663,13 @@ namespace mongo {
 
         template<typename T>
         BSONObjBuilderValueStream& operator<<( const BSONField<T>& f ) {
-            _s.endField( f.name().c_str() );
+            _s.endField( f.name() );
             return _s;
         }
 
         template<typename T>
         BSONObjBuilder& operator<<( const BSONFieldValue<T>& v ) {
-            append( v.name().c_str() , v.value() );
+            append( v.name(), v.value() );
             return *this;
         }
 
@@ -852,6 +837,11 @@ namespace mongo {
 
         BSONArrayBuilder& appendTimestamp(unsigned int sec, unsigned int inc) {
             _b.appendTimestamp(num(), sec, inc);
+            return *this;
+        }
+
+        BSONArrayBuilder& append(const StringData& s) {
+            _b.append(num(), s);
             return *this;
         }
 

@@ -3,6 +3,8 @@
  *
  * This test validates the SERVER-6240 ticket. uassert when attempting to extract a date from a
  * null value. Prevously verify'd.
+ *
+ * This test also validates the error cases for SERVER-6239 (support $add and $subtract with dates)
  */
 
 /*
@@ -28,46 +30,29 @@ db.s6240.save({date:new Date()});
 var s6240add = db.runCommand(
     { aggregate: "s6240", pipeline: [
         { $project: {
-            add: { $add: ["$date", 2] }
+            add: { $add: ["$date", "$date"] }
     }}
 ]});
-check_answer(s6240add, 16415);
-
+check_answer(s6240add, 16612);
 
 // Divide
-var s6240divide = db.runCommand(
-    { aggregate: "s6240", pipeline: [
-        { $project: {
-            divide: { $divide: ["$date", 2] }
-    }}
-]});
-check_answer(s6240divide, 16373);
+assertErrorCode(db.s6240,
+    {$project: {divide: {$divide: ["$date", 2]}}},
+    16609);
 
 // Mod
-var s6240mod = db.runCommand(
-    { aggregate: "s6240", pipeline: [
-        { $project: {
-            mod: { $mod: ["$date", 2] }
-    }}
-]});
-check_answer(s6240mod, 16374);
+assertErrorCode(db.s6240,
+    {$project: {mod: {$mod: ["$date", 2]}}},
+    16611);
 
 
 // Multiply
-var s6240multiply = db.runCommand(
-    { aggregate: "s6240", pipeline: [
-        { $project: {
-            multiply: { $multiply: ["$date", 2] }
-    }}
-]});
-check_answer(s6240multiply, 16375);
+assertErrorCode(db.s6240,
+    {$project: {multiply: {$multiply: ["$date", 2]}}},
+    16555);
 
 
 // Subtract
-var s6240subtract = db.runCommand(
-    { aggregate: "s6240", pipeline: [
-        { $project: {
-            subtract: { $subtract: ["$date", 2] }
-    }}
-]});
-check_answer(s6240subtract, 16376);
+assertErrorCode(db.s6240,
+    {$project: {subtract: {$subtract: [2, "$date"]}}},
+    16556);
