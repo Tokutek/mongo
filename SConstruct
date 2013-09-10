@@ -228,10 +228,6 @@ add_option( "use-system-sm", "use system version of spidermonkey library", 0, Tr
 
 add_option( "use-system-all" , "use all system libraries", 0 , True )
 
-add_option( "use-cpu-profiler",
-            "Link against the google-perftools profiler library",
-            0, True )
-
 add_option("mongod-concurrency-level", "Concurrency level, \"global\" or \"db\"", 1, True,
            type="choice", choices=["global", "db"])
 
