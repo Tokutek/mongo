@@ -16,6 +16,9 @@
 
 #include "mongo/db/auth/authz_manager_external_state_d.h"
 
+#include <string>
+#include <boost/thread/mutex.hpp>
+
 #include "mongo/base/status.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/user_name.h"
@@ -258,11 +261,11 @@ namespace {
     }
 
     bool AuthzManagerExternalStateMongod::tryAcquireAuthzUpdateLock() {
-        fassertFailed(17099);
+        return _authzDataUpdateLock.try_lock();
     }
 
     void AuthzManagerExternalStateMongod::releaseAuthzUpdateLock() {
-        fassertFailed(17100);
+        return _authzDataUpdateLock.unlock();
     }
 
 } // namespace mongo

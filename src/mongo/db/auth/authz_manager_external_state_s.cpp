@@ -16,12 +16,15 @@
 
 #include "mongo/db/auth/authz_manager_external_state_s.h"
 
+#include <boost/scoped_ptr.hpp>
 #include <string>
 
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/client/distlock.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/user_name.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/s/config.h"
 #include "mongo/s/type_database.h"
 #include "mongo/s/grid.h"
 #include "mongo/util/assert_util.h"
@@ -34,6 +37,7 @@ namespace {
 }
 
     AuthzManagerExternalStateMongos::AuthzManagerExternalStateMongos() {}
+
     AuthzManagerExternalStateMongos::~AuthzManagerExternalStateMongos() {}
 
     namespace {
@@ -247,11 +251,25 @@ namespace {
     }
 
     bool AuthzManagerExternalStateMongos::tryAcquireAuthzUpdateLock() {
-        fassertFailed(17109);
+        if (_authzDataUpdateLock.get()) {
+            return false;
+        }
+        _authzDataUpdateLock.reset(new ScopedDistributedLock(
+                configServer.getConnectionString(), "authorizationData"));
+
+        std::string errmsg;
+        if (!_authzDataUpdateLock->tryAcquire(&errmsg)) {
+            warning() <<
+                    "Error while attempting to acquire distributed lock for user modification: " <<
+                    errmsg << endl;
+            _authzDataUpdateLock.reset();
+            return false;
+        }
+        return true;
     }
 
     void AuthzManagerExternalStateMongos::releaseAuthzUpdateLock() {
-        fassertFailed(17110);
+        _authzDataUpdateLock.reset();
     }
 
 } // namespace mongo
