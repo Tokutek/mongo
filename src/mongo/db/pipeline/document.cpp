@@ -79,7 +79,7 @@ namespace mongo {
         append(value);
         append(nextCollision);
         append(nameSize);
-        memcpy(dest, name.rawData(), nameSize + 1/*NUL*/);
+        name.copyTo( dest, true );
         // Padding for alignment handled above
 #undef append
 
