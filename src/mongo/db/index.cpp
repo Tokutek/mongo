@@ -452,11 +452,11 @@ namespace mongo {
               _compressionMethod(idx.getCompressionMethod()),
               _readPageSize(idx.getReadPageSize()),
               _pageSize(idx.getPageSize()),
-              _accessCount(idx.getAccessCount()) {
+              _accessStats(idx.getAccessStats()) {
         idx.getStat64(&_stats);
     }
     
-    BSONObj IndexStats::bson(int scale) const {
+    BSONObj IndexStats::obj(int scale) const {
         BSONObjBuilder b;
         b.append("name", _name);
         b.appendNumber("count", (long long) _stats.bt_nkeys);
@@ -497,7 +497,11 @@ namespace mongo {
             b.append("compression", "unknown");
             break;
         }
-        b.appendNumber("accessCount", _accessCount);
+        b.appendNumber("queries", _accessStats.queries.word.load());
+        b.appendNumber("nscanned", _accessStats.nscanned.word.load());
+        b.appendNumber("nscannedObjects", _accessStats.nscannedObjects.word.load());
+        b.appendNumber("inserts", _accessStats.inserts.word.load());
+        b.appendNumber("deletes", _accessStats.deletes.word.load());
         return b.obj();
         // TODO: (Zardosht) Need to figure out how to display these dates
         /*

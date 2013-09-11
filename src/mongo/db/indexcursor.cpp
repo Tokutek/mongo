@@ -182,6 +182,7 @@ namespace mongo {
         _bounds(),
         _boundsMustMatch(true),
         _nscanned(0),
+        _nscannedObjects(0),
         _prelock(!cc().opSettings().getJustOne() && numWanted == 0),
         _cursor(_idx, cursor_flags()),
         _tailable(false),
@@ -207,6 +208,7 @@ namespace mongo {
         _bounds(bounds),
         _boundsMustMatch(true),
         _nscanned(0),
+        _nscannedObjects(0),
         _prelock(!cc().opSettings().getJustOne() && numWanted == 0),
         _cursor(_idx, cursor_flags()),
         _tailable(false),
@@ -223,6 +225,8 @@ namespace mongo {
     }
 
     IndexCursor::~IndexCursor() {
+        // Book-keeping for index access patterns.
+        _idx.noteQuery(_nscanned, _nscannedObjects);
     }
 
     int IndexCursor::cursor_getf(const DBT *key, const DBT *val, void *extra) {
@@ -395,9 +399,6 @@ namespace mongo {
     }
 
     void IndexCursor::initializeDBC() {
-        // Book-keeping for index access patterns.
-        _idx.accessed();
-
         if (_prelock) {
             // We need to prelock first, then position the cursor.
             prelock();
@@ -767,6 +768,7 @@ again:      while ( !allInclusive && ok() ) {
         // If the index is not clustering, _currObj starts as empty and gets filled
         // with the full document on the first call to current().
         if ( _currObj.isEmpty() ) {
+            _nscannedObjects++;
             bool found = _d->findByPK( _currPK, _currObj );
             if ( !found ) {
                 // If we didn't find the associated object, we must be either:

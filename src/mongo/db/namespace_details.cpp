@@ -152,7 +152,9 @@ namespace mongo {
         // is the primary key.
         bool findById(const BSONObj &query, BSONObj &result) const {
             dassert(query["_id"].ok());
-            return findByPK(query["_id"].wrap(""), result);
+            const bool found = findByPK(query["_id"].wrap(""), result);
+            getPKIndex().noteQuery(found ? 1 : 0, 0);
+            return found;
         }
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
@@ -1163,6 +1165,19 @@ namespace mongo {
         } else if (r != 0) {
             storage::handle_ydb_error(r);
         }
+
+        // Index usage accounting. If a key was generated for this 
+        // operation, then the index was used, otherwise it wasn't.
+        // The PK is always used, only secondarys may have keys generated.
+        getPKIndex().noteInsert();
+        for (int i = 0; i < n; i++) {
+            const DBT_ARRAY *array = &keyArrays.arrays()[i];
+            if (array->size > 0) {
+                IndexDetails &idx = *_indexes[i];
+                dassert(!isPKIndex(idx));
+                idx.noteInsert();
+            }
+        }
     }
 
     void NamespaceDetails::deleteFromIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
@@ -1191,6 +1206,19 @@ namespace mongo {
                                         n, dbs, keyArrays.arrays(), del_flags);
         if (r != 0) {
             storage::handle_ydb_error(r);
+        }
+
+        // Index usage accounting. If a key was generated for this 
+        // operation, then the index was used, otherwise it wasn't.
+        // The PK is always used, only secondarys may have keys generated.
+        getPKIndex().noteDelete();
+        for (int i = 0; i < n; i++) {
+            const DBT_ARRAY *array = &keyArrays.arrays()[i];
+            if (array->size > 0) {
+                IndexDetails &idx = *_indexes[i];
+                dassert(!isPKIndex(idx));
+                idx.noteDelete();
+            }
         }
     }
 
@@ -1394,14 +1422,6 @@ namespace mongo {
         return true;
     }
 
-    void NamespaceDetails::fillIndexStats(std::vector<IndexStats> &indexStats) const {
-        for (int i = 0; i < _nIndexes; i++) {
-            IndexDetails &idx = *_indexes[i];
-            IndexStats stats(idx);
-            indexStats.push_back(stats);
-        }
-    }
-
     void NamespaceDetails::optimize() {
         for (int i = 0; i < _nIndexes; i++) {
             IndexDetails &idx = *_indexes[i];
@@ -1416,33 +1436,40 @@ namespace mongo {
     {
         uint32_t numIndexes = nIndexes();
         accStats->nIndexes = numIndexes;
-        std::vector<IndexStats> indexStats;
-        // fill each of the indexStats with statistics
-        fillIndexStats(indexStats);
         // also sum up some stats of secondary indexes,
         // calculate their total data size and storage size
+        uint64_t collectionCount = 0;
+        uint64_t pkDataSize = 0;
+        uint64_t pkStorageSize = 0;
         uint64_t totalIndexDataSize = 0;
         uint64_t totalIndexStorageSize = 0;
         BSONArrayBuilder index_info;
-        for (std::vector<IndexStats>::const_iterator it = indexStats.begin(); it != indexStats.end(); ++it) {
-            index_info.append(it->bson(scale));
-            // the primary key is at indexStats[0], secondary indexes come after
-            if (it - indexStats.begin() > 0) {
-                totalIndexDataSize += it->getDataSize();
-                totalIndexStorageSize += it->getStorageSize();
+        for (uint32_t i = 0; i < numIndexes; i++) {
+            IndexDetails &idx = *_indexes[i];
+            IndexStats stats(idx);
+            index_info.append(stats.obj(scale));
+            if (isPKIndex(idx)) {
+                verify(collectionCount == 0);
+                collectionCount = stats.getCount();
+                pkDataSize = stats.getDataSize();
+                pkStorageSize = stats.getStorageSize();
+            } else {
+                // Only count secondary indexes here
+                totalIndexDataSize += stats.getDataSize();
+                totalIndexStorageSize += stats.getStorageSize();
             }
         }
 
-        accStats->count = indexStats[0].getCount();
+        accStats->count = collectionCount;
         result->appendNumber("count", (long long) accStats->count);
 
         result->append("nindexes" , numIndexes );
         result->append("nindexesbeingbuilt" , nIndexesBeingBuilt() );
 
-        accStats->size = indexStats[0].getDataSize();
+        accStats->size = totalIndexDataSize;
         result->appendNumber("size", (long long) accStats->size/scale);
 
-        accStats->storageSize = indexStats[0].getStorageSize();
+        accStats->storageSize = totalIndexStorageSize;
         result->appendNumber("storageSize", (long long) accStats->storageSize/scale);
 
         accStats->indexSize = totalIndexDataSize;
