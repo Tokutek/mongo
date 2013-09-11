@@ -95,7 +95,8 @@ namespace mongo {
         _god = 0;
 
         // client is being destroyed, if there are any transactions on our stack,
-        // abort them
+        // abort them, starting with the one in the loadInfo object if it exists.
+        _loadInfo.reset();
         if (_transactions) {
             while (_transactions->hasLiveTxn()) {
                 _transactions->abortTxn();
@@ -134,7 +135,8 @@ namespace mongo {
     bool Client::shutdown() {
         _shutdown = true;
         // client is being destroyed, if there are any transactions on our stack,
-        // abort them
+        // abort them, starting with the one in the loadInfo object if it exists.
+        _loadInfo.reset();
         if (_transactions) {
             while (_transactions->hasLiveTxn()) {
                 _transactions->abortTxn();

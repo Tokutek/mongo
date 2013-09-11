@@ -939,16 +939,16 @@ namespace mongo {
             return bulkLoad ? shared_ptr<NamespaceDetails>(new BulkLoadedCollection(serialized)) :
                               shared_ptr<NamespaceDetails>(new OplogCollection(serialized));
         } else if (isSystemCatalog(ns)) {
-            uassert( 16869, "Cannot bulk load any system collection. ", !bulkLoad );
+            massert( 16869, "bug: Should not bulk load a system catalog collection", !bulkLoad );
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(serialized));
         } else if (isProfileCollection(ns)) {
-            uassert( 16870, "Cannot bulk load the profile collection. ", !bulkLoad );
+            massert( 16870, "bug: Should not bulk load the profile collection", !bulkLoad );
             return shared_ptr<NamespaceDetails>(new ProfileCollection(serialized));
         } else if (serialized["options"]["capped"].trueValue()) {
-            uassert( 16871, "Cannot bulk load capped collections. ", !bulkLoad );
+            massert( 16871, "bug: Should not bulk load capped collections", !bulkLoad );
             return shared_ptr<NamespaceDetails>(new CappedCollection(serialized));
         } else if (serialized["options"]["natural"].trueValue()) {
-            uassert( 16872, "Cannot bulk load natural order collections (yet). ", !bulkLoad );
+            massert( 16872, "bug: Should not bulk load natural order collections. ", !bulkLoad );
             return shared_ptr<NamespaceDetails>(new NaturalOrderCollection(serialized));
         } else {
             // We only know how to bulk load indexed collections.
@@ -1780,7 +1780,14 @@ namespace mongo {
 
     void beginBulkLoad(const StringData &ns, const vector<BSONObj> &indexes,
                        const BSONObj &options) {
-        uassert( 16873, "Cannot bulk load a collection that already exists.", nsdetails(ns) == NULL );
+        uassert( 16873, "Cannot bulk load a collection that already exists.",
+                        nsdetails(ns) == NULL );
+        uassert( 16923, "Cannot bulk load a system collection",
+                        ns.find(".system.") == string::npos );
+        uassert( 16924, "Cannot bulk load a capped collection",
+                        !options["capped"].trueValue() );
+        uassert( 16925, "Cannot bulk load a natural order collection",
+                        !options["natural"].trueValue() );
 
         // Don't log the create. The begin/commit/abort load commands are already logged.
         string errmsg;
@@ -1807,10 +1814,6 @@ namespace mongo {
                             info["name"].ok() && info["name"].type() == mongo::String );
             if (d->ensureIndex(info)) {
                 addIndexToCatalog(info);
-            } else {
-                // The _id index is created automatically, so ensureIndex will
-                // say it already exists.
-                verify(info["key"]["_id"].ok());
             }
         }
 
