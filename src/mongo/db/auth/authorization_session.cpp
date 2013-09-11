@@ -106,13 +106,6 @@ namespace {
         return ret;
     }
 
-    bool AuthorizationSession::hasInternalAuthorization() {
-        ActionSet allActions;
-        allActions.addAllActions();
-        return _checkAuthForPrivilegeHelper(
-                Privilege(AuthorizationManager::WILDCARD_RESOURCE_NAME, allActions)).isOK();
-    }
-
     bool AuthorizationSession::checkAuthorization(const std::string& resource,
                                                   ActionType action) {
         return checkAuthForPrivilege(Privilege(resource, action)).isOK();

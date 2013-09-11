@@ -29,50 +29,13 @@ namespace mongo {
 
     BSONObj userReplQuery = fromjson("{\"user\":\"repl\"}");
 
-    /* Generally replAuthenticate will only be called within system threads to fully authenticate
-     * connections to other nodes in the cluster that will be used as part of internal operations.
-     * If a user-initiated action results in needing to call replAuthenticate, you can call it
-     * with skipAuthCheck set to false. Only do this if you are certain that the proper auth
-     * checks have already run to ensure that the user is authorized to do everything that this
-     * connection will be used for!
-     */
-    bool replAuthenticate(DBClientBase *conn, bool skipAuthCheck) {
-        if(!AuthorizationManager::isAuthEnabled()) {
+    bool replAuthenticate(DBClientBase *conn) {
+        if (!AuthorizationManager::isAuthEnabled())
             return true;
-        }
-        if (!skipAuthCheck && !cc().getAuthorizationSession()->hasInternalAuthorization()) {
-            log() << "replauthenticate: requires internal authorization, failing" << endl;
+
+        if (!isInternalAuthSet())
             return false;
-        }
-
-        if (isInternalAuthSet()) { 
-            return authenticateInternalUser(conn); 
-        }
-
-        BSONObj user;
-        {
-            StringData ns("local.system.users");
-            LOCK_REASON(lockReason, "repl: authenticating with local db");
-            Client::ReadContext ctx(ns, lockReason);
-            if (!Collection::findOne(ns, userReplQuery, user) ||
-                // try the first user in local
-                !Collection::findOne(ns, BSONObj(), user)) {
-                log() << "replauthenticate: no user in local.system.users to use for authentication" << endl;
-                return false;
-            }
-        }
-        std::string u = user.getStringField("user");
-        std::string p = user.getStringField("pwd");
-        massert( 10392 , "bad user object? [1]", !u.empty());
-        massert( 10393 , "bad user object? [2]", !p.empty());
-
-        std::string err;
-        if( !conn->auth("local", u.c_str(), p.c_str(), err, false) ) {
-            log() << "replauthenticate: can't authenticate to master server, user:" << u << endl;
-            return false;
-        }
-
-        return true;
+        return authenticateInternalUser(conn);
     }
 
     void getMe(BSONObj& me) {
@@ -154,7 +117,7 @@ namespace mongo {
                                                                           default_timeout /* tcp timeout */));
             string errmsg;
             if ( !_conn->connect(hostName.c_str(), errmsg) ||
-                 (AuthorizationManager::isAuthEnabled() && !replAuthenticate(_conn.get(), true)) ) {
+                 (AuthorizationManager::isAuthEnabled() && !replAuthenticate(_conn.get())) ) {
                 resetConnection();
                 log() << "repl: " << errmsg << endl;
                 return false;

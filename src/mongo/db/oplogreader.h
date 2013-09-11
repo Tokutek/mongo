@@ -31,6 +31,13 @@ namespace mongo {
     */
     const double default_so_timeout = 30;
 
+    /**
+     * Authenticates conn using the server's cluster-membership credentials.
+     *
+     * Returns true on successful authentication.
+     */
+    bool replAuthenticate(DBClientBase *conn);
+
     class OplogReader {
         shared_ptr<DBClientConnection> _conn;
         shared_ptr<DBClientCursor> cursor;

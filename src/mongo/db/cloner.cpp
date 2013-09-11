@@ -38,6 +38,7 @@
 #include "mongo/db/repl.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/oplog_helpers.h"
+#include "mongo/db/oplogreader.h"
 #include "mongo/db/database.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/storage_options.h"
@@ -49,8 +50,6 @@
 namespace mongo {
 
     BSONElement getErrField(const BSONObj& o);
-
-    bool replAuthenticate(DBClientBase *, bool);
 
     void mayInterrupt( bool mayBeInterrupted ) {
         if ( mayBeInterrupted ) {
@@ -92,7 +91,7 @@ namespace mongo {
         verify(!masterSameProcess(masterHost));
         ConnectionString cs = ConnectionString::parse(masterHost, errmsg);
         shared_ptr<DBClientConnection> conn(static_cast<DBClientConnection *>(cs.connect(errmsg)));
-        if (!replAuthenticate(conn.get(), false)) {
+        if (!replAuthenticate(conn.get())) {
             errmsg = "can't authenticate replication";
             conn.reset();
         }
