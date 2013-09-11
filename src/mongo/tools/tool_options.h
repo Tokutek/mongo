@@ -36,8 +36,6 @@ namespace mongo {
 
     Status addSpecifyDBCollectionToolOptions(moe::OptionSection* options);
 
-    Status addToolFieldOptions(moe::OptionSection* options);
-
     Status addBSONToolOptions(moe::OptionSection* options);
 
     Status addMongo2TokuOptions(moe::OptionSection* options);
