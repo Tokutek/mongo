@@ -42,17 +42,9 @@ namespace mongo {
      *    data: <Object> // optional arbitrary object to store.
      * }
      */
-    class FaultInjectCmd: public Command {
+    class FaultInjectCmd: public InformationCommand {
     public:
-        FaultInjectCmd(): Command("configureFailPoint") {}
-
-        virtual bool slaveOk() const {
-            return true;
-        }
-
-        virtual LockType locktype() const {
-            return NONE;
-        }
+        FaultInjectCmd(): InformationCommand("configureFailPoint") {}
 
         virtual bool adminOnly() const {
             return true;
