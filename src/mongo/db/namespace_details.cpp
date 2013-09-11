@@ -1434,10 +1434,10 @@ namespace mongo {
         result->append("nindexes" , numIndexes );
         result->append("nindexesbeingbuilt" , nIndexesBeingBuilt() );
 
-        accStats->size = totalIndexDataSize;
+        accStats->size = pkDataSize;
         result->appendNumber("size", (long long) accStats->size/scale);
 
-        accStats->storageSize = totalIndexStorageSize;
+        accStats->storageSize = pkStorageSize;
         result->appendNumber("storageSize", (long long) accStats->storageSize/scale);
 
         accStats->indexSize = totalIndexDataSize;
