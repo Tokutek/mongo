@@ -53,7 +53,7 @@ namespace mongo {
         }
 
         // Step 3
-        uassert(16442, stream() << "mode not supported " << static_cast<int>(mode),
+        uassert(16989, stream() << "mode not supported " << static_cast<int>(mode),
                 mode >= off && mode < numModes);
 
         _mode = mode;
@@ -112,7 +112,7 @@ namespace mongo {
 
         default:
             error() << "FailPoint Mode not supported: " << static_cast<int>(_mode) << endl;
-            fassertFailed(16444);
+            fassertFailed(16990);
         }
     }
 
@@ -140,7 +140,7 @@ namespace mongo {
 
     const BSONObj& ScopedFailPoint::getData() const {
         // Assert when attempting to get data without incrementing ref counter.
-        fassert(16445, _shouldClose);
+        fassert(16991, _shouldClose);
         return _failPoint->getData();
     }
 }
