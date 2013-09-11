@@ -67,11 +67,19 @@ namespace mongo {
             }
         }
 
-        Dictionary::Dictionary(const string &dname) :
+        Dictionary::Dictionary(const string &dname, const BSONObj &info,
+                               const mongo::Descriptor &descriptor, const bool may_create,
+                               const bool hot_index) :
             _dname(dname), _db(NULL) {
             const int r = db_create(&_db, env, 0);
             if (r != 0) {
                 handle_ydb_error(r);
+            }
+            try {
+                open(info, descriptor, may_create, hot_index);
+            } catch (...) {
+                close();
+                throw;
             }
         }
 
@@ -83,9 +91,9 @@ namespace mongo {
             }
         }
 
-        int Dictionary::open(const BSONObj &info,
-                             const mongo::Descriptor &descriptor, const bool may_create,
-                             const bool hot_index) {
+        void Dictionary::open(const BSONObj &info,
+                              const mongo::Descriptor &descriptor, const bool may_create,
+                              const bool hot_index) {
             int readPageSize = 65536;
             int pageSize = 4 * 1024 * 1024;
             TOKU_COMPRESSION_METHOD compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
@@ -148,9 +156,8 @@ namespace mongo {
             const int db_flags = may_create ? DB_CREATE : 0;
             r = _db->open(_db, cc().txn().db_txn(), _dname.c_str(), NULL,
                           DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
-            if (r == ENOENT) {
-                verify(!may_create);
-                return r;
+            if (r == ENOENT && !may_create) {
+                throw NeedsCreate();
             }
             if (r != 0) {
                 handle_ydb_error(r);
@@ -163,7 +170,6 @@ namespace mongo {
             if (altTxn.get() != NULL) {
                 altTxn->commit();
             }
-            return r;
         }
 
         int Dictionary::close() {

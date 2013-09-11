@@ -347,6 +347,7 @@ namespace mongo {
         shared_ptr< CoveredIndexMatcher > _matcher;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
         long long _nscanned;
+        long long _nscannedObjects;
 
         // Prelock is true if the caller does not want a limited result set from the cursor.
         // Even if the query looks like { a: { $gte: 5 } }, the caller may want limited results for:

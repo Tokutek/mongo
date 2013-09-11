@@ -546,7 +546,7 @@ namespace mongo {
             return open_ns(ns);
         }
 
-        bool allocated() const { return _nsdb.get() != NULL; }
+        bool allocated() const { return _nsdb; }
 
         void getNamespaces( list<string>& tofill );
 
@@ -578,13 +578,14 @@ namespace mongo {
         // Only beginBulkLoad may call open_ns with bulkLoad = true.
         friend void beginBulkLoad(const StringData &ns, const vector<BSONObj> &indexes, const BSONObj &options);
 
-        // The underlying ydb dictionary that stores namespace information.
-        scoped_ptr<storage::Dictionary> _nsdb;
-
         NamespaceDetailsMap _namespaces;
         const string _dir;
         const string _nsdbFilename;
         const string _database;
+
+        // The underlying ydb dictionary that stores namespace information.
+        // - May not transition _nsdb from non-null to null in a DBRead lock.
+        shared_ptr<storage::Dictionary> _nsdb;
 
         // It isn't necessary to hold either of these locks in a a DBWrite lock.
 

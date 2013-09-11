@@ -419,10 +419,6 @@ mongodOnlyFiles = [ "db/db.cpp", "db/commands/touch.cpp" ]
 
 env.StaticLibrary("gridfs", "client/gridfs.cpp")
 
-if has_option( 'use-cpu-profiler' ):
-    coreServerFiles.append( 'db/commands/cpuprofile.cpp' )
-    env.Append( LIBS=['profiler'] )
-
 env.StaticLibrary("coreserver", coreServerFiles, LIBDEPS=["mongocommon", "scripting"])
 
 # main db target

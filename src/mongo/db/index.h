@@ -205,13 +205,40 @@ namespace mongo {
         template<class Callback>
         void getKeyAfterBytes(const storage::Key &startKey, uint64_t skipLen, Callback &cb) const;
 
-        // Book-keeping for index access, displayed in db.stats()
-        void accessed() const {
-            _accessCount.fetchAndAdd(1);
+        // Index access statistics
+        struct AccessStats {
+#pragma pack(8)
+            // If each word sits on its own cache line, we prevent false-sharing
+            // in the cache and reduce cache-invalidation stalls.
+            struct CacheLineWord : AtomicWord<uint64_t> {
+                char _pad[64 - sizeof(AtomicWord<uint64_t>)];
+            };
+#pragma pack()
+            BOOST_STATIC_ASSERT(sizeof(CacheLineWord) == 64);
+            CacheLineWord queries;
+            CacheLineWord nscanned;
+            CacheLineWord nscannedObjects;
+            CacheLineWord inserts;
+            CacheLineWord deletes;
+            // Not sure how to capture updates just yet
+            //CacheLineWord updates;
+        };
+
+        const AccessStats &getAccessStats() const {
+            return _accessStats;
         }
 
-        uint64_t getAccessCount() const {
-            return _accessCount.load();
+        // Book-keeping for index access, displayed in db.stats()
+        void noteQuery(const long long nscanned, const long long nscannedObjects) const {
+            _accessStats.queries.fetchAndAdd(1);
+            _accessStats.nscanned.fetchAndAdd(nscanned);
+            _accessStats.nscannedObjects.fetchAndAdd(nscannedObjects);
+        }
+        void noteInsert() const {
+            _accessStats.inserts.fetchAndAdd(1);
+        }
+        void noteDelete() const {
+            _accessStats.deletes.fetchAndAdd(1);
         }
 
         class Cursor : public storage::Cursor {
@@ -237,7 +264,7 @@ namespace mongo {
 
     protected:
         // Open ydb dictionary representing the index on disk.
-        scoped_ptr<storage::Dictionary> _db;
+        shared_ptr<storage::Dictionary> _db;
 
         DB *db() const {
             return _db->db();
@@ -263,7 +290,7 @@ namespace mongo {
         scoped_ptr<Descriptor> _descriptor;
 
     private:
-        mutable AtomicWord<uint64_t> _accessCount;
+        mutable AccessStats _accessStats;
 
         // Must be called after constructor. Opens the ydb dictionary
         // using _descriptor, which is set by subclass constructors.
@@ -279,7 +306,7 @@ namespace mongo {
     class IndexStats {
     public:
         explicit IndexStats(const IndexDetails &idx);
-        BSONObj bson(int scale) const;
+        BSONObj obj(int scale) const;
         uint64_t getCount() const {
             return _stats.bt_nkeys;
         }
@@ -289,8 +316,20 @@ namespace mongo {
         uint64_t getStorageSize() const {
             return _stats.bt_fsize;
         }
-        uint64_t getAccessCount() const {
-            return _accessCount;
+        uint64_t getQueryCount() const {
+            return _accessStats.queries.load();
+        }
+        uint64_t getNscanned() const {
+            return _accessStats.nscanned.load();
+        }
+        uint64_t getNscannedObjects() const {
+            return _accessStats.nscannedObjects.load();
+        }
+        uint64_t getInsertCount() const {
+            return _accessStats.inserts.load();
+        }
+        uint64_t getDeleleCount() const {
+            return _accessStats.deletes.load();
         }
     private:
         string _name;
@@ -298,7 +337,7 @@ namespace mongo {
         enum toku_compression_method _compressionMethod;
         uint32_t _readPageSize;
         uint32_t _pageSize;
-        uint64_t _accessCount;
+        const IndexDetails::AccessStats &_accessStats;
     };
 
     template<class Callback>
