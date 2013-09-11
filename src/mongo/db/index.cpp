@@ -473,11 +473,11 @@ namespace mongo {
             b.append("compression", "unknown");
             break;
         }
-        b.appendNumber("queries", _accessStats.queries.word.load());
-        b.appendNumber("nscanned", _accessStats.nscanned.word.load());
-        b.appendNumber("nscannedObjects", _accessStats.nscannedObjects.word.load());
-        b.appendNumber("inserts", _accessStats.inserts.word.load());
-        b.appendNumber("deletes", _accessStats.deletes.word.load());
+        b.appendNumber("queries", _accessStats.queries.load());
+        b.appendNumber("nscanned", _accessStats.nscanned.load());
+        b.appendNumber("nscannedObjects", _accessStats.nscannedObjects.load());
+        b.appendNumber("inserts", _accessStats.inserts.load());
+        b.appendNumber("deletes", _accessStats.deletes.load());
         return b.obj();
         // TODO: (Zardosht) Need to figure out how to display these dates
         /*

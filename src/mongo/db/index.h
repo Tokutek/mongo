@@ -210,9 +210,8 @@ namespace mongo {
 #pragma pack(8)
             // If each word sits on its own cache line, we prevent false-sharing
             // in the cache and reduce cache-invalidation stalls.
-            struct CacheLineWord {
-                AtomicWord<uint64_t> word;
-                char _pad[56];
+            struct CacheLineWord : AtomicWord<uint64_t> {
+                char _pad[64 - sizeof(AtomicWord<uint64_t>)];
             };
 #pragma pack()
             BOOST_STATIC_ASSERT(sizeof(CacheLineWord) == 64);
@@ -231,15 +230,15 @@ namespace mongo {
 
         // Book-keeping for index access, displayed in db.stats()
         void noteQuery(const long long nscanned, const long long nscannedObjects) const {
-            _accessStats.queries.word.fetchAndAdd(1);
-            _accessStats.nscanned.word.fetchAndAdd(nscanned);
-            _accessStats.nscannedObjects.word.fetchAndAdd(nscannedObjects);
+            _accessStats.queries.fetchAndAdd(1);
+            _accessStats.nscanned.fetchAndAdd(nscanned);
+            _accessStats.nscannedObjects.fetchAndAdd(nscannedObjects);
         }
         void noteInsert() const {
-            _accessStats.inserts.word.fetchAndAdd(1);
+            _accessStats.inserts.fetchAndAdd(1);
         }
         void noteDelete() const {
-            _accessStats.deletes.word.fetchAndAdd(1);
+            _accessStats.deletes.fetchAndAdd(1);
         }
 
         class Cursor : public storage::Cursor {
@@ -318,19 +317,19 @@ namespace mongo {
             return _stats.bt_fsize;
         }
         uint64_t getQueryCount() const {
-            return _accessStats.queries.word.load();
+            return _accessStats.queries.load();
         }
         uint64_t getNscanned() const {
-            return _accessStats.nscanned.word.load();
+            return _accessStats.nscanned.load();
         }
         uint64_t getNscannedObjects() const {
-            return _accessStats.nscannedObjects.word.load();
+            return _accessStats.nscannedObjects.load();
         }
         uint64_t getInsertCount() const {
-            return _accessStats.inserts.word.load();
+            return _accessStats.inserts.load();
         }
         uint64_t getDeleleCount() const {
-            return _accessStats.deletes.word.load();
+            return _accessStats.deletes.load();
         }
     private:
         string _name;
