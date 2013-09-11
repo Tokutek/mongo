@@ -628,11 +628,17 @@ foreach (tool
     top
     2toku
     files
-    bridge
     )
-  add_executable(mongo${tool} tools/${tool})
+  add_executable(mongo${tool}
+    tools/${tool}
+    tools/mongo${tool}_options
+    )
 endforeach ()
-add_executable(bsondump tools/bsondump)
+add_executable(mongobridge tools/bridge)
+add_executable(bsondump
+  tools/bsondump
+  tools/bsondump_options
+  )
 foreach (tool
     mongodump
     mongorestore

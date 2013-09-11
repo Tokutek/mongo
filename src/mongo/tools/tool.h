@@ -36,39 +36,21 @@ using std::string;
 
 namespace mongo {
 
-    extern moe::OptionSection options;
-    extern moe::Environment _params;
-
     class Tool {
     public:
-        Tool( string name , string defaultDB="test" ,
-              string defaultCollection="", bool usesstdout=true, bool quiet=false);
+        Tool(bool usesstdout=true);
         virtual ~Tool();
 
         static auto_ptr<Tool> (*createInstance)();
 
         int main( int argc , char ** argv, char ** envp );
 
-        string getParam( string name , string def="" ) const {
-            if ( _params.count( name ) )
-                return _params[name.c_str()].as<string>();
-            return def;
-        }
-        int getParam( string name , int def ) const {
-            if ( _params.count( name ) )
-                return _params[name.c_str()].as<int>();
-            return def;
-        }
-        bool hasParam( string name ) const {
-            return _params.count( name );
-        }
-
         string getNS() {
-            if ( _coll.size() == 0 ) {
+            if (toolGlobalParams.coll.size() == 0) {
                 cerr << "no collection specified!" << endl;
                 throw -1;
             }
-            return _db + "." + _coll;
+            return toolGlobalParams.db + "." + toolGlobalParams.coll;
         }
 
         string getAuthenticationDatabase();
@@ -86,52 +68,27 @@ namespace mongo {
 
         virtual void printHelp(ostream &out) = 0;
 
-        virtual void printVersion(ostream &out);
-
     protected:
 
         mongo::DBClientBase &conn( bool slaveIfPaired = false );
 
-        string _name;
-
-        string _db;
-        string _coll;
-        string _fileName;
-
-        string _username;
-        string _password;
-        string _authenticationDatabase;
-        string _authenticationMechanism;
-
         bool _usesstdout;
-        bool _quiet;
-        bool _noconnection;
         bool _autoreconnect;
-
-        void needFields();
-
-        vector<string> _fields;
-        BSONObj _fieldsObj;
-
-
-        string _host;
 
     protected:
 
         mongo::DBClientBase * _conn;
         mongo::DBClientBase * _slaveConn;
-        bool _paired;
 
     private:
         void auth();
     };
 
     class BSONTool : public Tool {
-        bool _objcheck;
         auto_ptr<Matcher> _matcher;
 
     public:
-        BSONTool( const char * name , bool objcheck = true );
+        BSONTool();
 
         virtual int doRun() = 0;
         virtual void gotObject( const BSONObj& obj ) = 0;

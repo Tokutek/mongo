@@ -27,114 +27,46 @@
 #include <fstream>
 #include <set>
 
-#include "mongo/base/init.h"
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/client/remote_loader.h"
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
+#include "mongo/tools/mongorestore_options.h"
 #include "mongo/tools/tool.h"
-#include "mongo/tools/tool_options.h"
 #include "mongo/util/options_parser/option_section.h"
-#include "mongo/util/options_parser/options_parser.h"
 #include "mongo/util/stringutils.h"
 
 using namespace mongo;
 
-namespace mongo {
-    MONGO_INITIALIZER_GENERAL(ParseStartupConfiguration,
-                              MONGO_NO_PREREQUISITES,
-                              ("default"))(InitializerContext* context) {
-
-        options = moe::OptionSection( "options" );
-        moe::OptionsParser parser;
-
-        Status retStatus = addMongoRestoreOptions(&options);
-        if (!retStatus.isOK()) {
-            return retStatus;
-        }
-
-        retStatus = parser.run(options, context->args(), context->env(), &_params);
-        if (!retStatus.isOK()) {
-            std::ostringstream oss;
-            oss << retStatus.toString() << "\n";
-            printMongoRestoreHelp(options, &oss);
-            return Status(ErrorCodes::FailedToParse, oss.str());
-        }
-
-        return Status::OK();
-    }
-} // namespace mongo
-
 class Restore : public BSONTool {
 public:
 
-    bool _drop;
-    bool _restoreOptions;
-    bool _restoreIndexes;
-    int _w;
-    bool _doBulkLoad;
     string _curns;
     string _curdb;
     string _curcoll;
     set<string> _users; // For restoring users with --drop
 
-    std::string _defaultCompression;
-    int _defaultPageSize;
-    int _defaultReadPageSize;
-
-    Restore() : BSONTool( "restore" ) , _drop(false) { }
+    Restore() : BSONTool() { }
 
     virtual void printHelp(ostream& out) {
-        printMongoRestoreHelp(options, &out);
+        printMongoRestoreHelp(toolsOptions, &out);
     }
 
     virtual int doRun() {
 
-        boost::filesystem::path root = getParam("dir");
+        boost::filesystem::path root = mongoRestoreGlobalParams.restoreDirectory;
 
         // check if we're actually talking to a machine that can write
         if (!isMaster()) {
             return -1;
         }
 
-        if (isMongos() && _db == "" && exists(root / "config")) {
+        if (isMongos() && toolGlobalParams.db == "" && exists(root / "config")) {
             log() << "Cannot do a full restore on a sharded system" << endl;
             return -1;
         }
 
-        _drop = hasParam( "drop" );
-        _restoreOptions = !hasParam("noOptionsRestore");
-        _restoreIndexes = !hasParam("noIndexRestore");
-        // Make sure default value set here stays in sync with the one set in the constructor above.
-        _w = getParam( "w" , 0 );
-        _doBulkLoad = _w <= 1;
-        if (!_doBulkLoad) {
-            log() << "warning: not using bulk loader due to --w > 1" << endl;
-        }
-        if (hasParam( "noLoader" )) {
-            _doBulkLoad = false;
-        }
-        if (hasParam( "keepIndexVersion" )) {
-            log() << "warning: --keepIndexVersion is deprecated in TokuMX" << endl;
-        }
-        if (hasParam( "oplogReplay" )) {
-            log() << "warning: --oplogReplay is deprecated in TokuMX" << endl;
-        }
-        if (hasParam( "oplogLimit" )) {
-            log() << "warning: --oplogLimit is deprecated in TokuMX" << endl;
-        }
-
-        if (hasParam("defaultCompression")) {
-            _defaultCompression = getParam("defaultCompression");
-        }
-        if (hasParam("defaultPageSize")) {
-            _defaultPageSize = getParam("defaultPageSize", 0);
-        }
-        if (hasParam("defaultReadPageSize")) {
-            _defaultReadPageSize = getParam("defaultReadPageSize", 0);
-        }
-
-        /* If _db is not "" then the user specified a db name to restore as.
+        /* If toolGlobalParams.db is not "" then the user specified a db name to restore as.
          *
          * In that case we better be given either a root directory that
          * contains only .bson files or a single .bson file  (a db).
@@ -143,8 +75,8 @@ public:
          * given either a root directory that contains only a single
          * .bson file, or a single .bson file itself (a collection).
          */
-        drillDown(root, _db != "", _coll != "", true);
-        string err = conn().getLastError(_db == "" ? "admin" : _db);
+        drillDown(root, !toolGlobalParams.db.empty(), !toolGlobalParams.coll.empty(), true);
+        string err = conn().getLastError(toolGlobalParams.db.empty() ? "admin" : toolGlobalParams.db);
         if (!err.empty()) {
             error() << err;
         }
@@ -217,7 +149,7 @@ public:
 
         string ns;
         if (use_db) {
-            ns += _db;
+            ns += toolGlobalParams.db;
         }
         else {
             ns = root.parent_path().filename().string();
@@ -230,7 +162,7 @@ public:
         string oldCollName = root.leaf().string(); // Name of the collection that was dumped from
         oldCollName = oldCollName.substr( 0 , oldCollName.find_last_of( "." ) );
         if (use_coll) {
-            ns += "." + _coll;
+            ns += "." + toolGlobalParams.coll;
         }
         else {
             ns += "." + oldCollName;
@@ -238,7 +170,7 @@ public:
 
         log() << "\tgoing into namespace [" << ns << "]" << endl;
 
-        if ( _drop ) {
+        if (mongoRestoreGlobalParams.drop) {
             if (root.leaf() != "system.users.bson" ) {
                 log() << "\t dropping" << endl;
                 conn().dropCollection( ns );
@@ -254,7 +186,7 @@ public:
         }
 
         BSONObj metadataObject;
-        if (_restoreOptions || _restoreIndexes) {
+        if (mongoRestoreGlobalParams.restoreOptions || mongoRestoreGlobalParams.restoreIndexes) {
             boost::filesystem::path metadataFile = (root.branch_path() / (oldCollName + ".metadata.json"));
             if (!boost::filesystem::exists(metadataFile.string())) {
                 // This is fine because dumps from before 2.1 won't have a metadata file, just print a warning.
@@ -273,7 +205,7 @@ public:
         _curcoll = nss.coll;
 
         // If drop is not used, warn if the collection exists.
-        if (!_drop) {
+        if (!mongoRestoreGlobalParams.drop) {
             scoped_ptr<DBClientCursor> cursor(conn().query(_curdb + ".system.namespaces",
                                                             Query(BSON("name" << ns))));
             if (cursor->more()) {
@@ -285,7 +217,7 @@ public:
         }
 
         vector<BSONObj> indexes;
-        if (_restoreIndexes && metadataObject.hasField("indexes")) {
+        if (mongoRestoreGlobalParams.restoreIndexes && metadataObject.hasField("indexes")) {
             const vector<BSONElement> indexElements = metadataObject["indexes"].Array();
             for (vector<BSONElement>::const_iterator it = indexElements.begin(); it != indexElements.end(); ++it) {
                 // Need to make sure the ns field gets updated to
@@ -295,11 +227,11 @@ public:
                 indexes.push_back(updateOptions(renameIndexNs(it->Obj())));
             }
         }
-        const BSONObj options = updateOptions(_restoreOptions && metadataObject.hasField("options")
+        const BSONObj options = updateOptions(mongoRestoreGlobalParams.restoreOptions && metadataObject.hasField("options")
                                               ? metadataObject["options"].Obj()
                                               : BSONObj());
 
-        if (_doBulkLoad && !options["partitioned"].trueValue()) {
+        if (mongoRestoreGlobalParams.doBulkLoad && !options["partitioned"].trueValue()) {
             RemoteLoader loader(conn(), _curdb, _curcoll, indexes, options);
             processFile( root );
             BSONObj res;
@@ -319,7 +251,7 @@ public:
             }
         }
 
-        if (_drop && root.leaf() == "system.users.bson") {
+        if (mongoRestoreGlobalParams.drop && root.leaf() == "system.users.bson") {
             // Delete any users that used to exist but weren't in the dump file
             for (set<string>::iterator it = _users.begin(); it != _users.end(); ++it) {
                 BSONObj userMatch = BSON("user" << *it);
@@ -333,7 +265,7 @@ public:
         StringData collstr = nsToCollectionSubstring(_curns);
         massert( 16910, "Shouldn't be inserting into system.indexes directly",
                         collstr != "system.indexes" );
-        if (_drop && collstr == "system.users" && _users.count(obj["user"].String())) {
+        if (mongoRestoreGlobalParams.drop && collstr == "system.users" && _users.count(obj["user"].String())) {
             // Since system collections can't be dropped, we have to manually
             // replace the contents of the system.users collection
             BSONObj userMatch = BSON("user" << obj["user"].String());
@@ -343,8 +275,8 @@ public:
             conn().insert( _curns , obj );
 
             // wait for insert to propagate to "w" nodes (doesn't warn if w used without replset)
-            if ( _w > 0 ) {
-                string err = conn().getLastError(_curdb, false, false, _w);
+            if (mongoRestoreGlobalParams.w > 0) {
+                string err = conn().getLastError(_curdb, false, false, mongoRestoreGlobalParams.w);
                 if (!err.empty()) {
                     error() << err << endl;
                 }
@@ -371,14 +303,14 @@ private:
             }
             newOptsBuilder.append(opt);
         }
-        if (!compressionSpecified && !_defaultCompression.empty()) {
-            newOptsBuilder.append("compression", _defaultCompression);
+        if (!compressionSpecified && !mongoRestoreGlobalParams.defaultCompression.empty()) {
+            newOptsBuilder.append("compression", mongoRestoreGlobalParams.defaultCompression);
         }
-        if (!pageSizeSpecified && _defaultPageSize != 0) {
-            newOptsBuilder.append("pageSize", _defaultPageSize);
+        if (!pageSizeSpecified && mongoRestoreGlobalParams.defaultPageSize != 0) {
+            newOptsBuilder.append("pageSize", mongoRestoreGlobalParams.defaultPageSize);
         }
-        if (!readPageSizeSpecified && _defaultReadPageSize != 0) {
-            newOptsBuilder.append("readPageSize", _defaultReadPageSize);
+        if (!readPageSizeSpecified && mongoRestoreGlobalParams.defaultReadPageSize != 0) {
+            newOptsBuilder.append("readPageSize", mongoRestoreGlobalParams.defaultReadPageSize);
         }
         return newOptsBuilder.obj();
     }
@@ -502,10 +434,10 @@ private:
         conn().insert( _curdb + ".system.indexes" ,  indexObj );
 
         // We're stricter about errors for indexes than for regular data
-        BSONObj err = conn().getLastErrorDetailed(_curdb, false, false, _w);
+        BSONObj err = conn().getLastErrorDetailed(_curdb, false, false, mongoRestoreGlobalParams.w);
 
         if (err.hasField("err") && !err["err"].isNull()) {
-            if (err["err"].str() == "norepl" && _w > 1) {
+            if (err["err"].str() == "norepl" && mongoRestoreGlobalParams.w > 1) {
                 error() << "Cannot specify write concern for non-replicas" << endl;
             }
             else {

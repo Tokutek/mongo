@@ -31,39 +31,14 @@
 #include "mongo/base/string_data.h"
 #include "mongo/client/connpool.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/tools/mongo2toku_options.h"
 #include "mongo/tools/tool.h"
-#include "mongo/tools/tool_options.h"
 #include "mongo/util/options_parser/option_section.h"
 #include "mongo/util/options_parser/options_parser.h"
 #include "mongo/util/password.h"
 #include "mongo/util/timer.h"
 
 using namespace mongo;
-
-namespace mongo {
-    MONGO_INITIALIZER_GENERAL(ParseStartupConfiguration,
-                              MONGO_NO_PREREQUISITES,
-                              ("default"))(InitializerContext* context) {
-
-        options = moe::OptionSection( "options" );
-        moe::OptionsParser parser;
-
-        Status retStatus = addMongo2TokuOptions(&options);
-        if (!retStatus.isOK()) {
-            return retStatus;
-        }
-
-        retStatus = parser.run(options, context->args(), context->env(), &_params);
-        if (!retStatus.isOK()) {
-            std::ostringstream oss;
-            oss << retStatus.toString() << "\n";
-            printMongo2TokuHelp(options, &oss);
-            return Status(ErrorCodes::FailedToParse, oss.str());
-        }
-
-        return Status::OK();
-    }
-} // namespace mongo
 
 static string fmtOpTime(const OpTime &t) {
     stringstream ss;
@@ -73,7 +48,6 @@ static string fmtOpTime(const OpTime &t) {
 
 class VanillaOplogPlayer : boost::noncopyable {
     mongo::DBClientBase &_conn;
-    string _host;
     OpTime _maxOpTimeSynced;
     OpTime _thisTime;
     vector<BSONObj> _insertBuf;
@@ -98,9 +72,9 @@ class VanillaOplogPlayer : boost::noncopyable {
     }
 
   public:
-    VanillaOplogPlayer(mongo::DBClientBase &conn, const string &host, const OpTime &maxOpTimeSynced,
+    VanillaOplogPlayer(mongo::DBClientBase &conn, const OpTime &maxOpTimeSynced,
                        volatile bool &running, bool &logAtExit)
-            : _conn(conn), _host(host), _maxOpTimeSynced(maxOpTimeSynced),
+            : _conn(conn), _maxOpTimeSynced(maxOpTimeSynced),
               _running(running), _logAtExit(logAtExit) {}
 
     void flushInserts() {
@@ -308,10 +282,7 @@ namespace proc_mgmt {
 class OplogTool : public Tool {
     static const char *_tsFilename;
     bool _logAtExit;
-    string _from;
     scoped_ptr<VanillaOplogPlayer> _player;
-    string _oplogns;
-    string _rpass;
     mutable Timer _reportingTimer;
 
     class CantFindTimestamp {
@@ -350,10 +321,10 @@ public:
     }
     static volatile bool running;
 
-    OplogTool() : Tool("2toku", "admin"), _logAtExit(true), _player(), _reportingTimer() {}
+    OplogTool() : Tool(true), _logAtExit(true), _player(), _reportingTimer() {}
 
-    virtual void printHelp( ostream& out ) {
-        printMongo2TokuHelp(options, &out);
+    virtual void printHelp(ostream& out) {
+        printMongo2TokuHelp(toolsOptions, &out);
     }
 
     void report() const {
@@ -362,13 +333,13 @@ public:
         Query lastQuery;
         lastQuery.sort("$natural", -1);
         BSONObj lastFields = BSON("ts" << 1);
-        ScopedDbConnection conn(_from);
+        ScopedDbConnection conn(mongo2TokuGlobalParams.from);
         if (!doAuth(conn)) {
             LOG(0) << endl;
             conn.done();
             return;
         }
-        BSONObj lastObj = conn->findOne(_oplogns, lastQuery, &lastFields);
+        BSONObj lastObj = conn->findOne(mongo2TokuGlobalParams.oplogns, lastQuery, &lastFields);
         conn.done();
         BSONElement tsElt = lastObj["ts"];
         if (!tsElt.ok()) {
@@ -395,19 +366,15 @@ public:
     }
 
     bool doAuth(ScopedDbConnection &conn) const {
-        if (hasParam("ruser")) {
-            if (!hasParam("rpass")) {
-                log() << "if using auth on source, must specify both --ruser and --rpass" << endl;
-                return false;
-            }
+        if (!mongo2TokuGlobalParams.ruser.empty()) {
             try {
-                conn->auth(BSON("user" << getParam("ruser") <<
-                                "userSource" << getParam("rauthenticationDatabase") <<
-                                "pwd" << _rpass <<
-                                "mechanism" << getParam("authenticationMechanism")));
+                conn->auth(BSON("user" << mongo2TokuGlobalParams.ruser <<
+                                "userSource" << mongo2TokuGlobalParams.rauthenticationDatabase <<
+                                "pwd" << mongo2TokuGlobalParams.rpass <<
+                                "mechanism" << mongo2TokuGlobalParams.rauthenticationMechanism));
             } catch (DBException &e) {
                 if (e.getCode() == ErrorCodes::AuthenticationFailed) {
-                    error() << "error authenticating to " << getParam("rauthenticationDatabase") << " on source: "
+                    error() << "error authenticating to " << mongo2TokuGlobalParams.rauthenticationDatabase << " on source: "
                             << e.what() << endl;
                     return false;
                 }
@@ -421,28 +388,13 @@ public:
         proc_mgmt::theTool = this;
         running = true;
 
-        if (!hasParam("from")) {
-            log() << "need to specify --from" << endl;
-            return -1;
-        }
-
-        _oplogns = getParam("oplogns");
-
-        if ( _params.count( "rpass" ) ) {
-            _rpass = _params["rpass"].as<string>();
-            if ( _rpass.empty() ) {
-                _rpass = askPassword();
-            }
-        }
-
         if (currentClient.get() == 0) {
             Client::initThread( "mongo2toku" );
         }
 
         LOG(1) << "going to connect" << endl;
 
-        _from = getParam("from");
-        ScopedDbConnection conn(_from);
+        ScopedDbConnection conn(mongo2TokuGlobalParams.from);
 
         if (!doAuth(conn)) {
             conn.done();
@@ -452,11 +404,8 @@ public:
         LOG(1) << "connected" << endl;
 
         {
-            string tsString;
-            if (hasParam("ts")) {
-                tsString = getParam("ts");
-            }
-            else {
+            string tsString = mongo2TokuGlobalParams.ts;
+            if (tsString.empty()) {
                 try {
                     ifstream tsFile;
                     tsFile.exceptions(std::ifstream::badbit | std::ifstream::failbit);
@@ -481,7 +430,7 @@ public:
             }
             maxOpTimeSynced = OpTime(secs, i);
 
-            _player.reset(new VanillaOplogPlayer(conn.conn(), _host, maxOpTimeSynced, running, _logAtExit));
+            _player.reset(new VanillaOplogPlayer(conn.conn(), maxOpTimeSynced, running, _logAtExit));
         }
 
         try {
@@ -540,7 +489,7 @@ public:
     bool attemptQuery(ScopedDbConnection &conn, int queryOptions) {
         BSONObj res;
         auto_ptr<DBClientCursor> cursor(conn->query(
-            _oplogns, QUERY("ts" << GTE << _player->maxOpTimeSynced()),
+            mongo2TokuGlobalParams.oplogns, QUERY("ts" << GTE << _player->maxOpTimeSynced()),
             0, 0, &res, queryOptions));
 
         if (!cursor->more()) {
@@ -579,7 +528,7 @@ public:
             }
             _player->flushInserts();
 
-            if (_reportingTimer.seconds() >= getParam("reportingPeriod", 10)) {
+            if (_reportingTimer.seconds() >= mongo2TokuGlobalParams.reportingPeriod) {
                 report();
             }
         }

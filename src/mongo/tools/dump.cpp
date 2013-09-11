@@ -26,40 +26,14 @@
 #include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/convenience.hpp>
 
-#include "mongo/base/init.h"
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/namespacestring.h"
+#include "mongo/tools/mongodump_options.h"
 #include "mongo/tools/tool.h"
 #include "mongo/tools/tool_options.h"
 #include "mongo/util/options_parser/option_section.h"
-#include "mongo/util/options_parser/options_parser.h"
 
 using namespace mongo;
-
-namespace mongo {
-    MONGO_INITIALIZER_GENERAL(ParseStartupConfiguration,
-                              MONGO_NO_PREREQUISITES,
-                              ("default"))(InitializerContext* context) {
-
-        options = moe::OptionSection( "options" );
-        moe::OptionsParser parser;
-
-        Status retStatus = addMongoDumpOptions(&options);
-        if (!retStatus.isOK()) {
-            return retStatus;
-        }
-
-        retStatus = parser.run(options, context->args(), context->env(), &_params);
-        if (!retStatus.isOK()) {
-            std::ostringstream oss;
-            oss << retStatus.toString() << "\n";
-            printMongoDumpHelp(options, &oss);
-            return Status(ErrorCodes::FailedToParse, oss.str());
-        }
-
-        return Status::OK();
-    }
-} // namespace mongo
 
 class Dump : public Tool {
     class FilePtr : boost::noncopyable {
@@ -71,11 +45,10 @@ class Dump : public Tool {
         FILE* _f;
     };
 public:
-    Dump() : Tool( "dump" , "" , "" , true ) { }
+    Dump() : Tool(true/*usesstdout*/) { }
 
     virtual void preSetup() {
-        string out = getParam("out");
-        if ( out == "-" ) {
+        if (mongoDumpGlobalParams.outputFile == "-") {
                 // write output to standard error to avoid mangling output
                 // must happen early to avoid sending junk to stdout
                 useStandardOutput(false);
@@ -83,7 +56,7 @@ public:
     }
 
     virtual void printHelp(ostream& out) {
-        printMongoDumpHelp(options, &out);
+        printMongoDumpHelp(toolsOptions, &out);
     }
 
     // This is a functor that writes a BSONObj to a file
@@ -231,7 +204,7 @@ public:
             }
 
             // skip namespaces with $ in them only if we don't specify a collection to dump
-            if ( _coll.empty() && name.find( ".$" ) != string::npos ) {
+            if (toolGlobalParams.coll.empty() && name.find(".$") != string::npos) {
                 LOG(1) << "\tskipping collection: " << name << endl;
                 continue;
             }
@@ -239,8 +212,11 @@ public:
             const string filename = name.substr( db.size() + 1 );
 
             //if a particular collections is specified, and it's not this one, skip it
-            if ( !_coll.empty() && db + "." + _coll != name && _coll != name )
+            if (toolGlobalParams.coll.empty() &&
+                db + "." + toolGlobalParams.coll != name &&
+                toolGlobalParams.coll != name) {
                 continue;
+            }
 
             // raise error before writing collection with non-permitted filename chars in the name
             size_t hasBadChars = name.find_first_of("/\0");
@@ -256,9 +232,6 @@ public:
               continue;
             }
             
-            if ( !_coll.empty() && db + "." + _coll != name && _coll != name )
-              continue;
-            
             collections.push_back(name);
         }
         
@@ -272,20 +245,19 @@ public:
     }
 
     int repair() {
-        if ( ! hasParam( "dbpath" ) ){
+        if (toolGlobalParams.dbpath.empty()) {
             log() << "repair mode only works with --dbpath" << endl;
             return -1;
         }
-        
-        if ( ! hasParam( "db" ) ){
+
+        if (toolGlobalParams.db.empty()) {
             log() << "repair mode only works on 1 db at a time right now" << endl;
             return -1;
         }
 
-        string dbname = getParam( "db" );
-        log() << "going to try and recover data from: " << dbname << endl;
+        log() << "going to try and recover data from: " << toolGlobalParams.db << endl;
 
-        return _repair( dbname  );
+        return _repair(toolGlobalParams.db);
     }    
 
     int _repair( string dbname ) {
@@ -293,26 +265,20 @@ public:
     }
 
     int run() {
-        
-        if ( hasParam( "repair" ) ){
+        if (mongoDumpGlobalParams.repair) {
             warning() << "repair is a work in progress" << endl;
             return repair();
         }
 
         {
-            string q = getParam("query");
-            if ( q.size() )
-                _query = fromjson( q );
+            if (mongoDumpGlobalParams.query.size()) {
+                _query = fromjson(mongoDumpGlobalParams.query);
+            }
         }
 
         string opLogName = "";
         unsigned long long opLogStart = 0;
-        if (hasParam("oplog")) {
-            if (hasParam("query") || hasParam("db") || hasParam("collection")) {
-                log() << "oplog mode is only supported on full dumps" << endl;
-                return -1;
-            }
-
+        if (mongoDumpGlobalParams.useOplog) {
 
             BSONObj isMaster;
             conn("true").simpleCommand("admin", &isMaster, "isMaster");
@@ -338,10 +304,9 @@ public:
         }
 
         // check if we're outputting to stdout
-        string out = getParam("out");
-        if ( out == "-" ) {
-            if ( _db != "" && _coll != "" ) {
-                writeCollectionStdout( _db+"."+_coll );
+        if (mongoDumpGlobalParams.outputFile == "-") {
+            if (toolGlobalParams.db != "" && toolGlobalParams.coll != "") {
+                writeCollectionStdout(toolGlobalParams.db + "." + toolGlobalParams.coll);
                 return 0;
             }
             else {
@@ -352,11 +317,10 @@ public:
 
         _usingMongos = isMongos();
 
-        boost::filesystem::path root( out );
-        string db = _db;
+        boost::filesystem::path root(mongoDumpGlobalParams.outputFile);
 
-        if ( db == "" ) {
-            if ( _coll != "" ) {
+        if (toolGlobalParams.db == "") {
+            if (toolGlobalParams.coll != "") {
                 error() << "--db must be specified with --collection" << endl;
                 return -1;
             }
@@ -389,7 +353,7 @@ public:
             }
         }
         else {
-            go( db , root / db );
+            go(toolGlobalParams.db, root / toolGlobalParams.db);
         }
 
         if (!opLogName.empty()) {

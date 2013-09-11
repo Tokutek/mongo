@@ -641,15 +641,16 @@ env.StaticLibrary("alltools",
 normalTools = [ "dump", "restore", "export", "import", "stat", "top", "2toku"]
 env.Alias( "tools", [ "#/${PROGPREFIX}mongo" + x + "${PROGSUFFIX}" for x in normalTools ] )
 for x in normalTools:
-    tool = env.Install( '#/', env.Program( "mongo" + x, [ "tools/" + x + ".cpp" ],
+    tool = env.Install( '#/', env.Program("mongo" + x,
+                                          ["tools/" + x + ".cpp", "tools/mongo" + x + "_options.cpp"],
                                            LIBS=env['LIBS'] + tokulibs,
                                            LIBDEPS=["alltools"]) )
     addBuildRpath(env, tool)
 
 #some special tools
 env.Install( '#/', [
-        env.Program( "mongofiles", "tools/files.cpp", LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools", "gridfs"] ),
-        env.Program( "bsondump", "tools/bsondump.cpp", LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools"]),
+        env.Program( "mongofiles", ["tools/files.cpp", "tools/mongofiles_options.cpp"], LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools", "gridfs"] ),
+        env.Program( "bsondump", ["tools/bsondump.cpp", "tools/bsondump_options.cpp"], LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools"]),
         env.Program( "mongobridge", "tools/bridge.cpp", LIBS=env['LIBS'] + tokulibs,
                      LIBDEPS=["serveronly", "coreserver", "coredb"] ),
         ] )
