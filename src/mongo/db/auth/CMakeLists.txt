@@ -30,6 +30,7 @@ add_library(authcore STATIC
   "${CMAKE_CURRENT_BINARY_DIR}/action_type.cpp"
   authorization_manager
   authorization_session
+  authz_documents_update_guard
   authz_manager_external_state
   authz_session_external_state
   privilege
