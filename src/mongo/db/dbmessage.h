@@ -209,18 +209,13 @@ namespace mongo {
 
         const Message& msg() const { return m; }
 
-        const char * markGet() {
-            return nextjsobj;
-        }
-
         void markSet() {
             mark = nextjsobj;
         }
 
-        void markReset( const char * toMark = 0) {
-            if( toMark == 0 ) toMark = mark;
-            verify( toMark );
-            nextjsobj = toMark;
+        void markReset() {
+            verify( mark );
+            nextjsobj = mark;
         }
 
     private:
