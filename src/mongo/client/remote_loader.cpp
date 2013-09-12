@@ -56,12 +56,20 @@ namespace mongo {
     void RemoteLoader::begin(const BSONObj &obj) {
         _commandObj = obj;
         BSONObj res;
-        bool ok = _conn->runCommand(_db, obj, res);
+
+        bool ok = false;
+        if (_rtxn.isLive()) {
+            ok = _conn->runCommand(_db, obj, res);
+        }
+
         if (ok) {
             _usingLoader = true;
         } else {
             LOG(0) << "RemoteLoader failed to beginLoad: " << res
                    << ". Falling back to normal inserts." << endl;
+            ok = _rtxn.rollback(res);
+            massert(16997, mongoutils::str::stream() << "error rolling back transaction: " << res, ok);
+
             BSONObjBuilder cb;
             BSONElement nsElt = obj["ns"];
             uassert(16923, mongoutils::str::stream() << "invalid bulkLoad obj: " << obj,
