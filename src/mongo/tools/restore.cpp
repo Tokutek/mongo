@@ -272,8 +272,11 @@ public:
         if (_restoreIndexes && metadataObject.hasField("indexes")) {
             const vector<BSONElement> indexElements = metadataObject["indexes"].Array();
             for (vector<BSONElement>::const_iterator it = indexElements.begin(); it != indexElements.end(); ++it) {
-                BSONObj indexObj = renameIndexNs(it->Obj());
-                indexes.push_back(indexObj);
+                // Need to make sure the ns field gets updated to
+                // the proper _curdb + _curns value, if we're 
+                // restoring to a different database.
+                const BSONObj indexObj = renameIndexNs(it->Obj());
+                indexes.push_back(o);
             }
         }
         const BSONObj options = _restoreOptions && metadataObject.hasField("options") ?
@@ -411,7 +414,6 @@ private:
         while ( i.more() ) {
             BSONElement e = i.next();
             if (strcmp(e.fieldName(), "ns") == 0) {
-                NamespaceString n(e.String());
                 string s = _curdb + "." + _curcoll;
                 bo.append("ns", s);
             }
@@ -423,7 +425,6 @@ private:
     }
 
     /* We must handle if the dbname or collection name is different at restore time than what was dumped.
-       If keepCollName is true, however, we keep the same collection name that's in the index object.
      */
     void createIndex(BSONObj indexObj) {
         LOG(0) << "\tCreating index: " << indexObj << endl;
