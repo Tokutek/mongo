@@ -65,6 +65,8 @@ namespace mongo {
             @return true -- iff the rollback was successful
          */
         bool rollback(BSONObj *res = NULL);
+        /** @return true -- iff the transaction is live */
+        bool isLive() const { return _conn != NULL; }
     };
 
 } // namespace mongo
