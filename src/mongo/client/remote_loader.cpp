@@ -67,7 +67,7 @@ namespace mongo {
         } else {
             LOG(0) << "RemoteLoader failed to beginLoad: " << res
                    << ". Falling back to normal inserts." << endl;
-            ok = _rtxn.rollback(res);
+            ok = _rtxn.rollback(&res);
             massert(16997, mongoutils::str::stream() << "error rolling back transaction: " << res, ok);
 
             BSONObjBuilder cb;
