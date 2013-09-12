@@ -291,7 +291,7 @@ public:
             // Build indexes last - it's a little faster.
             processFile( root );
             for (vector<BSONObj>::iterator it = indexes.begin(); it != indexes.end(); ++it) {
-                createIndex(*it, false);
+                createIndex(*it);
             }
         }
 
@@ -411,7 +411,7 @@ private:
         while ( i.more() ) {
             BSONElement e = i.next();
             if (strcmp(e.fieldName(), "ns") == 0) {
-                NamespaceString n(e.Stringdata());
+                NamespaceString n(e.String());
                 string s = _curdb + "." + _curcoll;
                 bo.append("ns", s);
             }
