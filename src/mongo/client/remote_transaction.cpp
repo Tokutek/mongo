@@ -49,8 +49,10 @@ namespace mongo {
 
     bool RemoteTransaction::commit(BSONObj *res) {
         if (!_conn) {
-            *res = BSON("ok" << 0 <<
-                        "errmsg" << "no live transaction to commit");
+            if (res != NULL) {
+                *res = BSON("ok" << 0 <<
+                            "errmsg" << "no live transaction to commit");
+            }
             return false;
         }
         bool ok = _conn->commitTransaction(res);
@@ -62,8 +64,10 @@ namespace mongo {
 
     bool RemoteTransaction::rollback(BSONObj *res) {
         if (!_conn) {
-            *res = BSON("ok" << 1 <<
-                        "errmsg" << "no live transaction to abort");
+            if (res != NULL) {
+                *res = BSON("ok" << 1 <<
+                            "errmsg" << "no live transaction to abort");
+            }
             return true;
         }
         bool ok = _conn->rollbackTransaction(res);
