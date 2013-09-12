@@ -55,18 +55,28 @@ namespace mongo {
         }
     }
 
-    // Returned *writeConcern is valid only as long as cmdObj is.
-    static Status extractWriteConcern(const BSONObj cmdObj, BSONObj* writeConcern) {
-        BSONElement writeConcernElement;
-        Status status = bsonExtractTypedField(cmdObj, "writeConcern", Object, &writeConcernElement);
+    static BSONArray rolesToBSONArray(const User::RoleDataMap& roles) {
+        BSONArrayBuilder arrBuilder;
+        for (User::RoleDataMap::const_iterator it = roles.begin(); it != roles.end(); ++it) {
+            const User::RoleData& role = it->second;
+            arrBuilder.append(BSON("name" << role.name.getRole() <<
+                                   "source" << role.name.getDB() <<
+                                   "hasRole" << role.hasRole <<
+                                   "canDelegate" << role.canDelegate));
+        }
+        return arrBuilder.arr();
+    }
+
+    static Status getCurrentUserRoles(AuthorizationManager* authzManager,
+                                      const UserName& userName,
+                                      User::RoleDataMap* roles) {
+        User* user;
+        Status status = authzManager->acquireUser(userName, &user);
         if (!status.isOK()) {
-            if (status.code() == ErrorCodes::NoSuchKey) {
-                *writeConcern = BSONObj();
-                return Status::OK();
-            }
             return status;
         }
-        *writeConcern = writeConcernElement.Obj();
+        *roles = user->getRoles();
+        authzManager->releaseUser(user);
         return Status::OK();
     }
 
@@ -112,7 +122,7 @@ namespace mongo {
             }
 
             BSONObj writeConcern;
-            status = extractWriteConcern(cmdObj, &writeConcern);
+            status = auth::extractWriteConcern(cmdObj, &writeConcern);
             if (!status.isOK()) {
                 addStatus(status, result);
                 return false;
@@ -174,7 +184,7 @@ namespace mongo {
             }
 
             BSONObj writeConcern;
-            status = extractWriteConcern(cmdObj, &writeConcern);
+            status = auth::extractWriteConcern(cmdObj, &writeConcern);
             if (!status.isOK()) {
                 addStatus(status, result);
                 return false;
@@ -233,7 +243,7 @@ namespace mongo {
             }
 
             BSONObj writeConcern;
-            status = extractWriteConcern(cmdObj, &writeConcern);
+            status = auth::extractWriteConcern(cmdObj, &writeConcern);
             if (!status.isOK()) {
                 addStatus(status, result);
                 return false;
@@ -294,7 +304,7 @@ namespace mongo {
                  BSONObjBuilder& result,
                  bool fromRepl) {
             BSONObj writeConcern;
-            Status status = extractWriteConcern(cmdObj, &writeConcern);
+            Status status = auth::extractWriteConcern(cmdObj, &writeConcern);
             if (!status.isOK()) {
                 addStatus(status, result);
                 return false;
@@ -318,4 +328,78 @@ namespace mongo {
         }
 
     } cmdRemoveUsersFromDatabase;
+
+    class CmdGrantRolesToUser: public InformationCommand {
+    public:
+
+        virtual bool slaveOk() const {
+            return false;
+        }
+
+        CmdGrantRolesToUser() : InformationCommand("grantRolesToUser") {}
+
+        virtual void help(stringstream& ss) const {
+            ss << "Grants roles to a user." << endl;
+        }
+
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            // TODO: update this with the new rules around user creation in 2.6.
+            ActionSet actions;
+            actions.addAction(ActionType::userAdmin);
+            out->push_back(Privilege(dbname, actions));
+        }
+
+        bool run(const string& dbname,
+                 BSONObj& cmdObj,
+                 int options,
+                 string& errmsg,
+                 BSONObjBuilder& result,
+                 bool fromRepl) {
+            UserName userName;
+            std::vector<RoleName> roles;
+            BSONObj writeConcern;
+            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
+            Status status = auth::parseUserRoleManipulationCommand(cmdObj,
+                                                                   "grantRolesToUser",
+                                                                   dbname,
+                                                                   authzManager,
+                                                                   &userName,
+                                                                   &roles,
+                                                                   &writeConcern);
+            if (!status.isOK()) {
+                addStatus(status, result);
+                return false;
+            }
+
+            User::RoleDataMap userRoles;
+            status = getCurrentUserRoles(authzManager, userName, &userRoles);
+            if (!status.isOK()) {
+                addStatus(status, result);
+                return false;
+            }
+
+            for (vector<RoleName>::iterator it = roles.begin(); it != roles.end(); ++it) {
+                RoleName& roleName = *it;
+                User::RoleData& role = userRoles[roleName];
+                if (role.name.empty()) {
+                    role.name = roleName;
+                }
+                role.hasRole = true;
+            }
+
+            BSONArray newRolesBSONArray = rolesToBSONArray(userRoles);
+            status = authzManager->updatePrivilegeDocument(
+                    userName, BSON("$set" << BSON("roles" << newRolesBSONArray)), writeConcern);
+            if (!status.isOK()) {
+                addStatus(status, result);
+                return false;
+            }
+
+            authzManager->invalidateUserByName(userName);
+            return true;
+        }
+
+    } CmdGrantRolesToUser;
 }
