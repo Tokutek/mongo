@@ -52,6 +52,8 @@ namespace mongo {
         DBClientWithCommands *_conn;
         string _db;
         RemoteTransaction _rtxn;
+        bool _usingLoader;
+        BSONObj _commandObj;
         static void beginLoadCmd(const string &ns, const vector<BSONObj> &indexes, const BSONObj &options,
                                  BSONObjBuilder &b);
         void begin(const BSONObj &obj);
