@@ -64,7 +64,7 @@ namespace mongo {
                    << ". Falling back to normal inserts." << endl;
             BSONObjBuilder cb;
             BSONElement nsElt = obj["ns"];
-            uassert(16916, mongoutils::str::stream() << "invalid bulkLoad obj: " << obj,
+            uassert(16923, mongoutils::str::stream() << "invalid bulkLoad obj: " << obj,
                     nsElt.ok() && nsElt.type() == String);
             cb.append("create", nsElt.Stringdata());
             BSONElement optsElt = obj["options"];
@@ -76,7 +76,7 @@ namespace mongo {
                 }
             }
             ok = _conn->runCommand(_db, cb.done(), res);
-            uassert(16917, mongoutils::str::stream() << "error creating collection: " << res, ok);
+            uassert(16924, mongoutils::str::stream() << "error creating collection: " << res, ok);
         }
     }
 
@@ -101,7 +101,7 @@ namespace mongo {
             // constructor.
             BSONElement indexesElt = _commandObj["indexes"];
             if (indexesElt.ok()) {
-                uassert(16918, mongoutils::str::stream() << "invalid beginLoad command object: " << obj,
+                uassert(16925, mongoutils::str::stream() << "invalid beginLoad command object: " << obj,
                         indexesElt.type() == Array);
                 const vector<BSONElement> indexes = indexesElt.Array();
                 stringstream nss;
@@ -111,7 +111,7 @@ namespace mongo {
                     _conn->insert(ns, it->Obj());
                     string le = _conn->getLastError(_db);
                     ok = le.empty();
-                    uassert(16919, mongoutils::str::stream() << "error ensuring index: " << le, ok);
+                    uassert(16926, mongoutils::str::stream() << "error ensuring index: " << le, ok);
                 }
             }
         }
