@@ -236,30 +236,17 @@ namespace mongo {
     }
 
     void IndexDetails::kill_idx() {
-        string ns = indexNamespace(); // e.g. foo.coll.$ts_1
-        try {
-            string pns = parentNS();
+        const string ns = indexNamespace();
+        const string parentns = parentNS();
 
-            storage::db_close(_db);
-            _db = NULL;
-            storage::db_remove(ns);
+        storage::db_close(_db);
+        _db = NULL;
+        storage::db_remove(ns);
 
-            /* important to catch exception here so we can finish cleanup below. */
-            try {
-                removeNamespaceFromCatalog(ns);
-            }
-            catch (DBException &e) {
-                LOG(0) << "IndexDetails::kill(): couldn't remove ns from system.namespaces"
-                       << ns << endl;
-            }
-
-            if (!StringData(pns).endsWith(".system.indexes")) {
-                const int n = removeFromSysIndexes(pns, indexName());
-                wassert( n == 1 );
-            }
-        }
-        catch (DBException &e) {
-            log() << "exception in kill_idx: " << e << ", ns: " << ns << endl;
+        // Removing this index's ns from the system.indexes/namespaces catalog.
+        removeNamespaceFromCatalog(ns);
+        if (!StringData(parentns).endsWith(".system.indexes")) {
+            removeFromSysIndexes(parentns, indexName());
         }
     }
 

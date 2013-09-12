@@ -303,7 +303,6 @@ public:
                 return -1;
             }
 
-            verify(op["ts"].type() == Timestamp);
             opLogStart = op["ts"]._numberLong();
         }
 
@@ -362,7 +361,7 @@ public:
 
         if (!opLogName.empty()) {
             BSONObjBuilder b;
-            b.appendTimestamp("$gt", opLogStart);
+            b.appendDate("$gt", opLogStart);
 
             _query = BSON("ts" << b.obj());
 

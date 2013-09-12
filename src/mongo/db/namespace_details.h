@@ -62,7 +62,7 @@ namespace mongo {
 
     void removeNamespaceFromCatalog(const StringData& name);
 
-    int removeFromSysIndexes(const StringData& ns, const StringData& name);
+    void removeFromSysIndexes(const StringData& ns, const StringData& name);
 
     // Rename a namespace within current 'client' db.
     // (Arguments should include db name)

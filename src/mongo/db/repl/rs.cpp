@@ -1079,51 +1079,84 @@ namespace mongo {
         while (_replBackgroundShouldRun) {
             // need to grab _purgeMutex here to protect against races
             // of expireOplogMilliseconds() changing
-            boost::unique_lock<boost::mutex> lock(_purgeMutex);
-            const uint64_t expireMillis = expireOplogMilliseconds();
+            uint64_t expireMillis = 0;
+            {
+                boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                expireMillis = expireOplogMilliseconds();
+            }
+
             if (expireMillis) {
                 // Allow an additional slack period of one hour.
-                const uint64_t ageAllowed = expireMillis + (3600 * 1000);
+                const uint64_t ageAllowed = expireMillis + (3600*1000);
                 const uint64_t minTime = curTimeMillis64() - ageAllowed;
-                // now get the minimum entry in the oplog, if it has timestamp
-                // less than minTime, delete it, otherwise, 
                 uint64_t millisToWait = 0;
-                // do a possible deletion from the oplog, if we find an entry
-                // old enough. If not, we will sleep
+                // delete some entries from the oplog. We use a cursor
+                // to get up to 1000 entries and delete them, all with a single
+                // transaction.
                 try {
-                    BSONObj result;
-                    bool found = false;
-
                     Client::ReadContext ctx(rsoplog);
-                    Client::Transaction transaction(DB_SERIALIZABLE);
+                    Client::Transaction transaction(DB_READ_UNCOMMITTED);
                     NamespaceDetails *d = nsdetails(rsoplog);
+                    std::deque<BSONObj> deque;
+                    // We set the default wait time to 2 seconds.
+                    // If we find nothing in the oplog, we will wait 2 seconds
+                    millisToWait = 2000;
                     if (d != NULL) {
-                        if (_lastPurgedGTID.isInitial()) {
-                            found = d->findOne(BSONObj(), result);
-                        }
-                        else {
-                            BSONObjBuilder query;
-                            BSONObjBuilder q(query.subobjStart("_id"));
-                            addGTIDToBSON("$gte", _lastPurgedGTID, q);
-                            q.doneFast();
-                            found = d->findOne(query.done(), result, false);
+                        BSONObjBuilder query;
+                        BSONObjBuilder q(query.subobjStart("_id"));
+                        addGTIDToBSON("$gte", _lastPurgedGTID, q);
+                        q.doneFast();
+                        shared_ptr<Cursor> c(
+                            getOptimizedCursor(
+                                rsoplog,
+                                query.done(),
+                                BSONObj(),
+                                QueryPlanSelectionPolicy::indexOnly()
+                                )
+                            );
+                        // add entries to deque from a cursor
+                        while (c->ok()) {
+                            BSONObj curr = c->current();
+                            uint64_t ts = curr["ts"]._numberLong();
+                            if (ts > minTime) {
+                                // we only set millisToWait, which has us sleep,
+                                // if we are not deleting anything in this loop.
+                                // If we are deleting even just one entry,
+                                // we do not sleep.
+                                if (deque.size() == 0) {
+                                    // set the time to way to be 1 second longer
+                                    // than when the next entry expires, so that
+                                    // when we wake up, we can hopefully
+                                    // delete a bunch of entries in bulk
+                                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                                    _lastPurgedGTID = getGTIDFromBSON("_id", curr);
+                                    millisToWait = ts - minTime + 1000;
+                                }
+                                break;
+                            }
+                            deque.push_back(curr.copy());
+                            if (curr.hasElement("ref") || deque.size() > 1000) {
+                                break;
+                            }
+                            c->advance();
                         }
                     }
-                    if (found) {
-                        _lastPurgedGTID = getGTIDFromBSON("_id", result);                    
-                        uint64_t ts = result["ts"]._numberLong();
-                        if (ts < minTime) {
-                            // delete the row "result"
-                            purgeEntryFromOplog(result);
+
+                    if (deque.size() > 0) {
+                        // we are deleting something, so let's not sleep
+                        millisToWait = 0;
+                        while (deque.size() > 0) {
+                            BSONObj curr = deque.front();
+                            // only set _lastPurgedGTID once we get are about
+                            // to delete the last entry
+                            if (deque.size() == 1) {
+                                boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                                _lastPurgedGTID = getGTIDFromBSON("_id", curr);
+                            }
+                            // delete the row
+                            purgeEntryFromOplog(curr);                            
+                            deque.pop_front();
                         }
-                        else {
-                            millisToWait = ts - minTime;
-                        }
-                    }
-                    // there is no data, just sleep for now
-                    // this should be rare
-                    else {
-                        millisToWait = 2000;
                     }
                     transaction.commit(DB_TXN_NOSYNC);
                 }
@@ -1132,11 +1165,24 @@ namespace mongo {
                     millisToWait = 2000;
                 }
                 // do a timed_wait, if necessary
+                // at this point, we have use a transaction to delete
+                // up to 1000 entries from the oplog. If we deleted anything, we
+                // will NOT sleep. If we deleted nothing, we will sleep for
+                // some amount, as determined by the code above
                 if (millisToWait > 0) {
-                    _purgeCond.timed_wait(
-                        _purgeMutex, 
-                        boost::posix_time::milliseconds(millisToWait)
-                        );
+                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                    // It is possible that while we were doing our deleting,
+                    // that expireOplogHours or expireOplogDays has changed.
+                    // This is rare, but still possible. In that case, the amount
+                    // of time we are planning to sleep may be in accurate.
+                    // Therefore, if we see a change, we simply
+                    // don't sleep and continue with another iteration
+                    if (expireMillis == expireOplogMilliseconds()) {
+                        _purgeCond.timed_wait(
+                            _purgeMutex,
+                            boost::posix_time::milliseconds(millisToWait)
+                            );
+                    }
                 }
             }
             else {

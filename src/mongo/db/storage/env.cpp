@@ -74,14 +74,7 @@ namespace mongo {
             }
         }
 
-        inline static void dbt_set(DBT *dbt, const void *data, const size_t size) {
-            dbt->data = const_cast<void *>(data);
-            dbt->size = size;
-            dbt->ulen = size;
-            dbt->flags = 0;
-        }
-
-        inline static void dbt_realloc(DBT *dbt, const void *data, const size_t size) {
+        static void dbt_realloc(DBT *dbt, const void *data, const size_t size) {
             if (dbt->flags != DB_DBT_REALLOC || dbt->ulen < size) {
                 dbt->ulen = size;
                 dbt->data = realloc(dbt->flags == DB_DBT_REALLOC ? dbt->data : NULL, dbt->ulen);
@@ -92,7 +85,7 @@ namespace mongo {
             memcpy(dbt->data, data, size);
         }
 
-        inline static void dbt_array_clear_and_resize(DBT_ARRAY *dbt_array, const size_t new_capacity,
+        static void dbt_array_clear_and_resize(DBT_ARRAY *dbt_array, const size_t new_capacity,
                                                       const int flags = DB_DBT_REALLOC) {
             const size_t old_capacity = dbt_array->capacity;
             if (old_capacity < new_capacity) {
@@ -104,7 +97,7 @@ namespace mongo {
             dbt_array->size = 0;
         }
 
-        inline static void dbt_array_push(DBT_ARRAY *dbt_array, const void *data, const size_t size) {
+        static void dbt_array_push(DBT_ARRAY *dbt_array, const void *data, const size_t size) {
             verify(dbt_array->size < dbt_array->capacity);
             dbt_realloc(&dbt_array->dbts[dbt_array->size], data, size);
             dbt_array->size++;
@@ -122,25 +115,24 @@ namespace mongo {
                 const BSONObj pk(sPK.key());
                 const BSONObj obj(reinterpret_cast<const char *>(src_val->data));
 
-                if (dest_db == src_db) {
-                    dbt_array_clear_and_resize(dest_keys, 1);
-                    dbt_array_push(dest_keys, src_key->data, src_key->size);
-                } else {
-                    // Generate keys for a secondary index.
-                    BSONObjSet keys;
-                    descriptor.generateKeys(obj, keys);
-                    dbt_array_clear_and_resize(dest_keys, keys.size());
-                    for (BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); i++) {
-                        const Key sKey(*i, &pk);
-                        dbt_array_push(dest_keys, sKey.buf(), sKey.size());
-                    }
-                    // Set the multiKey bool if it's provided and we generated multiple keys.
-                    // See NamespaceDetails::Indexer::Indexer()
-                    if (dest_db->app_private != NULL && keys.size() > 1) {
-                        bool *multiKey = reinterpret_cast<bool *>(dest_db->app_private);
-                        if (!*multiKey) {
-                            *multiKey = true;
-                        }
+                // The ydb knows that src_db does not need keys generated,
+                // because the one and only key is src_key
+                verify(dest_db != src_db);
+
+                // Generate keys for a secondary index.
+                BSONObjSet keys;
+                descriptor.generateKeys(obj, keys);
+                dbt_array_clear_and_resize(dest_keys, keys.size());
+                for (BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); i++) {
+                    const Key sKey(*i, &pk);
+                    dbt_array_push(dest_keys, sKey.buf(), sKey.size());
+                }
+                // Set the multiKey bool if it's provided and we generated multiple keys.
+                // See NamespaceDetails::Indexer::Indexer()
+                if (dest_db->app_private != NULL && keys.size() > 1) {
+                    bool *multiKey = reinterpret_cast<bool *>(dest_db->app_private);
+                    if (!*multiKey) {
+                        *multiKey = true;
                     }
                 }
             } catch (const DBException &ex) {
