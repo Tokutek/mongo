@@ -34,6 +34,7 @@
 #include "mongo/util/version.h"
 #include "mongo/db/json.h"
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/client/remote_loader.h"
 
 using namespace mongo;
 
@@ -278,9 +279,9 @@ public:
                                 metadataObject["options"].Obj() : BSONObj();
 
         if (_doBulkLoad) {
-            ClientBulkLoad bulkLoad(conn(), _curdb, _curcoll, indexes, options);
+            RemoteLoader loader(conn(), _curdb, _curcoll, indexes, options);
             processFile( root );
-            bulkLoad.commit();
+            loader.commit();
         } else {
             // No bulk load. Create collection and indexes manually.
             if (!options.isEmpty()) {
