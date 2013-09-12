@@ -54,7 +54,7 @@ namespace mongo {
     }
 
     void RemoteLoader::begin(const BSONObj &obj) {
-        _commandObj = obj;
+        _commandObj = obj.getOwned();
         BSONObj res;
 
         bool ok = false;
