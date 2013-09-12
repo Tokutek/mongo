@@ -65,7 +65,7 @@ try {
     assert.lt( 0, o.lockStats.timeLockedMicros.r );
     assert.eq( 0, o.lockStats.timeLockedMicros.w );
     assert.lt( 0, o.lockStats.timeAcquiringMicros.r );
-    assert.lt( 0, o.lockStats.timeAcquiringMicros.w ); // RFP: t already exists, no write lock taken, so why is this > 0?
+    assert.eq( 0, o.lockStats.timeAcquiringMicros.w );
     printjson(o.lockStats);
 
     // check read lock stats are set
@@ -75,7 +75,7 @@ try {
     assert.eq( 0, o.lockStats.timeLockedMicros.w );
     assert.lt( 0, o.lockStats.timeLockedMicros.r );
     assert.lt( 0, o.lockStats.timeAcquiringMicros.r );
-    assert.lt( 0, o.lockStats.timeAcquiringMicros.w ); // RFP: why is this > 0?
+    assert.eq( 0, o.lockStats.timeAcquiringMicros.w );
     printjson(o.lockStats);
 
     t.save( {} );
