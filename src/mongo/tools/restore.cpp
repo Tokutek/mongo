@@ -273,7 +273,7 @@ public:
             const vector<BSONElement> indexElements = metadataObject["indexes"].Array();
             for (vector<BSONElement>::const_iterator it = indexElements.begin(); it != indexElements.end(); ++it) {
                 // Need to make sure the ns field gets updated to
-                // the proper _curdb + _curns value, if we're 
+                // the proper _curdb + _curns value, if we're
                 // restoring to a different database.
                 const BSONObj indexObj = renameIndexNs(it->Obj());
                 indexes.push_back(indexObj);
@@ -408,7 +408,11 @@ private:
         }
     }
 
+<<<<<<< HEAD
     BSONObj renameIndexNs(const BSONObj &orig) {
+=======
+    BSONObj fixupIndexObj(const BSONObj &indexObj) {
+>>>>>>> bugs/512c
         BSONObjBuilder bo;
         BSONObjIterator i(orig);
         while ( i.more() ) {
