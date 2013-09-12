@@ -101,7 +101,7 @@ namespace mongo {
             // constructor.
             BSONElement indexesElt = _commandObj["indexes"];
             if (indexesElt.ok()) {
-                uassert(16925, mongoutils::str::stream() << "invalid beginLoad command object: " << obj,
+                uassert(16925, mongoutils::str::stream() << "invalid beginLoad command object: " << _commandObj,
                         indexesElt.type() == Array);
                 const vector<BSONElement> indexes = indexesElt.Array();
                 stringstream nss;
