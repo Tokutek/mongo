@@ -1794,10 +1794,6 @@ namespace mongo {
                             info["name"].ok() && info["name"].type() == mongo::String );
             if (d->ensureIndex(info)) {
                 addIndexToCatalog(info);
-            } else {
-                // The _id index is created automatically, so ensureIndex will
-                // say it already exists.
-                verify(info["key"]["_id"].ok());
             }
         }
 
