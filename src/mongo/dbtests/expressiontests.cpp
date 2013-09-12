@@ -1460,6 +1460,10 @@ namespace ExpressionTests {
                 testable->addOperand( ExpressionConstant::create( Value::createInt( 1 ) ) );
                 assertDependencies( BSONArray(), testable );
 
+                // Add a field path argument.
+                testable->addOperand( ExpressionFieldPath::create( "ab.c" ) );
+                assertDependencies( BSON_ARRAY( "ab.c" ), testable );
+
                 // Add an object expression.
                 BSONObj spec = BSON( "" << BSON( "a" << "$x" << "q" << "$r" ) );
                 BSONElement specElement = spec.firstElement();
