@@ -408,11 +408,7 @@ private:
         }
     }
 
-<<<<<<< HEAD
     BSONObj renameIndexNs(const BSONObj &orig) {
-=======
-    BSONObj fixupIndexObj(const BSONObj &indexObj) {
->>>>>>> bugs/512c
         BSONObjBuilder bo;
         BSONObjIterator i(orig);
         while ( i.more() ) {
