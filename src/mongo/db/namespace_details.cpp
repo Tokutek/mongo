@@ -1764,11 +1764,11 @@ namespace mongo {
                        const BSONObj &options) {
         uassert( 16873, "Cannot bulk load a collection that already exists.",
                         nsdetails(ns) == NULL );
-        uassert( 16923, "Cannot bulk load a system collection",
+        uassert( 16998, "Cannot bulk load a system collection",
                         ns.find(".system.") == string::npos );
-        uassert( 16924, "Cannot bulk load a capped collection",
+        uassert( 16999, "Cannot bulk load a capped collection",
                         !options["capped"].trueValue() );
-        uassert( 16925, "Cannot bulk load a natural order collection",
+        uassert( 17000, "Cannot bulk load a natural order collection",
                         !options["natural"].trueValue() );
 
         // Don't log the create. The begin/commit/abort load commands are already logged.
