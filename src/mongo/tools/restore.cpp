@@ -34,6 +34,7 @@
 #include "mongo/util/version.h"
 #include "mongo/db/json.h"
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/client/remote_loader.h"
 
 using namespace mongo;
 
@@ -271,16 +272,17 @@ public:
         if (_restoreIndexes && metadataObject.hasField("indexes")) {
             const vector<BSONElement> indexElements = metadataObject["indexes"].Array();
             for (vector<BSONElement>::const_iterator it = indexElements.begin(); it != indexElements.end(); ++it) {
-                indexes.push_back(it->Obj());
+                BSONObj indexObj = renameIndexNs(it->Obj());
+                indexes.push_back(indexObj);
             }
         }
         const BSONObj options = _restoreOptions && metadataObject.hasField("options") ?
                                 metadataObject["options"].Obj() : BSONObj();
 
         if (_doBulkLoad) {
-            ClientBulkLoad bulkLoad(conn(), _curdb, _curcoll, indexes, options);
+            RemoteLoader loader(conn(), _curdb, _curcoll, indexes, options);
             processFile( root );
-            bulkLoad.commit();
+            loader.commit();
         } else {
             // No bulk load. Create collection and indexes manually.
             if (!options.isEmpty()) {
@@ -403,26 +405,29 @@ private:
         }
     }
 
-    /* We must handle if the dbname or collection name is different at restore time than what was dumped.
-       If keepCollName is true, however, we keep the same collection name that's in the index object.
-     */
-    void createIndex(BSONObj indexObj, bool keepCollName) {
+    BSONObj renameIndexNs(const BSONObj &orig) {
         BSONObjBuilder bo;
-        BSONObjIterator i(indexObj);
+        BSONObjIterator i(orig);
         while ( i.more() ) {
             BSONElement e = i.next();
             if (strcmp(e.fieldName(), "ns") == 0) {
-                NamespaceString n(e.String());
-                string s = _curdb + "." + (keepCollName ? n.coll : _curcoll);
+                NamespaceString n(e.Stringdata());
+                string s = _curdb + "." + _curcoll;
                 bo.append("ns", s);
             }
             else if (strcmp(e.fieldName(), "v") != 0) { // Remove index version number
                 bo.append(e);
             }
         }
-        BSONObj o = bo.obj();
-        LOG(0) << "\tCreating index: " << o << endl;
-        conn().insert( _curdb + ".system.indexes" ,  o );
+        return bo.obj();
+    }
+
+    /* We must handle if the dbname or collection name is different at restore time than what was dumped.
+       If keepCollName is true, however, we keep the same collection name that's in the index object.
+     */
+    void createIndex(BSONObj indexObj) {
+        LOG(0) << "\tCreating index: " << indexObj << endl;
+        conn().insert( _curdb + ".system.indexes" ,  indexObj );
 
         // We're stricter about errors for indexes than for regular data
         BSONObj err = conn().getLastErrorDetailed(_curdb, false, false, _w);
@@ -438,7 +443,7 @@ private:
                     errCode = str::stream() << err["code"].numberInt();
                 }
 
-                error() << "Error creating index " << o["ns"].String() << ": "
+                error() << "Error creating index " << indexObj["ns"].String() << ": "
                         << errCode << " " << err["err"] << endl;
             }
 
