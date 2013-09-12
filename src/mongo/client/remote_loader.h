@@ -21,11 +21,11 @@
 #include "mongo/pch.h"
 
 #include "mongo/client/remote_transaction.h"
+#include "mongo/db/jsobj.h"
 
 namespace mongo {
 
     class DBClientWithCommands;
-    class BSONObj;
 
     /**
        RemoteLoader manages the lifetime of a bulk load operation on another machine.
