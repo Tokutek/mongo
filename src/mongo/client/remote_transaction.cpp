@@ -27,25 +27,32 @@
 
 namespace mongo {
 
-    RemoteTransaction::RemoteTransaction(DBClientWithCommands &conn, const string &isolation) : _conn(&conn) {
+    RemoteTransaction::RemoteTransaction(DBClientWithCommands &conn, const string &isolation) : _conn(NULL) {
         BSONObj res;
-        bool ok = _conn->beginTransaction(isolation, &res);
-        massert(16909, mongoutils::str::stream() << "error in beginTransaction: " << res, ok);
+        bool ok = conn.beginTransaction(isolation, &res);
+        if (ok) {
+            _conn = &conn;
+        } else {
+            LOG(0) << "error in beginTransaction: " << res << endl;
+        }
     }
 
     RemoteTransaction::~RemoteTransaction() {
-        if (_conn) {
-            try {
-                rollback();
-            }
-            catch (DBException &e) {
-                LOG(1) << "error rolling back RemoteTransaction" << endl;
-                // not much else we can do
-            }
+        try {
+            rollback();
+        }
+        catch (DBException &e) {
+            LOG(1) << "error rolling back RemoteTransaction" << endl;
+            // not much else we can do
         }
     }
 
     bool RemoteTransaction::commit(BSONObj *res) {
+        if (!_conn) {
+            *res = BSON("ok" << 0 <<
+                        "errmsg" << "no live transaction to commit");
+            return false;
+        }
         bool ok = _conn->commitTransaction(res);
         if (ok) {
             _conn = NULL;
@@ -54,6 +61,11 @@ namespace mongo {
     }
 
     bool RemoteTransaction::rollback(BSONObj *res) {
+        if (!_conn) {
+            *res = BSON("ok" << 1 <<
+                        "errmsg" << "no live transaction to abort");
+            return true;
+        }
         bool ok = _conn->rollbackTransaction(res);
         if (ok) {
             _conn = NULL;
