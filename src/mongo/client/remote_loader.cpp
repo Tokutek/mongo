@@ -54,7 +54,7 @@ namespace mongo {
     }
 
     void RemoteLoader::begin(const BSONObj &obj) {
-        _commandObj = obj;
+        _commandObj = obj.getOwned();
         BSONObj res;
 
         bool ok = false;
@@ -84,7 +84,9 @@ namespace mongo {
                 }
             }
             ok = _conn->runCommand(_db, cb.done(), res);
-            uassert(16994, mongoutils::str::stream() << "error creating collection: " << res, ok);
+            if (!ok) {
+                LOG(0) << "RemoteLoader did not create target ns: it already exists. Proceeding." << endl;
+            }
         }
     }
 

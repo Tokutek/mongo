@@ -23,7 +23,7 @@ var testNSProvisionallyExists = function() {
     s = startParallelShell('db.runCommand({ beginTransaction: 1 });' +
                            'db.loadnsprovexists.insert({ prov: 1 });' +
                            'sleep(2000); db.runCommand({ commitTransaction: 1 })');
-    sleep(500);
+    sleep(1000);
     beginLoadShouldFail('loadnsprovexists', [ ], { });
     commit();
     s();
@@ -97,4 +97,48 @@ var testBadOptions = function() {
     beginLoadShouldFail('loadbadoptions', [ ] , [ { clustering: true } ]);
     commit();
     assert.eq(0, db.system.namespaces.count({ "name" : "test.loadbadoptions" }));
+}();
+
+var testCappedLoadFails = function() {
+    t = db.loadcappedfails;
+    t.drop();
+
+    // Test explicitly specifying the $_ index
+    begin();
+    beginLoadShouldFail('loadcappedfails', [ { ns: "test.loadcappedfails", key: { "$_" : 1 }, name: "$_1" } ], { capped: true, size: 1024 } );
+    commit();
+    assert.eq(0, db.system.namespaces.find({ "name": "test.loadcappedfails" }).itcount());
+
+    // Test without explicitly specifying the $_ index
+    begin();
+    beginLoadShouldFail('loadcappedfails', [ { ns: "test.loadcappedfails", key: { "a" : 1 }, name: "$_1" } ], { capped: true, size: 1024 } );
+    commit();
+    assert.eq(0, db.system.namespaces.find({ "name": "test.loadcappedfails" }).itcount());
+}();
+
+var testNaturalOrderLoadFails = function() {
+    t = db.loadnaturalfails;
+    t.drop();
+
+    begin();
+    beginLoadShouldFail('loadnaturalfails', [ { ns: "test.loadnaturalfails", key: { "a" : 1 }, name: "$_1" } ],  { natural: 1 } );
+    commit();
+    assert.eq(0, db.system.namespaces.find({ "name": "test.loadnaturalfails" }).itcount());
+
+    begin();
+    beginLoadShouldFail('loadnaturalfails', [ { ns: "test.loadnaturalfails", key: { "$_" : 1 }, name: "$_1" }, { ns: "test.loadnaturalfails", key: { "a" : 1 }, name: "a_1" } ],  { natural: 1 } );
+    commit();
+    assert.eq(0, db.system.namespaces.find({ "name": "test.loadnaturalfails" }).itcount());
+}();
+
+var testSystemCatalogOrProfileLoadFails = function() {
+    db.dropDatabase(); // so no catalog collections exist
+    begin();
+    beginLoadShouldFail('system.indexes', [ ], { });
+    beginLoadShouldFail('system.indexes', [ { ns: 'test.system.indexes', key: { "$_" : 1 } , name: "$_1" } ], { });
+    beginLoadShouldFail('system.namespaces', [ ], { });
+    beginLoadShouldFail('system.namespaces', [ { ns: 'test.system.namespaces', key: { "$_" : 1 } , name: "$_1" } ], { });
+    beginLoadShouldFail('system.profile', [ ], { });
+    beginLoadShouldFail('system.profile', [ { ns: 'test.system.profile', key: { "$_" : 1 } , name: "$_1" } ], { });
+    beginLoadShouldFail('system.profile', [ { ns: 'test.system.profile', key: { "$_" : 1 } , name: "$_1" } ], { capped: true, size: 1024 });
 }();
