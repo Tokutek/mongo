@@ -23,6 +23,7 @@
 #include "mongo/tools/tool.h"
 #include "mongo/util/text.h"
 #include "mongo/base/initializer.h"
+#include "mongo/client/remote_loader.h"
 
 #include <fstream>
 #include <iostream>
@@ -407,12 +408,12 @@ public:
         boost::scoped_array<char> buffer(new char[BUF_SIZE+2]);
         char* line = buffer.get();
 
-        scoped_ptr<ClientBulkLoad> bulkLoad;
+        scoped_ptr<RemoteLoader> loader;
         if (_doBulkLoad) {
             // Pass no indexes or collection options, since this tool has no
             // way of specifying either.
             NamespaceString n(ns);
-            bulkLoad.reset(new ClientBulkLoad(conn(), n.db, n.coll, vector<BSONObj>(), BSONObj()));
+            loader.reset(new RemoteLoader(conn(), n.db, n.coll, vector<BSONObj>(), BSONObj()));
         }
         while ( _jsonArray || in->rdstate() == 0 ) {
             try {
@@ -477,8 +478,8 @@ public:
                 log() << "\t\t\t" << num << "\t" << ( num / ( time(0) - start ) ) << "/second" << endl;
             }
         }
-        if (bulkLoad.get() != NULL) {
-            bulkLoad->commit();
+        if (loader) {
+            loader->commit();
         }
 
         log() << "imported " << ( num - headerRows ) << " objects" << endl;
