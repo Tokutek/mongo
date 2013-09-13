@@ -47,7 +47,7 @@ var testExternallyUsableAfterAbort = function() {
     assert.eq(0, t.count());
     assert.eq(0, t.count({ duringLoad: 1 }));
 
-    s = startParallelShell('k = db.loaderusableabort1.count(); assert.eq(0, k); db.loaderusableabort1.insert({ success: 1 });')
+    s = startParallelShell('k = db.loaderusableabort1.count(); assert.eq(0, k); db.loaderusableabort1.insert({ success: 1 }); assert(!db.getLastError());')
     s();
     assert.eq(1, t.count({ success: 1 }));
 }();

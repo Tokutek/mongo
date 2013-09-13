@@ -132,7 +132,7 @@ var testExternallyUsableAfterCommit = function() {
     assert.eq(1, t.count());
     assert.eq(1, t.count({ duringLoad: 1 }));
 
-    s = startParallelShell('k = db.loaderusablecommit1.count(); assert.eq(1, k); db.loaderusablecommit1.insert({ success: 1 });')
+    s = startParallelShell('k = db.loaderusablecommit1.count(); print("second thread: count got " + k ); assert.eq(1, k); db.loaderusablecommit1.insert({ success: 1 }); assert(!db.getLastError());')
     s();
     assert.eq(1, t.count({ success: 1 }));
 }();
