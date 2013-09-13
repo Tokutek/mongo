@@ -404,13 +404,15 @@ namespace mongo {
         }
         // Need access to the database to enable profiling on it
         virtual bool slaveOk() const { return true; }
-        virtual LockType locktype() const { return WRITE; }
+        virtual LockType locktype() const { return NONE; }
         virtual bool requiresSync() const { return false; }
-        virtual bool needsTxn() const { return true; }
-        virtual int txnFlags() const { return DB_SERIALIZABLE; }
+        virtual bool needsTxn() const { return false; }
+        virtual int txnFlags() const { return 0; }
         virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
-        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+
+    private:
+        bool _run(const string& dbname, BSONObj& cmdObj, int i, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             BSONElement e = cmdObj.firstElement();
             result.append("was", cc().database()->profile());
             result.append("slowms", cmdLine.slowMS );
@@ -418,10 +420,12 @@ namespace mongo {
             int p = (int) e.number();
             bool ok = false;
 
-            if ( p == -1 )
+            if ( p == -1 ) {
                 ok = true;
-            else if ( p >= 0 && p <= 2 ) {
+            } else if ( p >= 0 && p <= 2 ) {
+                Client::Transaction transaction(DB_SERIALIZABLE);
                 ok = cc().database()->setProfilingLevel( p , errmsg );
+                transaction.commit();
             }
 
             BSONElement slow = cmdObj["slowms"];
@@ -429,6 +433,17 @@ namespace mongo {
                 cmdLine.slowMS = slow.numberInt();
 
             return ok;
+        }
+
+    public:
+        bool run(const string& dbname, BSONObj& cmdObj, int i, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            try {
+                Client::ReadContext ctx(dbname);
+                return _run(dbname, cmdObj, i, errmsg, result, fromRepl);
+            } catch (RetryWithWriteLock &e) {
+                Client::WriteContext ctx(dbname);
+                return _run(dbname, cmdObj, i, errmsg, result, fromRepl);
+            }
         }
     } cmdProfile;
 
