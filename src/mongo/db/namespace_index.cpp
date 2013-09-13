@@ -32,8 +32,7 @@ namespace mongo {
             _dir(dir),
             _nsdbFilename(database.toString() + ".ns"),
             _database(database.toString()),
-            _openRWLock("nsOpenRWLock"),
-            _initLock("nsInitLock")
+            _openRWLock("nsOpenRWLock")
     {}
 
     NamespaceIndex::~NamespaceIndex() {
@@ -59,7 +58,7 @@ namespace mongo {
     void NamespaceIndex::init(bool may_create) {
         Lock::assertAtLeastReadLocked(_database);
         if (!allocated()) {
-            SimpleMutex::scoped_lock lk(_initLock);
+            SimpleRWLock::Exclusive lk(_openRWLock);
             if (!allocated()) {
                 _init(may_create);
             }
@@ -204,14 +203,25 @@ namespace mongo {
         DBT ndbt = sKey.dbt();
         DB_TXN *db_txn = cc().hasTxn() ? cc().txn().db_txn() : NULL;
         DB *db = _nsdb->db();
-        const int r = db->getf_set(db, db_txn, 0, &ndbt, getf_serialized, &serialized);
+        // Pass flags that get us a write lock on the nsindex row
+        // for the ns we'd like to open.
+        const int r = db->getf_set(db, db_txn, DB_SERIALIZABLE | DB_RMW,
+                                   &ndbt, getf_serialized, &serialized);
         if (r == 0) {
-            shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized, bulkLoad );
-            {
-                SimpleRWLock::Exclusive lk(_openRWLock);
-                verify(!_namespaces[ns]);
-                _namespaces[ns] = details;
+            // We found an entry for this ns and we have the row lock.
+            // First check if someone got the lock before us and already
+            // did the open.
+            NamespaceDetails *d = find_ns(ns);
+            if (d != NULL) {
+                return d;
             }
+            // No need to hold the openRWLock during NamespaceDetails::make(),
+            // the fact that we have the row lock ensures only one thread will
+            // be here for a particular ns at a time.
+            shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized, bulkLoad );
+            SimpleRWLock::Exclusive lk(_openRWLock);
+            verify(!_namespaces[ns]);
+            _namespaces[ns] = details;
             return details.get();
         } else if (r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);

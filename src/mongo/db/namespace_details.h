@@ -530,19 +530,12 @@ namespace mongo {
                 }
             }
 
-            // The ns doesn't exist, or it's not opened. Grab an exclusive lock
-            // and do the open if we still can't find it.
-            SimpleMutex::scoped_lock lk(_initLock);
-            NamespaceDetails *d = NULL;
-            {
-                SimpleRWLock::Exclusive lk(_openRWLock);
-                d = find_ns_locked(ns);
-            }
+            // The ns doesn't exist, or it's not opened.
+            NamespaceDetails *d = open_ns(ns);
             if (d != NULL) {
                 d->validateConnectionId(cc().getConnectionId());
-                return d;
             }
-            return open_ns(ns);
+            return d;
         }
 
         bool allocated() const { return _nsdb; }
@@ -572,7 +565,7 @@ namespace mongo {
         }
 
         // @return NamespaceDetails object if the ns existed and is now open, NULL otherwise.
-        // requires: _openRWLock is locked, exclusively.
+        // called with no locks held - synchronization is done internally.
         NamespaceDetails *open_ns(const StringData& ns, const bool bulkLoad = false);
         // Only beginBulkLoad may call open_ns with bulkLoad = true.
         friend void beginBulkLoad(const StringData &ns, const vector<BSONObj> &indexes, const BSONObj &options);
@@ -592,8 +585,6 @@ namespace mongo {
         // With a DBRead lock and this shared lock, one can retrieve
         // a NamespaceDetails that has already been opened
         SimpleRWLock _openRWLock;
-        // This rwlock serializes opens of a NamespaceDetails in a DBRead lock.
-        SimpleMutex _initLock;
     };
 
     // Gets the namespace objects for this client threads' current database.
