@@ -608,6 +608,34 @@ namespace mongo {
         }
     } cmdEngineStatus;
 
+    class CmdShowPendingLockRequests : public WebInformationCommand {
+    public:
+        CmdShowPendingLockRequests() : WebInformationCommand("showPendingLockRequests") {}
+
+        virtual void help( stringstream& help ) const {
+            help << "returns a list of pending, document-level level lock requests";
+        }
+
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            storage::get_pending_lock_request_status(result);
+            return true;
+        }
+    } cmdShowPendingLockRequests;
+
+    class CmdShowLiveTransactions : public WebInformationCommand {
+    public:
+        CmdShowLiveTransactions() : WebInformationCommand("showLiveTransactions") {}
+
+        virtual void help( stringstream& help ) const {
+            help << "returns a list of live transactions";
+        }
+
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            storage::get_live_transaction_status(result);
+            return true;
+        }
+    } cmdShowLiveTransactions;
+
     class CmdCheckpoint : public Command {
     public:
         CmdCheckpoint() : Command("checkpoint") {}

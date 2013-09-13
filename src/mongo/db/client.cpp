@@ -521,6 +521,7 @@ namespace mongo {
         keyUpdates = 0;  // unsigned, so -1 not possible
         
         exceptionInfo.reset();
+        lockNotGrantedInfo = BSONObj();
         
         executionTime = 0;
         nreturned = -1;
@@ -586,6 +587,11 @@ namespace mongo {
             s << " exception: " << exceptionInfo.msg;
             if ( exceptionInfo.code )
                 s << " code:" << exceptionInfo.code;
+        }
+
+
+        if ( ! lockNotGrantedInfo.isEmpty() ) {
+            s << " lockNotGranted: " << lockNotGrantedInfo;
         }
 
         s << " ";

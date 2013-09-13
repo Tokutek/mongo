@@ -50,6 +50,7 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/stats/counters.h"
+#include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/storage/env.h"
 
 #include "mongo/plugins/loader.h"
@@ -442,6 +443,9 @@ namespace mongo {
                 tlog(3) << " Caught Assertion in " << opToString(op) << ", continuing "
                         << ue.toString() << endl;
                 debug.exceptionInfo = ue.getInfo();
+                if (ue.getCode() == storage::ASSERT_IDS::LockDeadlock) {
+                    shouldLog = true;
+                }
             }
             catch ( AssertionException& e ) {
                 tlog(3) << " Caught Assertion in " << opToString(op) << ", continuing "

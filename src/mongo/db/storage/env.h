@@ -36,6 +36,8 @@ namespace mongo {
         void db_rename(const string &old_name, const string &new_name);
 
         void get_status(BSONObjBuilder &status);
+        void get_pending_lock_request_status(BSONObjBuilder &status);
+        void get_live_transaction_status(BSONObjBuilder &status);
         void log_flush();
         void checkpoint();
 
