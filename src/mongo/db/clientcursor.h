@@ -313,7 +313,7 @@ namespace mongo {
 
     private: // methods
 
-        // cursors normally timeout after an inactivy period to prevent excess memory use
+        // cursors normally timeout after an inactivity period to prevent excess memory use
         // setting this prevents timeout of the cursor in question.
         void noTimeout() { _pinValue++; }
 

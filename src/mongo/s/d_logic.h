@@ -88,7 +88,7 @@ namespace mongo {
          * the newest one.
          *
          * @param ns collection to be accessed
-         * @param version (IN) the client belive this collection is on and (OUT) the version the manager is actually in
+         * @param version (IN) the client believe this collection is on and (OUT) the version the manager is actually in
          * @return true if the access can be allowed at the provided version
          */
         bool trySetVersion( const string& ns , ConfigVersion& version );
@@ -170,7 +170,7 @@ namespace mongo {
 
     /**
      * one per connection from mongos
-     * holds version state for each namesapce
+     * holds version state for each namespace
      */
     class ShardedConnectionInfo {
     public:

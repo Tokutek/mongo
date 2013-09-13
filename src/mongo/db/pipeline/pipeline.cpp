@@ -42,7 +42,6 @@ namespace mongo {
 
     Pipeline::Pipeline(const intrusive_ptr<ExpressionContext> &pTheCtx):
         collectionName(),
-        sourceVector(),
         explain(false),
         splitMongodPipeline(false),
         pCtx(pTheCtx) {
@@ -62,6 +61,8 @@ namespace mongo {
         {DocumentSourceFilter::filterName,
          DocumentSourceFilter::createFromBson},
 #endif
+        {DocumentSourceGeoNear::geoNearName,
+         DocumentSourceGeoNear::createFromBson},
         {DocumentSourceGroup::groupName,
          DocumentSourceGroup::createFromBson},
         {DocumentSourceLimit::limitName,
@@ -100,6 +101,16 @@ namespace mongo {
             BSONElement cmdElement(cmdIterator.next());
             const char *pFieldName = cmdElement.fieldName();
 
+            // ignore top-level fields prefixed with $. They are for the command processor, not us.
+            if (pFieldName[0] == '$') {
+                continue;
+            }
+
+            // ignore cursor options since they are handled externally.
+            if (str::equals(pFieldName, "cursor")) {
+                continue;
+            }
+
             /* look for the aggregation command */
             if (!strcmp(pFieldName, commandName)) {
                 pPipeline->collectionName = cmdElement.String();
@@ -130,13 +141,6 @@ namespace mongo {
                 continue;
             }
 
-            /* Ignore $auth information sent along with the command. The authentication system will
-             * use it, it's not a part of the pipeline.
-             */
-            if (!strcmp(pFieldName, AuthenticationTable::fieldName.c_str())) {
-                continue;
-            }
-
             /* we didn't recognize a field in the command */
             ostringstream sb;
             sb <<
@@ -151,7 +155,7 @@ namespace mongo {
 
           Set up the specified document source pipeline.
         */
-        SourceVector *pSourceVector = &pPipeline->sourceVector; // shorthand
+        SourceContainer& sources = pPipeline->sources; // shorthand
 
         /* iterate over the steps in the pipeline */
         const size_t nSteps = pipeline.size();
@@ -163,39 +167,30 @@ namespace mongo {
                     pipeElement.type() == Object);
             BSONObj bsonObj(pipeElement.Obj());
 
-            intrusive_ptr<DocumentSource> pSource;
+            // Parse a pipeline stage from 'bsonObj'.
+            uassert(16435, "A pipeline stage specification object must contain exactly one field.",
+                    bsonObj.nFields() == 1);
+            BSONElement stageSpec = bsonObj.firstElement();
+            const char* stageName = stageSpec.fieldName();
 
-            /* use the object to add a DocumentSource to the processing chain */
-            BSONObjIterator bsonIterator(bsonObj);
-            while(bsonIterator.more()) {
-                BSONElement bsonElement(bsonIterator.next());
-                const char *pFieldName = bsonElement.fieldName();
-
-                /* select the appropriate operation and instantiate */
-                StageDesc key;
-                key.pName = pFieldName;
-                const StageDesc *pDesc = (const StageDesc *)
+            // Create a DocumentSource pipeline stage from 'stageSpec'.
+            StageDesc key;
+            key.pName = stageName;
+            const StageDesc* pDesc = (const StageDesc*)
                     bsearch(&key, stageDesc, nStageDesc, sizeof(StageDesc),
                             stageDescCmp);
-                if (pDesc) {
-                    pSource = (*pDesc->pFactory)(&bsonElement, pCtx);
-                    pSource->setPipelineStep(iStep);
-                }
-                else {
-                    ostringstream sb;
-                    sb <<
-                       "Pipeline::run(): unrecognized pipeline op \"" <<
-                       pFieldName;
-                    errmsg = sb.str();
-                    return intrusive_ptr<Pipeline>();
-                }
-            }
 
-            pSourceVector->push_back(pSource);
+            uassert(16436,
+                    str::stream() << "Unrecognized pipeline stage name: '" << stageName << "'",
+                    pDesc);
+            intrusive_ptr<DocumentSource> stage = (*pDesc->pFactory)(&stageSpec, pCtx);
+            verify(stage);
+            stage->setPipelineStep(iStep);
+            sources.push_back(stage);
         }
 
         /* if there aren't any pipeline stages, there's nothing more to do */
-        if (!pSourceVector->size())
+        if (sources.empty())
             return pPipeline;
 
         /*
@@ -213,12 +208,10 @@ namespace mongo {
           We do this first, because then when we coalesce operators below,
           any adjacent matches will be combined.
          */
-        for(size_t srcn = pSourceVector->size(), srci = 1;
-            srci < srcn; ++srci) {
-            intrusive_ptr<DocumentSource> &pSource = pSourceVector->at(srci);
+        for (size_t srcn = sources.size(), srci = 1; srci < srcn; ++srci) {
+            intrusive_ptr<DocumentSource> &pSource = sources[srci];
             if (dynamic_cast<DocumentSourceMatch *>(pSource.get())) {
-                intrusive_ptr<DocumentSource> &pPrevious =
-                    pSourceVector->at(srci - 1);
+                intrusive_ptr<DocumentSource> &pPrevious = sources[srci - 1];
                 if (dynamic_cast<DocumentSourceSort *>(pPrevious.get())) {
                     /* swap this item with the previous */
                     intrusive_ptr<DocumentSource> pTemp(pPrevious);
@@ -232,15 +225,15 @@ namespace mongo {
          * since currently, we can only split the pipeline at a single source
          * and it is better to limit the results coming from each shard
          */
-        for(int i = pSourceVector->size() - 1; i >= 1 /* not looking at 0 */; i--) {
+        for(int i = sources.size() - 1; i >= 1 /* not looking at 0 */; i--) {
             DocumentSourceLimit* limit =
-                dynamic_cast<DocumentSourceLimit*>((*pSourceVector)[i].get());
+                dynamic_cast<DocumentSourceLimit*>(sources[i].get());
             DocumentSourceSkip* skip =
-                dynamic_cast<DocumentSourceSkip*>((*pSourceVector)[i-1].get());
+                dynamic_cast<DocumentSourceSkip*>(sources[i-1].get());
             if (limit && skip) {
                 // Increase limit by skip since the skipped docs now pass through the $limit
                 limit->setLimit(limit->getLimit() + skip->getSkip());
-                swap((*pSourceVector)[i], (*pSourceVector)[i-1]);
+                swap(sources[i], sources[i-1]);
 
                 // Start at back again. This is needed to handle cases with more than 1 $limit
                 // (S means skip, L means limit)
@@ -253,7 +246,7 @@ namespace mongo {
                 // SLL  -> LLS
                 // SSLL -> LLSS
                 // SLSL -> LLSS
-                i = pSourceVector->size(); // decremented before next pass
+                i = sources.size(); // decremented before next pass
             }
         }
 
@@ -270,35 +263,33 @@ namespace mongo {
 
           Move all document sources to a temporary list.
         */
-        SourceVector tempVector(*pSourceVector);
-        pSourceVector->clear();
+        SourceContainer tempSources;
+        sources.swap(tempSources);
 
         /* move the first one to the final list */
-        pSourceVector->push_back(tempVector[0]);
+        sources.push_back(tempSources[0]);
 
         /* run through the sources, coalescing them or keeping them */
-        for(size_t tempn = tempVector.size(), tempi = 1;
-            tempi < tempn; ++tempi) {
+        for (size_t tempn = tempSources.size(), tempi = 1; tempi < tempn; ++tempi) {
             /*
               If we can't coalesce the source with the last, then move it
               to the final list, and make it the new last.  (If we succeeded,
               then we're still on the same last, and there's no need to move
-              or do anything with the source -- the destruction of tempVector
+              or do anything with the source -- the destruction of tempSources
               will take care of the rest.)
             */
-            intrusive_ptr<DocumentSource> &pLastSource = pSourceVector->back();
-            intrusive_ptr<DocumentSource> &pTemp = tempVector.at(tempi);
-            if (!pTemp || !pLastSource) {
-                errmsg = "Pipeline received empty document as argument";
-                return intrusive_ptr<Pipeline>();
-            }
+            intrusive_ptr<DocumentSource> &pLastSource = sources.back();
+            intrusive_ptr<DocumentSource> &pTemp = tempSources[tempi];
+            verify(pTemp && pLastSource);
             if (!pLastSource->coalesce(pTemp))
-                pSourceVector->push_back(pTemp);
+                sources.push_back(pTemp);
         }
 
         /* optimize the elements in the pipeline */
-        for(SourceVector::iterator iter(pSourceVector->begin()),
-                listEnd(pSourceVector->end()); iter != listEnd; ++iter) {
+        for(SourceContainer::iterator iter(sources.begin()),
+                                      listEnd(sources.end());
+                                    iter != listEnd;
+                                    ++iter) {
             if (!*iter) {
                 errmsg = "Pipeline received empty document as argument";
                 return intrusive_ptr<Pipeline>();
@@ -316,36 +307,30 @@ namespace mongo {
         pShardPipeline->collectionName = collectionName;
         pShardPipeline->explain = explain;
 
-        // We will be removing from the front so reverse for now. undone later
-        // TODO: maybe sourceVector should be a deque
-        reverse(sourceVector.begin(), sourceVector.end());
-
         /*
           Run through the pipeline, looking for points to split it into
           shard pipelines, and the rest.
          */
-        while(!sourceVector.empty()) {
+        while (!sources.empty()) {
             // pop the first source
-            intrusive_ptr<DocumentSource> pSource = sourceVector.back();
-            sourceVector.pop_back();
+            intrusive_ptr<DocumentSource> pSource = sources.front();
+            sources.pop_front();
 
             // Check if this source is splittable
             SplittableDocumentSource* splittable=
                 dynamic_cast<SplittableDocumentSource *>(pSource.get());
 
             if (!splittable){
-                // move the source from the router sourceVector to the shard sourceVector
-                pShardPipeline->sourceVector.push_back(pSource);
+                // move the source from the router sources to the shard sources
+                pShardPipeline->sources.push_back(pSource);
             }
             else {
                 // split into Router and Shard sources
                 intrusive_ptr<DocumentSource> shardSource  = splittable->getShardSource();
                 intrusive_ptr<DocumentSource> routerSource = splittable->getRouterSource();
-                if (shardSource) pShardPipeline->sourceVector.push_back(shardSource);
-                if (routerSource)          this->sourceVector.push_back(routerSource);
+                if (shardSource) pShardPipeline->sources.push_back(shardSource);
+                if (routerSource)          this->sources.push_front(routerSource);
 
-                // put the sourceVector back in the correct order and exit the loop
-                reverse(sourceVector.begin(), sourceVector.end());
                 break;
             }
         }
@@ -355,11 +340,11 @@ namespace mongo {
 
     bool Pipeline::getInitialQuery(BSONObjBuilder *pQueryBuilder) const
     {
-        if (!sourceVector.size())
+        if (sources.empty())
             return false;
 
         /* look for an initial $match */
-        const intrusive_ptr<DocumentSource> &pMC = sourceVector.front();
+        const intrusive_ptr<DocumentSource> &pMC = sources.front();
         const DocumentSourceMatch *pMatch =
             dynamic_cast<DocumentSourceMatch *>(pMC.get());
 
@@ -375,8 +360,10 @@ namespace mongo {
     void Pipeline::toBson(BSONObjBuilder *pBuilder) const {
         /* create an array out of the pipeline operations */
         BSONArrayBuilder arrayBuilder;
-        for(SourceVector::const_iterator iter(sourceVector.begin()),
-                listEnd(sourceVector.end()); iter != listEnd; ++iter) {
+        for(SourceContainer::const_iterator iter(sources.begin()),
+                                            listEnd(sources.end());
+                                        iter != listEnd;
+                                        ++iter) {
             intrusive_ptr<DocumentSource> pSource(*iter);
             pSource->addToBsonArray(&arrayBuilder);
         }
@@ -399,18 +386,23 @@ namespace mongo {
         }
     }
 
-    bool Pipeline::run(BSONObjBuilder &result, string &errmsg,
-                       const intrusive_ptr<DocumentSource> &pInputSource) {
-        /* chain together the sources we found */
-        DocumentSource *pSource = pInputSource.get();
-        for(SourceVector::iterator iter(sourceVector.begin()),
-                listEnd(sourceVector.end()); iter != listEnd; ++iter) {
-            intrusive_ptr<DocumentSource> pTemp(*iter);
-            pTemp->setSource(pSource);
-            pSource = pTemp.get();
-        }
-        /* pSource is left pointing at the last source in the chain */
+    void Pipeline::stitch() {
+        massert(16600, "should not have an empty pipeline",
+                !sources.empty());
 
+        /* chain together the sources we found */
+        DocumentSource* prevSource = sources.front().get();
+        for(SourceContainer::iterator iter(sources.begin() + 1),
+                                      listEnd(sources.end());
+                                    iter != listEnd;
+                                    ++iter) {
+            intrusive_ptr<DocumentSource> pTemp(*iter);
+            pTemp->setSource(prevSource);
+            prevSource = pTemp.get();
+        }
+    }
+
+    void Pipeline::run(BSONObjBuilder& result) {
         /*
           Iterate through the resulting documents, and add them to the result.
           We do this even if we're doing an explain, in order to capture
@@ -419,17 +411,18 @@ namespace mongo {
         */
         if (explain) {
             if (!pCtx->getInRouter())
-                writeExplainShard(result, pInputSource);
+                writeExplainShard(result);
             else {
-                writeExplainMongos(result, pInputSource);
+                writeExplainMongos(result);
             }
         }
         else {
             // the array in which the aggregation results reside
             // cant use subArrayStart() due to error handling
             BSONArrayBuilder resultArray;
-            for(bool hasDoc = !pSource->eof(); hasDoc; hasDoc = pSource->advance()) {
-                intrusive_ptr<Document> pDocument(pSource->getCurrent());
+            DocumentSource* finalSource = sources.back().get();
+            for (bool hasDoc = !finalSource->eof(); hasDoc; hasDoc = finalSource->advance()) {
+                Document pDocument(finalSource->getCurrent());
 
                 /* add the document to the result set */
                 BSONObjBuilder documentBuilder (resultArray.subobjStart());
@@ -445,26 +438,25 @@ namespace mongo {
             resultArray.done();
             result.appendArray("result", resultArray.arr());
         }
-
-    return true;
     }
 
     void Pipeline::writeExplainOps(BSONArrayBuilder *pArrayBuilder) const {
-        for(SourceVector::const_iterator iter(sourceVector.begin()),
-                listEnd(sourceVector.end()); iter != listEnd; ++iter) {
+        for(SourceContainer::const_iterator iter(sources.begin()),
+                                            listEnd(sources.end());
+                                        iter != listEnd;
+                                        ++iter) {
             intrusive_ptr<DocumentSource> pSource(*iter);
+
+            // handled in writeExplainMongos
+            if (dynamic_cast<DocumentSourceBsonArray*>(pSource.get()))
+                continue;
 
             pSource->addToBsonArray(pArrayBuilder, true);
         }
     }
 
-    void Pipeline::writeExplainShard(
-        BSONObjBuilder &result,
-        const intrusive_ptr<DocumentSource> &pInputSource) const {
+    void Pipeline::writeExplainShard(BSONObjBuilder &result) const {
         BSONArrayBuilder opArray; // where we'll put the pipeline ops
-
-        // first the cursor, which isn't in the opArray
-        pInputSource->addToBsonArray(&opArray, true);
 
         // next, add the pipeline operators
         writeExplainOps(&opArray);
@@ -472,25 +464,22 @@ namespace mongo {
         result.appendArray(serverPipelineName, opArray.arr());
     }
 
-    void Pipeline::writeExplainMongos(
-        BSONObjBuilder &result,
-        const intrusive_ptr<DocumentSource> &pInputSource) const {
+    void Pipeline::writeExplainMongos(BSONObjBuilder &result) const {
 
         /*
           For now, this should be a BSON source array.
           In future, we might have a more clever way of getting this, when
           we have more interleaved fetching between shards.  The DocumentSource
-          interface will have to change to accomodate that.
+          interface will have to change to accommodate that.
          */
         DocumentSourceBsonArray *pSourceBsonArray =
-            dynamic_cast<DocumentSourceBsonArray *>(pInputSource.get());
+            dynamic_cast<DocumentSourceBsonArray *>(sources.front().get());
         verify(pSourceBsonArray);
 
         BSONArrayBuilder shardOpArray; // where we'll put the pipeline ops
         for(bool hasDocument = !pSourceBsonArray->eof(); hasDocument;
             hasDocument = pSourceBsonArray->advance()) {
-            intrusive_ptr<Document> pDocument(
-                pSourceBsonArray->getCurrent());
+            Document pDocument = pSourceBsonArray->getCurrent();
             BSONObjBuilder opBuilder;
             pDocument->toBson(&opBuilder);
             shardOpArray.append(opBuilder.obj());
@@ -502,6 +491,10 @@ namespace mongo {
         // now we combine the shard pipelines with the one here
         result.append(serverPipelineName, shardOpArray.arr());
         result.append(mongosPipelineName, mongosOpArray.arr());
+    }
+
+    void Pipeline::addInitialSource(intrusive_ptr<DocumentSource> source) {
+        sources.push_front(source);
     }
 
 } // namespace mongo

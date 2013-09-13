@@ -644,7 +644,7 @@ namespace mongo {
 
             // The query plan must have a matcher.  The matcher's constructor performs some aspects
             // of query validation that should occur before a cursor is returned.
-            fassert( 16859, singlePlan->matcher() );
+            fassert( 16449, singlePlan->matcher() );
 
             if ( // If a matcher is requested or ...
                  _requestMatcher ||

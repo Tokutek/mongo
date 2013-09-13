@@ -506,6 +506,10 @@ namespace mongo {
                     countCmdBuilder.append( "limit", limit );
                 }
 
+                if (cmdObj.hasField("$queryOptions")) {
+                    countCmdBuilder.append(cmdObj["$queryOptions"]);
+                }
+
                 map<Shard, BSONObj> countResult;
 
                 SHARDED->commandOp( dbName, countCmdBuilder.done(),
@@ -1119,14 +1123,15 @@ namespace mongo {
                 while ( i.more() ) {
                     BSONElement e = i.next();
                     string fn = e.fieldName();
-                    if ( fn == "map" ||
+                    if (fn == "map" ||
                             fn == "mapreduce" ||
                             fn == "mapparams" ||
                             fn == "reduce" ||
                             fn == "query" ||
                             fn == "sort" ||
                             fn == "scope" ||
-                            fn == "verbose" ) {
+                            fn == "verbose" ||
+                            fn == "$queryOptions") {
                         b.append( e );
                     }
                     else if ( fn == "out" ||
@@ -1572,6 +1577,9 @@ namespace mongo {
                                   BSONObjBuilder &result, bool fromRepl) {
             //const string shardedOutputCollection = getTmpName( collection );
 
+            uassert(16961, "Aggregation in a sharded system doesn't yet support cursors",
+                    !cmdObj.hasField("cursor"));
+
             intrusive_ptr<ExpressionContext> pExpCtx(
                 ExpressionContext::create(&InterruptStatusMongos::status));
             pExpCtx->setInRouter(true);
@@ -1599,6 +1607,11 @@ namespace mongo {
             /* create the command for the shards */
             BSONObjBuilder commandBuilder;
             pShardPipeline->toBson(&commandBuilder);
+
+            if (cmdObj.hasField("$queryOptions")) {
+                commandBuilder.append(cmdObj["$queryOptions"]);
+            }
+
             BSONObj shardedCommand(commandBuilder.done());
 
             BSONObjBuilder shardQueryBuilder;
@@ -1615,9 +1628,11 @@ namespace mongo {
             map<Shard, BSONObj> shardResults;
             SHARDED->commandOp(dbName, shardedCommand, options, fullns, shardQuery, shardResults);
 
+            pPipeline->addInitialSource(DocumentSourceCommandShards::create(shardResults, pExpCtx));
+
             // Combine the shards' output and finish the pipeline
-            pPipeline->run(result, errmsg,
-                    DocumentSourceCommandShards::create(shardResults, pExpCtx));
+            pPipeline->stitch();
+            pPipeline->run(result);
 
             if (errmsg.length() > 0)
                 return false;

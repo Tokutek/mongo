@@ -196,7 +196,7 @@ namespace mongo {
         int idxNo(const IndexDetails& idx) const;
 
         /* multikey indexes are indexes where there are more than one key in the index
-             for a single document. see multikey in wiki.
+             for a single document. see multikey in docs.
            for these, we have to do some dedup work on queries.
         */
         bool isMultikey(int i) const {

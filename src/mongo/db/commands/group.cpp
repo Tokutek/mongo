@@ -40,9 +40,9 @@ namespace mongo {
                 const BSONObj& key = b.obj();
                 int res = s->invoke( func , &key, 0 );
                 uassert( 10041 ,  (string)"invoke failed in $keyf: " + s->getError() , res == 0 );
-                int type = s->type("return");
+                int type = s->type("__returnValue");
                 uassert( 10042 ,  "return of $key has to be an object" , type == Object );
-                return s->getObject( "return" );
+                return s->getObject( "__returnValue" );
             }
             return obj.extractFields( keyPattern , true ).getOwned();
         }
@@ -59,16 +59,15 @@ namespace mongo {
                     string& errmsg,
                     BSONObjBuilder& result ) {
 
-            auto_ptr<Scope> s = globalScriptEngine->getPooledScope( realdbname );
-            s->localConnect( realdbname.c_str() );
+            auto_ptr<Scope> s = globalScriptEngine->getPooledScope( realdbname, "group");
 
             if ( reduceScope )
                 s->init( reduceScope );
 
             s->setObject( "$initial" , initial , true );
 
-            s->exec( "$reduce = " + reduceCode , "reduce setup" , false , true , true , 100 );
-            s->exec( "$arr = [];" , "reduce setup 2" , false , true , true , 100 );
+            s->exec( "$reduce = " + reduceCode , "$group reduce setup" , false , true , true , 100 );
+            s->exec( "$arr = [];" , "$group reduce setup 2" , false , true , true , 100 );
             ScriptingFunction f = s->createFunction(
                                       "function(){ "
                                       "  if ( $arr[n] == null ){ "
@@ -125,7 +124,7 @@ namespace mongo {
             ccPointer.reset();
 
             if (!finalize.empty()) {
-                s->exec( "$finalize = " + finalize , "finalize define" , false , true , true , 100 );
+                s->exec( "$finalize = " + finalize , "$group finalize define" , false , true , true , 100 );
                 ScriptingFunction g = s->createFunction(
                                           "function(){ "
                                           "  for(var i=0; i < $arr.length; i++){ "
@@ -140,7 +139,7 @@ namespace mongo {
             result.appendArray( "retval" , s->getObject( "$arr" ) );
             result.append( "count" , keynum - 1 );
             result.append( "keys" , (int)(map.size()) );
-            s->exec( "$arr = [];" , "reduce setup 2" , false , true , true , 100 );
+            s->exec( "$arr = [];" , "$group reduce setup 2" , false , true , true , 100 );
             s->gc();
 
             return true;

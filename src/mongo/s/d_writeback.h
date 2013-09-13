@@ -41,7 +41,7 @@ namespace mongo {
             QueueInfo(){}
 
             BlockingQueue<BSONObj> queue;
-            long long lastCall;   // this is ellapsed millis since startup
+            long long lastCall;   // this is elapsed millis since startup
         };
 
         // a map from mongos's serverIDs to queues of "rejected" operations
@@ -90,7 +90,7 @@ namespace mongo {
         
     private:
         
-        // '_writebackQueueLock' protects only the map itself, since each queue is syncrhonized.
+        // '_writebackQueueLock' protects only the map itself, since each queue is synchronized.
         mutable mongo::mutex _writebackQueueLock;
         WriteBackQueuesMap _writebackQueues;
         

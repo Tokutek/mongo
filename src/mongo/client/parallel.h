@@ -24,6 +24,7 @@
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/namespacestring.h"
+#include "mongo/s/shard.h"
 #include "mongo/s/util.h"
 #include "mongo/util/concurrency/mvar.h"
 
@@ -66,7 +67,7 @@ namespace mongo {
 
     /**
      * this is a cursor that works over a set of servers
-     * can be used in serial/paralellel as controlled by sub classes
+     * can be used in serial/parallel as controlled by sub classes
      */
     class ClusteredCursor {
     public:
@@ -254,17 +255,10 @@ namespace mongo {
         }
     };
 
-    class ShardConnection;
     typedef shared_ptr<ShardConnection> ShardConnectionPtr;
 
     class DBClientCursor;
     typedef shared_ptr<DBClientCursor> DBClientCursorPtr;
-
-    class Shard;
-    typedef shared_ptr<Shard> ShardPtr;
-
-    class ChunkManager;
-    typedef shared_ptr<const ChunkManager> ChunkManagerPtr;
 
     class ParallelConnectionState {
     public:

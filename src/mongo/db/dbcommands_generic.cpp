@@ -52,13 +52,19 @@ namespace mongo {
             help << "get version #, etc.\n";
             help << "{ buildinfo:1 }";
         }
-        bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
+        bool run(const std::string& dbname,
+                 BSONObj& jsobj,
+                 int, // options
+                 std::string& errmsg,
+                 BSONObjBuilder& result,
+                 bool fromRepl) {
             result << "version"             << mongodbVersionString
                    << "tokumxVersion"       << tokumxVersionString
                    << "gitVersion"          << gitVersion()
                    << "tokukvVersion"       << tokukvVersion()
                    << "sysInfo"             << sysInfo()
                    << "versionArray"        << versionArray
+                   << "interpreterVersion"  << globalScriptEngine->getInterpreterVersionString()
                    << "bits"                << ( sizeof( int* ) == 4 ? 32 : 64 );
             result.appendBool( "debug" , debug );
             result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);

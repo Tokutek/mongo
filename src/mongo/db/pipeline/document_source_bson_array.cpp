@@ -45,10 +45,10 @@ namespace mongo {
         return true;
     }
 
-    intrusive_ptr<Document> DocumentSourceBsonArray::getCurrent() {
+    Document DocumentSourceBsonArray::getCurrent() {
         verify(haveCurrent);
         BSONObj documentObj(currentElement.Obj());
-        intrusive_ptr<Document> pDocument(
+        Document pDocument(
             Document::createFromBsonObj(&documentObj));
         return pDocument;
     }

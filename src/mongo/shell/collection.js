@@ -121,11 +121,14 @@ DBCollection.prototype._massageObject = function( q ){
 
 
 DBCollection.prototype._validateObject = function( o ){
+    if (typeof(o) != "object")
+        throw "attempted to save a " + typeof(o) + " value.  document expected.";
+
     if ( o._ensureSpecial && o._checkModify )
         throw "can't save a DBQuery object";
 }
 
-DBCollection._allowedFields = { $id : 1 , $ref : 1 , $db : 1 , $MinKey : 1, $MaxKey : 1 };
+DBCollection._allowedFields = { $id : 1 , $ref : 1 , $db : 1 };
 
 DBCollection.prototype._validateForStorage = function( o ){
     this._validateObject( o );
@@ -162,12 +165,15 @@ DBCollection.prototype.findOne = function( query , fields, options ){
     return ret;
 }
 
-DBCollection.prototype.insert = function( obj , _allow_dot ){
+DBCollection.prototype.insert = function( obj , options, _allow_dot ){
     if ( ! obj )
         throw "no object passed to insert!";
     if ( ! _allow_dot ) {
         this._validateForStorage( obj );
     }
+    
+    if ( typeof( options ) == "undefined" ) options = 0;
+    
     if ( typeof( obj._id ) == "undefined" && ! Array.isArray( obj ) ){
         var tmp = obj; // don't want to modify input
         obj = {_id: new ObjectId()};
@@ -176,7 +182,7 @@ DBCollection.prototype.insert = function( obj , _allow_dot ){
         }
     }
     this._db._initExtraInfo();
-    this._mongo.insert( this._fullName , obj );
+    this._mongo.insert( this._fullName , obj, options );
     this._lastID = obj._id;
     this._db._getExtraInfo("Inserted");
 }
@@ -320,7 +326,7 @@ DBCollection.prototype._indexSpec = function( keys, options ) {
 
 DBCollection.prototype.createIndex = function( keys , options ){
     var o = this._indexSpec( keys, options );
-    this._db.getCollection( "system.indexes" ).insert( o , true );
+    this._db.getCollection( "system.indexes" ).insert( o , 0, true );
 }
 
 DBCollection.prototype.ensureIndex = function( keys , options ){
@@ -574,18 +580,61 @@ DBCollection.prototype.distinct = function( keyString , query ){
 }
 
 
+DBCollection.prototype.aggregateCursor = function(pipeline, extraOpts) {
+    // This function should replace aggregate() in SERVER-10165.
+
+    var cmd = {pipeline: pipeline};
+
+    if (!(pipeline instanceof Array)) {
+        // support varargs form
+        cmd.pipeline = [];
+        for (var i=0; i<arguments.length; i++) {
+            cmd.pipeline.push(arguments[i]);
+        }
+    }
+    else {
+        Object.extend(cmd, extraOpts);
+    }
+
+    if (cmd.cursor === undefined) {
+        cmd.cursor = {};
+    }
+
+    var cursorRes = this.runCommand("aggregate", cmd);
+    assert.commandWorked(cursorRes, "aggregate with cursor failed");
+    return new DBCommandCursor(this._mongo, cursorRes);
+}
+
 DBCollection.prototype.aggregate = function( ops ) {
     
     var arr = ops;
     
-    if ( ! ops.length ) {
+    if (!ops.length) {
         arr = [];
-        for ( var i=0; i<arguments.length; i++ ) {
-            arr.push( arguments[i] )
+        for (var i=0; i<arguments.length; i++) {
+            arr.push(arguments[i]);
         }
     }
-    
-    return this.runCommand( "aggregate" , { pipeline : arr } );
+
+    var res = this.runCommand("aggregate", {pipeline: arr});
+    if (!res.ok) {
+        printStackTrace();
+        throw "aggregate failed: " + tojson(res);
+    }
+
+    if (TestData) {
+        // If we are running in a test, make sure cursor output is the same.
+        // This block should go away with work on SERVER-10165.
+
+        if (this._db.isMaster().msg !== "isdbgrid") {
+            // agg cursors not supported sharded yet
+
+            var cursor = this.aggregateCursor(arr, {cursor: {batchSize: 0}});
+            assert.eq(cursor.toArray(), res.result);
+        }
+    }
+
+    return res;
 }
 
 DBCollection.prototype.group = function( params ){

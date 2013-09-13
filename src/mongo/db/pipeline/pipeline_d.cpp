@@ -23,16 +23,29 @@
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/pipeline/document_source.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/instance.h"
 
 
 namespace mongo {
 
-    intrusive_ptr<DocumentSourceCursor> PipelineD::prepareCursorSource(
+    void PipelineD::prepareCursorSource(
         const intrusive_ptr<Pipeline> &pPipeline,
         const string &dbName,
         const intrusive_ptr<ExpressionContext> &pExpCtx) {
 
-        Pipeline::SourceVector *pSources = &pPipeline->sourceVector;
+        // We will be modifying the source vector as we go
+        Pipeline::SourceContainer& sources = pPipeline->sources;
+
+        if (!sources.empty()) {
+            DocumentSource* first = sources.front().get();
+            DocumentSourceGeoNear* geoNear = dynamic_cast<DocumentSourceGeoNear*>(first);
+            if (geoNear) {
+                geoNear->client.reset(new DBDirectClient);
+                geoNear->db = dbName;
+                geoNear->collection = pPipeline->collectionName;
+                return; // we don't need a DocumentSourceCursor in this case
+            }
+        }
 
         /* look for an initial match */
         BSONObjBuilder queryBuilder;
@@ -42,7 +55,7 @@ namespace mongo {
               This will get built in to the Cursor we'll create, so
               remove the match from the pipeline
             */
-            pSources->erase(pSources->begin());
+            sources.pop_front();
         }
 
         /*
@@ -61,16 +74,20 @@ namespace mongo {
          * for fields that won't make it through the projection.
          */
 
+        bool haveProjection = false;
         BSONObj projection;
+        DocumentSource::ParsedDeps dependencies;
         {
             set<string> deps;
             DocumentSource::GetDepsReturn status = DocumentSource::SEE_NEXT;
-            for (size_t i=0; i < pSources->size() && status == DocumentSource::SEE_NEXT; i++) {
-                status = (*pSources)[i]->getDependencies(deps);
+            for (size_t i=0; i < sources.size() && status == DocumentSource::SEE_NEXT; i++) {
+                status = sources[i]->getDependencies(deps);
             }
 
             if (status == DocumentSource::EXHAUSTIVE) {
                 projection = DocumentSource::depsToProjection(deps);
+                dependencies = DocumentSource::parseDeps(deps);
+                haveProjection = true;
             }
         }
 
@@ -81,10 +98,10 @@ namespace mongo {
           will already come sorted in the specified order as a result of the
           index scan.
         */
-        const DocumentSourceSort *pSort = NULL;
+        intrusive_ptr<DocumentSourceSort> pSort;
         BSONObjBuilder sortBuilder;
-        if (pSources->size()) {
-            const intrusive_ptr<DocumentSource> &pSC = pSources->front();
+        if (!sources.empty()) {
+            const intrusive_ptr<DocumentSource> &pSC = sources.front();
             pSort = dynamic_cast<DocumentSourceSort *>(pSC.get());
 
             if (pSort) {
@@ -151,7 +168,12 @@ namespace mongo {
 
             if (pSortedCursor.get()) {
                 /* success:  remove the sort from the pipeline */
-                pSources->erase(pSources->begin());
+                sources.pop_front();
+
+                if (pSort->getLimitSrc()) {
+                    // need to reinsert coalesced $limit after removing $sort
+                    sources.push_front(pSort->getLimitSrc());
+                }
 
                 pCursor = pSortedCursor;
                 initSort = true;
@@ -192,10 +214,16 @@ namespace mongo {
         if (initSort)
             pSource->setSort(pSortObj);
 
-        if (!projection.isEmpty())
-            pSource->setProjection(projection);
+        if (haveProjection) {
+            pSource->setProjection(projection, dependencies);
+        }
 
-        return pSource;
+        // If we are in an explain, we won't actually use the created cursor so release it.
+        // This is important to avoid double locking when we use DBDirectClient to run explain.
+        if (pPipeline->isExplain())
+            pSource->dispose();
+
+        pPipeline->addInitialSource(pSource);
     }
 
 } // namespace mongo

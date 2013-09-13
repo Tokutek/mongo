@@ -379,12 +379,20 @@ namespace mongo {
             return *this;
         }
 
+        BSONObjBuilder& append(const StringData& fieldName, const BSONRegEx& regex) {
+            return appendRegex(fieldName, regex.pattern, regex.flags);
+        }
+
         BSONObjBuilder& appendCode(const StringData& fieldName, const StringData& code) {
             _b.appendNum((char) Code);
             _b.appendStr(fieldName);
             _b.appendNum((int) code.size()+1);
             _b.appendStr(code);
             return *this;
+        }
+
+        BSONObjBuilder& append(const StringData& fieldName, const BSONCode& code) {
+            return appendCode(fieldName, code.code);
         }
 
         /** Append a string element. 
@@ -406,11 +414,7 @@ namespace mongo {
         }
         /** Append a string element */
         BSONObjBuilder& append(const StringData& fieldName, const StringData& str) {
-            _b.appendNum((char) String);
-            _b.appendStr(fieldName);
-            _b.appendNum((int)str.size()+1);
-            _b.appendStr(str, true);
-            return *this;
+            return append(fieldName, str.rawData(), (int) str.size()+1);
         }
 
         BSONObjBuilder& appendSymbol(const StringData& fieldName, const StringData& symbol) {
@@ -419,6 +423,10 @@ namespace mongo {
             _b.appendNum((int) symbol.size()+1);
             _b.appendStr(symbol);
             return *this;
+        }
+
+        BSONObjBuilder& append(const StringData& fieldName, const BSONSymbol& symbol) {
+            return appendSymbol(fieldName, symbol.symbol);
         }
 
         /** Implements builder interface but no-op in ObjBuilder */
@@ -454,6 +462,19 @@ namespace mongo {
             return *this;
         }
 
+        /**
+         * To store an OpTime in BSON, use this function.
+         * This captures both the secs and inc fields.
+         */
+        BSONObjBuilder& append(const StringData& fieldName, OpTime optime);
+
+        /**
+         * Alternative way to store an OpTime in BSON. Pass the OpTime as a Date, as follows:
+         *
+         *     builder.appendTimestamp("field", optime.asDate());
+         *
+         * This captures both the secs and inc fields.
+         */
         BSONObjBuilder& appendTimestamp( const StringData& fieldName , unsigned long long val ) {
             _b.appendNum( (char) Timestamp );
             _b.appendStr( fieldName );
@@ -481,6 +502,10 @@ namespace mongo {
             return *this;
         }
 
+        BSONObjBuilder& append(const StringData& fieldName, const BSONDBRef& dbref) {
+            return appendDBRef(fieldName, dbref.ns, dbref.oid);
+        }
+
         /** Append a binary data element
             @param fieldName name of the field
             @param len length of the binary data in bytes
@@ -495,6 +520,10 @@ namespace mongo {
             _b.appendNum( (char) type );
             _b.appendBuf( data, len );
             return *this;
+        }
+
+        BSONObjBuilder& append(const StringData& fieldName, const BSONBinData& bd) {
+            return appendBinData(fieldName, bd.length, bd.type, bd.data);
         }
 
         /**
@@ -524,6 +553,10 @@ namespace mongo {
             _b.appendStr( code );
             _b.appendBuf( ( void * )scope.objdata(), scope.objsize() );
             return *this;
+        }
+
+        BSONObjBuilder& append(const StringData& fieldName, const BSONCodeWScope& cws) {
+            return appendCodeWScope(fieldName, cws.code, cws.scope);
         }
 
         void appendUndefined( const StringData& fieldName ) {
@@ -615,24 +648,13 @@ namespace mongo {
         }
 
         /** Stream oriented way to add field names and values. */
-        BSONObjBuilderValueStream &operator<<(const char * name ) {
+        BSONObjBuilderValueStream &operator<<( const StringData& name ) {
             _s.endField( name );
             return _s;
         }
 
         /** Stream oriented way to add field names and values. */
         BSONObjBuilder& operator<<( GENOIDLabeler ) { return genOID(); }
-
-        // prevent implicit string conversions which would allow bad things like BSON( BSON( "foo" << 1 ) << 2 )
-        struct ForceExplicitString {
-            ForceExplicitString( const std::string &str ) : str_( str ) {}
-            std::string str_;
-        };
-
-        /** Stream oriented way to add field names and values. */
-        BSONObjBuilderValueStream &operator<<( const ForceExplicitString& name ) {
-            return operator<<( name.str_.c_str() );
-        }
 
         Labeler operator<<( const Labeler::Label &l ) {
             massert( 10336 ,  "No subobject started", _s.subobjStarted() );
@@ -641,13 +663,13 @@ namespace mongo {
 
         template<typename T>
         BSONObjBuilderValueStream& operator<<( const BSONField<T>& f ) {
-            _s.endField( f.name().c_str() );
+            _s.endField( f.name() );
             return _s;
         }
 
         template<typename T>
         BSONObjBuilder& operator<<( const BSONFieldValue<T>& v ) {
-            append( v.name().c_str() , v.value() );
+            append( v.name(), v.value() );
             return *this;
         }
 
@@ -721,7 +743,8 @@ namespace mongo {
 
         template <typename T>
         BSONArrayBuilder& operator<<(const T& x) {
-            return append(x);
+            _b << num().c_str() << x;
+            return *this;
         }
 
         void appendNull() {
@@ -814,6 +837,11 @@ namespace mongo {
 
         BSONArrayBuilder& appendTimestamp(unsigned int sec, unsigned int inc) {
             _b.appendTimestamp(num(), sec, inc);
+            return *this;
+        }
+
+        BSONArrayBuilder& append(const StringData& s) {
+            _b.append(num(), s);
             return *this;
         }
 

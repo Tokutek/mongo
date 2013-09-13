@@ -27,6 +27,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/commands/fail_point_cmd.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/d_globals.h"
 #include "mongo/db/dbmessage.h"
@@ -295,7 +296,7 @@ namespace mongo {
         return killCurrentOp.checkForInterruptNoAssert();
     }
 
-    unsigned jsGetInterruptSpecCallback() {
+    unsigned jsGetCurrentOpIdCallback() {
         return cc().curop()->opNum();
     }
 
@@ -361,7 +362,7 @@ namespace mongo {
         if ( scriptingEnabled ) {
             ScriptEngine::setup();
             globalScriptEngine->setCheckInterruptCallback( jsInterruptCallback );
-            globalScriptEngine->setGetInterruptSpecCallback( jsGetInterruptSpecCallback );
+            globalScriptEngine->setGetCurrentOpIdCallback( jsGetCurrentOpIdCallback );
         }
 
         /* this is for security on certain platforms (nonce generation) */
@@ -988,6 +989,9 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
         // exits directly and so never reaches here either.
 #endif
 
+        if (params.count("enableFaultInjection")) {
+            enableFailPointCmd();
+        }
     }
 
     setupSignals( false );
