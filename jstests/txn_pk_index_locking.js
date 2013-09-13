@@ -30,7 +30,7 @@ s1 = startParallelShell('db.txnpklocking.insert({ _id: 3 }); assert(!db.getLastE
 s1();
 t.insert({ _id: 4 });
 assert(!db.getLastError());
-s2 = startParallelShell('db.txnpklocking.insert({ _id: 5 }); assert(!db.getLastError()); db.txnpklocking.insert({ success: 5 })');
+s2 = startParallelShell('db.txnpklocking.insert({ _id: 5 }); assert(!db.getLastError()); db.txnpklocking.insert({ success: 5 }); assert(!db.getLastError());');
 s2();
 t.insert({ _id: 6 });
 assert(!db.getLastError());

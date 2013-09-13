@@ -75,20 +75,14 @@ namespace mongo {
     }
 
     void profile(const Client& c, int op, CurOp& currentOp) {
+        Lock::assertAtLeastReadLocked(currentOp.getNS());
+
         // initialize with 1kb to start, to avoid realloc later
         // doing this outside the dblock to improve performance
         BufBuilder profileBufBuilder(1024);
 
         try {
-            Lock::DBWrite lk( currentOp.getNS() );
-            if ( dbHolder()._isLoaded( nsToDatabase( currentOp.getNS() ) , dbpath ) ) {
-                Client::Context cx( currentOp.getNS(), dbpath, false );
-                _profile(c, currentOp, profileBufBuilder);
-            }
-            else {
-                mongo::log() << "note: not profiling because db went away - probably a close on: "
-                             << currentOp.getNS() << endl;
-            }
+            _profile(c, currentOp, profileBufBuilder);
         }
         catch (const AssertionException& assertionEx) {
             warning() << "Caught Assertion while trying to profile " << opToString(op)

@@ -301,6 +301,17 @@ namespace mongo {
         ::abort();
     }
 
+    // Profile the current op in an alternate transaction
+    void lockedDoProfile(const Client& c, int op, CurOp& currentOp) {
+        if ( dbHolder().__isLoaded( nsToDatabase( currentOp.getNS() ) , dbpath ) ) {
+            Client::Context ctx( currentOp.getNS(), dbpath, false );
+            Client::AlternateTransactionStack altStack;
+            Client::Transaction txn(DB_SERIALIZABLE);
+            profile(c, op, currentOp);
+            txn.commit();
+        }
+    }
+
     // Returns false when request includes 'end'
     void assembleResponse( Message &m, DbResponse &dbresponse, const HostAndPort& remote ) {
 
@@ -458,16 +469,12 @@ namespace mongo {
                 LOG(1) << "note: not profiling because doing fsync+lock" << endl;
             }
             else {
-                Lock::DBWrite lk( currentOp.getNS() );
-                if ( dbHolder()._isLoaded( nsToDatabase( currentOp.getNS() ) , dbpath ) ) {
-                    Client::Context cx( currentOp.getNS(), dbpath, false );
-                    Client::AlternateTransactionStack altStack;
-                    Client::Transaction txn(DB_SERIALIZABLE);
-                    profile(c, op, currentOp);
-                    txn.commit();
-                }
-                else {
-                    mongo::log() << "note: not profiling because db went away - probably a close on: " << currentOp.getNS() << endl;
+                try {
+                    Lock::DBRead lk( currentOp.getNS() );
+                    lockedDoProfile( c, op, currentOp );
+                } catch (RetryWithWriteLock &e) {
+                    Lock::DBWrite lk( currentOp.getNS() );
+                    lockedDoProfile( c, op, currentOp );
                 }
             }
         }

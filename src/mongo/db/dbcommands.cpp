@@ -631,7 +631,7 @@ namespace mongo {
     public:
         CmdDiagLogging() : InformationCommand("diagLogging") { }
         // Vanilla mongo had this, I don't know why.  Seems like if they need a write lock it should be global?
-        virtual LockType locktype() const { return WRITE; }
+        virtual LockType locktype() const { return NONE; }
         bool adminOnly() const { return true; }
         void help(stringstream& h) const { h << "http://dochub.mongodb.org/core/monitoring#MonitoringandDiagnostics-DatabaseRecord%2FReplay%28diagLoggingcommand%29"; }
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
