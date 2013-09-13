@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <boost/function.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <string>
 
@@ -57,6 +58,9 @@ namespace mongo {
         virtual Status findOne(const NamespaceString& collectionName,
                                const BSONObj& query,
                                BSONObj* result);
+        virtual Status query(const NamespaceString& collectionName,
+                             const BSONObj& query,
+                             const boost::function<void(const BSONObj&)>& resultProcessor);
         virtual Status insert(const NamespaceString& collectionName,
                               const BSONObj& document,
                               const BSONObj& writeConcern);

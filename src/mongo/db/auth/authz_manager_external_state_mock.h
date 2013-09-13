@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <boost/function.hpp>
 #include <string>
 #include <map>
 #include <vector>
@@ -66,6 +67,10 @@ namespace mongo {
                                const BSONObj& query,
                                BSONObj* result);
 
+        virtual Status query(const NamespaceString& collectionName,
+                             const BSONObj& query,
+                             const boost::function<void(const BSONObj&)>& resultProcessor);
+
         // This implementation does not understand uniqueness constraints.
         virtual Status insert(const NamespaceString& collectionName,
                               const BSONObj& document,
@@ -105,6 +110,11 @@ namespace mongo {
         Status _findOneIter(const NamespaceString& collectionName,
                             const BSONObj& query,
                             BSONObjCollection::iterator* result);
+
+        Status _queryVector(const NamespaceString& collectionName,
+                            const BSONObj& query,
+                            std::vector<BSONObjCollection::iterator>* result);
+
 
         NamespaceDocumentMap _documents; // Mock database.
     };
