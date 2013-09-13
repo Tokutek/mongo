@@ -36,10 +36,11 @@ var testNSProvisionallyDropped = function() {
     begin();
     s = startParallelShell('db.runCommand({ beginTransaction: 1 });' +
                            'db.loadnsprovdropped.drop(); ' +
-                           'sleep(2000); db.runCommand({ commitTransaction: 1 })');
+                           'sleep(2000); db.runCommand({ abortTransaction: 1 })');
     sleep(500);
     beginLoadShouldFail('loadnsprovdropped', [ ], { });
     commit();
+    assert.eq(1, t.count({ prov : 1 }));
     s();
 }();
 
