@@ -211,7 +211,7 @@ namespace mongo {
             // exist.  This error only gets thrown if may_create is false, which happens when we're
             // trying to open a collection for which we have serialized info.  Therefore, this is a
             // fatal non-user error.
-            msgasserted(16922, mongoutils::str::stream() << "dictionary " << dname
+            msgasserted(16988, mongoutils::str::stream() << "dictionary " << dname
                                << " should exist, but we got ENOENT");
         }
     }

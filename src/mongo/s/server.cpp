@@ -22,6 +22,7 @@
 #include <boost/thread/thread.hpp>
 
 #include "mongo/base/initializer.h"
+#include "mongo/db/commands/fail_point_cmd.h"
 #include "../util/net/message.h"
 #include "../util/startup_test.h"
 #include "../client/connpool.h"
@@ -484,6 +485,10 @@ int _main(int argc, char* argv[]) {
             out() << "configdb: " << e.what() << endl;
             return 9;
         }
+    }
+
+    if (params.count("enableFaultInjection")) {
+        enableFailPointCmd();
     }
 
 #if defined(_WIN32)

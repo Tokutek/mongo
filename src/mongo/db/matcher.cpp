@@ -62,17 +62,8 @@ namespace mongo {
             _func = 0;
             _initCalled = false;
         }
-        
-        ~Where() {
 
-            if ( _scope.get() ){
-                try {
-                    _scope->execSetup( "_mongo.readOnly = false;" , "make not read only" );
-                }
-                catch( DBException& e ){
-                    warning() << "javascript scope cleanup interrupted" << causedBy( e ) << endl;
-                }
-            }
+        ~Where() {
             _func = 0;
         }
 
@@ -81,14 +72,12 @@ namespace mongo {
                 return;
             _initCalled = true;
 
-            _scope = globalScriptEngine->getPooledScope( _ns );
             NamespaceString ns( _ns );
-            _scope->localConnect( ns.db.c_str() );
-            
+            _scope = globalScriptEngine->getPooledScope( ns.db.c_str(), "where" );
+
             massert( 10341 ,  "code has to be set first!" , ! _jsCode.empty() );
 
             _func = _scope->createFunction( _jsCode.c_str() );
-            _scope->execSetup( "_mongo.readOnly = true;" , "make read only" );
         }
 
         void setScope( const BSONObj& scope ) {
@@ -121,7 +110,7 @@ namespace mongo {
                 uassert( 10072 , "unknown error in invocation of $where function", false);
             }
             
-            return _scope->getBoolean( "return" ) != 0;
+            return _scope->getBoolean( "__returnValue" ) != 0;
         }
         
     private:
@@ -1194,7 +1183,7 @@ namespace mongo {
                 u_assert( 10072 , "unknown error in invocation of $where function", false);
                 return false;
             }
-            return _where->scope->getBoolean( "return" ) != 0;
+            return _where->scope->getBoolean( "__returnValue" ) != 0;
 
         }
     }

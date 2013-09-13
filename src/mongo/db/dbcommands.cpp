@@ -17,7 +17,7 @@
 
 /* SHARDING: 
    I believe this file is for mongod only.
-   See s/commnands_public.cpp for mongos.
+   See s/commands_public.cpp for mongos.
 */
 
 #include <time.h>
@@ -1735,6 +1735,12 @@ namespace mongo {
             else {
                 jsobj = _cmdobj;
             }
+        }
+
+        // Treat the command the same as if it has slaveOk bit on if it has a read
+        // preference setting. This is to allow these commands to run on a secondary.
+        if (hasReadPreference(_cmdobj)) {
+            queryOptions |= QueryOption_SlaveOk;
         }
 
         Client& client = cc();

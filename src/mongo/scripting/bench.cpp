@@ -26,6 +26,7 @@
 #include <boost/thread/thread.hpp>
 
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/scripting/bson_template_evaluator.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/md5.h"
 #include "mongo/util/timer.h"
@@ -149,7 +150,7 @@ namespace mongo {
         if ( args["username"].type() == String )
             this->username = args["username"].String();
         if ( args["password"].type() == String )
-            this->db = args["password"].String();
+            this->password = args["password"].String();
 
         if ( args["parallel"].isNumber() )
             this->parallel = args["parallel"].numberInt();
@@ -286,61 +287,12 @@ namespace mongo {
         return false;
     }
 
-    static void _fixField( BSONObjBuilder& b , const BSONElement& e ) {
-        verify( e.type() == Object );
-
-        BSONObj sub = e.Obj();
-        verify( sub.nFields() == 1 );
-
-        BSONElement f = sub.firstElement();
-        if ( str::equals( "#RAND_INT" , f.fieldName() ) ) {
-            BSONObjIterator i( f.Obj() );
-            int min = i.next().numberInt();
-            int max = i.next().numberInt();
-
-            int x = min + ( rand() % ( max - min ) );
-
-            if ( i.more() )
-                x *= i.next().numberInt();
-
-            b.append( e.fieldName() , x );
-        }
-        else {
-            uasserted( 14811 , str::stream() << "invalid bench dynamic piece: " << f.fieldName() );
-        }
-
-    }
-
-    static void fixQuery( BSONObjBuilder& b  , const BSONObj& obj ) {
-        BSONObjIterator i( obj );
-        while ( i.more() ) {
-            BSONElement e = i.next();
-
-            if ( ! e.isABSONObj() ) {
-                b.append( e );
-                continue;
-            }
-
-            BSONObj sub = e.Obj();
-            if ( sub.firstElement().fieldName()[0] == '#' ) {
-                _fixField( b , e );
-            }
-            else {
-                BSONObjBuilder xx( e.type() == Object ? b.subobjStart( e.fieldName() ) : b.subarrayStart( e.fieldName() ) );
-                fixQuery( xx , sub );
-                xx.done();
-            }
-
-        }
-    }
-
-    static BSONObj fixQuery( const BSONObj& obj ) {
-
+    static BSONObj fixQuery( const BSONObj& obj, BsonTemplateEvaluator& btl ) {
         if ( ! _hasSpecial( obj ) ) 
             return obj;
-
         BSONObjBuilder b( obj.objsize() + 128 );
-        fixQuery( b , obj );
+
+        verify(BsonTemplateEvaluator::StatusSuccess == btl.evaluate(obj, b));
         return b.obj();
     }
 
@@ -365,6 +317,8 @@ namespace mongo {
         long long count = 0;
         mongo::Timer timer;
 
+        BsonTemplateEvaluator bsonTemplateEvaluator;
+
         while ( !shouldStop() ) {
             BSONObjIterator i( _config->ops );
             while ( i.more() ) {
@@ -386,7 +340,7 @@ namespace mongo {
 
                 if (_config->username != "") {
                     string errmsg;
-                    if (!conn->auth(_config->db, _config->username, _config->password, errmsg)) {
+                    if (!conn->auth("admin", _config->username, _config->password, errmsg)) {
                         uasserted(15931, "Authenticating to connection for _benchThread failed: " + errmsg);
                     }
                 }
@@ -394,7 +348,7 @@ namespace mongo {
                 bool check = ! e["check"].eoo();
                 if( check ){
                     if ( e["check"].type() == CodeWScope || e["check"].type() == Code || e["check"].type() == String ) {
-                        scope = globalScriptEngine->getPooledScope( ns );
+                        scope = globalScriptEngine->getPooledScope( ns, "benchrun" );
                         verify( scope.get() );
 
                         if ( e.type() == CodeWScope ) {
@@ -420,7 +374,8 @@ namespace mongo {
                         BSONObj result;
                         {
                             BenchRunEventTrace _bret(&_stats.findOneCounter);
-                            result = conn->findOne( ns , fixQuery( e["query"].Obj() ) );
+                            result = conn->findOne( ns , fixQuery( e["query"].Obj(),
+                                                                   bsonTemplateEvaluator ) );
                         }
 
                         if( check ){
@@ -440,8 +395,8 @@ namespace mongo {
                     else if ( op == "command" ) {
 
                         BSONObj result;
-                        // TODO
-                        /* bool ok = */ conn->runCommand( ns , fixQuery( e["command"].Obj() ), result, e["options"].numberInt() );
+                        conn->runCommand( ns, fixQuery( e["command"].Obj(), bsonTemplateEvaluator ),
+                                          result, e["options"].numberInt() );
 
                         if( check ){
                             int err = scope->invoke( scopeFunc , 0 , &result,  1000 * 60 , false );
@@ -469,7 +424,7 @@ namespace mongo {
                         auto_ptr<DBClientCursor> cursor;
                         int count;
 
-                        BSONObj fixedQuery = fixQuery(e["query"].Obj());
+                        BSONObj fixedQuery = fixQuery(e["query"].Obj(), bsonTemplateEvaluator);
 
                         // use special query function for exhaust query option
                         if (options & QueryOption_Exhaust) {
@@ -479,7 +434,8 @@ namespace mongo {
                         }
                         else {
                             BenchRunEventTrace _bret(&_stats.queryCounter);
-                            cursor = conn->query( ns, fixedQuery, limit, skip, &filter, options, batchSize );
+                            cursor = conn->query(ns, fixedQuery, limit, skip, &filter, options,
+                                                 batchSize);
                             count = cursor->itcount();
                         }
 
@@ -514,7 +470,8 @@ namespace mongo {
 
                         {
                             BenchRunEventTrace _bret(&_stats.updateCounter);
-                            conn->update( ns, fixQuery( query ), update, upsert , multi );
+                            conn->update( ns, fixQuery( query, bsonTemplateEvaluator ), update,
+                                          upsert , multi );
                             if (safe)
                                 result = conn->getLastErrorDetailed();
                         }
@@ -543,7 +500,7 @@ namespace mongo {
                         BSONObj result;
                         {
                             BenchRunEventTrace _bret(&_stats.insertCounter);
-                            conn->insert( ns, fixQuery( e["doc"].Obj() ) );
+                            conn->insert( ns, fixQuery( e["doc"].Obj(), bsonTemplateEvaluator ) );
                             if (safe)
                                 result = conn->getLastErrorDetailed();
                         }
@@ -576,7 +533,7 @@ namespace mongo {
 
                         {
                             BenchRunEventTrace _bret(&_stats.deleteCounter);
-                            conn->remove( ns, fixQuery( query ), ! multi );
+                            conn->remove( ns, fixQuery( query, bsonTemplateEvaluator ), ! multi );
                             if (safe)
                                 result = conn->getLastErrorDetailed();
                         }
@@ -681,7 +638,7 @@ namespace mongo {
         try {
             if ( !_config->username.empty() ) {
                 string errmsg;
-                if (!conn->auth(_config->db, _config->username, _config->password, errmsg)) {
+                if (!conn->auth("admin", _config->username, _config->password, errmsg)) {
                     uasserted(15932, "Authenticating to connection for benchThread failed: " + errmsg);
                 }
             }
@@ -717,6 +674,16 @@ namespace mongo {
 
          {
              boost::scoped_ptr<DBClientBase> conn( _config->createConnection() );
+             // Must authenticate to admin db in order to run serverStatus command
+             if (_config->username != "") {
+                 string errmsg;
+                 if (!conn->auth("admin", _config->username, _config->password, errmsg)) {
+                     uasserted(16704, 
+                               str::stream() << "User " << _config->username 
+                               << " could not authenticate to admin db; admin db access is "
+                               "required to use benchRun with auth enabled");
+                 }
+             }
              // Get initial stats
              conn->simpleCommand( "admin" , &before , "serverStatus" );
              before = before.getOwned();
@@ -738,6 +705,16 @@ namespace mongo {
 
          {
              boost::scoped_ptr<DBClientBase> conn( _config->createConnection() );
+             if (_config->username != "") {
+                 string errmsg;
+                 // this can only fail if admin access was revoked since start of run
+                 if (!conn->auth("admin", _config->username, _config->password, errmsg)) {
+                     uasserted(16705,
+                               str::stream() << "User " << _config->username 
+                               << " could not authenticate to admin db; admin db access is "
+                               "still required to use benchRun with auth enabled");
+                 }
+             }
              // Get final stats
              conn->simpleCommand( "admin" , &after , "serverStatus" );
              after = after.getOwned();
@@ -834,7 +811,7 @@ namespace mongo {
      /**
       * benchRun( { ops : [] , host : XXX , db : XXXX , parallel : 5 , seconds : 5 }
       */
-     BSONObj benchRunSync( const BSONObj& argsFake, void* data ) {
+     BSONObj BenchRunner::benchRunSync( const BSONObj& argsFake, void* data ) {
 
          BSONObj start = benchStart( argsFake, data );
 
@@ -848,7 +825,7 @@ namespace mongo {
      /**
       * benchRun( { ops : [] , host : XXX , db : XXXX , parallel : 5 , seconds : 5 }
       */
-     BSONObj benchStart( const BSONObj& argsFake, void* data ) {
+     BSONObj BenchRunner::benchStart( const BSONObj& argsFake, void* data ) {
 
          verify( argsFake.firstElement().isABSONObj() );
          BSONObj args = argsFake.firstElement().Obj();
@@ -863,7 +840,7 @@ namespace mongo {
     /**
      * benchRun( { ops : [] , host : XXX , db : XXXX , parallel : 5 , seconds : 5 }
      */
-    BSONObj benchFinish( const BSONObj& argsFake, void* data ) {
+    BSONObj BenchRunner::benchFinish( const BSONObj& argsFake, void* data ) {
 
         OID oid = OID( argsFake.firstElement().String() );
 
@@ -875,11 +852,4 @@ namespace mongo {
         return BSON( "" << finalObj );
     }
 
-    void installBenchmarkSystem( Scope& scope ) {
-        scope.injectNative( "benchRun" , benchRunSync );
-        scope.injectNative( "benchRunSync" , benchRunSync );
-        scope.injectNative( "benchStart" , benchStart );
-        scope.injectNative( "benchFinish" , benchFinish );
-    }
-
-}
+} // namespace mongo

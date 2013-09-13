@@ -121,12 +121,19 @@ commonFiles = [ "pch.cpp",
                 "client/distlock.cpp",
                 ]
 
+env.StaticLibrary("fail_point",
+                  ["util/fail_point.cpp",
+                   "util/fail_point_registry.cpp",
+                   "util/fail_point_service.cpp"],
+                  LIBDEPS=["foundation", "bson"])
+
 env.StaticLibrary('mongocommon', commonFiles,
                   LIBDEPS=['bson',
                            'foundation',
                            'md5',
                            'stacktrace',
                            'stringutils',
+                           'fail_point',
                            '$BUILD_DIR/third_party/pcrecpp',
                            '$BUILD_DIR/third_party/murmurhash3/murmurhash3',
                            '$BUILD_DIR/third_party/shim_boost'],)
@@ -137,6 +144,7 @@ env.StaticLibrary("coredb", [
         "db/client_transaction.cpp",
         "db/opsettings.cpp",
         "db/commands.cpp",
+        "db/commands/fail_point_cmd.cpp",
         "db/commands/hashcmd.cpp",
         "db/commands/isself.cpp",
         "db/pipeline/pipeline.cpp",
@@ -165,6 +173,7 @@ env.StaticLibrary("coredb", [
         "db/pipeline/document_source_command_shards.cpp",
         "db/pipeline/document_source_filter.cpp",
         "db/pipeline/document_source_filter_base.cpp",
+        "db/pipeline/document_source_geo_near.cpp",
         "db/pipeline/document_source_group.cpp",
         "db/pipeline/document_source_limit.cpp",
         "db/pipeline/document_source_match.cpp",
@@ -213,14 +222,15 @@ env.CppUnitTest('bson_template_evaluator_test', ['scripting/bson_template_evalua
                 LIBDEPS=['bson_template_evaluator'])
 
 if usesm:
-    env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_spidermonkey.cpp'],
+    env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_spidermonkey.cpp',
+                                                             'scripting/sm_db.cpp'],
                       LIBDEPS=['$BUILD_DIR/third_party/js-1.7/js', 'bson_template_evaluator'])
 elif usev8:
     env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_v8.cpp',
                                                              'scripting/v8_db.cpp',
                                                              'scripting/v8_utils.cpp',
-                                                             'scripting/v8_wrapper.cpp'],
-                       LIBDEPS=['bson_template_evaluator'])
+                                                             'scripting/v8_profiler.cpp'],
+                       LIBDEPS=['bson_template_evaluator', '$BUILD_DIR/third_party/shim_v8'])
 else:
     env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_none.cpp'],
                       LIBDEPS=['bson_template_evaluator'])
@@ -328,6 +338,8 @@ serverOnlyFiles = [ "db/curop.cpp",
 
 env.Library( "dbcmdline", "db/cmdline.cpp" )
 
+env.CppUnitTest('v8_deadline_monitor_test', 'scripting/v8_deadline_monitor_test.cpp', LIBDEPS=[])
+
 env.Library('stacktrace', 'util/stacktrace.cpp')
 
 env.Program('lame_stacktrace_test', 'util/lame_stacktrace_test.cpp',
@@ -368,6 +380,10 @@ env.Library( "mongoscore" , mongosLibraryFiles )
 env.CppUnitTest( "balancer_policy_test" , [ "s/balancer_policy_tests.cpp" ] , LIBS=env['LIBS'] + tokulibs,
                  LIBDEPS=["mongoscore", "coreshard","mongocommon","coreserver","coredb","dbcmdline","mongodandmongos"] ,
                  NO_CRUTCH=True)
+
+# Should only need stuff from util, unittest and platform
+env.CppUnitTest("fail_point_test", [ "util/fail_point_test.cpp" ],
+                LIBDEPS=["fail_point"])
 
 env.CppUnitTest("shard_test", [ "s/shard_test.cpp" ], LIBS=env['LIBS'] + tokulibs,
                 LIBDEPS=[ "mongoscore",
@@ -410,15 +426,6 @@ env.StaticLibrary("notmongodormongos", everythingButMongodAndMongosFiles)
 
 mongodOnlyFiles = [ "db/db.cpp", "db/commands/touch.cpp" ]
 
-# create a library per module, and add it as a dependency
-# for the mongod target; as of now, modules are only included
-# in mongod, as though they were part of serverOnlyFiles
-modules = []
-for modName, modSources in env["MONGO_MODULES"].items():
-    libName = "mod%s" % modName
-    env.StaticLibrary(libName, modSources)
-    modules.append(libName)
-
 # ----- TARGETS ------
 
 env.StaticLibrary("gridfs", "client/gridfs.cpp")
@@ -429,7 +436,7 @@ env.StaticLibrary("coreserver", coreServerFiles, LIBDEPS=["mongocommon", "script
 mongod = env.Install(
     '#/', env.Program( "mongod", mongodOnlyFiles, LIBS=['HotBackup'] + env['LIBS'] + tokulibs,
                        LIBDEPS=["coreserver", "serveronly", "coredb", "ntservice",
-                                "mongodandmongos"] + modules ) )
+                                "mongodandmongos"] + env['MODULE_LIBDEPS_MONGOD'] ) )
 Default( mongod )
 
 # tools
@@ -459,7 +466,7 @@ env.Install( '#/', [
 mongos = env.Program(
     "mongos", [ "s/server.cpp"] ,
     LIBS=env['LIBS'] + tokulibs, LIBDEPS=["mongoscore", "coreserver", "coredb", "mongocommon", "coreshard", "dbcmdline", "ntservice",
-             "mongodandmongos"])
+             "mongodandmongos"] + env['MODULE_LIBDEPS_MONGOS'])
 env.Install( '#/', mongos )
 
 env.Library("clientandshell", ["client/authentication_table_client.cpp",
@@ -505,12 +512,15 @@ if darwin or env["_HAVEPCAP"]:
 # --- shell ---
 
 # if you add a file here, you need to add it in scripting/engine.cpp and shell/createCPPfromJavaScriptFiles.js as well
-env.JSHeader( "shell/mongo.cpp" , 
-              [ "shell/utils.js","shell/utils_sh.js","shell/db.js","shell/mongo.js","shell/mr.js","shell/query.js","shell/collection.js"] )
+env.JSHeader("shell/mongo.cpp",
+             ["shell/assert.js", "shell/types.js", "shell/utils.js", "shell/utils_sh.js",
+              "shell/db.js", "shell/mongo.js", "shell/mr.js", "shell/query.js",
+              "shell/collection.js"])
 
 # if you add a file here, you need to add it in shell/shell_utils.cpp and shell/createCPPfromJavaScriptFiles.js as well
-env.JSHeader( "shell/mongo-server.cpp" ,
-              ["shell/servers.js", "shell/shardingtest.js", "shell/servers_misc.js", "shell/replsettest.js", "shell/replsetbridge.js"] )
+env.JSHeader("shell/mongo-server.cpp",
+             ["shell/servers.js", "shell/shardingtest.js",
+              "shell/servers_misc.js", "shell/replsettest.js", "shell/replsetbridge.js"])
 
 coreShellFiles = [ "shell/dbshell.cpp",
                    "shell/shell_utils.cpp",
@@ -526,7 +536,7 @@ if shellEnv is not None:
         "mongo",
         coreShellFiles,
         LIBDEPS=["coreserver", "clientandshell",
-                 "$BUILD_DIR/third_party/pcrecpp"] )
+                 "$BUILD_DIR/third_party/pcrecpp"] + env['MODULE_LIBDEPS_MONGOSHELL'] )
 
     shellEnv.Install( '#/', mongo_shell )
 

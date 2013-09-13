@@ -25,8 +25,8 @@
 
 #pragma once
 
-#include "../util/optime.h"
-#include "../util/time_support.h"
+#include "mongo/util/optime.h"
+#include "mongo/util/time_support.h"
 
 namespace mongo {
 
@@ -38,6 +38,11 @@ namespace mongo {
     inline BSONObjBuilder& BSONObjBuilder::appendTimestamp( const StringData& fieldName , unsigned long long time , unsigned int inc ) {
         OpTime t( (unsigned) (time / 1000) , inc );
         appendTimestamp( fieldName , t.asDate() );
+        return *this;
+    }
+
+    inline BSONObjBuilder& BSONObjBuilder::append(const StringData& fieldName, OpTime optime) {
+        appendTimestamp(fieldName, optime.asDate());
         return *this;
     }
 
@@ -61,27 +66,34 @@ namespace mongo {
         return "";
     }
 
-    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(DateNowLabeler& id) {
+    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(const DateNowLabeler& id) {
         _builder->appendDate(_fieldName, jsTime());
-        _fieldName = 0;
+        _fieldName = StringData();
         return *_builder;
     }
 
-    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(NullLabeler& id) {
+    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(const NullLabeler& id) {
         _builder->appendNull(_fieldName);
-        _fieldName = 0;
+        _fieldName = StringData();
         return *_builder;
     }
 
-    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(MinKeyLabeler& id) {
+    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(const UndefinedLabeler& id) {
+        _builder->appendUndefined(_fieldName);
+        _fieldName = StringData();
+        return *_builder;
+    }
+
+
+    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(const MinKeyLabeler& id) {
         _builder->appendMinKey(_fieldName);
-        _fieldName = 0;
+        _fieldName = StringData();
         return *_builder;
     }
 
-    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(MaxKeyLabeler& id) {
+    inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<(const MaxKeyLabeler& id) {
         _builder->appendMaxKey(_fieldName);
-        _fieldName = 0;
+        _fieldName = StringData();
         return *_builder;
     }
 

@@ -93,16 +93,17 @@ namespace mongo {
         */
         void toBson(BSONObjBuilder *pBuilder) const;
 
+        /** Stitch together the source pointers (by calling setSource) for each source in sources.
+         *  Must be called after optimize and addInitialSource but before trying to get results.
+         */
+        void stitch();
+
         /**
           Run the Pipeline on the given source.
 
           @param result builder to write the result to
-          @param errmsg place to put error messages, if any
-          @param pSource the document source to use at the head of the chain
-          @returns true on success, false if an error occurs
         */
-        bool run(BSONObjBuilder &result, string &errmsg,
-                 const intrusive_ptr<DocumentSource> &pSource);
+        void run(BSONObjBuilder& result);
 
         /**
           Debugging:  should the processing pipeline be split within
@@ -123,6 +124,12 @@ namespace mongo {
            @returns true if this is an explain
          */
         bool isExplain() const;
+
+        /// The initial source is special since it varies between mongos and mongod.
+        void addInitialSource(intrusive_ptr<DocumentSource> source);
+
+        /// The source that represents the output. Returns a non-owning pointer.
+        DocumentSource* output() { return sources.back().get(); }
 
         /**
           The aggregation command name.
@@ -167,10 +174,8 @@ namespace mongo {
           information for the input source.
 
           @param result the object to add the explain information to
-          @param pInputSource source for the pipeline
          */
-        void writeExplainShard(BSONObjBuilder &result,
-            const intrusive_ptr<DocumentSource> &pInputSource) const;
+        void writeExplainShard(BSONObjBuilder &result) const;
 
         /*
           Write the pipeline's operators to the given result document,
@@ -184,15 +189,12 @@ namespace mongo {
           information for the input source.
 
           @param result the object to add the explain information to
-          @param pInputSource source for the pipeline; expected to be the
-            output of a shard
          */
-        void writeExplainMongos(BSONObjBuilder &result,
-            const intrusive_ptr<DocumentSource> &pInputSource) const;
+        void writeExplainMongos(BSONObjBuilder &result) const;
 
         string collectionName;
-        typedef vector<intrusive_ptr<DocumentSource> > SourceVector;
-        SourceVector sourceVector;
+        typedef deque<intrusive_ptr<DocumentSource> > SourceContainer;
+        SourceContainer sources;
         bool explain;
 
         bool splitMongodPipeline;

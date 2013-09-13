@@ -60,7 +60,7 @@ namespace mongo {
         const StringData &name = _info["name"].Stringdata();
         const BSONObj &keyPattern = _info["key"].Obj();
 
-        uassert(16449, str::stream() << "dropDups is not supported and is likely to remain "
+        uassert(16922, str::stream() << "dropDups is not supported and is likely to remain "
                        << "unsupported for some time because it deletes arbitrary data",
                        !_info["dropDups"].trueValue());
 
@@ -83,7 +83,7 @@ namespace mongo {
 
         // The first index we create should be the pk index, when we first create the collection.
         if (!_isSecondaryIndex) {
-            massert(16435, "first index should be pk index", keyPattern == _d->_pk);
+            massert(16923, "first index should be pk index", keyPattern == _d->_pk);
         }
 
         // Note this ns in the rollback so if this transaction aborts, we'll

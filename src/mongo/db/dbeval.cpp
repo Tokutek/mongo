@@ -58,7 +58,7 @@ namespace mongo {
             return false;
         }
 
-        auto_ptr<Scope> s = globalScriptEngine->getPooledScope( dbName );
+        auto_ptr<Scope> s = globalScriptEngine->getPooledScope( dbName, "dbeval" );
         ScriptingFunction f = s->createFunction(code);
         if ( f == 0 ) {
             errmsg = (string)"compile failed: " + s->getError();
@@ -92,14 +92,17 @@ namespace mongo {
                 else OCCASIONALLY log() << code << endl;
             }
         }
-        if ( res ) {
+        if (res || s->isLastRetNativeCode()) {
             result.append("errno", (double) res);
             errmsg = "invoke failed: ";
-            errmsg += s->getError();
+            if (s->isLastRetNativeCode())
+                errmsg += "cannot return native function";
+            else
+                errmsg += s->getError();
             return false;
         }
 
-        s->append( result , "retval" , "return" );
+        s->append( result , "retval" , "__returnValue" );
 
         return true;
     }

@@ -12,7 +12,7 @@ For instructions on building TokuKV, see [Tokutek/ft-index](http://github.com/To
 SCONS
 ---------------
 
-For detail information about building, please see [the wiki](http://dochub.mongodb.org/core/building).
+For detail information about building, please see [the manual](http://dochub.mongodb.org/core/building).
 
 If you want to build everything (mongod, mongo, tools, etc):
 
