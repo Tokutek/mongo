@@ -73,6 +73,7 @@ namespace mongo {
 
         // error handling
         ExceptionInfo exceptionInfo;
+        BSONObj lockNotGrantedInfo;
         
         // response info
         int executionTime;
