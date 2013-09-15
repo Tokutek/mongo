@@ -19,10 +19,13 @@
 #include "mongo/pch.h"
 
 #include <exception>
+#include <fstream>
+#include <iostream>
 #include <signal.h>
 #include <string.h>
 
 #include <boost/program_options.hpp>
+#include <boost/filesystem.hpp>
 
 #include "mongo/tools/tool.h"
 
@@ -261,6 +264,7 @@ class VanillaOplogPlayer : boost::noncopyable {
 };
 
 class OplogTool : public Tool {
+    static const char *_tsFilename;
     bool _logAtExit;
     scoped_ptr<VanillaOplogPlayer> _player;
     scoped_ptr<ScopedDbConnection> _rconn;
@@ -274,7 +278,23 @@ public:
                 log() << "Exiting while processing operation with OpTime " << _player->thisTimeStr() << endl;
             }
             report();
-            log() << "Use --ts=" << _player->maxOpTimeSyncedStr() << " to resume." << endl;
+            string tsString = _player->maxOpTimeSyncedStr();
+            log() << "Use --ts=" << tsString << " to resume." << endl;
+            try {
+                std::ofstream tsFile;
+                tsFile.exceptions(std::ifstream::badbit | std::ifstream::failbit);
+                tsFile.open(_tsFilename);
+                tsFile << tsString;
+                tsFile.close();
+                log() << "Saved timestamp to file "
+                      << (boost::filesystem::current_path() / _tsFilename).string() << "." << endl;
+                log() << "I'll automatically use this value next time if you don't pass --ts "
+                      << "and run from this directory." << endl;
+            }
+            catch (std::exception &e) {
+                warning() << "Error saving timestamp to file " << _tsFilename << ": " << e.what() << endl;
+                warning() << "Make sure you save the timestamp somewhere, because I couldn't!" << endl;
+            }
         }
     }
     static volatile bool running;
@@ -345,17 +365,34 @@ public:
         LOG(1) << "connected" << endl;
 
         {
-            OpTime maxOpTimeSynced;
+            string tsString;
             if (hasParam("ts")) {
-                unsigned secs, i;
-                const string &ts(getParam("ts"));
-                int r = sscanf(ts.c_str(), "%u:%u", &secs, &i);
-                if (r != 2) {
-                    log() << "need to specify --ts as <secs>:<inc>" << endl;
-                    return -1;
-                }
-                maxOpTimeSynced = OpTime(secs, i);
+                tsString = getParam("ts");
             }
+            else {
+                try {
+                    ifstream tsFile;
+                    tsFile.exceptions(std::ifstream::badbit | std::ifstream::failbit);
+                    tsFile.open(_tsFilename);
+                    tsFile >> tsString;
+                    tsFile.close();
+                } catch (std::exception &e) {
+                    warning() << "Couldn't read OpTime from file " << _tsFilename << ": " << e.what() << endl;
+                }
+            }
+            if (tsString.empty()) {
+                warning() << "No starting OpTime provided. "
+                          << "Please find the right starting point and run again with --ts." << endl;
+                return -1;
+            }
+            unsigned secs, i;
+            OpTime maxOpTimeSynced;
+            int r = sscanf(tsString.c_str(), "%u:%u", &secs, &i);
+            if (r != 2) {
+                warning() << "need to specify --ts as <secs>:<inc>" << endl;
+                return -1;
+            }
+            maxOpTimeSynced = OpTime(secs, i);
 
             _player.reset(new VanillaOplogPlayer(conn(), _host, maxOpTimeSynced, running, _logAtExit));
         }
@@ -460,6 +497,8 @@ public:
         }
     }
 };
+
+const char *OplogTool::_tsFilename = "__mongo2toku_saved_timestamp__";
 
 volatile bool OplogTool::running = false;
 
