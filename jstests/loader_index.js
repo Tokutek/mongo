@@ -50,6 +50,21 @@ var testMultiKey = function() {
     assert.eq(1, t.find({ a: 5 }).hint({ a: 1 }).itcount(), "finding 5" );
 }();
 
+var testNotMultiKey = function() {
+    t = db.loadernotmultikey;
+    t.drop();
+    begin();
+    beginLoad('loadernotmultikey', [ { key: { a: 1 }, name: "a_1" } ], { });
+    t.insert({ a: 1 });
+    t.insert({ b: 2 });
+    commitLoad();
+    commit();
+    assert.eq(false, t.find({ a: 1 }).hint({ a: 1 }).explain().isMultiKey);
+    assert.eq(2, t.count());
+    assert.eq(1, t.find({ a: 1 }).hint({ a: 1 }).itcount(), "finding 1" );
+    assert.eq(1, t.find({ b: 2 }).hint({ a: 1 }).itcount(), "finding 2" );
+}();
+
 var testHashed = function() {
     t = db.loaderhashedidx;
     t.drop();

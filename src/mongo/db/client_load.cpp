@@ -33,10 +33,6 @@ namespace mongo {
     // creating a child transaction for the load, and ensuring that this client
     // only loads one ns at a time.
 
-    // The try pattern used here isn't pretty.
-    // Maybe there's an RAII solution to this: I haven't thought
-    // of one that I like just yet.
-
     void Client::beginClientLoad(const StringData &ns, const vector<BSONObj> &indexes,
                                  const BSONObj &options) {
         uassert( 16915, "Cannot begin load, one is already in progress",

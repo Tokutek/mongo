@@ -622,9 +622,9 @@ namespace mongo {
                                            _lastDeletedPK.firstElement().Long() : 0;
                 // TODO: Disable prelocking on this cursor, or somehow prevent waiting 
                 //       on row locks we can't get immediately.
-                for ( shared_ptr<Cursor> c(IndexCursor::make(this, getPKIndex(),
-                                           BSON("" << startKey), maxKey, true, 1) );
-                      c->ok(); c->advance() ) {
+                for (shared_ptr<Cursor> c(IndexCursor::make(this, getPKIndex(),
+                                          BSON("" << startKey), maxKey, true, 1));
+                     c->ok(); c->advance()) {
                     BSONObj oldestPK = c->currPK();
                     BSONObj oldestObj = c->current();
                     trimmedBytes += oldestPK.objsize();
@@ -650,8 +650,7 @@ namespace mongo {
         // Remove everything from this capped collection
         void empty() {
             SimpleMutex::scoped_lock lk(_deleteMutex);
-            shared_ptr<Cursor> c( BasicCursor::make(this) );
-            for ( ; c->ok() ; c->advance() ) {
+            for (shared_ptr<Cursor> c( BasicCursor::make(this) ); c->ok() ; c->advance()) {
                 _deleteObject(c->currPK(), c->current(), 0);
             }
             _lastDeletedPK = BSONObj();
@@ -710,18 +709,10 @@ namespace mongo {
         }
     };
 
-    // A BulkLoadedCollection is a facade for an IndexedCollection that
-    // utilizes a namespace builder for faster insertions. Other flavors
-    // of writes are not allowed.
+    // A BulkLoadedCollection is a facade for an IndexedCollection that utilizes
+    // a bulk loader for insertions. Other flavors of writes are not allowed.
     //
-    // The underlying indexes must be fully write locked, and they must be empty.
-    // Other threads that read this collection will see nothing while it is
-    // under-going load, due to MVCC. Due to the implementation, the _calling_
-    // transaction will also see nothing if this collection is queried, because
-    // the bulk insertions going through a loader are not immediately applied to
-    // the underlying dictionaries (this specific behavior is implementation-specific).
-    // Because of this, the result of querying an indexed collection on the same
-    // transaction that initiated it is undefined (though non-crashing / corrupting).
+    // The underlying indexes must exist and be empty.
     class BulkLoadedCollection : public IndexedCollection {
     public:
         BulkLoadedCollection(const BSONObj &serialized) :
@@ -1086,19 +1077,21 @@ namespace mongo {
         }
     }
 
-    // TODO: Cache two of these in the client object so they're not created/destroyed
-    //       every time a connection/transaction does a single write. (multi inserts,
-    //       updates, deletes should come to mind)
-    class DBTArraysHolder : boost::noncopyable {
+    // Manages an array of DBT_ARRAYs and the lifetime of the objects they store.
+    //
+    // It may be a good idea to cache two of these in the client object so
+    // they're not created/destroyed every time a connection/transaction
+    // does a single write. (multi inserts/updates/deletes come to mind)
+    class DBTArrays : boost::noncopyable {
     public:
-        DBTArraysHolder(DBT_ARRAY *dbt_arrays, const size_t n) :
-            _dbt_arrays(dbt_arrays),
+        DBTArrays(const size_t n) :
+            _arrays(new DBT_ARRAY[n]),
             _n(n) {
-            memset(dbt_arrays, 0, n * sizeof(DBT_ARRAY));
+            memset(_arrays.get(), 0, n * sizeof(DBT_ARRAY));
         }
-        ~DBTArraysHolder() {
+        ~DBTArrays() {
             for (size_t i = 0; i < _n; i++) {
-                DBT_ARRAY *dbt_array = &_dbt_arrays[i];
+                DBT_ARRAY *dbt_array = &_arrays[i];
                 for (size_t j = 0; j < dbt_array->capacity; j++) {
                     DBT *dbt = &dbt_array->dbts[j];
                     if (dbt->data != NULL && dbt->flags == DB_DBT_REALLOC) {
@@ -1112,8 +1105,11 @@ namespace mongo {
                 }
             }
         }
+        DBT_ARRAY *arrays() const {
+            return _arrays.get();
+        }
     private:
-        DBT_ARRAY *const _dbt_arrays;
+        scoped_array<DBT_ARRAY> _arrays;
         const size_t _n;
     };
 
@@ -1123,10 +1119,8 @@ namespace mongo {
 
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
-        DBT_ARRAY key_dbt_arrays[n];
-        DBT_ARRAY val_dbt_arrays[n];
-        DBTArraysHolder keyArraysHolder(key_dbt_arrays, n);
-        DBTArraysHolder valArraysHolder(val_dbt_arrays, n);
+        DBTArrays keyArrays(n);
+        DBTArrays valArrays(n);
         uint32_t put_flags[n];
 
         storage::Key sPK(pk, NULL);
@@ -1136,27 +1130,19 @@ namespace mongo {
         for (int i = 0; i < n; i++) {
             const bool isPK = i == 0;
             const bool prelocked = flags & NamespaceDetails::NO_LOCKTREE;
-            const bool noUniqueChecks = flags & NamespaceDetails::NO_UNIQUE_CHECKS;
+            const bool doUniqueChecks = !(flags & NamespaceDetails::NO_UNIQUE_CHECKS);
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
-            put_flags[i] = (isPK && !noUniqueChecks ? DB_NOOVERWRITE : 0) |
-                           (prelocked ? DB_PRELOCKED_WRITE : 0);
 
-            // TODO: We need to generate keys here to check uniqueness and possible
-            //       set the multikey bit for an index. Find a way to store the keys
-            //       generated in the above DBT_ARRAYs in such a way that the we can
-            //       detect in the generate_row_for_put callback that keys do not
-            //       need to be generated.
-            //
-            //       This should be as easy as setting the DBTs here and checking for
-            //       a non-empty DBT_ARRAY in the generate callback. Only question:
-            //       does the ydb ever give the generate callback a non empty DBT_ARRAY?
-            //       Maybe during recovery? It shouldn't.
+            // Primary key uniqueness check will be done at the ydb layer.
+            // Secondary key uniqueness checks are done below, if necessary.
+            put_flags[i] = (isPK && doUniqueChecks ? DB_NOOVERWRITE : 0) |
+                           (prelocked ? DB_PRELOCKED_WRITE : 0);
 
             BSONObjSet idxKeys;
             if (!isPK) {
                 idx.getKeysFromObject(obj, idxKeys);
-                if (idx.unique() && !noUniqueChecks) {
+                if (idx.unique() && doUniqueChecks) {
                     for (BSONObjSet::const_iterator o = idxKeys.begin(); o != idxKeys.end(); ++o) {
                         idx.uniqueCheck(*o, &pk);
                     }
@@ -1170,7 +1156,7 @@ namespace mongo {
         DB_ENV *env = storage::env;
         const int r = env->put_multiple(env, dbs[0], cc().txn().db_txn(),
                                         &src_key, &src_val,
-                                        n, dbs, key_dbt_arrays, val_dbt_arrays, put_flags);
+                                        n, dbs, keyArrays.arrays(), valArrays.arrays(), put_flags);
         if (r == EINVAL) {
             uasserted( 16900, str::stream() << "Indexed insertion failed." <<
                               " This may be due to keys > 32kb. Check the error log." );
@@ -1185,10 +1171,7 @@ namespace mongo {
 
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
-        DBT_ARRAY key_dbt_arrays[n];
-        DBT_ARRAY val_dbt_arrays[n];
-        DBTArraysHolder keyArraysHolder(key_dbt_arrays, n);
-        DBTArraysHolder valArraysHolder(val_dbt_arrays, n);
+        DBTArrays keyArrays(n);
         uint32_t del_flags[n];
 
         storage::Key sPK(pk, NULL);
@@ -1205,7 +1188,7 @@ namespace mongo {
         DB_ENV *env = storage::env;
         const int r = env->del_multiple(env, dbs[0], cc().txn().db_txn(),
                                         &src_key, &src_val,
-                                        n, dbs, key_dbt_arrays, del_flags);
+                                        n, dbs, keyArrays.arrays(), del_flags);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
@@ -1239,10 +1222,8 @@ namespace mongo {
 
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
-        DBT_ARRAY key_dbt_arrays[n * 2];
-        DBT_ARRAY val_dbt_arrays[n];
-        DBTArraysHolder keysArraysHolder(key_dbt_arrays, n * 2);
-        DBTArraysHolder valsArraysHolder(val_dbt_arrays, n);
+        DBTArrays keyArrays(n * 2);
+        DBTArrays valArrays(n);
         uint32_t update_flags[n];
 
         storage::Key sPK(pk, NULL);
@@ -1255,7 +1236,7 @@ namespace mongo {
         for (int i = 0; i < n; i++) {
             const bool isPK = i == 0;
             const bool prelocked = flags & NamespaceDetails::NO_LOCKTREE;
-            const bool noUniqueChecks = flags & NamespaceDetails::NO_UNIQUE_CHECKS;
+            const bool doUniqueChecks = !(flags & NamespaceDetails::NO_UNIQUE_CHECKS);
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
             update_flags[i] = prelocked ? DB_PRELOCKED_WRITE : 0;
@@ -1265,7 +1246,7 @@ namespace mongo {
                 BSONObjSet newIdxKeys;
                 idx.getKeysFromObject(oldObj, oldIdxKeys);
                 idx.getKeysFromObject(newObj, newIdxKeys);
-                if (idx.unique() && !noUniqueChecks) {
+                if (idx.unique() && doUniqueChecks) {
                     // Only perform the unique check if the key actually changed.
                     for (BSONObjSet::iterator o = newIdxKeys.begin(); o != newIdxKeys.end(); ++o) {
                         const BSONObj &k = *o;
@@ -1286,7 +1267,7 @@ namespace mongo {
                                            &src_key, &old_src_val,
                                            &src_key, &new_src_val,
                                            n, dbs, update_flags,
-                                           n * 2, key_dbt_arrays, n, val_dbt_arrays);
+                                           n * 2, keyArrays.arrays(), n, valArrays.arrays());
         if (r == EINVAL) {
             uasserted( 16908, str::stream() << "Indexed insertion (on update) failed." <<
                               " This may be due to keys > 32kb. Check the error log." );
@@ -1324,7 +1305,7 @@ namespace mongo {
     }
 
     void NamespaceDetails::empty() {
-        for ( shared_ptr<Cursor> c( BasicCursor::make(this) ); c->ok() ; c->advance() ) {
+        for (shared_ptr<Cursor> c( BasicCursor::make(this) ); c->ok(); c->advance()) {
             deleteObject(c->currPK(), c->current(), 0);
         }
         resetTransient();
@@ -1683,13 +1664,17 @@ namespace mongo {
 
     void renameNamespace(const StringData& from, const StringData& to, bool stayTemp) {
         Lock::assertWriteLocked(from);
-        verify( nsdetails(from) != NULL );
+
+        NamespaceDetails *from_details = nsdetails(from);
+        verify( from_details != NULL );
         verify( nsdetails(to) == NULL );
 
-        uassert( 16896, "Cannot rename a collection under-going bulk load.", from != cc().bulkLoadNS() );
+        uassert( 16896, "Cannot rename a collection under-going bulk load.",
+                        from != cc().bulkLoadNS() );
+        uassert( 16918, "Cannot rename a collection with a background index build in progress",
+                        !from_details->indexBuildInProgress() );
 
-        // Invalidate any existing cursors on the old namespace details,
-        // and reset the query cache.
+        // Kill open cursors before we close and rename the namespace
         ClientCursor::invalidate( from );
 
         StringData database = nsToDatabaseSubstring(from);
@@ -1699,7 +1684,7 @@ namespace mongo {
         // Generate the serialized form of the namespace, and then close it.
         // This will close the underlying dictionaries and allow us to
         // rename them in the environment.
-        BSONObj serialized = nsdetails(from)->serialize();
+        BSONObj serialized = from_details->serialize();
         bool closed = nsindex(from)->close_ns(from);
         verify(closed);
 
@@ -1710,8 +1695,8 @@ namespace mongo {
             {
                 // Find all entries in sysIndexes for the from ns
                 Client::Context ctx( sysIndexes );
-                for ( shared_ptr<Cursor> c( getOptimizedCursor( sysIndexes, nsQuery ) );
-                      c->ok(); c->advance() ) {
+                for (shared_ptr<Cursor> c( getOptimizedCursor( sysIndexes, nsQuery ) );
+                     c->ok(); c->advance()) {
                     if (c->currentMatches()) {
                         indexSpecs.push_back( c->current().copy() );
                     }

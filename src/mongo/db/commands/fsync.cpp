@@ -62,7 +62,6 @@ namespace mongo {
 
             bool sync = !cmdObj["async"].trueValue(); // async means do an fsync, but return immediately
             bool lock = cmdObj["lock"].trueValue();
-            log() << "CMD fsync: sync:" << sync << " lock:" << lock << endl;
             if( lock ) {
                 if ( ! sync ) {
                     errmsg = "fsync: sync option must be true when using lock";
@@ -92,11 +91,11 @@ namespace mongo {
                 // the simple fsync command case
                 if (sync) {
                     Lock::GlobalWrite w; // can this be GlobalRead? and if it can, it should be nongreedy.
-                    problem() << " flushAll/commitNow not implemented, doing nothing!" << endl;
+                    DEV LOG(0) << "in fsync: flushAll/commitNow not implemented, doing nothing!" << endl;
                 }
                 // question : is it ok this is not in the dblock? i think so but this is a change from past behavior, 
                 // please advise.
-                problem() << " number of files flushed not known, arbitrarily reporting 1!" << endl;
+                DEV LOG(0) << "in fsync: number of files flushed not known, arbitrarily reporting 1!" << endl;
                 result.append( "numFiles" , 1 );
             }
             return 1;

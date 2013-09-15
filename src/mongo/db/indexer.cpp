@@ -34,12 +34,17 @@ namespace mongo {
         Lock::assertWriteLocked(_d->_ns);
 
         if (_d->_indexBuildInProgress) {
-            shared_ptr<IndexDetails> idx = _d->_indexes.back();
+            verify(_idx.get() == _d->_indexes.back().get());
+            // Pop back the index from the index vector. We still
+            // have a shared pointer (_idx), so it won't close here.
             _d->_indexes.pop_back();
             _d->_indexBuildInProgress = false;
             verify(_d->_nIndexes == (int) _d->_indexes.size());
+            // If we catch any exceptions, eat them. We can only enter this block
+            // if we're already propogating an exception (ie: not under normal
+            // operation) so it's okay to just print to the log and continue.
             try {
-                idx->close();
+                _idx->close();
             } catch (const DBException &e) {
                 TOKULOG(0) << "Caught DBException exception while destroying Indexer: "
                            << e.getCode() << ", " << e.what() << endl;
@@ -163,7 +168,7 @@ namespace mongo {
     }
 
     void NamespaceDetails::ColdIndexer::build() {
-        Lock::assertAtLeastReadLocked(_d->_ns);
+        Lock::assertWriteLocked(_d->_ns);
         if (_isSecondaryIndex) {
             IndexDetails::Builder builder(*_idx);
 

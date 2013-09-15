@@ -286,7 +286,7 @@ namespace mongo {
         DB_TXN *db_txn() const { return _txn.db_txn(); }
         /** @return unique 64 bit transaction id */
         long long id64() const {
-            DB_TXN *txn = _txn.db_txn();
+            DB_TXN *txn = db_txn();
             return txn->id64(txn);
         }
         /** @return true iff this transaction is live */

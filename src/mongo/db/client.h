@@ -133,9 +133,13 @@ namespace mongo {
          * It is possible for one of these to get stolen from a Client, for example, if a cursor needs to persist it between requests.
          */
         class TransactionStack : boost::noncopyable {
-            std::deque<shared_ptr<TxnContext> > _txns;
+            // If we had emplace we wouldn't need a shared_ptr...
+            std::stack<shared_ptr<TxnContext> > _txns;
+            long long _rootTransactionId;
+            void push(shared_ptr<TxnContext> &newTxn);
+            void pop();
           public:
-            TransactionStack() {}
+            TransactionStack() : _txns(), _rootTransactionId(0) {}
             ~TransactionStack() {
                 // This ensures that things get destroyed in the right order, I don't know if std::stack gives that guarantee.
                 while (hasLiveTxn()) {
@@ -151,13 +155,12 @@ namespace mongo {
             /** Abort the innermost transaction. */
             void abortTxn();
             uint32_t numLiveTxns();
+            long long rootTransactionId() const { return _rootTransactionId; }
 
             /** @return true iff this transaction stack has a live txn. */
             bool hasLiveTxn() const;
             /** @return the innermost transaction. */
             TxnContext &txn() const;
-            /** @return the outermost transaction. */
-            TxnContext &rootTxn() const;
         };
 
         /**
@@ -197,8 +200,11 @@ namespace mongo {
         }
 
         long long rootTransactionId() const {
-            dassert(hasTxn());
-            return _transactions->rootTxn().id64();
+            shared_ptr<TransactionStack> stack = txnStack();
+            if (!stack) {
+                return 0;
+            }
+            return stack->rootTransactionId();
         }
 
         const shared_ptr<TransactionStack> &txnStack() const {

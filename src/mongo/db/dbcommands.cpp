@@ -1003,7 +1003,7 @@ namespace mongo {
                 BSONObjBuilder b;
                 b.append( "name", *i );
 
-                problem() << "don't know how to calculate the sizeOnDisk of a database yet!" << endl;
+                DEV LOG(0) << "don't know how to calculate the sizeOnDisk of a database yet!" << endl;
                 boost::intmax_t size = 0;
                 b.append( "sizeOnDisk", (double) size );
                 totalSize += size;

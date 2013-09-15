@@ -210,7 +210,13 @@ namespace mongo {
             // format to a BSON with field names.  TODO: optimize it if it shows up in profiling.
             BSONObj splitKey = _chunkPattern.prettyKey(endKey->toBson());
             c = splitKey.woCompare(_lastSplitKey, _ordering);
-            massert(16797, "next split key cannot be less than the last split key", c >= 0);
+            if (c < 0) {
+                stringstream ss;
+                ss << "next split key cannot be less than the last split key. "
+                   << "last key: " << _lastSplitKey
+                   << "next key: " << splitKey;
+                msgasserted(16797, ss.str());
+            }
             if (c == 0) {
                 // If we got the same as the current chunk min, that means there are many documents
                 // with that same key (or a few really big ones).  Since we can't split in the

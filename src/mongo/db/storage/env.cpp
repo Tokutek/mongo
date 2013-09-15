@@ -80,14 +80,15 @@ namespace mongo {
                 dbt->ulen = size;
                 dbt->data = realloc(dbt->flags == DB_DBT_REALLOC ? dbt->data : NULL, dbt->ulen);
                 dbt->flags = DB_DBT_REALLOC;
-                verify(dbt->data != NULL);
+                // Calling realloc() with a size of 0 may return NULL on some platforms
+                verify(dbt->ulen == 0 || dbt->data != NULL);
             }
             dbt->size = size;
             memcpy(dbt->data, data, size);
         }
 
-        static void dbt_array_clear_and_resize(DBT_ARRAY *dbt_array, const size_t new_capacity,
-                                                      const int flags = DB_DBT_REALLOC) {
+        static void dbt_array_clear_and_resize(DBT_ARRAY *dbt_array,
+                                               const size_t new_capacity) {
             const size_t old_capacity = dbt_array->capacity;
             if (old_capacity < new_capacity) {
                 dbt_array->capacity = new_capacity;
@@ -218,7 +219,7 @@ namespace mongo {
             env->set_errpfx(env, "TokuMX");
 
             const uint64_t cachesize = (cmdLine.cacheSize > 0
-                                        ? cmdLine.cacheSize
+                                        ? (uint64_t) cmdLine.cacheSize
                                         : calculate_cachesize());
             const uint32_t bytes = cachesize % (1024L * 1024L * 1024L);
             const uint32_t gigabytes = cachesize >> 30;
@@ -229,12 +230,15 @@ namespace mongo {
             TOKULOG(1) << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
 
             // Use 10% the size of the cachetable for lock tree memory
-            const uint64_t lock_memory = cachesize / 10;
+            // if no value was specified on the command line.
+            const uint64_t lock_memory = (cmdLine.locktreeMaxMemory > 0
+                                          ? (uint64_t) cmdLine.locktreeMaxMemory
+                                          : (cachesize / 10));
             r = env->set_lk_max_memory(env, lock_memory);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            tokulog() << "locktree max memory set to " << lock_memory << " bytes." << endl;
+            TOKULOG(1) << "locktree max memory set to " << lock_memory << " bytes." << endl;
 
             const uint64_t lock_timeout = cmdLine.lockTimeout;
             r = env->set_lock_timeout(env, lock_timeout);
@@ -772,6 +776,8 @@ namespace mongo {
             switch (error) {
                 case ENOENT:
                     throw SystemException::Enoent();
+                case ENAMETOOLONG:
+                    throw UserException(16917, "Index name too long (must be shorter than the filesystem's max path)");
                 case ASSERT_IDS::AmbiguousFieldNames:
                     uasserted( storage::ASSERT_IDS::AmbiguousFieldNames,
                                mongoutils::str::stream() << "Ambiguous field name found in array" );

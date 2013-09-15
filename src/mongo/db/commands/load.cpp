@@ -21,24 +21,29 @@
 
 namespace mongo {
 
-    // TODO: Do we need to catch uasserts, set ok = false, and then rethrow?
-    // TODO: Is InformationCommand the interface we want to inherit from?
-
-    class BeginLoadCmd : public InformationCommand {
+    class LoaderCommand : public InformationCommand {
     public:
+        LoaderCommand(const char *name, bool webUI=false, const char *oldName=NULL) :
+            InformationCommand(name, webUI, oldName) {
+        }
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
         virtual LockType locktype() const { return WRITE; }
         virtual bool needsTxn() const { return false; }
         virtual bool logTheOp() { return true; }
         virtual bool slaveOk() const { return false; }
+    };
+
+    class BeginLoadCmd : public LoaderCommand {
+    public:
+        BeginLoadCmd() : LoaderCommand("beginLoad") {}
+
         virtual void help( stringstream& help ) const {
             help << "begin load" << endl << 
                 "Begin a bulk load into a collection." << endl <<
                 "Must be inside an existing multi-statement transaction." << endl <<
                 "{ beginLoad: 1, ns : collName, indexes: [ { ... }, ... ], options: { ... }  }" << endl;
         }
-        BeginLoadCmd() : InformationCommand("beginLoad") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
@@ -76,20 +81,15 @@ namespace mongo {
         }
     } beginLoadCmd;
 
-    class CommitLoadCmd : public InformationCommand {
+    class CommitLoadCmd : public LoaderCommand {
     public:
-        virtual bool adminOnly() const { return false; }
-        virtual bool requiresAuth() { return true; }
-        virtual LockType locktype() const { return WRITE; }
-        virtual bool needsTxn() const { return false; }
-        virtual bool logTheOp() { return true; }
-        virtual bool slaveOk() const { return false; }
+        CommitLoadCmd() : LoaderCommand("commitLoad") {}
+
         virtual void help( stringstream& help ) const {
             help << "commit load" << endl <<
                 "Commits a load in progress." << endl <<
                 "{ commitLoad }" << endl;
         }
-        CommitLoadCmd() : InformationCommand("commitLoad") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
@@ -105,20 +105,15 @@ namespace mongo {
         }
     } commitLoadCmd;
 
-    class AbortLoadCmd : public InformationCommand {
+    class AbortLoadCmd : public LoaderCommand {
     public:
-        virtual bool adminOnly() const { return false; }
-        virtual bool requiresAuth() { return true; }
-        virtual LockType locktype() const { return WRITE; }
-        virtual bool needsTxn() const { return false; }
-        virtual bool logTheOp() { return true; }
-        virtual bool slaveOk() const { return false; }
+        AbortLoadCmd() : LoaderCommand("abortLoad") {}
+
         virtual void help( stringstream& help ) const {
             help << "abort load" << endl <<
                 "Aborts a load in progress." << endl <<
                 "{ abortLoad }" << endl;
         }
-        AbortLoadCmd() : InformationCommand("abortLoad") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 

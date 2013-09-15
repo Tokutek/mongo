@@ -486,7 +486,7 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
 
     general_options.add_options()
     ("auth", "run with security")
-    ("cacheSize", po::value<uint64_t>(), "tokumx cache size (in bytes) for data and indexes")
+    ("cacheSize", po::value(&cmdLine.cacheSize), "tokumx cache size (in bytes) for data and indexes")
     ("checkpointPeriod", po::value<uint32_t>(), "tokumx time between checkpoints, 0 means never checkpoint")
     ("cleanerIterations", po::value<uint32_t>(), "tokumx number of iterations per cleaner thread operation, 0 means never run")
     ("cleanerPeriod", po::value<uint32_t>(), "tokumx time between cleaner thread operations, 0 means never run")
@@ -497,7 +497,8 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
     ("logDir", po::value<string>(), "directory to store transaction log files (default is --dbpath)")
     ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
-    ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers")
+    ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers (development use only).")
+    ("gdbPath", po::value<string>(), "if specified, debugging information will be gathered on fatal error by launching gdb at the given path")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
     ("journalCommitInterval", po::value<uint32_t>(), "how often to fsync recovery log (same as logFlushPeriod)")
@@ -507,6 +508,7 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     ("journalOptions", po::value<int>(), "DEPRECATED")
     ("jsonp","allow JSONP access via http (has security implications)")
     ("lockTimeout", po::value<uint64_t>(), "tokumx row lock wait timeout (in ms), 0 means wait as long as necessary")
+    ("locktreeMaxMemory", po::value(&cmdLine.locktreeMaxMemory), "tokumx memory limit (in bytes) for storing transactions' row locks.")
     ("noauth", "run without security")
     ("nohttpinterface", "disable http interface")
     ("nojournal", "DEPRECATED)")
@@ -526,7 +528,7 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     ("smallfiles", "DEPRECATED")
     ("syncdelay",po::value<double>(&cmdLine.syncdelay)->default_value(60), "seconds between disk syncs (0=never, but not recommended)")
     ("sysinfo", "print some diagnostic system information")
-    ("txnMemLimit", po::value<uint64_t>(), "limit of the size of a transaction's  operation")
+    ("txnMemLimit", po::value(&cmdLine.txnMemLimit)->default_value(cmdLine.txnMemLimit), "limit of the size of a transaction's  operation")
     ("upgrade", "upgrade db if needed")
     ;
 
@@ -719,9 +721,6 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
         if (params.count("cleanerIterations")) {
             cmdLine.cleanerIterations = params["cleanerIterations"].as<uint32_t>();
         }
-        if (params.count("cacheSize")) {
-            cmdLine.cacheSize = params["cacheSize"].as<uint64_t>();
-        }
         if (params.count("fsRedzone")) {
             cmdLine.fsRedzone = params["fsRedzone"].as<int>();
             if (cmdLine.fsRedzone < 1 || cmdLine.fsRedzone > 99) {
@@ -749,9 +748,12 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
                 cmdLine.tmpDir = cmdLine.cwd + "/" + cmdLine.tmpDir;
             }
         }
+        if (params.count("gdbPath")) {
+            cmdLine.gdbPath = params["gdbPath"].as<string>();
+        }
         if (params.count("txnMemLimit")) {
-            cmdLine.txnMemLimit = params["txnMemLimit"].as<uint64_t>();
-            if( cmdLine.txnMemLimit > 1ULL<<21 ) {
+            uint64_t limit = (uint64_t) params["txnMemLimit"].as<BytesQuantity<uint64_t> >();
+            if( limit > 1ULL<<21 ) {
                 out() << "--txnMemLimit cannot be greater than 2MB" << endl;
                 dbexit( EXIT_BADOPTIONS );
             }
@@ -852,10 +854,10 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
         if (params.count("oplogSize")) {
             out() << " oplogSize is a deprecated parameter" << endl;
         }
-        if (params.count("cacheSize")) {
-            long x = params["cacheSize"].as<uint64_t>();
-            if (x <= 0) {
-                out() << "bad --cacheSize arg" << endl;
+        if (params.count("locktreeMaxMemory")) {
+            uint64_t x = (uint64_t) params["locktreeMaxMemory"].as<BytesQuantity<uint64_t> >();
+            if (x < 65536) {
+                out() << "bad --locktreeMaxMemory arg (should never be less than 64kb)" << endl;
                 dbexit( EXIT_BADOPTIONS );
             }
         }
@@ -1017,16 +1019,15 @@ namespace mongo {
         ossSig << "Got signal: " << x << " (" << strsignal( x ) << ")." << endl;
         rawOut( ossSig.str() );
 
-        /*
-        ostringstream ossOp;
-        ossOp << "Last op: " << currentOp.infoNoauth() << endl;
-        rawOut( ossOp.str() );
-        */
-
         ostringstream oss;
         oss << "Backtrace:" << endl;
         printStackTrace( oss );
         rawOut( oss.str() );
+
+        // Try to get even more information if gdbPath was set to a gdb executable.
+        if (cmdLine.gdbPath != "") {
+            db_env_try_gdb_stack_trace(cmdLine.gdbPath.c_str());
+        }
 
         // Reinstall default signal handler, to generate core if necessary.
         signal(x, SIG_DFL);

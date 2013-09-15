@@ -67,7 +67,7 @@ namespace mongo {
         int Loader::close() {
             const int r = _loader->close(_loader);
 
-            // Doesn't matter if the close succeded or not. It's dead to us now.
+            // Doesn't matter if the close succeeded or not. It's dead to us now.
             _closed = true;
             if (r == -1) {
                 _poll_extra.throwException();

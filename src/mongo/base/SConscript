@@ -45,3 +45,7 @@ env.CppUnitTest('status_test',
 env.CppUnitTest('string_data_test',
                 'string_data_test.cpp',
                 LIBDEPS=['$BUILD_DIR/mongo/unittest/unittest'])
+
+env.CppUnitTest('units_test',
+                'units_test.cpp',
+                LIBDEPS=['base'])
