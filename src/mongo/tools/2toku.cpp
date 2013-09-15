@@ -283,7 +283,7 @@ public:
             try {
                 std::ofstream tsFile;
                 tsFile.exceptions(std::ifstream::badbit | std::ifstream::failbit);
-                tsFile.open(_tsFilename);
+                tsFile.open(_tsFilename, std::ofstream::trunc);
                 tsFile << tsString;
                 tsFile.close();
                 log() << "Saved timestamp to file "
