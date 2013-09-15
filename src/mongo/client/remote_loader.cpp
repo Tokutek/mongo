@@ -46,11 +46,11 @@ namespace mongo {
         {
             BSONArrayBuilder ab(b.subarrayStart("indexes"));
             for (vector<BSONObj>::const_iterator it = indexes.begin(); it != indexes.end(); ++it) {
-                ab.append(it->getOwned());
+                ab.append(*it);
             }
             ab.doneFast();
         }
-        b.append("options", options.getOwned());
+        b.append("options", options);
     }
 
     void RemoteLoader::begin(const BSONObj &obj) {
