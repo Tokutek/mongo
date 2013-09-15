@@ -184,13 +184,12 @@ namespace mongo {
         Client::ReadContext ctx(rsoplog);
         // TODO: Should this be using rsOplogDetails, verifying non-null?
         NamespaceDetails *d = nsdetails(rsoplog);
-        char gtidBin[GTID::GTIDBinarySize()];
-        gtid.serializeBinaryData(gtidBin);
+        BSONObjBuilder q;
         BSONObj result;
-        BSONObj query(BSON("_id" << gtidBin));
+        addGTIDToBSON("_id", gtid, q);
         const bool found = d != NULL &&
             d->findOne(
-               query, 
+               q.done(),
                result
                );
         return found;

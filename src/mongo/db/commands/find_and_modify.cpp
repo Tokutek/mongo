@@ -46,7 +46,13 @@ namespace mongo {
         virtual bool requiresSync() const { return true; }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return DB_SERIALIZABLE; }
-        virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual OpSettings getOpSettings() const {
+            // We set justOne to true because findAndModify modifies at most one document.
+            OpSettings settings;
+            settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+            settings.setJustOne(true);
+            return settings;
+        }
         
         /* this will eventually replace run,  once sort is handled */
         bool runNoDirectClient( const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {

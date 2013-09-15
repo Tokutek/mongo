@@ -34,6 +34,7 @@
 #include "mongo/util/version.h"
 #include "mongo/db/json.h"
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/client/remote_loader.h"
 
 using namespace mongo;
 
@@ -100,9 +101,9 @@ public:
         _restoreOptions = !hasParam("noOptionsRestore");
         _restoreIndexes = !hasParam("noIndexRestore");
         _w = getParam( "w" , 1 );
-        _doBulkLoad = _w == 0;
+        _doBulkLoad = _w <= 1;
         if (!_doBulkLoad) {
-            log() << "WARNING! not using bulk load due to w > 0" << endl;
+            log() << "warning: not using bulk loader due to --w > 1" << endl;
         }
         if (hasParam( "keepIndexVersion" )) {
             log() << "warning: --keepIndexVersion is deprecated in TokuMX" << endl;
@@ -274,17 +275,17 @@ public:
                 // Need to make sure the ns field gets updated to
                 // the proper _curdb + _curns value, if we're
                 // restoring to a different database.
-                const BSONObj o = fixupIndexObj(it->Obj());
-                indexes.push_back(o);
+                const BSONObj indexObj = renameIndexNs(it->Obj());
+                indexes.push_back(indexObj);
             }
         }
         const BSONObj options = _restoreOptions && metadataObject.hasField("options") ?
                                 metadataObject["options"].Obj() : BSONObj();
 
         if (_doBulkLoad) {
-            ClientBulkLoad bulkLoad(conn(), _curdb, _curcoll, indexes, options);
+            RemoteLoader loader(conn(), _curdb, _curcoll, indexes, options);
             processFile( root );
-            bulkLoad.commit();
+            loader.commit();
         } else {
             // No bulk load. Create collection and indexes manually.
             if (!options.isEmpty()) {
@@ -407,9 +408,9 @@ private:
         }
     }
 
-    BSONObj fixupIndexObj(const BSONObj &indexObj) {
+    BSONObj renameIndexNs(const BSONObj &orig) {
         BSONObjBuilder bo;
-        BSONObjIterator i(indexObj);
+        BSONObjIterator i(orig);
         while ( i.more() ) {
             BSONElement e = i.next();
             if (strcmp(e.fieldName(), "ns") == 0) {

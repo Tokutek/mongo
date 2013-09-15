@@ -21,11 +21,11 @@
 #include "mongo/pch.h"
 
 #include "mongo/client/remote_transaction.h"
+#include "mongo/db/jsobj.h"
 
 namespace mongo {
 
     class DBClientWithCommands;
-    class BSONObj;
 
     /**
        RemoteLoader manages the lifetime of a bulk load operation on another machine.
@@ -52,6 +52,8 @@ namespace mongo {
         DBClientWithCommands *_conn;
         string _db;
         RemoteTransaction _rtxn;
+        bool _usingLoader;
+        BSONObj _commandObj;
         static void beginLoadCmd(const string &ns, const vector<BSONObj> &indexes, const BSONObj &options,
                                  BSONObjBuilder &b);
         void begin(const BSONObj &obj);

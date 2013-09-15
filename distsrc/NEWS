@@ -1,9 +1,87 @@
 tokumx news
 ===========
 
-tokumx 1.1.0
+tokumx 1.2.0
+------------
+Release date: 2013-09-05
+
+General
+~~~~~~~
+
+    - This release adds a hot backup tool as an enterprise component.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The enterprise version of TokuMX now comes with a hot backup plugin
+      that offers fast, non-blocking backup of a live running system.  See
+      the user's guide for more details.
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Removed unnecessary unique checks done for updates and deletes.
+      (#483)
+
+    - Prevent overlocking on findAndModify and point update/delete
+      operations.  (#485)
+
+
+tokumx 1.1.2
 ------------
 Release date: TBD
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.1.1.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The maximum amount of memory that will be used by the document-level
+      locking data structures is now configurable with the parameter
+      `locktreeMaxMemory=<bytes>`, which defaults to 10% of
+      `cacheSize`. (#340)
+
+    - It is now possible to get more debugging information in the log
+      during a crash.  To use this, download and unpack the `-debuginfo`
+      tarball along with the binary tarball, and run with
+      `--gdbPath=/path/to/gdb`.
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a bug in background indexing and the bulk loader that caused
+      indexes to be built as multi-key indexes, which causes the query
+      planner to create non-optimal query plans. (#469)
+
+    - Optimized deletes, especially those performed on the oplog. (#471)
+
+
+tokumx 1.1.1
+------------
+Release date: 2013-08-23
+
+General
+~~~~~~~
+
+    - This release fixes a memory leak introduced in 1.1.0
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a memory leak in insert/update/delete workloads.  #465
+
+
+tokumx 1.1.0
+------------
+Release date: 2013-08-21
 
 General
 ~~~~~~~
@@ -31,6 +109,9 @@ New features and improvements
 
     - Improved the concurrency of certain highly multi-threaded
       modification workloads. (#342, #343, #358, #432)
+
+    - Optimized the thread that purges old entries from the oplog. (#399,
+      #435, #447)
 
     - Improved the reliability of distributed locks used in
       sharding. (#451)

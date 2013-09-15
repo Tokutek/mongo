@@ -1089,7 +1089,7 @@ namespace mongo {
     // TODO: Cache two of these in the client object so they're not created/destroyed
     //       every time a connection/transaction does a single write. (multi inserts,
     //       updates, deletes should come to mind)
-    class DBTArraysHolder {
+    class DBTArraysHolder : boost::noncopyable {
     public:
         DBTArraysHolder(DBT_ARRAY *dbt_arrays, const size_t n) :
             _dbt_arrays(dbt_arrays),
@@ -1105,6 +1105,10 @@ namespace mongo {
                         free(dbt->data);
                         dbt->data = NULL;
                     }
+                }
+                if (dbt_array->dbts != NULL) {
+                    free(dbt_array->dbts);
+                    dbt_array->dbts = NULL;
                 }
             }
         }
@@ -1195,7 +1199,7 @@ namespace mongo {
             const bool prelocked = flags & NamespaceDetails::NO_LOCKTREE;
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
-            del_flags[i] = prelocked ? DB_PRELOCKED_WRITE : 0;
+            del_flags[i] = DB_DELETE_ANY | (prelocked ? DB_PRELOCKED_WRITE : 0);
         }
 
         DB_ENV *env = storage::env;
@@ -1254,9 +1258,7 @@ namespace mongo {
             const bool noUniqueChecks = flags & NamespaceDetails::NO_UNIQUE_CHECKS;
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
-            // The pk doesn't change - always skip uniqueness checks.
-            update_flags[i] = (isPK || !noUniqueChecks ? DB_NOOVERWRITE : 0) |
-                              (prelocked ? DB_PRELOCKED_WRITE : 0);
+            update_flags[i] = prelocked ? DB_PRELOCKED_WRITE : 0;
 
             if (!isPK) {
                 BSONObjSet oldIdxKeys;
