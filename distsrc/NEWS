@@ -15,10 +15,10 @@ General
 New features and improvements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    - Added index usage stats.  The `db.stats()` and `db.coll.stats()`
-      commands now show cumulative statistics for how each index has been
-      used since the last reboot.  See the user's guide for more details.
-      (#285, #286, #501)
+    - Added index usage stats.  The db.coll.stats()` command now shows
+      cumulative statistics for how each index has been used since the
+      last reboot.  See the user's guide for more details.  (#285,
+      #286, #501)
 
     - Added document-level lock debugging information.  With new commands
       `showLiveTransactions` and `showPendingLockRequests`, you can show
