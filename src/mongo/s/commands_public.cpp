@@ -812,6 +812,16 @@ namespace mongo {
             AbortLoadCmd() : NotAllowedOnShardedClusterCmd("abortLoad") {}
         } abortLoadCmd;
 
+        class ShowLiveTransactionsCmd : public NotAllowedOnShardedClusterCmd  {
+        public:
+            ShowLiveTransactionsCmd() : NotAllowedOnShardedClusterCmd("showLiveTransactions") {}
+        } showLiveTransactionsCmd;
+
+        class ShowPendingLockRequestsCmd : public NotAllowedOnShardedClusterCmd  {
+        public:
+            ShowPendingLockRequestsCmd() : NotAllowedOnShardedClusterCmd("showPendingLockRequests") {}
+        } showPendingLockRequestsCmd;
+
         class GroupCmd : public NotAllowedOnShardedCollectionCmd  {
         public:
             GroupCmd() : NotAllowedOnShardedCollectionCmd("group") {}
