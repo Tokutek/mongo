@@ -729,8 +729,16 @@ namespace mongo {
                 if ( isHashedShardKey && isEmpty ){
 
                     int numChunks = cmdObj["numInitialChunks"].numberInt();
-                    if ( numChunks <= 0 )
-                        numChunks = 2*numShards;  // default number of initial chunks
+                    if ( numChunks <= 0 ) {
+                        // In vanilla mongodb, this is 2*numShards.  This causes a lot of migrations
+                        // during inital loading of data because it's easy for things to get out of
+                        // whack with only a few chunks.  It's unclear why the default is set so
+                        // low, but on vanilla it seems to cause a long startup time so that might
+                        // be it (not sure where that comes from?).  With this setting, 256 chunks
+                        // gives you a good runway of around 8GB per shard before you should expect
+                        // to start having to split much.
+                        numChunks = 256 * numShards;  // default number of initial chunks
+                    }
 
                     // hashes are signed, 64-bit ints. So we divide the range (-MIN long, +MAX long)
                     // into intervals of size (2^64/numChunks) and create split points at the
