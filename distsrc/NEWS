@@ -1,6 +1,65 @@
 tokumx news
 ===========
 
+tokumx 1.2.1
+------------
+Release date: 2013-09-18
+
+General
+~~~~~~~
+
+    - This release adds new diagnostic and performance analysis tools, and
+      bug fixes since 1.2.0.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added index usage stats.  The `db.stats()` and `db.coll.stats()`
+      commands now show cumulative statistics for how each index has been
+      used since the last reboot.  See the user's guide for more details.
+      (#285, #286, #501)
+
+    - Added document-level lock debugging information.  With new commands
+      `showLiveTransactions` and `showPendingLockRequests`, you can show
+      the state of all document-level locks currently held in TokuMX,
+      which helps diagnose why a workload might get "lock not granted" or
+      "deadlock" errors.  In addition, when an operation fails for one of
+      these reasons, some of this information is immediately printed to
+      the error log.  See the user's guide for more details.  (#297, #437,
+      #490)
+
+    - Added mongo shell wrapper functions `db.beginTransaction()`,
+      `db.commitTransaction()`, `db.rollbackTransaction()`, and
+      `db.engineStatus()`.  (#488)
+
+    - Added to `mongo2toku` persistent save/resume functionality.  When
+      the tool exits, it will write the timestamp to a file, and resume
+      from that file, rather than just by printing out the argument to use
+      for the next invocation.  (#495)
+
+    - Increased the default `numInitialChunks` for sharding empty
+      collections on a hashed key.  This should reduce the number of
+      migrations experienced during an initial load or at the beginning of
+      a workload.  (#513)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a deadlock that occurred when multiple clients tried to create
+      the same collection concurrently.  (#477)
+
+    - Improved the reliability and usability of mongorestore when using
+      the bulk loader.  (#492, #512, #514, #515)
+
+    - Fixed a race condition that occurred when multiple clients tried to
+      open the same database concurrently.  (#499)
+
+    - Reduced lock contention for profiling and diagnostics logging.
+      (#505, #506, #508)
+
+
 tokumx 1.2.0
 ------------
 Release date: 2013-09-05

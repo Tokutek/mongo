@@ -1,3 +1,20 @@
+// Dear reader,
+//
+// This test fails about half the time on buildbot because of something dumb like permissions
+// issues.  I've tried to fix it in sane ways on at least four separate occasions and it always
+// comes back.  This test is making a pretty successful run for the highest ever
+// annoyance-to-utility ratio of any software ever written.  Maybe someday we'll put it back but I
+// think the --logpath option has been tested far more than it deserves, so I'm disabling it.
+//
+// But forever shall it remain here, if-zero-ed out, to serve as a warning, like a test's head on a
+// pike, for other tests or test authors that might consider using a globally unique resource like
+// an absolute pathname or a hard-coded port number ever again.
+//
+// Vengefully,
+// Leif
+
+if (0) {
+
 // check replica set authentication
 
 var name = "logpath";
@@ -105,4 +122,6 @@ if ( false ) {
 
     print("------ Confirm that launch fails with special file: " + sfile);
     assert.throws(function() { MongoRunner.runMongod({ port: port[5], dbpath: dbdir, logpath: sfile }); });
+}
+
 }
