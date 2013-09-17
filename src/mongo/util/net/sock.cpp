@@ -43,6 +43,7 @@
 #include "mongo/util/concurrency/value.h"
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/util/net/message.h"
 #include "mongo/util/net/ssl_manager.h"
 #include "mongo/db/cmdline.h"
 
@@ -411,7 +412,8 @@ namespace mongo {
     }
 
     Socket::Socket(int fd , const SockAddr& remote) : 
-        _fd(fd), _remote(remote), _timeout(0), _lastValidityCheckAtSecs(time(0)), _logLevel(logger::LogSeverity::Log()) {
+        _fd(fd), _remote(remote), _timeout(0), _lastValidityCheckAtSecs(time(0)), 
+        _logLevel(logger::LogSeverity::Log()) {
         _init();
         if (fd >= 0) {
             _local = getLocalAddrForBoundSocketFd(_fd);
@@ -437,6 +439,7 @@ namespace mongo {
     void Socket::_init() {
         _bytesOut = 0;
         _bytesIn = 0;
+        _awaitingHandshake = true;
 #ifdef MONGO_SSL
         _sslManager = 0;
 #endif
@@ -468,10 +471,15 @@ namespace mongo {
         _sslManager = ssl;
     }
 
-    std::string Socket::doSSLHandshake() {
+    std::string Socket::doSSLHandshake(const char* firstBytes, int len) {
         if (!_sslManager) return "";
         fassert(16506, _fd);
-        _sslConnection.reset(_sslManager->accept(this));
+        if (_sslConnection.get()) {
+            throw SocketException(SocketException::RECV_ERROR, 
+                                  "Attempt to call SSL_accept on already secure Socket from " +
+                                  remoteString());
+        }
+        _sslConnection.reset(_sslManager->accept(this, firstBytes, len));
         return _sslManager->validatePeerCertificate(_sslConnection.get());
     }
 #endif
@@ -530,6 +538,9 @@ namespace mongo {
         _local = getLocalAddrForBoundSocketFd(_fd);
 
         _fdCreationMicroSec = curTimeMicros64();
+
+        _awaitingHandshake = false;
+
         return true;
     }
 
@@ -677,7 +688,7 @@ namespace mongo {
                 ret = unsafe_recv(buf, len);
             }
 
-            if ( len <= 4 && ret != len ) {
+            if ( len <= static_cast<int>(sizeof(MSGHEADER)) && ret != len ) {
                 LOG(_logLevel) << "Socket recv() got " << ret <<
                     " bytes wanted len=" << len << endl;
             }
