@@ -43,6 +43,7 @@
 #include "mongo/util/stringutils.h"
 #include "mongo/util/time_support.h"
 
+
 // make sure our assumptions are valid
 BOOST_STATIC_ASSERT( sizeof(short) == 2 );
 BOOST_STATIC_ASSERT( sizeof(int) == 4 );
@@ -52,6 +53,8 @@ BOOST_STATIC_ASSERT( sizeof(mongo::Date_t) == 8 );
 BOOST_STATIC_ASSERT( sizeof(mongo::OID) == 12 );
 
 namespace mongo {
+
+    namespace str = mongoutils::str;
 
     BSONElement eooElement;
 
@@ -344,7 +347,7 @@ namespace mongo {
                 return BSONObj::opOPTIONS;
             else if ( fn[1] == 'w' && fn[2] == 'i' && fn[3] == 't' && fn[4] == 'h' && fn[5] == 'i' && fn[6] == 'n' && fn[7] == 0 )
                 return BSONObj::opWITHIN;
-            else if (mongoutils::str::equals(fn + 1, "geoIntersects"))
+            else if (str::equals(fn + 1, "geoIntersects"))
                 return BSONObj::opGEO_INTERSECTS;
         }
         return def;
@@ -628,7 +631,7 @@ namespace mongo {
         while ( a.more() && b.more() ) {
             BSONElement x = a.next();
             BSONElement y = b.next();
-            if ( ! mongoutils::str::equals( x.fieldName() , y.fieldName() ) ) {
+            if ( ! str::equals( x.fieldName() , y.fieldName() ) ) {
                 return false;
             }
         }
@@ -848,7 +851,7 @@ namespace mongo {
             if( e.eoo() ) break;
 
             // TODO:  If actually important, may be able to do int->char* much faster
-            if( strcmp( e.fieldName(), ((string)( mongoutils::str::stream() << index )).c_str() ) != 0 )
+            if( strcmp( e.fieldName(), ((string)( str::stream() << index )).c_str() ) != 0 )
                 return false;
             index++;
         }
@@ -902,7 +905,7 @@ namespace mongo {
         return b.obj();
     }
 
-    bool BSONObj::_okForStorage(bool root) const {
+    Status BSONObj::_okForStorage(bool root) const {
         BSONObjIterator i( *this );
         bool first = true;
         while ( i.more() ) {
@@ -910,11 +913,11 @@ namespace mongo {
             const char* name = e.fieldName();
 
             // Cannot start with "$", unless dbref which must start with ($ref, $id)
-            if (mongoutils::str::startsWith(name, '$')) {
+            if (str::startsWith(name, '$')) {
                 if ( first &&
                      // $ref is a collection name and must be a String
-                     mongoutils::str::equals(name, "$ref") && e.type() == String &&
-                     mongoutils::str::equals(i.next().fieldName(), "$id") ) {
+                     str::equals(name, "$ref") && e.type() == String &&
+                     str::equals(i.next().fieldName(), "$id") ) {
 
                     first = false;
                     // keep inspecting fields for optional "$db"
@@ -922,43 +925,57 @@ namespace mongo {
                     name = e.fieldName(); // "" if eoo()
 
                     // optional $db field must be a String
-                    if (mongoutils::str::equals(name, "$db") && e.type() == String) {
+                    if (str::equals(name, "$db") && e.type() == String) {
                         continue; //this element is fine, so continue on to siblings (if any more)
                     }
 
                     // Can't start with a "$", all other checks are done below (outside if blocks)
-                    if (mongoutils::str::startsWith(name, '$'))  {
-                        return false;
+                    if (str::startsWith(name, '$'))  {
+                        return Status(ErrorCodes::DollarPrefixedFieldName,
+                                      str::stream() << name << " is not valid for storage.");
                     }
                 }
                 else {
                     // not an okay, $ prefixed field name.
-                    return false;
+                    return Status(ErrorCodes::DollarPrefixedFieldName,
+                                  str::stream() << name << " is not valid for storage.");
                 }
             }
 
             // Do not allow "." in the field name
             if (strchr(name, '.')) {
-                return false;
+                return Status(ErrorCodes::DottedFieldName,
+                              str::stream() << name << " is not valid for storage.");
             }
 
             // (SERVER-9502) Do not allow storing an _id field with a RegEx type or
             // Array type in a root document
-            if (root && (e.type() == RegEx || e.type() == Array)
-                     && mongoutils::str::equals(name,"_id")) {
-                return false;
+            if (root && (e.type() == RegEx || e.type() == Array || e.type() == Undefined)
+                     && str::equals(name,"_id")) {
+                return Status(ErrorCodes::InvalidIdField,
+                              str::stream() << name
+                                            << " is not valid for storage because of the type: "
+                                            << typeName(e.type()));
             }
 
             if ( e.mayEncapsulate() ) {
                 switch ( e.type() ) {
                 case Object:
                 case Array:
-                    if ( ! e.embeddedObject().okForStorage() )
-                        return false;
+                    {
+                        Status s = e.embeddedObject()._okForStorage(false);
+                        // TODO: combine field names for better error messages
+                        if ( ! s.isOK() )
+                            return s;
+                    }
                     break;
                 case CodeWScope:
-                    if ( ! e.codeWScopeObject().okForStorage() )
-                        return false;
+                    {
+                        Status s = e.embeddedObject()._okForStorage(false);
+                        // TODO: combine field names for better error messages
+                        if ( ! s.isOK() )
+                            return s;
+                    }
                     break;
                 default:
                     uassert( 12579, "unhandled cases in BSONObj okForStorage" , 0 );
@@ -966,7 +983,7 @@ namespace mongo {
             }
             first = false;
         }
-        return true;
+        return Status::OK();
     }
 
     void BSONObj::dump() const {
