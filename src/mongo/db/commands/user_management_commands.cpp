@@ -26,6 +26,7 @@
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authz_documents_update_guard.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/authorization_manager_global.h"
 #include "mongo/db/auth/privilege.h"
@@ -113,6 +114,13 @@ namespace mongo {
                  BSONObjBuilder& result,
                  bool fromRepl) {
             AuthorizationManager* authzManager = getGlobalAuthorizationManager();
+            AuthzDocumentsUpdateGuard updateGuard(authzManager);
+            if (!updateGuard.tryLock("Create user")) {
+                addStatus(Status(ErrorCodes::LockBusy, "Could not lock auth data update lock."),
+                          result);
+                return false;
+            }
+
             BSONObj userObj;
             Status status = auth::parseAndValidateCreateUserCommand(cmdObj,
                                                                     dbname,
@@ -173,6 +181,13 @@ namespace mongo {
                  BSONObjBuilder& result,
                  bool fromRepl) {
             AuthorizationManager* authzManager = getGlobalAuthorizationManager();
+            AuthzDocumentsUpdateGuard updateGuard(authzManager);
+            if (!updateGuard.tryLock("Update user")) {
+                addStatus(Status(ErrorCodes::LockBusy, "Could not lock auth data update lock."),
+                          result);
+                return false;
+            }
+
             BSONObj updateObj;
             UserName userName;
             Status status = auth::parseAndValidateUpdateUserCommand(cmdObj,
@@ -236,8 +251,15 @@ namespace mongo {
                  string& errmsg,
                  BSONObjBuilder& result,
                  bool fromRepl) {
-            std::string user;
+            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
+            AuthzDocumentsUpdateGuard updateGuard(authzManager);
+            if (!updateGuard.tryLock("Remove user")) {
+                addStatus(Status(ErrorCodes::LockBusy, "Could not lock auth data update lock."),
+                          result);
+                return false;
+            }
 
+            std::string user;
             Status status = bsonExtractStringField(cmdObj, "removeUser", &user);
             if (!status.isOK()) {
                 addStatus(status, result);
@@ -252,7 +274,6 @@ namespace mongo {
             }
 
             int numUpdated;
-            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
             status = authzManager->removePrivilegeDocuments(
                     BSON(AuthorizationManager::USER_NAME_FIELD_NAME << user <<
                          AuthorizationManager::USER_SOURCE_FIELD_NAME << dbname),
@@ -305,6 +326,14 @@ namespace mongo {
                  string& errmsg,
                  BSONObjBuilder& result,
                  bool fromRepl) {
+            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
+            AuthzDocumentsUpdateGuard updateGuard(authzManager);
+            if (!updateGuard.tryLock("Remove all users from database")) {
+                addStatus(Status(ErrorCodes::LockBusy, "Could not lock auth data update lock."),
+                          result);
+                return false;
+            }
+
             BSONObj writeConcern;
             Status status = auth::extractWriteConcern(cmdObj, &writeConcern);
             if (!status.isOK()) {
@@ -313,7 +342,6 @@ namespace mongo {
             }
 
             int numRemoved;
-            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
             status = authzManager->removePrivilegeDocuments(
                     BSON(AuthorizationManager::USER_SOURCE_FIELD_NAME << dbname),
                     writeConcern,
@@ -359,10 +387,17 @@ namespace mongo {
                  string& errmsg,
                  BSONObjBuilder& result,
                  bool fromRepl) {
+            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
+            AuthzDocumentsUpdateGuard updateGuard(authzManager);
+            if (!updateGuard.tryLock("Grant roles to user")) {
+                addStatus(Status(ErrorCodes::LockBusy, "Could not lock auth data update lock."),
+                          result);
+                return false;
+            }
+
             UserName userName;
             std::vector<RoleName> roles;
             BSONObj writeConcern;
-            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
             Status status = auth::parseUserRoleManipulationCommand(cmdObj,
                                                                    "grantRolesToUser",
                                                                    dbname,
@@ -433,10 +468,17 @@ namespace mongo {
                  string& errmsg,
                  BSONObjBuilder& result,
                  bool fromRepl) {
+            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
+            AuthzDocumentsUpdateGuard updateGuard(authzManager);
+            if (!updateGuard.tryLock("Revoke roles from user")) {
+                addStatus(Status(ErrorCodes::LockBusy, "Could not lock auth data update lock."),
+                          result);
+                return false;
+            }
+
             UserName userName;
             std::vector<RoleName> roles;
             BSONObj writeConcern;
-            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
             Status status = auth::parseUserRoleManipulationCommand(cmdObj,
                                                                    "revokeRolesFromUser",
                                                                    dbname,
@@ -515,10 +557,17 @@ namespace mongo {
                  string& errmsg,
                  BSONObjBuilder& result,
                  bool fromRepl) {
+            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
+            AuthzDocumentsUpdateGuard updateGuard(authzManager);
+            if (!updateGuard.tryLock("Grant role delegation to user")) {
+                addStatus(Status(ErrorCodes::LockBusy, "Could not lock auth data update lock."),
+                          result);
+                return false;
+            }
+
             UserName userName;
             std::vector<RoleName> roles;
             BSONObj writeConcern;
-            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
             Status status = auth::parseUserRoleManipulationCommand(cmdObj,
                                                                    "grantDelegateRolesToUser",
                                                                    dbname,
@@ -589,10 +638,17 @@ namespace mongo {
                  string& errmsg,
                  BSONObjBuilder& result,
                  bool fromRepl) {
+            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
+            AuthzDocumentsUpdateGuard updateGuard(authzManager);
+            if (!updateGuard.tryLock("Revoke role delegation from user")) {
+                addStatus(Status(ErrorCodes::LockBusy, "Could not lock auth data update lock."),
+                          result);
+                return false;
+            }
+
             UserName userName;
             std::vector<RoleName> roles;
             BSONObj writeConcern;
-            AuthorizationManager* authzManager = getGlobalAuthorizationManager();
             Status status = auth::parseUserRoleManipulationCommand(cmdObj,
                                                                    "revokeDelegateRolesFromUser",
                                                                    dbname,
