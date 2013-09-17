@@ -650,7 +650,12 @@ namespace mongo {
                                     void *extra) {
                     iterate_lock_requests *info = reinterpret_cast<iterate_lock_requests *>(extra);
                     try {
-                        BSONObjBuilder status;
+                        if (info->array.len() + left_key->size + right_key->size > BSONObjMaxUserSize - 1024) {
+                            // We're running out of space, better stop here.
+                            info->array.append("too many results to return");
+                            return ERANGE;
+                        }
+                        BSONObjBuilder status(info->array.subobjStart());
                         status.append("index", get_index_name(db));
                         status.appendNumber("requestingTxnid", requesting_txnid);
                         status.appendNumber("blockingTxnid", blocking_txnid);
@@ -660,7 +665,7 @@ namespace mongo {
                             pretty_bounds(db, left_key, right_key, bounds);
                             bounds.done();
                         }
-                        info->array.append(status.done());
+                        status.done();
                         return 0;
                     } catch (const std::exception &ex) {
                         info->saveException(ex);
@@ -670,7 +675,7 @@ namespace mongo {
                 BSONArrayBuilder array;
             } e;
             const int r = env->iterate_pending_lock_requests(env, iterate_lock_requests::callback, &e);
-            if (r != 0) {
+            if (r != 0 && r != ERANGE) {
                 e.throwException();
                 handle_ydb_error(r);
             }
@@ -687,24 +692,33 @@ namespace mongo {
                     try {
                         // We ignore client_id because txnid is sufficient for finding
                         // the associated operation in db.currentOp()
-                        BSONObjBuilder status;
+                        BSONObjBuilder status(info->array.subobjStart());
                         status.appendNumber("txnid", txnid);
                         BSONArrayBuilder locks(status.subarrayStart("rowLocks"));
                         {
                             DB *db;
                             DBT left_key, right_key;
                             while (iterate_locks(&db, &left_key, &right_key, locks_extra) == 0) {
-                                BSONObjBuilder row_lock;
+                                if (locks.len() + left_key.size + right_key.size > BSONObjMaxUserSize - 1024) {
+                                    // We're running out of space, better stop here.
+                                    locks.append("too many results to return");
+                                    break;
+                                }
+                                BSONObjBuilder row_lock(locks.subobjStart());
                                 row_lock.append("index", get_index_name(db));
                                 BSONArrayBuilder bounds(row_lock.subarrayStart("bounds"));
                                 pretty_bounds(db, &left_key, &right_key, bounds);
                                 bounds.done();
-                                locks.append(row_lock.done());
-
+                                row_lock.done();
                             }
                             locks.done();
                         }
-                        info->array.append(status.done());
+                        status.done();
+                        if (info->array.len() > BSONObjMaxUserSize - 1024) {
+                            // We're running out of space, better stop here.
+                            locks.append("too many results to return");
+                            return ERANGE;
+                        }
                         return 0;
                     } catch (const std::exception &ex) {
                         info->saveException(ex);
@@ -714,7 +728,7 @@ namespace mongo {
                 BSONArrayBuilder array;
             } e;
             const int r = env->iterate_live_transactions(env, iterate_transactions::callback, &e);
-            if (r != 0) {
+            if (r != 0 && r != ERANGE) {
                 e.throwException();
                 handle_ydb_error(r);
             }
