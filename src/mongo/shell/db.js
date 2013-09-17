@@ -862,6 +862,14 @@ DB.prototype.rollbackTransaction = function(){
     return this.runCommand('rollbackTransaction');
 }
 
+DB.prototype.showLiveTransactions = function(){
+    return this.runCommand('showLiveTransactions');
+}
+
+DB.prototype.showPendingLockRequests = function(){
+    return this.runCommand('showPendingLockRequests');
+}
+
 DB.prototype.serverBuildInfo = function(){
     return this._adminCommand( "buildinfo" );
 }
