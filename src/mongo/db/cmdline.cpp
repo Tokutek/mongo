@@ -18,6 +18,7 @@
 */
 
 #include <boost/algorithm/string.hpp>
+#include <boost/filesystem.hpp>
 
 #include "mongo/pch.h"
 
@@ -461,7 +462,8 @@ namespace {
 #ifdef MONGO_SSL
 
         if (params.count("ssl.PEMKeyFile")) {
-            cmdLine.sslPEMKeyFile = params["ssl.PEMKeyFile"].as<string>();
+            cmdLine.sslPEMKeyFile = boost::filesystem::absolute(
+                                        params["ssl.PEMKeyFile"].as<string>()).generic_string();
         }
 
         if (params.count("ssl.PEMKeyPassword")) {
@@ -469,7 +471,8 @@ namespace {
         }
 
         if (params.count("ssl.clusterFile")) {
-            cmdLine.sslClusterFile = params["ssl.clusterFile"].as<string>();
+            cmdLine.sslClusterFile = boost::filesystem::absolute(
+                                         params["ssl.clusterFile"].as<string>()).generic_string();
         }
 
         if (params.count("ssl.clusterPassword")) {
@@ -477,11 +480,13 @@ namespace {
         }
 
         if (params.count("ssl.CAFile")) {
-            cmdLine.sslCAFile = params["ssl.CAFile"].as<std::string>();
+            cmdLine.sslCAFile = boost::filesystem::absolute(
+                                         params["ssl.CAFile"].as<std::string>()).generic_string();
         }
 
         if (params.count("ssl.CRLFile")) {
-            cmdLine.sslCRLFile = params["ssl.CRLFile"].as<std::string>();
+            cmdLine.sslCRLFile = boost::filesystem::absolute(
+                                         params["ssl.CRLFile"].as<std::string>()).generic_string();
         }
 
         if (params.count("ssl.weakCertificateValidation")) {
