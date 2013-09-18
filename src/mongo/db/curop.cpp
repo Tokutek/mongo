@@ -148,7 +148,7 @@ namespace mongo {
                 b.append( "threadId" , _client->_threadId );
             if ( _client->_connectionId )
                 b.appendNumber( "connectionId" , _client->_connectionId );
-            b.appendNumber( "rootTransactionId" , _client->rootTransactionId() );
+            b.appendNumber( "rootTxnid" , _client->rootTransactionId() );
             _client->_ls.reportState(b);
         }
         
