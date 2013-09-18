@@ -72,7 +72,7 @@ files.forEach(
 	    return;
 	}
 	// These aren't supposed to get run under sharding:
-	if (/[\/\\](6072_touch|auth_mst|dbadmin|error1|fsync|fsync2|geo.*|indexh|remove5|update4|loglong|logpath|notablescan|compact.*|check_shard_index|bench_test.*|mr_replaceIntoDB|mr_auth|queryoptimizera|txn_.*|loader_.*|query_write_lock|bug301|collection_exists_cmd|getNamespaces_after_close|ops_after_close|collections_exist_cmd)\.js$/.test(x.name)) {
+	if (/[\/\\](6072_touch|auth_mst|lock_diag_size_limit|dbadmin|error1|fsync|fsync2|geo.*|indexh|remove5|update4|loglong|logpath|notablescan|compact.*|check_shard_index|bench_test.*|mr_replaceIntoDB|mr_auth|queryoptimizera|txn_.*|loader_.*|query_write_lock|bug301|collection_exists_cmd|getNamespaces_after_close|ops_after_close|collections_exist_cmd)\.js$/.test(x.name)) {
 	    print(" >>>>>>>>>>>>>>> skipping test that would correctly fail under sharding " + x.name)	    
 	    return;
 	}
