@@ -59,6 +59,9 @@ Bug fixes
     - Reduced lock contention for profiling and diagnostics logging.
       (#505, #506, #508)
 
+    - Includes a fix for a rare memory allocation error exposed by large
+      keys in the fractal tree library.  (Tokutek/ft-index#70)
+
 
 tokumx 1.2.0
 ------------
