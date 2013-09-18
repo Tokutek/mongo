@@ -22,7 +22,6 @@
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/dbwebserver.h"
 #include "mongo/db/repl.h"
@@ -444,7 +443,7 @@ namespace mongo {
             s << p(t);
 
             if( theReplSet == 0 ) {
-                if( cmdLine._replSet.empty() )
+                if( replSettings.replSet.empty() )
                     s << p("Not using --replSet");
                 else  {
                     s << p("Still starting up, or else set is not yet " + a("http://dochub.mongodb.org/core/replicasetconfiguration#ReplicaSetConfiguration-InitialSetup", "", "initiated")
@@ -475,7 +474,7 @@ namespace mongo {
                   );
 
             if( theReplSet == 0 ) {
-                if( cmdLine._replSet.empty() )
+                if( replSettings.replSet.empty() )
                     s << p("Not using --replSet");
                 else  {
                     s << p("Still starting up, or else set is not yet " + a("http://dochub.mongodb.org/core/replicasetconfiguration#ReplicaSetConfiguration-InitialSetup", "", "initiated")
@@ -516,8 +515,8 @@ namespace mongo {
         CmdReplSetExpireOplog() : ReplSetCommand("replSetExpireOplog") { }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if( cmdObj.hasElement("expireOplogDays") || cmdObj.hasElement("expireOplogHours") ) {
-                uint32_t expireOplogDays = cmdLine.expireOplogDays;
-                uint32_t expireOplogHours = cmdLine.expireOplogHours;
+                int expireOplogDays = replSettings.expireOplogDays;
+                int expireOplogHours = replSettings.expireOplogHours;
                 if (cmdObj.hasElement("expireOplogHours")) {
                     BSONElement e = cmdObj["expireOplogHours"];
                     if (!e.isNumber()) {
@@ -557,8 +556,8 @@ namespace mongo {
         CmdReplGetExpireOplog() : ReplSetCommand("replGetExpireOplog") { }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             // these reads can be racy. It does not matter
-            result.append("expireOplogDays", cmdLine.expireOplogDays);
-            result.append("expireOplogHours", cmdLine.expireOplogHours);
+            result.append("expireOplogDays", replSettings.expireOplogDays);
+            result.append("expireOplogHours", replSettings.expireOplogHours);
             return true;
         }
     } cmdReplGetExpireOplog;

@@ -24,8 +24,9 @@
 #include "mongo/db/json.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/ops/insert.h"
-#include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/bgsync.h"
+#include "mongo/db/repl/replication_server_status.h"  // replSettings
+#include "mongo/db/repl/rs.h"
 #include "mongo/dbtests/dbtests.h"
 
 namespace mongo {
@@ -122,7 +123,7 @@ namespace ReplSetTests {
         //SyncTail* _tailer;
     public:
         Base() {
-            cmdLine._replSet = "foo";
+            replSettings.replSet = "foo";
             createOplog();
             setup();
         }
@@ -159,6 +160,8 @@ namespace ReplSetTests {
             }
         }
         void setup() {
+            replSettings.replSet = "foo";
+
             // setup background sync instance
             //_bgsync = new BackgroundSyncTest();
 

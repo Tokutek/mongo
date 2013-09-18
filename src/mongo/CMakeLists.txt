@@ -386,7 +386,6 @@ if (BUILD_TESTING)
       coredb
       coreserver
       coreshard
-      dbcmdline
       mongocommon
       mongodandmongos
       mongoscore
@@ -399,7 +398,6 @@ if (BUILD_TESTING)
     )
 
   foreach (test
-      cmdline_test
       index_set_test
       server_parameters_test
       )
@@ -413,7 +411,6 @@ if (BUILD_TESTING)
       )
   endforeach ()
 
-  target_link_whole_libraries(cmdline_test bson dbcmdline options_parser)
   target_link_whole_libraries(index_set_test bson index_set)
   target_link_whole_libraries(server_parameters_test server_parameters)
 
@@ -523,7 +520,6 @@ if (BUILD_TESTING)
       mongocommon
       coreserver
       coredb
-      dbcmdline
       mongodandmongos
       ${TokuKV_LIBRARIES}
       ${TOKUMX_SSL_LIBRARIES}
@@ -704,7 +700,6 @@ link_recursive_deps(mongos
   coredb
   mongocommon
   coreshard
-  dbcmdline
   mongodandmongos
   s_upgrade
   ${TOKUMX_SSL_LIBRARIES}
@@ -927,7 +922,6 @@ if (BUILD_TESTING)
   endforeach ()
 
   foreach (test
-      cmdline_test
       field_ref_test
       field_parser_test
       index_set_test

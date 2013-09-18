@@ -34,6 +34,7 @@
 #include "mongo/db/collection.h"
 #include "mongo/db/json.h"
 #include "mongo/db/txn_complete_hooks.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/platform/posix_fadvise.h"
 #include "mongo/util/options_parser/option_section.h"
@@ -47,7 +48,6 @@ using namespace mongo;
 
 namespace mongo {
 
-    CmdLine cmdLine;
 
     moe::OptionSection options("options");
     moe::Environment _params;
@@ -149,10 +149,6 @@ namespace mongo {
 
         bool useDirectClient = hasParam( "dbpath" );
 
-        mongo::runGlobalInitializersOrDie(argc, argv, envp);
-
-        preSetup();
-
         preSetup();
 
         if ( ! useDirectClient ) {
@@ -198,7 +194,7 @@ namespace mongo {
             _conn = new DBDirectClient();
             _host = "DIRECT";
             static string myDbpath = getParam( "dbpath" );
-            dbpath = myDbpath.c_str();
+            storageGlobalParams.dbpath = myDbpath.c_str();
             try {
                 acquirePathLock();
             }

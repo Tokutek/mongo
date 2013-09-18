@@ -21,7 +21,6 @@
 #include <db.h>
 
 #include "mongo/db/client.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/storage/env.h"
 
 namespace mongo {

@@ -33,6 +33,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/restapi.h"
+#include "mongo/db/storage_options.h"
 
 namespace mongo {
 
@@ -250,7 +251,7 @@ namespace mongo {
         LOCK_REASON(lockReason, "restapi: getting admin auth credentials");
         readlocktry rl(10000, lockReason);
         uassert( 16173 , "couldn't get read lock to get admin auth credentials" , rl.got() );
-        Client::Context cx("admin.system.users", dbpath);
+        Client::Context cx("admin.system.users", storageGlobalParams.dbpath);
         Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
 
         BSONObj o;
@@ -290,7 +291,7 @@ namespace mongo {
             if( *replInfo )
                 ss << "\nreplInfo:  " << replInfo << "\n\n";
             if( replSet ) {
-                ss << a("", "see replSetGetStatus link top of page") << "--replSet </a>" << cmdLine._replSet;
+                ss << a("", "see replSetGetStatus link top of page") << "--replSet </a>" << replSettings.replSet;
             }
             if ( replAllDead ) {
                 ss << "\n<b>replication replAllDead=" << replAllDead << "</b>\n";

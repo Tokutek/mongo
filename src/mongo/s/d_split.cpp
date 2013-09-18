@@ -619,9 +619,9 @@ namespace mongo {
                     splitKeys.erase( splitKeys.begin() );
                     verify( c.get() );
 
-                    if ( timer.millis() > cmdLine.slowMS ) {
+                    if ( timer.millis() > serverGlobalParams.slowMS ) {
                         warning() << "Finding the split vector for " <<  ns << " over "<< keyPattern
-                                  << " maxChunkSize: " << maxChunkSize << " numSplits: " << splitKeys.size() 
+                                  << " maxChunkSize: " << maxChunkSize << " numSplits: " << splitKeys.size()
                                   << " lookedAt: " << currCount << " took " << timer.millis() << "ms"
                                   << endl;
                     }

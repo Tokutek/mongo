@@ -16,14 +16,14 @@ add_library(index_set STATIC
   )
 add_dependencies(index_set generate_error_codes generate_action_types)
 
-add_library(dbcmdline STATIC
-  cmdline
+add_library(server_options STATIC
   server_options
   )
-target_link_libraries(dbcmdline LINK_PUBLIC
+target_link_libraries(server_options LINK_PUBLIC
   bson
   server_parameters
   options_parser
+  cmdline_utils
   )
 
 add_library(db_common STATIC
@@ -33,6 +33,10 @@ add_library(db_common STATIC
 target_link_libraries(db_common LINK_PUBLIC
   bson
   foundation
+  )
+
+add_library(storage_global_params_impl STATIC
+  storage_global_params_impl
   )
 
 add_library(coredb STATIC
@@ -52,7 +56,6 @@ add_library(coredb STATIC
   commands/user_management_commands.cpp
   pipeline/pipeline
   dbcommands_generic
-  dbpath
   dbwebserver
   keypattern
   keygenerator
@@ -106,11 +109,13 @@ target_link_libraries(coredb LINK_PUBLIC
   serverauth
   db_common
   mongocommon
-  dbcmdline
   coreserver
   plugins
   server_parameters
   foundation
+  server_options
+  storage_global_params_impl
+  cmdline_utils
   ${TokuKV_LIBRARIES}
   )
 
@@ -172,6 +177,8 @@ add_library(serveronly STATIC
   ops/update
   ops/update_internal
   ops/insert
+  startup_warnings
+  storage_options
 
   # most commands are only for mongod
   dbcommands
@@ -211,7 +218,7 @@ target_link_libraries(serveronly LINK_PUBLIC
   coreshard
   authmongod
   db_common
-  dbcmdline
+  storage_global_params_impl
   defaultversion
   index_set
   ${TokuKV_LIBRARIES}

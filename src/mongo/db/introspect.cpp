@@ -126,7 +126,7 @@ namespace {
         fassert(16372, db);
         const char *profileName = db->profileName().c_str();
         Collection *cl = getCollection(profileName);
-        if (!cl && (cmdLine.defaultProfile || force)) {
+        if (!cl && (serverGlobalParams.defaultProfile || force)) {
             // system.profile collection doesn't exist; create it
             log() << "creating profile collection: " << profileName << endl;
             string errmsg;

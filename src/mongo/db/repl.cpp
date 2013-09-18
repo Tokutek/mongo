@@ -44,11 +44,11 @@
 #include "../util/background.h"
 #include "../client/connpool.h"
 #include "commands.h"
-#include "cmdline.h"
 #include "repl_block.h"
 #include "repl/rs.h"
 #include "replutil.h"
 #include "repl/connections.h"
+#include "mongo/db/repl/replication_server_status.h"
 #include "ops/update.h"
 #include "pcrecpp.h"
 #include "mongo/db/commands/server_status.h"
@@ -131,14 +131,14 @@ namespace mongo {
     void startReplSets(ReplSetCmdline*);
     void startReplication() {
         /* if we are going to be a replica set, we aren't doing other forms of replication. */
-        if( !cmdLine._replSet.empty() ) {
+        if (!replSettings.replSet.empty()) {
             replSet = true;
             setLogTxnOpsForReplication(true);
             setLogTxnToOplog(logTransactionOps);
             setLogTxnRefToOplog(logTransactionOpsRef);
             setLogOpsToOplogRef(logOpsToOplogRef);
             setOplogInsertStats(&oplogInsertStats, &oplogInsertBytesStats);
-            ReplSetCmdline *replSetCmdline = new ReplSetCmdline(cmdLine._replSet);
+            ReplSetCmdline *replSetCmdline = new ReplSetCmdline(replSettings.replSet);
             boost::thread t( boost::bind( &startReplSets, replSetCmdline) );
 
             return;

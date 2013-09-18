@@ -24,7 +24,6 @@
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/principal.h"
 #include "mongo/db/client.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/bgsync.h"
@@ -1087,8 +1086,8 @@ namespace mongo {
 
     void ReplSetImpl::changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours) {
         boost::unique_lock<boost::mutex> lock(_oplogPartitionMutex);
-        cmdLine.expireOplogDays = expireOplogDays;
-        cmdLine.expireOplogHours = expireOplogHours;
+        replSettings.expireOplogDays = expireOplogDays;
+        replSettings.expireOplogHours = expireOplogHours;
         _oplogPartitionCond.notify_all();
     }
 

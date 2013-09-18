@@ -23,10 +23,11 @@
 #include "mongo/base/init.h"
 #include "mongo/base/string_data.h"
 #include "mongo/db/client.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/server_options.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
@@ -159,11 +160,11 @@ namespace mongo {
         }
 
         static void gdbStacktrace() {
-            if (!cmdLine.gdbPath.empty()) {
+            if (!serverGlobalParams.gdbPath.empty()) {
                 rawOut("--------------------------------------------------------------------------------");
                 rawOut("GDB backtrace:");
                 rawOut(" ");
-                db_env_try_gdb_stack_trace(cmdLine.gdbPath.c_str());
+                db_env_try_gdb_stack_trace(serverGlobalParams.gdbPath.c_str());
                 rawOut(" ");
             }
         }
@@ -293,8 +294,7 @@ namespace mongo {
             rawOut("--------------------------------------------------------------------------------");
             rawOut("Parsed server options:");
             rawOut(" ");
-            const BSONObj &opts = CmdLine::getParsedOpts();
-            for (BSONObjIterator it(opts); it.more(); ) {
+            for (BSONObjIterator it(serverGlobalParams.parsedOpts); it.more(); ) {
                 const BSONElement &elt = it.next();
                 rawOut(elt.toString());
             }
@@ -431,12 +431,12 @@ namespace mongo {
             char *p;
 
             char dbpath_cstr[1<<12];
-            if (cmdLine.doFork || dbpath[0] == '/') {
-                strncpy(dbpath_cstr, dbpath.c_str(), sizeof dbpath_cstr);
+            if (serverGlobalParams.doFork || storageGlobalParams.dbpath[0] == '/') {
+                strncpy(dbpath_cstr, storageGlobalParams.dbpath.c_str(), sizeof dbpath_cstr);
             } else {
                 // mallocs, hopefully this is ok
                 std::stringstream ss;
-                ss << cmdLine.cwd << "/" << dbpath;
+                ss << serverGlobalParams.cwd << "/" << storageGlobalParams.dbpath;
                 std::string absdbpath = ss.str();
                 strncpy(dbpath_cstr, absdbpath.c_str(), sizeof dbpath_cstr);
             }
@@ -450,25 +450,25 @@ namespace mongo {
             singleFsInfo(dbpath_cstr);
             rawOut(" ");
 
-            if (!cmdLine.logDir.empty() && cmdLine.logDir != dbpath) {
+            if (!storageGlobalParams.logDir.empty() && storageGlobalParams.logDir != storageGlobalParams.dbpath) {
                 p = buf;
                 p = stpcpy(p, "Information for logDir \"");
-                p = stpncpy(p, cmdLine.logDir.c_str(), (sizeof buf) - (p - buf));
+                p = stpncpy(p, storageGlobalParams.logDir.c_str(), (sizeof buf) - (p - buf));
                 p = stpncpy(p, "\":", (sizeof buf) - (p - buf));
                 rawOut(buf);
                 rawOut(" ");
-                singleFsInfo(cmdLine.logDir.c_str());
+                singleFsInfo(storageGlobalParams.logDir.c_str());
                 rawOut(" ");
             }
 
-            if (!cmdLine.tmpDir.empty() && cmdLine.tmpDir != dbpath) {
+            if (!storageGlobalParams.tmpDir.empty() && storageGlobalParams.tmpDir != storageGlobalParams.dbpath) {
                 p = buf;
                 p = stpcpy(p, "Information for tmpDir \"");
-                p = stpncpy(p, cmdLine.tmpDir.c_str(), (sizeof buf) - (p - buf));
+                p = stpncpy(p, storageGlobalParams.tmpDir.c_str(), (sizeof buf) - (p - buf));
                 p = stpncpy(p, "\":", (sizeof buf) - (p - buf));
                 rawOut(buf);
                 rawOut(" ");
-                singleFsInfo(cmdLine.tmpDir.c_str());
+                singleFsInfo(storageGlobalParams.tmpDir.c_str());
                 rawOut(" ");
             }
         }

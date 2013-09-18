@@ -23,7 +23,6 @@
 #include <fcntl.h>
 #include <time.h>
 
-#include "mongo/db/cmdline.h"
 #include "mongo/util/background.h"
 #include "mongo/util/goodies.h"
 #include "mongo/util/net/listen.h"

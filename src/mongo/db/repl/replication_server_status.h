@@ -36,6 +36,19 @@ namespace mongo {
 
         int slavedelay;
 
+        int expireOplogDays;
+        int expireOplogHours;
+
+        std::string replSet;       // --replSet[/<seedlist>]
+        std::string ourSetName() const {
+            std::string setname;
+            size_t sl = replSet.find('/');
+            if( sl == std::string::npos )
+                return replSet;
+            return replSet.substr(0, sl);
+        }
+        bool usingReplSets() const { return !replSet.empty(); }
+
         std::set<std::string> discoveredSeeds;
         mutex discoveredSeeds_mx;
 
@@ -46,6 +59,8 @@ namespace mongo {
             startInRecovery(false),
             autoresync(false),
             slavedelay(),
+            expireOplogDays(14),
+            expireOplogHours(0),
             discoveredSeeds(),
             discoveredSeeds_mx("ReplSettings::discoveredSeeds") {
         }

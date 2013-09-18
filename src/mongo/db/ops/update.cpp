@@ -20,17 +20,18 @@
 #include "pch.h"
 
 #include "mongo/base/counter.h"
-#include "mongo/db/oplog.h"
-#include "mongo/db/queryutil.h"
-#include "mongo/db/query_optimizer.h"
 #include "mongo/db/collection.h"
-#include "mongo/db/server_parameters.h"
 #include "mongo/db/commands/server_status.h"
+#include "mongo/db/oplog.h"
+#include "mongo/db/oplog_helpers.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/query.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/update_internal.h"
-#include "mongo/db/oplog_helpers.h"
+#include "mongo/db/queryutil.h"
+#include "mongo/db/query_optimizer.h"
+#include "mongo/db/server_parameters.h"
+#include "mongo/db/storage_options.h"
 
 namespace mongo {
 
@@ -74,9 +75,9 @@ namespace mongo {
     }
 
     ExportedServerParameter<bool> _fastupdatesParameter(
-            ServerParameterSet::getGlobal(), "fastupdates", &cmdLine.fastupdates, true, true);
+            ServerParameterSet::getGlobal(), "fastupdates", &storageGlobalParams.fastupdates, true, true);
     ExportedServerParameter<bool> _fastupdatesIgnoreErrorsParameter(
-            ServerParameterSet::getGlobal(), "fastupdatesIgnoreErrors", &cmdLine.fastupdatesIgnoreErrors, true, true);
+            ServerParameterSet::getGlobal(), "fastupdatesIgnoreErrors", &storageGlobalParams.fastupdatesIgnoreErrors, true, true);
 
     static Counter64 fastupdatesErrors;
     static ServerStatusMetricField<Counter64> fastupdatesIgnoredErrorsDisplay("fastupdates.errors", &fastupdatesErrors);
@@ -100,7 +101,7 @@ namespace mongo {
                 // That is the risk you take when using --fastupdates.
                 //
                 // We will print such errors to the server's error log no more than once per 5 seconds.
-                if (!cmdLine.fastupdatesIgnoreErrors && _loggingTimer.millisReset() > 5000) {
+                if (!storageGlobalParams.fastupdatesIgnoreErrors && _loggingTimer.millisReset() > 5000) {
                     problem() << "* Failed to apply \"--fastupdate\" updateobj message! "
                                  "This means an update operation that appeared successful actually failed." << endl;
                     problem() << "* It probably should not be happening in production. To ignore these errors, "

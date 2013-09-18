@@ -30,9 +30,6 @@
 #include "mongo/db/auth/authorization_manager_global.h"
 #include "mongo/db/dbwebserver.h"
 #include "mongo/db/initialize_server_global_state.h"
-#include "../util/startup_test.h"
-#include "../util/stringutils.h"
-#include "../util/version.h"
 
 #include "mongo/db/lasterror.h"
 #include "mongo/db/log_process_details.h"
@@ -49,8 +46,10 @@
 #include "mongo/s/mongos_options.h"
 #include "mongo/s/request.h"
 #include "mongo/s/server.h"
+#include "mongo/s/version_mongos.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/admin_access.h"
+#include "mongo/util/cmdline_utils/censor_cmdline.h"
 #include "mongo/util/concurrency/task.h"
 #include "mongo/util/concurrency/thread_name.h"
 #include "mongo/util/exception_filter_win32.h"
@@ -62,14 +61,15 @@
 #include "mongo/util/ntservice.h"
 #include "mongo/util/options_parser/environment.h"
 #include "mongo/util/options_parser/option_section.h"
+#include "mongo/util/options_parser/options_parser.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/ramlog.h"
 #include "mongo/util/signal_handlers.h"
 #include "mongo/util/stacktrace.h"
-
-namespace {
-    bool _isUpgradeSwitchSet = false;
-}
+#include "mongo/util/startup_test.h"
+#include "mongo/util/stringutils.h"
+#include "mongo/util/text.h"
+#include "mongo/util/version.h"
 
 namespace mongo {
 
@@ -82,14 +82,9 @@ namespace mongo {
     static void initService();
 #endif
 
-    CmdLine cmdLine;
-    moe::Environment params;
-    moe::OptionSection options("Allowed options");
     Database *database = 0;
     string mongosCommand;
     bool dbexitCalled = false;
-    static bool scriptingEnabled = true;
-    static vector<string> configdbs;
 
     bool inShutdown() {
         return dbexitCalled;
@@ -211,7 +206,7 @@ namespace mongo {
         setupCoreSignals();
 
         signal(SIGTERM, sighandler);
-        if (!cmdLine.gdb) {
+        if (!serverGlobalParams.gdb) {
             signal(SIGINT, sighandler);
         }
 #if defined(SIGXCPU)
@@ -262,27 +257,6 @@ namespace mongo {
         return 0;
     }
 
-    void printShardingVersionInfo( bool out ) {
-        if ( out ) {
-            cout << "TokuMX mongos router v" << fullVersionString() << " starting: pid=" <<
-                    ProcessId::getCurrent() << " port=" << cmdLine.port <<
-                    ( sizeof(int*) == 4 ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() <<
-                    " (--help for usage)" << endl;
-            DEV cout << "_DEBUG build" << endl;
-            cout << "git version: " << gitVersion() << endl;
-            cout << openSSLVersion("OpenSSL version: ") << endl;
-            cout <<  "build sys info: " << sysInfo() << endl;
-        }
-        else {
-            log() << "TokuMX mongos router v" << fullVersionString() << " starting: pid=" <<
-                    ProcessId::getCurrent() << " port=" << cmdLine.port <<
-                    ( sizeof( int* ) == 4 ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() <<
-                    " (--help for usage)" << endl;
-            DEV log() << "_DEBUG build" << endl;
-            logProcessDetails();
-        }
-    }
-
 } // namespace mongo
 
 using namespace mongo;
@@ -305,7 +279,7 @@ static bool runMongosServer( bool doUpgrade ) {
 
     ReplicaSetMonitor::setConfigChangeHook( boost::bind( &ConfigServer::replicaSetChange , &configServer , _1 ) );
 
-    if ( ! configServer.init( configdbs ) ) {
+    if (!configServer.init(mongosGlobalParams.configdbs)) {
         log() << "couldn't resolve config db address" << endl;
         return false;
     }
@@ -337,138 +311,26 @@ static bool runMongosServer( bool doUpgrade ) {
 
     init();
 
-    if (!cmdLine.pluginsDir.empty()) {
-        plugins::loader->setPluginsDir(cmdLine.pluginsDir);
+    if (!serverGlobalParams.pluginsDir.empty()) {
+        plugins::loader->setPluginsDir(serverGlobalParams.pluginsDir);
     }
-    plugins::loader->autoload(cmdLine.plugins);
+    plugins::loader->autoload(serverGlobalParams.plugins);
 
 #if !defined(_WIN32)
-    CmdLine::launchOk();
+    mongo::signalForkSuccess();
 #endif
 
-    if ( cmdLine.isHttpInterfaceEnabled )
+    if (serverGlobalParams.isHttpInterfaceEnabled)
         boost::thread web( boost::bind(&webServerThread, new NoAdminAccess() /* takes ownership */) );
 
     MessageServer::Options opts;
-    opts.port = cmdLine.port;
-    opts.ipList = cmdLine.bind_ip;
+    opts.port = serverGlobalParams.port;
+    opts.ipList = serverGlobalParams.bind_ip;
     start(opts);
 
     // listen() will return when exit code closes its socket.
     dbexit( EXIT_NET_ERROR );
     return true;
-}
-
-static Status processCommandLineOptions(const std::vector<std::string>& argv) {
-    Status ret = addMongosOptions(&options);
-    if (!ret.isOK()) {
-        StringBuilder sb;
-        sb << "Error getting mongos options descriptions: " << ret.toString();
-        return Status(ErrorCodes::InternalError, sb.str());
-    }
-
-    // parse options
-    ret = CmdLine::store(argv, options, params);
-    if (!ret.isOK()) {
-        std::cerr << "Error parsing command line: " << ret.toString() << std::endl;
-        ::_exit(EXIT_BADOPTIONS);
-    }
-
-    if ( params.count( "help" ) ) {
-        std::cout << options.helpString() << std::endl;
-        ::_exit(EXIT_SUCCESS);
-    }
-    if ( params.count( "version" ) ) {
-        printShardingVersionInfo(true);
-        ::_exit(EXIT_SUCCESS);
-    }
-
-    if ( params.count( "chunkSize" ) ) {
-        int csize = params["chunkSize"].as<int>();
-
-        // validate chunksize before proceeding
-        if ( csize == 0 ) {
-            std::cerr << "error: need a non-zero chunksize" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
-        }
-
-        if ( !Chunk::setMaxChunkSizeSizeMB( csize ) ) {
-            std::cerr << "MaxChunkSize invalid" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
-        }
-    }
-
-    if ( params.count( "localThreshold" ) ) {
-        cmdLine.defaultLocalThresholdMillis = params["localThreshold"].as<int>();
-    }
-
-    if ( params.count( "ipv6" ) ) {
-        enableIPv6();
-    }
-
-    if ( params.count( "jsonp" ) ) {
-        cmdLine.jsonp = true;
-    }
-
-    if ( params.count( "test" ) ) {
-        ::mongo::logger::globalLogDomain()->setMinimumLoggedSeverity(
-                                                        ::mongo::logger::LogSeverity::Debug(5));
-        StartupTest::runTests();
-        ::_exit(EXIT_SUCCESS);
-    }
-
-    if (params.count("noscripting")) {
-        scriptingEnabled = false;
-    }
-
-    if (params.count("httpinterface")) {
-        if (params.count("nohttpinterface")) {
-            std::cerr << "can't have both --httpinterface and --nohttpinterface" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
-        }
-        cmdLine.isHttpInterfaceEnabled = true;
-    }
-
-    if (params.count("noAutoSplit")) {
-        warning() << "running with auto-splitting disabled" << endl;
-        Chunk::ShouldAutoSplit = false;
-    }
-
-    if (params.count("releaseConnectionsAfterResponse")) {
-        warning() << "releaseConnectionsAfterResponse set to true" << endl;
-        ShardConnection::releaseConnectionsAfterResponse = true;
-    }
-
-    if ( ! params.count( "configdb" ) ) {
-        std::cerr << "error: no args for --configdb" << std::endl;
-        ::_exit(EXIT_BADOPTIONS);
-    }
-
-    splitStringDelim( params["configdb"].as<string>() , &configdbs , ',' );
-    if ( configdbs.size() != 1 && configdbs.size() != 3 ) {
-        std::cerr << "need either 1 or 3 configdbs" << std::endl;
-        ::_exit(EXIT_BADOPTIONS);
-    }
-
-    if( configdbs.size() == 1 ) {
-        warning() << "running with 1 config server should be done only for testing purposes and is not recommended for production" << endl;
-    }
-
-    _isUpgradeSwitchSet = params.count("upgrade");
-
-    return Status::OK();
-}
-
-MONGO_INITIALIZER_GENERAL(ParseStartupConfiguration,
-                            ("GlobalLogManager"),
-                            ("default", "completedStartupConfig"))(InitializerContext* context) {
-
-    Status ret = processCommandLineOptions(context->args());
-    if (!ret.isOK()) {
-        return ret;
-    }
-
-    return Status::OK();
 }
 
 MONGO_INITIALIZER_GENERAL(ForkServerOrDie,
@@ -487,7 +349,7 @@ static void startupConfigActions(const std::vector<std::string>& argv) {
     vector<string> disallowedOptions;
     disallowedOptions.push_back( "upgrade" );
     ntservice::configureService(initService,
-                                params,
+                                serverParsedOptions,
                                 defaultServiceStrings,
                                 disallowedOptions,
                                 argv);
@@ -500,12 +362,13 @@ static int _main() {
         return EXIT_FAILURE;
 
     // we either have a setting where all processes are in localhost or none are
-    for ( vector<string>::const_iterator it = configdbs.begin() ; it != configdbs.end() ; ++it ) {
+    for (std::vector<std::string>::const_iterator it = mongosGlobalParams.configdbs.begin();
+         it != mongosGlobalParams.configdbs.end(); ++it) {
         try {
 
             HostAndPort configAddr( *it );  // will throw if address format is invalid
 
-            if ( it == configdbs.begin() ) {
+            if (it == mongosGlobalParams.configdbs.begin()) {
                 grid.setAllowLocalHost( configAddr.isLocalHost() );
             }
 
@@ -529,7 +392,7 @@ static int _main() {
     }
 #endif
 
-    return !runMongosServer(_isUpgradeSwitchSet);
+    return !runMongosServer(mongosGlobalParams.upgrade);
 }
 
 #if defined(_WIN32)
@@ -571,7 +434,7 @@ int main(int argc, char* argv[], char** envp) {
 
     mongo::runGlobalInitializersOrDie(argc, argv, envp);
     startupConfigActions(std::vector<std::string>(argv, argv + argc));
-    CmdLine::censor(argc, argv);
+    cmdline_utils::censorArgvArray(argc, argv);
     try {
         int exitCode = _main();
         ::_exit(exitCode);

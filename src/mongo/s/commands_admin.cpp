@@ -1161,7 +1161,7 @@ namespace mongo {
 
                     // it's fine if mongods of a set all use default port
                     if ( ! serverAddrs[i].hasPort() ) {
-                        serverAddrs[i].setPort( CmdLine::ShardServerPort );
+                        serverAddrs[i].setPort(ServerGlobalParams::ShardServerPort);
                     }
                 }
 

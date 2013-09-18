@@ -21,7 +21,6 @@
 
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/cursor.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/parsed_query.h"

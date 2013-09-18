@@ -31,10 +31,10 @@
 #include "mongo/base/init.h"
 #include "mongo/base/status.h"
 #include "mongo/db/client.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/txn_complete_hooks.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/dbtests/dbtests.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/mutex.h"
@@ -47,7 +47,6 @@ namespace moe = mongo::optionenvironment;
 
 namespace mongo {
 
-    CmdLine cmdLine;
     extern storage::UpdateCallback _storageUpdateCallback;
     moe::OptionSection options;
     moe::Environment params;
@@ -274,7 +273,7 @@ MONGO_INITIALIZER_GENERAL(ParseStartupConfiguration,
             }
 
             string dbpathString = p.string();
-            dbpath = dbpathString.c_str();
+            storageGlobalParams.dbpath = dbpathString.c_str();
 
             Client::initThread("testsuite");
             acquirePathLock();

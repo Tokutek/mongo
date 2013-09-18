@@ -21,7 +21,6 @@
 #include "mongo/client/dbclientcursor.h"
 
 #include "mongo/client/connpool.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/s/shard.h"

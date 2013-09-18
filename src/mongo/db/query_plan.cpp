@@ -16,12 +16,12 @@
 
 #include "mongo/db/query_plan.h"
 
-#include "mongo/db/cmdline.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/query_plan_summary.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/server.h"
 
 namespace mongo {
@@ -313,7 +313,7 @@ doneCheckOrder:
     }
     
     void QueryPlan::checkTableScanAllowed() const {
-        if ( likely( !cmdLine.noTableScan ) )
+        if (likely(!storageGlobalParams.noTableScan))
             return;
 
         // TODO - is this desirable?  See SERVER-2222.
@@ -329,7 +329,8 @@ doneCheckOrder:
         if ( !getCollection( ns() ) )
             return;
 
-        uassert( 10111, (string)"table scans not allowed:" + ns(), !cmdLine.noTableScan );
+        uassert(10111, (string)"table scans not allowed:" + ns(),
+                !storageGlobalParams.noTableScan);
     }
 
     int QueryPlan::independentRangesSingleIntervalLimit() const {

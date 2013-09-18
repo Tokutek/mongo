@@ -35,7 +35,6 @@
 #include "mongo/db/collection_map.h"
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/crash.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/d_concurrency.h"
@@ -58,8 +57,10 @@
 #include "mongo/db/repl/replication_server_status.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/restapi.h"
+#include "mongo/db/startup_warnings.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/stats/snapshots.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/ttl.h"
 #include "mongo/db/txn_complete_hooks.h"
@@ -68,6 +69,7 @@
 #include "mongo/s/d_writeback.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/background.h"
+#include "mongo/util/cmdline_utils/censor_cmdline.h"
 #include "mongo/util/concurrency/task.h"
 #include "mongo/util/concurrency/thread_name.h"
 #include "mongo/util/exception_filter_win32.h"
@@ -76,6 +78,7 @@
 #include "mongo/util/ntservice.h"
 #include "mongo/util/options_parser/environment.h"
 #include "mongo/util/options_parser/option_section.h"
+#include "mongo/util/options_parser/options_parser.h"
 #include "mongo/util/ramlog.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/startup_test.h"
@@ -107,11 +110,6 @@ namespace mongo {
     };
 #endif
 
-    CmdLine cmdLine;
-    moe::Environment params;
-    moe::OptionSection options("Allowed options");
-    static bool scriptingEnabled = true;
-    bool shouldRepairDatabases = 0;
     Timer startupSrandTimer;
 
     const char *ourgetns() {
@@ -170,19 +168,6 @@ namespace mongo {
         cout << n << endl;
     };
 #endif
-
-    void sysRuntimeInfo() {
-        out() << "sysinfo:" << endl;
-#if defined(_SC_PAGE_SIZE)
-        out() << "  page size: " << (int) sysconf(_SC_PAGE_SIZE) << endl;
-#endif
-#if defined(_SC_PHYS_PAGES)
-        out() << "  _SC_PHYS_PAGES: " << sysconf(_SC_PHYS_PAGES) << endl;
-#endif
-#if defined(_SC_AVPHYS_PAGES)
-        out() << "  _SC_AVPHYS_PAGES: " << sysconf(_SC_AVPHYS_PAGES) << endl;
-#endif
-    }
 
     class MyMessageHandler : public MessageHandler {
     public:
@@ -255,7 +240,7 @@ namespace mongo {
         toLog.appendTimeT( "startTime", time(0) );
         toLog.append( "startTimeLocal", dateToCtimeString(curTimeMillis64()) );
 
-        toLog.append( "cmdLine", CmdLine::getParsedOpts() );
+        toLog.append("cmdLine", serverGlobalParams.parsedOpts);
         toLog.append( "pid", ProcessId::getCurrent().asLongLong() );
 
         BSONObjBuilder buildinfo( toLog.subobjStart("buildinfo"));
@@ -272,7 +257,7 @@ namespace mongo {
         //testTheDb();
         MessageServer::Options options;
         options.port = port;
-        options.ipList = cmdLine.bind_ip;
+        options.ipList = serverGlobalParams.bind_ip;
 
         MessageServer * server = createServer( options , new MyMessageHandler() );
         server->setAsTimeTracker();
@@ -282,7 +267,7 @@ namespace mongo {
 
         logStartup();
         startReplication();
-        if ( cmdLine.isHttpInterfaceEnabled )
+        if (serverGlobalParams.isHttpInterfaceEnabled)
             boost::thread web( boost::bind(&webServerThread, new RestAdminAccess() /* takes ownership */));
 
 #if(TESTEXHAUST)
@@ -301,7 +286,7 @@ namespace mongo {
     unsigned long long checkIfReplMissingFromCommandLine() {
         LOCK_REASON(lockReason, "startup: checking whether --replSet is missing");
         Lock::GlobalWrite lk(lockReason);
-        if( !cmdLine.usingReplSets() ) {
+        if (!replSettings.usingReplSets()) {
             Client::GodScope gs;
             DBDirectClient c;
             return c.count("local.system.replset");
@@ -665,11 +650,13 @@ namespace mongo {
         {
             ProcessId pid = ProcessId::getCurrent();
             LogstreamBuilder l = log();
-            l << "TokuMX starting : pid=" << pid << " port=" << cmdLine.port << " dbpath=" << dbpath;
+            l << "TokuMX starting : pid=" << pid
+              << " port=" << serverGlobalParams.port
+              << " dbpath=" << storageGlobalParams.dbpath;
             l << ( is32bit ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() << endl;
         }
         DEV log() << "_DEBUG build (which is slower)" << endl;
-        show_warnings();
+        logStartupWarnings();
 #if defined(_WIN32)
         printTargetMinOS();
 #endif
@@ -678,11 +665,11 @@ namespace mongo {
             stringstream ss;
             ss << endl;
             ss << "*********************************************************************" << endl;
-            ss << " ERROR: dbpath (" << dbpath << ") does not exist." << endl;
+            ss << " ERROR: dbpath (" << storageGlobalParams.dbpath << ") does not exist." << endl;
             ss << " Create this directory or give existing directory in --dbpath." << endl;
             ss << " See http://dochub.mongodb.org/core/startingandstoppingmongo" << endl;
             ss << "*********************************************************************" << endl;
-            uassert( 10296 ,  ss.str().c_str(), boost::filesystem::exists( dbpath ) );
+            uassert(10296,  ss.str().c_str(), boost::filesystem::exists(storageGlobalParams.dbpath));
         }
 
         acquirePathLock();
@@ -723,7 +710,7 @@ namespace mongo {
 
         Module::initAll();
 
-        if ( scriptingEnabled ) {
+        if (mongodGlobalParams.scriptingEnabled) {
             ScriptEngine::setup();
             globalScriptEngine->setCheckInterruptCallback( jsInterruptCallback );
             globalScriptEngine->setGetCurrentOpIdCallback( jsGetCurrentOpIdCallback );
@@ -732,10 +719,10 @@ namespace mongo {
         /* this is for security on certain platforms (nonce generation) */
         srand((unsigned) (curTimeMicros() ^ startupSrandTimer.micros()));
 
-        if (!cmdLine.pluginsDir.empty()) {
-            plugins::loader->setPluginsDir(cmdLine.pluginsDir);
+        if (!serverGlobalParams.pluginsDir.empty()) {
+            plugins::loader->setPluginsDir(serverGlobalParams.pluginsDir);
         }
-        plugins::loader->autoload(cmdLine.plugins);
+        plugins::loader->autoload(serverGlobalParams.plugins);
 
         snapshotThread.go();
         d.clientCursorMonitor.go();
@@ -748,7 +735,7 @@ namespace mongo {
         }
 
 #ifndef _WIN32
-        CmdLine::launchOk();
+        mongo::signalForkSuccess();
 #endif
 
         if(AuthorizationManager::isAuthEnabled()) {
@@ -790,7 +777,7 @@ namespace mongo {
     void initService() {
         ntservice::reportStatus( SERVICE_RUNNING );
         log() << "Service running" << endl;
-        initAndListen( cmdLine.port );
+        initAndListen(serverGlobalParams.port);
     }
 #endif
 
@@ -798,408 +785,11 @@ namespace mongo {
 
 using namespace mongo;
 
-void show_help_text(const moe::OptionSection& options) {
-    show_warnings();
-    std::cout << options.helpString() << std::endl;
-};
-
 static int mongoDbMain(int argc, char* argv[], char** envp);
 
 int main(int argc, char* argv[], char** envp) {
     int exitCode = mongoDbMain(argc, argv, envp);
     ::_exit(exitCode);
-}
-
-static Status processCommandLineOptions(const std::vector<std::string>& argv) {
-    Status ret = addMongodOptions(&options);
-    if (!ret.isOK()) {
-        StringBuilder sb;
-        sb << "Error getting mongod options descriptions: " << ret.toString();
-        return Status(ErrorCodes::InternalError, sb.str());
-    }
-
-    {
-        ret = CmdLine::store(argv, options, params);
-        if (!ret.isOK()) {
-            std::cerr << "Error parsing command line: " << ret.toString() << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
-        }
-
-        if (params.count("help")) {
-            std::cout << options.helpString() << std::endl;
-            ::_exit(EXIT_SUCCESS);
-        }
-        if (params.count("version")) {
-            cout << mongodVersion() << endl;
-            printGitVersion();
-            printOpenSSLVersion();
-            ::_exit(EXIT_SUCCESS);
-        }
-        if (params.count("sysinfo")) {
-            sysRuntimeInfo();
-            ::_exit(EXIT_SUCCESS);
-        }
-
-        if ( params.count( "dbpath" ) ) {
-            dbpath = params["dbpath"].as<string>();
-            if ( params.count( "fork" ) && dbpath[0] != '/' ) {
-                // we need to change dbpath if we fork since we change
-                // cwd to "/"
-                // fork only exists on *nix
-                // so '/' is safe
-                dbpath = cmdLine.cwd + "/" + dbpath;
-            }
-        }
-#ifdef _WIN32
-        if (dbpath.size() > 1 && dbpath[dbpath.size()-1] == '/') {
-            // size() check is for the unlikely possibility of --dbpath "/"
-            dbpath = dbpath.erase(dbpath.size()-1);
-        }
-#endif
-        if ( params.count("slowms")) {
-            cmdLine.slowMS = params["slowms"].as<int>();
-        }
-
-        if ( params.count("syncdelay")) {
-            cmdLine.syncdelay = params["syncdelay"].as<double>();
-        }
-
-        if (params.count("cpu")) {
-            cmdLine.cpu = true;
-        }
-        if (params.count("noauth")) {
-            AuthorizationManager::setAuthEnabled(false);
-        }
-        if (params.count("auth")) {
-            AuthorizationManager::setAuthEnabled(true);
-        }
-        if (params.count("quota")) {
-            cmdLine.quota = true;
-        }
-        if (params.count("quotaFiles")) {
-            cmdLine.quota = true;
-            cmdLine.quotaFiles = params["quotaFiles"].as<int>() - 1;
-        }
-        if (params.count("nodur")) {
-            std::cerr << "nodur deprecated" <<std::endl;
-        }
-        if (params.count("nojournal")) {
-            std::cerr << "nojournal deprecated" <<std::endl;
-        }
-        if (params.count("dur")) {
-            std::cerr << "dur deprecated" <<std::endl;
-        }
-        if (params.count("journal")) {
-            std::cerr << "journal deprecated" <<std::endl;
-        }
-        if (params.count("durOptions")) {
-            std::cerr << "durOptions deprecated" <<std::endl;
-        }
-        if( params.count("journalCommitInterval") ) {
-            cmdLine.logFlushPeriod = params["journalCommitInterval"].as<uint32_t>();
-            std::cout << "--journalCommitInterval deprecated, treating as --logFlushPeriod" << std::endl;
-            if( cmdLine.logFlushPeriod > 300 ) {
-                std::cerr << "--logFlushPeriod out of allowed range (0-300ms)" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-        }
-        if( params.count("logFlushPeriod") ) {
-            cmdLine.logFlushPeriod = params["logFlushPeriod"].as<uint32_t>();
-            if( cmdLine.logFlushPeriod > 300 ) {
-                std::cerr << "--logFlushPeriod out of allowed range (0-300ms)" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-        }
-        if ( !(params.count("expireOplogHours") || params.count("expireOplogDays")) && params.count("replSet") ) {
-            warning() << "*****************************" << std::endl;
-            warning() << "No value set for expireOplogDays, using default of " << cmdLine.expireOplogDays << " days." << std::endl;
-            warning() << "*****************************" << std::endl;
-        }
-        if( params.count("expireOplogHours") ) {
-            cmdLine.expireOplogHours = params["expireOplogHours"].as<uint32_t>();
-            // if expireOplogHours is set, we don't want to use the default
-            // value of expireOplogDays. We want to use 0. If the user
-            // sets the value of expireOplogDays as well, next if-clause
-            // below will catch it
-            if( !params.count("expireOplogDays") ) {
-                cmdLine.expireOplogDays = 0;
-                warning() << "*****************************" << std::endl;
-                warning() << "No value set for expireOplogDays, only for expireOplogHours. Having at least 1 day set for expireOplogDays is recommended." << std::endl;
-                warning() << "*****************************" << std::endl;
-            }
-        }
-        if( params.count("expireOplogDays") ) {
-            cmdLine.expireOplogDays = params["expireOplogDays"].as<uint32_t>();
-        }
-        if (params.count("journalOptions")) {
-            std::cerr << "journalOptions deprecated" <<std::endl;
-        }
-        if (params.count("directio")) {
-            cmdLine.directio = true;
-        }
-        if (params.count("fastupdates")) {
-            cmdLine.fastupdates = true;
-        }
-        if (params.count("fastupdatesIgnoreErrors")) {
-            cmdLine.fastupdatesIgnoreErrors = true;
-        }
-        if (params.count("checkpointPeriod")) {
-            cmdLine.checkpointPeriod = params["checkpointPeriod"].as<uint32_t>();
-        }
-        if (params.count("cleanerPeriod")) {
-            cmdLine.cleanerPeriod = params["cleanerPeriod"].as<uint32_t>();
-        }
-        if (params.count("cleanerIterations")) {
-            cmdLine.cleanerIterations = params["cleanerIterations"].as<uint32_t>();
-        }
-        if (params.count("fsRedzone")) {
-            cmdLine.fsRedzone = params["fsRedzone"].as<int>();
-            if (cmdLine.fsRedzone < 1 || cmdLine.fsRedzone > 99) {
-                std::cerr << "--fsRedzone must be between 1 and 99." << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-        }
-        if (params.count("logDir")) {
-            cmdLine.logDir = params["logDir"].as<string>();
-            if ( cmdLine.logDir[0] != '/' ) {
-                // we need to change dbpath if we fork since we change
-                // cwd to "/"
-                // fork only exists on *nix
-                // so '/' is safe
-                cmdLine.logDir = cmdLine.cwd + "/" + cmdLine.logDir;
-            }
-        }
-        if (params.count("tmpDir")) {
-            cmdLine.tmpDir = params["tmpDir"].as<string>();
-            if ( cmdLine.tmpDir[0] != '/' ) {
-                // we need to change dbpath if we fork since we change
-                // cwd to "/"
-                // fork only exists on *nix
-                // so '/' is safe
-                cmdLine.tmpDir = cmdLine.cwd + "/" + cmdLine.tmpDir;
-            }
-        }
-        if (params.count("gdbPath")) {
-            cmdLine.gdbPath = params["gdbPath"].as<string>();
-        }
-        if (params.count("txnMemLimit")) {
-            uint64_t limit = params["txnMemLimit"].as<unsigned long long>();
-            if( limit > 1ULL<<21 ) {
-                std::cerr << "--txnMemLimit cannot be greater than 2MB" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-        }
-        if (params.count("nohints")) {
-            useHints = false;
-        }
-        if (params.count("nopreallocj")) {
-            std::cerr << "nopreallocj deprecated" << std::endl;
-        }
-        if (params.count("httpinterface")) {
-            if (params.count("nohttpinterface")) {
-                std::cerr << "can't have both --httpinterface and --nohttpinterface" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-            cmdLine.isHttpInterfaceEnabled = true;
-        }
-        // SERVER-10019 Enabling rest/jsonp without --httpinterface should break in the future 
-        if (params.count("rest")) {
-            if (params.count("nohttpinterface")) {
-                log() << "** WARNING: Should not specify both --rest and --nohttpinterface" << 
-                    startupWarningsLog;
-            }
-            else if (!params.count("httpinterface")) {
-                log() << "** WARNING: --rest is specified without --httpinterface," << 
-                    startupWarningsLog;
-                log() << "**          enabling http interface" << startupWarningsLog;
-                cmdLine.isHttpInterfaceEnabled = true;
-            }
-            cmdLine.rest = true;
-        }
-        if (params.count("jsonp")) {
-            if (params.count("nohttpinterface")) {
-                log() << "** WARNING: Should not specify both --jsonp and --nohttpinterface" << 
-                    startupWarningsLog;
-            }
-            else if (!params.count("httpinterface")) {
-                log() << "** WARNING --jsonp is specified without --httpinterface," << 
-                    startupWarningsLog;
-                log() << "**         enabling http interface" << startupWarningsLog;
-                cmdLine.isHttpInterfaceEnabled = true;
-            }
-            cmdLine.jsonp = true;
-        }
-        if (params.count("noscripting")) {
-            scriptingEnabled = false;
-        }
-        if (params.count("noprealloc")) {
-            std::cerr << "noprealloc is a deprecated parameter" << std::endl;
-        }
-        if (params.count("smallfiles")) {
-            std::cerr << " smallfiles is a deprecated parameter." << std::endl;
-        }
-        if (params.count("diaglog")) {
-            int x = params["diaglog"].as<int>();
-            if ( x < 0 || x > 7 ) {
-                std::cerr << "can't interpret --diaglog setting" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-            _diaglog.setLevel(x);
-        }
-        if (params.count("repair")) {
-            std::cerr << " repair is a deprecated parameter." << std::endl;
-        }
-        if (params.count("upgrade")) {
-            std::cerr << " upgrade is a deprecated parameter." << std::endl;
-        }
-        if (params.count("notablescan")) {
-            cmdLine.noTableScan = true;
-        }
-        if (params.count("master")) {
-            std::cerr << " master is a deprecated parameter" << std::endl;
-        }
-        if (params.count("slave")) {
-            std::cerr << " slave is a deprecated parameter" << std::endl;
-        }
-        if (params.count("slavedelay")) {
-            replSettings.slavedelay = params["slavedelay"].as<int>();
-        }
-        if (params.count("fastsync")) {
-            replSettings.fastsync = true;
-        }
-        if (params.count("rs_maintenance")) {
-            replSettings.startInRecovery = true;
-        }
-        if (params.count("autoresync")) {
-            replSettings.autoresync = true;
-            if( params.count("replSet") ) {
-                std::cerr << "--autoresync is not used with --replSet\nsee "
-                          << "http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember"
-                          << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-        }
-        if (params.count("source")) {
-            /* specifies what the source in local.sources should be */
-            cmdLine.source = params["source"].as<string>().c_str();
-        }
-        if( params.count("pretouch") ) {
-            std::cerr << " pretouch is a deprecated parameter" << std::endl;
-        }
-        if (params.count("replSet")) {
-            if (params.count("slavedelay")) {
-                std::cerr << "--slavedelay cannot be used with --replSet" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-            else if (params.count("only")) {
-                std::cerr << "--only cannot be used with --replSet" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-            /* seed list of hosts for the repl set */
-            cmdLine._replSet = params["replSet"].as<string>().c_str();
-        }
-        if (params.count("replIndexPrefetch")) {
-            std::cerr << " replIndexPrefetch is a deprecated parameter" << std::endl;
-        }
-        if (params.count("only")) {
-            cmdLine.only = params["only"].as<string>().c_str();
-        }
-        if( params.count("nssize") ) {
-            std::cerr << " nssize is a deprecated parameter" << std::endl;
-        }
-        if (params.count("oplogSize")) {
-            std::cerr << " oplogSize is a deprecated parameter" << std::endl;
-        }
-        if (params.count("locktreeMaxMemory")) {
-            uint64_t x = params["locktreeMaxMemory"].as<unsigned long long>();
-            if (x < 65536) {
-                std::cerr << "bad --locktreeMaxMemory arg (should never be less than 64kb)" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-        }
-        if (params.count("loaderMaxMemory")) {
-            uint64_t x = params["loaderMaxMemory"].as<unsigned long long>();
-            if (x < 32 * 1024 * 1024) {
-                std::cerr << "bad --loaderMaxMemory arg (should never be less than 32mb)" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-        }
-        if (!params.count("port")) {
-            if( params.count("configsvr") ) {
-                cmdLine.port = CmdLine::ConfigServerPort;
-            }
-            if( params.count("shardsvr") ) {
-                if( params.count("configsvr") ) {
-                    std::cerr << "can't do --shardsvr and --configsvr at the same time" << std::endl;
-                    ::_exit(EXIT_BADOPTIONS);
-                }
-                cmdLine.port = CmdLine::ShardServerPort;
-            }
-        }
-        else {
-            if ( cmdLine.port <= 0 || cmdLine.port > 65535 ) {
-                std::cerr << "bad --port number" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-        }
-        if ( params.count("configsvr" ) ) {
-            cmdLine.configsvr = true;
-            if (cmdLine.usingReplSets()) {
-                log() << "replication should not be enabled on a config server" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
-            }
-            if (!params.count("dbpath"))
-                dbpath = "/data/configdb";
-        }
-        if ( params.count( "profile" ) ) {
-            cmdLine.defaultProfile = params["profile"].as<int>();
-        }
-        if (params.count("ipv6")) {
-            enableIPv6();
-        }
-
-        if (params.count("noMoveParanoia") && params.count("moveParanoia")) {
-            std::cerr << "The moveParanoia and noMoveParanoia flags cannot both be set; "
-                      << "please use only one of them." << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
-        }
-
-        if (params.count("noMoveParanoia"))
-            cmdLine.moveParanoia = false;
-
-        if (params.count("moveParanoia"))
-            cmdLine.moveParanoia = true;
-
-        if (params.count("pairwith") || params.count("arbiter") || params.count("opIdMem")) {
-            std::cerr << "****\n"
-                      << "Replica Pairs have been deprecated. Invalid options: --pairwith, "
-                      << "--arbiter, and/or --opIdMem\n"
-                      << "<http://dochub.mongodb.org/core/replicapairs>\n"
-                      << "****" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
-        }
-
-        if (sizeof(void*) == 4) {
-            // trying to make this stand out more like startup warnings
-            log() << endl;
-            warning() << "32-bit servers don't have journaling enabled by default. Please use --journal if you want durability." << endl;
-            log() << endl;
-        }
-    }
-
-    return Status::OK();
-}
-
-MONGO_INITIALIZER_GENERAL(ParseStartupConfiguration,
-                            ("GlobalLogManager"),
-                            ("default", "completedStartupConfig"))(InitializerContext* context) {
-
-    Status ret = processCommandLineOptions(context->args());
-    if (!ret.isOK()) {
-        return ret;
-    }
-
-    return Status::OK();
 }
 
 MONGO_INITIALIZER_GENERAL(ForkServerOrDie,
@@ -1213,46 +803,46 @@ MONGO_INITIALIZER_GENERAL(ForkServerOrDie,
  * This function should contain the startup "actions" that we take based on the startup config.  It
  * is intended to separate the actions from "storage" and "validation" of our startup configuration.
  */
-static void startupConfigActions(const std::vector<std::string>& argv) {
+static void startupConfigActions(const std::vector<std::string>& args) {
     // The "command" option is deprecated.  For backward compatibility, still support the "run"
     // and "dbppath" command.  The "run" command is the same as just running mongod, so just
     // falls through.
-    if (params.count("command")) {
-        vector<string> command = params["command"].as< vector<string> >();
+    if (serverParsedOptions.count("command")) {
+        vector<string> command = serverParsedOptions["command"].as< vector<string> >();
 
         if (command[0].compare("dbpath") == 0) {
-            cout << dbpath << endl;
+            cout << storageGlobalParams.dbpath << endl;
             ::_exit(EXIT_SUCCESS);
         }
 
         if (command[0].compare("run") != 0) {
             cout << "Invalid command: " << command[0] << endl;
-            show_help_text(options);
+            printMongodHelp(serverOptions);
             ::_exit(EXIT_FAILURE);
         }
 
         if (command.size() > 1) {
             cout << "Too many parameters to 'run' command" << endl;
-            show_help_text(options);
+            printMongodHelp(serverOptions);
             ::_exit(EXIT_FAILURE);
         }
     }
 
-    Module::configAll(params);
+    Module::configAll(serverParsedOptions);
 
 #ifdef _WIN32
     ntservice::configureService(initService,
-            params,
+            serverParsedOptions,
             defaultServiceStrings,
             std::vector<std::string>(),
-            argv);
+            args);
 #endif  // _WIN32
 
 #ifdef __linux__
-    if (params.count("shutdown")){
+    if (serverParsedOptions.count("shutdown")){
         bool failed = false;
 
-        string name = ( boost::filesystem::path( dbpath ) / "mongod.lock" ).string();
+        string name = (boost::filesystem::path(storageGlobalParams.dbpath) / "mongod.lock").string();
         if ( !boost::filesystem::exists( name ) || boost::filesystem::file_size( name ) == 0 )
             failed = true;
 
@@ -1273,7 +863,8 @@ static void startupConfigActions(const std::vector<std::string>& argv) {
         }
 
         if (failed) {
-            cerr << "There doesn't seem to be a server running with dbpath: " << dbpath << endl;
+            std::cerr << "There doesn't seem to be a server running with dbpath: "
+                      << storageGlobalParams.dbpath << std::endl;
             ::_exit(EXIT_FAILURE);
         }
 
@@ -1338,7 +929,7 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     setupSignalHandlers();
     mongo::runGlobalInitializersOrDie(argc, argv, envp);
     startupConfigActions(std::vector<std::string>(argv, argv + argc));
-    CmdLine::censor(argc, argv);
+    cmdline_utils::censorArgvArray(argc, argv);
 
     if (!initializeServerGlobalState())
         ::_exit(EXIT_FAILURE);
@@ -1355,7 +946,7 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
 #endif
 
     StartupTest::runTests();
-    initAndListen(cmdLine.port);
+    initAndListen(serverGlobalParams.port);
     dbexit(EXIT_CLEAN);
     return 0;
 }
@@ -1472,7 +1063,7 @@ namespace mongo {
         sigemptyset( &asyncSignals );
         sigaddset( &asyncSignals, SIGTERM );
         sigaddset( &asyncSignals, SIGHUP );
-        if (!cmdLine.gdb) {
+        if (!serverGlobalParams.gdb) {
             sigaddset( &asyncSignals, SIGINT );
         }
         sigaddset( &asyncSignals, SIGUSR1 );

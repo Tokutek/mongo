@@ -728,7 +728,7 @@ namespace mongo {
                     return false;
                 }
             }
-            if ( relockTime.millis() >= ( cmdLine.slowMS - 10 ) ) {
+            if ( relockTime.millis() >= ( serverGlobalParams.slowMS - 10 ) ) {
                 log() << "setShardVersion - relocking slow: " << relockTime.millis() << endl;
             }
             

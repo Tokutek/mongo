@@ -50,11 +50,11 @@
 #include "mongo/db/json.h"
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/replutil.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/commands/fsync.h"
 #include "mongo/db/index.h"
 #include "mongo/db/jsobjmanipulator.h"
+#include "mongo/db/mongod_options.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/count.h"
@@ -63,6 +63,7 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/stats/counters.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/storage/env.h"
 
@@ -93,8 +94,6 @@ namespace mongo {
 #define LOGWITHRATELIMIT if( ++nloggedsome < 1000 || nloggedsome % 100 == 0 )
 
     string dbExecCommand;
-
-    bool useHints = true;
 
     KillCurrentOp killCurrentOp;
 
@@ -311,8 +310,8 @@ namespace mongo {
 
     // Profile the current op in an alternate transaction
     void lockedDoProfile(const Client& c, int op, CurOp& currentOp) {
-        if ( dbHolder().__isLoaded( nsToDatabase( currentOp.getNS() ) , dbpath ) ) {
-            Client::Context ctx(currentOp.getNS(), dbpath);
+        if ( dbHolder().__isLoaded( nsToDatabase( currentOp.getNS() ) , storageGlobalParams.dbpath ) ) {
+            Client::Context ctx(currentOp.getNS(), storageGlobalParams.dbpath);
             Client::AlternateTransactionStack altStack;
             Client::Transaction txn(DB_SERIALIZABLE);
             profile(c, op, currentOp);
@@ -382,7 +381,7 @@ namespace mongo {
         OpDebug& debug = currentOp.debug();
         debug.op = op;
 
-        long long logThreshold = cmdLine.slowMS;
+        long long logThreshold = serverGlobalParams.slowMS;
         bool shouldLog = logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1));
 
         if ( op == dbQuery ) {
@@ -1193,7 +1192,7 @@ namespace mongo {
             LOCK_REASON(lockReason, "shutting down");
             Lock::GlobalWrite lk(lockReason);
             log() << "shutdown: going to close databases..." << endl;
-            dbHolderW().closeDatabases(dbpath);
+            dbHolderW().closeDatabases(storageGlobalParams.dbpath);
             log() << "shutdown: going to unload all plugins..." << endl;
             plugins::loader->shutdown();
             log() << "shutdown: going to shutdown TokuMX..." << endl;
@@ -1316,7 +1315,7 @@ namespace mongo {
     }
 
     void acquirePathLock() {
-        string name = ( boost::filesystem::path( dbpath ) / "mongod.lock" ).string();
+        string name = (boost::filesystem::path(storageGlobalParams.dbpath) / "mongod.lock").string();
 
 #ifdef _WIN32
         lockFileHandle = CreateFileA( name.c_str(), GENERIC_READ | GENERIC_WRITE,
@@ -1367,7 +1366,7 @@ namespace mongo {
     void DiagLog::openFile() {
         verify( f == 0 );
         stringstream ss;
-        ss << dbpath << "/diaglog." << hex << time(0);
+        ss << storageGlobalParams.dbpath << "/diaglog." << hex << time(0);
         string name = ss.str();
         f = new ofstream(name.c_str(), ios::out | ios::binary);
         if ( ! f->good() ) {

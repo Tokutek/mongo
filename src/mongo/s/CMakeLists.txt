@@ -78,6 +78,8 @@ add_library(mongoscore STATIC
   balancer_policy
   writeback_listener
   version_manager
+  version_mongos
+  mongos_persistence_stubs
   )
 add_dependencies(mongoscore generate_error_codes generate_action_types)
 target_link_libraries(mongoscore LINK_PUBLIC

@@ -25,7 +25,6 @@
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/crash.h"
 #include "mongo/db/oplog.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/keypattern.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/repl.h"
@@ -44,12 +43,13 @@
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/util/elapsed_tracker.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/assert_ids.h"
 
 namespace mongo {
 
     void deleteOplogFiles() {
-        Client::Context ctx(rsoplog, dbpath);
+        Client::Context ctx(rsoplog, storageGlobalParams.dbpath);
         // TODO: code review this for possible error cases
         // although, I don't think we care about error cases,
         // just that after we exit, oplog files don't exist
@@ -73,7 +73,7 @@ namespace mongo {
 
     // assumes it is locked on entry
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID) {
-        Client::Context ctx(rsOplogRefs , dbpath);
+        Client::Context ctx(rsOplogRefs , storageGlobalParams.dbpath);
         Collection* replInfoDetails = getCollection(rsReplInfo);
         BufBuilder bufbuilder(256);
         BSONObjBuilder b(bufbuilder);
@@ -205,7 +205,7 @@ namespace mongo {
     }
 
     void createOplog() {
-        bool rs = !cmdLine._replSet.empty();
+        bool rs = !replSettings.replSet.empty();
         verify(rs);
         
         const char * oplogNS = rsoplog;
@@ -517,8 +517,8 @@ namespace mongo {
     }
 
     uint64_t expireOplogMilliseconds() {
-        const uint32_t days = cmdLine.expireOplogDays;
-        const uint32_t hours = days * 24 + cmdLine.expireOplogHours;
+        const uint32_t days = replSettings.expireOplogDays;
+        const uint32_t hours = days * 24 + replSettings.expireOplogHours;
         const uint64_t millisPerHour = 3600 * 1000;
         return hours * millisPerHour;
     }

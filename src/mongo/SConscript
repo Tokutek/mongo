@@ -56,7 +56,8 @@ env.SConscript(['base/SConscript',
                 's/SConscript',
                 'unittest/SConscript',
                 'util/concurrency/SConscript',
-                'util/options_parser/SConscript'])
+                'util/options_parser/SConscript',
+                'util/cmdline_utils/SConscript'])
 
 allPlugins = env.SConscript(['plugins/SConscript'])
 
@@ -341,7 +342,10 @@ env.StaticLibrary("coredb", [
                            'db/common',
                            'plugins/plugins',
                            'server_parameters',
-                           '$BUILD_DIR/mongo/foundation'])
+                           '$BUILD_DIR/mongo/foundation',
+                           'server_options',
+                           '$BUILD_DIR/mongo/util/cmdline_utils/cmdline_utils',
+                           ])
 
 coreServerFiles = [ "db/client_basic.cpp",
                     "db/common.cpp",
@@ -450,6 +454,8 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/ops/update.cpp",
                     "db/ops/update_internal.cpp",
                     "db/ops/insert.cpp",
+                    "db/startup_warnings.cpp",
+                    "db/storage_options.cpp",
 
                     # most commands are only for mongod
                     "db/dbcommands.cpp",
@@ -475,16 +481,12 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "util/elapsed_tracker.cpp"
                   ]
 
-env.Library("dbcmdline", ["db/cmdline.cpp", "db/server_options.cpp"],
+env.Library("server_options", ["db/server_options.cpp"],
             LIBDEPS=['bson',
                     'server_parameters',
                     '$BUILD_DIR/mongo/util/options_parser/options_parser',
+                    '$BUILD_DIR/mongo/util/cmdline_utils/cmdline_utils',
                     ])
-env.CppUnitTest('cmdline_test', 'db/cmdline_test.cpp',
-                LIBDEPS=['bson',
-                         'dbcmdline',
-                         '$BUILD_DIR/mongo/util/options_parser/options_parser',
-                         ])
 
 env.CppUnitTest('v8_deadline_monitor_test', 'scripting/v8_deadline_monitor_test.cpp', LIBDEPS=[])
 
@@ -517,20 +519,26 @@ mongosLibraryFiles = [
     "s/balancer_policy.cpp",
     "s/writeback_listener.cpp",
     "s/version_manager.cpp",
+    "s/version_mongos.cpp",
+    "s/mongos_persistence_stubs.cpp",
     ]
 
 env.Library( "mongoscore" , mongosLibraryFiles, LIBDEPS=['db/auth/authmongos'] )
 
 env.CppUnitTest( "balancer_policy_test" , [ "s/balancer_policy_tests.cpp" ] , LIBS=env['LIBS'] + tokulibs,
-                 LIBDEPS=["mongoscore", "coreshard", "mongocommon","coreserver","coredb","dbcmdline","mongodandmongos"] ,
-                 NO_CRUTCH=True)
+                LIBDEPS=["mongoscore",
+                         "coreshard",
+                         "mongocommon",
+                         "coreserver",
+                         "coredb",
+                         "mongodandmongos"],
+                NO_CRUTCH=True)
 
 env.CppUnitTest("dbclient_rs_test", [ "client/dbclient_rs_test.cpp" ], LIBS=env['LIBS'] + tokulibs,
                  LIBDEPS=[
                     "coredb",
                     "coreserver",
                     "coreshard",
-                    "dbcmdline",
                     "mocklib",
                     "mongocommon",
                     "mongodandmongos",
@@ -542,7 +550,6 @@ env.CppUnitTest("scoped_db_conn_test", [ "client/scoped_db_conn_test.cpp" ], LIB
                     "coredb",
                     "coreserver",
                     "coreshard",
-                    "dbcmdline",
                     "mongocommon",
                     "mongodandmongos",
                     "mongoscore"],
@@ -555,16 +562,10 @@ env.CppUnitTest("shard_conn_test", [ "s/shard_conn_test.cpp" ], LIBS=env['LIBS']
                     "mongocommon",
                     "coreserver",
                     "coredb",
-                    "dbcmdline",
                     "mongodandmongos",
                     "mocklib",
                     "$BUILD_DIR/mongo/db/auth/authmocks"],
                  NO_CRUTCH=True)
-
-
-# Should only need stuff from util, unittest and platform
-env.CppUnitTest("fail_point_test", [ "util/fail_point_test.cpp" ],
-                LIBDEPS=["fail_point"])
 
 env.CppUnitTest("shard_test", [ "s/shard_test.cpp" ], LIBS=env['LIBS'] + tokulibs,
                 LIBDEPS=[ "mongoscore",
@@ -572,9 +573,13 @@ env.CppUnitTest("shard_test", [ "s/shard_test.cpp" ], LIBS=env['LIBS'] + tokulib
                           "mongocommon",
                           "coreserver",
                           "coredb",
-                          "dbcmdline",
                           "mongodandmongos"],
                 NO_CRUTCH=True)
+
+
+# Should only need stuff from util, unittest and platform
+env.CppUnitTest("fail_point_test", [ "util/fail_point_test.cpp" ],
+                LIBDEPS=["fail_point"])
 
 serverOnlyFiles += [ "s/d_logic.cpp",
                      "s/d_writeback.cpp",
@@ -591,7 +596,6 @@ env.StaticLibrary("serveronly", serverOnlyFiles,
                   LIBDEPS=["coreshard",
                            "db/auth/authmongod",
                            "db/common",
-                           "dbcmdline",
                            "defaultversion",
                            "index_set"])
 
@@ -653,7 +657,7 @@ env.Install( '#/', [
 # mongos
 mongos = env.Program(
     "mongos", [ "s/server.cpp", "s/mongos_options.cpp" ] ,
-    LIBS=env['LIBS'] + tokulibs, LIBDEPS=["mongoscore", "coreserver", "coredb", "mongocommon", "coreshard", "dbcmdline", "ntservice",
+    LIBS=env['LIBS'] + tokulibs, LIBDEPS=["mongoscore", "coreserver", "coredb", "mongocommon", "coreshard", "ntservice",
              "mongodandmongos", "s/upgrade"] + env['MODULE_LIBDEPS_MONGOS'])
 mongosInstalled = env.Install( '#/', mongos )
 addBuildRpath(env, mongosInstalled)

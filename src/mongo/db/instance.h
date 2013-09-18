@@ -26,8 +26,8 @@
 #include "mongo/base/string_data.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/client.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/curop.h"
+#include "mongo/db/storage_options.h"
 
 namespace mongo {
 

@@ -40,6 +40,7 @@
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/database.h"
 #include "mongo/db/collection.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/exception.h"
 #include "mongo/db/repl/rs_sync.h"
 #include "mongo/util/progress_meter.h"
@@ -59,8 +60,8 @@ namespace mongo {
 
     bool masterSameProcess(const char *masterHost) {
         stringstream a,b;
-        a << "localhost:" << cmdLine.port;
-        b << "127.0.0.1:" << cmdLine.port;
+        a << "localhost:" << serverGlobalParams.port;
+        b << "127.0.0.1:" << serverGlobalParams.port;
         return (a.str() == masterHost || b.str() == masterHost);
     }
 
@@ -73,7 +74,7 @@ namespace mongo {
         string todb = cc().database()->name();
         bool same = masterSameProcess(masterHost);
         if ( same ) {
-            if ( fromDB == todb && cc().database()->path() == dbpath ) {
+            if ( fromDB == todb && cc().database()->path() == storageGlobalParams.dbpath ) {
                 // guard against an "infinite" loop
                 // if you are replicating, the local.sources config may be wrong if you get this
                 errmsg = "can't clone from self (localhost).";
@@ -1053,7 +1054,7 @@ namespace mongo {
             if ( fromhost.empty() ) {
                 /* copy from self */
                 stringstream ss;
-                ss << "localhost:" << cmdLine.port;
+                ss << "localhost:" << serverGlobalParams.port;
                 fromhost = ss.str();
             }
             shared_ptr<DBClientConnection> newConn( new DBClientConnection() );
@@ -1122,7 +1123,7 @@ namespace mongo {
             if ( fromSelf ) {
                 /* copy from self */
                 stringstream ss;
-                ss << "localhost:" << cmdLine.port;
+                ss << "localhost:" << serverGlobalParams.port;
                 fromhost = ss.str();
             }
             string fromdb = cmdObj.getStringField("fromdb");

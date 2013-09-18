@@ -34,7 +34,6 @@
 # endif
 #endif
 
-#include "mongo/db/cmdline.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/value.h"
 #include "mongo/util/fail_point_service.h"
@@ -317,7 +316,8 @@ namespace mongo {
     SockAddr unknownAddress( "0.0.0.0", 0 );
 
     string makeUnixSockPath(int port) {
-        return mongoutils::str::stream() << cmdLine.socket << "/mongodb-" << port << ".sock";
+        return mongoutils::str::stream() << serverGlobalParams.socket << "/mongodb-" << port
+                                         << ".sock";
     }
 
 
@@ -358,8 +358,8 @@ namespace mongo {
     string prettyHostName() {
         StringBuilder s;
         s << getHostNameCached();
-        if( cmdLine.port != CmdLine::DefaultDBPort )
-            s << ':' << mongo::cmdLine.port;
+        if (serverGlobalParams.port != ServerGlobalParams::DefaultDBPort)
+            s << ':' << mongo::serverGlobalParams.port;
         return s.str();
     }
 

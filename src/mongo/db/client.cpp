@@ -47,6 +47,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/server_parameters.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/s/chunk_version.h"
 #include "mongo/s/d_logic.h"
 #include "mongo/s/stale_exception.h" // for SendStaleConfigException
@@ -123,7 +124,7 @@ namespace mongo {
         _upgradingDiskFormatVersion(false),
         _globallyUninterruptible(false),
         _isYieldingToWriteLock(forceWriteLocks),
-        _lockTimeout(cmdLine.lockTimeout)
+        _lockTimeout(storageGlobalParams.lockTimeout)
     {
         _connectionId = p ? p->connectionId() : 0;
         
@@ -205,7 +206,8 @@ namespace mongo {
     Client::Context::Context(const StringData& ns , Database * db) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
-        _path( mongo::dbpath ), // is this right? could be a different db? may need a dassert for this
+        _path(storageGlobalParams.dbpath), // is this right? could be a different db?
+                                               // may need a dassert for this
         _doVersion( true ),
         _ns( ns.toString() ),
         _db(db)
@@ -227,11 +229,11 @@ namespace mongo {
     // Locking and context in one operation
     Client::ReadContext::ReadContext(const StringData& ns, const string &context)
         : _lk(ns, context) ,
-          _c(ns, dbpath) {
+          _c(ns, storageGlobalParams.dbpath) {
     }
     Client::WriteContext::WriteContext(const StringData& ns, const string &context)
         : _lk(ns, context) ,
-          _c(ns, dbpath) {
+          _c(ns, storageGlobalParams.dbpath) {
     }
 
     void Client::Context::checkNotStale() const { 

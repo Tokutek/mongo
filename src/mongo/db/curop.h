@@ -175,7 +175,7 @@ namespace mongo {
             if ( _dbprofile <= 0 )
                 return false;
 
-            return _dbprofile >= 2 || ms >= cmdLine.slowMS;
+            return _dbprofile >= 2 || ms >= serverGlobalParams.slowMS;
         }
 
         AtomicUInt opNum() const { return _opNum; }

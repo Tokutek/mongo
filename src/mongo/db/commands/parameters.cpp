@@ -18,9 +18,9 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/client/dbclient_rs.h"
 #include "mongo/db/server_parameters.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/s/shard.h"
 #include "mongo/util/mongoutils/str.h"
@@ -62,6 +62,16 @@ namespace mongo {
             if (all || cmdObj.hasElement("releaseConnectionsAfterResponse")) {
                 result.append("releaseConnectionsAfterResponse",
                               ShardConnection::releaseConnectionsAfterResponse);
+            }
+            // TODO: convert to ServerParameters -- SERVER-10515
+
+            if( all || cmdObj.hasElement( "traceExceptions" ) ) {
+                result.append("traceExceptions",
+                              DBException::traceExceptions);
+            }
+            if( all || cmdObj.hasElement( "replMonitorMaxFailedChecks" ) ) {
+                result.append("replMonitorMaxFailedChecks",
+                              ReplicaSetMonitor::getMaxFailedChecks());
             }
 
             const ServerParameter::Map& m = ServerParameterSet::getGlobal()->getMap();
@@ -211,29 +221,11 @@ namespace mongo {
             }
         } logLevelSetting;
 
-        ExportedServerParameter<bool> NoTableScanSetting( ServerParameterSet::getGlobal(),
-                                                          "notablescan",
-                                                          &cmdLine.noTableScan,
-                                                          true,
-                                                          true );
-
         ExportedServerParameter<bool> QuietSetting( ServerParameterSet::getGlobal(),
                                                     "quiet",
-                                                    &cmdLine.quiet,
+                                                    &serverGlobalParams.quiet,
                                                     true,
                                                     true );
-
-        ExportedServerParameter<double> SyncdelaySetting( ServerParameterSet::getGlobal(),
-                                                          "syncdelay",
-                                                          &cmdLine.syncdelay,
-                                                          true,
-                                                          true );
-
-        ExportedServerParameter<bool> LoaderCompressTmpSetting( ServerParameterSet::getGlobal(),
-                                                                "loaderCompressTmp",
-                                                                &cmdLine.loaderCompressTmp,
-                                                                true,
-                                                                true );
     }
 
 }

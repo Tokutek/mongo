@@ -24,6 +24,7 @@
 #include "pch.h"
 
 #include "mongo/db/client.h"
+#include "mongo/db/storage_options.h"
 
 namespace mongo {
 
@@ -59,7 +60,7 @@ namespace mongo {
     }
 
     void Client::TransactionStack::commitTxn() {
-        int flags = (cmdLine.logFlushPeriod == 0) ? 0 : DB_TXN_NOSYNC;
+        int flags = (storageGlobalParams.logFlushPeriod == 0) ? 0 : DB_TXN_NOSYNC;
         commitTxn(flags);
     }
 

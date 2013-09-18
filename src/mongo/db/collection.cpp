@@ -35,6 +35,7 @@
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/db/server_options.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/platform/atomic_word.h"
 #include "mongo/scripting/engine.h"
@@ -1411,7 +1412,7 @@ namespace mongo {
             return false;
         }
 
-        if ( cmdLine.configsvr &&
+        if ( serverGlobalParams.configsvr &&
              !( ns.startsWith( "config." ) ||
                 ns.startsWith( "local." ) ||
                 ns.startsWith( "admin." ) ) ) {
