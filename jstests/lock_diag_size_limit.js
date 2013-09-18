@@ -45,7 +45,7 @@ assert.eq(null, db.getLastError());
 
 var thds = [];
 for (var i = 0; i < 512; ++i) {
-    thds += startParallelShell(
+    thds.push(startParallelShell(
         'var s = "a";' +
         'while (s.length < 32*1024) {' +
         '    s += s;' +
@@ -54,7 +54,7 @@ for (var i = 0; i < 512; ++i) {
         't = db.lock_diag_size_limit;' +
         't.insert({_id: s});' +
         'assert.neq(null, db.getLastError());'
-    );
+    ));
 }
 
 var o = db.showPendingLockRequests();
