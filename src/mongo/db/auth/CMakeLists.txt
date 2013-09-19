@@ -35,6 +35,7 @@ add_library(authcore STATIC
   authz_session_external_state
   privilege
   privilege_document_parser
+  resource_pattern
   role_graph
   role_name
   role_graph_builtin_roles

@@ -66,6 +66,16 @@ namespace mongo {
         NamespaceString( const char * ns ) { init(ns); }
         NamespaceString( const string& ns ) { init(ns.c_str()); }
 
+        // TODO: NamespaceString inefficiently uses memory in both mongo 2.4 and 2.6.  Come up with
+        // a good solution.
+        NamespaceString()
+                : db(""),
+                  coll("") {}
+
+        NamespaceString(const StringData &dbIn, const StringData &collIn)
+                : db(dbIn.rawData(), dbIn.size()),
+                  coll(collIn.rawData(), collIn.size()) {}
+
         string ns() const { return db + '.' + coll; }
 
         bool isSystem() const { return strncmp(coll.c_str(), "system.", 7) == 0; }
