@@ -39,6 +39,7 @@ add_library(mongocommon_util STATIC
   intrusive_counter
   util
   trace
+  paths
   progress_meter
   percentage_progress_meter
   concurrency/task

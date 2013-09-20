@@ -177,6 +177,7 @@ set(client_sources
   util/net/sock.cpp
   util/net/ssl_manager.cpp
   util/password.cpp
+  util/paths.cpp
   util/processinfo.cpp
   util/processinfo_${system_suffix}.cpp
   util/signal_handlers.cpp

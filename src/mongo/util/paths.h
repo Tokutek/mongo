@@ -19,12 +19,13 @@
 
 #pragma once
 
-#include "mongoutils/str.h"
+#include <boost/filesystem/path.hpp>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include <boost/filesystem/path.hpp>
+#include "mongo/util/log.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
     
@@ -52,7 +53,7 @@ namespace mongo {
             string fullpath = f.string();
             string relative = str::after(fullpath, dbp.string());
             if( relative.empty() ) {
-                log() << "warning file is not under db path? " << fullpath << ' ' << dbp.string() << endl;
+                log() << "warning file is not under db path? " << fullpath << ' ' << dbp.string();
                 RelativePath rp;
                 rp._p = fullpath;
                 return rp;
@@ -99,28 +100,7 @@ namespace mongo {
         return dev1 == dev2;
     }
 
-    inline void flushMyDirectory(const boost::filesystem::path& file){
-#ifdef __linux__ // this isn't needed elsewhere
-        if( !file.has_branch_path() ) {
-            log() << "warning flushMYDirectory couldn't find parent dir for file: " << file.string() << endl;
-            return;
-        }
-
-
-        boost::filesystem::path dir = file.branch_path(); // parent_path in new boosts
-
-        LOG(1) << "flushing directory " << dir.string() << endl;
-
-        int fd = ::open(dir.string().c_str(), O_RDONLY); // DO NOT THROW OR ASSERT BEFORE CLOSING
-        massert(13650, str::stream() << "Couldn't open directory '" << dir.string() << "' for flushing: " << errnoWithDescription(), fd >= 0);
-        if (fsync(fd) != 0){
-            int e = errno;
-            close(fd);
-            massert(13651, str::stream() << "Couldn't fsync directory '" << dir.string() << "': " << errnoWithDescription(e), false);
-        }
-        close(fd);
-#endif
-    }
+    void flushMyDirectory(const boost::filesystem::path& file);
 
     boost::filesystem::path ensureParentDirCreated(const boost::filesystem::path& p);
 
