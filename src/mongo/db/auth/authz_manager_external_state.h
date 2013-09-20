@@ -57,18 +57,18 @@ namespace mongo {
         // TODO(spencer): remove dbname argument once users are only written into the admin db
         virtual Status insertPrivilegeDocument(const std::string& dbname,
                                                const BSONObj& userObj,
-                                               const BSONObj& writeConcern) = 0;
+                                               const BSONObj& writeConcern);
 
         // Updates the given user object with the given update modifier.
         virtual Status updatePrivilegeDocument(const UserName& user,
                                                const BSONObj& updateObj,
-                                               const BSONObj& writeConcern) = 0;
+                                               const BSONObj& writeConcern);
 
         // Removes users for the given database matching the given query.
         // Writes into *numRemoved the number of user documents that were modified.
         virtual Status removePrivilegeDocuments(const BSONObj& query,
                                                 const BSONObj& writeConcern,
-                                                int* numRemoved) = 0;
+                                                int* numRemoved);
 
         /**
          * Puts into the *dbnames vector the name of every database in the cluster.
@@ -103,6 +103,7 @@ namespace mongo {
 
         /**
          * Inserts "document" into "collectionName".
+         * If there is a duplicate key error, returns a Status with code DuplicateKey.
          */
         virtual Status insert(const NamespaceString& collectionName,
                               const BSONObj& document,
@@ -113,6 +114,9 @@ namespace mongo {
          *
          * If "upsert" is true and no document matches "query", inserts one using "query" as a
          * template.
+         * If "upsert" is false and no document matches "query", return a Status with the code
+         * NoMatchingDocument.  The Status message in that case is not very descriptive and should
+         * not be displayed to the end user.
          */
         virtual Status updateOne(const NamespaceString& collectionName,
                                  const BSONObj& query,
@@ -125,7 +129,8 @@ namespace mongo {
          */
         virtual Status remove(const NamespaceString& collectionName,
                               const BSONObj& query,
-                              const BSONObj& writeConcern) = 0;
+                              const BSONObj& writeConcern,
+                              int* numRemoved) = 0;
 
         /**
          * Creates an index with the given pattern on "collectionName".
