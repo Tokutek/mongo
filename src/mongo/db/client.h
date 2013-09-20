@@ -36,6 +36,7 @@
 #include "mongo/db/lockstate.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/opsettings.h"
 #include "mongo/s/d_logic.h"
 #include "mongo/db/storage_options.h"
@@ -452,6 +453,10 @@ namespace mongo {
             ~CreatingSystemUsersScope();
         };
         bool creatingSystemUsers() const;
+
+        bool creatingSystemUsersOn(const NamespaceString &ns) {
+            return _creatingSystemUsers == ns.db;
+        }
 
         /* declare that we're upgrading system.users
            therefore we should look for mismatched collectionMap objects and handle them properly

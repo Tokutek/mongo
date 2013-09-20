@@ -17,8 +17,6 @@
 #include "mongo/pch.h"
 
 #include "mongo/base/string_data.h"
-#include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/client.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
@@ -27,6 +25,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/collection_map.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/progress_meter.h"
 #include "mongo/util/stringutils.h"
@@ -34,16 +33,7 @@
 namespace mongo {
 
     CollectionBase::IndexerBase::IndexerBase(CollectionBase *cl, const BSONObj &info) :
-        _cl(cl), _info(info), _isSecondaryIndex(_cl->_nIndexes > 0) {
-        if (!cc().creatingSystemUsers() &&
-            !cc().upgradingDiskFormatVersion()) {
-            std::string sourceNS = info["ns"].String();
-            uassert(16548,
-                    mongoutils::str::stream() << "not authorized to create index on " << sourceNS,
-                    cc().getAuthorizationSession()->checkAuthorization(sourceNS,
-                                                                       ActionType::ensureIndex));
-        }
-    }
+        _cl(cl), _info(info), _isSecondaryIndex(_cl->_nIndexes > 0) {}
 
     CollectionBase::IndexerBase::~IndexerBase() {
         Lock::assertWriteLocked(_cl->_ns);

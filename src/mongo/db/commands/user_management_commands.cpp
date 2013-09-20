@@ -104,7 +104,7 @@ namespace mongo {
             // TODO: update this with the new rules around user creation in 2.6.
             ActionSet actions;
             actions.addAction(ActionType::userAdmin);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forDatabaseName(dbname), actions));
         }
 
         bool run(const string& dbname,
@@ -171,7 +171,7 @@ namespace mongo {
             // TODO: update this with the new rules around user creation in 2.6.
             ActionSet actions;
             actions.addAction(ActionType::userAdmin);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forDatabaseName(dbname), actions));
         }
 
         bool run(const string& dbname,
@@ -242,7 +242,7 @@ namespace mongo {
             // TODO: update this with the new rules around user creation in 2.6.
             ActionSet actions;
             actions.addAction(ActionType::userAdmin);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forDatabaseName(dbname), actions));
         }
 
         bool run(const string& dbname,
@@ -317,7 +317,7 @@ namespace mongo {
             // TODO: update this with the new rules around user creation in 2.6.
             ActionSet actions;
             actions.addAction(ActionType::userAdmin);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forDatabaseName(dbname), actions));
         }
 
         bool run(const string& dbname,
@@ -378,7 +378,7 @@ namespace mongo {
             // TODO: update this with the new rules around user creation in 2.6.
             ActionSet actions;
             actions.addAction(ActionType::userAdmin);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forDatabaseName(dbname), actions));
         }
 
         bool run(const string& dbname,
@@ -459,7 +459,7 @@ namespace mongo {
             // TODO: update this with the new rules around user creation in 2.6.
             ActionSet actions;
             actions.addAction(ActionType::userAdmin);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forDatabaseName(dbname), actions));
         }
 
         bool run(const string& dbname,
@@ -548,7 +548,7 @@ namespace mongo {
             // TODO: update this with the new rules around user creation in 2.6.
             ActionSet actions;
             actions.addAction(ActionType::userAdmin);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forDatabaseName(dbname), actions));
         }
 
         bool run(const string& dbname,
@@ -629,7 +629,7 @@ namespace mongo {
             // TODO: update this with the new rules around user creation in 2.6.
             ActionSet actions;
             actions.addAction(ActionType::userAdmin);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forDatabaseName(dbname), actions));
         }
 
         bool run(const string& dbname,
@@ -718,7 +718,7 @@ namespace mongo {
             // TODO: update this with the new rules around user creation in 2.6.
             ActionSet actions;
             actions.addAction(ActionType::userAdmin);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forDatabaseName(dbname), actions));
         }
 
         bool run(const string& dbname,

@@ -42,7 +42,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::pluginLoad);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
         }
         virtual void help(stringstream &h) const {
             h << "Load a plugin into mongod." << endl
@@ -94,7 +94,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::pluginList);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
         }
         virtual void help(stringstream &h) const {
             h << "List plugins currently loaded into mongod." << endl
@@ -125,7 +125,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::pluginLoad);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
         }
         UnloadPluginCommand() : InformationCommand("unloadPlugin") {}
 

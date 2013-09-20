@@ -30,12 +30,14 @@ namespace rename_collection {
 
     void addPrivilegesRequiredForRenameCollection(const BSONObj& cmdObj,
                                                   std::vector<Privilege>* out) {
-        std::string sourceNS = cmdObj.getStringField("renameCollection");
-        std::string targetNS = cmdObj.getStringField("to");
+        NamespaceString sourceNS = NamespaceString(cmdObj.getStringField("renameCollection"));
+        NamespaceString targetNS = NamespaceString(cmdObj.getStringField("to"));
+        uassert(17140, "Invalid source namespace " + sourceNS.ns(), sourceNS.isValid());
+        uassert(17141, "Invalid target namespace " + targetNS.ns(), targetNS.isValid());
         ActionSet sourceActions;
         ActionSet targetActions;
 
-        if (nsToDatabaseSubstring(sourceNS) == nsToDatabaseSubstring(targetNS)) {
+        if (sourceNS.db == targetNS.db) {
             sourceActions.addAction(ActionType::renameCollectionSameDB);
             targetActions.addAction(ActionType::renameCollectionSameDB);
         } else {
@@ -46,8 +48,8 @@ namespace rename_collection {
             targetActions.addAction(ActionType::ensureIndex);
         }
 
-        out->push_back(Privilege(sourceNS, sourceActions));
-        out->push_back(Privilege(targetNS, targetActions));
+        out->push_back(Privilege(ResourcePattern::forExactNamespace(sourceNS), sourceActions));
+        out->push_back(Privilege(ResourcePattern::forExactNamespace(targetNS), targetActions));
     }
 
 } // namespace rename_collection

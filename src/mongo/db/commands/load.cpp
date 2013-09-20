@@ -36,7 +36,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::loaderCommands);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(parseResourcePattern(dbname, cmdObj), actions));
         }
     };
 

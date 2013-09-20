@@ -38,7 +38,7 @@ namespace mongo {
             // authed as someone and aren't just anonymous.  This means that if you're running with
             // auth, you need to issue transaction commands against a db that you have privileges
             // on, which doesn't seem like that big of a requirement.
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(parseResourcePattern(dbname, cmdObj), actions));
         }
         virtual LockType locktype() const { return OPLOCK; }
         TransactionCommand(const char *name, bool webUI=false, const char *oldName=NULL) : InformationCommand(name, webUI, oldName) {}

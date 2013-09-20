@@ -83,7 +83,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::netstat);
-                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 result.append("configserver", configServer.getPrimary().getConnString() );
@@ -103,7 +103,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::flushRouterConfig);
-                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 grid.flushConfig();
@@ -120,7 +120,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::fsync);
-                out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 if ( cmdObj["lock"].trueValue() ) {
@@ -168,7 +168,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::movePrimary);
-                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 string dbname = cmdObj.firstElement().valuestrsafe();
@@ -325,7 +325,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::enableSharding);
-                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 string dbname = cmdObj.firstElement().valuestrsafe();
@@ -376,7 +376,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::shardCollection);
-                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 const string ns = cmdObj.firstElement().valuestrsafe();
@@ -822,7 +822,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::getShardVersion);
-                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 string ns = cmdObj.firstElement().valuestrsafe();
@@ -866,7 +866,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::split);
-                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 if ( ! okForConfigChanges( errmsg ) )
@@ -1014,7 +1014,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::moveChunk);
-                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 if ( ! okForConfigChanges( errmsg ) )
@@ -1104,7 +1104,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::listShards);
-                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
@@ -1135,7 +1135,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::addShard);
-                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 errmsg.clear();
@@ -1203,7 +1203,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 ActionSet actions;
                 actions.addAction(ActionType::removeShard);
-                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+                out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 string target = cmdObj.firstElement().valuestrsafe();
@@ -1467,7 +1467,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::listDatabases);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
         }
 
         bool run(const string& , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
@@ -1618,7 +1618,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::closeAllDatabases);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
         }
 
         bool run(const string& , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& /*result*/, bool /*fromRepl*/) {
@@ -1640,7 +1640,7 @@ namespace mongo {
             // TODO: Should this require no auth since it's not supported in mongos anyway?
             ActionSet actions;
             actions.addAction(ActionType::replSetGetStatus);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
         }
         bool run(const string& , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             if ( jsobj["forShell"].trueValue() ) {

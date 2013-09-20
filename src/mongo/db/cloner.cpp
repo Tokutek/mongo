@@ -705,7 +705,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::collectionsExist);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(parseResourcePattern(dbname, cmdObj), actions));
         }
         virtual bool run(const string &dbname, BSONObj &jsobj, int, string &errmsg, BSONObjBuilder &result, bool) {
             BSONElement arrElt = jsobj["_collectionsExist"];
@@ -831,7 +831,7 @@ namespace mongo {
             // compatibility, and to internal connections (used in movePrimary).
             ActionSet actions;
             actions.addAction(ActionType::clone);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(ResourcePattern::forDatabaseName(dbname), actions));
         }
         CmdClone() : Command("clone") { }
         
@@ -923,16 +923,21 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool requiresSync() const { return true; }
         CmdCloneCollection() : Command("cloneCollection") { }
+
+        virtual std::string parseNs(const std::string& dbname, const BSONObj& cmdObj) const {
+            return parseNsFullyQualified(dbname, cmdObj);
+        }
+
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
             // Will fail if source instance has auth on.
-            string collection = cmdObj.getStringField("cloneCollection");
-            uassert(16709, "bad 'cloneCollection' value", !collection.empty());
+            NamespaceString ns(parseNs(dbname, cmdObj));
+            uassert(16709, "bad 'cloneCollection' value '" + ns.ns() + "'", ns.isValid());
 
             ActionSet actions;
             actions.addAction(ActionType::cloneCollectionTarget);
-            out->push_back(Privilege(collection, actions));
+            out->push_back(Privilege(ResourcePattern::forExactNamespace(ns), actions));
         }
         virtual void help( stringstream &help ) const {
             help << "{ cloneCollection: <collection>, from: <host> [,query: <query_filter>] [,copyIndexes:<bool>] }"
@@ -962,7 +967,7 @@ namespace mongo {
                     return false;
                 }
             }
-            string collection = cmdObj.getStringField("cloneCollection");
+            string collection = parseNs(dbname, cmdObj);
             if ( collection.empty() ) {
                 errmsg = "bad 'cloneCollection' value";
                 return false;
@@ -1097,8 +1102,10 @@ namespace mongo {
             // compatibility, since we can't properly handle auth checking for the read from the
             // source DB.
             ActionSet actions;
+            // TODO: Should this become remove, insert, dropIndex,createIndex, etc., on "todb"?
             actions.addAction(ActionType::copyDBTarget);
-            out->push_back(Privilege(dbname, actions)); // NOTE: dbname is always admin
+            out->push_back(Privilege(ResourcePattern::forDatabaseName(cmdObj["todb"].str()),
+                                     actions));
         }
         virtual void help( stringstream &help ) const {
             help << "copy a database from another host to this host\n";

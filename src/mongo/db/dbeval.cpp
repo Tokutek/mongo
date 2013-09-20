@@ -123,8 +123,8 @@ namespace mongo {
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
-            // $eval can do pretty much anything, so require all privileges.
-            out->push_back(Privilege(AuthorizationManager::WILDCARD_RESOURCE_NAME,
+
+            out->push_back(Privilege(ResourcePattern::forAnyResource(),
                                      getGlobalAuthorizationManager()->getAllUserActions()));
         }
         CmdEval() : Command("eval", false, "$eval") { }

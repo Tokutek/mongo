@@ -85,12 +85,20 @@ namespace mongo {
      */
     class ShardedPoolStats : public InformationCommand {
       public:
+
         ShardedPoolStats() : InformationCommand("shardConnPoolStats") {}
-        // No auth required
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {}
         virtual void help( stringstream &help ) const { help << "stats about the shard connection pool"; }
+
+        // Same privs as connPoolStats
+        virtual void addRequiredPrivileges( const std::string& dbname,
+                                            const BSONObj& cmdObj,
+                                            std::vector<Privilege>* out )
+        {
+            ActionSet actions;
+            actions.addAction( ActionType::connPoolStats );
+            out->push_back( Privilege( ResourcePattern::forClusterResource(), actions ) );
+        }
+
         virtual bool run ( const string&, mongo::BSONObj&, int, std::string&, mongo::BSONObjBuilder& result, bool ) {
             // Base pool info
             shardConnectionPool.appendInfo( result );
