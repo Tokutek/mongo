@@ -228,8 +228,6 @@ namespace mongo {
 
     void Client::Context::_finishInit() {
         dassert( Lock::isLocked() );
-        int writeLocked = Lock::somethingWriteLocked();
-
         _db = dbHolderUnchecked().getOrCreate( _ns , _path );
         verify(_db);
         if( _doVersion ) checkNotStale();

@@ -1378,6 +1378,7 @@ namespace mongo {
 
     // Wrapper for offline (write locked) indexing.
     void NamespaceDetails::createIndex(const BSONObj &info) {
+        const string sourceNS = info["ns"].String();
         uassert(16548,
                 mongoutils::str::stream() << "not authorized to create index on " << sourceNS,
                 cc().getAuthorizationManager()->checkAuthorization(sourceNS,
