@@ -34,7 +34,6 @@
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/database.h"
 #include "mongo/db/dbhelpers.h"

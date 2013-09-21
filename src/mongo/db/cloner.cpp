@@ -24,6 +24,9 @@
 #include "mongo/bson/util/builder.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/client/remote_transaction.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cloner.h"
 #include "mongo/db/jsobj.h"
@@ -579,6 +582,13 @@ namespace mongo {
         CmdCollectionsExist() : QueryCommand("_collectionsExist") {}
         virtual void help(stringstream &h) const { h << "internal use only"; }
         virtual bool slaveOk() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::collectionsExist);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
         virtual bool run(const string &dbname, BSONObj &jsobj, int, string &errmsg, BSONObjBuilder &result, bool) {
             BSONElement arrElt = jsobj["_collectionsExist"];
             if (!arrElt.ok() || arrElt.type() != Array) {

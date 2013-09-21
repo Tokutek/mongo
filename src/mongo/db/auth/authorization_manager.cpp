@@ -98,6 +98,7 @@ namespace {
     MONGO_INITIALIZER(AuthorizationSystemRoles)(InitializerContext* context) {
         // Read role
         readRoleActions.addAction(ActionType::cloneCollectionLocalSource);
+        readRoleActions.addAction(ActionType::collectionsExist);
         readRoleActions.addAction(ActionType::collStats);
         readRoleActions.addAction(ActionType::dbHash);
         readRoleActions.addAction(ActionType::dbStats);
@@ -176,6 +177,7 @@ namespace {
         clusterAdminRoleReadActions.addAction(ActionType::getShardVersion);
         clusterAdminRoleReadActions.addAction(ActionType::listShards);
         clusterAdminRoleReadActions.addAction(ActionType::netstat);
+        clusterAdminRoleReadActions.addAction(ActionType::replGetExpireOplog);
         clusterAdminRoleReadActions.addAction(ActionType::replSetFreeze);
         clusterAdminRoleReadActions.addAction(ActionType::replSetGetStatus);
         clusterAdminRoleReadActions.addAction(ActionType::replSetMaintenance);
@@ -184,7 +186,6 @@ namespace {
         clusterAdminRoleReadActions.addAction(ActionType::setShardVersion); // TODO: should this be internal?
         clusterAdminRoleReadActions.addAction(ActionType::splitVector);
         clusterAdminRoleReadActions.addAction(ActionType::unsetSharding);
-        clusterAdminRoleReadActions.addAction(ActionType::replGetExpireOplog);
 
         clusterAdminRoleWriteActions.addAction(ActionType::addShard);
         clusterAdminRoleWriteActions.addAction(ActionType::dropDatabase); // TODO: Should there be a CREATE_DATABASE also?
@@ -193,6 +194,7 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::moveChunk);
         clusterAdminRoleWriteActions.addAction(ActionType::movePrimary);
         clusterAdminRoleWriteActions.addAction(ActionType::removeShard);
+        clusterAdminRoleWriteActions.addAction(ActionType::replSetExpireOplog);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetInitiate);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetReconfig);
         clusterAdminRoleWriteActions.addAction(ActionType::resync);
@@ -200,7 +202,7 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::shardingState);
         clusterAdminRoleWriteActions.addAction(ActionType::split);
         clusterAdminRoleWriteActions.addAction(ActionType::splitChunk);
-        clusterAdminRoleWriteActions.addAction(ActionType::replSetExpireOplog);
+        clusterAdminRoleWriteActions.addAction(ActionType::updateSlave);
 
         clusterAdminRoleActions.addAllActionsFromSet(clusterAdminRoleReadActions);
         clusterAdminRoleActions.addAllActionsFromSet(clusterAdminRoleWriteActions);
