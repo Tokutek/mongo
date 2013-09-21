@@ -104,6 +104,7 @@ namespace {
         readRoleActions.addAction(ActionType::dbStats);
         readRoleActions.addAction(ActionType::find);
         readRoleActions.addAction(ActionType::killCursors);
+        readRoleActions.addAction(ActionType::transactionCommands);
 
         // Read-write role
         readWriteRoleActions.addAllActionsFromSet(readRoleActions);
@@ -115,6 +116,7 @@ namespace {
         readWriteRoleActions.addAction(ActionType::emptycapped);
         readWriteRoleActions.addAction(ActionType::ensureIndex);
         readWriteRoleActions.addAction(ActionType::insert);
+        readWriteRoleActions.addAction(ActionType::loaderCommands);
         readWriteRoleActions.addAction(ActionType::remove);
         readWriteRoleActions.addAction(ActionType::renameCollectionSameDB); // db admin gets this also
         readWriteRoleActions.addAction(ActionType::update);

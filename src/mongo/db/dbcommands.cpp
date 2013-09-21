@@ -1835,7 +1835,7 @@ namespace mongo {
                 lk.reset(new Lock::GlobalRead());
             }
             Client::Context ctx(ns, dbpath);
-            if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
+            if (!canRunCommand(c, dbname, queryOptions, fromRepl, errmsg, result)) {
                 appendCommandStatus(result, false, errmsg);
                 return;
             }
