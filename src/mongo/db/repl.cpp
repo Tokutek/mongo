@@ -53,6 +53,7 @@
 #include "pcrecpp.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/server_parameters.h"
 
 namespace mongo {
 
@@ -164,10 +165,6 @@ namespace mongo {
             if ( replSettings.slavedelay != 0 && b > 1 ) {
                 return Status( ErrorCodes::BadValue,
                                "can't use a batch size > 1 with slavedelay" );
-            }
-            if ( ! replSettings.slave ) {
-                return Status( ErrorCodes::BadValue,
-                               "can't set replApplyBatchSize on a non-slave machine" );
             }
 
             _value = b;
