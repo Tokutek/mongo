@@ -470,13 +470,16 @@ namespace mongo {
         virtual void help( stringstream& help ) const {
             help << "returns lots of administrative server statistics";
         }
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::serverStatus);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             long long start = Listener::getElapsedTimeMillis();
             BSONObjBuilder timeBuilder(128);
-
-
-            bool authed = cc().getAuthenticationInfo()->isAuthorizedReads("admin");
 
             result.append("host", prettyHostName() );
             result.append("version", mongodbVersionString);
@@ -604,9 +607,6 @@ namespace mongo {
                     arr.done();
                 }
             }
-
-            if ( ! authed )
-                result.append( "note" , "run against admin for more info" );
 
             timeBuilder.appendNumber( "at end" , Listener::getElapsedTimeMillis() - start );
             if ( Listener::getElapsedTimeMillis() - start > 1000 ) {
