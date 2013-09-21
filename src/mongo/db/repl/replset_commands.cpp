@@ -494,6 +494,14 @@ namespace mongo {
             help << "{ replSetExpireOplog : 1, expireOplogDays:new_val, expireOplogHours:new_val }";
         }
 
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::replSetExpireOplog);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
+
         CmdReplSetExpireOplog() : ReplSetCommand("replSetExpireOplog") { }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if( cmdObj.hasElement("expireOplogDays") || cmdObj.hasElement("expireOplogHours") ) {
@@ -526,6 +534,13 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << "retrieve settings for expire oplog.\n";
             help << "{ replGetExpireOplog : 1 }";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::replGetExpireOplog);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
         }
 
         CmdReplGetExpireOplog() : ReplSetCommand("replGetExpireOplog") { }

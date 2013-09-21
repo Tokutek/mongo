@@ -184,6 +184,7 @@ namespace {
         clusterAdminRoleReadActions.addAction(ActionType::setShardVersion); // TODO: should this be internal?
         clusterAdminRoleReadActions.addAction(ActionType::splitVector);
         clusterAdminRoleReadActions.addAction(ActionType::unsetSharding);
+        clusterAdminRoleReadActions.addAction(ActionType::replGetExpireOplog);
 
         clusterAdminRoleWriteActions.addAction(ActionType::addShard);
         clusterAdminRoleWriteActions.addAction(ActionType::dropDatabase); // TODO: Should there be a CREATE_DATABASE also?
@@ -199,6 +200,7 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::shardingState);
         clusterAdminRoleWriteActions.addAction(ActionType::split);
         clusterAdminRoleWriteActions.addAction(ActionType::splitChunk);
+        clusterAdminRoleWriteActions.addAction(ActionType::replSetExpireOplog);
 
         clusterAdminRoleActions.addAllActionsFromSet(clusterAdminRoleReadActions);
         clusterAdminRoleActions.addAllActionsFromSet(clusterAdminRoleWriteActions);
