@@ -65,11 +65,11 @@ namespace mongo {
 
     Client& Client::initThread(const char *desc, AbstractMessagingPort *mp) {
         // mp is non-null only for client connections, and mongos uses ClientInfo for those
-        massert(16478, "Client being used for incoming connection thread in mongos", mp == NULL);
+        massert(17005, "Client being used for incoming connection thread in mongos", mp == NULL);
         setThreadName(desc);
         verify( currentClient.get() == 0 );
         // mp is always NULL in mongos. Threads for client connections use ClientInfo in mongos
-        massert(16482,
+        massert(17006,
                 "Non-null messaging port provided to Client::initThread in a mongos",
                 mp == NULL);
         Client *c = new Client(desc, mp);

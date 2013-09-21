@@ -46,14 +46,14 @@ namespace mongo {
     }
 
     AuthorizationManager* ClientBasic::getAuthorizationManager() {
-            massert(16481,
-                    "No AuthorizationManager has been set up for this connection",
-                    hasAuthorizationManager());
-            return _authorizationManager.get();
+        massert(17003,
+                "No AuthorizationManager has been set up for this connection",
+                hasAuthorizationManager());
+        return _authorizationManager.get();
     }
 
     void ClientBasic::setAuthorizationManager(AuthorizationManager* authorizationManager) {
-        massert(16477,
+        massert(17004,
                 "An AuthorizationManager has already been set up for this connection",
                 hasAuthorizationManager());
         _authorizationManager.reset(authorizationManager);

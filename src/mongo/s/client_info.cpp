@@ -79,7 +79,7 @@ namespace mongo {
 
     ClientInfo* ClientInfo::create(AbstractMessagingPort* messagingPort) {
         ClientInfo * info = _tlInfo.get();
-        massert(16472, "A ClientInfo already exists for this thread", !info);
+        massert(17007, "A ClientInfo already exists for this thread", !info);
         info = new ClientInfo(messagingPort);
         info->setAuthorizationManager(new AuthorizationManager(new AuthExternalStateMongos()));
         _tlInfo.reset( info );
@@ -92,7 +92,7 @@ namespace mongo {
         if (!info) {
             info = create(messagingPort);
         }
-        massert(16483,
+        massert(17008,
                 mongoutils::str::stream() << "AbstractMessagingPort was provided to ClientInfo::get"
                         << " but differs from the one stored in the current ClientInfo object. "
                         << "Current ClientInfo messaging port "

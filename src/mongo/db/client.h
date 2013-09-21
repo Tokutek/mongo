@@ -29,7 +29,6 @@
 
 #include <stack>
 
-#include "mongo/db/security.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/db/stats/top.h"
 #include "mongo/db/client_basic.h"

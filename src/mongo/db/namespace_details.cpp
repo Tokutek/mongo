@@ -969,7 +969,7 @@ namespace mongo {
             massert( 16869, "bug: Should not bulk load a system catalog collection", !bulkLoad );
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(serialized));
         } else if (isSystemUsersCollection(ns)) {
-            massert( 0, "bug: Should not bulk load the users collection", !bulkLoad );
+            massert( 17002, "bug: Should not bulk load the users collection", !bulkLoad );
             return shared_ptr<NamespaceDetails>(new SystemUsersCollection(serialized));
         } else if (isProfileCollection(ns)) {
             massert( 16870, "bug: Should not bulk load the profile collection", !bulkLoad );

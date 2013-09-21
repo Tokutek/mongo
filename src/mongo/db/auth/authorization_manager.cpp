@@ -431,7 +431,7 @@ namespace {
         actions.addAllActions();
 
         addAuthorizedPrincipal(principal);
-        fassert(0, acquirePrivilege(Privilege(PrivilegeSet::WILDCARD_RESOURCE, actions),
+        fassert(17001, acquirePrivilege(Privilege(PrivilegeSet::WILDCARD_RESOURCE, actions),
                                     principal->getName()).isOK());
     }
 
