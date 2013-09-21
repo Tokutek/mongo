@@ -1808,7 +1808,7 @@ namespace mongo {
             // sufficient. Upgrade to a global read lock. Note that the db may close
             // between lock acquisions, but that's okay - we'll uassert later in the
             // Client::Context constructor and the user must retry the command.
-            scoped_ptr<Client::ReadContext> rctx(new Client::ReadContext(ns, dbpath, c->requiresAuth()));
+            scoped_ptr<Client::ReadContext> rctx(new Client::ReadContext(ns, dbpath));
             scoped_ptr<Lock::GlobalRead> lk;
             if (c->lockGlobally()) {
                 rctx.reset();
