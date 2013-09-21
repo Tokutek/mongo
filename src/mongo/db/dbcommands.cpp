@@ -1849,7 +1849,7 @@ namespace mongo {
             scoped_ptr<Lock::ScopedLock> lk(global
                                             ? static_cast<Lock::ScopedLock*>(new Lock::GlobalWrite())
                                             : static_cast<Lock::ScopedLock*>(new Lock::DBWrite(dbname)));
-            if (!canRunCommand(c, dbname, queryOptions, fromRepl, result)) {
+            if (!canRunCommand(c, dbname, queryOptions, fromRepl, errmsg, result)) {
                 appendCommandStatus(result, false, errmsg);
                 return;
             }
