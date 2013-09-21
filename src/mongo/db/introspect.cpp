@@ -53,7 +53,6 @@ namespace {
     static void _profile(const Client& c, CurOp& currentOp, BufBuilder& profileBufBuilder) {
         Database *db = c.database();
         DEV verify( db );
-        const char *ns = db->profileName().c_str();
         
         // build object
         BSONObjBuilder b(profileBufBuilder);
