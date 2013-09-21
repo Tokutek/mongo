@@ -10,7 +10,6 @@
 #include "mongo/util/background.h"
 #include "mongo/client/connpool.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/security.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/connections.h"
 #include "mongo/db/instance.h"
