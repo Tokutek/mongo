@@ -20,13 +20,9 @@
 #include "mongo/db/commands.h"
 
 namespace mongo {
-    class CmdConnectionStatus : public Command {
+    class CmdConnectionStatus : public InformationCommand {
     public:
-        CmdConnectionStatus() : Command("connectionStatus") {}
-        virtual bool requiresAuth() { return false; }
-        virtual bool logTheOp() { return false; }
-        virtual bool slaveOk() const { return true; }
-        virtual LockType locktype() const { return NONE; }
+        CmdConnectionStatus() : InformationCommand("connectionStatus") {}
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {} // No auth required
