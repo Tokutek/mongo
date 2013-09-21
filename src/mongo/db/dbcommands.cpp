@@ -642,6 +642,13 @@ namespace mongo {
     public:
         CmdShowPendingLockRequests() : WebInformationCommand("showPendingLockRequests") {}
 
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::showPendingLockRequests);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         virtual void help( stringstream& help ) const {
             help << "returns a list of pending, document-level level lock requests";
         }
@@ -656,6 +663,13 @@ namespace mongo {
     public:
         CmdShowLiveTransactions() : WebInformationCommand("showLiveTransactions") {}
 
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::showLiveTransactions);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         virtual void help( stringstream& help ) const {
             help << "returns a list of live transactions";
         }
@@ -676,6 +690,13 @@ namespace mongo {
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::checkpoint);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         virtual void help( stringstream& help ) const {
             help << "performs a checkpoint of all TokuMX dictionaries." << endl;
         }
@@ -1600,7 +1621,6 @@ namespace mongo {
     class EmptyCapped : public ModifyCommand {
     public:
         EmptyCapped() : ModifyCommand( "emptycapped" ) {}
-        virtual bool requiresAuth() { return true; }
         virtual bool logTheOp() { return true; }
         // No auth needed because it only works when enabled via command line.
         virtual bool requiresAuth() { return false; }

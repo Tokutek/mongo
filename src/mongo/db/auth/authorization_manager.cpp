@@ -154,12 +154,15 @@ namespace {
         serverAdminRoleReadActions.addAction(ActionType::logRotate);
         serverAdminRoleReadActions.addAction(ActionType::setParameter);
         serverAdminRoleReadActions.addAction(ActionType::serverStatus);
+        serverAdminRoleReadActions.addAction(ActionType::showLiveTransactions);
+        serverAdminRoleReadActions.addAction(ActionType::showPendingLockRequests);
         serverAdminRoleReadActions.addAction(ActionType::shutdown);
         serverAdminRoleReadActions.addAction(ActionType::top);
         serverAdminRoleReadActions.addAction(ActionType::touch);
         serverAdminRoleReadActions.addAction(ActionType::unlock);
 
         serverAdminRoleWriteActions.addAction(ActionType::applyOps);
+        serverAdminRoleWriteActions.addAction(ActionType::checkpoint);
         serverAdminRoleWriteActions.addAction(ActionType::closeAllDatabases);
         serverAdminRoleWriteActions.addAction(ActionType::cpuProfiler);
         serverAdminRoleWriteActions.addAction(ActionType::cursorInfo);
