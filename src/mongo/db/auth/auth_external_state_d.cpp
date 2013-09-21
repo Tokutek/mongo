@@ -24,6 +24,7 @@
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/namespace_details.h"
 
 namespace mongo {
 
@@ -41,8 +42,20 @@ namespace mongo {
                                             BSONObj* result) const {
         Client::GodScope gs;
         Client::ReadContext ctx(usersNamespace);
+        // we want all authentication stuff to happen on an alternate stack
+        Client::AlternateTransactionStack altStack;
+        Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
 
-        return Helpers::findOne(usersNamespace, query, *result);
+        NamespaceDetails *d = nsdetails(usersNamespace);
+        if (d == NULL) {
+            return false;
+        }
+        BSONObj tmpResult;
+        bool ok = d->findOne(query, result != NULL ? *result : tmpResult);
+        if (ok) {
+            txn.commit();
+        }
+        return ok;
     }
 
     bool AuthExternalStateMongod::shouldIgnoreAuthChecks() const {

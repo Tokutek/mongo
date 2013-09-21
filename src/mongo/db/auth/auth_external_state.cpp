@@ -43,11 +43,6 @@ namespace mongo {
 
         std::string usersNamespace = dbname + ".system.users";
 
-        Client::ReadContext tc(usersNamespace, dbpath, false);
-        // we want all authentication stuff to happen on an alternate stack
-        Client::AlternateTransactionStack altStack;
-        Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-
         BSONObj userBSONObj;
         BSONObjBuilder queryBuilder;
         queryBuilder.append(AuthorizationManager::USER_NAME_FIELD_NAME, principalName.getUser());
@@ -66,8 +61,6 @@ namespace mongo {
                           principalName.toString() << ", " << usersNamespace,
                           0);
         }
-
-        txn.commit();
 
         *result = userBSONObj.getOwned();
         return Status::OK();
