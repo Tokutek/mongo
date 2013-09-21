@@ -21,6 +21,8 @@
 #include "mongo/db/cmdline.h"
 #include "mongo/client/dbclient_rs.h"
 #include "mongo/db/server_parameters.h"
+#include "mongo/db/storage/env.h"
+#include "mongo/s/shard.h"
 
 namespace mongo {
 
