@@ -989,8 +989,6 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     if (!initializeServerGlobalState())
         ::_exit(EXIT_FAILURE);
 
-    dataFileSync.go();
-
 #if defined(_WIN32)
     if (ntservice::shouldStartService()) {
         ntservice::startService();
