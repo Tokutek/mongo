@@ -258,38 +258,6 @@ namespace mongo {
         return 0;
     }
 
-    void clearTmpCollections() {
-        Lock::GlobalWrite lk;
-        Client::GodScope gs;
-        vector< string > toDelete;
-        DBDirectClient cli;
-        {
-            // We don't want to get read locks on system.namespaces,
-            // so chose a snapshot transaction. We'll do the actual
-            // drops in _dropTempCollections, outside of this txn.
-            Client::Transaction txn(DB_TXN_SNAPSHOT);
-            vector< string > dbNames;
-            getDatabaseNames( dbNames );
-            for (vector<string>::const_iterator it(dbNames.begin()), end(dbNames.end()); it != end; ++it){
-                const string coll = *it + ".system.namespaces";
-                scoped_ptr< DBClientCursor > c (cli.query(coll, Query( fromjson( "{'options.temp': {$in: [true, 1]}}" ) ) ));
-                while( c->more() ) {
-                    BSONObj o = c->next();
-                    toDelete.push_back( o.getStringField( "name" ) );
-                }
-            }
-            txn.commit();
-        }
-        {
-            Client::Transaction txn(DB_SERIALIZABLE);
-            for( vector< string >::iterator i = toDelete.begin(); i != toDelete.end(); ++i ) {
-                log() << "Dropping old temporary collection: " << *i << endl;
-                cli.dropCollection( *i );
-            }
-            txn.commit();
-        }
-    }
-
     const char * jsInterruptCallback() {
         // should be safe to interrupt in js code, even if we have a write lock
         return killCurrentOp.checkForInterruptNoAssert();
@@ -342,9 +310,6 @@ namespace mongo {
         extern TxnCompleteHooks _txnCompleteHooks;
         setTxnCompleteHooks(&_txnCompleteHooks);
         storage::startup();
-
-        // comes after storage::startup() because this reads from the database
-        clearTmpCollections();
 
         unsigned long long missingRepl = checkIfReplMissingFromCommandLine();
         if (missingRepl) {

@@ -341,10 +341,10 @@ namespace mongo {
                     Client::WriteContext ctx( _config.incLong );
                     string err;
                     // Specifying { natural : 1 } creates a "natural order" collection,
-                    // which does not automaticall add/index the _id field.
+                    // which does not automatically add/index the _id field.
                     // write create to oplog, because the ensureIndex that happens below will be logged as well
                     // not ideal, but harmless to have just the create, ensureIndex, and drop of this temp collection logged
-                    if ( ! userCreateNS( _config.incLong.c_str() , BSON( "natural" << 1 << "temp" << true ) , err , true ) ) {
+                    if ( ! userCreateNS( _config.incLong.c_str() , BSON( "natural" << 1 ) , err , true ) ) {
                         uasserted( 13631 , str::stream() << "userCreateNS failed for mr incLong ns: " << _config.incLong << " err: " << err );
                     }
                     transaction.commit();
@@ -361,7 +361,7 @@ namespace mongo {
                 Client::Transaction transaction(0);
                 Client::WriteContext ctx( _config.tempLong.c_str() );
                 string errmsg;
-                if ( ! userCreateNS( _config.tempLong.c_str() , BSON("temp" << true) , errmsg , true ) ) {
+                if ( ! userCreateNS( _config.tempLong.c_str() , BSONObj(), errmsg , true ) ) {
                     uasserted( 13630 , str::stream() << "userCreateNS failed for mr tempLong ns: " << _config.tempLong << " err: " << errmsg );
                 }
                 transaction.commit();
@@ -519,8 +519,7 @@ namespace mongo {
 
                 if ( ! _db.runCommand( "admin"
                                       , BSON( "renameCollection" << _config.tempLong <<
-                                              "to" << _config.finalLong <<
-                                              "stayTemp" << _config.shardedFirstPass )
+                                              "to" << _config.finalLong )
                                       , info ) ) {
                     uasserted( 10076 ,  str::stream() << "rename failed: " << info );
                 }

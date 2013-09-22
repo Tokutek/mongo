@@ -1662,7 +1662,7 @@ namespace mongo {
         return b.obj();
     }
 
-    void renameNamespace(const StringData& from, const StringData& to, bool stayTemp) {
+    void renameNamespace(const StringData& from, const StringData& to) {
         Lock::assertWriteLocked(from);
 
         NamespaceDetails *from_details = nsdetails(from);
@@ -1732,9 +1732,7 @@ namespace mongo {
             while ( i.more() ) {
                 BSONElement e = i.next();
                 if ( strcmp( e.fieldName(), "create" ) != 0 ) {
-                    if (stayTemp || (strcmp(e.fieldName(), "temp") != 0)) {
-                        b.append( e );
-                    }
+                    b.append( e );
                 }
                 else {
                     b << "create" << to;
