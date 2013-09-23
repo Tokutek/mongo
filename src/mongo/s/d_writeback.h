@@ -21,6 +21,7 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/jsobj.h"
 #include "../util/queue.h"
 #include "../util/background.h"
 
