@@ -2275,6 +2275,7 @@ namespace mongo {
             Command::appendCommandStatus(anObjBuilder,
                                          false,
                                          str::stream() << "no such cmd: " << e.fieldName());
+            anObjBuilder.append("code", ErrorCodes::CommandNotFound);
             anObjBuilder.append("bad cmd" , cmdobj );
         }
 

@@ -51,6 +51,7 @@ error_code("NamespaceExists", 48)
 error_code("ExceededTimeLimit", 50)
 
 # Non-sequential error codes (for compatibility only)
+error_code("CommandNotFound", 59)
 error_code("NodeNotFound", 74)
 
 error_class("NetworkError", ["HostUnreachable", "HostNotFound"])
