@@ -367,9 +367,9 @@ namespace mongo {
         srand((unsigned) (curTimeMicros() ^ startupSrandTimer.micros()));
 
         if (!cmdLine.pluginsDir.empty()) {
-            plugins::loader.setPluginsDir(cmdLine.pluginsDir);
+            plugins::loader->setPluginsDir(cmdLine.pluginsDir);
         }
-        plugins::loader.autoload(cmdLine.plugins);
+        plugins::loader->autoload(cmdLine.plugins);
 
         snapshotThread.go();
         d.clientCursorMonitor.go();

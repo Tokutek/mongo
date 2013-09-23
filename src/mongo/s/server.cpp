@@ -311,9 +311,9 @@ static bool runMongosServer( bool doUpgrade ) {
     init();
 
     if (!cmdLine.pluginsDir.empty()) {
-        plugins::loader.setPluginsDir(cmdLine.pluginsDir);
+        plugins::loader->setPluginsDir(cmdLine.pluginsDir);
     }
-    plugins::loader.autoload(cmdLine.plugins);
+    plugins::loader->autoload(cmdLine.plugins);
 
 #if !defined(_WIN32)
     CmdLine::launchOk();
@@ -567,7 +567,7 @@ int main(int argc, char* argv[], char** envp) {
 
 void mongo::exitCleanly( ExitCode code ) {
     // TODO: do we need to add anything?
-    plugins::loader.shutdown();
+    plugins::loader->shutdown();
     mongo::dbexit( code );
 }
 

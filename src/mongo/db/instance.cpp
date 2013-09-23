@@ -1087,7 +1087,7 @@ namespace mongo {
             log() << "shutdown: going to close databases..." << endl;
             dbHolderW().closeDatabases(dbpath);
             log() << "shutdown: going to unload all plugins..." << endl;
-            plugins::loader.shutdown();
+            plugins::loader->shutdown();
             log() << "shutdown: going to shutdown TokuMX..." << endl;
             storage::shutdown();
         }

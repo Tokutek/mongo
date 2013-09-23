@@ -77,7 +77,7 @@ namespace mongo {
                 }
                 checksum = cksumElt.Stringdata();
             }
-            return plugins::loader.load(filename, checksum, errmsg, result);
+            return plugins::loader->load(filename, checksum, errmsg, result);
         }
     } loadPluginCommand;
 
@@ -105,7 +105,7 @@ namespace mongo {
         ListPluginsCommand() : InformationCommand("listPlugins") {}
 
         virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
-            return plugins::loader.list(errmsg, result);
+            return plugins::loader->list(errmsg, result);
         }
     } listPluginsCommand;
 
@@ -143,7 +143,7 @@ namespace mongo {
                 errmsg = "unloadPlugin argument must not be empty";
                 return false;
             }
-            return plugins::loader.unload(name, errmsg, result);
+            return plugins::loader->unload(name, errmsg, result);
         }
     } unloadPluginCommand;
 
