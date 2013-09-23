@@ -890,7 +890,10 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setOpSettings(settings);
 
-        if (str::contains(ns, ".system.indexes") && objs[0]["background"].trueValue()) {
+        if (str::contains(ns, ".system.indexes") && 
+                // Can only build non-unique indexes in the background, because the
+                // hot indexer does not know how to perform unique checks.
+                objs[0]["background"].trueValue() && !objs[0]["unique"].trueValue()) {
             _buildHotIndex(ns, m, objs);
             return;
         }
