@@ -21,6 +21,7 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mongo/base/init.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/repl/rs.h"
 
@@ -32,6 +33,9 @@ namespace mongo {
         virtual void help( stringstream& help ) const {
             help << "internal command used for testing";
         }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
 
         bool run(
             const string& db,
@@ -49,5 +53,14 @@ namespace mongo {
 
             return true;
         }
-    } cmdTestHooks;
+    };
+
+    MONGO_INITIALIZER(RegisterTestHooksCmd)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdTestHooks();
+        }
+        return Status::OK();
+    }
+
 }

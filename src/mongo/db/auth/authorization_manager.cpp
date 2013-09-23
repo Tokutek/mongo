@@ -154,6 +154,7 @@ namespace {
         serverAdminRoleReadActions.addAction(ActionType::hostInfo);
         serverAdminRoleReadActions.addAction(ActionType::listDatabases);
         serverAdminRoleReadActions.addAction(ActionType::logRotate);
+        serverAdminRoleReadActions.addAction(ActionType::pluginList);
         serverAdminRoleReadActions.addAction(ActionType::setParameter);
         serverAdminRoleReadActions.addAction(ActionType::serverStatus);
         serverAdminRoleReadActions.addAction(ActionType::showLiveTransactions);
@@ -172,6 +173,7 @@ namespace {
         serverAdminRoleWriteActions.addAction(ActionType::fsync);
         serverAdminRoleWriteActions.addAction(ActionType::inprog);
         serverAdminRoleWriteActions.addAction(ActionType::killop);
+        serverAdminRoleWriteActions.addAction(ActionType::pluginLoad);
         serverAdminRoleWriteActions.addAction(ActionType::repairDatabase);
 
         serverAdminRoleActions.addAllActionsFromSet(serverAdminRoleReadActions);

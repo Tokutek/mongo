@@ -55,6 +55,8 @@
 "moveChunk",
 "movePrimary",
 "netstat",
+"pluginLoad",
+"pluginList",
 "profileEnable",
 "profileRead",
 "reIndex",
