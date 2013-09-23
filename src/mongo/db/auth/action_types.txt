@@ -6,6 +6,9 @@
 # also may change between versions.
 ["addShard",
 "applyOps",
+"backupStart",
+"backupStatus",
+"backupThrottle",
 "captrunc",
 "checkpoint",
 "clean",

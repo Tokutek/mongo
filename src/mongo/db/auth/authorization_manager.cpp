@@ -145,6 +145,7 @@ namespace {
         dbAdminRoleActions.addAction(ActionType::validate);
 
         // Server admin role
+        serverAdminRoleReadActions.addAction(ActionType::backupStatus);
         serverAdminRoleReadActions.addAction(ActionType::connPoolStats);
         serverAdminRoleReadActions.addAction(ActionType::connPoolSync);
         serverAdminRoleReadActions.addAction(ActionType::getCmdLineOpts);
@@ -165,6 +166,8 @@ namespace {
         serverAdminRoleReadActions.addAction(ActionType::unlock);
 
         serverAdminRoleWriteActions.addAction(ActionType::applyOps);
+        serverAdminRoleWriteActions.addAction(ActionType::backupStart);
+        serverAdminRoleWriteActions.addAction(ActionType::backupThrottle);
         serverAdminRoleWriteActions.addAction(ActionType::checkpoint);
         serverAdminRoleWriteActions.addAction(ActionType::closeAllDatabases);
         serverAdminRoleWriteActions.addAction(ActionType::cpuProfiler);
