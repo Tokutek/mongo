@@ -404,7 +404,14 @@ namespace mongo {
                     {
                         time_t t = row->value.num;
                         char tbuf[26];
-                        status.appendNumber( row->keyname, (long long) ctime_r(&t, tbuf) );
+                        char *tstr = ctime_r(&t, tbuf);
+                        verify(tstr != NULL);
+                        // Remove any trailing newline.
+                        size_t len = strlen(tstr);
+                        if (len > 0 && tstr[len - 1] == '\n') {
+                            tstr[len - 1] = '\0';
+                        }
+                        status.append( row->keyname, tstr );
                     }
                     break;
                 case TOKUTIME:
