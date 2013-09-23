@@ -197,13 +197,13 @@ namespace mongo {
         static shared_ptr<IndexCursor> make( NamespaceDetails *d, const IndexDetails &idx,
                                              const BSONObj &startKey, const BSONObj &endKey,
                                              bool endKeyInclusive, int direction,
-                                             int numWanted = 0);
+                                             int numWanted = 0, const BSONObj &join = BSONObj());
 
         // Create a cursor over a set of one or more field ranges.
         static shared_ptr<IndexCursor> make( NamespaceDetails *d, const IndexDetails &idx,
                                              const shared_ptr< FieldRangeVector > &bounds,
                                              int singleIntervalLimit, int direction,
-                                             int numWanted = 0);
+                                             const int numWanted = 0, const BSONObj &join = BSONObj());
 
         virtual ~IndexCursor();
 
@@ -274,11 +274,13 @@ namespace mongo {
 
         IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
                      const BSONObj &startKey, const BSONObj &endKey,
-                     bool endKeyInclusive, int direction, int numWanted = 0);
+                     bool endKeyInclusive, int direction,
+                     int numWanted = 0, const BSONObj &join = BSONObj());
 
         IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
                      const shared_ptr< FieldRangeVector > &bounds,
-                     int singleIntervalLimit, int direction, int numWanted = 0);
+                     int singleIntervalLimit, int direction,
+                     int numWanted = 0, const BSONObj &join = BSONObj());
 
     private:
 
@@ -377,6 +379,12 @@ namespace mongo {
         // of bulk fetch so we know an appropriate amount of rows to fetch.
         RowBuffer _buffer;
         int _getf_iteration;
+
+        // Describes a join that should be made on another collection
+        // before returning objects via current()
+        BSONObj _join;
+        // Has _currObj been joined yet?
+        bool _currentJoined;
     };
 
     /**
@@ -385,8 +393,8 @@ namespace mongo {
      */
     class IndexScanCursor : public IndexCursor {
     public:
-        IndexScanCursor( NamespaceDetails *d, const IndexDetails &idx,
-                         int direction, int numWanted = 0);
+        IndexScanCursor( NamespaceDetails *d, const IndexDetails &idx, int direction,
+                         int numWanted = 0, const BSONObj &join = BSONObj());
     private:
         static const BSONObj &startKey(const BSONObj &keyPattern, const int direction);
         static const BSONObj &endKey(const BSONObj &keyPattern, const int direction);
@@ -397,7 +405,8 @@ namespace mongo {
      */
     class BasicCursor : public IndexScanCursor {
     public:
-        static shared_ptr<Cursor> make( NamespaceDetails *d, int direction = 1 );
+        static shared_ptr<Cursor> make( NamespaceDetails *d, int direction = 1,
+                                        const BSONObj &join = BSONObj() );
 
         BSONObj currKey() const { return BSONObj(); }
         virtual BSONObj indexKeyPattern() const { return BSONObj(); }
@@ -411,7 +420,7 @@ namespace mongo {
         virtual void explainDetails( BSONObjBuilder& b ) const { return; }
 
     private:
-        BasicCursor( NamespaceDetails *d, int direction );
+        BasicCursor( NamespaceDetails *d, int direction, const BSONObj &join = BSONObj() );
     };
 
     /**

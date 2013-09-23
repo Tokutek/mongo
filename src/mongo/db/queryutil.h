@@ -90,6 +90,7 @@ namespace mongo {
         const BSONObj& getMax() const { return _max; }
         const BSONObj& getOrder() const { return _order; }
         const BSONObj& getHint() const { return _hint; }
+        const BSONObj& getJoin() const { return _join; }
         int getMaxScan() const { return _maxScan; }
         
         bool couldBeCommand() const {
@@ -199,6 +200,8 @@ namespace mongo {
                         _max = e.embeddedObject();
                     else if ( strcmp( "hint" , name ) == 0 )
                         _hint = e.wrap();
+                    else if ( strcmp( "join" , name ) == 0 )
+                        _join = e.embeddedObject();
                     else if ( strcmp( "returnKey" , name ) == 0 )
                         _returnKey = e.trueValue();
                     else if ( strcmp( "maxScan" , name ) == 0 )
@@ -213,7 +216,7 @@ namespace mongo {
                 uassert( 12001 , "E12001 can't sort with $snapshot", _order.isEmpty() );
                 uassert( 12002 , "E12002 can't use hint with $snapshot", _hint.isEmpty() );
             }
-            
+
         }
         
         void initFields( const BSONObj& fields ) {
@@ -238,6 +241,7 @@ namespace mongo {
         BSONObj _min;
         BSONObj _max;
         BSONObj _hint;
+        BSONObj _join;
         int _maxScan;
     };
     

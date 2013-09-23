@@ -153,24 +153,25 @@ namespace mongo {
     shared_ptr<IndexCursor> IndexCursor::make( NamespaceDetails *d, const IndexDetails &idx,
                                                const BSONObj &startKey, const BSONObj &endKey,
                                                bool endKeyInclusive, int direction,
-                                               int numWanted ) {
+                                               int numWanted, const BSONObj &join ) {
         return shared_ptr<IndexCursor>( new IndexCursor( d, idx, startKey, endKey,
                                                          endKeyInclusive, direction,
-                                                         numWanted ) );
+                                                         numWanted, join ) );
     }
 
     shared_ptr<IndexCursor> IndexCursor::make( NamespaceDetails *d, const IndexDetails &idx,
                                                const shared_ptr< FieldRangeVector > &bounds,
                                                int singleIntervalLimit, int direction,
-                                               int numWanted ) {
+                                               int numWanted, const BSONObj &join ) {
         return shared_ptr<IndexCursor>( new IndexCursor( d, idx, bounds,
                                                          singleIntervalLimit, direction,
-                                                         numWanted ) );
+                                                         numWanted, join ) );
     }
 
     IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
                               const BSONObj &startKey, const BSONObj &endKey,
-                              bool endKeyInclusive, int direction, int numWanted ) :
+                              bool endKeyInclusive, int direction,
+                              int numWanted, const BSONObj &join ) :
         _d(d),
         _idx(idx),
         _ordering(Ordering::make(_idx.keyPattern())),
@@ -187,7 +188,9 @@ namespace mongo {
         _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
-        _getf_iteration(0)
+        _getf_iteration(0),
+        _join(join),
+        _currentJoined(false)
     {
         verify( _d != NULL );
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
@@ -196,7 +199,8 @@ namespace mongo {
 
     IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
                               const shared_ptr< FieldRangeVector > &bounds,
-                              int singleIntervalLimit, int direction, int numWanted ) :
+                              int singleIntervalLimit, int direction,
+                              int numWanted, const BSONObj &join ) :
         _d(d),
         _idx(idx),
         _ordering(Ordering::make(_idx.keyPattern())),
@@ -213,7 +217,9 @@ namespace mongo {
         _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
-        _getf_iteration(0)
+        _getf_iteration(0),
+        _join(join),
+        _currentJoined(false)
     {
         verify( _d != NULL );
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
@@ -475,6 +481,7 @@ namespace mongo {
     void IndexCursor::getCurrentFromBuffer() {
         storage::Key sKey;
         _buffer.current(sKey, _currObj);
+        _currentJoined = false;
 
         _currKeyBufBuilder.reset(512);
         _currKey = sKey.key(_currKeyBufBuilder);
@@ -784,6 +791,40 @@ again:      while ( !allInclusive && ok() ) {
                                 << _currPK << ", index key " << _currKey, found );
                 }
             }
+        }
+        if ( !_join.isEmpty() && !_currentJoined ) {
+            const StringData &joinNS = _join["ns"].Stringdata();
+            const StringData &joinOn = _join["on"].Stringdata();
+            const StringData &joinField = _join["field"].Stringdata();
+
+            // Only actually do the join if the target ns exists,
+            // the target field exists in the current obj, and we were
+            // able to find a matching document in the target ns.
+            // TODO: Performance: Cache the NamespaceDetails object
+            // TODO: Require an index?
+            BSONElement e;
+            NamespaceDetails *d = nsdetails(joinNS);
+            if ( d != NULL && (e = _currObj[joinOn]).ok() ) {
+                BSONObj result;
+                BSONObj query = e.wrap();
+                if ( d->findOne(query, result) ) {
+                    // TODO: Performance: Use a MutableDocument of some sort?
+                    // TODO: Refactor: Put this in its own function somewhere
+                    BSONObjBuilder b;
+                    BSONObjIterator i( _currObj );
+                    while ( i.more() ) {
+                        // Remove whatever exists for 'joinField' so we can
+                        // replace it with the joined document.
+                        BSONElement ee = i.next();
+                        if ( StringData(ee.fieldName()) != joinField ) {
+                            b.append( ee );
+                        }
+                    }
+                    b.append( joinField, result );
+                    _currObj = b.obj();
+                }
+            }
+            _currentJoined = true;
         }
         bool shouldAppendPK = _d->isCapped() && cc().opSettings().shouldCappedAppendPK();
         if (shouldAppendPK) {

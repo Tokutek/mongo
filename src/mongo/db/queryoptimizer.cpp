@@ -261,12 +261,15 @@ doneCheckOrder:
 
         // hopefully safe to use original query in these contexts - don't think we can mix type with $or clause separation yet
         int numWanted = 0;
+        BSONObj join;
         if ( _parsedQuery ) {
             // SERVER-5390
             TOKULOG(2) << "QueryPlan:: newCursor has _parsedQuery skip " <<
-                _parsedQuery->getSkip() << ", limit " << _parsedQuery->getNumToReturn() << endl;
+                _parsedQuery->getSkip() << ", limit " << _parsedQuery->getNumToReturn() << 
+                ", join " << _parsedQuery->getJoin() << endl;
 
             numWanted = _parsedQuery->getSkip() + _parsedQuery->getNumToReturn();
+            join = _parsedQuery->getJoin();
         }
 
         if ( _index != NULL && _index->special() ) {
@@ -282,19 +285,19 @@ doneCheckOrder:
             checkTableScanAllowed();
             const int direction = _order.getField("$natural").number() >= 0 ? 1 : -1;
             NamespaceDetails *d = nsdetails( _frs.ns() );
-            return shared_ptr<Cursor>( BasicCursor::make( d, direction ) );
+            return shared_ptr<Cursor>( BasicCursor::make( d, direction, join ) );
         }
                 
         verify( _index != NULL );
         if ( _startOrEndSpec ) {
             // we are sure to spec _endKeyInclusive
-            return shared_ptr<Cursor>( IndexCursor::make( _d, *_index, _startKey, _endKey, _endKeyInclusive, _direction >= 0 ? 1 : -1, numWanted ) );
+            return shared_ptr<Cursor>( IndexCursor::make( _d, *_index, _startKey, _endKey, _endKeyInclusive, _direction >= 0 ? 1 : -1, numWanted, join ) );
         }
         else if ( _index->special() ) {
-            return shared_ptr<Cursor>( IndexCursor::make( _d, *_index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1, numWanted ) );
+            return shared_ptr<Cursor>( IndexCursor::make( _d, *_index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1, numWanted, join ) );
         }
         else {
-            return shared_ptr<Cursor>( IndexCursor::make( _d, *_index, _frv, independentRangesSingleIntervalLimit(), _direction >= 0 ? 1 : -1, numWanted) );
+            return shared_ptr<Cursor>( IndexCursor::make( _d, *_index, _frv, independentRangesSingleIntervalLimit(), _direction >= 0 ? 1 : -1, numWanted, join ) );
         }
     }
 

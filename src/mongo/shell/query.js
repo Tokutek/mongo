@@ -226,6 +226,10 @@ DBQuery.prototype.hint = function( hint ){
     return this._addSpecial( "$hint" , hint );
 }
 
+DBQuery.prototype.join = function( join ){
+    return this._addSpecial( "$join", join );
+}
+
 DBQuery.prototype.min = function( min ) {
     return this._addSpecial( "$min" , min );
 }

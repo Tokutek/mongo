@@ -33,24 +33,24 @@ namespace mongo {
         return reverseMinMaxBoundsOrder(Ordering::make(keyPattern), direction) ? minKey : maxKey;
     }
 
-    IndexScanCursor::IndexScanCursor( NamespaceDetails *d, const IndexDetails &idx,
-                                      int direction, int numWanted ) :
+    IndexScanCursor::IndexScanCursor( NamespaceDetails *d, const IndexDetails &idx, int direction,
+                                      int numWanted, const BSONObj &join ) :
         IndexCursor( d, idx,
                      startKey(idx.keyPattern(), direction),
                      endKey(idx.keyPattern(), direction),
-                     true, direction, numWanted ) {
+                     true, direction, numWanted, join ) {
     }
 
-    shared_ptr<Cursor> BasicCursor::make( NamespaceDetails *d, int direction ) {
+    shared_ptr<Cursor> BasicCursor::make( NamespaceDetails *d, int direction, const BSONObj &join ) {
         if ( d != NULL ) {
-            return shared_ptr<Cursor>(new BasicCursor(d, direction));
+            return shared_ptr<Cursor>(new BasicCursor(d, direction, join));
         } else {
             return shared_ptr<Cursor>(new DummyCursor(direction));
         }
     }
 
-    BasicCursor::BasicCursor( NamespaceDetails *d, int direction ) :
-        IndexScanCursor( d, d->getPKIndex(), direction ) {
+    BasicCursor::BasicCursor( NamespaceDetails *d, int direction, const BSONObj &join ) :
+        IndexScanCursor( d, d->getPKIndex(), direction, 0, join ) {
     }
 
 } // namespace mongo
