@@ -337,7 +337,7 @@ namespace mongo {
 
                 BSONObjBuilder temp( bb.subobjStart( s ) );
                 temp.append( "available" , i->second.numAvailable() );
-                temp.appendNumber( "created" , i->second.numCreated() );
+                temp.appendNumber( "created" , (long long) i->second.numCreated() );
                 temp.done();
 
                 avail += i->second.numAvailable();
