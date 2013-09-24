@@ -585,7 +585,7 @@ namespace mongo {
             const DBT *desc = (db != NULL && db->cmp_descriptor != NULL)
                               ? &db->cmp_descriptor->dbt
                               : NULL;
-            if (desc != NULL && desc->data != NULL) {
+            if (desc != NULL && desc->data != NULL && desc->size > 0) {
                 Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
                 const BSONObj key = sKey.key();
 
