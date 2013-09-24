@@ -342,7 +342,6 @@ namespace mongo {
             IndexedCollection(ns, options) {
             BSONObj info = extendedSystemUsersIndexInfo(ns);
             createIndex(info);
-            addIndexToCatalog(info);
         }
         SystemUsersCollection(const BSONObj &serialized) :
             IndexedCollection(serialized) {
