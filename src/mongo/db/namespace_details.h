@@ -67,7 +67,7 @@ namespace mongo {
 
     // Rename a namespace within current 'client' db.
     // (Arguments should include db name)
-    void renameNamespace( const StringData& from, const StringData& to, bool stayTemp);
+    void renameNamespace( const StringData& from, const StringData& to );
 
     // Manage bulk loading into a namespace
     //
@@ -258,6 +258,10 @@ namespace mongo {
 
         bool indexBuildInProgress() const {
             return _indexBuildInProgress;
+        }
+
+        const string &ns() const {
+            return _ns;
         }
 
         // @return a BSON representation of this NamespaceDetail's state

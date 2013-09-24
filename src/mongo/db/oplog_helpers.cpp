@@ -328,11 +328,11 @@ namespace OpLogHelpers{
         if (isRollback) {
             // if this is a rollback, then the newRow is what is in the
             // collections, that we want to replace with oldRow
-            updateOneObject(nsd, pk, newRow, oldRow, NULL, flags);
+            updateOneObject(nsd, pk, newRow, oldRow, LogOpUpdateDetails(), flags);
         }
         else {
             // normal replication case
-            updateOneObject(nsd, pk, oldRow, newRow, NULL, flags);
+            updateOneObject(nsd, pk, oldRow, newRow, LogOpUpdateDetails(), flags);
         }
     }
     static void runUpdateFromOplog(const char* ns, BSONObj op, bool isRollback) {
