@@ -259,6 +259,10 @@ namespace mongo {
             return _indexBuildInProgress;
         }
 
+        const string &ns() const {
+            return _ns;
+        }
+
         // @return a BSON representation of this NamespaceDetail's state
         static BSONObj serialize(const StringData& ns, const BSONObj &options,
                                  const BSONObj &pk, unsigned long long multiKeyIndexBits,
