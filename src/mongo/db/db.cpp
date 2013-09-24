@@ -507,7 +507,7 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     ("expireOplogHours", po::value<uint32_t>(), "how many hours, in addition to expireOplogDays, of oplog data to keep")
     ("journalOptions", po::value<int>(), "DEPRECATED")
     ("jsonp","allow JSONP access via http (has security implications)")
-    ("lockTimeout", po::value<uint64_t>(), "tokumx row lock wait timeout (in ms), 0 means wait as long as necessary")
+    ("lockTimeout", po::value(&cmdLine.lockTimeout), "tokumx row lock wait timeout (in ms), 0 means wait as long as necessary")
     ("locktreeMaxMemory", po::value(&cmdLine.locktreeMaxMemory), "tokumx memory limit (in bytes) for storing transactions' row locks.")
     ("noauth", "run without security")
     ("nohttpinterface", "disable http interface")
