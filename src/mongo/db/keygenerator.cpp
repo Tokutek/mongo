@@ -64,11 +64,11 @@ namespace mongo {
         vector<BSONElement> fixed( fieldNames.size() );
         _getKeys( fieldNames , fixed , obj, sparse, keys );
         if ( keys.empty() && ! sparse ) {
-            BSONObjBuilder nullKey;
+            BSONObjBuilder nullKey(128);
             for (size_t i = 0; i < fieldNames.size(); i++) {
                 nullKey.appendNull("");
             }
-            keys.insert( nullKey.done() );
+            keys.insert( nullKey.obj() );
         }
     }
         
