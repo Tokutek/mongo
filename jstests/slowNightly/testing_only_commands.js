@@ -13,6 +13,7 @@ var testOnlyCommands = ['_testDistLockWithSyncCluster',
                         // TODO: since they're testing only, we should just delete them
                         //'journalLatencyTest',
                         //'godinsert',
+                        '_testHooks',
                         'sleep',
                         'captrunc',
                         'emptycapped']
