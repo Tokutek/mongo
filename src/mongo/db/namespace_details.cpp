@@ -1661,8 +1661,9 @@ namespace mongo {
         if (coll.startsWith("system.") && !can_drop_system) {
             if (coll == "system.profile") {
                 uassert(10087, "turn off profiling before dropping system.profile collection", cc().database()->profile() == 0);
+            } else {
+                uasserted(12502, "can't drop system ns");
             }
-            uasserted(12502, "can't drop system ns");
         }
 
         // Invalidate cursors, then drop all of the indexes.
