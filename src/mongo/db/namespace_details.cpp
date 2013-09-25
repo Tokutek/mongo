@@ -1658,12 +1658,11 @@ namespace mongo {
         StringData database = nsToDatabaseSubstring(name);
         verify(database == cc().database()->name());
         StringData coll = name.substr(name.find('.') + 1);
-        if (coll.startsWith("system.")) {
+        if (coll.startsWith("system.") && !can_drop_system) {
             if (coll == "system.profile") {
                 uassert(10087, "turn off profiling before dropping system.profile collection", cc().database()->profile() == 0);
-            } else if (!can_drop_system) {
-                uasserted(12502, "can't drop system ns");
             }
+            uasserted(12502, "can't drop system ns");
         }
 
         // Invalidate cursors, then drop all of the indexes.
