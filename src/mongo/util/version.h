@@ -65,6 +65,7 @@ namespace mongo {
     std::string sysInfo();
     const char * sysInfoCstr();
     void printSysInfo();
+    void printTargetMinOS();
 
     const char *tokukvVersion();
     void printTokukvVersion();
