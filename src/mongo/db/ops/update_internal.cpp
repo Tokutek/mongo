@@ -465,10 +465,6 @@ namespace mongo {
                 // becomes a no-op.
                 if ( !insertion ) {
                     ms.dontApply = true;
-                    mss->amIInPlacePossible( true );
-                }
-                else {
-                    mss->amIInPlacePossible( false );
                 }
                 break;
 

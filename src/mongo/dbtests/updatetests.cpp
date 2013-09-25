@@ -790,20 +790,6 @@ namespace UpdateTests {
             }
         };
 
-        // A no-op $setOnInsert would not interfere with in-placeness and won't log.
-        class SetOnInsertRewriteInPlace {
-        public:
-            void run() {
-                BSONObj obj = BSON( "a" << 2 );
-                BSONObj mod = BSON( "$setOnInsert" << BSON( "a" << 1 ) );
-                ModSet modSet( mod );
-                auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
-                ASSERT_TRUE( modSetState->canApplyInPlace() );
-                modSetState->applyModsInPlace(false);
-                ASSERT_EQUALS( BSONObj(), modSetState->getOpLogRewrite() );
-            }
-        };
-
         // A no-op $setOnInsert that was forced not in-place doesn't log.
         class SetOnInsertRewriteExistingField {
         public:
@@ -1438,7 +1424,6 @@ namespace UpdateTests {
             add< ModSetTests::InRewriteForceNotInPlace >();
             add< ModSetTests::IncRewriteExistingField >();
             add< ModSetTests::IncRewriteNonExistingField >();
-            add< ModSetTests::SetOnInsertRewriteInPlace >();
             add< ModSetTests::SetOnInsertRewriteExistingField >();
             add< ModSetTests::PushRewriteExistingField >();
             add< ModSetTests::PushRewriteNonExistingField >();
