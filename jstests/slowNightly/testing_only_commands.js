@@ -9,8 +9,10 @@ var testOnlyCommands = ['_testDistLockWithSyncCluster',
                         'configureFailPoint',
                         '_hashBSONElement',
                         'replSetTest',
-                        'journalLatencyTest',
-                        'godinsert',
+                        // these are actually deprecated, not "testing only"
+                        // TODO: since they're testing only, we should just delete them
+                        //'journalLatencyTest',
+                        //'godinsert',
                         'sleep',
                         'captrunc',
                         'emptycapped']
