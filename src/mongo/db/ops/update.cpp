@@ -192,7 +192,8 @@ namespace mongo {
 
         int idIdxNo = -1;
         if ( planPolicy.permitOptimalIdPlan() && !multi &&
-             (idIdxNo = d->findIdIndex()) >= 0 && isSimpleIdQuery(patternOrig) ) {
+             (idIdxNo = d->findIdIndex()) >= 0 &&
+             d->mayFindById() && isSimpleIdQuery(patternOrig) ) {
             debug.idhack = true;
             IndexDetails &idx = d->idx(idIdxNo);
             BSONObj pk = idx.getKeyFromQuery(patternOrig);
