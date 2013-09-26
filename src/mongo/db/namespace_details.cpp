@@ -316,7 +316,7 @@ namespace mongo {
 
     static void addIndexToCatalog(const BSONObj &info) {
         const StringData &indexns = info["ns"].Stringdata();
-        if (nsToCollectionSubstring(indexns) == "system.indexes") {
+        if (nsToCollectionSubstring(indexns).startsWith("system.indexes")) {
             // system.indexes holds all the others, so it is not explicitly listed in the catalog.
             return;
         }
@@ -1687,7 +1687,7 @@ namespace mongo {
     void addNewNamespaceToCatalog(const StringData& ns, const BSONObj *options) {
         LOG(1) << "New namespace: " << ns << endl;
         StringData coll = nsToCollectionSubstring(ns);
-        if (coll == "system.namespaces") {
+        if (coll.startsWith("system.namespaces")) {
             // system.namespaces holds all the others, so it is not explicitly listed in the catalog.
             return;
         }
@@ -1706,7 +1706,7 @@ namespace mongo {
 
     void removeNamespaceFromCatalog(const StringData& ns) {
         StringData coll = nsToCollectionSubstring(ns);
-        if (coll != "system.namespaces") {
+        if (!coll.startsWith("system.namespaces")) {
             string system_namespaces = getSisterNS(cc().database()->name(), "system.namespaces");
             _deleteObjects(system_namespaces.c_str(),
                            BSON("name" << ns), false, false);
