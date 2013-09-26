@@ -46,6 +46,7 @@
 #include "mongo/db/lasterror.h"
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/repl/bgsync.h"
@@ -914,7 +915,7 @@ namespace mongo {
             }
 
             list<BSONObj> all;
-            auto_ptr<DBClientCursor> i = db.query( dbname + ".system.indexes" , BSON( "ns" << toDeleteNs ) , 0 , 0 , 0 , QueryOption_SlaveOk );
+            auto_ptr<DBClientCursor> i = db.query( getSisterNS(dbname, "system.indexes") , BSON( "ns" << toDeleteNs ) , 0 , 0 , 0 , QueryOption_SlaveOk );
             BSONObjBuilder b;
             while ( i->more() ) {
                 BSONObj o = i->next().getOwned();
@@ -955,7 +956,7 @@ namespace mongo {
         virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             string source = cmdObj.getStringField( name.c_str() );
             string target = cmdObj.getStringField( "to" );
-            uassert(15967,"invalid collection name: " + target, NamespaceString::validCollectionName(target.c_str()));
+            uassert(15967,"invalid collection name: " + target, NamespaceString::validCollectionName(target));
             if ( source.empty() || target.empty() ) {
                 errmsg = "invalid command syntax";
                 return false;
@@ -1022,8 +1023,8 @@ namespace mongo {
                 insertObject( target.c_str(), o, 0, false );
             }
 
-            string sourceIndexes = nsToDatabaseSubstring(source).toString() + ".system.indexes";
-            string targetIndexes = nsToDatabaseSubstring(target).toString() + ".system.indexes";
+            string sourceIndexes = getSisterNS(source, "system.indexes");
+            string targetIndexes = getSisterNS(target, "system.indexes");
             {
                 c = bridge.query( sourceIndexes, QUERY( "ns" << source ), 0, 0, 0, fromRepl ? QueryOption_SlaveOk : 0 );
             }
@@ -1098,7 +1099,7 @@ namespace mongo {
                 totalSize += size;
                 
                 if (1) {
-                    Client::ReadContext rc( *i + ".system.namespaces" );
+                    Client::ReadContext rc( getSisterNS(*i, "system.namespaces") );
                     b.appendBool( "empty", rc.ctx().db()->isEmpty() );
                 }
                 
@@ -1532,8 +1533,9 @@ namespace mongo {
             BSONObjBuilder bb( result.subobjStart( "collections" ) );
             for ( list<string>::iterator i=colls.begin(); i != colls.end(); i++ ) {
                 string c = *i;
-                if ( c.find( ".system.profile" ) != string::npos )
+                if ( nsToCollectionSubstring(c) == "system.profile" ) {
                     continue;
+                }
 
                 NamespaceDetails * nsd = nsdetails( c.c_str() );
 
@@ -1547,7 +1549,7 @@ namespace mongo {
                     }
                 }
 
-                if ( c.find( ".system." ) != string::npos ) {
+                if ( NamespaceString::isSystem(c) ) {
                     continue;
                 }
 

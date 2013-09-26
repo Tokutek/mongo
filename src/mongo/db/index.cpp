@@ -26,6 +26,7 @@
 #include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/keygenerator.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/ops/delete.h"
@@ -257,7 +258,7 @@ namespace mongo {
 
         // Removing this index's ns from the system.indexes/namespaces catalog.
         removeNamespaceFromCatalog(ns);
-        if (!StringData(parentns).endsWith(".system.indexes")) {
+        if (nsToCollectionSubstring(parentns) != "system.indexes") {
             removeFromSysIndexes(parentns, indexName());
         }
     }

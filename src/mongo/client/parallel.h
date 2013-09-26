@@ -348,7 +348,7 @@ namespace mongo {
         void startInit();
         void finishInit();
 
-        bool isCommand(){ return NamespaceString( _qSpec.ns() ).isCommand(); }
+        bool isCommand(){ return NamespaceString::isCommand( _qSpec.ns() ); }
         bool isExplain(){ return _qSpec.isExplain(); }
         bool isVersioned(){ return _qShards.size() == 0; }
 

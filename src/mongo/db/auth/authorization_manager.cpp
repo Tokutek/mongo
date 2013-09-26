@@ -339,7 +339,7 @@ namespace {
             if (userSourceElement.str() == dbname) {
                 return _badValue(mongoutils::str::stream() << "'" << dbname <<
                                  "' is not a valid value for the userSource field in " <<
-                                 dbname << ".system.users entries",
+                                 getSisterNS(dbname, "system.users") << " entries",
                                  0);
             }
             if (rolesElement.eoo()) {
@@ -728,8 +728,7 @@ namespace {
     }
 
     Status AuthorizationManager::checkAuthForQuery(const std::string& ns) {
-        NamespaceString namespaceString(ns);
-        verify(!namespaceString.isCommand());
+        verify(!NamespaceString::isCommand(ns));
         if (!checkAuthorization(ns, ActionType::find)) {
             return Status(ErrorCodes::Unauthorized,
                           mongoutils::str::stream() << "not authorized for query on " << ns,
@@ -739,7 +738,6 @@ namespace {
     }
 
     Status AuthorizationManager::checkAuthForInsert(const std::string& ns) {
-        NamespaceString namespaceString(ns);
         if (!checkAuthorization(ns, ActionType::insert)) {
             return Status(ErrorCodes::Unauthorized,
                           mongoutils::str::stream() << "not authorized for insert on " << ns,
@@ -749,7 +747,6 @@ namespace {
     }
 
     Status AuthorizationManager::checkAuthForUpdate(const std::string& ns, bool upsert) {
-        NamespaceString namespaceString(ns);
         if (!upsert) {
             if (!checkAuthorization(ns, ActionType::update)) {
                 return Status(ErrorCodes::Unauthorized,
@@ -771,7 +768,6 @@ namespace {
     }
 
     Status AuthorizationManager::checkAuthForDelete(const std::string& ns) {
-        NamespaceString namespaceString(ns);
         if (!checkAuthorization(ns, ActionType::remove)) {
             return Status(ErrorCodes::Unauthorized,
                           mongoutils::str::stream() << "not authorized to remove from " << ns,
@@ -787,7 +783,7 @@ namespace {
     Privilege AuthorizationManager::_modifyPrivilegeForSpecialCases(const Privilege& privilege) {
         ActionSet newActions;
         newActions.addAllActionsFromSet(privilege.getActions());
-        std::string collectionName = NamespaceString(privilege.getResource()).coll;
+        StringData collectionName = nsToCollectionSubstring(privilege.getResource());
         if (collectionName == "system.users") {
             newActions.removeAction(ActionType::find);
             newActions.removeAction(ActionType::insert);

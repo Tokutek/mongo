@@ -70,7 +70,7 @@ namespace mongo {
             }
                         
             string ns = db + '.' + coll;
-            if ( ! NamespaceString::normal(ns.c_str()) ) {
+            if ( ! NamespaceString::normal(ns) ) {
                 errmsg = "bad namespace name";
                 return false;
             }

@@ -23,6 +23,7 @@
 #include "mongo/db/queryoptimizer.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/namespacestring.h"
 
 //#define DEBUGQO(x) cout << x << endl;
 #define DEBUGQO(x)
@@ -340,13 +341,16 @@ doneCheckOrder:
         if ( _frs.numNonUniversalRanges() == 0 )
             return;
 
-        if ( strstr( ns() , ".system." ) ) 
+        StringData nsStr(ns());
+        if ( NamespaceString::isSystem(nsStr) )  {
             return;
+        }
 
-        if( str::startsWith(ns(), "local.") )
+        if( nsToDatabaseSubstring(nsStr) == "local" ) {
             return;
+        }
 
-        if ( ! nsdetails( ns() ) )
+        if ( ! nsdetails( nsStr ) )
             return;
 
         uassert( 10111 ,  (string)"table scans not allowed:" + ns() , ! cmdLine.noTableScan );
@@ -758,7 +762,7 @@ doneCheckOrder:
         // and it's a capped collection
         // we warn as it's a common user error
         // .system. and local collections are exempt
-        const char *ns = _qps.frsp().ns();
+        StringData ns = _qps.frsp().ns();
         NamespaceDetails *d = nsdetails( ns );
         if ( d &&
             d->isCapped() &&
@@ -766,8 +770,8 @@ doneCheckOrder:
             ( _qps.firstPlan()->utility() != QueryPlan::Impossible ) &&
             !_qps.firstPlan()->indexed() &&
             !_qps.firstPlan()->multikeyFrs().range( "_id" ).universal() ) {
-            if (str::contains( ns , ".system." ) ||
-                str::startsWith( ns , "local." ) ) {
+            if (NamespaceString::isSystem(ns) ||
+                nsToDatabaseSubstring(ns) == "local") {
                 // ok
             }
             else {

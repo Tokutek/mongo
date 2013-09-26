@@ -364,7 +364,7 @@ namespace mongo {
             // this does mean mongos has more back pressure than mongod alone
             // since it nots 100% tcp queue bound
             // this was implicit before since we did a splitVector on the same socket
-            ShardConnection::sync( NamespaceString(getManager()->getns()).db );
+            ShardConnection::sync( nsToDatabase(getManager()->getns()) );
 
             LOG(1) << "about to initiate autosplit: " << *this << " dataWritten: " << _dataWritten << " splitThreshold: " << splitThreshold << endl;
 

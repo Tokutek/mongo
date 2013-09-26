@@ -201,7 +201,7 @@ public:
             }
 
             // skip namespaces with $ in them only if we don't specify a collection to dump
-            if ( _coll == "" && name.find( ".$" ) != string::npos ) {
+            if ( _coll.empty() && name.find( ".$" ) != string::npos ) {
                 LOG(1) << "\tskipping collection: " << name << endl;
                 continue;
             }
@@ -209,7 +209,7 @@ public:
             const string filename = name.substr( db.size() + 1 );
 
             //if a particular collections is specified, and it's not this one, skip it
-            if ( _coll != "" && db + "." + _coll != name && _coll != name )
+            if ( !_coll.empty() && db + "." + _coll != name && _coll != name )
                 continue;
 
             // raise error before writing collection with non-permitted filename chars in the name
@@ -220,11 +220,11 @@ public:
             }
             
             // Don't dump indexes
-            if (NamespaceString(name).coll == "system.indexes") {
+            if (nsToCollectionSubstring(name) == "system.indexes") {
               continue;
             }
             
-            if ( _coll != "" && db + "." + _coll != name && _coll != name )
+            if ( !_coll.empty() && db + "." + _coll != name && _coll != name )
               continue;
             
             collections.push_back(name);

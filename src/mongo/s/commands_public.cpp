@@ -1806,7 +1806,7 @@ namespace mongo {
     bool Command::runAgainstRegistered(const char *ns, BSONObj& jsobj, BSONObjBuilder& anObjBuilder,
                                        int queryOptions) {
 
-        if (NamespaceString(ns).coll != "$cmd") {
+        if (!NamespaceString::isCommand(ns)) {
             return false;
         }
 

@@ -98,7 +98,7 @@ namespace mongo {
             throw UserException( o["code"].numberInt() , o["$err"].String() );
         }
 
-        if ( NamespaceString( cursor->getns() ).isCommand() ) {
+        if ( NamespaceString::isCommand( cursor->getns() ) ) {
             // For backwards compatibility with v2.0 mongods because in 2.0 commands that care about
             // versioning (like the count command) will return with the stale config error code, but
             // don't set the ShardConfigStale result flag on the cursor.

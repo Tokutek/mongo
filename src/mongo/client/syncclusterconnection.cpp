@@ -333,7 +333,7 @@ namespace mongo {
 
         uassert(13119,
                 (string)"SyncClusterConnection::insert obj has to have an _id: " + obj.jsonString(),
-                 NamespaceString(ns).coll == "system.indexes" || obj["_id"].type());
+                nsToCollectionSubstring(ns) == "system.indexes" || obj["_id"].type());
 
         string errmsg;
         if ( ! prepare( errmsg ) )

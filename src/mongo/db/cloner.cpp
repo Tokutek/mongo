@@ -209,7 +209,7 @@ namespace mongo {
                 ++n;
 
                 if (isindex) {
-                    verify(NamespaceString(from_collection).coll == "system.indexes");
+                    verify(nsToCollectionSubstring(from_collection) == "system.indexes");
                     storedForLater->push_back(fixindex(js, to_dbname).getOwned());
                 }
                 else {
@@ -329,7 +329,7 @@ namespace mongo {
 
         if( copyIndexes ) {
             // indexes
-            string dbname = nsToDatabase(ns) + ".system.indexes";
+            string dbname = getSisterNS(ns, "system.indexes");
             copy(
                 dbname.c_str(),
                 dbname.c_str(),
@@ -352,7 +352,7 @@ namespace mongo {
     {
         {
             // config
-            string temp = cc().database()->name() + ".system.namespaces";
+            string temp = getSisterNS(cc().database()->name(), "system.namespaces");
             BSONObj config = conn->findOne( temp , BSON( "name" << ns ) );
             if ( config["options"].isABSONObj() ) {
                 if ( !userCreateNS(
@@ -417,7 +417,7 @@ namespace mongo {
         /* todo: we can put these releases inside dbclient or a dbclient specialization.
            or just wait until we get rid of global lock anyway.
            */
-        string ns = opts.fromDB + ".system.namespaces";
+        string ns = getSisterNS(opts.fromDB, "system.namespaces");
         list<BSONObj> toClone;
         vector<string> toCloneNames;
         clonedColls.clear();
@@ -463,9 +463,9 @@ namespace mongo {
                 }
                 verify( !e.eoo() );
                 verify( e.type() == String );
-                const char *from_name = e.valuestr();
+                StringData from_name = e.Stringdata();
 
-                if( strstr(from_name, ".system.") ) {
+                if( NamespaceString::isSystem(from_name) ) {
                     // system.users and s.js is cloned -- but nothing else from system.
                     // * system.indexes is handled specially at the end
                     if( legalClientSystemNS( from_name , true ) == 0 ) {
@@ -478,7 +478,8 @@ namespace mongo {
                     continue;
                 }
 
-                if( opts.collsToIgnore.find( string( from_name ) ) != opts.collsToIgnore.end() ){
+                string from_name_str = from_name.toString();
+                if( opts.collsToIgnore.find( from_name_str ) != opts.collsToIgnore.end() ){
                     LOG(2) << "\t\t ignoring collection " << from_name << endl;
                     continue;
                 }
@@ -486,9 +487,9 @@ namespace mongo {
                     LOG(2) << "\t\t not ignoring collection " << from_name << endl;
                 }
 
-                clonedColls.insert( from_name );
+                clonedColls.insert( from_name_str );
                 toClone.push_back( collection.getOwned() );
-                toCloneNames.push_back(from_name);
+                toCloneNames.push_back( from_name_str );
             }
         }
 
@@ -535,8 +536,8 @@ namespace mongo {
         // now build the indexes
         
         if ( opts.syncIndexes ) {
-            string system_indexes_from = opts.fromDB + ".system.indexes";
-            string system_indexes_to = todb + ".system.indexes";
+            string system_indexes_from = getSisterNS(opts.fromDB, "system.indexes");
+            string system_indexes_to = getSisterNS(todb, "system.indexes");
             
             // [dm]: is the ID index sometimes not called "_id_"?  There is 
             // other code in the system that looks for a "_id" prefix

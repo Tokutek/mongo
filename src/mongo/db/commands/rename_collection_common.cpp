@@ -30,12 +30,12 @@ namespace rename_collection {
 
     void addPrivilegesRequiredForRenameCollection(const BSONObj& cmdObj,
                                                   std::vector<Privilege>* out) {
-        NamespaceString sourceNS = NamespaceString(cmdObj.getStringField("renameCollection"));
-        NamespaceString targetNS = NamespaceString(cmdObj.getStringField("to"));
+        std::string sourceNS = cmdObj.getStringField("renameCollection");
+        std::string targetNS = cmdObj.getStringField("to");
         ActionSet sourceActions;
         ActionSet targetActions;
 
-        if (sourceNS.db == targetNS.db) {
+        if (nsToDatabaseSubstring(sourceNS) == nsToDatabaseSubstring(targetNS)) {
             sourceActions.addAction(ActionType::renameCollectionSameDB);
             targetActions.addAction(ActionType::renameCollectionSameDB);
         } else {
@@ -46,8 +46,8 @@ namespace rename_collection {
             targetActions.addAction(ActionType::ensureIndex);
         }
 
-        out->push_back(Privilege(sourceNS.ns(), sourceActions));
-        out->push_back(Privilege(targetNS.ns(), targetActions));
+        out->push_back(Privilege(sourceNS, sourceActions));
+        out->push_back(Privilege(targetNS, targetActions));
     }
 
 } // namespace rename_collection

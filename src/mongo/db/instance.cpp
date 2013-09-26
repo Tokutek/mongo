@@ -230,7 +230,7 @@ namespace mongo {
         shared_ptr<AssertionException> ex;
 
         try {
-            if (!NamespaceString(d.getns()).isCommand()) {
+            if (!NamespaceString::isCommand(d.getns())) {
                 // Auth checking for Commands happens later.
                 Status status = cc().getAuthorizationManager()->checkAuthForQuery(d.getns());
                 uassert(16550, status.reason(), status.isOK());
@@ -417,8 +417,6 @@ namespace mongo {
         }
         else {
             try {
-                const NamespaceString nsString( ns );
-
                 // The following operations all require authorization.
                 // dbInsert, dbUpdate and dbDelete can be easily pre-authorized,
                 // here, but dbKillCursors cannot.
@@ -427,7 +425,7 @@ namespace mongo {
                     logThreshold = 10;
                     receivedKillCursors(m);
                 }
-                else if ( !nsString.isValid() ) {
+                else if ( !NamespaceString::isValid(ns) ) {
                     // Only killCursors doesn't care about namespaces
                     uassert( 16257, str::stream() << "Invalid ns [" << ns << "]", false );
                 }
@@ -519,12 +517,12 @@ namespace mongo {
     // transaction stack instead of the possible multi statement
     // transaction stack that it is a part of. Several operations/statements,
     // such as authentication, should not run 
-    static bool opNeedsAltTxn(const char *ns) {
+    static bool opNeedsAltTxn(const StringData &ns) {
         // for now, the only operations that need to run in an
         // alternate transaction stack are authentication related
         // operations. We do not want them to be part of multi statement
         // transactions.
-        return mongoutils::str::endsWith(ns, ".system.users");
+        return nsToCollectionSubstring(ns) == "system.users";
     }
 
     static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &toupdate, const BSONObj &query,
@@ -660,8 +658,7 @@ namespace mongo {
         bool isOplog = false;
         while( 1 ) {
             try {
-                const NamespaceString nsString( ns );
-                uassert( 16258, str::stream() << "Invalid ns [" << ns << "]", nsString.isValid() );
+                uassert( 16258, str::stream() << "Invalid ns [" << ns << "]", NamespaceString::isValid(ns) );
 
                 Status status = cc().getAuthorizationManager()->checkAuthForGetMore(ns);
                 uassert(16543, status.reason(), status.isOK());
@@ -891,8 +888,9 @@ namespace mongo {
         const char *ns = d.getns();
         op.debug().ns = ns;
 
+        StringData coll = nsToCollectionSubstring(ns);
         // Auth checking for index writes happens later.
-        if (NamespaceString(ns).coll != "system.indexes") {
+        if (coll != "system.indexes") {
             Status status = cc().getAuthorizationManager()->checkAuthForInsert(ns);
             uassert(16544, status.reason(), status.isOK());
         }
@@ -913,7 +911,7 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setOpSettings(settings);
 
-        if (str::contains(ns, ".system.indexes") && objs[0]["background"].trueValue()) {
+        if (coll == "system.indexes" && objs[0]["background"].trueValue()) {
             _buildHotIndex(ns, m, objs);
             return;
         }

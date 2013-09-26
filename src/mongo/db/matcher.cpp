@@ -75,8 +75,8 @@ namespace mongo {
 
             const string userToken = ClientBasic::getCurrent()->getAuthorizationManager()
                                                               ->getAuthenticatedPrincipalNamesToken();
-            NamespaceString ns( _ns );
-            _scope = globalScriptEngine->getPooledScope( ns.db.c_str(), "where" + userToken );
+            string dbstr = nsToDatabase(_ns);
+            _scope = globalScriptEngine->getPooledScope( dbstr.c_str(), "where" + userToken );
 
             massert( 10341 ,  "code has to be set first!" , ! _jsCode.empty() );
 

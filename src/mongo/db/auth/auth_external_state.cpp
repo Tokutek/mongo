@@ -57,7 +57,7 @@ namespace mongo {
             return Status::OK();
         }
 
-        std::string usersNamespace = dbname + ".system.users";
+        std::string usersNamespace = getSisterNS(dbname, "system.users");
 
         BSONObj userBSONObj;
         BSONObjBuilder queryBuilder;
@@ -83,7 +83,7 @@ namespace mongo {
     }
 
     bool AuthExternalState::_hasPrivilegeDocument(const std::string& dbname) const {
-        std::string usersNamespace = dbname + ".system.users";
+        std::string usersNamespace = getSisterNS(dbname, "system.users");
 
         BSONObj userBSONObj;
         BSONObj query;

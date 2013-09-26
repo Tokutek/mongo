@@ -48,7 +48,7 @@ namespace mongo {
         else {
             BSONObj user;
             {
-                const char *ns = "local.system.users";
+                StringData ns("local.system.users");
                 Client::ReadContext ctx(ns);
                 NamespaceDetails *d = nsdetails(ns);
                 if( d == NULL || !d->findOne(userReplQuery, user) ||

@@ -27,6 +27,7 @@
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/introspect.h"
+#include "mongo/db/namespacestring.h"
 
 namespace mongo {
 
@@ -37,7 +38,7 @@ namespace mongo {
 
     Database::Database(const StringData &name, const StringData &path)
         : _name(name.toString()), _path(path.toString()), _nsIndex( _path, _name ),
-          _profileName(_name + ".system.profile")
+          _profileName(getSisterNS(_name, "system.profile"))
     {
         try {
             // check db name is valid

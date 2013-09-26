@@ -248,8 +248,9 @@ public:
         }
 
         _curns = ns.c_str();
-        _curdb = NamespaceString(_curns).db;
-        _curcoll = NamespaceString(_curns).coll;
+        NamespaceString nss(_curns);
+        _curdb = nss.db;
+        _curcoll = nss.coll;
 
         // If drop is not used, warn if the collection exists.
         if (!_drop) {
@@ -304,9 +305,10 @@ public:
     }
 
     virtual void gotObject( const BSONObj& obj ) {
+        StringData collstr = nsToCollectionSubstring(_curns);
         massert( 16910, "Shouldn't be inserting into system.indexes directly",
-                        NamespaceString(_curns).coll != "system.indexes" );
-        if (_drop && endsWith(_curns.c_str(), ".system.users") && _users.count(obj["user"].String())) {
+                        collstr != "system.indexes" );
+        if (_drop && collstr == "system.users" && _users.count(obj["user"].String())) {
             // Since system collections can't be dropped, we have to manually
             // replace the contents of the system.users collection
             BSONObj userMatch = BSON("user" << obj["user"].String());

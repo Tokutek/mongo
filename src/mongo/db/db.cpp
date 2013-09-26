@@ -269,7 +269,7 @@ namespace mongo {
             vector< string > dbNames;
             getDatabaseNames( dbNames );
             for (vector<string>::const_iterator it(dbNames.begin()), end(dbNames.end()); it != end; ++it){
-                const string coll = *it + ".system.namespaces";
+                const string coll = getSisterNS(*it, "system.namespaces");
                 scoped_ptr< DBClientCursor > c (cli.query(coll, Query( fromjson( "{'options.temp': {$in: [true, 1]}}" ) ) ));
                 while( c->more() ) {
                     BSONObj o = c->next();

@@ -498,8 +498,7 @@ namespace mongo {
                     return false;
                 }
 
-                const NamespaceString nsStr( ns );
-                if ( !nsStr.isValid() ){
+                if ( !NamespaceString::isValid(ns) ){
                     errmsg = str::stream() << "bad ns[" << ns << "]";
                     return false;
                 }
@@ -702,8 +701,7 @@ namespace mongo {
                     cmd.append( "checkShardingIndex" , ns );
                     cmd.append( "keyPattern" , proposedKey );
                     BSONObj cmdObj = cmd.obj();
-                    NamespaceString nss(ns);
-                    if ( ! conn->get()->runCommand( nss.db , cmdObj , res ) ) {
+                    if ( ! conn->get()->runCommand( nsToDatabase(ns) , cmdObj , res ) ) {
                         errmsg = res["errmsg"].str();
                         conn->done();
                         return false;
@@ -941,7 +939,7 @@ namespace mongo {
                     return false;
                 }
 
-                ShardConnection::sync( NamespaceString(ns).db );
+                ShardConnection::sync( nsToDatabase(ns) );
 
                 DBConfigPtr config = grid.getDBConfig( ns );
                 if ( ! config->isSharded( ns ) ) {
@@ -1025,7 +1023,7 @@ namespace mongo {
                     return false;
                 }
 
-                ShardConnection::sync( NamespaceString(ns).db );
+                ShardConnection::sync( nsToDatabase(ns) );
 
                 Timer t;
 

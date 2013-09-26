@@ -505,17 +505,17 @@ namespace {
                                const BSONObj& query,
                                BSONObj* result) const {
 
-            NamespaceString nsstring(usersNamespace);
+            std::string dbstr = nsToDatabase(usersNamespace);
             std::string user = query[AuthorizationManager::USER_NAME_FIELD_NAME].String();
             std::string userSource;
             if (!query[AuthorizationManager::USER_SOURCE_FIELD_NAME].trueValue()) {
-                userSource = nsstring.db;
+                userSource = dbstr;
             }
             else {
                 userSource = query[AuthorizationManager::USER_SOURCE_FIELD_NAME].String();
             }
             *result = mapFindWithDefault(_privilegeDocs,
-                                         std::make_pair(nsstring.db,
+                                         std::make_pair(dbstr,
                                                         PrincipalName(user, userSource)),
                                          BSON("invalid" << 1));
             return  !(*result)["invalid"].trueValue();
