@@ -111,7 +111,6 @@ namespace mongo {
         }
 
         static bool special(const StringData &ns) {
-            // TODO: this seems...off, see indexOtherNamespace.js.
             return !normal(ns) || isSystem(ns);
         }
 
