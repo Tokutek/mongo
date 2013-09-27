@@ -19,6 +19,9 @@
 #include "mongo/pch.h"
 
 #include "mongo/base/string_data.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/plugins/loader.h"
@@ -35,6 +38,13 @@ namespace mongo {
         virtual bool lockGlobally() const { return true; }
         virtual bool requiresAuth() { return true; }
         virtual bool adminOnly() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::pluginLoad);
+            out->push_back(Privilege(dbname, actions));
+        }
         virtual void help(stringstream &h) const {
             h << "Load a plugin into mongod." << endl
               << "{ loadPlugin : <name> [, checksum: <md5 checksum>] }" << endl;
@@ -67,7 +77,7 @@ namespace mongo {
                 }
                 checksum = cksumElt.Stringdata();
             }
-            return plugins::loader.load(filename, checksum, errmsg, result);
+            return plugins::loader->load(filename, checksum, errmsg, result);
         }
     } loadPluginCommand;
 
@@ -81,6 +91,13 @@ namespace mongo {
         virtual bool lockGlobally() const { return true; }
         virtual bool requiresAuth() { return true; }
         virtual bool adminOnly() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::pluginList);
+            out->push_back(Privilege(dbname, actions));
+        }
         virtual void help(stringstream &h) const {
             h << "List plugins currently loaded into mongod." << endl
               << "{ listPlugins : 1 }" << endl;
@@ -88,7 +105,7 @@ namespace mongo {
         ListPluginsCommand() : InformationCommand("listPlugins") {}
 
         virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
-            return plugins::loader.list(errmsg, result);
+            return plugins::loader->list(errmsg, result);
         }
     } listPluginsCommand;
 
@@ -106,6 +123,13 @@ namespace mongo {
             h << "Unload a plugin from mongod." << endl
               << "{ unloadPlugin : <name> }" << endl;
         }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::pluginLoad);
+            out->push_back(Privilege(dbname, actions));
+        }
         UnloadPluginCommand() : InformationCommand("unloadPlugin") {}
 
         virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
@@ -119,7 +143,7 @@ namespace mongo {
                 errmsg = "unloadPlugin argument must not be empty";
                 return false;
             }
-            return plugins::loader.unload(name, errmsg, result);
+            return plugins::loader->unload(name, errmsg, result);
         }
     } unloadPluginCommand;
 

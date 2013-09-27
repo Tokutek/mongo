@@ -18,6 +18,11 @@
 
 #include "mongo/pch.h"
 
+#include <vector>
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/interrupt_status_mongod.h"
@@ -164,6 +169,9 @@ namespace mongo {
         virtual OpSettings getOpSettings() const { return OpSettings(); }
         virtual bool slaveOk() const;
         virtual void help(stringstream &help) const;
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out);
 
         PipelineCommand();
 
@@ -221,6 +229,14 @@ namespace mongo {
 
     void PipelineCommand::help(stringstream &help) const {
         help << "{ pipeline : [ { <data-pipe-op>: {...}}, ... ] }";
+    }
+
+    void PipelineCommand::addRequiredPrivileges(const std::string& dbname,
+                                                const BSONObj& cmdObj,
+                                                std::vector<Privilege>* out) {
+        ActionSet actions;
+        actions.addAction(ActionType::find);
+        out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
     }
 
     PipelineCommand::~PipelineCommand() {

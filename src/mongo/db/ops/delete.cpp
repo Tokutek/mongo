@@ -92,16 +92,16 @@ namespace mongo {
        justOne: stop after 1 match
     */
     long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
-        if ( strstr(ns, ".system.") ) {
+        if ( NamespaceString::isSystem(ns) ) {
             /* note a delete from system.indexes would corrupt the db
                if done here, as there are pointers into those objects in
                NamespaceDetails.
             */
             uassert(12050, "cannot delete from system namespace", legalClientSystemNS( ns , true ) );
         }
-        if ( strchr( ns , '$' ) ) {
+        if ( !NamespaceString::normal(ns) ) {
             log() << "cannot delete from collection with reserved $ in name: " << ns << endl;
-            uassert( 10100 ,  "cannot delete from collection with reserved $ in name", strchr(ns, '$') == 0 );
+            uasserted( 10100 ,  "cannot delete from collection with reserved $ in name" );
         }
 
         long long nDeleted = _deleteObjects(ns, pattern, justOne, logop);

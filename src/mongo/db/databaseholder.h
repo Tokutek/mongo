@@ -102,13 +102,9 @@ namespace mongo {
             return d;
         }
         static StringData __todb( const StringData& ns ) {
-            size_t i = ns.find( '.' );
-            if ( i == string::npos ) {
-                uassert( 13074 , "db name can't be empty" , ns.size() );
-                return ns;
-            }
-            uassert( 13075 , "db name can't be empty" , i > 0 );
-            return ns.substr( 0 , i );
+            StringData d = nsToDatabaseSubstring(ns);
+            uassert( 13074 , "db name can't be empty" , !d.empty() );
+            return d;
         }
     };
 

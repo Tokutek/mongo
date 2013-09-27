@@ -18,6 +18,7 @@
 #include "mongo/pch.h"
 
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/json.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/storage/dictionary.h"
@@ -307,16 +308,16 @@ namespace mongo {
         // - We'll look at the entire system.namespaces collection just for one database.
         // - Code is duplicated to handle dropping system system collections in stages.
         vector<string> sysIndexesEntries;
-        const string systemNamespacesNs(_database + ".system.namespaces");
+        const string systemNamespacesNs = getSisterNS(_database, "system.namespaces");
         NamespaceDetails *sysNsd = nsdetails(systemNamespacesNs);
         for (shared_ptr<Cursor> c(BasicCursor::make(sysNsd)); c->ok(); c->advance()) {
             const BSONObj nsObj = c->current();
             const StringData ns = nsObj["name"].Stringdata();
-            if (!ns.startsWith(_database)) {
+            if (nsToDatabaseSubstring(ns) != _database) {
                 // Not part of this database, skip.
                 continue;
             }
-            if (ns.find(".system.indexes") != string::npos) {
+            if (nsToCollectionSubstring(ns) == "system.indexes") {
                 // Save .system.indexes collection for last, because dropCollection deletes from it.
                 sysIndexesEntries.push_back(ns.toString());
             } else {

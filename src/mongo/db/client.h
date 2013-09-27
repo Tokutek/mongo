@@ -29,10 +29,9 @@
 
 #include <stack>
 
-#include "mongo/db/security.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/db/stats/top.h"
-#include "mongo/db/client_common.h"
+#include "mongo/db/client_basic.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/lockstate.h"
 #include "mongo/db/gtid.h"
@@ -40,7 +39,6 @@
 #include "mongo/db/opsettings.h"
 #include "mongo/util/paths.h"
 #include "mongo/util/concurrency/threadlocal.h"
-#include "mongo/util/net/message_port.h"
 #include "mongo/util/concurrency/rwlock.h"
 
 namespace mongo {
@@ -91,9 +89,6 @@ namespace mongo {
         bool shutdown();
 
         string clientAddress(bool includePort=false) const;
-        const AuthenticationInfo * getAuthenticationInfo() const { return &_ai; }
-        AuthenticationInfo * getAuthenticationInfo() { return &_ai; }
-        bool isAdmin() { return _ai.isAuthorized( "admin" ); }
         CurOp* curop() const { return _curOp; }
         Context* getContext() const { return _context; }
         Database* database() const {  return _context ? _context->db() : 0; }
@@ -117,11 +112,8 @@ namespace mongo {
         bool isGod() const { return _god; } /* this is for map/reduce writes */
         string toString() const;
         void gotHandshake( const BSONObj& o );
-        bool hasRemote() const { return _mp; }
-        HostAndPort getRemote() const { verify( _mp ); return _mp->remote(); }
         BSONObj getRemoteID() const { return _remoteId; }
         BSONObj getHandshake() const { return _handshake; }
-        AbstractMessagingPort * port() const { return _mp; }
         ConnectionId getConnectionId() const { return _connectionId; }
 
         LockState& lockState() { return _ls; }
@@ -317,11 +309,10 @@ namespace mongo {
         bool _shutdown; // to track if Client::shutdown() gets called
         std::string _desc;
         bool _god;
-        AuthenticationInfo _ai;
+        StringData _creatingSystemUsers;
         GTID _lastGTID;
         BSONObj _handshake;
         BSONObj _remoteId;
-        AbstractMessagingPort * const _mp;
         OpSettings _opSettings;
 
         // for CmdCopyDb and CmdCopyDbGetNonce
@@ -330,6 +321,16 @@ namespace mongo {
         LockState _ls;
         
     public:
+
+        /* declare that we're creating system.users for some db
+           therefore we should not care about authing for ensureIndex on system colls */
+        class CreatingSystemUsersScope : boost::noncopyable {
+            StringData _prev;
+          public:
+            CreatingSystemUsersScope();
+            ~CreatingSystemUsersScope();
+        };
+        bool creatingSystemUsers() const;
 
         /* set _god=true temporarily, safely */
         class GodScope {
@@ -345,16 +346,16 @@ namespace mongo {
         class Context : boost::noncopyable {
         public:
             /** this is probably what you want */
-            Context(const StringData &ns, const StringData &path=dbpath, bool doauth=true, bool doVersion=true );
+            Context(const StringData &ns, const StringData &path=dbpath, bool doVersion=true);
 
             /** note: this does not call finishInit -- i.e., does not call 
                       shardVersionOk() for example. 
                 see also: reset().
             */
-            Context( const StringData &ns , Database * db, bool doauth=true );
+            Context(const StringData &ns , Database * db);
 
             // used by ReadContext
-            Context(const StringData &path, const StringData &ns, Database *db, bool doauth);
+            Context(const StringData &path, const StringData &ns, Database *db);
 
             ~Context();
             Client* getClient() const { return _client; }
@@ -380,8 +381,7 @@ namespace mongo {
 
         private:
             friend class CurOp;
-            void _finishInit( bool doauth=true);
-            void _auth( int lockState );
+            void _finishInit();
             void checkNotStale() const;
             void checkNsAccess( bool doauth );
             void checkNsAccess( bool doauth, int lockState );
@@ -399,7 +399,7 @@ namespace mongo {
          */
         class ReadContext : boost::noncopyable { 
         public:
-            ReadContext(const StringData &ns, const StringData &path=dbpath, bool doauth=true);
+            ReadContext(const StringData &ns, const StringData &path=dbpath);
             Context& ctx() { return _c; }
         private:
             Lock::DBRead _lk;
@@ -408,7 +408,7 @@ namespace mongo {
 
         class WriteContext : boost::noncopyable {
         public:
-            WriteContext(const StringData &ns, const StringData &path=dbpath, bool doauth=true );
+            WriteContext(const StringData &ns, const StringData &path=dbpath);
             Context& ctx() { return _c; }
         private:
             Lock::DBWrite _lk;

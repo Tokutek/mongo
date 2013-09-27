@@ -21,7 +21,7 @@
 #include <map>
 
 #include "mongo/db/repl/rs.h"
-#include "mongo/db/security_common.h"
+#include "mongo/db/auth/authorization_manager.h"
 
 namespace mongo {
 
@@ -66,12 +66,8 @@ namespace mongo {
            So here what we do is wrapper known safe methods and not allow cursor-style queries at all.  This makes
            ScopedConn limited in functionality but very safe.  More non-cursor wrappers can be added here if needed.
            */
-        bool runCommand(const string &dbname,
-                        const BSONObj& cmd,
-                        BSONObj &info,
-                        int options=0,
-                        const AuthenticationTable* auth=NULL) {
-            return conn()->runCommand(dbname, cmd, info, options, auth);
+        bool runCommand(const string &dbname, const BSONObj& cmd, BSONObj &info, int options=0) {
+            return conn()->runCommand(dbname, cmd, info, options);
         }
         unsigned long long count(const string &ns) {
             return conn()->count(ns);
@@ -140,8 +136,6 @@ namespace mongo {
                   log() << "could not authenticate against " << _hostport << ", " << err << rsLog;
                   return false;
               }
-              connInfo->cc->setAuthenticationTable(
-                      AuthenticationTable::getInternalSecurityAuthenticationTable() );
           }
 
           return true;

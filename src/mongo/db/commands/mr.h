@@ -17,7 +17,15 @@
 
 #pragma once
 
-#include "mongo/pch.h"
+#include <boost/scoped_ptr.hpp>
+#include <string>
+#include <vector>
+
+#include "mongo/db/auth/privilege.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/scripting/engine.h"
 
 namespace mongo {
 
@@ -175,12 +183,24 @@ namespace mongo {
 
             // output tables
             string incLong;
-            string tempLong;
+            string tempNamespace;
 
-            string finalShort;
-            string finalLong;
+            enum OutputType {
+                REPLACE , // atomically replace the collection
+                MERGE ,  // merge keys, override dups
+                REDUCE , // merge keys, reduce dups
+                INMEMORY // only store in memory, limited in size
+            };
+            struct OutputOptions {
+                string outDB;
+                string collectionName;
+                string finalNamespace;
+                // if true, no lock during output operation
+                bool outNonAtomic;
+                OutputType outType;
+            } outputOptions;
 
-            string outDB;
+            static OutputOptions parseOutputOptions(const string& dbname, const BSONObj& cmdObj);
 
             // max number of keys allowed in JS map before switching mode
             long jsMaxKeys;
@@ -188,12 +208,6 @@ namespace mongo {
             float reduceTriggerRatio;
             // maximum size of map before it gets dumped to disk
             long maxInMemSize;
-
-            enum { REPLACE , // atomically replace the collection
-                   MERGE ,  // merge keys, override dups
-                   REDUCE , // merge keys, reduce dups
-                   INMEMORY // only store in memory, limited in size
-                 } outType;
 
             // true when called from mongos to do phase-1 of M/R
             bool shardedFirstPass;
@@ -320,6 +334,9 @@ namespace mongo {
         BSONObj fast_emit( const BSONObj& args, void* data );
         BSONObj _bailFromJS( const BSONObj& args, void* data );
 
+        void addPrivilegesRequiredForMapReduce(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out);
     } // end mr namespace
 }
 

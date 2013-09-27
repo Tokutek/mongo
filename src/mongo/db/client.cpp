@@ -22,19 +22,32 @@
 */
 
 #include "mongo/pch.h"
+
 #include "mongo/db/client.h"
+
+#include <string>
+#include <vector>
+
+#include "mongo/base/status.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/auth_external_state_d.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/curop.h"
+#include "mongo/db/database.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/json.h"
-#include "mongo/db/security.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/dbwebserver.h"
+#include "mongo/db/json.h"
+#include "mongo/db/jsobj.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/s/d_logic.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/mongoutils/html.h"
-#include "mongo/util/mongoutils/checksum.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
   
@@ -46,35 +59,42 @@ namespace mongo {
 
     TSP_DEFINE(Client, currentClient)
 
+    Client::CreatingSystemUsersScope::CreatingSystemUsersScope()
+            : _prev(cc()._creatingSystemUsers) {
+        Client &c = cc();
+        Database *d = c.database();
+        massert(17013, "no database context open", d != NULL);
+        c._creatingSystemUsers = d->name();
+    }
+
+    Client::CreatingSystemUsersScope::~CreatingSystemUsersScope() {
+        cc()._creatingSystemUsers = _prev;
+    }
+
+    bool Client::creatingSystemUsers() const {
+        Database *d = database();
+        massert(17014, "no database context open", d != NULL);
+        return _creatingSystemUsers == d->name();
+    }
+
     /* each thread which does db operations has a Client object in TLS.
        call this when your thread starts.
     */
-#if defined _DEBUG
-    static unsigned long long nThreads = 0;
-    void assertStartingUp() { 
-        verify( nThreads <= 1 );
-    }
-#else
-    void assertStartingUp() { }
-#endif
-
     Client& Client::initThread(const char *desc, AbstractMessagingPort *mp) {
-#if defined(_DEBUG)
-        nThreads++; // never decremented.  this is for casi class asserts
-#endif
         verify( currentClient.get() == 0 );
         Client *c = new Client(desc, mp);
         currentClient.reset(c);
         mongo::lastError.initThread();
+        c->setAuthorizationManager(new AuthorizationManager(new AuthExternalStateMongod()));
         return *c;
     }
 
     Client::Client(const char *desc, AbstractMessagingPort *p) :
+        ClientBasic(p),
         _context(0),
         _shutdown(false),
         _desc(desc),
-        _god(0),
-        _mp(p)
+        _god(0)
     {
         _connectionId = p ? p->connectionId() : 0;
         
@@ -155,7 +175,7 @@ namespace mongo {
     }
 
     BSONObj CachedBSONObj::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");
-    Client::Context::Context( const StringData &ns , Database * db, bool doauth ) :
+    Client::Context::Context(const StringData& ns , Database * db) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( mongo::dbpath ), // is this right? could be a different db? may need a dassert for this
@@ -164,31 +184,30 @@ namespace mongo {
         _db(db)
     {
         _client->_context = this;
-        checkNsAccess( doauth );
     }
 
-    Client::Context::Context(const StringData &ns, const StringData &path , bool doauth, bool doVersion ) :
-        _client( currentClient.get() ),
+    Client::Context::Context(const StringData& ns, const StringData& path, bool doVersion) :
+        _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( path.toString() ),
         _doVersion(doVersion),
         _ns( ns.toString() ),
         _db(0)
     {
-        _finishInit( doauth );
+        _finishInit();
     }
 
     /** "read lock, and set my context, all in one operation" 
      *  This handles (if not recursively locked) opening an unopened database.
      */
-    Client::ReadContext::ReadContext(const StringData &ns, const StringData &path, bool doauth)
+    Client::ReadContext::ReadContext(const StringData& ns, const StringData& path)
         : _lk( ns ) ,
-          _c( ns , path , doauth ) {
+          _c(ns, path) {
     }
 
-    Client::WriteContext::WriteContext(const StringData &ns, const StringData &path , bool doauth ) 
+    Client::WriteContext::WriteContext(const StringData& ns, const StringData& path)
         : _lk( ns ) ,
-          _c( ns , path , doauth ) {
+          _c(ns, path) {
     }
 
 
@@ -212,8 +231,8 @@ namespace mongo {
     }
 
     // invoked from ReadContext
-    Client::Context::Context(const StringData &path, const StringData &ns, Database *db , bool doauth) :
-        _client( currentClient.get() ),
+    Client::Context::Context(const StringData& path, const StringData& ns, Database *db) :
+        _client( currentClient.get() ), 
         _oldContext( _client->_context ),
         _path( path.toString() ),
         _doVersion( true ),
@@ -224,35 +243,16 @@ namespace mongo {
         checkNotStale();
         _client->_context = this;
         _client->_curOp->enter( this );
-        checkNsAccess( doauth );
     }
 
-    void Client::Context::_finishInit( bool doauth ) {
+    void Client::Context::_finishInit() {
         dassert( Lock::isLocked() );
-        int writeLocked = Lock::somethingWriteLocked();
-
         _db = dbHolderUnchecked().getOrCreate( _ns , _path );
         verify(_db);
         if( _doVersion ) checkNotStale();
         massert( 16107 , str::stream() << "Don't have a lock on: " << _ns , Lock::atLeastReadLocked( _ns ) );
         _client->_context = this;
         _client->_curOp->enter( this );
-        checkNsAccess( doauth, writeLocked ? 1 : 0 );
-    }
-
-    void Client::Context::_auth( int lockState ) {
-        if (lockState <= 0 && str::endsWith(_ns, ".system.users"))
-            lockState = 1; // we don't want read-only users to be able to read system.users SERVER-4692
-
-        if ( _client->_ai.isAuthorizedForLock( _db->name() , lockState ) )
-            return;
-
-        // before we assert, do a little cleanup
-        _client->_context = _oldContext; // note: _oldContext may be null
-
-        stringstream ss;
-        ss << "unauthorized db:" << _db->name() << " ns:" << _ns << " lock type:" << lockState << " client:" << _client->clientAddress();
-        uasserted( 10057 , ss.str() );
     }
     
     Client::Context::~Context() {
@@ -275,18 +275,6 @@ namespace mongo {
 
         return  _ns[db.size()] == '.';
     }
-    
-    void Client::Context::checkNsAccess( bool doauth, int lockState ) {
-        if ( 0 ) { // SERVER-4276
-            uassert( 15929, "client access to index backing namespace prohibited", NamespaceString::normal( _ns.c_str() ) );
-        }
-        if ( doauth ) {
-            _auth( lockState );
-        }
-    }
-    void Client::Context::checkNsAccess( bool doauth ) {
-        checkNsAccess( doauth, Lock::somethingWriteLocked() ? 1 : 0 );
-    }
 
     void Client::appendLastGTID( BSONObjBuilder& b ) const {
         // _lastGTID is never set if replication is off
@@ -304,7 +292,7 @@ namespace mongo {
     string Client::toString() const {
         stringstream ss;
         if ( _curOp )
-            ss << _curOp->infoNoauth().jsonString();
+            ss << _curOp->info().jsonString();
         return ss.str();
     }
 
@@ -388,6 +376,13 @@ namespace mongo {
         void help(stringstream& h) const { h << "internal"; }
         HandshakeCmd() : InformationCommand("handshake") {}
         virtual bool adminOnly() const { return false; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::handshake);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             Client& c = cc();
             c.gotHandshake( cmdObj );
@@ -607,17 +602,54 @@ namespace mongo {
 
 #define OPDEBUG_APPEND_NUMBER(x) if( x != -1 ) b.appendNumber( #x , (x) )
 #define OPDEBUG_APPEND_BOOL(x) if( x ) b.appendBool( #x , (x) )
-    void OpDebug::append( const CurOp& curop, BSONObjBuilder& b ) const {
+    bool OpDebug::append(const CurOp& curop, BSONObjBuilder& b, size_t maxSize) const {
         b.append( "op" , iscommand ? "command" : opToString( op ) );
         b.append( "ns" , ns );
-        if ( ! query.isEmpty() )
-            b.append( iscommand ? "command" : "query" , query );
-        else if ( ! iscommand && curop.haveQuery() )
-            curop.appendQuery( b , "query" );
-
-        if ( ! updateobj.isEmpty() )
-            b.append( "updateobj" , updateobj );
         
+        int queryUpdateObjSize = 0;
+        if (!query.isEmpty()) {
+            queryUpdateObjSize += query.objsize();
+        }
+        else if (!iscommand && curop.haveQuery()) {
+            queryUpdateObjSize += curop.query()["query"].size();
+        }
+
+        if (!updateobj.isEmpty()) {
+            queryUpdateObjSize += updateobj.objsize();
+        }
+
+        if (static_cast<size_t>(queryUpdateObjSize) > maxSize) {
+            if (!query.isEmpty()) {
+                // Use 60 since BSONObj::toString can truncate strings into 150 chars
+                // and we want to have enough room for both query and updateobj when
+                // the entire document is going to be serialized into a string
+                const string abbreviated(query.toString(false, false), 0, 60);
+                b.append(iscommand ? "command" : "query", abbreviated + "...");
+            }
+            else if (!iscommand && curop.haveQuery()) {
+                const string abbreviated(curop.query()["query"].toString(false, false), 0, 60);
+                b.append("query", abbreviated + "...");
+            }
+
+            if (!updateobj.isEmpty()) {
+                const string abbreviated(updateobj.toString(false, false), 0, 60);
+                b.append("updateobj", abbreviated + "...");
+            }
+
+            return false;
+        }
+
+        if (!query.isEmpty()) {
+            b.append(iscommand ? "command" : "query", query);
+        }
+        else if (!iscommand && curop.haveQuery()) {
+            curop.appendQuery(b, "query");
+        }
+
+        if (!updateobj.isEmpty()) {
+            b.append("updateobj", updateobj);
+        }
+
         const bool moved = (nmoved >= 1);
 
         OPDEBUG_APPEND_NUMBER( cursorid );
@@ -637,14 +669,15 @@ namespace mongo {
         OPDEBUG_APPEND_NUMBER( keyUpdates );
 
         b.append( "lockStats" , curop.lockStat().report() );
-        
-        if ( ! exceptionInfo.empty() ) 
+
+        if ( ! exceptionInfo.empty() )
             exceptionInfo.append( b , "exception" , "exceptionCode" );
-        
+
         OPDEBUG_APPEND_NUMBER( nreturned );
         OPDEBUG_APPEND_NUMBER( responseLength );
         b.append( "millis" , executionTime );
-        
+
+        return true;
     }
 
 }

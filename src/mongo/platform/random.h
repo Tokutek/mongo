@@ -21,13 +21,20 @@
 
 namespace mongo {
 
+    /**
+     * Uses http://en.wikipedia.org/wiki/Xorshift
+     */
     class PseudoRandom {
     public:
-        PseudoRandom( unsigned seed )
-            : _seed( seed ) {
-        }
+        PseudoRandom( int32_t seed );
+
+        PseudoRandom( uint32_t seed );
+
+        PseudoRandom( int64_t seed );
 
         int32_t nextInt32();
+
+        int64_t nextInt64();
 
         /**
          * @return a number between 0 and max
@@ -35,7 +42,24 @@ namespace mongo {
         int32_t nextInt32( int32_t max ) { return nextInt32() % max; }
 
     private:
-        unsigned _seed;
+        int32_t _x;
+        int32_t _y;
+        int32_t _z;
+        int32_t _w;
+    };
+
+    /**
+     * More secure random numbers
+     * Suitable for nonce/crypto
+     * Slower than PseudoRandom, so only use when really need
+     */
+    class SecureRandom {
+    public:
+        virtual ~SecureRandom();
+
+        virtual int64_t nextInt64() = 0;
+
+        static SecureRandom* create();
     };
 
 }

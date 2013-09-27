@@ -20,6 +20,9 @@
 #include "mongo/pch.h"
 
 #include "mongo/bson/util/builder.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/principal_set.h"
+#include "mongo/db/curop.h"
 #include "mongo/db/database.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/introspect.h"
@@ -28,39 +31,73 @@
 #include "mongo/db/ops/insert.h"
 #include "mongo/util/goodies.h"
 
+namespace {
+    const size_t MAX_PROFILE_DOC_SIZE_BYTES = 100*1024;
+}
+
 namespace mongo {
+
+namespace {
+    void _appendUserInfo(const Client& c, BSONObjBuilder& builder, AuthorizationManager* authManager) {
+        PrincipalSet::NameIterator nameIter = authManager->getAuthenticatedPrincipalNames();
+
+        PrincipalName bestUser;
+        if (nameIter.more())
+            bestUser = *nameIter;
+
+        StringData opdb( nsToDatabaseSubstring( c.ns() ) );
+
+        BSONArrayBuilder allUsers(builder.subarrayStart("allUsers"));
+        for ( ; nameIter.more(); nameIter.next()) {
+            BSONObjBuilder nextUser(allUsers.subobjStart());
+            nextUser.append(AuthorizationManager::USER_NAME_FIELD_NAME, nameIter->getUser());
+            nextUser.append(AuthorizationManager::USER_SOURCE_FIELD_NAME, nameIter->getDB());
+            nextUser.doneFast();
+
+            if (nameIter->getDB() == opdb) {
+                bestUser = *nameIter;
+            }
+        }
+        allUsers.doneFast();
+
+        builder.append("user", bestUser.getUser().empty() ? "" : bestUser.getFullName());
+
+    }
+} // namespace
 
     static void _profile(const Client& c, CurOp& currentOp, BufBuilder& profileBufBuilder) {
         Database *db = c.database();
         DEV verify( db );
-        const char *ns = db->profileName().c_str();
-        
+
         // build object
         BSONObjBuilder b(profileBufBuilder);
+
+        const bool isQueryObjTooBig = !currentOp.debug().append(currentOp, b,
+                MAX_PROFILE_DOC_SIZE_BYTES);
+
         b.appendDate("ts", jsTime());
-        currentOp.debug().append( currentOp , b );
+        b.append("client", c.clientAddress());
 
-        b.append("client", c.clientAddress() );
-
-        if ( c.getAuthenticationInfo() )
-            b.append( "user" , c.getAuthenticationInfo()->getUser( nsToDatabase( ns ) ) );
+        AuthorizationManager* authManager = c.getAuthorizationManager();
+        _appendUserInfo(c, b, authManager);
 
         BSONObj p = b.done();
 
-        if (p.objsize() > 100*1024){
+        if (static_cast<size_t>(p.objsize()) > MAX_PROFILE_DOC_SIZE_BYTES || isQueryObjTooBig) {
             string small = p.toString(/*isArray*/false, /*full*/false);
 
-            warning() << "can't add full line to system.profile: " << small;
+            warning() << "can't add full line to system.profile: " << small << endl;
 
             // rebuild with limited info
             BSONObjBuilder b(profileBufBuilder);
             b.appendDate("ts", jsTime());
             b.append("client", c.clientAddress() );
-            if ( c.getAuthenticationInfo() )
-                b.append( "user" , c.getAuthenticationInfo()->getUser( nsToDatabase( ns ) ) );
+            _appendUserInfo(c, b, authManager);
 
             b.append("err", "profile line too large (max is 100KB)");
-            if (small.size() < 100*1024){ // should be much smaller but if not don't break anything
+
+            // should be much smaller but if not don't break anything
+            if (small.size() < MAX_PROFILE_DOC_SIZE_BYTES){
                 b.append("abbreviated", small);
             }
 

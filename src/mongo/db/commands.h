@@ -20,9 +20,16 @@
 
 #include <db.h>
 
-#include "jsobj.h"
-#include "../util/mongoutils/str.h"
+#include <vector>
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
+#include "mongo/db/client_basic.h"
+#include "mongo/db/jsobj.h"
 #include "mongo/db/opsettings.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
@@ -136,6 +143,14 @@ namespace mongo {
         */
         virtual bool requiresAuth() { return true; }
 
+        /**
+         * Appends to "*out" the privileges required to run this command on database "dbname" with
+         * the invocation described by "cmdObj".
+         */
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) = 0;
+
         /* Return true if command should be permitted when a replica set secondary is in "recovering"
            (unreadable) state.
          */
@@ -171,10 +186,32 @@ namespace mongo {
     public:
         static const map<string,Command*>* commandsByBestName() { return _commandsByBestName; }
         static const map<string,Command*>* webCommands() { return _webCommands; }
-        /** @return if command was found and executed */
+        /** @return if command was found */
         static bool runAgainstRegistered(const char *ns, BSONObj& jsobj, BSONObjBuilder& anObjBuilder, int queryOptions = 0);
         static LockType locktype( const string& name );
         static Command * findCommand( const string& name );
+        // For mongod and webserver.
+        static void execCommand(Command* c,
+                                Client& client,
+                                int queryOptions,
+                                const char *ns,
+                                BSONObj& cmdObj,
+                                BSONObjBuilder& result,
+                                bool fromRepl );
+        // For mongos
+        static void execCommandClientBasic(Command* c,
+                                           ClientBasic& client,
+                                           int queryOptions,
+                                           const char *ns,
+                                           BSONObj& cmdObj,
+                                           BSONObjBuilder& result,
+                                           bool fromRepl );
+
+        // Helper for setting errmsg and ok field in command result object.
+        static void appendCommandStatus(BSONObjBuilder& result, bool ok, const std::string& errmsg);
+
+        // Set by command line.  Controls whether or not testing-only commands should be available.
+        static int testCommandsEnabled;
     };
 
     /** A command that modifies metadata in some way. */
@@ -241,6 +278,10 @@ namespace mongo {
     class DeprecatedCommand : public InformationCommand {
       public:
         DeprecatedCommand(const char *name, bool webUI=false, const char *oldName=NULL) : InformationCommand(name, false, oldName) {}
+        // No auth required
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
         void help(stringstream &h) const { h << name << " is a deprecated command"; }
         bool run(const string&, BSONObj&, int, string &errmsg, BSONObjBuilder &res, bool) {
             stringstream ss;
@@ -249,6 +290,28 @@ namespace mongo {
             errmsg = ss.str();
             res.append("errmsg", errmsg);
             res.append("ok", false);
+            return false;
+        }
+    };
+
+    // This will be registered instead of the real implementations of any commands that don't work
+    // when auth is enabled.
+    class NotWithAuthCmd : public InformationCommand {
+    public:
+        NotWithAuthCmd(const char* cmdName) : InformationCommand(cmdName) { }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
+        virtual void help( stringstream &help ) const {
+            help << name << " is not supported when running with authentication enabled";
+        }
+        virtual bool run(const string&,
+                         BSONObj& cmdObj,
+                         int,
+                         string& errmsg,
+                         BSONObjBuilder& result,
+                         bool fromRepl) {
+            errmsg = name + " is not supported when running with authentication enabled";
             return false;
         }
     };
@@ -263,6 +326,13 @@ namespace mongo {
         }
         virtual bool slaveOk() const {
             return true;
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::shutdown);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
         }
         virtual LockType locktype() const { return NONE; }
         virtual bool requiresSync() const { return false; }

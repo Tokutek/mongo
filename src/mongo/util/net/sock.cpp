@@ -16,12 +16,9 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
-#include "sock.h"
-#include "../background.h"
-#include "../concurrency/value.h"
-#include "../mongoutils/str.h"
-#include "../../db/cmdline.h"
+#include "mongo/pch.h"
+
+#include "mongo/util/net/sock.h"
 
 #if !defined(_WIN32)
 # include <sys/socket.h>
@@ -45,9 +42,16 @@
 #include <openssl/ssl.h>
 #endif
 
+#include "mongo/util/background.h"
+#include "mongo/util/concurrency/value.h"
+#include "mongo/util/fail_point_service.h"
+#include "mongo/util/mongoutils/str.h"
+#include "mongo/db/cmdline.h"
+
 using namespace mongoutils;
 
 namespace mongo {
+    MONGO_FP_DECLARE(throwSockExcep);
 
     static bool ipv6 = false;
     void enableIPv6(bool state) { ipv6 = state; }
@@ -337,6 +341,14 @@ namespace mongo {
         return temp;
     }
 
+    string prettyHostName() {
+        StringBuilder s;
+        s << getHostNameCached();
+        if( cmdLine.port != CmdLine::DefaultDBPort )
+            s << ':' << mongo::cmdLine.port;
+        return s.str();
+    }
+
     // --------- SocketException ----------
 
 #ifdef MSG_NOSIGNAL
@@ -612,6 +624,7 @@ namespace mongo {
         setsockopt( _fd , SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(int));
 #endif
 
+        _fdCreationMicroSec = curTimeMicros64();
         return true;
     }
 
@@ -628,7 +641,7 @@ namespace mongo {
     void Socket::send( const char * data , int len, const char *context ) {
         while( len > 0 ) {
             int ret = _send( data , len  );
-            if ( ret == -1 ) {
+            if ( ret == -1 || MONGO_FAIL_POINT(throwSockExcep)) {
                 
 #ifdef MONGO_SSL
                 if ( _ssl ) {
@@ -706,7 +719,7 @@ namespace mongo {
 
         while( meta.msg_iovlen > 0 ) {
             int ret = ::sendmsg( _fd , &meta , portSendFlags );
-            if ( ret == -1 ) {
+            if ( ret == -1 || MONGO_FAIL_POINT(throwSockExcep)) {
                 if ( errno != EAGAIN || _timeout == 0 ) {
                     LOG(_logLevel) << "Socket " << context << " send() " << errnoWithDescription() << ' ' << remoteString() << endl;
                     throw SocketException( SocketException::SEND_ERROR , remoteString() );
@@ -746,7 +759,7 @@ namespace mongo {
                 len -= ret;
                 buf += ret;
             }
-            else if ( ret == 0 ) {
+            else if ( ret == 0 || MONGO_FAIL_POINT(throwSockExcep)) {
                 LOG(3) << "Socket recv() conn closed? " << remoteString() << endl;
                 throw SocketException( SocketException::CLOSED , remoteString() );
             }

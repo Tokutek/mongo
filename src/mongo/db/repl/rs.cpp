@@ -16,15 +16,21 @@
 */
 
 #include "pch.h"
-#include "../cmdline.h"
-#include "../../util/net/sock.h"
-#include "../client.h"
-#include "../../s/d_logic.h"
-#include "rs.h"
-#include "connections.h"
-#include "../repl.h"
-#include "../instance.h"
+#include "mongo/platform/basic.h"
+
+#include "mongo/base/owned_pointer_vector.h"
+#include "mongo/base/status.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/principal.h"
+#include "mongo/db/client.h"
+#include "mongo/db/cmdline.h"
+#include "mongo/db/dbhelpers.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/repl.h"
 #include "mongo/db/repl/bgsync.h"
+#include "mongo/db/repl/connections.h"
+#include "mongo/db/repl/rs.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/platform/bits.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
@@ -32,6 +38,7 @@
 #include "mongo/db/oplog.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/oplog_helpers.h"
+#include "mongo/s/d_logic.h"
 #include "mongo/db/query_optimizer.h"
 
 using namespace std;
@@ -1027,7 +1034,7 @@ namespace mongo {
     void replLocalAuth() {
         if ( noauth )
             return;
-        cc().getAuthenticationInfo()->authorize("local","_repl");
+        cc().getAuthorizationManager()->grantInternalAuthorization("_repl");
     }
 
     // for testing only
@@ -1316,5 +1323,39 @@ namespace mongo {
             BackgroundSync::get()->startOpSyncThread();
         }
     }
+
+    class ReplIndexPrefetch : public ServerParameter {
+    public:
+        ReplIndexPrefetch()
+            : ServerParameter( ServerParameterSet::getGlobal(), "replIndexPrefetch" ) {
+        }
+
+        virtual ~ReplIndexPrefetch() {
+        }
+
+        const char * _value() {
+            if (!theReplSet)
+                return "uninitialized";
+            return "none";
+        }
+
+        virtual void append( BSONObjBuilder& b, const string& name ) {
+            b.append( name, _value() );
+        }
+
+        virtual Status set( const BSONElement& newValueElement ) {
+            if (!theReplSet) {
+                return Status( ErrorCodes::BadValue, "replication is not enabled" );
+            }
+
+            std::string prefetch = newValueElement.valuestrsafe();
+            return setFromString( prefetch );
+        }
+
+        virtual Status setFromString( const string& prefetch ) {
+            return Status( ErrorCodes::IllegalOperation, "replIndexPrefetch is a deprecated parameter" );
+        }
+
+    } replIndexPrefetch;
 }
 

@@ -69,8 +69,14 @@ assert.eq(foo.system.namespaces.count({name: "foo.bar"}), 0);
 assert.eq(foo.system.namespaces.count({name: "foo.baz"}), 0);
 
 // now try to restore dump with correct credentials
-x = runMongoProgram( "mongorestore", "-h", "127.0.0.1:" + port, "-d", "foo", "-u", "admin", "-p",
-                     "admin", "--dir", dumpdir + "foo/", "-vvvvv");
+x = runMongoProgram( "mongorestore",
+                     "-h", "127.0.0.1:" + port,
+                     "-d", "foo",
+                     "--authenticationDatabase=admin",
+                     "-u", "admin",
+                     "-p", "admin",
+                     "--dir", dumpdir + "foo/",
+                     "-vvvvv");
 
 // make sure that the collection was restored
 assert.eq(foo.system.namespaces.count({name: "foo.bar"}), 1);
@@ -89,14 +95,19 @@ assert.eq(foo.system.namespaces.count({name: "foo.baz"}), 0);
 foo.addUser('user', 'password');
 
 // now try to restore dump with foo database credentials
-x = runMongoProgram("mongorestore", "-h", "127.0.0.1:" + port, "-d", "foo", "-u", "user", "-p",
-                    "password", "--dir", dumpdir + "foo/", "-vvvvv");
+x = runMongoProgram("mongorestore",
+                    "-h", "127.0.0.1:" + port,
+                    "-d", "foo",
+                    "-u", "user",
+                    "-p", "password",
+                    "--dir", dumpdir + "foo/",
+                    "-vvvvv");
 
 // make sure that the collection was restored
 assert.eq(foo.system.namespaces.count({name: "foo.bar"}), 1);
 assert.eq(foo.system.namespaces.count({name: "foo.baz"}), 1);
 assert.eq(foo.bar.count(), 4);
 assert.eq(foo.baz.count(), 4);
-assert.eq(foo.system.indexes.count(), 5); // _id on foo, _id on bar, x on foo, _id on system.users
+assert.eq(foo.system.indexes.count(), 6); // _id on foo, _id on bar, x on foo, _id on system.users, compound on system.users
 
 stopMongod( port );

@@ -23,8 +23,6 @@
 
 #include "mongo/pch.h"
 
-#include "mongo/client/authlevel.h"
-#include "mongo/client/authentication_table.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/platform/atomic_word.h"
 #include "mongo/util/net/message.h"
@@ -181,6 +179,7 @@ namespace mongo {
     bool hasReadPreference(const BSONObj& queryObj);
 
     class DBClientBase;
+    class DBClientConnection;
 
     /**
      * ConnectionString handles parsing different ways to connect to mongo and determining method
@@ -293,6 +292,11 @@ namespace mongo {
         static void setConnectionHook( ConnectionHook* hook ){
             scoped_lock lk( _connectHookMutex );
             _connectHook = hook;
+        }
+
+        static ConnectionHook* getConnectionHook() {
+            scoped_lock lk( _connectHookMutex );
+            return _connectHook;
         }
 
     private:
@@ -569,8 +573,7 @@ namespace mongo {
 
         DBClientWithCommands() : _logLevel(0),
                 _cachedAvailableOptions( (enum QueryOptions)0 ),
-                _haveCachedAvailableOptions(false),
-                _hasAuthentication(false) { }
+                _haveCachedAvailableOptions(false) { }
 
         /** helper function.  run a simple command where the command expression is simply
               { command : 1 }
@@ -582,9 +585,7 @@ namespace mongo {
 
         /** Run a database command.  Database commands are represented as BSON objects.  Common database
             commands have prebuilt helper functions -- see below.  If a helper is not available you can
-            directly call runCommand.  If _authTable has been set, will append a BSON representation of
-            that AuthenticationTable to the command object, unless an AuthenticationTable object has been
-            passed to this method directly, in which case it will use that instead of _authTable.
+            directly call runCommand.
 
             @param dbname database name.  Use "admin" for global administrative commands.
             @param cmd  the command object to execute.  For example, { ismaster : 1 }
@@ -596,7 +597,7 @@ namespace mongo {
             @return true if the command returned "ok".
         */
         virtual bool runCommand(const string &dbname, const BSONObj& cmd, BSONObj &info,
-                                int options=0, const AuthenticationTable* auth = NULL);
+                                int options=0);
 
         /** Begin a multi-statement transaction.
             If you are using a SyncClusterConnection, you must use these wrappers (or a RemoteTransaction), not bare runCommand() calls.
@@ -622,6 +623,30 @@ namespace mongo {
             @return true iff the rollback was successful.
          */
         virtual bool rollbackTransaction(BSONObj *res = NULL);
+        /**
+         * Authenticate a user.
+         *
+         * The "params" BSONObj should be initialized with some of the fields below.  Which fields
+         * are required depends on the mechanism, which is mandatory.
+         *
+         *     "mechanism": The string name of the sasl mechanism to use.  Mandatory.
+         *     "user": The string name of the principal to authenticate.  Mandatory.
+         *     "userSource": The database target of the auth command, which identifies the location
+         *         of the credential information for the principal.  May be "$external" if
+         *         credential information is stored outside of the mongo cluster.  Mandatory.
+         *     "pwd": The password data.
+         *     "digestPassword": Boolean, set to true if the "pwd" is undigested (default).
+         *     "serviceName": The GSSAPI service name to use.  Defaults to "mongodb".
+         *     "serviceHostname": The GSSAPI hostname to use.  Defaults to the name of the remote
+         *          host.
+         *
+         * Other fields in "params" are silently ignored.
+         *
+         * Returns normally on success, and throws on error.  Throws a DBException with getCode() ==
+         * ErrorCodes::AuthenticationFailed if authentication is rejected.  All other exceptions are
+         * tantamount to authentication failure, but may also indicate more serious problems.
+         */
+        void auth(const BSONObj& params);
 
         /** Authorize access to a particular database.
             Authentication is separate for each database on the server -- you may authenticate for any
@@ -632,7 +657,7 @@ namespace mongo {
             @param[out] authLevel       level of authentication for the given user
             @return true if successful
         */
-        virtual bool auth(const string &dbname, const string &username, const string &pwd, string& errmsg, bool digestPassword = true, Auth::Level * level = NULL);
+        bool auth(const string &dbname, const string &username, const string &pwd, string& errmsg, bool digestPassword = true);
 
         /**
          * Logs out the connection for the given database.
@@ -892,9 +917,6 @@ namespace mongo {
 
         bool exists( const string& ns );
 
-        virtual void setAuthenticationTable( const AuthenticationTable& auth );
-        virtual void clearAuthenticationTable();
-
         /** Create an index if it does not already exist.
             ensureIndex calls are remembered so it is safe/fast to call this function many
             times in your code.
@@ -957,14 +979,22 @@ namespace mongo {
 
         virtual QueryOptions _lookupAvailableOptions();
 
-        bool hasAuthenticationTable();
-        AuthenticationTable& getAuthenticationTable();
+        virtual void _auth(const BSONObj& params);
+
+        /**
+         * Use the MONGODB-CR protocol to authenticate as "username" against the database "dbname",
+         * with the given password.  If digestPassword is false, the password is assumed to be
+         * pre-digested.  Returns false on failure, and sets "errmsg".
+         */
+        bool _authMongoCR(const string &dbname,
+                          const string &username,
+                          const string &pwd,
+                          string& errmsg,
+                          bool digestPassword);
 
     private:
         enum QueryOptions _cachedAvailableOptions;
         bool _haveCachedAvailableOptions;
-        AuthenticationTable _authTable;
-        bool _hasAuthentication;
     };
 
     /**
@@ -976,6 +1006,8 @@ namespace mongo {
         long long _connectionId; // unique connection id for this connection
         WriteConcern _writeConcern;
     public:
+        static const uint64_t INVALID_SOCK_CREATION_TIME;
+
         DBClientBase() {
             _writeConcern = W_NORMAL;
             _connectionId = ConnectionIdSequence.fetchAndAdd(1);
@@ -1071,6 +1103,10 @@ namespace mongo {
         
         virtual double getSoTimeout() const = 0;
 
+        virtual uint64_t getSockCreationMicroSec() const {
+            return INVALID_SOCK_CREATION_TIME;
+        }
+
     }; // DBClientBase
 
     class DBClientReplicaSet;
@@ -1145,8 +1181,6 @@ namespace mongo {
                 throw ConnectException(string("can't connect ") + errmsg);
         }
 
-        virtual bool auth(const string &dbname, const string &username, const string &pwd, string& errmsg, bool digestPassword = true, Auth::Level* level=NULL);
-
         virtual auto_ptr<DBClientCursor> query(const string &ns, Query query=Query(), int nToReturn = 0, int nToSkip = 0,
                                                const BSONObj *fieldsToReturn = 0, int queryOptions = 0 , int batchSize = 0 ) {
             checkConnection();
@@ -1162,8 +1196,7 @@ namespace mongo {
         virtual bool runCommand(const string &dbname,
                                 const BSONObj& cmd,
                                 BSONObj &info,
-                                int options=0,
-                                const AuthenticationTable* auth=NULL);
+                                int options=0);
 
         /**
            @return true if this connection is currently in a failed state.  When autoreconnect is on,
@@ -1201,11 +1234,26 @@ namespace mongo {
             return _numConnections;
         }
 
+        /**
+         * Primarily used for notifying the replica set client that the server
+         * it is talking to is not primary anymore.
+         *
+         * @param rsClient caller is responsible for managing the life of rsClient
+         * and making sure that it lives longer than this object.
+         *
+         * Warning: This is only for internal use and will eventually be removed in
+         * the future.
+         */
+        void setReplSetClientCallback(DBClientReplicaSet* rsClient);
+
         static void setLazyKillCursor( bool lazy ) { _lazyKillCursor = lazy; }
         static bool getLazyKillCursor() { return _lazyKillCursor; }
 
+        uint64_t getSockCreationMicroSec() const;
+
     protected:
         friend class SyncClusterConnection;
+        virtual void _auth(const BSONObj& params);
         virtual void sayPiggyBack( Message &toSend );
 
         DBClientReplicaSet *clientSet;
@@ -1221,7 +1269,7 @@ namespace mongo {
         // throws SocketException if in failed state and not reconnecting or if waiting to reconnect
         void checkConnection() { if( _failed ) _checkConnection(); }
 
-        map< string, pair<string,string> > authCache;
+        map<string, BSONObj> authCache;
         double _so_timeout;
         bool _connect( string& errmsg );
 

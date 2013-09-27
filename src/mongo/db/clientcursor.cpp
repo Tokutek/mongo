@@ -25,17 +25,28 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/clientcursor.h"
+
+#include <string>
 #include <time.h>
+#include <vector>
 
 #include "mongo/client/dbclientinterface.h"
-#include "mongo/db/database.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/introspect.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/database.h"
+#include "mongo/db/introspect.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/repl/rs.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/scanandorder.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/platform/random.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/timer.h"
 
@@ -325,19 +336,40 @@ namespace mongo {
         }
     }
 
-    // See SERVER-5726.
-    long long ctmLast = 0; // so we don't have to do find() which is a little slow very often.
+    namespace {
+        // so we don't have to do find() which is a little slow very often.
+        long long cursorGenTSLast = 0;
+        PseudoRandom* cursorGenRandom = NULL;
+    }
+
     long long ClientCursor::allocCursorId_inlock() {
-        long long ctm = curTimeMillis64();
-        dassert( ctm );
+        // It is important that cursor IDs not be reused within a short period of time.
+
+        if ( ! cursorGenRandom ) {
+            scoped_ptr<SecureRandom> sr( SecureRandom::create() );
+            cursorGenRandom = new PseudoRandom( sr->nextInt64() );
+        }
+
+        const long long ts = Listener::getElapsedTimeMillis();
+
         long long x;
+
         while ( 1 ) {
-            x = (((long long)rand()) << 32);
-            x = x ^ ctm;
-            if ( ctm != ctmLast || ClientCursor::find_inlock(x, false) == 0 )
+            x = ts << 32;
+            x |= cursorGenRandom->nextInt32();
+
+            if ( x == 0 )
+                continue;
+
+            if ( x < 0 )
+                x *= -1;
+
+            if ( ts != cursorGenTSLast || ClientCursor::find_inlock(x, false) == 0 )
                 break;
         }
-        ctmLast = ctm;
+
+        cursorGenTSLast = ts;
+
         return x;
     }
 
@@ -390,6 +422,13 @@ namespace mongo {
         virtual void help( stringstream& help ) const {
             help << " example: { cursorInfo : 1 }";
         }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::cursorInfo);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             ClientCursor::appendStats( result );
             return true;
@@ -418,35 +457,82 @@ namespace mongo {
         }
     }
 
-    bool ClientCursor::erase( CursorId id ) {
-        recursive_scoped_lock lock( ccmutex );
-        ClientCursor *cursor = find_inlock( id );
-        if ( ! cursor )
-            return false;
-
-        if ( ! cc().getAuthenticationInfo()->isAuthorizedReads( nsToDatabase( cursor->ns() ) ) )
-            return false;
-
+    bool ClientCursor::_erase_inlock(ClientCursor* cursor) {
         // Must not have an active ClientCursor::Pin.
         massert( 16089,
-                str::stream() << "Cannot kill active cursor " << id,
+                str::stream() << "Cannot kill active cursor " << cursor->cursorid(),
                 cursor->_pinValue < 100 );
-        
+
         delete cursor;
         return true;
+    }
+
+    bool ClientCursor::erase(CursorId id) {
+        recursive_scoped_lock lock(ccmutex);
+        ClientCursor* cursor = find_inlock(id);
+        if (!cursor) {
+            return false;
+        }
+
+        return _erase_inlock(cursor);
+    }
+
+    bool ClientCursor::eraseIfAuthorized(CursorId id) {
+        std::string ns;
+        {
+            recursive_scoped_lock lock(ccmutex);
+            ClientCursor* cursor = find_inlock(id);
+            if (!cursor) {
+                return false;
+            }
+            ns = cursor->ns();
+        }
+
+        // Can't be in a lock when checking authorization
+        if (!cc().getAuthorizationManager()->checkAuthorization(ns, ActionType::killCursors)) {
+            return false;
+        }
+
+        // It is safe to lookup the cursor again after temporarily releasing the mutex because
+        // of 2 invariants: that the cursor ID won't be re-used in a short period of time, and that
+        // the namespace associated with a cursor cannot change.
+        recursive_scoped_lock lock(ccmutex);
+        ClientCursor* cursor = find_inlock(id);
+        if (!cursor) {
+            // Cursor was deleted in another thread since we found it earlier in this function.
+            return false;
+        }
+        if (cursor->ns() != ns) {
+            warning() << "Cursor namespace changed. Previous ns: " << ns << ", current ns: "
+                    << cursor->ns() << endl;
+            return false;
+        }
+
+        return _erase_inlock(cursor);
     }
 
     int ClientCursor::erase(int n, long long *ids) {
         int found = 0;
         for ( int i = 0; i < n; i++ ) {
-            if ( erase(ids[i]) )
+            if ( erase(ids[i]))
                 found++;
 
             if ( inShutdown() )
                 break;
         }
         return found;
+    }
 
+    int ClientCursor::eraseIfAuthorized(int n, long long *ids) {
+        int found = 0;
+        for ( int i = 0; i < n; i++ ) {
+            if ( eraseIfAuthorized(ids[i]))
+                found++;
+
+            if ( inShutdown() )
+                break;
+        }
+        return found;
     }
 
     bool ClientCursor::checkMultiStatementTxn() {

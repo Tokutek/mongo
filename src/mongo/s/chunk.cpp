@@ -82,8 +82,9 @@ namespace mongo {
         : _manager(info), _min(min), _max(max), _shard(shard), _lastmod(lastmod), _jumbo(false), _dataWritten(mkDataWritten())
     {}
 
-    long Chunk::mkDataWritten() {
-        return rand() % ( MaxChunkSize / ChunkManager::SplitHeuristics::splitTestFactor );
+    int Chunk::mkDataWritten() {
+        PseudoRandom r(static_cast<int64_t>(time(0)));
+        return r.nextInt32( MaxChunkSize / ChunkManager::SplitHeuristics::splitTestFactor );
     }
 
     string Chunk::getns() const {
@@ -363,7 +364,7 @@ namespace mongo {
             // this does mean mongos has more back pressure than mongod alone
             // since it nots 100% tcp queue bound
             // this was implicit before since we did a splitVector on the same socket
-            ShardConnection::sync( NamespaceString(getManager()->getns()).db );
+            ShardConnection::sync( nsToDatabase(getManager()->getns()) );
 
             LOG(1) << "about to initiate autosplit: " << *this << " dataWritten: " << _dataWritten << " splitThreshold: " << splitThreshold << endl;
 
@@ -1428,11 +1429,7 @@ namespace mongo {
 
         LOG(1) << "    setShardVersion  " << s.getName() << " " << conn.getServerAddress() << "  " << ns << "  " << cmd << " " << &conn << endl;
 
-        return conn.runCommand( "admin",
-                                cmd,
-                                result,
-                                0,
-                                &AuthenticationTable::getInternalSecurityAuthenticationTable() );
+        return conn.runCommand("admin", cmd, result, 0);
     }
 
 } // namespace mongo

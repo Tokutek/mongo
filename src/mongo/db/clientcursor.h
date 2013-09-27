@@ -267,13 +267,20 @@ namespace mongo {
         /**
          * Deletes the cursor with the provided @param 'id' if one exists.
          * @throw if the cursor with the provided id is pinned.
+         * This does not do any auth checking and should be used only when erasing cursors as part
+         * of cleaning up internal operations.
          */
         static bool erase(CursorId id);
+        // Same as erase but checks to make sure this thread has read permission on the cursor's
+        // namespace.  This should be called when receiving killCursors from a client.  This should
+        // not be called when ccmutex is held.
+        static bool eraseIfAuthorized(CursorId id);
 
         /**
          * @return number of cursors found
          */
-        static int erase( int n , long long * ids );
+        static int erase(int n, long long* ids);
+        static int eraseIfAuthorized(int n, long long* ids);
 
         /**
          * @param millis amount of idle passed time since last call
@@ -317,6 +324,8 @@ namespace mongo {
         // cursors normally timeout after an inactivity period to prevent excess memory use
         // setting this prevents timeout of the cursor in question.
         void noTimeout() { _pinValue++; }
+
+        static bool _erase_inlock(ClientCursor* cursor);
 
         CursorId _cursorid;
 

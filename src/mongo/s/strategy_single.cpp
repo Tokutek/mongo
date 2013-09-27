@@ -36,81 +36,81 @@ namespace mongo {
 
             LOG(3) << "single query: " << q.ns << "  " << q.query << "  ntoreturn: " << q.ntoreturn << " options : " << q.queryOptions << endl;
 
-            if ( r.isCommand() ) {
+            verify(r.isCommand()); // Regular queries are handled in strategy_shard.cpp
 
-                if ( handleSpecialNamespaces( r , q ) )
-                    return;
+            if ( handleSpecialNamespaces( r , q ) )
+                return;
 
-                int loops = 5;
-                while ( true ) {
-                    BSONObjBuilder builder;
-                    try {
-                        BSONObj cmdObj = q.query;
-                        {
-                            BSONElement e = cmdObj.firstElement();
-                            if (e.type() == Object && (e.fieldName()[0] == '$'
-                                                         ? str::equals("query", e.fieldName()+1)
-                                                         : str::equals("query", e.fieldName()))) {
-                                // Extract the embedded query object.
+            int loops = 5;
+            while ( true ) {
+                BSONObjBuilder builder;
+                try {
+                    BSONObj cmdObj = q.query;
+                    {
+                        BSONElement e = cmdObj.firstElement();
+                        if (e.type() == Object && (e.fieldName()[0] == '$'
+                                                     ? str::equals("query", e.fieldName()+1)
+                                                     : str::equals("query", e.fieldName()))) {
+                            // Extract the embedded query object.
 
-                                if (cmdObj.hasField("$readPreference")) {
-                                    // The command has a read preference setting. We don't want
-                                    // to lose this information so we copy this to a new field
-                                    // called $queryOptions.$readPreference
-                                    BSONObjBuilder finalCmdObjBuilder;
-                                    finalCmdObjBuilder.appendElements(e.embeddedObject());
+                            if (cmdObj.hasField("$readPreference")) {
+                                // The command has a read preference setting. We don't want
+                                // to lose this information so we copy this to a new field
+                                // called $queryOptions.$readPreference
+                                BSONObjBuilder finalCmdObjBuilder;
+                                finalCmdObjBuilder.appendElements(e.embeddedObject());
 
-                                    BSONObjBuilder queryOptionsBuilder(
-                                            finalCmdObjBuilder.subobjStart("$queryOptions"));
-                                    queryOptionsBuilder.append(cmdObj["$readPreference"]);
-                                    queryOptionsBuilder.done();
+                                BSONObjBuilder queryOptionsBuilder(
+                                        finalCmdObjBuilder.subobjStart("$queryOptions"));
+                                queryOptionsBuilder.append(cmdObj["$readPreference"]);
+                                queryOptionsBuilder.done();
 
-                                    cmdObj = finalCmdObjBuilder.obj();
-                                }
-                                else {
-                                    cmdObj = e.embeddedObject();
-                                }
+                                cmdObj = finalCmdObjBuilder.obj();
+                            }
+                            else {
+                                cmdObj = e.embeddedObject();
                             }
                         }
-
-                        bool ok = Command::runAgainstRegistered(q.ns, cmdObj, builder, q.queryOptions);
-                        if ( ok ) {
-                            BSONObj x = builder.done();
-                            replyToQuery(0, r.p(), r.m(), x);
-                            return;
-                        }
-                        break;
                     }
-                    catch ( StaleConfigException& e ) {
-                        if ( loops <= 0 )
-                            throw e;
 
-                        loops--;
-                        log() << "retrying command: " << q.query << endl;
-
-                        // For legacy reasons, ns may not actually be set in the exception :-(
-                        string staleNS = e.getns();
-                        if( staleNS.size() == 0 ) staleNS = q.ns;
-
-                        ShardConnection::checkMyConnectionVersions( staleNS );
-                        if( loops < 4 ) versionManager.forceRemoteCheckShardVersionCB( staleNS );
-                    }
-                    catch ( AssertionException& e ) {
-                        e.getInfo().append( builder , "assertion" , "assertionCode" );
-                        builder.append( "errmsg" , "db assertion failure" );
-                        builder.append( "ok" , 0 );
+                    bool commandFound = Command::runAgainstRegistered(q.ns,
+                                                                      cmdObj,
+                                                                      builder,
+                                                                      q.queryOptions);
+                    if (commandFound) {
                         BSONObj x = builder.done();
                         replyToQuery(0, r.p(), r.m(), x);
                         return;
                     }
+                    break;
                 }
+                catch ( StaleConfigException& e ) {
+                    if ( loops <= 0 )
+                        throw e;
 
-                string commandName = q.query.firstElementFieldName();
+                    loops--;
+                    log() << "retrying command: " << q.query << endl;
 
-                uasserted(13390, "unrecognized command: " + commandName);
+                    // For legacy reasons, ns may not actually be set in the exception :-(
+                    string staleNS = e.getns();
+                    if( staleNS.size() == 0 ) staleNS = q.ns;
+
+                    ShardConnection::checkMyConnectionVersions( staleNS );
+                    if( loops < 4 ) versionManager.forceRemoteCheckShardVersionCB( staleNS );
+                }
+                catch ( AssertionException& e ) {
+                    e.getInfo().append( builder , "assertion" , "assertionCode" );
+                    builder.append( "errmsg" , "db assertion failure" );
+                    builder.append( "ok" , 0 );
+                    BSONObj x = builder.done();
+                    replyToQuery(0, r.p(), r.m(), x);
+                    return;
+                }
             }
 
-            doQuery( r , r.primaryShard() );
+            string commandName = q.query.firstElementFieldName();
+
+            uasserted(13390, "unrecognized command: " + commandName);
         }
 
         // Deprecated
@@ -132,12 +132,18 @@ namespace mongo {
                 return false;
             ns += 10;
 
-            r.checkAuth( Auth::WRITE );
-
             BSONObjBuilder b;
             vector<Shard> shards;
 
+            AuthorizationManager* authManager =
+                    ClientBasic::getCurrent()->getAuthorizationManager();
+
             if ( strcmp( ns , "inprog" ) == 0 ) {
+                uassert(16545,
+                        "not authorized to run inprog",
+                        authManager->checkAuthorization(AuthorizationManager::SERVER_RESOURCE_NAME,
+                                                        ActionType::inprog));
+
                 Shard::getAllShards( shards );
 
                 BSONArrayBuilder arr( b.subarrayStart( "inprog" ) );
@@ -176,7 +182,10 @@ namespace mongo {
                 arr.done();
             }
             else if ( strcmp( ns , "killop" ) == 0 ) {
-                r.checkAuth( Auth::WRITE , "admin" );
+                uassert(16546,
+                        "not authorized to run killop",
+                        authManager->checkAuthorization(AuthorizationManager::SERVER_RESOURCE_NAME,
+                                                        ActionType::killop));
 
                 BSONElement e = q.query["op"];
                 if ( e.type() != String ) {

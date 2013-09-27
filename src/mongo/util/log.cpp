@@ -17,11 +17,12 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
-#include "assert_util.h"
-#include "time_support.h"
+#include "mongo/pch.h"
+
+#include "mongo/util/assert_util.h"
 #include "mongo/util/concurrency/threadlocal.h"
 #include "mongo/util/stacktrace.h"
+#include "mongo/util/time_support.h"
 
 using namespace std;
 
@@ -42,6 +43,19 @@ using namespace std;
 #include <boost/filesystem/operations.hpp>
 
 namespace mongo {
+
+    static Logstream::ExtraLogContextFn _appendExtraLogContext;
+
+    Status Logstream::registerExtraLogContextFn(ExtraLogContextFn contextFn) {
+        if (!contextFn)
+            return Status(ErrorCodes::BadValue, "Cannot register a NULL log context function.");
+        if (_appendExtraLogContext) {
+            return Status(ErrorCodes::AlreadyInitialized,
+                          "Cannot call registerExtraLogContextFn multiple times.");
+        }
+        _appendExtraLogContext = contextFn;
+        return Status::OK();
+    }
 
     int logLevel = 0;
     int tlogLevel = 0; // test log level. so we avoid overchattiness (somewhat) in the c++ unit tests
@@ -317,13 +331,12 @@ namespace mongo {
             if ( msgLen > MAX_LOG_LINE )
                 msgLen = MAX_LOG_LINE;
 
-            const int spaceNeeded = (int)( msgLen + 64 /* for extra info */ + threadName.size());
-            int bufSize = 128;
-            while ( bufSize < spaceNeeded )
-                bufSize += 128;
+            const int spaceNeeded = (int)( msgLen + 300 /* for extra info */ + threadName.size());
 
-            BufBuilder b(bufSize);
-            time_t_to_String( time(0) , b.grow(20) );
+            BufBuilder b(spaceNeeded);
+            char* dateStr = b.grow(24);
+            curTimeString(dateStr);
+            dateStr[23] = ' '; // change null char to space
 
             if (!threadName.empty()) {
                 b.appendChar( '[' );
@@ -340,6 +353,9 @@ namespace mongo {
                 b.appendStr( ": " , false );
             }
 
+            if (_appendExtraLogContext)
+                _appendExtraLogContext(b);
+
             if ( msg.size() > MAX_LOG_LINE ) {
                 stringstream sss;
                 sss << "warning: log line attempted (" << msg.size() / 1024 << "k) over max size(" << MAX_LOG_LINE / 1024 << "k)";
@@ -355,7 +371,6 @@ namespace mongo {
             }
 
             string out( b.buf() , b.len() - 1);
-            verify( b.len() < spaceNeeded );
 
             scoped_lock lk(mutex);
 
@@ -425,10 +440,9 @@ namespace mongo {
         if( s.empty() ) return;
 
         char buf[64];
-        time_t_to_String( time(0) , buf );
-        /* truncate / don't show the year: */
-        buf[19] = ' ';
-        buf[20] = 0;
+        curTimeString(buf);
+        buf[23] = ' ';
+        buf[24] = 0;
 
         Logstream::logLockless(buf);
         Logstream::logLockless(s);

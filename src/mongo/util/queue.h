@@ -23,6 +23,8 @@
 #include <limits>
 #include <queue>
 
+#include <boost/thread/condition.hpp>
+
 #include "mongo/util/timer.h"
 
 namespace mongo {

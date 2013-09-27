@@ -18,6 +18,9 @@
 */
 
 #include "pch.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
 #include "repl.h"
 #include "repl_block.h"
 #include "instance.h"
@@ -233,6 +236,13 @@ namespace mongo {
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::updateSlave);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
         virtual void help( stringstream& help ) const {
             help << "internal." << endl;
         }

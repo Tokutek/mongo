@@ -375,8 +375,8 @@ namespace mongo {
     }
 
     void validateUpdate( const char* ns , const BSONObj& updateobj, const BSONObj& patternOrig ) {
-        uassert( 10155 , "cannot update reserved $ collection", strchr(ns, '$') == 0 );
-        if ( strstr(ns, ".system.") ) {
+        uassert( 10155 , "cannot update reserved $ collection", NamespaceString::normal(ns) );
+        if ( NamespaceString::isSystem(ns) ) {
             /* dm: it's very important that system.indexes is never updated as IndexDetails
                has pointers into it */
             uassert( 10156,

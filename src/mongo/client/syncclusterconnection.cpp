@@ -24,6 +24,7 @@
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/dbmessage.h"
+#include "mongo/db/namespacestring.h"
 
 // error codes 8000-8009
 
@@ -224,13 +225,7 @@ namespace mongo {
         return DBClientBase::findOne( ns , query , fieldsToReturn , queryOptions );
     }
 
-    bool SyncClusterConnection::auth(const string &dbname,
-                                     const string &username,
-                                     const string &password_text,
-                                     string& errmsg,
-                                     bool digestPassword,
-                                     Auth::Level* level)
-    {
+    void SyncClusterConnection::_auth(const BSONObj& params) {
         // A SCC is authorized if any connection has been authorized
         // Credentials are stored in the auto-reconnect connections.
 
@@ -244,20 +239,17 @@ namespace mongo {
 
             // Authorize or collect the error message
             string lastErrmsg;
-            bool authed = false;
+            bool authed;
             try{
                 // Auth errors can manifest either as exceptions or as false results
                 // TODO: Make this better
-                authed = (*it)->auth( dbname,
-                                      username,
-                                      password_text,
-                                      lastErrmsg,
-                                      digestPassword,
-                                      level );
+                (*it)->auth(params);
+                authed = true;
             }
             catch( const DBException& e ){
                 // auth will be retried on reconnect
                 lastErrmsg = e.what();
+                authed = false;
             }
 
             if( ! authed ){
@@ -275,7 +267,7 @@ namespace mongo {
             authedOnce = authedOnce || authed;
         }
 
-        if( authedOnce ) return true;
+        if( authedOnce ) return;
 
         // Assemble the error message
         str::stream errStream;
@@ -284,25 +276,10 @@ namespace mongo {
             errStream << *it;
         }
 
-        errmsg = errStream;
-        return false;
+        uasserted(ErrorCodes::AuthenticationFailed, errStream);
     }
 
     // TODO: logout is required for use of this class outside of a cluster environment
-
-    void SyncClusterConnection::setAuthenticationTable( const AuthenticationTable& auth ) {
-        for( size_t i = 0; i < _conns.size(); ++i ) {
-            _conns[i]->setAuthenticationTable( auth );
-        }
-        DBClientWithCommands::setAuthenticationTable( auth );
-    }
-
-    void SyncClusterConnection::clearAuthenticationTable() {
-        for( size_t i = 0; i < _conns.size(); ++i ) {
-            _conns[i]->clearAuthenticationTable();
-        }
-        DBClientWithCommands::clearAuthenticationTable();
-    }
 
     auto_ptr<DBClientCursor> SyncClusterConnection::query(const string &ns, Query query, int nToReturn, int nToSkip,
             const BSONObj *fieldsToReturn, int queryOptions, int batchSize ) {
@@ -317,11 +294,7 @@ namespace mongo {
     }
 
     bool SyncClusterConnection::_commandOnActive(const string &dbname, const BSONObj& cmd, BSONObj &info, int options ) {
-        BSONObj actualCmd = cmd;
-        if ( hasAuthenticationTable() ) {
-            actualCmd = getAuthenticationTable().copyCommandObjAddingAuth( cmd );
-        }
-        auto_ptr<DBClientCursor> cursor = _queryOnActive( dbname + ".$cmd" , actualCmd , 1 , 0 , 0 , options , 0 );
+        auto_ptr<DBClientCursor> cursor = _queryOnActive(dbname + ".$cmd", cmd, 1, 0, 0, options, 0);
         if ( cursor->more() )
             info = cursor->next().copy();
         else
@@ -358,8 +331,9 @@ namespace mongo {
 
     void SyncClusterConnection::insert( const string &ns, BSONObj obj , int flags) {
 
-        uassert( 13119 , (string)"SyncClusterConnection::insert obj has to have an _id: " + obj.jsonString() ,
-                 ns.find( ".system.indexes" ) != string::npos || obj["_id"].type() );
+        uassert(13119,
+                (string)"SyncClusterConnection::insert obj has to have an _id: " + obj.jsonString(),
+                nsToCollectionSubstring(ns) == "system.indexes" || obj["_id"].type());
 
         string errmsg;
         if ( ! prepare( errmsg ) )

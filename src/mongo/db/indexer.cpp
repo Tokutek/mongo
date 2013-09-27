@@ -16,6 +16,10 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/base/string_data.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/client.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/index.h"
@@ -28,6 +32,13 @@ namespace mongo {
 
     NamespaceDetails::Indexer::Indexer(NamespaceDetails *d, const BSONObj &info) :
         _d(d), _info(info), _isSecondaryIndex(_d->_nIndexes > 0) {
+        if (!cc().creatingSystemUsers()) {
+            std::string sourceNS = info["ns"].String();
+            uassert(16548,
+                    mongoutils::str::stream() << "not authorized to create index on " << sourceNS,
+                    cc().getAuthorizationManager()->checkAuthorization(sourceNS,
+                                                                       ActionType::ensureIndex));
+        }
     }
 
     NamespaceDetails::Indexer::~Indexer() {

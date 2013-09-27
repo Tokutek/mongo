@@ -20,13 +20,14 @@
 
 #include "mongo/pch.h"
 
-#include "mongo/db/client_common.h"
-#include "mongo/db/security.h"
+#include "mongo/db/client_basic.h"
 #include "mongo/s/chunk.h"
 #include "mongo/s/writeback_listener.h"
 #include "mongo/util/net/hostandport.h"
 
 namespace mongo {
+
+    class AbstractMessagingPort;
 
     /**
      * holds information about a client connected to a mongos
@@ -35,7 +36,7 @@ namespace mongo {
      */
     class ClientInfo : public ClientBasic {
     public:
-        ClientInfo();
+        ClientInfo(AbstractMessagingPort* messagingPort);
         ~ClientInfo();
 
         /** new request on behalf of a client, adjusts internal state */
@@ -100,18 +101,18 @@ namespace mongo {
 
         void noAutoSplit() { _autoSplitOk = false; }
 
-        static ClientInfo * get();
+        // Gets the ClientInfo object for this thread from _tlInfo. If no ClientInfo object exists
+        // yet for this thread, it creates one.
+        static ClientInfo * get(AbstractMessagingPort* messagingPort = NULL);
 
         // Returns whether or not a ClientInfo for this thread has already been created and stored
         // in _tlInfo.
         static bool exists();
 
-        const AuthenticationInfo* getAuthenticationInfo() const { return (AuthenticationInfo*)&_ai; }
-        AuthenticationInfo* getAuthenticationInfo() { return (AuthenticationInfo*)&_ai; }
-        bool isAdmin() { return _ai.isAuthorized( "admin" ); }
+        // Creates a ClientInfo and stores it in _tlInfo
+        static ClientInfo* create(AbstractMessagingPort* messagingPort);
 
     private:
-        AuthenticationInfo _ai;
         struct WBInfo {
             WBInfo( const WriteBackListener::ConnectionIdent& c, OID o, bool fromLastOperation )
                 : ident( c ), id( o ), fromLastOperation( fromLastOperation ) {}

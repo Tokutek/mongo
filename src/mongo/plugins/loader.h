@@ -72,7 +72,7 @@ namespace mongo {
             void shutdown();
         };
 
-        extern Loader loader;
+        extern Loader *loader;
 
     }  // namespace plugins
 

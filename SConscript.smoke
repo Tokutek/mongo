@@ -61,7 +61,7 @@ def addSmoketest( name, deps, extraSmokeArgs=[] ):
     smokeArgs = smokeFlags + [target] + extraSmokeArgs
     addTest(name, deps, utils.run_smoke_command(*smokeArgs))
 
-def addSmokeSuite( name, suitefile ):
+def addSmokeSuite( name, suitefile, needMongod=False ):
     # Add a smoketest target which invokes smoke.py with
     # --from-file, and passes the named suitefile as the
     # command line argument.
@@ -69,22 +69,29 @@ def addSmokeSuite( name, suitefile ):
     # resolve an initial # in the suitefile
     suitefile = str(env.File(suitefile))
 
-    args = smokeFlags + ['--mode', 'files', '--from-file', suitefile]
-    addTest(name, [suitefile],
-            utils.run_smoke_command(*args))
+    smoke_args = smokeFlags + ['--mode', 'files', '--from-file', suitefile]
+    if not needMongod:
+        smoke_args.append('--dont-start-mongod')
+    addTest(name, [suitefile], utils.run_smoke_command(*smoke_args))
 
 addSmoketest( "smoke", [ add_exe( "test" ), add_exe( "mongod" ), add_exe( "mongo" ) ] )
 addSmoketest( "smokePerf", [ add_exe("perftest") ]  )
-addSmoketest( "smokeClient", [
-        add_exe('firstExample'),
-        add_exe('rsExample'),
-        add_exe('secondExample'),
-        add_exe('whereExample'),
-        add_exe('authTest'),
-        add_exe('httpClientTest'),
-        add_exe('bsondemo'),
-        add_exe('clientTest'),
-        ] )
+
+smokeClientDeps = [
+    add_exe('firstExample'),
+    add_exe('rsExample'),
+    add_exe('secondExample'),
+    add_exe('whereExample'),
+    add_exe('authTest'),
+    add_exe('httpClientTest'),
+    add_exe('clientTest'),
+]
+if has_option("sharedclient"):
+    smokeClientDeps += [ "sharedclient/" + name for name in smokeClientDeps ]
+smokeClientDeps += [add_exe('bsondemo')]
+smokeClientDeps += [add_exe('mongod'), add_exe('mongo')]
+smokeClient = addSmoketest( "smokeClient", smokeClientDeps )
+
 addSmoketest( "mongosTest", [ add_exe( 'mongos' ) ])
 addSmokeSuite( "smokeCppUnittests", "$UNITTEST_LIST" )
 addSmokeSuite( "smokeModuleTests", "$MODULETEST_LIST" )

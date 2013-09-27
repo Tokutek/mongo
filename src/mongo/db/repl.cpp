@@ -30,7 +30,13 @@
 #include "pch.h"
 
 #include <boost/thread/thread.hpp>
+#include <string>
+#include <vector>
 
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
 #include "jsobj.h"
 #include "../util/goodies.h"
 #include "repl.h"
@@ -38,7 +44,6 @@
 #include "../util/background.h"
 #include "../client/connpool.h"
 #include "commands.h"
-#include "security.h"
 #include "cmdline.h"
 #include "repl_block.h"
 #include "repl/rs.h"
@@ -48,6 +53,7 @@
 #include "pcrecpp.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/parsed_query.h"
 
 namespace mongo {
@@ -78,8 +84,7 @@ namespace mongo {
 
     bool replAuthenticate(DBClientBase *conn);
 
-    void appendReplicationInfo( BSONObjBuilder& result , bool authed , int level ) {
-
+    void appendReplicationInfo(BSONObjBuilder& result, int level) {
         if ( replSet ) {
             if( theReplSet == 0 || theReplSet->state().shunned() ) {
                 result.append("ismaster", false);
@@ -119,15 +124,15 @@ namespace mongo {
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {} // No auth required
         CmdIsMaster() : Command("isMaster", true, "ismaster") { }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             /* currently request to arbiter is (somewhat arbitrarily) an ismaster request that is not
                authenticated.
-               we allow unauthenticated ismaster but we aren't as verbose informationally if
-               one is not authenticated for admin db to be safe.
             */
-            bool authed = cc().getAuthenticationInfo()->isAuthorizedReads("admin");
-            appendReplicationInfo( result , authed );
+            appendReplicationInfo(result, 0);
 
             result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
             result.appendDate("localTime", jsTime());
@@ -135,7 +140,45 @@ namespace mongo {
         }
     } cmdismaster;
 
-    extern unsigned replApplyBatchSize;
+    class ReplApplyBatchSize : public ServerParameter {
+    public:
+        ReplApplyBatchSize()
+            : ServerParameter( ServerParameterSet::getGlobal(), "replApplyBatchSize" ),
+              _value( 1 ) {
+        }
+
+        int get() const { return _value; }
+
+        virtual void append( BSONObjBuilder& b, const string& name ) {
+            b.append( name, _value );
+        }
+
+        virtual Status set( const BSONElement& newValuElement ) {
+            return set( newValuElement.numberInt() );
+        }
+
+        virtual Status set( int b ) {
+            if( b < 1 || b > 1024 ) {
+                return Status( ErrorCodes::BadValue,
+                               "replApplyBatchSize has to be >= 1 and < 1024" );
+            }
+
+            if ( replSettings.slavedelay != 0 && b > 1 ) {
+                return Status( ErrorCodes::BadValue,
+                               "can't use a batch size > 1 with slavedelay" );
+            }
+
+            _value = b;
+            return Status::OK();
+        }
+
+        virtual Status setFromString( const string& str ) {
+            return set( atoi( str.c_str() ) );
+        }
+
+        int _value;
+
+    } replApplyBatchSize;
 
     void startReplSets(ReplSetCmdline*);
     void startReplication() {

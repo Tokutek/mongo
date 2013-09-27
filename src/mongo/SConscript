@@ -33,6 +33,7 @@ ltokuportability = os.getenv('LIBTOKUPORTABILITY_NAME', 'tokuportability')
 tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
 
 env.SConscript(['base/SConscript',
+                'db/auth/SConscript',
                 'platform/SConscript',
                 'unittest/SConscript'])
 
@@ -61,27 +62,58 @@ env.StaticLibrary('foundation',
 env.StaticLibrary('stringutils', ['util/stringutils.cpp', 'util/base64.cpp',])
 
 env.StaticLibrary('md5', [
-        'util/md5.cpp',
-        'util/md5main.cpp',
+        'util/md5.cpp'
         ])
 
 env.CppUnitTest( "stringutils_test", [ "util/stringutils_test.cpp" ],
                  LIBDEPS=["stringutils"] )
 
+env.CppUnitTest( "md5_test", ["util/md5_test.cpp", "util/md5main.cpp" ],
+                 LIBDEPS=["md5"] )
+
 env.StaticLibrary('bson', [
+        'bson/mutable/mutable_bson.cpp',
+        'bson/mutable/mutable_bson_builder.cpp',
+        'bson/mutable/mutable_bson_heap.cpp',
+        'bson/mutable/mutable_bson_internal.cpp',
+        'bson/util/bson_extract.cpp',
+        'util/safe_num.cpp',
+        'bson/bson_validate.cpp',
         'bson/oid.cpp',
-        'db/nonce.cpp',
         'db/jsobj.cpp',
-        'db/json.cpp',
+        'db/json.cpp'
         ], LIBDEPS=[
         'base/base',
         'md5',
         'stringutils',
+        '$BUILD_DIR/mongo/platform/platform',
         ])
 
 env.CppUnitTest('string_map_test', ['util/string_map_test.cpp'],
                 LIBDEPS=['bson','foundation'])
 
+env.CppUnitTest('mutable_bson_test', ['bson/mutable/mutable_bson_test.cpp'],
+                 LIBDEPS=['bson'])
+
+env.CppUnitTest('mutable_bson_heap_test', ['bson/mutable/mutable_bson_heap_test.cpp'],
+                 LIBDEPS=['bson'])
+
+env.CppUnitTest('mutable_bson_builder_test', ['bson/mutable/mutable_bson_builder_test.cpp'],
+                LIBDEPS=['bson'])
+
+env.CppUnitTest('mutable_bson_algo_test', ['bson/mutable/mutable_bson_algo_test.cpp'],
+                LIBDEPS=['bson'])
+
+env.CppUnitTest('safe_num_test', ['util/safe_num_test.cpp'],
+                LIBDEPS=['bson'])
+
+env.CppUnitTest('bson_field_test', ['bson/bson_field_test.cpp'],
+                LIBDEPS=['bson'])
+
+env.CppUnitTest('bson_validate_test', ['bson/bson_validate_test.cpp'],
+                LIBDEPS=['bson'])
+
+env.CppUnitTest('bson_extract_test', ['bson/util/bson_extract_test.cpp'], LIBDEPS=['bson'])
 
 commonFiles = [ "pch.cpp",
                 "buildinfo.cpp",
@@ -109,7 +141,7 @@ commonFiles = [ "pch.cpp",
                 "util/net/message_port.cpp",
                 "util/net/listen.cpp",
                 "util/startup_test.cpp",
-                "client/authentication_table_common.cpp",
+                "util/version.cpp",
                 "client/connpool.cpp",
                 "client/dbclient.cpp",
                 "client/dbclient_rs.cpp",
@@ -117,9 +149,49 @@ commonFiles = [ "pch.cpp",
                 "client/model.cpp",
                 "client/remote_loader.cpp",
                 "client/remote_transaction.cpp",
+                'client/sasl_client_authenticate.cpp',
                 "client/syncclusterconnection.cpp",
                 "client/distlock.cpp",
+                "db/dbmessage.cpp"
                 ]
+
+extraCommonLibdeps = []
+
+if env['MONGO_BUILD_SASL_CLIENT']:
+    env.StaticLibrary('sasl_client_session',
+                      ['client/sasl_client_session.cpp'],
+                      LIBDEPS=['foundation'],
+                      SYSLIBDEPS=['sasl2'])
+    commonFiles.extend(['client/sasl_client_authenticate_impl.cpp'])
+    extraCommonLibdeps.append('sasl_client_session')
+
+# handle processinfo*
+processInfoFiles = [ "util/processinfo.cpp" ]
+
+processInfoPlatformFile = env.File( "util/processinfo_${PYSYSPLATFORM}.cpp" )
+# NOTE( schwerin ): This is a very un-scons-y way to make this decision, and prevents one from using
+# code generation to produce util/processinfo_$PYSYSPLATFORM.cpp.
+if not os.path.exists( str( processInfoPlatformFile ) ):
+    processInfoPlatformFile = env.File( "util/processinfo_none.cpp" )
+
+processInfoFiles.append( processInfoPlatformFile )
+
+env.StaticLibrary("processinfo",
+                  processInfoFiles,
+                  LIBDEPS=["foundation", "bson"])
+
+env.CppUnitTest("processinfo_test",
+                ["util/processinfo_test.cpp"],
+                LIBDEPS=["processinfo"])
+
+env.StaticLibrary("server_parameters",
+                  ["db/server_parameters.cpp"],
+                  LIBDEPS=["foundation","bson"])
+
+env.CppUnitTest("server_parameters_test",
+                [ "db/server_parameters_test.cpp" ],
+                LIBDEPS=["server_parameters"] )
+
 
 env.StaticLibrary("fail_point",
                   ["util/fail_point.cpp",
@@ -131,22 +203,29 @@ env.StaticLibrary('mongocommon', commonFiles,
                   LIBDEPS=['bson',
                            'foundation',
                            'md5',
+                           'processinfo',
                            'stacktrace',
                            'stringutils',
                            'fail_point',
                            '$BUILD_DIR/third_party/pcrecpp',
                            '$BUILD_DIR/third_party/murmurhash3/murmurhash3',
-                           '$BUILD_DIR/third_party/shim_boost'],)
+                           '$BUILD_DIR/third_party/shim_boost'] +
+                           extraCommonLibdeps)
 
 env.StaticLibrary("coredb", [
-        "client/authentication_table_server.cpp",
         "client/parallel.cpp",
         "db/client_transaction.cpp",
         "db/opsettings.cpp",
         "db/commands.cpp",
+        "db/commands/authentication_commands.cpp",
+        "db/commands/connection_status.cpp",
         "db/commands/fail_point_cmd.cpp",
+        "db/commands/find_and_modify_common.cpp",
         "db/commands/hashcmd.cpp",
         "db/commands/isself.cpp",
+        "db/commands/mr_common.cpp",
+        "db/commands/rename_collection_common.cpp",
+        "db/commands/parameters.cpp",
         "db/pipeline/pipeline.cpp",
         "db/dbcommands_generic.cpp",
         "db/dbpath.cpp",
@@ -189,8 +268,6 @@ env.StaticLibrary("coredb", [
         "db/projection.cpp",
         "db/querypattern.cpp",
         "db/queryutil.cpp",
-        "db/security_commands.cpp",
-        "db/security_common.cpp",
         "db/stats/top.cpp",
         "db/descriptor.cpp",
         "db/storage/cursor.cpp",
@@ -199,12 +276,13 @@ env.StaticLibrary("coredb", [
         "db/storage/key.cpp",
         "s/shardconnection.cpp",
         ],
-        LIBDEPS=['plugins/plugins'])
+                  LIBDEPS=['db/auth/serverauth',
+                           'plugins/plugins',
+                           'server_parameters'])
 
-coreServerFiles = [ "util/version.cpp",
+coreServerFiles = [ "db/client_basic.cpp",
                     "db/common.cpp",
                     "util/net/miniwebserver.cpp",
-                    "db/dbmessage.cpp",
                     "db/stats/counters.cpp",
                     "db/stats/service_stats.cpp",
                     ]
@@ -234,19 +312,6 @@ elif usev8:
 else:
     env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_none.cpp'],
                       LIBDEPS=['bson_template_evaluator'])
-
-# handle processinfo*
-processInfoFiles = [ "util/processinfo.cpp" ]
-
-processInfoPlatformFile = env.File( "util/processinfo_${PYSYSPLATFORM}.cpp" )
-# NOTE( schwerin ): This is a very un-scons-y way to make this decision, and prevents one from using
-# code generation to produce util/processinfo_$PYSYSPLATFORM.cpp.
-if not os.path.exists( str( processInfoPlatformFile ) ):
-    processInfoPlatformFile = env.File( "util/processinfo_none.cpp" )
-
-processInfoFiles.append( processInfoPlatformFile )
-
-coreServerFiles += processInfoFiles
 
 # handle systeminfo*
 systemInfoPlatformFile = env.File( "util/systeminfo_${PYSYSPLATFORM}.cpp" )
@@ -302,7 +367,6 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/client_load.cpp",
                     "db/database.cpp",
                     "db/cursor.cpp",
-                    "db/security.cpp",
                     "db/query_optimizer.cpp",
                     "db/query_optimizer_internal.cpp",
                     "db/queryoptimizercursorimpl.cpp",
@@ -343,7 +407,8 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "util/elapsed_tracker.cpp"
                   ]
 
-env.Library( "dbcmdline", "db/cmdline.cpp" )
+env.Library( "dbcmdline", "db/cmdline.cpp", LIBDEPS=['bson', 'server_parameters'] )
+env.CppUnitTest('cmdline_test', 'db/cmdline_test.cpp', LIBDEPS=['dbcmdline'])
 
 env.CppUnitTest('v8_deadline_monitor_test', 'scripting/v8_deadline_monitor_test.cpp', LIBDEPS=[])
 
@@ -379,14 +444,37 @@ mongosLibraryFiles = [
     "s/balancer_policy.cpp",
     "s/writeback_listener.cpp",
     "s/shard_version.cpp",
-    "s/security.cpp",
     ]
 
-env.Library( "mongoscore" , mongosLibraryFiles )
+env.Library( "mongoscore" , mongosLibraryFiles, LIBDEPS=['db/auth/authmongos'] )
 
 env.CppUnitTest( "balancer_policy_test" , [ "s/balancer_policy_tests.cpp" ] , LIBS=env['LIBS'] + tokulibs,
-                 LIBDEPS=["mongoscore", "coreshard","mongocommon","coreserver","coredb","dbcmdline","mongodandmongos"] ,
+                 LIBDEPS=["mongoscore", "coreshard", "mongocommon","coreserver","coredb","dbcmdline","mongodandmongos"] ,
                  NO_CRUTCH=True)
+
+env.CppUnitTest("scoped_db_conn_test", [ "client/scoped_db_conn_test.cpp" ], LIBS=env['LIBS'] + tokulibs,
+                 LIBDEPS=[
+                    "coredb",
+                    "coreserver",
+                    "coreshard",
+                    "dbcmdline",
+                    "mongocommon",
+                    "mongodandmongos",
+                    "mongoscore"],
+                 NO_CRUTCH=True)
+
+env.CppUnitTest("shard_conn_test", [ "s/shard_conn_test.cpp" ], LIBS=env['LIBS'] + tokulibs,
+                 LIBDEPS=[
+                    "mongoscore",
+                    "coreshard",
+                    "mongocommon",
+                    "coreserver",
+                    "coredb",
+                    "dbcmdline",
+                    "mongodandmongos",
+                    "mocklib"],
+                 NO_CRUTCH=True)
+
 
 # Should only need stuff from util, unittest and platform
 env.CppUnitTest("fail_point_test", [ "util/fail_point_test.cpp" ],
@@ -415,12 +503,15 @@ env.StaticLibrary("defaultversion", "s/default_version.cpp")
 
 env.StaticLibrary("serveronly", serverOnlyFiles,
                   LIBDEPS=["coreshard",
+                           "db/auth/authmongod",
                            "dbcmdline",
                            "defaultversion"])
 
 # These files go into mongos and mongod only, not into the shell or any tools.
 mongodAndMongosFiles = [
     "db/connection_factory.cpp",
+    "db/initialize_server_global_state.cpp",
+    "db/server_extra_log_context.cpp",
     "util/net/message_server_port.cpp",
     ]
 env.StaticLibrary("mongodandmongos", mongodAndMongosFiles)
@@ -442,8 +533,12 @@ env.StaticLibrary("coreserver", coreServerFiles, LIBDEPS=["mongocommon", "script
 # main db target
 mongod = env.Install(
     '#/', env.Program( "mongod", mongodOnlyFiles, LIBS=['HotBackup'] + env['LIBS'] + tokulibs,
-                       LIBDEPS=["coreserver", "serveronly", "coredb", "ntservice",
-                                "mongodandmongos"] + env['MODULE_LIBDEPS_MONGOD'] ) )
+                       LIBDEPS=["coredb",
+                                "coreserver",
+                                "mongodandmongos",
+                                "ntservice",
+                                "serveronly",
+                                ] + env['MODULE_LIBDEPS_MONGOD'] ) )
 Default( mongod )
 
 # tools
@@ -476,25 +571,39 @@ mongos = env.Program(
              "mongodandmongos"] + env['MODULE_LIBDEPS_MONGOS'])
 env.Install( '#/', mongos )
 
-env.Library("clientandshell", ["client/authentication_table_client.cpp",
-                               "client/clientAndShell.cpp"],
+env.Library("clientandshell", ["client/clientAndShell.cpp"],
                               LIBDEPS=["mongocommon",
                                        "defaultversion",
                                        "gridfs",
                                        "notmongodormongos"])
 env.Library("allclient", "client/clientOnly.cpp", LIBDEPS=["clientandshell"])
 
-if has_option( "sharedclient" ):
-    sharedClientLibName = str( env.SharedLibrary( "mongoclient", [], LIBDEPS=["allclient"] )[0] )
-
 # dbtests test binary
 env.StaticLibrary('testframework', ['dbtests/framework.cpp'], LIBDEPS=['unittest/unittest'])
 
+env.StaticLibrary('mocklib', [
+        'dbtests/mock/mock_conn_registry.cpp',
+        'dbtests/mock/mock_dbclient_connection.cpp',
+        'dbtests/mock/mock_dbclient_cursor.cpp',
+        'dbtests/mock/mock_remote_db_server.cpp',
+        'dbtests/mock/mock_replica_set.cpp'
+    ],
+    LIBDEPS=['mongocommon'])
+
 test = testEnv.Install(
     '#/',
-    testEnv.Program( "test", [ f for f in Glob( "dbtests/*.cpp" ) if not str( f ).endswith( 'framework.cpp' ) ],
-                     LIBS=env['LIBS'] + tokulibs,
-                     LIBDEPS=["mongocommon", "serveronly", "coreserver", "coredb", "testframework", "gridfs", "notmongodormongos" ] ) )
+    testEnv.Program("test",
+                    [ f for f in Glob("dbtests/*.cpp") if not str(f).endswith('framework.cpp') ],
+                    LIBS=env['LIBS'] + tokulibs,
+                    LIBDEPS = [
+                       "mongocommon",
+                       "serveronly",
+                       "coreserver",
+                       "coredb",
+                       "testframework",
+                       "gridfs",
+                       "notmongodormongos",
+                       "mocklib"]))
 
 if len(testEnv.subst('$PROGSUFFIX')):
     testEnv.Alias( "test", "#/${PROGPREFIX}test${PROGSUFFIX}" )
@@ -514,7 +623,7 @@ if darwin or env["_HAVEPCAP"]:
     sniffEnv.Append(LIBS=tokulibs)
 
     sniffEnv.Install( '#/', sniffEnv.Program( "mongosniff", "tools/sniffer.cpp",
-                                              LIBDEPS=["gridfs", "serveronly", "coreserver", "coredb", "notmongodormongos"] ) )
+                                              LIBDEPS=["gridfs", "serveronly", "coreserver", "coredb", "notmongodormongos"]))
 
 # --- shell ---
 
@@ -542,7 +651,7 @@ if shellEnv is not None:
     mongo_shell = shellEnv.Program(
         "mongo",
         coreShellFiles,
-        LIBDEPS=["coreserver", "clientandshell",
+        LIBDEPS=[ "clientandshell", "mongocommon", "scripting", 
                  "$BUILD_DIR/third_party/pcrecpp"] + env['MODULE_LIBDEPS_MONGOSHELL'] )
 
     shellEnv.Install( '#/', mongo_shell )
@@ -616,20 +725,6 @@ if shellEnv is not None:
     installBinary( env, "mongo", False )
 
 env.Alias( "core", [ '#/%s' % b for b in [ add_exe( "mongo" ), add_exe( "mongod" ), add_exe( "mongos" ) ] ] )
-
-#headers
-if installSetup.headers:
-    for id in [ "", "util/", "util/net/", "util/mongoutils/", "util/concurrency/", "db/",
-                "db/stats/", "db/repl/", "db/ops/", "client/", "bson/", "bson/util/", "s/",
-                "scripting/", "base/", "platform/" ]:
-        env.Install( "$INSTALL_DIR/include/" + id, Glob( id + "*.h" ) )
-        env.Install( "$INSTALL_DIR/include/" + id, Glob( id + "*.hpp" ) )
-
-#lib
-if installSetup.libraries:
-    env.Install('$INSTALL_DIR/$NIX_LIB_DIR', '#${LIBPREFIX}mongoclient${LIBSUFFIX}')
-    if has_option( "sharedclient" ):
-        env.Install( "$INSTALL_DIR/$NIX_LIB_DIR",  '#${SHLIBPREFIX}mongoclient${SHLIBSUFFIX}')
 
 toku_readme_cmd = env.Command('distsrc/README-TOKUKV', tokusrc.File('README-TOKUDB'), 'sed -e s/TokuDB/TokuKV/g $SOURCE > $TARGET')
 toku_readme = env.File('distsrc/README-TOKUKV')

@@ -29,6 +29,8 @@
 
 #include <boost/filesystem.hpp>
 
+#include "mongo/base/init.h"
+#include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/plugins/dl.h"
@@ -347,11 +349,19 @@ namespace mongo {
 
         fs::path Loader::defaultPluginsDir() {
             ProcessInfo p;
-            fs::path exePath(p.getExePath());
+            fs::path exePath = p.getExePath();
             return exePath.parent_path().parent_path() / "lib64" / "plugins";
         }
 
-        Loader loader;
+        Loader *loader;
+
+        namespace {
+            MONGO_INITIALIZER(CreatePluginLoader)(InitializerContext* context) {
+                // intentionally leaked
+                loader = new Loader;
+                return Status::OK();
+            }
+        } // namespace
 
     }  // namespace plugins
 

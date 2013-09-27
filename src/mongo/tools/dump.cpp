@@ -28,6 +28,7 @@
 
 #include "mongo/base/initializer.h"
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/tools/tool.h"
 
 using namespace mongo;
@@ -200,7 +201,7 @@ public:
             }
 
             // skip namespaces with $ in them only if we don't specify a collection to dump
-            if ( _coll == "" && name.find( ".$" ) != string::npos ) {
+            if ( _coll.empty() && name.find( ".$" ) != string::npos ) {
                 LOG(1) << "\tskipping collection: " << name << endl;
                 continue;
             }
@@ -208,7 +209,7 @@ public:
             const string filename = name.substr( db.size() + 1 );
 
             //if a particular collections is specified, and it's not this one, skip it
-            if ( _coll != "" && db + "." + _coll != name && _coll != name )
+            if ( !_coll.empty() && db + "." + _coll != name && _coll != name )
                 continue;
 
             // raise error before writing collection with non-permitted filename chars in the name
@@ -219,11 +220,11 @@ public:
             }
             
             // Don't dump indexes
-            if ( endsWith(name.c_str(), ".system.indexes") ) {
+            if (nsToCollectionSubstring(name) == "system.indexes") {
               continue;
             }
             
-            if ( _coll != "" && db + "." + _coll != name && _coll != name )
+            if ( !_coll.empty() && db + "." + _coll != name && _coll != name )
               continue;
             
             collections.push_back(name);
@@ -295,8 +296,6 @@ public:
                 }
             }
 
-            auth("local");
-
             BSONObj op = conn(true).findOne(opLogName, Query().sort("$natural", -1), 0, QueryOption_SlaveOk);
             if (op.isEmpty()) {
                 log() << "No operations in oplog. Please ensure you are connecting to a master." << endl;
@@ -310,7 +309,6 @@ public:
         string out = getParam("out");
         if ( out == "-" ) {
             if ( _db != "" && _coll != "" ) {
-                auth( _db );
                 writeCollectionStdout( _db+"."+_coll );
                 return 0;
             }
@@ -327,7 +325,6 @@ public:
 
         if ( db == "" ) {
             log() << "all dbs" << endl;
-            auth( "admin" );
 
             BSONObj res = conn( true ).findOne( "admin.$cmd" , BSON( "listDatabases" << 1 ) );
             if ( ! res["databases"].isABSONObj() ) {
@@ -355,7 +352,6 @@ public:
             }
         }
         else {
-            auth( db );
             go( db , root / db );
         }
 

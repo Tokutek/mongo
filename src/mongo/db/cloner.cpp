@@ -18,15 +18,22 @@
 */
 
 #include "mongo/pch.h"
+#include "mongo/base/init.h"
+#include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
 #include "mongo/bson/util/builder.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/client/remote_transaction.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cloner.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/commands/rename_collection.h"
 #include "mongo/db/instance.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/oplog_helpers.h"
@@ -202,7 +209,7 @@ namespace mongo {
                 ++n;
 
                 if (isindex) {
-                    verify(strstr(from_collection, "system.indexes"));
+                    verify(nsToCollectionSubstring(from_collection) == "system.indexes");
                     storedForLater->push_back(fixindex(js, to_dbname).getOwned());
                 }
                 else {
@@ -322,7 +329,7 @@ namespace mongo {
 
         if( copyIndexes ) {
             // indexes
-            string dbname = nsToDatabase(ns) + ".system.indexes";
+            string dbname = getSisterNS(ns, "system.indexes");
             copy(
                 dbname.c_str(),
                 dbname.c_str(),
@@ -345,7 +352,7 @@ namespace mongo {
     {
         {
             // config
-            string temp = cc().database()->name() + ".system.namespaces";
+            string temp = getSisterNS(cc().database()->name(), "system.namespaces");
             BSONObj config = conn->findOne( temp , BSON( "name" << ns ) );
             if ( config["options"].isABSONObj() ) {
                 if ( !userCreateNS(
@@ -410,7 +417,7 @@ namespace mongo {
         /* todo: we can put these releases inside dbclient or a dbclient specialization.
            or just wait until we get rid of global lock anyway.
            */
-        string ns = opts.fromDB + ".system.namespaces";
+        string ns = getSisterNS(opts.fromDB, "system.namespaces");
         list<BSONObj> toClone;
         vector<string> toCloneNames;
         clonedColls.clear();
@@ -456,9 +463,9 @@ namespace mongo {
                 }
                 verify( !e.eoo() );
                 verify( e.type() == String );
-                const char *from_name = e.valuestr();
+                StringData from_name = e.Stringdata();
 
-                if( strstr(from_name, ".system.") ) {
+                if( NamespaceString::isSystem(from_name) ) {
                     // system.users and s.js is cloned -- but nothing else from system.
                     // * system.indexes is handled specially at the end
                     if( legalClientSystemNS( from_name , true ) == 0 ) {
@@ -471,7 +478,8 @@ namespace mongo {
                     continue;
                 }
 
-                if( opts.collsToIgnore.find( string( from_name ) ) != opts.collsToIgnore.end() ){
+                string from_name_str = from_name.toString();
+                if( opts.collsToIgnore.find( from_name_str ) != opts.collsToIgnore.end() ){
                     LOG(2) << "\t\t ignoring collection " << from_name << endl;
                     continue;
                 }
@@ -479,9 +487,9 @@ namespace mongo {
                     LOG(2) << "\t\t not ignoring collection " << from_name << endl;
                 }
 
-                clonedColls.insert( from_name );
+                clonedColls.insert( from_name_str );
                 toClone.push_back( collection.getOwned() );
-                toCloneNames.push_back(from_name);
+                toCloneNames.push_back( from_name_str );
             }
         }
 
@@ -528,8 +536,8 @@ namespace mongo {
         // now build the indexes
         
         if ( opts.syncIndexes ) {
-            string system_indexes_from = opts.fromDB + ".system.indexes";
-            string system_indexes_to = todb + ".system.indexes";
+            string system_indexes_from = getSisterNS(opts.fromDB, "system.indexes");
+            string system_indexes_to = getSisterNS(todb, "system.indexes");
             
             // [dm]: is the ID index sometimes not called "_id_"?  There is 
             // other code in the system that looks for a "_id" prefix
@@ -576,6 +584,13 @@ namespace mongo {
         CmdCollectionsExist() : QueryCommand("_collectionsExist") {}
         virtual void help(stringstream &h) const { h << "internal use only"; }
         virtual bool slaveOk() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::collectionsExist);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
         virtual bool run(const string &dbname, BSONObj &jsobj, int, string &errmsg, BSONObjBuilder &result, bool) {
             BSONElement arrElt = jsobj["_collectionsExist"];
             if (!arrElt.ok() || arrElt.type() != Array) {
@@ -671,6 +686,8 @@ namespace mongo {
 
     /* Usage:
        mydb.$cmd.findOne( { clone: "fromhost" } );
+       Note: doesn't work with authentication enabled, except as internal operation or for
+       old-style users for backwards compatibility.
     */
     class CmdClone : public Command {
     public:
@@ -685,6 +702,15 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << "clone this database from an instance of the db on another host\n";
             help << "{ clone : \"host13\" }";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            // Note: privileges required are currently only granted to old-style users for backwards
+            // compatibility, and to internal connections (used in movePrimary).
+            ActionSet actions;
+            actions.addAction(ActionType::clone);
+            out->push_back(Privilege(dbname, actions));
         }
         CmdClone() : Command("clone") { }
         
@@ -763,7 +789,7 @@ namespace mongo {
             return rval;
 
         }
-    } cmdclone;
+    } cmdClone;
 
     class CmdCloneCollection : public Command {
     public:
@@ -776,6 +802,17 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool requiresSync() const { return true; }
         CmdCloneCollection() : Command("cloneCollection") { }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            // Will fail if source instance has auth on.
+            string collection = cmdObj.getStringField("cloneCollection");
+            uassert(16709, "bad 'cloneCollection' value", !collection.empty());
+
+            ActionSet actions;
+            actions.addAction(ActionType::cloneCollectionTarget);
+            out->push_back(Privilege(collection, actions));
+        }
         virtual void help( stringstream &help ) const {
             help << "{ cloneCollection: <collection>, from: <host> [,query: <query_filter>] [,copyIndexes:<bool>] }"
                  "\nCopies a collection from one server to another. Do not use on a single server as the destination "
@@ -851,7 +888,7 @@ namespace mongo {
 
             return retval;
         }
-    } cmdclonecollection;
+    } cmdCloneCollection;
 
 
     /* Usage:
@@ -871,6 +908,9 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {} // No auth required
         virtual void help( stringstream &help ) const {
             help << "get a nonce for subsequent copy db request from secure server\n";
             help << "usage: {copydbgetnonce: 1, fromhost: <hostname>}";
@@ -906,10 +946,11 @@ namespace mongo {
             result.appendElements( ret );
             return true;
         }
-    } cmdcopydbgetnonce;
+    } cmdCopyDBGetNonce;
 
     /* Usage:
        admindb.$cmd.findOne( { copydb: 1, fromhost: <hostname>, fromdb: <db>, todb: <db>[, username: <username>, nonce: <nonce>, key: <key>] } );
+       Note: doesn't work with authentication enabled, except as old-style users.
     */
     class CmdCopyDb : public Command {
     public:
@@ -925,6 +966,16 @@ namespace mongo {
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual bool requiresSync() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            // Note: privileges required are currently only granted to old-style users for backwards
+            // compatibility, since we can't properly handle auth checking for the read from the
+            // source DB.
+            ActionSet actions;
+            actions.addAction(ActionType::copyDBTarget);
+            out->push_back(Privilege(dbname, actions));
+        }
         virtual void help( stringstream &help ) const {
             help << "copy a database from another host to this host\n";
             help << "usage: {copydb: 1, fromhost: <hostname>, fromdb: <db>, todb: <db>[, slaveOk: <bool>, username: <username>, nonce: <nonce>, key: <key>]}";
@@ -1045,6 +1096,6 @@ namespace mongo {
             cc().setAuthConn(emptyConn);
             return res;
         }
-    } cmdcopydb;
+    } cmdCopyDB;
 
 } // namespace mongo

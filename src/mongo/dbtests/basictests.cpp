@@ -393,7 +393,8 @@ namespace BasicTests {
 
             ASSERT( NamespaceString::normal( "asdads" ) );
             ASSERT( ! NamespaceString::normal( "asda$ds" ) );
-            ASSERT( NamespaceString::normal( "local.oplog.$main" ) );
+            // This is no longer the case in TokuMX, see the comment on NamespaceString::normal.
+            //ASSERT( NamespaceString::normal( "local.oplog.$main" ) );
         }
     };
 

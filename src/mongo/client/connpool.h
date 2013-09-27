@@ -21,6 +21,7 @@
 
 #include "mongo/util/background.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/platform/cstdint.h"
 
 namespace mongo {
 
@@ -34,11 +35,12 @@ namespace mongo {
     class PoolForHost {
     public:
         PoolForHost()
-            : _created(0) {}
+            : _created(0), _minValidCreationTimeMicroSec(0) {}
 
         PoolForHost( const PoolForHost& other ) {
             verify(other._pool.size() == 0);
             _created = other._created;
+            _minValidCreationTimeMicroSec = other._minValidCreationTimeMicroSec;
             verify( _created == 0 );
         }
 
@@ -47,7 +49,7 @@ namespace mongo {
         int numAvailable() const { return (int)_pool.size(); }
 
         void createdOne( DBClientBase * base );
-        long long numCreated() const { return _created; }
+        int64_t numCreated() const { return _created; }
 
         ConnectionString::ConnectionType type() const { verify(_created); return _type; }
 
@@ -65,6 +67,23 @@ namespace mongo {
         
         void getStaleConnections( vector<DBClientBase*>& stale );
 
+        /**
+         * Sets the lower bound for creation times that can be considered as
+         *     good connections.
+         */
+        void reportBadConnectionAt(uint64_t microSec);
+
+        /**
+         * @return true if the given creation time is considered to be not
+         *     good for use.
+         */
+        bool isBadSocketCreationTime(uint64_t microSec);
+
+        /**
+         * Sets the host name to a new one, only if it is currently empty.
+         */
+        void initializeHostName(const std::string& hostName);
+
         static void setMaxPerHost( unsigned max ) { _maxPerHost = max; }
         static unsigned getMaxPerHost() { return _maxPerHost; }
     private:
@@ -78,9 +97,11 @@ namespace mongo {
             time_t when;
         };
 
+        std::string _hostName;
         std::stack<StoredConnection> _pool;
         
-        long long _created;
+        int64_t _created;
+        uint64_t _minValidCreationTimeMicroSec;
         ConnectionString::ConnectionType _type;
 
         static unsigned _maxPerHost;
@@ -132,6 +153,22 @@ namespace mongo {
 
         void addHook( DBConnectionHook * hook ); // we take ownership
         void appendInfo( BSONObjBuilder& b );
+
+        /**
+         * Clears all connections for all host.
+         */
+        void clear();
+
+        /**
+         * Checks whether the connection for a given host is black listed or not.
+         *
+         * @param hostName the name of the host the connection connects to.
+         * @param conn the connection to check.
+         *
+         * @return true if the connection is not bad, meaning, it is good to keep it for
+         *     future use.
+         */
+        bool isConnectionGood(const string& host, DBClientBase* conn);
 
         // Removes and deletes all connections from the pool for the host (regardless of timeout)
         void removeHost( const string& host );
@@ -229,15 +266,12 @@ namespace mongo {
                                                          double socketTimeout = 0);
         static ScopedDbConnection* getScopedDbConnection();
 
-        // Gets a ScopedDbConnection designed to be used for internal communication within a cluster
-        // The mongod/mongos implementations of these set the AuthenticationTable on the underlying
-        // connection to the internalSecurity permissions.  All commands run on the shard mongods
-        // using this connection will have full access.  If the command should only be run on the
-        // shard if the client has permission to do so, then use getScopedDbConnection().
-        // These functions should not be called by consumers of the C++ client library.
+        // DEPRECATED. This is now just a synonym for getScopedDbConnection.
         static ScopedDbConnection* getInternalScopedDbConnection(const string& host,
                                                                  double socketTimeout = 0);
         static ScopedDbConnection* getInternalScopedDbConnection();
+
+        static void clearPool();
 
         ~ScopedDbConnection();
 
@@ -286,7 +320,6 @@ namespace mongo {
                 kill();
             else
             */
-            _conn->clearAuthenticationTable();
             pool.release(_host, _conn);
             _conn = 0;
         }

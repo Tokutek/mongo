@@ -342,16 +342,25 @@ jsTestPath = function(){
     return "__unknown_path__"
 }
 
+var _jsTestOptions = { enableTestCommands : true }; // Test commands should be enabled by default
+
 jsTestOptions = function(){
-    if( TestData ) return { noJournal : TestData.noJournal,
-                            noJournalPrealloc : TestData.noJournalPrealloc,
-                            auth : TestData.auth,
-                            keyFile : TestData.keyFile,
-                            authUser : "__system",
-                            authPassword : TestData.keyFileData,
-                            adminUser : "admin",
-                            adminPassword : "password" }
-    return {}
+    if( TestData ) {
+        return Object.merge(_jsTestOptions,
+                            { noJournal : TestData.noJournal,
+                              noJournalPrealloc : TestData.noJournalPrealloc,
+                              auth : TestData.auth,
+                              keyFile : TestData.keyFile,
+                              authUser : "__system",
+                              authPassword : TestData.keyFileData,
+                              adminUser : TestData.adminUser || "admin",
+                              adminPassword : TestData.adminPassword || "password" });
+    }
+    return _jsTestOptions;
+}
+
+setJsTestOption = function(name, value) {
+    _jsTestOptions[name] = value;
 }
 
 jsTestLog = function(msg){
@@ -364,6 +373,7 @@ jsTest.name = jsTestName
 jsTest.file = jsTestFile
 jsTest.path = jsTestPath
 jsTest.options = jsTestOptions
+jsTest.setOption = setJsTestOption
 jsTest.log = jsTestLog
 
 jsTest.dir = function(){
@@ -397,14 +407,32 @@ jsTest.addAuth = function(conn) {
 }
 
 jsTest.authenticate = function(conn) {
-    // Set authenticated to stop an infinite recursion from getDB calling back into authenticate
-    conn.authenticated = true;
-    if (jsTest.options().auth || jsTest.options().keyFile) {
-        print ("Authenticating to admin user on connection: " + conn);
-        conn.authenticated = conn.getDB('admin').auth(jsTestOptions().adminUser,
-                                                      jsTestOptions().adminPassword);
-        return conn.authenticated;
+    if (!jsTest.options().auth && !jsTest.options().keyFile) {
+        conn.authenticated = true;
+        return true;
     }
+
+    try {
+        jsTest.attempt({timeout:5000, sleepTime:1000},
+                       function() {
+                           // Set authenticated to stop an infinite recursion from getDB calling
+                           // back into authenticate.
+                           conn.authenticated = true;
+                           print ("Authenticating to admin database as " +
+                                  jsTestOptions().adminUser + " with mechanism " +
+                                  DB.prototype._defaultAuthenticationMechanism +
+                                  " on connection: " + conn);
+                           conn.authenticated = conn.getDB('admin').auth({
+                               user: jsTestOptions().adminUser,
+                               pwd: jsTestOptions().adminPassword
+                           });
+                           return conn.authenticated;
+                       });
+    } catch (e) {
+        print("Caught exception while authenticating connection: " + tojson(e));
+        conn.authenticated = false;
+    }
+    return conn.authenticated;
 }
 
 jsTest.authenticateNodes = function(nodes) {
@@ -433,7 +461,7 @@ jsTest.isMongos = function(conn) {
 jsTest.attempt = function( opts, func ) {
     var timeout = opts.timeout || 1000;
     var tries   = 0;
-    var sleepTime = 2000;
+    var sleepTime = opts.sleepTime || 2000;
     var result = null;
     var context = opts.context || this;
 

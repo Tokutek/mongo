@@ -22,6 +22,7 @@
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/query_plan_selection_policy.h"
@@ -601,7 +602,7 @@ namespace mongo {
         // and it's a capped collection
         // we warn as it's a common user error
         // .system. and local collections are exempt
-        const char* ns = _qps.frsp().ns();
+        StringData ns = _qps.frsp().ns();
         NamespaceDetails* d = nsdetails( ns );
         if ( d &&
              d->isCapped() &&
@@ -609,7 +610,7 @@ namespace mongo {
              ( _qps.firstPlan()->utility() != QueryPlan::Impossible ) &&
              !_qps.firstPlan()->indexed() &&
              !_qps.firstPlan()->multikeyFrs().range( "_id" ).universal() ) {
-            if ( !str::contains( ns , ".system." ) && !str::startsWith( ns , "local." ) ) {
+            if (!NamespaceString::isSystem(ns) && nsToDatabaseSubstring(ns) != "local") {
                 warning() << "unindexed _id query on capped collection, "
                           << "performance will be poor collection: " << ns << endl;
             }

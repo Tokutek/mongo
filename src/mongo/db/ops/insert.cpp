@@ -32,18 +32,11 @@ namespace mongo {
 
     static bool handle_system_collection_insert(const char *ns, const BSONObj &obj, bool logop) {
         // Trying to insert into a system collection.  Fancy side-effects go here:
-        if (mongoutils::str::endsWith(ns, ".system.indexes")) {
+        if (nsToCollectionSubstring(ns) == "system.indexes") {
             // Creating an index creates the collection if it doesn't already exist.
             NamespaceDetails *d = getAndMaybeCreateNS(obj["ns"].Stringdata(), logop);
             return d->ensureIndex(obj);
-        } else if (legalClientSystemNS(ns, true)) {
-            if (mongoutils::str::endsWith(ns, ".system.users")) {
-                uassert( 14051 , "system.users entry needs 'user' field to be a string", obj["user"].type() == String );
-                uassert( 14052 , "system.users entry needs 'pwd' field to be a string", obj["pwd"].type() == String );
-                uassert( 14053 , "system.users entry needs 'user' field to be non-empty", obj["user"].String().size() );
-                uassert( 14054 , "system.users entry needs 'pwd' field to be non-empty", obj["pwd"].String().size() );
-            }
-        } else {
+        } else if (!legalClientSystemNS(ns, true)) {
             uasserted(16459, str::stream() << "attempt to insert in system namespace '" << ns << "'");
         }
         return true;
@@ -94,9 +87,10 @@ namespace mongo {
     }
 
     void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
-        if (mongoutils::str::contains(ns, "system.")) {
+        StringData _ns(ns);
+        if (NamespaceString::isSystem(_ns)) {
             massert(16748, "need transaction to run insertObjects", cc().txnStackSize() > 0);
-            uassert(10095, "attempt to insert in reserved database name 'system'", !mongoutils::str::startsWith(ns, "system."));
+            uassert(10095, "attempt to insert in reserved database name 'system'", nsToDatabaseSubstring(_ns) != "system");
             massert(16750, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
             if (!handle_system_collection_insert(ns, objs[0], logop)) {
                 return;
