@@ -22,7 +22,10 @@ testDB.system.users.createIndex({haxx:1}, {unique:true, dropDups:true});
 assertGLENotOK(testDB.getLastErrorObj());
 testDB.exploit.system.indexes.insert({ns: "test.system.users", key: { haxx: 1.0 }, name: "haxx_1",
                                       unique: true, dropDups: true});
-assertGLENotOK(testDB.getLastErrorObj());
+// In TokuMX, the above is OK, but it inserts a fairly nonsense document into a
+// weird-looking collection named "exploit.system.indexes".  We just need to
+// make sure it doesn't actually build an index.
+assert.eq(null, testDB.getLastError());
 // Make sure that no indexes were built.
 assert.eq(null,
           testDB.system.namespaces.findOne(

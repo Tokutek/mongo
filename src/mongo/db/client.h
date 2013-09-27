@@ -309,6 +309,7 @@ namespace mongo {
         bool _shutdown; // to track if Client::shutdown() gets called
         std::string _desc;
         bool _god;
+        StringData _creatingSystemUsers;
         GTID _lastGTID;
         BSONObj _handshake;
         BSONObj _remoteId;
@@ -320,6 +321,16 @@ namespace mongo {
         LockState _ls;
         
     public:
+
+        /* declare that we're creating system.users for some db
+           therefore we should not care about authing for ensureIndex on system colls */
+        class CreatingSystemUsersScope : boost::noncopyable {
+            StringData _prev;
+          public:
+            CreatingSystemUsersScope();
+            ~CreatingSystemUsersScope();
+        };
+        bool creatingSystemUsers() const;
 
         /* set _god=true temporarily, safely */
         class GodScope {

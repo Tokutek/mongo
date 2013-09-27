@@ -25,6 +25,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/storage/exception.h"
 
 namespace mongo {
 
@@ -40,20 +41,25 @@ namespace mongo {
     bool AuthExternalStateMongod::_findUser(const string& usersNamespace,
                                             const BSONObj& query,
                                             BSONObj* result) const {
-        Client::GodScope gs;
-        Client::ReadContext ctx(usersNamespace);
-        // we want all authentication stuff to happen on an alternate stack
-        Client::AlternateTransactionStack altStack;
-        Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+        bool ok = false;
+        try {
+            Client::GodScope gs;
+            Client::ReadContext ctx(usersNamespace);
+            // we want all authentication stuff to happen on an alternate stack
+            Client::AlternateTransactionStack altStack;
 
-        NamespaceDetails *d = nsdetails(usersNamespace);
-        if (d == NULL) {
-            return false;
-        }
-        BSONObj tmpResult;
-        bool ok = d->findOne(query, result != NULL ? *result : tmpResult);
-        if (ok) {
-            txn.commit();
+            Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+            NamespaceDetails *d = nsdetails(usersNamespace);
+            if (d == NULL) {
+                return false;
+            }
+            BSONObj tmpResult;
+            ok = d->findOne(query, result != NULL ? *result : tmpResult);
+            if (ok) {
+                txn.commit();
+            }
+        } catch (storage::LockException &e) {
+            LOG(1) << "Couldn't read from system.users because of " << e.what() << ", assuming it's empty.";
         }
         return ok;
     }

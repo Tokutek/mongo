@@ -35,6 +35,7 @@
 #include "mongo/db/auth/auth_external_state_d.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/curop.h"
+#include "mongo/db/database.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/json.h"
 #include "mongo/db/commands.h"
@@ -57,6 +58,24 @@ namespace mongo {
 
 
     TSP_DEFINE(Client, currentClient)
+
+    Client::CreatingSystemUsersScope::CreatingSystemUsersScope()
+            : _prev(cc()._creatingSystemUsers) {
+        Client &c = cc();
+        Database *d = c.database();
+        massert(17013, "no database context open", d != NULL);
+        c._creatingSystemUsers = d->name();
+    }
+
+    Client::CreatingSystemUsersScope::~CreatingSystemUsersScope() {
+        cc()._creatingSystemUsers = _prev;
+    }
+
+    bool Client::creatingSystemUsers() const {
+        Database *d = database();
+        massert(17014, "no database context open", d != NULL);
+        return _creatingSystemUsers == d->name();
+    }
 
     /* each thread which does db operations has a Client object in TLS.
        call this when your thread starts.

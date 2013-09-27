@@ -928,6 +928,7 @@ namespace mongo {
         } else if (isSystemCatalog(ns)) {
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(ns, options));
         } else if (isSystemUsersCollection(ns)) {
+            Client::CreatingSystemUsersScope scope;
             return shared_ptr<NamespaceDetails>(new SystemUsersCollection(ns, options));
         } else if (isProfileCollection(ns)) {
             // TokuMX doesn't _necessarily_ need the profile to be capped, but vanilla does.
@@ -1380,10 +1381,6 @@ namespace mongo {
     // Wrapper for offline (write locked) indexing.
     void NamespaceDetails::createIndex(const BSONObj &info) {
         const string sourceNS = info["ns"].String();
-        uassert(16548,
-                mongoutils::str::stream() << "not authorized to create index on " << sourceNS,
-                cc().getAuthorizationManager()->checkAuthorization(sourceNS,
-                                                                   ActionType::ensureIndex));
 
         if (!Lock::isWriteLocked(_ns)) {
             throw RetryWithWriteLock();
