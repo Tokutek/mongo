@@ -28,6 +28,7 @@
 #include "mongo/db/index.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/queryoptimizercursor.h"
+#include "mongo/db/query_plan_selection_policy.h"
 #include "mongo/db/querypattern.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/storage/env.h"

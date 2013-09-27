@@ -30,6 +30,7 @@
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/query.h"
 #include "mongo/dbtests/dbtests.h"
+#include "mongo/db/parsed_query.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {

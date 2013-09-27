@@ -31,7 +31,8 @@
 namespace mongo {
 
     const char* Mod::modNames[] = { "$inc", "$set", "$push", "$pushAll", "$pull", "$pullAll" , "$pop", "$unset" ,
-                                    "$bitand" , "$bitor" , "$bit" , "$addToSet", "$rename", "$rename"
+                                    "$bitand" , "$bitor" , "$bit" , "$addToSet", "$rename", "$rename" ,
+                                    "$setOnInsert"
                                   };
     unsigned Mod::modNamesNum = sizeof(Mod::modNames)/sizeof(char*);
 
@@ -104,6 +105,14 @@ namespace mongo {
             // being in inc{int,long,double} inside the ModState that wraps around this Mod.
             break;
         }
+
+        case SET_ON_INSERT:
+            // There is a corner case that would land us here (making a change to an existing
+            // field with $setOnInsert). If we're in an upsert, and the query portion of the
+            // update creates a field, we can modify it with $setOnInsert. This degenerates
+            // into a $set, so we fall through to the next case.
+            ms.fixedOpName = "$set";
+            // Fall through.
 
         case SET: {
             _checkForAppending( elt );
@@ -399,7 +408,7 @@ namespace mongo {
         return !obj.getField( path ).eoo();
     }
 
-    auto_ptr<ModSetState> ModSet::prepare(const BSONObj& obj) const {
+    auto_ptr<ModSetState> ModSet::prepare(const BSONObj& obj, bool insertion) const {
         DEBUGUPDATE( "\t start prepare" );
         auto_ptr<ModSetState> mss( new ModSetState( obj ) );
 
@@ -438,7 +447,7 @@ namespace mongo {
                 continue;
             }
 
-            if ( e.eoo() ) {
+            if ( m.op != Mod::SET_ON_INSERT && e.eoo() ) {
                 continue;
             }
 
@@ -449,6 +458,14 @@ namespace mongo {
 
             default:
             case Mod::SET:
+                break;
+
+            case Mod::SET_ON_INSERT:
+                // If the document exist (i.e this is an update, not an insert) $setOnInsert
+                // becomes a no-op.
+                if ( !insertion ) {
+                    ms.dontApply = true;
+                }
                 break;
 
             case Mod::PUSH:
@@ -614,12 +631,13 @@ namespace mongo {
             modState.fixedOpName = "$unset";
             return;
 
-        // $rename may involve dotted path creation, so we want to make sure we're not
-        // creating a path here for a rename that's a no-op. In other words if we're
-        // issuing a {$rename: {a.b : c.d} } that's a no-op, we don't want to create
-        // the a and c paths here. See test NestedNoName in the 'repl' suite.
+        // $rename/$setOnInsert may involve dotted path creation, so we want to make sure we're
+        // not creating a path here for a rename that's a no-op. In other words if we're
+        // issuing a {$rename: {a.b : c.d} } that's a no-op, we don't want to create the a and
+        // c paths here. See test NestedNoName in the 'repl' suite.
         case Mod::RENAME_FROM:
         case Mod::RENAME_TO:
+        case Mod::SET_ON_INSERT:
             if (modState.dontApply) {
                 return;
             }
@@ -861,7 +879,7 @@ namespace mongo {
             newObj = bb.obj();
         }
 
-        auto_ptr<ModSetState> mss = prepare( newObj );
+        auto_ptr<ModSetState> mss = prepare( newObj, true /* this is an insertion */ );
         newObj = mss->createNewFromMods();
 
         return newObj;

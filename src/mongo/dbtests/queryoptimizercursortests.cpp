@@ -22,11 +22,13 @@
 
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/queryoptimizercursorimpl.h"
-#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/query_optimizer.h"
+#include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/json.h"
+#include "mongo/db/queryutil.h"
 #include "mongo/dbtests/dbtests.h"
 
 namespace mongo {
@@ -90,7 +92,7 @@ namespace QueryOptimizerCursorTests {
                 c.setMatch( false );
                 ASSERT( c.knowMatch() );
 
-                c.countMatch( BSONObj() );
+                c.incMatch( BSONObj() );
                 ASSERT_EQUALS( 0, c.count() );
                 ASSERT_EQUALS( 0, c.cumulativeCount() );
                 
@@ -100,19 +102,19 @@ namespace QueryOptimizerCursorTests {
                 c.setMatch( true );
                 ASSERT( c.knowMatch() );
                 
-                c.countMatch( BSONObj() );
+                c.incMatch( BSONObj() );
                 ASSERT_EQUALS( 1, c.count() );
                 ASSERT_EQUALS( 1, c.cumulativeCount() );
 
                 // Don't count the same match twice, without checking the document location.
-                c.countMatch( BSON( "a" << 1 ) );
+                c.incMatch( BSON( "a" << 1 ) );
                 ASSERT_EQUALS( 1, c.count() );
                 ASSERT_EQUALS( 1, c.cumulativeCount() );
 
                 // Reset and count another match.
                 c.resetMatch();
                 c.setMatch( true );
-                c.countMatch( BSON( "a" << 1 ) );
+                c.incMatch( BSON( "a" << 1 ) );
                 ASSERT_EQUALS( 2, c.count() );
                 ASSERT_EQUALS( 2, c.cumulativeCount() );
             }
@@ -127,7 +129,7 @@ namespace QueryOptimizerCursorTests {
                 ASSERT_EQUALS( 10, c.cumulativeCount() );
                 
                 c.setMatch( true );
-                c.countMatch( BSONObj() );
+                c.incMatch( BSONObj() );
                 ASSERT_EQUALS( 1, c.count() );
                 ASSERT_EQUALS( 11, c.cumulativeCount() );
             }
@@ -141,12 +143,12 @@ namespace QueryOptimizerCursorTests {
 
                 c.setCheckDups( true );
                 c.setMatch( true );
-                c.countMatch( BSONObj() );
+                c.incMatch( BSONObj() );
                 ASSERT_EQUALS( 1, c.count() );
 
                 c.resetMatch();
                 c.setMatch( true );
-                c.countMatch( BSONObj() );
+                c.incMatch( BSONObj() );
                 ASSERT_EQUALS( 1, c.count() );
             }
         };

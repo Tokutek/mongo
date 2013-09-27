@@ -367,8 +367,12 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/client_load.cpp",
                     "db/database.cpp",
                     "db/cursor.cpp",
-                    "db/queryoptimizer.cpp",
+                    "db/query_optimizer.cpp",
+                    "db/query_optimizer_internal.cpp",
                     "db/queryoptimizercursorimpl.cpp",
+                    "db/query_plan.cpp",
+                    "db/query_plan_selection_policy.cpp",
+                    "db/parsed_query.cpp",
                     "db/index.cpp",
                     "db/scanandorder.cpp",
                     "db/explain.cpp",
@@ -398,7 +402,10 @@ serverOnlyFiles = [ "db/curop.cpp",
                     # Most storage/ files are in coredb, but this is server-only.
                     "db/storage/loader.cpp",
                     "db/storage/indexer.cpp",
-                    "db/storage/dictionary.cpp" ]
+                    "db/storage/dictionary.cpp",
+                    
+                    "util/elapsed_tracker.cpp"
+                  ]
 
 env.Library( "dbcmdline", "db/cmdline.cpp", LIBDEPS=['bson', 'server_parameters'] )
 env.CppUnitTest('cmdline_test', 'db/cmdline_test.cpp', LIBDEPS=['dbcmdline'])

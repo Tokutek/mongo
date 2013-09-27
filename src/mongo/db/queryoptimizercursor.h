@@ -1,5 +1,3 @@
-// @file queryoptimizercursor.h - Interface for a cursor interleaving multiple candidate cursors.
-
 /**
  *    Copyright (C) 2011 10gen Inc.
  *    Copyright (C) 2013 Tokutek Inc.
@@ -20,67 +18,13 @@
 #pragma once
 
 #include "mongo/db/cursor.h"
+#include "mongo/db/query_plan_selection_policy.h"
 
 namespace mongo {
     
-    class QueryPlan;
     class CandidatePlanCharacter;
-    
-    /**
-     * An interface for policies overriding the query optimizer's default query plan selection
-     * behavior.
-     */
-    class QueryPlanSelectionPolicy {
-    public:
-        virtual ~QueryPlanSelectionPolicy() {}
-        virtual string name() const = 0;
-        virtual bool permitOptimalNaturalPlan() const { return true; }
-        virtual bool permitOptimalIdPlan() const { return true; }
-        virtual bool permitPlan( const QueryPlan &plan ) const { return true; }
-        virtual BSONObj planHint( const StringData& ns ) const { return BSONObj(); }
-        
-        /** Allow any query plan selection, permitting the query optimizer's default behavior. */
-        static const QueryPlanSelectionPolicy &any();
-
-        /** Prevent unindexed collection scans. */
-        static const QueryPlanSelectionPolicy &indexOnly();
-
-        /**
-         * Generally hints to use the _id plan, falling back to the $natural plan.  However, the
-         * $natural plan will always be used if optimal for the query.
-         */
-        static const QueryPlanSelectionPolicy &idElseNatural();
-        
-    private:
-        class Any;
-        static Any __any;
-        class IndexOnly;
-        static IndexOnly __indexOnly;
-        class IdElseNatural;
-        static IdElseNatural __idElseNatural;
-    };
-
-    class QueryPlanSelectionPolicy::Any : public QueryPlanSelectionPolicy {
-    public:
-        virtual string name() const { return "any"; }
-    };
-    
-    class QueryPlanSelectionPolicy::IndexOnly : public QueryPlanSelectionPolicy {
-    public:
-        virtual string name() const { return "indexOnly"; }
-        virtual bool permitOptimalNaturalPlan() const { return false; }
-        virtual bool permitPlan( const QueryPlan &plan ) const;
-    };
-
-    class QueryPlanSelectionPolicy::IdElseNatural : public QueryPlanSelectionPolicy {
-    public:
-        virtual string name() const { return "idElseNatural"; }
-        virtual bool permitPlan( const QueryPlan &plan ) const;
-        virtual BSONObj planHint( const StringData& ns ) const;
-    };
-    
-    class FieldRangeSet;
     class ExplainQueryInfo;
+    class FieldRangeSet;
     
     /**
      * Adds functionality to Cursor for running multiple plans, running out of order plans,
@@ -121,70 +65,5 @@ namespace mongo {
         /** @return explain output for the query run by this cursor. */
         virtual shared_ptr<ExplainQueryInfo> explainQueryInfo() const = 0;
     };
-
-    class ParsedQuery;
-    class QueryPlanSummary;
-
-    /**
-     * @return a cursor interface to the query optimizer.  The implementation may utilize a
-     * single query plan or interleave results from multiple query plans before settling on a
-     * single query plan.  Note that the schema of currKey() documents, indexKeyPattern(), the
-     * matcher(), and the isMultiKey() nature of the cursor may change over the course of
-     * iteration.
-     *
-     * @param query - Query used to select indexes and populate matchers; not copied if unowned
-     * (see bsonobj.h).
-     *
-     * @param order - Required ordering spec for documents produced by this cursor, empty object
-     * default indicates no order requirement.  If no index exists that satisfies the required
-     * sort order, an empty shared_ptr is returned unless parsedQuery is also provided.  This is
-     * not copied if unowned.
-     *
-     * @param planPolicy - A policy for selecting query plans - see queryoptimizercursor.h
-     *
-     * @param requestMatcher - Set to true to request that the returned Cursor provide a
-     * matcher().  If false, the cursor's matcher() may return NULL if the Cursor can perform
-     * accurate query matching internally using a non Matcher mechanism.  One case where a
-     * Matcher might be requested even though not strictly necessary to select matching
-     * documents is if metadata about matches may be requested using MatchDetails.  NOTE This is
-     * a hint that the Cursor use a Matcher, but the hint may be ignored.  In some cases the
-     * returned cursor may not provide a matcher even if 'requestMatcher' is true.
-     *
-     * @param parsedQuery - Additional query parameters, as from a client query request.
-     *
-     * @param requireOrder - If false, the resulting cursor may return results in an order
-     * inconsistent with the @param order spec.  See queryoptimizercursor.h for information on
-     * handling these results properly.
-     *
-     * @param singlePlanSummary - Query plan summary information that may be provided when a
-     * cursor running a single plan is returned.
-     *
-     * This is a work in progress.  Partial list of features not yet implemented through this
-     * interface:
-     * 
-     * - covered indexes
-     * - in memory sorting
-     */
-    shared_ptr<Cursor> getOptimizedCursor( const StringData& ns,
-                                           const BSONObj& query,
-                                           const BSONObj& order = BSONObj(),
-                                           const QueryPlanSelectionPolicy& planPolicy =
-                                               QueryPlanSelectionPolicy::any(),
-                                           bool requestMatcher = true,
-                                           const shared_ptr<const ParsedQuery>& parsedQuery =
-                                               shared_ptr<const ParsedQuery>(),
-                                           bool requireOrder = true,
-                                           QueryPlanSummary* singlePlanSummary = NULL );
-
-    /**
-     * @return a single cursor that may work well for the given query.  A $or style query will
-     * produce a single cursor, not a MultiCursor.
-     * It is possible no cursor is returned if the sort is not supported by an index.  Clients are responsible
-     * for checking this if they are not sure an index for a sort exists, and defaulting to a non-sort if
-     * no suitable indices exist.
-     */
-    shared_ptr<Cursor> getBestGuessCursor( const StringData& ns,
-                                           const BSONObj &query,
-                                           const BSONObj &sort );
     
 } // namespace mongo

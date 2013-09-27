@@ -34,6 +34,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/txn_context.h"

@@ -1,5 +1,3 @@
-// @file queryutil.cpp
-
 /*    Copyright 2009 10gen Inc.
  *    Copyright (C) 2013 Tokutek Inc.
  *
@@ -22,18 +20,11 @@
 #include "mongo/db/querypattern.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/queryutil.h"
-#include "../util/startup_test.h"
-#include "dbmessage.h"
-#include "../util/mongoutils/str.h"
+#include "mongo/util/startup_test.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
-    ParsedQuery::ParsedQuery( QueryMessage& qm )
-    : _ns( qm.ns ) , _ntoskip( qm.ntoskip ) , _ntoreturn( qm.ntoreturn ) , _options( qm.queryOptions ) {
-        init( qm.query );
-        initFields( qm.fields );
-    }
-    
     extern BSONObj staticNull;
     extern BSONObj staticUndefined;
 
@@ -514,6 +505,8 @@ namespace mongo {
             _specialNeedsIndex = other._specialNeedsIndex;
         }
         _exactMatchRepresentation = exactMatchRepresentation;
+        // A manipulated FieldRange may no longer be valid within a parent context.
+        _elemMatchContext = BSONElement();
     }
 
     /** @return the maximum of two lower bounds, considering inclusivity. */
@@ -545,13 +538,22 @@ namespace mongo {
     }
 
     const FieldRange &FieldRange::intersect( const FieldRange &other, bool singleKey ) {
+        // If 'this' FieldRange is universal(), intersect by copying the 'other' range into 'this'.
+        if ( universal() ) {
+            string intersectSpecial = !_special.empty() ? _special : other._special;
+            *this = other;
+            _special = intersectSpecial;
+            return *this;
+        }
         // Range intersections are not taken for multikey indexes.  See SERVER-958.
         if ( !singleKey && !universal() ) {
+            string intersectSpecial = !_special.empty() ? _special : other._special;
             // Pick 'other' range if it is smaller than or equal to 'this'.
             if ( other <= *this ) {
              	*this = other;
             }
             _exactMatchRepresentation = false;
+            _special = intersectSpecial;
             return *this;
         }
         vector<FieldInterval> newIntervals;
@@ -999,8 +1001,18 @@ namespace mongo {
             *this &= elemMatchRanges;
         }
         else {
-            // Handle $elemMatch applied to nested elements ($elemMatch fields are not operators).
+            // Handle $elemMatch applied to nested elements ($elemMatch fields are not operators,
+            // but full match specifications).
+
             FieldRangeSet elemMatchRanges( _ns.c_str(), elemMatchObj, _singleKey, optimize );
+            // Set the parent $elemMatch context on direct $elemMatch children (those with undotted
+            // field names).
+            for( map<string,FieldRange>::iterator i = elemMatchRanges._ranges.begin();
+                 i != elemMatchRanges._ranges.end(); ++i ) {
+                if ( !str::contains( i->first, '.' ) ) {
+                    i->second.setElemMatchContext( elemMatch );
+                }
+            }
             scoped_ptr<FieldRangeSet> prefixedRanges
                     ( elemMatchRanges.prefixed( matchFieldName ) );
             *this &= *prefixedRanges;
@@ -1123,7 +1135,7 @@ namespace mongo {
         _boundElemMatch( boundElemMatch ) {
         init( optimize );
     }
-    
+
     void FieldRangeSet::init( bool optimize ) {
         BSONObjIterator i( _queries[ 0 ] );
         while( i.more() ) {
@@ -1164,24 +1176,48 @@ namespace mongo {
         _keyGenerator.reset(new KeyGenerator(_fieldNames, false));
 
         BSONObjIterator i( _keyPattern );
-        set< string > baseObjectNonUniversalPrefixes;
+        map<string,BSONElement> topFieldElemMatchContexts;
         while( i.more() ) {
             BSONElement e = i.next();
             const FieldRange *range = &frs.range( e.fieldName() );
-            verify(  !range->empty() );
+            verify( !range->empty() );
+
             if ( !frs.singleKey() ) {
-                string prefix = str::before( e.fieldName(), '.' );
-                if ( baseObjectNonUniversalPrefixes.count( prefix ) > 0 ) {
-                    // A field with the same parent field has already been
-                    // constrainted, and with a multikey index we cannot
-                    // constrain this field.  SERVER-958
+                // Some constraints across different fields cannot be correctly intersected on a
+                // multikey index.  SERVER-958
+                //
+                // Given a multikey index { 'a.b':1, 'a.c':1 } and query { 'a.b':3, 'a.c':3 } only
+                // the index field 'a.b' is constrained to the range [3, 3], while the index
+                // field 'a.c' is just constrained to be within minkey and maxkey.  This
+                // implementation ensures that the document { a:[ { b:3 }, { c:3 } ] }, which
+                // generates index keys { 'a.b':3, 'a.c':null } and { 'a.b':null and 'a.c':3 } will
+                // be retrieved for the query.
+                //
+                // However, if the query is instead { a:{ $elemMatch:{ b:3, c:3 } } } then the
+                // document { a:[ { b:3 }, { c:3 } ] } should not match the query and both index
+                // fields 'a.b' and 'a.c' are constrained to the range [3, 3].
+
+                // If no other field with the same topField has been constrained ...
+                string topField = str::before( e.fieldName(), '.' );
+                if ( topFieldElemMatchContexts.count( topField ) == 0 ) {
+                    // ... and this field is constrained ...
+                    if ( !range->universal() ) {
+                        // ... record this field's elemMatchContext for its topField.
+                        topFieldElemMatchContexts[ topField ] = range->elemMatchContext();
+                    }
+                }
+
+                // Else if an already constrained field is not an $elemMatch sibling of this field
+                // (does not share its elemMatchContext) ...
+                else if ( range->elemMatchContext().eoo() ||
+                          range->elemMatchContext().rawdata() !=
+                              topFieldElemMatchContexts[ topField ].rawdata() ) {
+                    // ... this field's parsed range cannot be used.
                     range = &frs.universalRange();
                     _hasAllIndexedRanges = false;
                 }
-                else if ( !range->universal() ) {
-                    baseObjectNonUniversalPrefixes.insert( prefix );
-                }
             }
+
             int number = (int) e.number(); // returns 0.0 if not numeric
             bool forward = ( ( number >= 0 ? 1 : -1 ) * ( direction >= 0 ? 1 : -1 ) > 0 );
             if ( forward ) {
@@ -1247,37 +1283,6 @@ namespace mongo {
         }
         return *ret;
     }
-
-    BSONObj FieldRangeSet::simplifiedQuery( const BSONObj &_fields ) const {
-        BSONObj fields = _fields;
-        if ( fields.isEmpty() ) {
-            BSONObjBuilder b;
-            for( map<string,FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {
-                b.append( i->first, 1 );
-            }
-            fields = b.obj();
-        }
-        BSONObjBuilder b;
-        BSONObjIterator i( fields );
-        while( i.more() ) {
-            BSONElement e = i.next();
-            const char *name = e.fieldName();
-            const FieldRange &eRange = range( name );
-            verify( !eRange.empty() );
-            if ( eRange.equality() )
-                b.appendAs( eRange.min(), name );
-            else if ( !eRange.universal() ) {
-                BSONObj o;
-                BSONObjBuilder c;
-                c.appendAs( eRange.min(), eRange.minInclusive() ? "$gte" : "$gt" );
-                c.appendAs( eRange.max(), eRange.maxInclusive() ? "$lte" : "$lt" );
-                o = c.obj();
-                b.append( name, o );
-            }
-        }
-        return b.obj();
-    }
-
 
     bool FieldRangeSet::isPointIntervalSet( const string& fieldname ) const {
 
@@ -1363,10 +1368,6 @@ namespace mongo {
                     "multiKey" << _multiKey.toString()
                     ).jsonString();
     }
-    
-    BSONObj FieldRangeSetPair::simplifiedQueryForIndex( NamespaceDetails *d, int idxNo, const BSONObj &keyPattern ) const {
-        return frsForIndex( d, idxNo ).simplifiedQuery( keyPattern );
-    }    
     
     void FieldRangeSetPair::assertValidIndex( const NamespaceDetails *d, int idxNo ) const {
         massert( 14048, "FieldRangeSetPair invalid index specified", idxNo >= 0 && idxNo < d->nIndexes() );   

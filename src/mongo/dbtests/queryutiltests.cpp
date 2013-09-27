@@ -21,7 +21,7 @@
 #include "mongo/pch.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/queryutil.h"
-#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/querypattern.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/json.h"
@@ -406,31 +406,6 @@ namespace QueryUtilTests {
                 FieldRangeSet s6( "ns", BSON( "a" << GTE << 1 << LTE << 1 << LT << 1 ), true,
                                   true );
                 ASSERT( !s6.range( "a" ).equality() );
-            }
-        };
-
-        class SimplifiedQuery {
-        public:
-            void run() {
-                FieldRangeSet frs( "ns",
-                                  BSON( "a" << GT << 1 << GT << 5 << LT << 10 <<
-                                       "b" << 4 <<
-                                       "c" << LT << 4 << LT << 6 <<
-                                       "d" << GTE << 0 << GT << 0 <<
-                                       "e" << GTE << 0 << LTE << 10 <<
-                                       "f" << NE << 9 ),
-                                  true, true );
-                BSONObj simple = frs.simplifiedQuery();
-                ASSERT_EQUALS( fromjson( "{$gt:5,$lt:10}" ), simple.getObjectField( "a" ) );
-                ASSERT_EQUALS( 4, simple.getIntField( "b" ) );
-                ASSERT_EQUALS( BSON("$gte" << -numeric_limits<double>::max() << "$lt" << 4 ),
-                              simple.getObjectField( "c" ) );
-                ASSERT_EQUALS( BSON("$gt" << 0 << "$lte" << numeric_limits<double>::max() ),
-                              simple.getObjectField( "d" ) );
-                ASSERT_EQUALS( fromjson( "{$gte:0,$lte:10}" ),
-                              simple.getObjectField( "e" ) );
-                ASSERT_EQUALS( BSON( "$gte" << MINKEY << "$lte" << MAXKEY ),
-                              simple.getObjectField( "f" ) );
             }
         };
 
@@ -1042,6 +1017,54 @@ namespace QueryUtilTests {
                 ASSERT_EQUALS( "x", frs.range( "a" ).min().String() );
             }
         };
+
+        /**
+         * The elemMatchContext is preserved when two FieldRanges are intersected, singleKey ==
+         * false, and the resulting FieldRange is an unmodified copy of one of the original two
+         * FieldRanges.  For example, if FieldRange a == [[1, 10]] is intersected with FieldRange b
+         * == [[5, 5]], a will be replaced with b.  In this case, because a becomes an exact copy of
+         * b, b's elemMatchContext will be copied to a.
+         */
+        class PreserveNonUniversalElemMatchContext {
+        public:
+            void run() {
+                BSONObj query = fromjson( "{a:{$elemMatch:{b:1}},c:{$lt:5},d:1}" );
+                _expectedElemMatchContext = query.firstElement().Obj().firstElement();
+
+                // The elemMatchContext is set properly for the 'a.b' field.
+                FieldRangeSet frs( "", query, true, true );
+                assertElemMatchContext( frs.range( "a.b" ) );
+
+                // The elemMatchContext is preserved after intersecting with a superset range.
+                frs.range( "a.b" ).intersect( frs.range( "c" ), false );
+                assertElemMatchContext( frs.range( "a.b" ) );
+
+                // The elemMatchContext is forwarded after intersecting with a subset range.
+                frs.range( "c" ).intersect( frs.range( "a.b" ), false );
+                assertElemMatchContext( frs.range( "c" ) );
+
+                // The elemMatchContext is cleared after a _single key_ intersection.
+                frs.range( "a.b" ).intersect( frs.range( "d" ), true /* singleKey */ );
+                ASSERT( frs.range( "a.b" ).elemMatchContext().eoo() );
+            }
+        private:
+            void assertElemMatchContext( const FieldRange& range ) {
+                ASSERT_EQUALS( _expectedElemMatchContext.rawdata(),
+                               range.elemMatchContext().rawdata() );
+            }
+            BSONElement _expectedElemMatchContext;
+        };
+
+        /** Intersect two universal ranges, one special. */
+        class IntersectSpecial {
+        public:
+            void run() {
+                FieldRangeSet frs( "", fromjson( "{loc:{$near:[0,0],$maxDistance:5}}" ), true,
+                                   true );
+                // The intersection is special.
+                ASSERT( !frs.range( "loc" ).getSpecial().empty() );
+            }
+        };
         
         namespace ExactMatchRepresentation {
 
@@ -1213,7 +1236,9 @@ namespace QueryUtilTests {
                 FieldRangeSet frs2( "", fromjson( "{a:1,b:5,c:{$in:[7,8]},d:{$in:[8,9]},e:10}" ),
                                     true, true );
                 frs1 &= frs2;
-                ASSERT_EQUALS( fromjson( "{a:1,b:5,c:7,d:{$gte:8,$lte:9},e:10}" ), frs1.simplifiedQuery( BSONObj() ) );
+                FieldRangeSet expectedResult( "", fromjson( "{a:1,b:5,c:7,d:{$in:[8,9]},e:10}" ),
+                                              true, true );
+                ASSERT_EQUALS( frs1.toString(), expectedResult.toString() );
             }
         };
         
@@ -1225,18 +1250,15 @@ namespace QueryUtilTests {
                 FieldRangeSet frs3( "", BSON( "a" << LT << 6 ), false, true );
                 // An intersection with a universal range is allowed.
                 frs1 &= frs2;
-                ASSERT_EQUALS( frs2.simplifiedQuery( BSONObj() ),
-                              frs1.simplifiedQuery( BSONObj() ) );
+                ASSERT_EQUALS( frs2.toString(), frs1.toString() );
                 // An intersection with non universal range is not allowed, as it might prevent a
                 // valid multikey match.
                 frs1 &= frs3;
-                ASSERT_EQUALS( frs2.simplifiedQuery( BSONObj() ),
-                              frs1.simplifiedQuery( BSONObj() ) );
+                ASSERT_EQUALS( frs2.toString(), frs1.toString() );
                 // Now intersect with a fully contained range.
                 FieldRangeSet frs4( "", BSON( "a" << GT << 6 ), false, true );
                 frs1 &= frs4;
-                ASSERT_EQUALS( frs4.simplifiedQuery( BSONObj() ),
-                              frs1.simplifiedQuery( BSONObj() ) );                
+                ASSERT_EQUALS( frs4.toString(), frs1.toString() );
             }
         };
 
@@ -1259,7 +1281,8 @@ namespace QueryUtilTests {
                 FieldRangeSet frs2( "", BSON( "a" << GT << 6 ), false, true );
                 // Range subtraction is no different for multikey ranges.
                 frs1 -= frs2;
-                ASSERT_EQUALS( BSON( "a" << GT << 4 << LTE << 6 ), frs1.simplifiedQuery( BSONObj() ) );
+                FieldRangeSet expectedResult( "", BSON( "a" << GT << 4 << LTE << 6 ), true, true );
+                ASSERT_EQUALS( frs1.toString(), expectedResult.toString() );
             }
         };
         
@@ -2606,7 +2629,6 @@ namespace QueryUtilTests {
             add<FieldRangeTests::NonSingletonOr>();
             add<FieldRangeTests::Empty>();
             add<FieldRangeTests::Equality>();
-            add<FieldRangeTests::SimplifiedQuery>();
             add<FieldRangeTests::QueryPatternTest>();
             add<FieldRangeTests::QueryPatternEmpty>();
             add<FieldRangeTests::QueryPatternNeConstraint>();
@@ -2688,6 +2710,8 @@ namespace QueryUtilTests {
             add<FieldRangeTests::DiffMulti2>();
             add<FieldRangeTests::Universal>();
             add<FieldRangeTests::ElemMatchRegex>();
+            add<FieldRangeTests::PreserveNonUniversalElemMatchContext>();
+            add<FieldRangeTests::IntersectSpecial>();
             add<FieldRangeTests::ExactMatchRepresentation::EqualArray>();
             add<FieldRangeTests::ExactMatchRepresentation::EqualEmptyArray>();
             add<FieldRangeTests::ExactMatchRepresentation::EqualNull>();

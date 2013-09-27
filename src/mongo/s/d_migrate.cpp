@@ -41,7 +41,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/hasher.h"
 #include "mongo/db/cmdline.h"
-#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/clientcursor.h"
@@ -63,6 +63,7 @@
 #include "mongo/util/startup_test.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/ramlog.h"
+#include "mongo/util/elapsed_tracker.h"
 
 #include "mongo/s/shard.h"
 #include "mongo/s/d_logic.h"

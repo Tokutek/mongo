@@ -54,6 +54,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/server_parameters.h"
+#include "mongo/db/parsed_query.h"
 
 namespace mongo {
 

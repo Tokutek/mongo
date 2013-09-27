@@ -43,6 +43,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl_block.h"
+#include "mongo/db/parsed_query.h"
 #include "mongo/db/scanandorder.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/platform/random.h"

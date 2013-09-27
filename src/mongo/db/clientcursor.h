@@ -38,6 +38,7 @@
 #include "mongo/util/net/message.h"
 #include "mongo/util/net/listen.h"
 #include "mongo/util/background.h"
+#include "mongo/util/elapsed_tracker.h"
 
 namespace mongo {
 

@@ -89,9 +89,9 @@ namespace mongo {
             return true;
         }
 
-        Suitability suitability(const BSONObj &query, const BSONObj &order) const {
-            FieldRangeSet frs( "" , query , true, true );
-            if (frs.isPointIntervalSet(_hashedField)) {
+        Suitability suitability(const FieldRangeSet &queryConstraints,
+                                const BSONObj &order) const {
+            if (queryConstraints.isPointIntervalSet(_hashedField)) {
                 return HELPFUL;
             }
             return USELESS;
@@ -267,28 +267,26 @@ namespace mongo {
         _descriptor->generateKeys(obj, keys);
     }
 
-    static bool anyElementNamesMatch( const BSONObj& a , const BSONObj& b ) {
-        BSONObjIterator x(a);
-        while ( x.more() ) {
-            BSONElement e = x.next();
-            BSONObjIterator y(b);
-            while ( y.more() ) {
-                BSONElement f = y.next();
-                FieldCompareResult res = compareDottedFieldNames( e.fieldName() , f.fieldName() ,
-                                                                 LexNumCmp( true ) );
-                if ( res == SAME || res == LEFT_SUBFIELD || res == RIGHT_SUBFIELD )
-                    return true;
-            }
-        }
-        return false;
-    }
+    IndexDetails::Suitability IndexDetails::suitability(const FieldRangeSet &queryConstraints,
+                                                        const BSONObj &order) const {
+        // This is a quick first pass to determine the suitability of the index.  It produces some
+        // false positives (returns HELPFUL for some indexes which are not particularly). When we
+        // return HELPFUL a more precise determination of utility is done by the query optimizer.
 
-    IndexDetails::Suitability IndexDetails::suitability(const BSONObj &query, const BSONObj &order) const {
-        if (anyElementNamesMatch( _keyPattern , query ) == 0 &&
-            anyElementNamesMatch( _keyPattern , order ) == 0)  {
-            return USELESS;
+        // check whether any field in the index is constrained at all by the query
+        BSONForEach( elt, _keyPattern ){
+            const FieldRange& frange = queryConstraints.range( elt.fieldName() );
+            if( ! frange.universal() )
+                return IndexDetails::HELPFUL;
         }
-        return HELPFUL;
+        // or whether any field in the desired sort order is in the index
+        set<string> orderFields;
+        order.getFieldNames( orderFields );
+        BSONForEach( k, _keyPattern ) {
+            if ( orderFields.find( k.fieldName() ) != orderFields.end() )
+                return IndexDetails::HELPFUL;
+        }
+        return IndexDetails::USELESS;
     }
 
     int IndexDetails::uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
