@@ -72,6 +72,7 @@
 #include "mongo/s/d_logic.h"
 #include "mongo/s/stale_exception.h" // for SendStaleConfigException
 #include "mongo/util/fail_point_service.h"
+#include "mongo/util/gcov.h"
 #include "mongo/util/goodies.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/time_support.h"
@@ -1248,6 +1249,8 @@ namespace mongo {
 
     /* not using log() herein in case we are already locked */
     NOINLINE_DECL void dbexit( ExitCode rc, const char *why ) {
+
+        flushForGcov();
 
         Client * c = currentClient.get();
         {
