@@ -15,10 +15,19 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mongo/db/commands.h"
-#include "mongo/db/instance.h"
+#include <string>
+#include <vector>
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/jsobj.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/util/timer.h"
 
@@ -27,6 +36,13 @@ namespace mongo {
     class DistinctCommand : public QueryCommand {
     public:
         DistinctCommand() : QueryCommand("distinct") {}
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::find);
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+        }
         virtual void help( stringstream &help ) const {
             help << "{ distinct : 'collection name' , key : 'a.b' , query : {} }";
         }

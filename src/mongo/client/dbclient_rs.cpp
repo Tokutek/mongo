@@ -25,6 +25,7 @@
 #include "mongo/bson/util/builder.h"
 #include "mongo/client/connpool.h"
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/json.h"
@@ -171,6 +172,27 @@ namespace mongo {
         return new TagSet(arrayBuilder.arr());
     }
 
+    /**
+     * @return the connection associated with the monitor node. Will also attempt
+     *     to establish connection if NULL. Can still return NULL if reconnect failed.
+     */
+    shared_ptr<DBClientConnection> _getConnWithRefresh(ReplicaSetMonitor::Node& node) {
+        if (node.conn.get() == NULL) {
+            ConnectionString connStr(node.addr);
+            string errmsg;
+
+            try {
+                node.conn.reset(dynamic_cast<DBClientConnection*>(
+                        connStr.connect(errmsg, ReplicaSetMonitor::SOCKET_TIMEOUT_SECS)));
+            }
+            catch (const AssertionException& ex) {
+                node.ok = false;
+            }
+        }
+
+        return node.conn;
+    }
+
     // --------------------------------
     // ----- ReplicaSetMonitor ---------
     // --------------------------------
@@ -225,6 +247,8 @@ namespace mongo {
 
         return seedStr;
     }
+
+    const double ReplicaSetMonitor::SOCKET_TIMEOUT_SECS = 5;
 
     // Must already be in _setsLock when constructing a new ReplicaSetMonitor. This is why you
     // should only create ReplicaSetMonitors from ReplicaSetMonitor::get and
@@ -658,21 +682,38 @@ namespace mongo {
             log() << "trying to add new host " << *i << " to replica set " << this->_name << endl;
 
             // Connect to new node
-            HostAndPort h( *i );
-            DBClientConnection * newConn = new DBClientConnection( true, 0, 5.0 );
+            HostAndPort host(*i);
+            ConnectionString connStr(host);
 
+            uassert(16530, str::stream() << "cannot create a replSet node connection that "
+                    "is not single: " << host.toString(true),
+                    connStr.type() == ConnectionString::MASTER ||
+                    connStr.type() == ConnectionString::CUSTOM);
+
+            DBClientConnection* newConn = NULL;
             string errmsg;
-            try{
-                if( ! newConn->connect( h , errmsg ) ){
-                    throw DBException( errmsg, 15927 );
-                }
-                log() << "successfully connected to new host " << *i << " in replica set " << this->_name << endl;
+            try {
+                // Needs to perform a dynamic_cast because we need to set the replSet
+                // callback. We should eventually not need this after we remove the
+                // callback.
+                newConn = dynamic_cast<DBClientConnection*>(
+                        connStr.connect(errmsg, SOCKET_TIMEOUT_SECS));
             }
-            catch( DBException& e ){
-                warning() << "cannot connect to new host " << *i << " to replica set " << this->_name << causedBy( e ) << endl;
+            catch (const AssertionException& ex) {
+                errmsg = ex.toString();
             }
 
-            _nodes.push_back( Node( h , newConn ) );
+            if (!errmsg.empty()) {
+                log() << "successfully connected to new host " << *i
+                        << " in replica set " << this->_name << endl;
+            }
+            else {
+                warning() << "cannot connect to new host " << *i
+                        << " to replica set " << this->_name
+                        << ", err: " << errmsg << endl;
+            }
+
+            _nodes.push_back(Node(host, newConn));
         }
 
         // Invalidate the cached _master index since the _nodes structure has
@@ -808,7 +849,8 @@ namespace mongo {
                 {
                     scoped_lock lk( _lock );
                     if ( i >= _nodes.size() ) break;
-                    nodeConn = _nodes[i].conn;
+                    nodeConn = _getConnWithRefresh(_nodes[i]);
+                    if (nodeConn.get() == NULL) continue;
                 }
 
                 string maybePrimary;
@@ -844,7 +886,9 @@ namespace mongo {
                         probablePrimaryIdx = _find_inlock( maybePrimary );
 
                         if (probablePrimaryIdx >= 0) {
-                            probablePrimaryConn = _nodes[probablePrimaryIdx].conn;
+                            probablePrimaryConn = _getConnWithRefresh(
+                                    _nodes[probablePrimaryIdx]);
+                            if (probablePrimaryConn.get() == NULL) continue;
                         }
                     }
 
@@ -937,7 +981,7 @@ namespace mongo {
             // first see if the current master is fine
             if ( _master >= 0 ) {
                 verify(_master < static_cast<int>(_nodes.size()));
-                masterConn = _nodes[_master].conn;
+                masterConn = _getConnWithRefresh(_nodes[_master]);
             }
         }
 
@@ -1006,9 +1050,10 @@ namespace mongo {
     
     bool ReplicaSetMonitor::_checkConnMatch_inlock( DBClientConnection* conn,
             size_t nodeOffset ) const {
-        
-        return ( nodeOffset < _nodes.size() &&
-            conn->getServerAddress() == _nodes[nodeOffset].conn->getServerAddress() );
+        return (nodeOffset < _nodes.size() &&
+                // Assumption: value for getServerAddress was extracted from
+                // HostAndPort::toString()
+                conn->getServerAddress() == _nodes[nodeOffset].addr.toString());
     }
 
     HostAndPort ReplicaSetMonitor::selectAndCheckNode(ReadPreference preference,
@@ -1149,25 +1194,37 @@ namespace mongo {
             // Don't check servers we have already
             if (_find(*iter) >= 0) continue;
 
-            scoped_ptr<DBClientConnection> conn(new DBClientConnection(true, 0, 5.0));
+            ConnectionString connStr(*iter);
+            scoped_ptr<DBClientConnection> conn;
 
-            try{
-                string errmsg;
-                if (!conn->connect(*iter, errmsg)) {
-                    throw DBException(errmsg, 15928);
-                }
+            uassert(16531, str::stream() << "cannot create a replSet node connection that "
+                    "is not single: " << iter->toString(true),
+                    connStr.type() == ConnectionString::MASTER ||
+                    connStr.type() == ConnectionString::CUSTOM);
 
+            string errmsg;
+            try {
+                // Needs to perform a dynamic_cast because we need to set the replSet
+                // callback. We should eventually not need this after we remove the
+                // callback.
+                conn.reset(dynamic_cast<DBClientConnection*>(
+                        connStr.connect(errmsg, SOCKET_TIMEOUT_SECS)));
+            }
+            catch (const AssertionException& ex) {
+                errmsg = ex.toString();
+            }
+
+            if (conn.get() != NULL && errmsg.empty()) {
                 log() << "successfully connected to seed " << *iter
                         << " for replica set " << _name << endl;
-            }
-            catch(const DBException& e){
-                log() << "error connecting to seed " << *iter << causedBy(e) << endl;
-                // skip seeds that don't work
-                continue;
-            }
 
-            string maybePrimary;
-            _checkConnection(conn.get(), maybePrimary, false, -1);
+                string maybePrimary;
+                _checkConnection(conn.get(), maybePrimary, false, -1);
+            }
+            else {
+                log() << "error connecting to seed " << *iter
+                      << ", err: " << errmsg << endl;
+            }
         }
 
         // Check everything to get the first data
@@ -1319,12 +1376,33 @@ namespace mongo {
         }
 
         _masterHost = monitor->getMaster();
-        _master.reset( new DBClientConnection( true , this , _so_timeout ) );
+
+        ConnectionString connStr(_masterHost);
+
         string errmsg;
-        if ( ! _master->connect( _masterHost , errmsg ) ) {
-            monitor->notifyFailure( _masterHost );
-            uasserted( 13639 , str::stream() << "can't connect to new replica set master [" << _masterHost.toString() << "] err: " << errmsg );
+        DBClientConnection* newConn = NULL;
+
+        try {
+            // Needs to perform a dynamic_cast because we need to set the replSet
+            // callback. We should eventually not need this after we remove the
+            // callback.
+            newConn = dynamic_cast<DBClientConnection*>(
+                    connStr.connect(errmsg, _so_timeout));
         }
+        catch (const AssertionException& ex) {
+            errmsg = ex.toString();
+        }
+
+        if (newConn == NULL || !errmsg.empty()) {
+            monitor->notifyFailure(_masterHost);
+            uasserted(13639, str::stream() << "can't connect to new replica set master ["
+                      << _masterHost.toString() << "]"
+                      << (errmsg.empty()? "" : ", err: ") << errmsg);
+        }
+
+        _master.reset(newConn);
+        _master->setReplSetClientCallback(this);
+
         _auth( _master.get() );
         return _master.get();
     }
@@ -1345,12 +1423,15 @@ namespace mongo {
     }
 
     void DBClientReplicaSet::_auth( DBClientConnection * conn ) {
-        for (map<string, AuthInfo>::const_iterator i = _auths.begin(); i != _auths.end(); ++i) {
-            const AuthInfo& a = i->second;
-            string errmsg;
-            if ( ! conn->auth( a.dbname , a.username , a.pwd , errmsg, a.digestPassword ) )
-                warning() << "cached auth failed for set: " << _setName << " db: " << a.dbname << " user: " << a.username << endl;
-
+        for (map<string, BSONObj>::const_iterator i = _auths.begin(); i != _auths.end(); ++i) {
+            try {
+                conn->auth(i->second);
+            }
+            catch (const UserException& ex) {
+                warning() << "cached auth failed for set: " << _setName <<
+                    " db: " << i->second[saslCommandPrincipalSourceFieldName].str() <<
+                    " user: " << i->second[saslCommandPrincipalFieldName].str() << endl;
+            }
         }
     }
 
@@ -1374,12 +1455,11 @@ namespace mongo {
         return _getMonitor()->isAnyNodeOk();
     }
 
-    bool DBClientReplicaSet::auth(const string &dbname, const string &username, const string &pwd, string& errmsg, bool digestPassword, Auth::Level * level) {
+    void DBClientReplicaSet::_auth(const BSONObj& params) {
         DBClientConnection * m = checkMaster();
 
         // first make sure it actually works
-        if( ! m->auth(dbname, username, pwd, errmsg, digestPassword, level ) )
-            return false;
+        m->auth(params);
 
         /* Also authenticate the cached secondary connection. Note that this is only
          * needed when we actually have something cached and is last known to be
@@ -1387,7 +1467,7 @@ namespace mongo {
          */
         if (_lastSlaveOkConn.get() != NULL && !_lastSlaveOkConn->isFailed()) {
             try {
-                _lastSlaveOkConn->auth(dbname, username, pwd, errmsg, digestPassword, level);
+                _lastSlaveOkConn->auth(params);
             }
             catch (const DBException&) {
                 /* Swallow exception. _lastSlaveOkConn is now in failed state.
@@ -1399,8 +1479,7 @@ namespace mongo {
         }
 
         // now that it does, we should save so that for a new node we can auth
-        _auths[dbname] = AuthInfo(dbname, username, pwd, digestPassword);
-        return true;
+        _auths[params[saslCommandPrincipalSourceFieldName].str()] = params.getOwned();
     }
 
     void DBClientReplicaSet::logout(const string &dbname, BSONObj& info) {
@@ -1588,8 +1667,22 @@ namespace mongo {
             return _master.get();
         }
 
-        _lastSlaveOkConn.reset(new DBClientConnection(true , this , _so_timeout));
-        _lastSlaveOkConn->connect(_lastSlaveOkHost);
+        string errmsg;
+        ConnectionString connStr(_lastSlaveOkHost);
+        // Needs to perform a dynamic_cast because we need to set the replSet
+        // callback. We should eventually not need this after we remove the
+        // callback.
+        DBClientConnection* newConn = dynamic_cast<DBClientConnection*>(
+                connStr.connect(errmsg, _so_timeout));
+
+	// Assert here instead of returning NULL since the contract of this method is such
+	// that returning NULL means none of the nodes were good, which is not the case here.
+        uassert(16532, str::stream() << "Failed to connect to "
+                << _lastSlaveOkHost.toString(true),
+                newConn != NULL);
+
+        _lastSlaveOkConn.reset(newConn);
+        _lastSlaveOkConn->setReplSetClientCallback(this);
 
         _auth(_lastSlaveOkConn.get());
         return _lastSlaveOkConn.get();

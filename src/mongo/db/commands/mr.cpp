@@ -19,6 +19,7 @@
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/parallel.h"
+#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/matcher.h"
@@ -219,7 +220,8 @@ namespace mongo {
             _reduce( x , key , endSizeEstimate );
         }
 
-        Config::Config( const string& _dbname , const BSONObj& cmdObj ) {
+        Config::Config( const string& _dbname , const BSONObj& cmdObj )
+        {
             dbname = _dbname;
             ns = dbname + "." + cmdObj.firstElement().valuestr();
 
@@ -235,55 +237,24 @@ namespace mongo {
 
             uassert( 13602 , "outType is no longer a valid option" , cmdObj["outType"].eoo() );
 
-            if ( cmdObj["out"].type() == String ) {
-                finalShort = cmdObj["out"].String();
-                outType = REPLACE;
-            }
-            else if ( cmdObj["out"].type() == Object ) {
-                BSONObj o = cmdObj["out"].embeddedObject();
-
-                BSONElement e = o.firstElement();
-                string t = e.fieldName();
-
-                if ( t == "normal" || t == "replace" ) {
-                    outType = REPLACE;
-                    finalShort = e.String();
-                }
-                else if ( t == "merge" ) {
-                    outType = MERGE;
-                    finalShort = e.String();
-                }
-                else if ( t == "reduce" ) {
-                    outType = REDUCE;
-                    finalShort = e.String();
-                }
-                else if ( t == "inline" ) {
-                    outType = INMEMORY;
-                }
-                else {
-                    uasserted( 13522 , str::stream() << "unknown out specifier [" << t << "]" );
-                }
-
-                if (o.hasElement("db")) {
-                    outDB = o["db"].String();
-                }
-            }
-            else {
-                uasserted( 13606 , "'out' has to be a string or an object" );
-            }
+            outputOptions = parseOutputOptions(dbname, cmdObj);
 
             shardedFirstPass = false;
             if (cmdObj.hasField("shardedFirstPass") && cmdObj["shardedFirstPass"].trueValue()){
-                massert(16054, "shardedFirstPass should only use replace outType", outType == REPLACE);
+                massert(16054,
+                        "shardedFirstPass should only use replace outType",
+                        outputOptions.outType == REPLACE);
                 shardedFirstPass = true;
             }
 
-            if ( outType != INMEMORY ) { // setup names
-                tempLong = str::stream() << (outDB.empty() ? dbname : outDB) << ".tmp.mr." << cmdObj.firstElement().String() << "_" << JOB_NUMBER++;
-
-                incLong = tempLong + "_inc";
-
-                finalLong = str::stream() << (outDB.empty() ? dbname : outDB) << "." << finalShort;
+            if ( outputOptions.outType != INMEMORY ) { // setup temp collection name
+                tempNamespace = str::stream()
+                        << (outputOptions.outDB.empty() ? dbname : outputOptions.outDB)
+                        << ".tmp.mr."
+                        << cmdObj.firstElement().String()
+                        << "_"
+                        << JOB_NUMBER++;
+                incLong = tempNamespace + "_inc";
             }
 
             {
@@ -329,7 +300,7 @@ namespace mongo {
          * Clean up the temporary and incremental collections
          */
         void State::dropTempCollections() {
-            _db.dropCollection(_config.tempLong);
+            _db.dropCollection(_config.tempNamespace);
             if (_useIncremental)
                 _db.dropCollection(_config.incLong);
         }
@@ -370,22 +341,23 @@ namespace mongo {
             {
                 // See above for why userCreateNS must be called in its own child transaction.
                 Client::Transaction transaction(0);
-                Client::WriteContext ctx( _config.tempLong.c_str() );
+                Client::WriteContext ctx( _config.tempNamespace.c_str() );
                 string errmsg;
-                if ( ! userCreateNS( _config.tempLong.c_str() , BSON("temp" << true) , errmsg , true ) ) {
-                    uasserted( 13630 , str::stream() << "userCreateNS failed for mr tempLong ns: " << _config.tempLong << " err: " << errmsg );
+                if ( ! userCreateNS( _config.tempNamespace.c_str() , BSON("temp" << true) , errmsg , true ) ) {
+                    uasserted(13630, str::stream() << "userCreateNS failed for mr tempLong ns: "
+                              << _config.tempNamespace << " err: " << errmsg );
                 }
                 transaction.commit();
             }
 
             {
                 // copy indexes
-                auto_ptr<DBClientCursor> idx = _db.getIndexes( _config.finalLong );
+                auto_ptr<DBClientCursor> idx = _db.getIndexes(_config.outputOptions.finalNamespace);
                 while ( idx->more() ) {
                     BSONObj i = idx->next();
 
                     BSONObjBuilder b( i.objsize() + 16 );
-                    b.append( "ns" , _config.tempLong );
+                    b.append( "ns" , _config.tempNamespace );
                     BSONObjIterator j( i );
                     while ( j.more() ) {
                         BSONElement e = j.next();
@@ -398,7 +370,7 @@ namespace mongo {
 
                     BSONObj indexToInsert = b.obj();
 
-                    string sysIndexes = getSisterNS( _config.tempLong, "system.indexes" );
+                    string sysIndexes = getSisterNS( _config.tempNamespace, "system.indexes" );
                     Client::WriteContext ctx( sysIndexes.c_str() );
                     insert( sysIndexes.c_str() , indexToInsert );
                 }
@@ -412,25 +384,29 @@ namespace mongo {
          */
         void State::appendResults( BSONObjBuilder& final ) {
             if ( _onDisk ) {
-                if (!_config.outDB.empty()) {
+                if (!_config.outputOptions.outDB.empty()) {
                     BSONObjBuilder loc;
-                    if ( !_config.outDB.empty())
-                        loc.append( "db" , _config.outDB );
-                    if ( !_config.finalShort.empty() )
-                        loc.append( "collection" , _config.finalShort );
+                    if ( !_config.outputOptions.outDB.empty())
+                        loc.append( "db" , _config.outputOptions.outDB );
+                    if ( !_config.outputOptions.collectionName.empty() )
+                        loc.append( "collection" , _config.outputOptions.collectionName );
                     final.append("result", loc.obj());
                 }
                 else {
-                    if ( !_config.finalShort.empty() )
-                        final.append( "result" , _config.finalShort );
+                    if ( !_config.outputOptions.collectionName.empty() )
+                        final.append( "result" , _config.outputOptions.collectionName );
                 }
 
                 if ( _config.splitInfo > 0 ) {
                     // add split points, used for shard
                     BSONObj res;
                     BSONObj idKey = BSON( "_id" << 1 );
-                    string dbname = nsToDatabase(_config.finalLong);
-                    if ( ! _db.runCommand(dbname , BSON( "splitVector" << _config.finalLong << "keyPattern" << idKey << "maxChunkSizeBytes" << _config.splitInfo ) , res ) ) {
+                    string dbname = nsToDatabase(_config.outputOptions.finalNamespace);
+                    if (!_db.runCommand(dbname,
+                                        BSON("splitVector" << _config.outputOptions.finalNamespace
+                                             << "keyPattern" << idKey
+                                             << "maxChunkSizeBytes" << _config.splitInfo),
+                                        res)) {
                         uasserted( 15921 ,  str::stream() << "splitVector failed: " << res );
                     }
                     if ( res.hasField( "splitKeys" ) )
@@ -481,7 +457,7 @@ namespace mongo {
          * This may involve replacing, merging or reducing.
          */
         long long State::postProcessCollection(CurOp* op, ProgressMeterHolder& pm) {
-            if ( _onDisk == false || _config.outType == Config::INMEMORY )
+            if ( _onDisk == false || _config.outputOptions.outType == Config::INMEMORY )
                 return numInMemKeys();
 
             return _postProcessCollection(op, pm);
@@ -526,61 +502,66 @@ namespace mongo {
 
         long long State::_postProcessCollection(CurOp* op, ProgressMeterHolder& pm) {
 
-            if ( _config.finalLong == _config.tempLong )
-                return _safeCount( _db, _config.finalLong );
+            if ( _config.outputOptions.finalNamespace == _config.tempNamespace )
+                return _safeCount( _db, _config.outputOptions.finalNamespace );
 
-            if ( _config.outType == Config::REPLACE || _safeCount( _db, _config.finalLong ) == 0 ) {
+            if (_config.outputOptions.outType == Config::REPLACE ||
+                    _safeCount(_db, _config.outputOptions.finalNamespace) == 0) {
                 // replace: just rename from temp to final collection name, dropping previous collection
-                _db.dropCollection( _config.finalLong );
+                _db.dropCollection( _config.outputOptions.finalNamespace );
                 BSONObj info;
 
                 if ( ! _db.runCommand( "admin"
-                                      , BSON( "renameCollection" << _config.tempLong <<
-                                              "to" << _config.finalLong <<
+                                      , BSON( "renameCollection" << _config.tempNamespace <<
+                                              "to" << _config.outputOptions.finalNamespace <<
                                               "stayTemp" << _config.shardedFirstPass )
                                       , info ) ) {
                     uasserted( 10076 ,  str::stream() << "rename failed: " << info );
                 }
                          
-                _db.dropCollection( _config.tempLong );
+                _db.dropCollection( _config.tempNamespace );
             }
-            else if ( _config.outType == Config::MERGE ) {
+            else if ( _config.outputOptions.outType == Config::MERGE ) {
                 // merge: upsert new docs into old collection
-                op->setMessage( "m/r: merge post processing" , _safeCount( _db, _config.tempLong, BSONObj() ) );
+                op->setMessage("m/r: merge post processing",
+                               _safeCount(_db, _config.tempNamespace, BSONObj()));
                 {
-                    Client::ReadContext ctx( _config.finalLong );
-                    auto_ptr<DBClientCursor> cursor = _db.query( _config.tempLong , BSONObj() );
+                    Client::ReadContext ctx( _config.outputOptions.finalNamespace );
+                    auto_ptr<DBClientCursor> cursor = _db.query( _config.tempNamespace , BSONObj() );
                     while ( cursor->more() ) {
                         BSONObj o = cursor->next();
-                        upsert( _config.finalLong , o );
+                        upsert( _config.outputOptions.finalNamespace , o );
                         pm.hit();
                     }
                 }
-                _db.dropCollection( _config.tempLong );
+                _db.dropCollection( _config.tempNamespace );
                 pm.finished();
             }
-            else if ( _config.outType == Config::REDUCE ) {
+            else if ( _config.outputOptions.outType == Config::REDUCE ) {
                 // reduce: apply reduce op on new result and existing one
                 BSONList values;
-                op->setMessage( "m/r: reduce post processing" , _safeCount( _db, _config.tempLong, BSONObj() ) );
+                op->setMessage("m/r: reduce post processing",
+                               _safeCount(_db, _config.tempNamespace, BSONObj()));
                 {
-                    Client::ReadContext ctx( _config.finalLong );
-                    auto_ptr<DBClientCursor> cursor = _db.query( _config.tempLong , BSONObj() );
+                    Client::ReadContext ctx( _config.outputOptions.finalNamespace );
+                    auto_ptr<DBClientCursor> cursor = _db.query( _config.tempNamespace , BSONObj() );
                     while ( cursor->more() ) {
                         BSONObj temp = cursor->next();
                         BSONObj old;
 
-                        NamespaceDetails *d = nsdetails( _config.finalLong.c_str() );
+                        NamespaceDetails *d = nsdetails( _config.outputOptions.finalNamespace.c_str() );
                         const bool found = d != NULL && d->findOne( temp["_id"].wrap() , old , true );
                         if ( found ) {
                             // need to reduce
                             values.clear();
                             values.push_back( temp );
                             values.push_back( old );
-                            upsert( _config.finalLong , _config.reducer->finalReduce( values , _config.finalizer.get() ) );
+                            upsert(_config.outputOptions.finalNamespace,
+                                   _config.reducer->finalReduce(values,
+                                                                _config.finalizer.get()));
                         }
                         else {
-                            upsert( _config.finalLong , temp );
+                            upsert( _config.outputOptions.finalNamespace, temp);
                         }
                         pm.hit();
                     }
@@ -588,7 +569,7 @@ namespace mongo {
                 pm.finished();
             }
 
-            return _safeCount( _db, _config.finalLong );
+            return _safeCount( _db, _config.outputOptions.finalNamespace );
         }
 
         /**
@@ -616,7 +597,7 @@ namespace mongo {
                 _dupCount(0),
                 _numEmits(0) {
             _temp.reset( new InMemory() );
-            _onDisk = _config.outType != Config::INMEMORY;
+            _onDisk = _config.outputOptions.outType != Config::INMEMORY;
         }
 
         bool State::sourceExists() {
@@ -656,7 +637,10 @@ namespace mongo {
          */
         void State::init() {
             // setup js
-            _scope.reset(globalScriptEngine->getPooledScope( _config.dbname, "mapreduce" ).release() );
+            const string userToken = ClientBasic::getCurrent()->getAuthorizationManager()
+                                                              ->getAuthenticatedPrincipalNamesToken();
+            _scope.reset(globalScriptEngine->getPooledScope(
+                            _config.dbname, "mapreduce" + userToken).release());
 
             if ( ! _config.scopeSetup.isEmpty() )
                 _scope->init( &_config.scopeSetup );
@@ -807,13 +791,13 @@ namespace mongo {
                 return;
 
             BSONObj res = _config.reducer->finalReduce( values , _config.finalizer.get() );
-            insert( _config.tempLong , res );
+            insert( _config.tempNamespace , res );
         }
 
         BSONObj _nativeToTemp( const BSONObj& args, void* data ) {
             State* state = (State*) data;
             BSONObjIterator it(args);
-            state->insert(state->_config.tempLong, it.next().Obj());
+            state->insert(state->_config.tempNamespace, it.next().Obj());
             return BSONObj();
         }
 
@@ -1122,6 +1106,12 @@ namespace mongo {
             virtual bool canRunInMultiStmtTxn() const { return true; }
             virtual OpSettings getOpSettings() const { return OpSettings().setBulkFetch(true); }
 
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                addPrivilegesRequiredForMapReduce(dbname, cmdObj, out);
+            }
+
             bool run(const string& dbname , BSONObj& cmd, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
                 Timer t;
                 Client& client = cc();
@@ -1166,10 +1156,6 @@ namespace mongo {
                             }
                         }
                         
-                        if (state.isOnDisk() && !client.getAuthenticationInfo()->isAuthorized(dbname)) {
-                            errmsg = "read-only user cannot output mapReduce to collection, use inline instead";
-                            return false;
-                        }
                         state.init();
                         state.prepTempCollection();
                         ON_BLOCK_EXIT_OBJ(state, &State::dropTempCollections);
@@ -1295,7 +1281,6 @@ namespace mongo {
             MapReduceFinishCommand() : Command( "mapreduce.shardedfinish" ) {}
             virtual bool slaveOk() const { return !replSet; }
             virtual bool slaveOverrideOk() const { return true; }
-
             virtual LockType locktype() const { return NONE; }
             virtual bool requiresSync() const { return false; }
             virtual bool needsTxn() const { return false; }
@@ -1303,6 +1288,13 @@ namespace mongo {
             virtual bool canRunInMultiStmtTxn() const { return true; }
             virtual OpSettings getOpSettings() const { return OpSettings().setBulkFetch(true); }
 
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::mapReduceShardedFinish);
+                out->push_back(Privilege(dbname, actions));
+            }
             bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 ShardedConnectionInfo::addHook();
                 // legacy name
@@ -1325,7 +1317,7 @@ namespace mongo {
 
                 // no need for incremental collection because records are already sorted
                 state._useIncremental = false;
-                config.incLong = config.tempLong;
+                config.incLong = config.tempNamespace;
 
                 BSONObj shardCounts = cmdObj["shardCounts"].embeddedObjectUserCheck();
                 BSONObj counts = cmdObj["counts"].embeddedObjectUserCheck();
@@ -1350,17 +1342,17 @@ namespace mongo {
                 ON_BLOCK_EXIT_OBJ(state, &State::dropTempCollections);
 
                 BSONList values;
-                if (!config.outDB.empty()) {
+                if (!config.outputOptions.outDB.empty()) {
                     BSONObjBuilder loc;
-                    if ( !config.outDB.empty())
-                        loc.append( "db" , config.outDB );
-                    if ( !config.finalShort.empty() )
-                        loc.append( "collection" , config.finalShort );
+                    if ( !config.outputOptions.outDB.empty())
+                        loc.append( "db" , config.outputOptions.outDB );
+                    if ( !config.outputOptions.collectionName.empty() )
+                        loc.append( "collection" , config.outputOptions.collectionName );
                     result.append("result", loc.obj());
                 }
                 else {
-                    if ( !config.finalShort.empty() )
-                        result.append( "result" , config.finalShort );
+                    if ( !config.outputOptions.collectionName.empty() )
+                        result.append( "result" , config.outputOptions.collectionName );
                 }
 
                 // fetch result from other shards 1 chunk at a time
@@ -1368,8 +1360,9 @@ namespace mongo {
                 string shardName = shardingState.getShardName();
                 DBConfigPtr confOut = grid.getDBConfig( dbname , false );
                 vector<ChunkPtr> chunks;
-                if ( confOut->isSharded(config.finalLong) ) {
-                    ChunkManagerPtr cm = confOut->getChunkManager( config.finalLong );
+                if ( confOut->isSharded(config.outputOptions.finalNamespace) ) {
+                    ChunkManagerPtr cm = confOut->getChunkManager(
+                            config.outputOptions.finalNamespace);
                     const ChunkMap& chunkMap = cm->getChunkMap();
                     for ( ChunkMap::const_iterator it = chunkMap.begin(); it != chunkMap.end(); ++it ) {
                         ChunkPtr chunk = it->second;
@@ -1418,7 +1411,7 @@ namespace mongo {
                         BSONObj res = config.reducer->finalReduce( values , config.finalizer.get());
                         chunkSize += res.objsize();
                         if (state.isOnDisk())
-                            state.insert( config.tempLong , res );
+                            state.insert( config.tempNamespace , res );
                         else
                             state.emit(res);
                         values.clear();

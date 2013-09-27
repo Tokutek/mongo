@@ -23,14 +23,18 @@
    mostly around shard management and checking
  */
 
-
+#include <algorithm>
 #include <map>
 #include <string>
-#include <algorithm>
+#include <vector>
 
 #include <boost/thread/thread.hpp>
 
 #include "mongo/pch.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/database.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/commands.h"
@@ -679,7 +683,7 @@ namespace mongo {
                                                         OID::gen().toString()).c_str());
 
         if (!noauth) {
-            cc().getAuthenticationInfo()->authorize("local", internalSecurity.user);
+            cc().getAuthorizationManager()->grantInternalAuthorization("_cleanupOldData");
         }
 
         log() << " (start) waiting to cleanup " << cleanup
@@ -757,7 +761,13 @@ namespace mongo {
     class TransferModsCommand : public ChunkCommandHelper {
     public:
         TransferModsCommand() : ChunkCommandHelper( "_transferMods" ) {}
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_transferMods);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             return migrateFromStatus.transferMods( errmsg, result );
         }
@@ -767,7 +777,13 @@ namespace mongo {
     class InitialCloneCommand : public ChunkCommandHelper {
     public:
         InitialCloneCommand() : ChunkCommandHelper( "_migrateClone" ) {}
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_migrateClone);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             return migrateFromStatus.clone( errmsg, result );
         }
@@ -796,6 +812,13 @@ namespace mongo {
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::moveChunk);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
 
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             // 1. parse options
@@ -1790,7 +1813,7 @@ namespace mongo {
         Client::initThread( "migrateThread" );
         if (!noauth) {
             ShardedConnectionInfo::addHook();
-            cc().getAuthenticationInfo()->authorize("local", internalSecurity.user);
+            cc().getAuthorizationManager()->grantInternalAuthorization("_migrateThread");
         }
         migrateStatus.go();
         cc().shutdown();
@@ -1801,7 +1824,13 @@ namespace mongo {
         RecvChunkStartCommand() : ChunkCommandHelper( "_recvChunkStart" ) {}
 
         virtual LockType locktype() const { return WRITE; }  // this is so don't have to do locking internally
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_recvChunkStart);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
 
             if ( migrateStatus.getActive() ) {
@@ -1856,7 +1885,13 @@ namespace mongo {
     class RecvChunkStatusCommand : public ChunkCommandHelper {
     public:
         RecvChunkStatusCommand() : ChunkCommandHelper( "_recvChunkStatus" ) {}
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_recvChunkStatus);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             migrateStatus.status( result );
             return 1;
@@ -1867,7 +1902,13 @@ namespace mongo {
     class RecvChunkCommitCommand : public ChunkCommandHelper {
     public:
         RecvChunkCommitCommand() : ChunkCommandHelper( "_recvChunkCommit" ) {}
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_recvChunkCommit);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             bool ok = migrateStatus.startCommit();
             migrateStatus.status( result );
@@ -1879,7 +1920,13 @@ namespace mongo {
     class RecvChunkAbortCommand : public ChunkCommandHelper {
     public:
         RecvChunkAbortCommand() : ChunkCommandHelper( "_recvChunkAbort" ) {}
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_recvChunkAbort);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             migrateStatus.abort();
             migrateStatus.status( result );

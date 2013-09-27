@@ -323,8 +323,9 @@ namespace mongo {
             if ( d ) {
                 int i = d->findIdIndex();
                 if( i < 0 ) {
-                    if ( _ns.find( ".system." ) == string::npos )
+                    if ( !NamespaceString::isSystem(_ns) ) {
                         log() << "warning: no _id index on $snapshot query, ns:" << _ns << endl;
+                    }
                 }
                 else {
                     /* [dm] the name of an _id index tends to vary, so we build the hint the hard

@@ -16,13 +16,16 @@
 */
 
 #include "mongo/pch.h"
+
+#include "mongo/db/commands/find_and_modify.h"
+
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
-#include "../queryutil.h"
+#include "mongo/db/queryutil.h"
 #include "mongo/db/relock.h"
 
 namespace mongo {
@@ -54,6 +57,11 @@ namespace mongo {
             return settings;
         }
         
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            find_and_modify::addPrivilegesRequiredForFindAndModify(dbname, cmdObj, out);
+        }
         /* this will eventually replace run,  once sort is handled */
         bool runNoDirectClient( const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             verify( cmdObj["sort"].eoo() );

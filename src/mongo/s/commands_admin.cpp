@@ -31,6 +31,10 @@
 #include "mongo/client/connpool.h"
 #include "mongo/client/dbclientcursor.h"
 
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/namespacestring.h"
@@ -82,6 +86,13 @@ namespace mongo {
             virtual void help( stringstream& help ) const {
                 help << " shows status/reachability of servers in the cluster";
             }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::netstat);
+                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 result.append("configserver", configServer.getPrimary().getConnString() );
                 result.append("isdbgrid", 1);
@@ -95,12 +106,14 @@ namespace mongo {
             virtual void help( stringstream& help ) const {
                 help << "flush all router config";
             }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::flushRouterConfig);
+                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
-                if ( !ClientBasic::getCurrent()->getAuthenticationInfo()->isAuthorized("admin") ) {
-                    errmsg = "unauthorized. Need admin authentication for flushRouterConfig. ";
-                    return false;
-                }
-
                 grid.flushConfig();
                 result.appendBool( "flushed" , true );
                 return true;
@@ -112,6 +125,13 @@ namespace mongo {
         public:
             ServerStatusCmd() : WebInformationCommand( "serverStatus" ) {
                 _started = time(0);
+            }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::serverStatus);
+                out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
             }
 
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
@@ -141,8 +161,9 @@ namespace mongo {
 
                 {
                     BSONObjBuilder bb( result.subobjStart( "connections" ) );
-                    bb.append( "current" , connTicketHolder.used() );
-                    bb.append( "available" , connTicketHolder.available() );
+                    bb.append( "current" , Listener::globalTicketHolder.used() );
+                    bb.append( "available" , Listener::globalTicketHolder.available() );
+                    bb.append( "totalCreated" , Listener::globalConnectionNumber.load() );
                     bb.done();
                 }
 
@@ -204,6 +225,13 @@ namespace mongo {
         class FsyncCommand : public GridAdminCmd {
         public:
             FsyncCommand() : GridAdminCmd( "fsync" ) {}
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::fsync);
+                out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 if ( cmdObj["lock"].trueValue() ) {
                     errmsg = "can't do lock through mongos";
@@ -244,6 +272,13 @@ namespace mongo {
             MoveDatabasePrimaryCommand() : GridAdminCmd("movePrimary") { }
             virtual void help( stringstream& help ) const {
                 help << " example: { moveprimary : 'foo' , to : 'localhost:9999' }";
+            }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::movePrimary);
+                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 string dbname = cmdObj.firstElement().valuestrsafe();
@@ -398,13 +433,14 @@ namespace mongo {
                         << "Enable sharding for a db. (Use 'shardcollection' command afterwards.)\n"
                         << "  { enablesharding : \"<dbname>\" }\n";
             }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::enableSharding);
+                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
-                if ( !ClientBasic::getCurrent()->getAuthenticationInfo()->isAuthorized("admin") ) {
-                    errmsg = "unauthorized. Need admin authentication to enable sharding on a "
-                        "database";
-                    return false;
-                }
-
                 string dbname = cmdObj.firstElement().valuestrsafe();
                 if ( dbname.size() == 0 ) {
                     errmsg = "no db";
@@ -448,21 +484,21 @@ namespace mongo {
                         << "Shard a collection.  Requires key.  Optional unique. Sharding must already be enabled for the database.\n"
                         << "  { enablesharding : \"<dbname>\" }\n";
             }
-
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::shardCollection);
+                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
-                if ( !ClientBasic::getCurrent()->getAuthenticationInfo()->isAuthorized("admin") ) {
-                    errmsg = "unauthorized. Need admin authentication to shard a collection";
-                    return false;
-                }
-
                 const string ns = cmdObj.firstElement().valuestrsafe();
                 if ( ns.size() == 0 ) {
                     errmsg = "no ns";
                     return false;
                 }
 
-                const NamespaceString nsStr( ns );
-                if ( !nsStr.isValid() ){
+                if ( !NamespaceString::isValid(ns) ){
                     errmsg = str::stream() << "bad ns[" << ns << "]";
                     return false;
                 }
@@ -665,8 +701,7 @@ namespace mongo {
                     cmd.append( "checkShardingIndex" , ns );
                     cmd.append( "keyPattern" , proposedKey );
                     BSONObj cmdObj = cmd.obj();
-                    NamespaceString nss(ns);
-                    if ( ! conn->get()->runCommand( nss.db , cmdObj , res ) ) {
+                    if ( ! conn->get()->runCommand( nsToDatabase(ns) , cmdObj , res ) ) {
                         errmsg = res["errmsg"].str();
                         conn->done();
                         return false;
@@ -843,7 +878,13 @@ namespace mongo {
             virtual void help( stringstream& help ) const {
                 help << " example: { getShardVersion : 'alleyinsider.foo'  } ";
             }
-
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::getShardVersion);
+                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 string ns = cmdObj.firstElement().valuestrsafe();
                 if ( ns.size() == 0 ) {
@@ -881,13 +922,14 @@ namespace mongo {
                         << " NOTE: this does not move move the chunks, it merely creates a logical separation \n"
                         ;
             }
-
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::split);
+                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
-                if ( !ClientBasic::getCurrent()->getAuthenticationInfo()->isAuthorized("admin") ) {
-                    errmsg = "unauthorized. Need admin authentication to split a chunk ";
-                    return false;
-                }
-
                 if ( ! okForConfigChanges( errmsg ) )
                     return false;
 
@@ -897,7 +939,7 @@ namespace mongo {
                     return false;
                 }
 
-                ShardConnection::sync( NamespaceString(ns).db );
+                ShardConnection::sync( nsToDatabase(ns) );
 
                 DBConfigPtr config = grid.getDBConfig( ns );
                 if ( ! config->isSharded( ns ) ) {
@@ -964,12 +1006,14 @@ namespace mongo {
             virtual void help( stringstream& help ) const {
                 help << "{ movechunk : 'test.foo' , find : { num : 1 } , to : 'localhost:30001' }";
             }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::moveChunk);
+                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
-                if ( !ClientBasic::getCurrent()->getAuthenticationInfo()->isAuthorized("admin") ) {
-                    errmsg = "unauthorized. Need admin authentication to move a chunk ";
-                    return false;
-                }
-
                 if ( ! okForConfigChanges( errmsg ) )
                     return false;
 
@@ -979,7 +1023,7 @@ namespace mongo {
                     return false;
                 }
 
-                ShardConnection::sync( NamespaceString(ns).db );
+                ShardConnection::sync( nsToDatabase(ns) );
 
                 Timer t;
 
@@ -1040,6 +1084,13 @@ namespace mongo {
             virtual void help( stringstream& help ) const {
                 help << "list all shards of the system";
             }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::listShards);
+                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 scoped_ptr<ScopedDbConnection> conn(
                         ScopedDbConnection::getInternalScopedDbConnection( configServer.getPrimary()
@@ -1066,14 +1117,15 @@ namespace mongo {
             virtual void help( stringstream& help ) const {
                 help << "add a new shard to the system";
             }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::addShard);
+                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 errmsg.clear();
-
-                if ( !ClientBasic::getCurrent()->getAuthenticationInfo()->isAuthorized("admin") ) {
-                    errmsg = "unauthorized. Need admin authentication to add a shard ";
-                    log() << "addshard request " << cmdObj << " failed:" << errmsg << endl;
-                    return false;
-                }
 
                 // get replica set component hosts
                 ConnectionString servers = ConnectionString::parse( cmdObj.firstElement().valuestrsafe() , errmsg );
@@ -1133,12 +1185,14 @@ namespace mongo {
             virtual void help( stringstream& help ) const {
                 help << "remove a shard to the system.";
             }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::removeShard);
+                out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
-                if ( !ClientBasic::getCurrent()->getAuthenticationInfo()->isAuthorized("admin") ) {
-                    errmsg = "unauthorized. Need admin authentication to remove a shard ";
-                    return false;
-                }
-
                 string target = cmdObj.firstElement().valuestrsafe();
                 Shard s = Shard::make( target );
                 if ( ! grid.knowAboutShard( s.getConnString() ) ) {
@@ -1272,6 +1326,9 @@ namespace mongo {
         public:
             virtual bool requiresAuth() { return false; }
             IsDbGridCmd() : InformationCommand("isdbgrid") { }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {} // No auth required
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 result.append("isdbgrid", 1);
                 result.append("hostname", getHostNameCached());
@@ -1286,6 +1343,9 @@ namespace mongo {
                 help << "test if this is master half of a replica pair";
             }
             CmdIsMaster() : InformationCommand("isMaster" , false , "ismaster") { }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {} // No auth required
             virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 result.appendBool("ismaster", true );
                 result.append("msg", "isdbgrid");
@@ -1297,6 +1357,9 @@ namespace mongo {
         class CmdWhatsMyUri : public InformationCommand {
         public:
             CmdWhatsMyUri() : InformationCommand("whatsmyuri") { }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {} // No auth required
             virtual void help( stringstream &help ) const {
                 help << "{whatsmyuri:1}";
             }
@@ -1314,6 +1377,9 @@ namespace mongo {
                 help << "get previous error (since last reseterror command)";
             }
             CmdShardingGetPrevError() : InformationCommand( "getPrevError" , false , "getpreverror") { }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {} // No auth required
             virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 errmsg += "getpreverror not supported for sharded environments";
                 return false;
@@ -1326,6 +1392,9 @@ namespace mongo {
                 help << "check for an error on the last command executed";
             }
             CmdShardingGetLastError() : InformationCommand("getLastError" , false , "getlasterror") { }
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {} // No auth required
 
             virtual bool run(const string& dbName, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 LastError *le = lastError.disableForCommand();
@@ -1349,6 +1418,9 @@ namespace mongo {
     public:
         CmdShardingResetError() : InformationCommand( "resetError" , false , "reseterror" ) {}
 
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {} // No auth required
         bool run(const string& dbName , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             LastError *le = lastError.get();
             if ( le )
@@ -1376,6 +1448,13 @@ namespace mongo {
         virtual bool logTheOp() { return false; }
         virtual bool adminOnly() const { return true; }
         virtual void help( stringstream& help ) const { help << "list databases on cluster"; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::listDatabases);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
 
         bool run(const string& , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             vector<Shard> shards;
@@ -1498,6 +1577,13 @@ namespace mongo {
         virtual bool logTheOp() { return false; }
         virtual bool adminOnly() const { return true; }
         virtual void help( stringstream& help ) const { help << "Not supported sharded"; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::closeAllDatabases);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
 
         bool run(const string& , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& /*result*/, bool /*fromRepl*/) {
             errmsg = "closeAllDatabases isn't supported through mongos";
@@ -1512,7 +1598,14 @@ namespace mongo {
         virtual bool logTheOp() { return false; }
         virtual bool adminOnly() const { return true; }
         virtual void help( stringstream& help ) const { help << "Not supported through mongos"; }
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            // TODO: Should this require no auth since it's not supported in mongos anyway?
+            ActionSet actions;
+            actions.addAction(ActionType::replSetGetStatus);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
             if ( jsobj["forShell"].trueValue() ) {
                 lastError.disableForCommand();
@@ -1533,11 +1626,6 @@ namespace mongo {
     }
 
     bool CmdShutdown::run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-        if ( !ClientBasic::getCurrent()->getAuthenticationInfo()->isAuthorized("admin") ) {
-            errmsg = "unauthorized. Need admin authentication to run shutdown";
-            return false;
-        }
-
         return shutdownHelper();
     }
 

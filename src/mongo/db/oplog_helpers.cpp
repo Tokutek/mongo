@@ -20,6 +20,7 @@
 #include "repl_block.h"
 #include "stats/counters.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
@@ -210,7 +211,7 @@ namespace OpLogHelpers{
     static void runInsertFromOplog(const char* ns, BSONObj op) {
         BSONObj row = op[KEY_STR_ROW].Obj();
         // handle add index case
-        if (mongoutils::str::endsWith(ns, ".system.indexes")) {
+        if (nsToCollectionSubstring(ns) == "system.indexes") {
             // do not build the index if the user has disabled
             if (theReplSet->buildIndexes()) {
                 Client::WriteContext ctx(ns);
@@ -406,7 +407,7 @@ namespace OpLogHelpers{
 
     static void runRollbackInsertFromOplog(const char* ns, BSONObj op) {
         // handle add index case
-        if (mongoutils::str::endsWith(ns, ".system.indexes")) {
+        if (nsToCollectionSubstring(ns) == "system.indexes") {
             throw RollbackOplogException(str::stream() << "Not rolling back an add index on " << ns << ". Op: " << op.toString(false, true));
         }
         else {

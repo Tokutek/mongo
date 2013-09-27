@@ -69,6 +69,7 @@ mongod_port = None
 shell_executable = None
 continue_on_failure = None
 file_of_commands_mode = False
+start_mongod = True
 
 tests = []
 winners = []
@@ -212,6 +213,8 @@ class mongod(object):
             """
         utils.ensureDir(dir_name)
         argv = [mongod_executable, "--port", str(self.port), "--dbpath", dir_name]
+        # This should always be set for tests
+        argv += ['--setParameter', 'enableTestCommands=1']
         if self.kwargs.get('small_oplog'):
             argv += ["--master", "--oplogSize", "511"]
         if self.kwargs.get('small_oplog_rs'):
@@ -224,11 +227,16 @@ class mongod(object):
             argv += ['--nopreallocj']
         if self.kwargs.get('auth'):
             argv += ['--auth']
+            authMechanism = self.kwargs.get('authMechanism', 'MONGODB-CR')
+            if authMechanism != 'MONGODB-CR':
+                argv.append('--setParameter=authenticationMechanisms=' + authMechanism)
             self.auth = True
         if len(server_log_file) > 0:
             argv += ['--logpath', server_log_file]
         if len(smoke_server_opts) > 0:
             argv += [smoke_server_opts]
+        if self.kwargs.get('use_ssl'):
+            argv += ['--sslOnNormalPorts', '--sslPEMKeyFile', 'jstests/libs/smoke.pem']
         if not quiet:
             print "running " + " ".join(argv)
         self.proc = self._start(buildlogger(argv, is_global=True))
@@ -383,6 +391,23 @@ def skipTest(path):
         # These tests fail due to bugs
         if os.path.join(parentDir,basename) in ["sharding/sync_conn_cmd.js"]:
             return True
+
+        authTestsToSkip = [("sharding", "gle_with_conf_servers.js"), # SERVER-6972
+                           ("sharding", "read_pref.js"), # SERVER-6972
+                           ("sharding", "read_pref_cmd.js"), # SERVER-6972
+                           ("sharding", "read_pref_rs_client.js"), # SERVER-6972
+                           ("sharding", "sync_conn_cmd.js"), #SERVER-6327
+                           ("sharding", "sync3.js"), # SERVER-6388 for this and those below
+                           ("sharding", "sync6.js"),
+                           ("sharding", "parallel.js"),
+                           ("jstests", "bench_test1.js"),
+                           ("jstests", "bench_test2.js"),
+                           ("jstests", "bench_test3.js"),
+                           ]
+
+        if os.path.join(parentDir,basename) in [ os.path.join(*test) for test in authTestsToSkip ]:
+            return True
+
     if _debug:
         # MutexDebugger complains about this test, it's not unique to tokumx though, see #79
         if os.path.join(parentDir,basename) in ["sharding/remove2.js"]:
@@ -415,11 +440,13 @@ def runTest(test, testnum):
         if os.path.basename(path) in ('python', 'python.exe'):
             path = argv[1]
     elif ext == ".js":
-        argv = [shell_executable, "--port", mongod_port]
+        argv = [shell_executable, "--port", mongod_port, '--authenticationMechanism', authMechanism]
         if not usedb:
             argv += ["--nodb"]
         if small_oplog or small_oplog_rs:
             argv += ["--eval", 'testingReplication = true;']
+        if use_ssl:
+            argv += ["--ssl"]
         argv += [path]
     elif ext in ["", ".exe"]:
         # Blech.
@@ -526,12 +553,14 @@ def runTest(test, testnum):
     finally:
         tempfile.close()
 
-"""
-    try:
-        c = Connection( "127.0.0.1" , int(mongod_port) )
-    except Exception,e:
-        raise TestServerFailure(path)
-"""
+    if r != 0:
+        raise TestExitFailure(path, r)
+    
+    if start_mongod:
+        try:
+            c = Connection(host="127.0.0.1", port=int(mongod_port), ssl=use_ssl)
+        except Exception,e:
+            raise TestServerFailure(path)
 
 def run_tests(tests):
     # FIXME: some suites of tests start their own mongod, so don't
@@ -542,12 +571,28 @@ def run_tests(tests):
     # The reason we want to use "with" is so that we get __exit__ semantics
     # but "with" is only supported on Python 2.5+
 
-    master = mongod(small_oplog_rs=small_oplog_rs,small_oplog=small_oplog,no_journal=no_journal,no_preallocj=no_preallocj,auth=auth).__enter__()
+    if start_mongod:
+        master = mongod(small_oplog_rs=small_oplog_rs,
+                        small_oplog=small_oplog,
+                        no_journal=no_journal,
+                        no_preallocj=no_preallocj,
+                        auth=auth,
+                        authMechanism=authMechanism,
+                        use_ssl=use_ssl).__enter__()
+    else:
+        master = Nothing()
     try:
         if small_oplog:
             slave = mongod(slave=True).__enter__()
         elif small_oplog_rs:
-            slave = mongod(slave=True,small_oplog_rs=small_oplog_rs,small_oplog=small_oplog,no_journal=no_journal,no_preallocj=no_preallocj,auth=auth).__enter__()
+            slave = mongod(slave=True,
+                           small_oplog_rs=small_oplog_rs,
+                           small_oplog=small_oplog,
+                           no_journal=no_journal,
+                           no_preallocj=no_preallocj,
+                           auth=auth,
+                           authMechanism=authMechanism,
+                           use_ssl=use_ssl).__enter__()
             primary = Connection(port=master.port, slave_okay=True);
 
             primary.admin.command({'replSetInitiate' : {'_id' : 'foo', 'members' : [
@@ -582,7 +627,13 @@ def run_tests(tests):
                         if (tests_run+1) % 20 == 0:
                             # restart mongo every 20 times, for our 32-bit machines
                             master.__exit__(None, None, None)
-                            master = mongod(small_oplog_rs=small_oplog_rs,small_oplog=small_oplog,no_journal=no_journal,no_preallocj=no_preallocj,auth=auth).__enter__()
+                            master = mongod(small_oplog_rs=small_oplog_rs,
+                                            small_oplog=small_oplog,
+                                            no_journal=no_journal,
+                                            no_preallocj=no_preallocj,
+                                            auth=auth,
+                                            authMechanism=authMechanism,
+                                            use_ssl=use_ssl).__enter__()
 
                 except TestFailure, f:
                     try:
@@ -676,6 +727,12 @@ def expand_suites(suites,expandUseDB=True):
             paths = ["firstExample", "secondExample", "whereExample", "authTest", "clientTest", "httpClientTest"]
             if os.sys.platform == "win32":
                 paths = [path + '.exe' for path in paths]
+
+            # Add any files of the same name from the sharedclient directory.
+            scpaths = ["sharedclient/" + path for path in paths]
+            scfiles = glob.glob("sharedclient/*")
+            paths += [scfile for scfile in scfiles if scfile in scpaths]
+
             # hack
             tests += [(test_path and path or os.path.join(mongo_repo, path), False) for path in paths]
         elif suite == 'mongosTest':
@@ -719,8 +776,12 @@ def add_exe(e):
     return e
 
 def set_globals(options, tests):
-    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, small_oplog_rs, no_journal, no_preallocj, auth, keyFile, smoke_db_prefix, smoke_server_opts, server_log_file, tests_log, quiet, test_path
+    global mongod_executable, mongod_port, shell_executable, continue_on_failure, small_oplog, small_oplog_rs
+    global no_journal, no_preallocj, auth, authMechanism, keyFile, smoke_db_prefix, smoke_server_opts, server_log_file, tests_log, quiet, test_path, start_mongod
+    global use_ssl
     global file_of_commands_mode
+    start_mongod = options.start_mongod
+    use_ssl = options.use_ssl
     #Careful, this can be called multiple times
     test_path = options.test_path
 
@@ -748,8 +809,10 @@ def set_globals(options, tests):
             print "Not running client suite with auth even though --auth was provided"
         auth = False;
         keyFile = False;
+        authMechanism = None
     else:
         auth = options.auth
+        authMechanism = options.authMechanism
         keyFile = options.keyFile
 
     if auth and not keyFile:
@@ -882,6 +945,8 @@ def main():
     parser.add_option('--auth', dest='auth', default=False,
                       action="store_true",
                       help='Run standalone mongods in tests with authentication enabled')
+    parser.add_option('--authMechanism', dest='authMechanism', default='MONGODB-CR',
+                      help='Use the given authentication mechanism, when --auth is used.')
     parser.add_option('--keyFile', dest='keyFile', default=None,
                       help='Path to keyFile to use to run replSet and sharding tests with authentication enabled')
     parser.add_option('--ignore', dest='ignore_files', default=None,
@@ -908,6 +973,12 @@ def main():
     parser.add_option('--skip-until', dest='skip_tests_until', default="",
                       action="store",
                       help='Skip all tests alphabetically less than the given name.')
+    parser.add_option('--dont-start-mongod', dest='start_mongod', default=True, 
+                      action='store_false',
+                      help='Do not start mongod before commencing test running')
+    parser.add_option('--use-ssl', dest='use_ssl', default=False,
+                      action='store_true',
+                      help='Run mongo shell and mongod instances with SSL encryption')
 
     # Buildlogger invocation from command line
     parser.add_option('--buildlogger-builder', dest='buildlogger_builder', default=None,

@@ -29,7 +29,6 @@
 #include "mongo/db/repl/connections.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/rs_config.h"
-#include "mongo/db/security.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/msg.h"
 #include "mongo/util/concurrency/task.h"
@@ -59,6 +58,13 @@ namespace mongo {
     public:
         CmdReplSetHeartbeat() : ReplSetCommand("replSetHeartbeat") { }
         virtual bool needsTxn() const { return false; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::replSetHeartbeat);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if( replSetBlind ) {
                 if (theReplSet) {
@@ -71,10 +77,6 @@ namespace mongo {
                checks many things that are pre-initialization. */
             if( !replSet ) {
                 errmsg = "not running with --replSet";
-                return false;
-            }
-
-            if (!checkAuth(errmsg, result)) {
                 return false;
             }
 
@@ -198,11 +200,7 @@ namespace mongo {
                             "from" << from );
 
         ScopedConn conn(memberFullName);
-        return conn.runCommand("admin",
-                               cmd,
-                               result,
-                               0,
-                               &AuthenticationTable::getInternalSecurityAuthenticationTable());
+        return conn.runCommand("admin", cmd, result, 0);
     }
 
     /**
@@ -274,8 +272,7 @@ namespace mongo {
                 if( ok ) {
                     up(info, mem);
                 }
-                else if (!info["errmsg"].eoo() &&
-                         info["errmsg"].str() == "need to login") {
+                else if (!info["errmsg"].eoo() && info["errmsg"].str() == "unauthorized") {
                     authIssue(mem);
                 }
                 else {

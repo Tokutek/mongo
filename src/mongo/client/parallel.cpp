@@ -98,7 +98,7 @@ namespace mongo {
             throw UserException( o["code"].numberInt() , o["$err"].String() );
         }
 
-        if ( NamespaceString( cursor->getns() ).isCommand() ) {
+        if ( NamespaceString::isCommand( cursor->getns() ) ) {
             // For backwards compatibility with v2.0 mongods because in 2.0 commands that care about
             // versioning (like the count command) will return with the stale config error code, but
             // don't set the ShardConfigStale result flag on the cursor.
@@ -1675,12 +1675,7 @@ namespace mongo {
             }
 
             if ( _conn->lazySupported() ) {
-                BSONObj actualCommand = _cmd;
-                if ( !noauth ) {
-                    actualCommand = ClientBasic::getCurrent()->getAuthenticationInfo()->
-                        getAuthTable().copyCommandObjAddingAuth( _cmd );
-                }
-                _cursor.reset( new DBClientCursor(_conn, _db + ".$cmd", actualCommand,
+                _cursor.reset( new DBClientCursor(_conn, _db + ".$cmd", _cmd,
                                                   -1/*limit*/, 0, NULL, _options, 0));
                 _cursor->initLazy();
             }

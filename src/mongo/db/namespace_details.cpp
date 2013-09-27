@@ -25,6 +25,9 @@
 
 #include <boost/filesystem/operations.hpp>
 
+#include "mongo/base/init.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/database.h"
 #include "mongo/db/databaseholder.h"
@@ -291,6 +294,68 @@ namespace mongo {
                 }
             }
             return b.obj();
+        }
+    };
+
+    namespace {
+        BSONObj oldSystemUsersKeyPattern;
+        BSONObj extendedSystemUsersKeyPattern;
+        std::string extendedSystemUsersIndexName;
+
+        MONGO_INITIALIZER(AuthIndexKeyPatterns)(InitializerContext*) {
+            oldSystemUsersKeyPattern = BSON(AuthorizationManager::USER_NAME_FIELD_NAME << 1);
+            extendedSystemUsersKeyPattern = BSON(AuthorizationManager::USER_NAME_FIELD_NAME << 1 <<
+                                                 AuthorizationManager::USER_SOURCE_FIELD_NAME << 1);
+            extendedSystemUsersIndexName = std::string(str::stream() <<
+                                                       AuthorizationManager::USER_NAME_FIELD_NAME <<
+                                                       "_1_" <<
+                                                       AuthorizationManager::USER_SOURCE_FIELD_NAME <<
+                                                       "_1");
+            return Status::OK();
+        }
+    }
+
+    static void addIndexToCatalog(const BSONObj &info) {
+        const StringData &indexns = info["ns"].Stringdata();
+        if (nsToCollectionSubstring(indexns).startsWith("system.indexes")) {
+            // system.indexes holds all the others, so it is not explicitly listed in the catalog.
+            return;
+        }
+
+        string ns = getSisterNS(indexns, "system.indexes");
+        NamespaceDetails *d = nsdetails_maybe_create(ns);
+        BSONObj objMod = info;
+        insertOneObject(d, objMod);
+    }
+
+    class SystemUsersCollection : public IndexedCollection {
+        static BSONObj extendedSystemUsersIndexInfo(const StringData &ns) {
+            BSONObjBuilder indexBuilder;
+            indexBuilder.append("key", extendedSystemUsersKeyPattern);
+            indexBuilder.appendBool("unique", true);
+            indexBuilder.append("ns", ns);
+            indexBuilder.append("name", extendedSystemUsersIndexName);
+            return indexBuilder.obj();
+        }
+    public:
+        SystemUsersCollection(const StringData &ns, const BSONObj &options) :
+            IndexedCollection(ns, options) {
+            BSONObj info = extendedSystemUsersIndexInfo(ns);
+            createIndex(info);
+        }
+        SystemUsersCollection(const BSONObj &serialized) :
+            IndexedCollection(serialized) {
+            int idx = findIndexByKeyPattern(extendedSystemUsersKeyPattern);
+            if (idx < 0) {
+                const StringData ns = serialized["ns"].Stringdata();
+                BSONObj info = extendedSystemUsersIndexInfo(ns);
+                createIndex(info);
+                addIndexToCatalog(info);
+            }
+            idx = findIndexByKeyPattern(oldSystemUsersKeyPattern);
+            if (idx >= 0) {
+                dropIndex(idx);
+            }
         }
     };
 
@@ -813,13 +878,19 @@ namespace mongo {
     }
 
     static bool isSystemCatalog(const StringData &ns) {
-        return ns.find(".system.indexes") != string::npos || ns.find(".system.namespaces") != string::npos;
+        StringData coll = nsToCollectionSubstring(ns);
+        return coll == "system.indexes" || coll == "system.namespaces";
     }
     static bool isProfileCollection(const StringData &ns) {
-        return ns.find(".system.profile") != string::npos;
+        StringData coll = nsToCollectionSubstring(ns);
+        return coll == "system.profile";
     }
     static bool isOplogCollection(const StringData &ns) {
         return ns == rsoplog;
+    }
+    static bool isSystemUsersCollection(const StringData &ns) {
+        StringData coll = nsToCollectionSubstring(ns);
+        return coll == "system.users";
     }
 
     // Construct a brand new NamespaceDetails with a certain primary key and set of options.
@@ -832,7 +903,7 @@ namespace mongo {
         _multiKeyIndexBits(0),
         _qcWriteCount(0) {
 
-        massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns.rawData()));
+        massert( 10356 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns));
 
         TOKULOG(1) << "Creating NamespaceDetails " << ns << endl;
 
@@ -857,6 +928,9 @@ namespace mongo {
             return shared_ptr<NamespaceDetails>(new OplogCollection(ns, options));
         } else if (isSystemCatalog(ns)) {
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(ns, options));
+        } else if (isSystemUsersCollection(ns)) {
+            Client::CreatingSystemUsersScope scope;
+            return shared_ptr<NamespaceDetails>(new SystemUsersCollection(ns, options));
         } else if (isProfileCollection(ns)) {
             // TokuMX doesn't _necessarily_ need the profile to be capped, but vanilla does.
             // We enforce the restriction because it's easier to implement. See SERVER-6937.
@@ -897,6 +971,9 @@ namespace mongo {
         } else if (isSystemCatalog(ns)) {
             massert( 16869, "bug: Should not bulk load a system catalog collection", !bulkLoad );
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(serialized));
+        } else if (isSystemUsersCollection(ns)) {
+            massert( 17002, "bug: Should not bulk load the users collection", !bulkLoad );
+            return shared_ptr<NamespaceDetails>(new SystemUsersCollection(serialized));
         } else if (isProfileCollection(ns)) {
             massert( 16870, "bug: Should not bulk load the profile collection", !bulkLoad );
             return shared_ptr<NamespaceDetails>(new ProfileCollection(serialized));
@@ -1074,6 +1151,10 @@ namespace mongo {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
 
+        if (isSystemUsersCollection(_ns)) {
+            uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), obj));
+        }
+
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
         DBTArrays keyArrays(n);
@@ -1203,6 +1284,10 @@ namespace mongo {
         dassert(!oldObj.isEmpty());
         dassert(!newObj.isEmpty());
 
+        if (isSystemUsersCollection(_ns)) {
+            uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), newObj));
+        }
+
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
         DBTArrays keyArrays(n * 2);
@@ -1296,6 +1381,8 @@ namespace mongo {
 
     // Wrapper for offline (write locked) indexing.
     void NamespaceDetails::createIndex(const BSONObj &info) {
+        const string sourceNS = info["ns"].String();
+
         if (!Lock::isWriteLocked(_ns)) {
             throw RetryWithWriteLock();
         }
@@ -1452,23 +1539,11 @@ namespace mongo {
         fillSpecificStats(result, scale);
     }
 
-    static void addIndexToCatalog(const BSONObj &info) {
-        const StringData &indexns = info["ns"].Stringdata();
-        if (indexns.find(".system.indexes") != string::npos) {
-            // system.indexes holds all the others, so it is not explicitly listed in the catalog.
-            return;
-        }
-
-        StringData database = nsToDatabaseSubstring(indexns);
-        string ns = database.toString() + ".system.indexes";
-        NamespaceDetails *d = nsdetails_maybe_create(ns);
-        BSONObj objMod = info;
-        insertOneObject(d, objMod);
-    }
-
     void NamespaceDetails::addDefaultIndexesToCatalog() {
         // Either a single primary key or a hidden primary key + _id index.
-        dassert(_nIndexes == 1 || (_nIndexes == 2 && findIdIndex() == 1));
+        // TODO: this is now incorrect in the case of system.users collections, need to fix it and
+        //uncomment it:
+        //dassert(_nIndexes == 1 || (_nIndexes == 2 && findIdIndex() == 1));
         for (int i = 0; i < nIndexes(); i++) {
             addIndexToCatalog(_indexes[i]->info());
         }
@@ -1507,7 +1582,7 @@ namespace mongo {
 
     bool userCreateNS(const StringData& ns, BSONObj options, string& err, bool logForReplication) {
         StringData coll = ns.substr(ns.find('.') + 1);
-        massert( 16451 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns.rawData()));
+        massert( 16451 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns));
         StringData cl = nsToDatabaseSubstring( ns );
         if (nsdetails(ns) != NULL) {
             // Namespace already exists
@@ -1582,11 +1657,10 @@ namespace mongo {
         // Check that we are allowed to drop the namespace.
         StringData database = nsToDatabaseSubstring(name);
         verify(database == cc().database()->name());
-        StringData coll = name.substr(name.find('.') + 1);
-        if (coll.startsWith("system.")) {
-            if (coll == "system.profile") {
+        if (NamespaceString::isSystem(name) && !can_drop_system) {
+            if (nsToCollectionSubstring(name) == "system.profile") {
                 uassert(10087, "turn off profiling before dropping system.profile collection", cc().database()->profile() == 0);
-            } else if (!can_drop_system) {
+            } else {
                 uasserted(12502, "can't drop system ns");
             }
         }
@@ -1610,7 +1684,8 @@ namespace mongo {
     */
     void addNewNamespaceToCatalog(const StringData& ns, const BSONObj *options) {
         LOG(1) << "New namespace: " << ns << endl;
-        if (ns.find(".system.namespaces") != string::npos) {
+        StringData coll = nsToCollectionSubstring(ns);
+        if (coll.startsWith("system.namespaces")) {
             // system.namespaces holds all the others, so it is not explicitly listed in the catalog.
             return;
         }
@@ -1622,22 +1697,22 @@ namespace mongo {
         }
         BSONObj info = b.done();
 
-        StringData database = nsToDatabaseSubstring(ns);
-        string system_ns = database.toString() + ".system.namespaces";
+        string system_ns = getSisterNS(ns, "system.namespaces");
         NamespaceDetails *d = nsdetails_maybe_create(system_ns);
         insertOneObject(d, info);
     }
 
     void removeNamespaceFromCatalog(const StringData& ns) {
-        if (ns.find(".system.namespaces") == string::npos) {
-            string system_namespaces = cc().database()->name() + ".system.namespaces";
+        StringData coll = nsToCollectionSubstring(ns);
+        if (!coll.startsWith("system.namespaces")) {
+            string system_namespaces = getSisterNS(cc().database()->name(), "system.namespaces");
             _deleteObjects(system_namespaces.c_str(),
                            BSON("name" << ns), false, false);
         }
     }
 
     void removeFromSysIndexes(const StringData& ns, const StringData& name) {
-        string system_indexes = cc().database()->name() + ".system.indexes";
+        string system_indexes = getSisterNS(cc().database()->name(), "system.indexes");
         BSONObj obj = BSON("ns" << ns << "name" << name);
         TOKULOG(2) << "removeFromSysIndexes removing " << obj << endl;
         const int n = _deleteObjects(system_indexes.c_str(), obj, false, false);
@@ -1673,9 +1748,8 @@ namespace mongo {
         // Kill open cursors before we close and rename the namespace
         ClientCursor::invalidate( from );
 
-        StringData database = nsToDatabaseSubstring(from);
-        string sysIndexes = database.toString() + ".system.indexes";
-        string sysNamespaces = database.toString() + ".system.namespaces";
+        string sysIndexes = getSisterNS(from, "system.indexes");
+        string sysNamespaces = getSisterNS(from, "system.namespaces");
 
         // Generate the serialized form of the namespace, and then close it.
         // This will close the underlying dictionaries and allow us to
@@ -1766,7 +1840,7 @@ namespace mongo {
         uassert( 16873, "Cannot bulk load a collection that already exists.",
                         nsdetails(ns) == NULL );
         uassert( 16998, "Cannot bulk load a system collection",
-                        ns.find(".system.") == string::npos );
+                        !NamespaceString::isSystem(ns) );
         uassert( 16999, "Cannot bulk load a capped collection",
                         !options["capped"].trueValue() );
         uassert( 17000, "Cannot bulk load a natural order collection",
@@ -1824,10 +1898,12 @@ namespace mongo {
     bool legalClientSystemNS( const StringData& ns , bool write ) {
         if( ns == "local.system.replset" ) return true;
 
-        if ( ns.find( ".system.users" ) != string::npos )
+        StringData collstr = nsToCollectionSubstring(ns);
+        if ( collstr == "system.users" ) {
             return true;
+        }
 
-        if ( ns.find( ".system.js" ) != string::npos ) {
+        if ( collstr == "system.js" ) {
             if ( write )
                 Scope::storedFuncMod();
             return true;

@@ -41,7 +41,21 @@ namespace mongo {
         bool vetoLog( const CurOp& curop ) const;
         
         string report( const CurOp& curop ) const;
-        void append( const CurOp& curop, BSONObjBuilder& b ) const;
+
+        /**
+         * Appends stored data and information from curop to the builder.
+         *
+         * @param curop information about the current operation which will be
+         *     use to append data to the builder.
+         * @param builder the BSON builder to use for appending data. Data can
+         *     still be appended even if this method returns false.
+         * @param maxSize the maximum allowed combined size for the query object
+         *     and update object
+         *
+         * @return false if the sum of the sizes for the query object and update
+         *     object exceeded maxSize
+         */
+        bool append(const CurOp& curop, BSONObjBuilder& builder, size_t maxSize) const;
 
         // -------------------
         
@@ -155,7 +169,7 @@ namespace mongo {
         ~CurOp();
 
         bool haveQuery() const { return _query.have(); }
-        BSONObj query() { return _query.get();  }
+        BSONObj query() const { return _query.get();  }
         void appendQuery( BSONObjBuilder& b , const StringData& name ) const { _query.append( b , name ); }
         
         void ensureStarted();
@@ -204,7 +218,6 @@ namespace mongo {
         void setQuery(const BSONObj& query) { _query.set( query ); }
         Client * getClient() const { return _client; }
         BSONObj info();
-        BSONObj infoNoauth();
         string getRemoteString( bool includePort = true ) { return _remote.toString(includePort); }
         ProgressMeter& setMessage( const char * msg , unsigned long long progressMeterTotal = 0 , int secondsBetween = 3 );
         string getMessage() const { return _message.toString(); }

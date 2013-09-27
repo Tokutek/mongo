@@ -42,7 +42,7 @@ namespace mongo {
         MessageHandler * handler;
 
         void threadRun( MessagingPort * inPort) {
-            TicketHolderReleaser connTicketReleaser( &connTicketHolder );
+            TicketHolderReleaser connTicketReleaser( &Listener::globalTicketHolder );
 
             {
                 string threadName = "conn";
@@ -74,7 +74,7 @@ namespace mongo {
 
                     if ( ! p->recv(m) ) {
                         if( !cmdLine.quiet ){
-                            int conns = connTicketHolder.used()-1;
+                            int conns = Listener::globalTicketHolder.used()-1;
                             const char* word = (conns == 1 ? " connection" : " connections");
                             log() << "end connection " << otherSide << " (" << conns << word << " now open)" << endl;
                         }
@@ -121,10 +121,15 @@ namespace mongo {
             pms::handler = handler;
         }
 
+        ~PortMessageServer() {
+            delete pms::handler;
+            pms::handler = NULL;
+        }
+
         virtual void acceptedMP(MessagingPort * p) {
 
-            if ( ! connTicketHolder.tryAcquire() ) {
-                log() << "connection refused because too many open connections: " << connTicketHolder.used() << endl;
+            if ( ! Listener::globalTicketHolder.tryAcquire() ) {
+                log() << "connection refused because too many open connections: " << Listener::globalTicketHolder.used() << endl;
 
                 // TODO: would be nice if we notified them...
                 p->shutdown();
@@ -169,7 +174,7 @@ namespace mongo {
 #endif
             }
             catch ( boost::thread_resource_error& ) {
-                connTicketHolder.release();
+                Listener::globalTicketHolder.release();
                 log() << "can't create new thread, closing connection" << endl;
 
                 p->shutdown();
@@ -178,7 +183,7 @@ namespace mongo {
                 sleepmillis(2);
             }
             catch ( ... ) {
-                connTicketHolder.release();
+                Listener::globalTicketHolder.release();
                 log() << "unknown error accepting new socket" << endl;
 
                 p->shutdown();

@@ -58,7 +58,9 @@ namespace mongo {
             return false;
         }
 
-        auto_ptr<Scope> s = globalScriptEngine->getPooledScope( dbName, "dbeval" );
+        const string userToken = ClientBasic::getCurrent()->getAuthorizationManager()
+                                                          ->getAuthenticatedPrincipalNamesToken();
+        auto_ptr<Scope> s = globalScriptEngine->getPooledScope( dbName, "dbeval" + userToken );
         ScriptingFunction f = s->createFunction(code);
         if ( f == 0 ) {
             errmsg = (string)"compile failed: " + s->getError();
@@ -118,28 +120,25 @@ namespace mongo {
         }
         virtual LockType locktype() const { return OPLOCK; }
         virtual bool requiresSync() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            // $eval can do pretty much anything, so require all privileges.
+            out->push_back(Privilege(PrivilegeSet::WILDCARD_RESOURCE,
+                                     AuthorizationManager::getAllUserActions()));
+        }
         CmdEval() : Command("eval", false, "$eval") { }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-
-            AuthenticationInfo *ai = cc().getAuthenticationInfo();
-            uassert( 12598 , "$eval reads unauthorized", ai->isAuthorizedReads(dbname.c_str()) );
-
             if ( cmdObj["nolock"].trueValue() ) {
                 return dbEval(dbname, cmdObj, result, errmsg);
             }
 
-            // write security will be enforced in DBDirectClient
-            // TODO: should this be a db lock?
-            // TODO: What happens if isAuthorized is false and the js tries to create a collection?
-            //       We'll be in a global read lock, so wouldn't getting a write lock will massert?
-            scoped_ptr<Lock::ScopedLock> lk( ai->isAuthorized( dbname.c_str() ) ? 
-                                             static_cast<Lock::ScopedLock*>( new Lock::GlobalWrite() ) : 
-                                             static_cast<Lock::ScopedLock*>( new Lock::GlobalRead() ) );
-
+            Lock::GlobalWrite lk;
             Client::Context ctx( dbname );
+
             return dbEval(dbname, cmdObj, result, errmsg);
         }
     } cmdeval;

@@ -126,6 +126,8 @@ namespace mongo {
      * will be stale */
     string getHostNameCached();
 
+    string prettyHostName();
+
     /**
      * thrown by Socket and SockAddr
      */
@@ -242,6 +244,13 @@ namespace mongo {
          */
         void postFork();
         
+        /**
+         * @return the time when the socket was opened.
+         */
+        uint64_t getSockCreationMicroSec() const {
+            return _fdCreationMicroSec;
+        }
+
     private:
         void _init();
 
@@ -257,6 +266,7 @@ namespace mongo {
         int _recv( char * buf , int max );
 
         int _fd;
+        uint64_t _fdCreationMicroSec;
         SockAddr _remote;
         double _timeout;
 

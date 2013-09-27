@@ -80,11 +80,6 @@ public:
 
     virtual int doRun() {
 
-        // authenticate
-        enum Auth::Level authLevel = Auth::NONE;
-        auth("", &authLevel);
-        uassert(15935, "user does not have write access", authLevel == Auth::WRITE);
-
         boost::filesystem::path root = getParam("dir");
 
         // check if we're actually talking to a machine that can write
@@ -136,7 +131,7 @@ public:
         LOG(2) << "drillDown: " << root.string() << endl;
 
         // skip hidden files and directories
-        if (root.leaf()[0] == '.' && root.leaf() != ".")
+        if (root.leaf().string()[0] == '.' && root.leaf().string() != ".")
             return;
 
         if ( is_directory( root ) ) {
@@ -212,7 +207,7 @@ public:
 
         verify( ns.size() );
 
-        string oldCollName = root.leaf(); // Name of the collection that was dumped from
+        string oldCollName = root.leaf().string(); // Name of the collection that was dumped from
         oldCollName = oldCollName.substr( 0 , oldCollName.find_last_of( "." ) );
         if (use_coll) {
             ns += "." + _coll;
@@ -244,7 +239,7 @@ public:
             if (!boost::filesystem::exists(metadataFile.string())) {
                 // This is fine because dumps from before 2.1 won't have a metadata file, just print a warning.
                 // System collections shouldn't have metadata so don't warn if that file is missing.
-                if (!startsWith(metadataFile.leaf(), "system.")) {
+                if (!startsWith(metadataFile.leaf().string(), "system.")) {
                     log() << metadataFile.string() << " not found. Skipping." << endl;
                 }
             } else {
@@ -253,8 +248,9 @@ public:
         }
 
         _curns = ns.c_str();
-        _curdb = NamespaceString(_curns).db;
-        _curcoll = NamespaceString(_curns).coll;
+        NamespaceString nss(_curns);
+        _curdb = nss.db;
+        _curcoll = nss.coll;
 
         // If drop is not used, warn if the collection exists.
         if (!_drop) {
@@ -309,9 +305,10 @@ public:
     }
 
     virtual void gotObject( const BSONObj& obj ) {
+        StringData collstr = nsToCollectionSubstring(_curns);
         massert( 16910, "Shouldn't be inserting into system.indexes directly",
-                        !endsWith( _curns.c_str() , ".system.indexes" ));
-        if (_drop && endsWith(_curns.c_str(), ".system.users") && _users.count(obj["user"].String())) {
+                        collstr != "system.indexes" );
+        if (_drop && collstr == "system.users" && _users.count(obj["user"].String())) {
             // Since system collections can't be dropped, we have to manually
             // replace the contents of the system.users collection
             BSONObj userMatch = BSON("user" << obj["user"].String());

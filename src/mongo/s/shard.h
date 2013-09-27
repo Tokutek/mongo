@@ -298,6 +298,12 @@ namespace mongo {
          */
         static void releaseMyConnections();
 
+        /**
+         * Clears all connections in the sharded pool, including connections in the
+         * thread local storage pool of the current thread.
+         */
+        static void clearPool();
+
     private:
         void _init();
         void _finishInit();

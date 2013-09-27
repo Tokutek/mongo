@@ -17,12 +17,23 @@
  */
 
 
-#include "pch.h"
-#include "cursors.h"
-#include "../client/connpool.h"
-#include "../db/commands.h"
-#include "../util/concurrency/task.h"
-#include "../util/net/listen.h"
+#include "mongo/pch.h"
+
+#include "mongo/s/cursors.h"
+
+#include <string>
+#include <vector>
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
+#include "mongo/client/connpool.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/s/cursors.h"
+#include "mongo/util/concurrency/task.h"
+#include "mongo/util/net/listen.h"
 
 namespace mongo {
     const int ShardedClientCursor::INIT_REPLY_BUFFER_SIZE = 32768;
@@ -144,8 +155,15 @@ namespace mongo {
 
     long long CursorCache::TIMEOUT = 600000;
 
+    unsigned getCCRandomSeed() {
+        scoped_ptr<SecureRandom> sr( SecureRandom::create() );
+        return sr->nextInt64();
+    }
+
     CursorCache::CursorCache()
-        :_mutex( "CursorCache" ), _shardedTotal(0) {
+        :_mutex( "CursorCache" ),
+         _random( getCCRandomSeed() ),
+         _shardedTotal(0) {
     }
 
     CursorCache::~CursorCache() {
@@ -153,6 +171,7 @@ namespace mongo {
         bool print = logLevel > 0;
         if ( _cursors.size() || _refs.size() )
             print = true;
+        verify(_refs.size() == _refsNS.size());
         
         if ( print ) 
             cout << " CursorCache at shutdown - "
@@ -186,11 +205,12 @@ namespace mongo {
         _cursors.erase( id );
     }
     
-    void CursorCache::storeRef( const string& server , long long id ) {
+    void CursorCache::storeRef(const std::string& server, long long id, const std::string& ns) {
         LOG(_myLogLevel) << "CursorCache::storeRef server: " << server << " id: " << id << endl;
         verify( id );
         scoped_lock lk( _mutex );
         _refs[id] = server;
+        _refsNS[id] = ns;
     }
 
     string CursorCache::getRef( long long id ) const {
@@ -205,16 +225,33 @@ namespace mongo {
         return i->second;
     }
 
+    std::string CursorCache::getRefNS(long long id) const {
+        verify(id);
+        scoped_lock lk(_mutex);
+        MapNormal::const_iterator i = _refsNS.find(id);
+
+        LOG(_myLogLevel) << "CursorCache::getRefNs id: " << id
+                << " out: " << ( i == _refsNS.end() ? " NONE " : i->second ) << std::endl;
+
+        if ( i == _refsNS.end() )
+            return "";
+        return i->second;
+    }
+
 
     long long CursorCache::genId() {
         while ( true ) {
-            long long x = Security::getNonce();
+            scoped_lock lk( _mutex );
+
+            long long x = Listener::getElapsedTimeMillis() << 32;
+            x |= _random.nextInt32();
+
             if ( x == 0 )
                 continue;
+
             if ( x < 0 )
                 x *= -1;
 
-            scoped_lock lk( _mutex );
             MapSharded::iterator i = _cursors.find( x );
             if ( i != _cursors.end() )
                 continue;
@@ -241,6 +278,8 @@ namespace mongo {
         uassert( 13287 , "too many cursors to kill" , n < 30000 );
 
         long long * cursors = (long long *)x;
+        AuthorizationManager* authManager =
+                ClientBasic::getCurrent()->getAuthorizationManager();
         for ( int i=0; i<n; i++ ) {
             long long id = cursors[i];
             LOG(_myLogLevel) << "CursorCache::gotKillCursors id: " << id << endl;
@@ -256,17 +295,26 @@ namespace mongo {
 
                 MapSharded::iterator i = _cursors.find( id );
                 if ( i != _cursors.end() ) {
-                    _cursors.erase( i );
+                    if (authManager->checkAuthorization(i->second->getNS(),
+                                                        ActionType::killCursors)) {
+                        _cursors.erase( i );
+                    }
                     continue;
                 }
 
-                MapNormal::iterator j = _refs.find( id );
-                if ( j == _refs.end() ) {
+                MapNormal::iterator refsIt = _refs.find(id);
+                MapNormal::iterator refsNSIt = _refsNS.find(id);
+                if (refsIt == _refs.end()) {
                     LOG( LL_WARNING ) << "can't find cursor: " << id << endl;
                     continue;
                 }
-                server = j->second;
-                _refs.erase( j );
+                verify(refsNSIt != _refsNS.end());
+                if (!authManager->checkAuthorization(refsNSIt->second, ActionType::killCursors)) {
+                    continue;
+                }
+                server = refsIt->second;
+                _refs.erase(refsIt);
+                _refsNS.erase(refsNSIt);
             }
 
             LOG(_myLogLevel) << "CursorCache::found gotKillCursors id: " << id << " server: " << server << endl;
@@ -325,6 +373,13 @@ namespace mongo {
         CmdCursorInfo() : WebInformationCommand("cursorInfo") {}
         virtual void help( stringstream& help ) const {
             help << " example: { cursorInfo : 1 }";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::cursorInfo);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
         }
         bool run(const string&, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             cursorCache.appendInfo( result );

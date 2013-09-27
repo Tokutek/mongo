@@ -20,6 +20,9 @@
 
 #include <string>
 
+#include "mongo/bson/util/builder.h"
+#include "mongo/util/assert_util.h"
+
 namespace mongo {
 
     using std::string;
@@ -27,6 +30,29 @@ namespace mongo {
     /* in the mongo source code, "client" means "database". */
 
     const size_t MaxDatabaseNameLen = 128; // max str len for the db name, including null char
+
+    // "database.a.b.c" -> "a.b.c"
+    // cheaper than constructing a whole NamespaceString
+    inline StringData nsToCollectionSubstring( const StringData &ns ) {
+        size_t i = ns.find( '.' );
+        if ( i == string::npos ) {
+            massert(17011, "nsToCollection: ns too long", ns.size() < MaxDatabaseNameLen );
+            return StringData();
+        }
+        massert(17012, "nsToCollection: ns too long", i < static_cast<size_t>(MaxDatabaseNameLen));
+        return ns.substr(i + 1);
+    }
+
+    // "database.a.b.c" -> "database"
+    inline StringData nsToDatabaseSubstring( const StringData &ns ) {
+        size_t i = ns.find( '.' );
+        if ( i == string::npos ) {
+            massert(10078, "nsToDatabase: ns too long", ns.size() < MaxDatabaseNameLen );
+            return ns;
+        }
+        massert(10088, "nsToDatabase: ns too long", i < static_cast<size_t>(MaxDatabaseNameLen));
+        return ns.substr( 0, i );
+    }
 
     /* e.g.
        NamespaceString ns("acme.orders");
@@ -43,13 +69,22 @@ namespace mongo {
         string ns() const { return db + '.' + coll; }
 
         bool isSystem() const { return strncmp(coll.c_str(), "system.", 7) == 0; }
+        static bool isSystem(const StringData &ns) {
+            return nsToCollectionSubstring(ns).startsWith("system.");
+        }
         bool isCommand() const { return coll == "$cmd"; }
+        static bool isCommand(const StringData &ns) {
+            return nsToCollectionSubstring(ns) == "$cmd";
+        }
 
         /**
          * @return true if the namespace is valid. Special namespaces for internal use are considered as valid.
          */
         bool isValid() const {
             return validDBName( db ) && !coll.empty();
+        }
+        static bool isValid(const StringData &ns) {
+            return validDBName(nsToDatabaseSubstring(ns)) && !nsToCollectionSubstring(ns).empty();
         }
 
         operator string() const { return ns(); }
@@ -69,16 +104,14 @@ namespace mongo {
         /**
          * @return true if ns is 'normal'.  $ used for collections holding index data, which do not contain BSON objects in their records.
          * special case for the local.oplog.$main ns -- naming it as such was a mistake.
+         * TokuMX doesn't need this special case.
          */
-        static bool normal(const char* ns) {
-            const char *p = strchr(ns, '$');
-            if( p == 0 )
-                return true;
-            return strcmp( ns, "local.oplog.$main" ) == 0;
+        static bool normal(const StringData &ns) {
+            return ns.find('$') == string::npos;
         }
 
-        static bool special(const char *ns) { 
-            return !normal(ns) || strstr(ns, ".system.");
+        static bool special(const StringData &ns) {
+            return !normal(ns) || isSystem(ns);
         }
 
         /**
@@ -117,9 +150,9 @@ namespace mongo {
          * @param dbcoll - a possible collection name of the form db.coll
          * @return if db.coll is an allowed collection name
          */
-        static bool validCollectionName(const char* dbcoll){
-            const char *c = strchr( dbcoll, '.' );
-            return (c != NULL) && (c[1] != '\0') && normal(dbcoll);
+        static bool validCollectionName(const StringData &dbcoll) {
+            StringData coll = nsToCollectionSubstring(dbcoll);
+            return !coll.empty() && normal(dbcoll);
         }
 
     private:
@@ -132,17 +165,6 @@ namespace mongo {
     };
 
     // "database.a.b.c" -> "database"
-    inline StringData nsToDatabaseSubstring( const StringData &ns ) {
-        size_t i = ns.find( '.' );
-        if ( i == string::npos ) {
-            massert(10078, "nsToDatabase: ns too long", ns.size() < MaxDatabaseNameLen );
-            return ns;
-        }
-        massert(10088, "nsToDatabase: ns too long", i < static_cast<size_t>(MaxDatabaseNameLen));
-        return ns.substr( 0, i );
-    }
-
-    // "database.a.b.c" -> "database"
     inline void nsToDatabase(const StringData& ns, char *database) {
         StringData db = nsToDatabaseSubstring( ns );
         db.copyTo( database, true );
@@ -153,7 +175,7 @@ namespace mongo {
         return nsToDatabaseSubstring( ns ).toString();
     }
 
-    inline bool isValidNS( const string &ns ) {
+    inline bool isValidNS( const StringData &ns ) {
         // TODO: should check for invalid characters
 
         size_t idx = ns.find( '.' );
@@ -169,11 +191,9 @@ namespace mongo {
     // TODO: Possibly make this less inefficient.
     inline string getSisterNS(const StringData &ns, const StringData &local) {
         verify( local.size() > 0 && local[0] != '.' );
-        string old(ns.toString());
-        if (old.find( "." ) != string::npos) {
-            old = old.substr( 0, old.find( "." ) );
-        }
-        return old + "." + local.toString();
+        mongo::StackStringBuilder ss;
+        ss << nsToDatabaseSubstring(ns) << "." << local;
+        return ss.str();
     }
 
 }

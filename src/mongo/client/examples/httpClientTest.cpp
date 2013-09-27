@@ -17,6 +17,7 @@
 
 #include <iostream>
 
+#include "mongo/base/init.h"
 #include "mongo/client/dbclient.h"
 #include "util/net/httpclient.h"
 
@@ -39,7 +40,12 @@ void play( string url ) {
     
 }
 
-int main( int argc, const char **argv ) {
+int main( int argc, const char **argv, char **envp) {
+
+#ifdef MONGO_SSL
+    cmdLine.sslOnNormalPorts = true;
+    runGlobalInitializersOrDie(argc, argv, envp);
+#endif
 
     int port = 27017;
     if ( argc != 1 ) {

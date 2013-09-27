@@ -456,11 +456,13 @@ namespace mongo {
 
         unsigned long long _multiKeyIndexBits;
 
+    protected:
+        void dropIndex(const int idxNum);
+
     private:
         set<string> _indexKeys;
         void resetTransient();
         void computeIndexKeys();
-        void dropIndex(const int idxNum);
 
         /* query cache (for query optimizer) */
         int _qcWriteCount;
