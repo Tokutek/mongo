@@ -67,8 +67,6 @@ namespace mongo {
 
         virtual const StringData path() const { return _path; }
 
-        virtual void resetTag() { setTag(NULL); }
-
     protected:
         Status initPath( const StringData& path );
 
@@ -358,8 +356,6 @@ namespace mongo {
         int getData() const { return _type; }
 
         virtual const StringData path() const { return _path; }
-
-        virtual void resetTag() { setTag(NULL); }
 
     private:
         bool _matches( const StringData& path,

@@ -171,7 +171,12 @@ namespace mongo {
          */
         void setTag(TagData* data) { _tagData.reset(data); }
         TagData* getTag() const { return _tagData.get(); }
-        virtual void resetTag() = 0;
+        virtual void resetTag() {
+            setTag(NULL);
+            for (size_t i = 0; i < numChildren(); ++i) {
+                getChild(i)->resetTag();
+            }
+        }
 
         //
         // Debug information
@@ -213,8 +218,6 @@ namespace mongo {
         virtual bool equivalent( const MatchExpression* other ) const {
             return other->matchType() == ATOMIC;
         }
-
-        virtual void resetTag() { setTag(NULL); }
     };
 
     class FalseMatchExpression : public MatchExpression {
@@ -238,7 +241,5 @@ namespace mongo {
         virtual bool equivalent( const MatchExpression* other ) const {
             return other->matchType() == ALWAYS_FALSE;
         }
-
-        virtual void resetTag() { setTag(NULL); }
     };
 }
