@@ -46,9 +46,11 @@ namespace mongo {
     };
     
     struct LogOpUpdateDetails {
-        bool logop;
-        const char* ns;
-        bool fromMigrate;
+        LogOpUpdateDetails(bool log = false, bool m = false) :
+            logop(log), fromMigrate(m) {
+        }
+        const bool logop;
+        const bool fromMigrate;
     };
 
     void updateOneObject(
@@ -56,7 +58,7 @@ namespace mongo {
         const BSONObj &pk, 
         const BSONObj &oldObj, 
         const BSONObj &newObj, 
-        struct LogOpUpdateDetails* loud,
+        const LogOpUpdateDetails &logDetails,
         uint64_t flags = 0
         );
 
