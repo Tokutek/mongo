@@ -48,6 +48,7 @@
 #include "mongo/db/introspect.h"
 #include "mongo/db/json.h"
 #include "mongo/db/kill_current_op.h"
+#include "mongo/db/log_process_details.h"
 #include "mongo/db/module.h"
 #include "mongo/db/mongod_options.h"
 #include "mongo/db/ops/delete.h"
@@ -668,15 +669,10 @@ namespace mongo {
         }
         DEV log() << "_DEBUG build (which is slower)" << endl;
         show_warnings();
-        log() << mongodVersion() << endl;
 #if defined(_WIN32)
         printTargetMinOS();
 #endif
-        printGitVersion();
-        printOpenSSLVersion();
-        printSysInfo();
-        printCommandLineOpts();
-
+        logProcessDetails();
         {
             stringstream ss;
             ss << endl;
@@ -1422,6 +1418,7 @@ namespace mongo {
             case SIGUSR1:
                 // log rotate signal
                 fassert(17024, rotateLogs());
+                logProcessDetailsForLogRotate();
                 break;
             default:
                 // interrupt/terminate signal

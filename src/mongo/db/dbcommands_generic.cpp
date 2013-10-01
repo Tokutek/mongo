@@ -35,6 +35,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
+#include "mongo/db/log_process_details.h"
 #include "mongo/db/repl/multicmd.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/s/shard.h"
@@ -156,7 +157,10 @@ namespace mongo {
             out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
         }
         virtual bool run(const string& ns, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            return rotateLogs();
+            bool didRotate = rotateLogs();
+            if (didRotate)
+                logProcessDetailsForLogRotate();
+            return didRotate;
         }
 
     } logRotateCmd;

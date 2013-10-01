@@ -229,6 +229,7 @@ add_library(coreserver STATIC
   ../util/net/miniwebserver
   stats/counters
   stats/service_stats
+  log_process_details
   )
 add_dependencies(coreserver generate_error_codes generate_action_types)
 target_link_libraries(coreserver LINK_PUBLIC
