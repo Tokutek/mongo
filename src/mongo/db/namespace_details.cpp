@@ -1324,11 +1324,21 @@ namespace mongo {
     }
 
     void NamespaceDetails::dropIndex(const int idxNum) {
+        verify(!_indexBuildInProgress);
         verify(idxNum < (int) _indexes.size());
+
+        // Note this ns in the rollback so if this transaction aborts, we'll
+        // close this ns, forcing the next user to reload in-memory metadata.
+        NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+        rollback.noteNs(_ns);
+
         IndexDetails &idx = *_indexes[idxNum];
         idx.kill_idx();
         _indexes.erase(_indexes.begin() + idxNum);
         _nIndexes--;
+        // Removes the nth bit, and shifts any bits higher than it down a slot.
+        _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << idxNum) - 1)) |
+                             ((_multiKeyIndexBits >> (idxNum + 1)) << idxNum));
         resetTransient();
     }
 
@@ -1339,11 +1349,6 @@ namespace mongo {
     bool NamespaceDetails::dropIndexes(const StringData& ns, const StringData& name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex) {
         Lock::assertWriteLocked(ns);
         TOKULOG(1) << "dropIndexes " << name << endl;
-
-        // Note this ns in the rollback so if this transaction aborts, we'll
-        // close this ns, forcing the next user to reload in-memory metadata.
-        NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
-        rollback.noteNs(_ns);
 
         NamespaceDetails *d = nsdetails(ns);
         ClientCursor::invalidate(ns);
@@ -1356,7 +1361,6 @@ namespace mongo {
 
         if (name == "*") {
             result.append("nIndexesWas", (double) _nIndexes);
-            // This is O(n^2), not great, but you can have at most 64 indexes anyway.
             for (int i = 0; i < _nIndexes; ) {
                 IndexDetails &idx = *_indexes[i];
                 if (mayDeleteIdIndex || (!idx.isIdIndex() && !d->isPKIndex(idx))) {
@@ -1365,8 +1369,8 @@ namespace mongo {
                     i++;
                 }
             }
-            // Assuming id index isn't multikey
-            _multiKeyIndexBits = 0;
+            // Assuming id/pk index isn't multikey
+            verify(_multiKeyIndexBits == 0);
             result.append("msg", (mayDeleteIdIndex
                                   ? "indexes dropped for collection"
                                   : "non-_id indexes dropped for collection"));
@@ -1380,15 +1384,13 @@ namespace mongo {
                     return false;
                 }
                 dropIndex(idxNum);
-                // Removes the nth bit, and shifts any bits higher than it down a slot.
-                _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << idxNum) - 1)) |
-                                     ((_multiKeyIndexBits >> (idxNum + 1)) << idxNum));
             } else {
                 log() << "dropIndexes: " << name << " not found" << endl;
                 errmsg = "index not found";
                 return false;
             }
         }
+
         // Updated whatever in memory structures are necessary, now update the nsindex.
         nsindex(ns)->update_ns(ns, serialize(), true);
         return true;
