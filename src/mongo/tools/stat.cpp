@@ -82,10 +82,6 @@ namespace mongo {
             return out.getOwned();
         }
 
-
-        virtual void preSetup() {
-        }
-
         int run() {
             _statUtil.setSeconds(mongoStatGlobalParams.allFields);
             _statUtil.setAll(mongoStatGlobalParams.sleep);

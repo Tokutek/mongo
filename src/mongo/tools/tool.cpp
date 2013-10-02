@@ -46,8 +46,8 @@ using namespace mongo;
 
 namespace mongo {
 
-    Tool::Tool(bool usesstdout) :
-        _usesstdout(usesstdout), _autoreconnect(false), _conn(0), _slaveConn(0) { }
+    Tool::Tool() :
+        _autoreconnect(false), _conn(0), _slaveConn(0) { }
 
     Tool::~Tool() {
         if ( _conn )
@@ -70,8 +70,6 @@ namespace mongo {
                 }
             }
         }
-
-        preSetup();
 
         if (!toolGlobalParams.useDirectClient) {
             if (toolGlobalParams.noconnection) {
@@ -96,9 +94,8 @@ namespace mongo {
                 }
 
                 if (!toolGlobalParams.quiet) {
-                    (_usesstdout ? std::cout : std::cerr ) << "connected to: "
-                                                           << toolGlobalParams.connectionString
-                                                           << std::endl;
+                    toolOutput() << "connected to: " << toolGlobalParams.connectionString
+                                  << std::endl;
                 }
             }
 
@@ -250,7 +247,7 @@ namespace mongo {
                          toolGlobalParams.authenticationMechanism));
     }
 
-    BSONTool::BSONTool() : Tool(false/*usesstdout*/) { }
+    BSONTool::BSONTool() : Tool() { }
 
     int BSONTool::run() {
 
@@ -268,7 +265,7 @@ namespace mongo {
 
         if ( fileLength == 0 ) {
             if (!toolGlobalParams.quiet) {
-                (_usesstdout ? cout : cerr ) << "file " << fileName << " empty, skipping" << endl;
+                toolOutput() << "file " << fileName << " empty, skipping" << endl;
             }
             return 0;
         }
@@ -286,7 +283,7 @@ namespace mongo {
 
         if (!toolGlobalParams.quiet &&
             logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
-            (_usesstdout ? cout : cerr ) << "\t file size: " << fileLength << endl;
+            toolOutput() << "\t file size: " << fileLength << endl;
         }
 
         unsigned long long read = 0;
@@ -343,9 +340,9 @@ namespace mongo {
 
         uassert( 10265 ,  "counts don't match" , m.done() == fileLength );
         if (!toolGlobalParams.quiet) {
-            (_usesstdout ? cout : cerr ) << m.hits() << " objects found" << endl;
+            toolOutput() << m.hits() << " objects found" << std::endl;
             if (bsonToolGlobalParams.hasFilter)
-                (_usesstdout ? cout : cerr ) << processed << " objects processed" << endl;
+                toolOutput() << processed << " objects processed" << std::endl;
         }
         return processed;
     }

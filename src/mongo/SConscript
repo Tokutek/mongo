@@ -642,7 +642,8 @@ Default( mongod )
 
 # tools
 allToolFiles = ["tools/tool.cpp",
-                "tools/stat_util.cpp"]
+                "tools/stat_util.cpp",
+                "tools/tool_logger.cpp"]
 env.StaticLibrary("tool_options", "tools/tool_options.cpp",
                   LIBDEPS=["server_options",
                            "$BUILD_DIR/mongo/util/options_parser/options_parser",

@@ -321,7 +321,7 @@ public:
     }
     static volatile bool running;
 
-    OplogTool() : Tool(true), _logAtExit(true), _player(), _reportingTimer() {}
+    OplogTool() : Tool(), _logAtExit(true), _player(), _reportingTimer() {}
 
     virtual void printHelp(ostream& out) {
         printMongo2TokuHelp(&out);

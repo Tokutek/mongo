@@ -84,6 +84,9 @@ namespace mongo {
             toolGlobalParams.db = "";
         }
 
+        // bsondump always outputs data to stdout, so we can't send messages there
+        toolGlobalParams.canUseStdout = false;
+
         return Status::OK();
     }
 
