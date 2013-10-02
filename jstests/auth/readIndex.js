@@ -16,9 +16,8 @@ adminDB.addUser({user:'admin',
 
 testDB.auth('dbAdmin', 'password');
 testDB.foo.ensureIndex({a:1});
-assert.eq(4, testDB.system.indexes.count()); // 2 for system.users, 2 for foo
+assert.eq(5, testDB.system.indexes.count()); // 2 for system.users, 2 for foo, 1 for system.namespaces.$_id_
 var indexDoc = testDB.system.indexes.findOne({key:{a:1}});
 printjson(indexDoc);
 assert.neq(null, indexDoc);
-// Don't know why this was needed but it's an estimate so it's flaky
-//assert.eq(4, testDB.system.indexes.stats().count);
+assert.eq(5, testDB.system.indexes.stats().count);
