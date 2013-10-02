@@ -42,7 +42,7 @@ namespace mongo {
         GeoMatchExpression() : LeafMatchExpression( GEO ){}
         virtual ~GeoMatchExpression(){}
 
-        Status init( const StringData& path, const GeoQuery& query );
+        Status init( const StringData& path, const GeoQuery& query, const BSONObj& rawObj );
 
         virtual bool matchesSingleElement( const BSONElement& e ) const;
 
@@ -52,8 +52,35 @@ namespace mongo {
 
         virtual LeafMatchExpression* shallowClone() const;
 
+        const GeoQuery& getGeoQuery() const { return _query; }
+        const BSONObj getRawObj() const { return _rawObj; }
+
     private:
+        BSONObj _rawObj;
         GeoQuery _query;
     };
 
-}
+    class GeoNearMatchExpression : public LeafMatchExpression {
+    public:
+        GeoNearMatchExpression() : LeafMatchExpression( GEO_NEAR ){}
+        virtual ~GeoNearMatchExpression(){}
+
+        Status init( const StringData& path, const NearQuery& query, const BSONObj& rawObj );
+
+        // This shouldn't be called and as such will crash.  GeoNear always requires an index.
+        virtual bool matchesSingleElement( const BSONElement& e ) const;
+
+        virtual void debugString( StringBuilder& debug, int level = 0 ) const;
+
+        virtual bool equivalent( const MatchExpression* other ) const;
+
+        virtual LeafMatchExpression* shallowClone() const;
+
+        const NearQuery& getData() const { return _query; }
+        const BSONObj getRawObj() const { return _rawObj; }
+    private:
+        NearQuery _query;
+        BSONObj _rawObj;
+    };
+
+}  // namespace mongo
