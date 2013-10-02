@@ -967,10 +967,10 @@ namespace mongo {
                     "multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
                     "indexes" << indexes_array);
     }
-    BSONObj NamespaceDetails::serialize() const {
+    BSONObj NamespaceDetails::serialize(const bool includeHotIndex) const {
         BSONArrayBuilder indexes_array;
         // Serialize all indexes that exist, including a hot index if it exists.
-        for (int i = 0; i < nIndexesBeingBuilt(); i++) {
+        for (int i = 0; i < (includeHotIndex ? nIndexesBeingBuilt() : nIndexes()); i++) {
             IndexDetails &idx = *_indexes[i];
             indexes_array.append(idx.info());
         }
