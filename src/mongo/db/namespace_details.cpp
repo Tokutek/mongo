@@ -1177,6 +1177,12 @@ namespace mongo {
             put_flags[i] = (isPK && doUniqueChecks ? DB_NOOVERWRITE : 0) |
                            (prelocked ? DB_PRELOCKED_WRITE : 0);
 
+            // It is not our responsibility to set the multikey bits
+            // for a hot index. Further, a hot index cannot be unique,
+            if (i >= _nIndexes) {
+                continue;
+            }
+
             BSONObjSet idxKeys;
             if (!isPK) {
                 idx.getKeysFromObject(obj, idxKeys);
@@ -1308,6 +1314,12 @@ namespace mongo {
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
             update_flags[i] = prelocked ? DB_PRELOCKED_WRITE : 0;
+
+            // It is not our responsibility to set the multikey bits
+            // for a hot index. Further, a hot index cannot be unique,
+            if (i >= _nIndexes) {
+                continue;
+            }
 
             if (!isPK) {
                 BSONObjSet oldIdxKeys;
