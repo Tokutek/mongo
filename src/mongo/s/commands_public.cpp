@@ -1759,7 +1759,7 @@ namespace mongo {
             */
             DBConfigPtr conf(grid.getDBConfig(dbName , false));
             if (!conf || !conf->isShardingEnabled() || !conf->isSharded(fullns))
-                return passthrough(conf, cmdObj, result);
+                return passthrough(conf, cmdObj, options, result);
 
             /* split the pipeline into pieces for mongods and this mongos */
             intrusive_ptr<Pipeline> pShardPipeline(
