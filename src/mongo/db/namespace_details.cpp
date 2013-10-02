@@ -969,10 +969,10 @@ namespace mongo {
                     "multiKeyIndexBits" << static_cast<long long>(multiKeyIndexBits) <<
                     "indexes" << indexes_array);
     }
-    BSONObj NamespaceDetails::serialize() const {
+    BSONObj NamespaceDetails::serialize(const bool includeHotIndex) const {
         BSONArrayBuilder indexes_array;
         // Serialize all indexes that exist, including a hot index if it exists.
-        for (int i = 0; i < nIndexesBeingBuilt(); i++) {
+        for (int i = 0; i < (includeHotIndex ? nIndexesBeingBuilt() : nIndexes()); i++) {
             IndexDetails &idx = *_indexes[i];
             indexes_array.append(idx.info());
         }
@@ -1141,6 +1141,12 @@ namespace mongo {
             put_flags[i] = (isPK && doUniqueChecks ? DB_NOOVERWRITE : 0) |
                            (prelocked ? DB_PRELOCKED_WRITE : 0);
 
+            // It is not our responsibility to set the multikey bits
+            // for a hot index. Further, a hot index cannot be unique,
+            if (i >= _nIndexes) {
+                continue;
+            }
+
             BSONObjSet idxKeys;
             if (!isPK) {
                 idx.getKeysFromObject(obj, idxKeys);
@@ -1268,6 +1274,12 @@ namespace mongo {
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
             update_flags[i] = prelocked ? DB_PRELOCKED_WRITE : 0;
+
+            // It is not our responsibility to set the multikey bits
+            // for a hot index. Further, a hot index cannot be unique,
+            if (i >= _nIndexes) {
+                continue;
+            }
 
             if (!isPK) {
                 BSONObjSet oldIdxKeys;

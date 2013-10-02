@@ -111,7 +111,8 @@ namespace mongo {
         _d->_indexBuildInProgress = false;
         _d->_nIndexes++;
 
-        nsindex(_d->_ns)->update_ns(_d->_ns, _d->serialize(), _isSecondaryIndex);
+        // Pass true for includeHotIndex to serialize()
+        nsindex(_d->_ns)->update_ns(_d->_ns, _d->serialize(true), _isSecondaryIndex);
         _d->resetTransient();
     }
 

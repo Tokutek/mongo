@@ -268,7 +268,7 @@ namespace mongo {
         static BSONObj serialize(const StringData& ns, const BSONObj &options,
                                  const BSONObj &pk, unsigned long long multiKeyIndexBits,
                                  const BSONArray &indexes_array);
-        BSONObj serialize() const;
+        BSONObj serialize(const bool includeHotIndex = false) const;
 
         void fillCollectionStats(struct NamespaceDetailsAccStats* accStats, BSONObjBuilder* result, int scale) const;
 
