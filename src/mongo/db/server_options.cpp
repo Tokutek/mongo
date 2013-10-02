@@ -288,13 +288,31 @@ namespace mongo {
         }
 
         if (params.count("verbose")) {
-            logger::globalLogDomain()->setMinimumLoggedSeverity(logger::LogSeverity::Debug(1));
+            std::string verbosity = params["verbose"].as<std::string>();
+            for (std::string::iterator iterator = verbosity.begin();
+                 iterator != verbosity.end(); iterator++) {
+                if (*iterator != 'v') {
+                    return Status(ErrorCodes::BadValue,
+                                  "The \"verbose\" option string cannot contain any characters "
+                                  "other than \"v\"");
+                }
+            }
         }
 
-        for (string s = "vv"; s.length() <= 12; s.append("v")) {
-            if (params.count(s)) {
+        // Handle both the "--verbose" string argument and the "-vvvv" arguments at the same time so
+        // that we ensure that we set the log level to the maximum of the options provided
+        for (string s = ""; s.length() <= 14; s.append("v")) {
+            if (!s.empty() && params.count(s)) {
                 logger::globalLogDomain()->setMinimumLoggedSeverity(
                         logger::LogSeverity::Debug(s.length()));
+            }
+
+            if (params.count("verbose")) {
+                std::string verbosity = params["verbose"].as<std::string>();
+                if (s == verbosity) {
+                    logger::globalLogDomain()->setMinimumLoggedSeverity(
+                            logger::LogSeverity::Debug(s.length()));
+                }
             }
         }
 
