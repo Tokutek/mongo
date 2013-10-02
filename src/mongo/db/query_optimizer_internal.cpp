@@ -1433,30 +1433,6 @@ namespace mongo {
         return id;
     }
     
-    shared_ptr<Cursor> getBestGuessCursor( const StringData& ns,
-                                           const BSONObj &query,
-                                           const BSONObj &sort ) {
-        // TODO: make FieldRangeSet and QueryPlanSet understand StringData
-        string ns_s = ns.toString();
-        auto_ptr<FieldRangeSetPair> frsp( new FieldRangeSetPair( ns_s.c_str(), query, true ) );
-        auto_ptr<FieldRangeSetPair> origFrsp( new FieldRangeSetPair( *frsp ) );
-
-        scoped_ptr<QueryPlanSet> qps( QueryPlanSet::make( ns_s.c_str(), frsp, origFrsp, query, sort,
-                                                         shared_ptr<const ParsedQuery>(), BSONObj(),
-                                                         QueryPlanGenerator::UseIfInOrder,
-                                                         BSONObj(), BSONObj(), true ) );
-        QueryPlanSet::QueryPlanPtr qpp = qps->getBestGuess();
-        if( ! qpp.get() ) return shared_ptr<Cursor>();
-
-        shared_ptr<Cursor> ret = qpp->newCursor();
-
-        // If we don't already have a matcher, supply one.
-        if ( !query.isEmpty() && ! ret->matcher() ) {
-            ret->setMatcher( qpp->matcher() );
-        }
-        return ret;
-    }
-
     bool QueryUtilIndexed::indexUseful( const FieldRangeSetPair& frsp,
                                         NamespaceDetails* d,
                                         int idxNo,
