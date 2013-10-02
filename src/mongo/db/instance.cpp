@@ -864,7 +864,6 @@ namespace mongo {
             // and set _indexBuildInProgress to false.
             indexer.reset();
         }
-        uasserted( 17015, "derp" );
         transaction->commit();
     }
 
