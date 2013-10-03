@@ -27,6 +27,9 @@ New features and improvements
       `backupThrottle` command in the enterprise Hot Backup plugin.
       (#266, 536, #545)
 
+    - Added mongo shell wrapper functions `db.showLiveTransactions()` and
+      `db.showPendingLockRequests()`.  (#437, #526)
+
 
 tokumx 1.2.1
 ------------
