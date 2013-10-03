@@ -1095,7 +1095,9 @@ namespace mongo {
 
         BSONObj obj;
         struct findByPKCallbackExtra extra(obj);
-        const int r = db->getf_set(db, cc().txn().db_txn(), 0, &key_dbt,
+        const int flags = cc().opSettings().getQueryCursorMode() != DEFAULT_LOCK_CURSOR ?
+                          DB_SERIALIZABLE | DB_RMW : 0;
+        const int r = db->getf_set(db, cc().txn().db_txn(), flags, &key_dbt,
                                    findByPKCallback, &extra);
         if (extra.ex != NULL) {
             throw *extra.ex;
