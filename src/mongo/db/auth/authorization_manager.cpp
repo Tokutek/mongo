@@ -95,7 +95,6 @@ namespace {
     MONGO_INITIALIZER(AuthorizationSystemRoles)(InitializerContext* context) {
         // Read role
         readRoleActions.addAction(ActionType::cloneCollectionLocalSource);
-        readRoleActions.addAction(ActionType::collectionsExist);
         readRoleActions.addAction(ActionType::collStats);
         readRoleActions.addAction(ActionType::dbHash);
         readRoleActions.addAction(ActionType::dbStats);
@@ -184,7 +183,7 @@ namespace {
         clusterAdminRoleReadActions.addAction(ActionType::writeBacksQueued);
 
         clusterAdminRoleWriteActions.addAction(ActionType::addShard);
-        clusterAdminRoleWriteActions.addAction(ActionType::applyOps);
+        clusterAdminRoleWriteActions.addAction(ActionType::applyOps); // TODO: remove all action types for deprecated commands
         clusterAdminRoleWriteActions.addAction(ActionType::backupStart);
         clusterAdminRoleWriteActions.addAction(ActionType::backupThrottle);
         clusterAdminRoleWriteActions.addAction(ActionType::checkpoint);
@@ -210,7 +209,6 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::shardingState);
         clusterAdminRoleWriteActions.addAction(ActionType::split);
         clusterAdminRoleWriteActions.addAction(ActionType::splitChunk);
-        clusterAdminRoleWriteActions.addAction(ActionType::updateSlave);
 
         clusterAdminRoleActions.addAllActionsFromSet(clusterAdminRoleReadActions);
         clusterAdminRoleActions.addAllActionsFromSet(clusterAdminRoleWriteActions);
@@ -236,12 +234,14 @@ namespace {
 
         // Internal commands
         internalActions.addAction(ActionType::clone);
+        internalActions.addAction(ActionType::collectionsExist);
         internalActions.addAction(ActionType::handshake);
         internalActions.addAction(ActionType::mapReduceShardedFinish);
         internalActions.addAction(ActionType::replSetElect);
         internalActions.addAction(ActionType::replSetFresh);
         internalActions.addAction(ActionType::replSetGetRBID);
         internalActions.addAction(ActionType::replSetHeartbeat);
+        internalActions.addAction(ActionType::updateSlave);
         internalActions.addAction(ActionType::writebacklisten);
         internalActions.addAction(ActionType::_migrateClone);
         internalActions.addAction(ActionType::_recvChunkAbort);
