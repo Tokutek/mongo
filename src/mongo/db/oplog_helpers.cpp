@@ -225,37 +225,39 @@ namespace OpLogHelpers{
     {
         // The context and lock must outlive the indexer so that
         // the indexer destructor gets called in a write locked.
-        scoped_ptr<Client::WriteContext> ctx;
+        // These MUST NOT be reordered, the context must destruct
+        // after the indexer.
+        scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns));
         scoped_ptr<NamespaceDetails::HotIndexer> indexer;
 
-        ctx.reset(new Client::WriteContext(ns));
-        NamespaceDetails* nsd = nsdetails(ns);
+        {
+            Client::Context ctx(ns);
+            NamespaceDetails* nsd = nsdetails(ns);
 
-        const string &coll = row["ns"].String();
-        NamespaceDetails* collNsd = nsdetails(coll);
-        if (collNsd->findIndexByKeyPattern(row["key"].Obj()) >= 0) {
-            // the index already exists, so this is a no-op
-            // Note that for create index and drop index, we
-            // are tolerant of the fact that the operation may
-            // have already been done
-            return;
+            const string &coll = row["ns"].String();
+            NamespaceDetails* collNsd = nsdetails(coll);
+            if (collNsd->findIndexByKeyPattern(row["key"].Obj()) >= 0) {
+                // the index already exists, so this is a no-op
+                // Note that for create index and drop index, we
+                // are tolerant of the fact that the operation may
+                // have already been done
+                return;
+            }
+            insertOneObject(nsd, row, NamespaceDetails::NO_UNIQUE_CHECKS);
+            indexer.reset(new NamespaceDetails::HotIndexer(collNsd, row));
+            indexer->prepare();
         }
-        insertOneObject(nsd, row, NamespaceDetails::NO_UNIQUE_CHECKS);
-        indexer.reset(new NamespaceDetails::HotIndexer(collNsd, row));
-        indexer->prepare();
 
-        try {
-            // Do the actual build in a read lock
-            ctx.reset();
-            Client::ReadContext rctx(ns);
+        {
+            Lock::DBWrite::Downgrade dg(lk);
+            Client::Context ctx(ns);
             indexer->build();
-        } catch (...) {
-            ctx.reset(new Client::WriteContext(ns));
-            throw;
         }
 
-        ctx.reset(new Client::WriteContext(ns));
-        indexer->commit();
+        {
+            Client::Context ctx(ns);
+            indexer->commit();
+        }
     }
     static void runNonSystemInsertFromOplogWithLock(
         const char* ns, 

@@ -796,38 +796,22 @@ namespace mongo {
     static void _buildHotIndex(const char *ns, Message &m, const vector<BSONObj> objs) {
         uassert(16905, "Can only build one index at a time.", objs.size() == 1);
 
-        scoped_ptr<Client::Transaction> transaction;
-        scoped_ptr<NamespaceDetails::HotIndexer> indexer;
+        scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns));
 
-        // The indexer destructor must be called in a write lock
-        class DestroyIndexerInWriteLock : boost::noncopyable {
-        public:
-            DestroyIndexerInWriteLock(const char *ns,
-                                      scoped_ptr<NamespaceDetails::HotIndexer> &indexer) :
-                _ns(ns), _indexer(indexer) {
-            }
-            ~DestroyIndexerInWriteLock() {
-                Lock::DBWrite lk(_ns);
-                _indexer.reset();
-            }
-        private:
-            const char *_ns;
-            scoped_ptr<NamespaceDetails::HotIndexer> &_indexer;
-        } destroyIndexer(ns, indexer);
+        uassert(16902, "not master", isMasterNs(ns));
+
+        // System.indexes cannot be sharded.
+        verify(!handlePossibleShardedMessage(m, 0));
+
+        const BSONObj &info = objs[0];
+        const StringData &coll = info["ns"].Stringdata();
+
+        scoped_ptr<Client::Transaction> transaction(new Client::Transaction(DB_SERIALIZABLE));
+        scoped_ptr<NamespaceDetails::HotIndexer> indexer;
 
         // Prepare the index build. Performs index validation and marks
         // the NamespaceDetails as having an index build in progress.
         {
-            Lock::DBWrite lk(ns);
-            transaction.reset(new Client::Transaction(DB_SERIALIZABLE));
-            uassert(16902, "not master", isMasterNs(ns));
-
-            // System.indexes cannot be sharded.
-            verify(!handlePossibleShardedMessage(m, 0));
-
-            const BSONObj &info = objs[0];
-            const StringData &coll = info["ns"].Stringdata();
-
             Client::Context ctx(ns);
             NamespaceDetails *d = getAndMaybeCreateNS(coll, true);
             if (d->findIndexByKeyPattern(info["key"].Obj()) >= 0) {
@@ -845,24 +829,19 @@ namespace mongo {
 
         // Perform the index build
         {
-            Lock::DBRead lk(ns);
+            Lock::DBWrite::Downgrade dg(lk);
             uassert(16906, "not master: after indexer setup but before build", isMasterNs(ns));
 
             Client::Context ctx(ns);
             indexer->build();
         }
 
+        uassert(16907, "not master: after indexer build but before commit", isMasterNs(ns));
+
         // Commit the index build
         {
-            Lock::DBWrite lk(ns);
-            uassert(16907, "not master: after indexer build but before commit", isMasterNs(ns));
-
             Client::Context ctx(ns);
             indexer->commit();
-            // Indexer must get destroyed in the same locking context as commit(),
-            // (if it succeeded) because we have to atomically destroy the Indexer
-            // and set _indexBuildInProgress to false.
-            indexer.reset();
         }
         transaction->commit();
     }

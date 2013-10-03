@@ -131,6 +131,22 @@ namespace mongo {
                 bool _gotUpgrade;
             };
 
+            class Downgrade : boost::noncopyable {
+                const std::string _ns;
+                scoped_ptr<Lock::DBWrite> &_wrlk;
+                scoped_ptr<Lock::DBRead> _rdlk;
+              public:
+                Downgrade(scoped_ptr<Lock::DBWrite> &wrlk)
+                        : _ns(_wrlk->_what), _wrlk(wrlk) {
+                    _wrlk.reset();
+                    _rdlk.reset(new Lock::DBRead(_ns));
+                }
+                ~Downgrade() {
+                    _lk.reset();
+                    _lk.reset(new Lock::DBWrite>(_ns));
+                }
+            };
+
         private:
             bool _locked_w;
             bool _locked_W;
