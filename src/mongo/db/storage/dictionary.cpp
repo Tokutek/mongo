@@ -14,6 +14,9 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mongo/pch.h"
+
+#include "mongo/base/units.h"
 #include "mongo/db/client.h"
 #include "mongo/db/descriptor.h"
 #include "mongo/db/storage/dictionary.h"
@@ -102,14 +105,14 @@ namespace mongo {
             BSONElement e;
             e = info["readPageSize"];
             if (e.ok() && !e.isNull()) {
-                readPageSize = e.numberInt();
-                uassert(16743, "readPageSize must be a number > 0.", e.isNumber () && readPageSize > 0);
+                readPageSize = BytesQuantity<int>(e);
+                uassert(16743, "readPageSize must be a number > 0.", readPageSize > 0);
                 TOKULOG(1) << "db " << _dname << ", using read page size " << readPageSize << endl;
             }
             e = info["pageSize"];
             if (e.ok() && !e.isNull()) {
-                pageSize = e.numberInt();
-                uassert(16445, "pageSize must be a number > 0.", e.isNumber () && pageSize > 0);
+                pageSize = BytesQuantity<int>(e);
+                uassert(16445, "pageSize must be a number > 0.", pageSize > 0);
                 TOKULOG(1) << "db " << _dname << ", using page size " << pageSize << endl;
             }
             e = info["compression"];

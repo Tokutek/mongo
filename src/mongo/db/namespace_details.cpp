@@ -26,6 +26,7 @@
 #include <boost/filesystem/operations.hpp>
 
 #include "mongo/base/init.h"
+#include "mongo/base/units.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/cursor.h"
@@ -378,8 +379,8 @@ namespace mongo {
         CappedCollection(const StringData &ns, const BSONObj &options,
                          const bool mayIndexId = true) :
             NaturalOrderCollection(ns, options),
-            _maxSize(options["size"].numberLong()),
-            _maxObjects(options["max"].numberLong()),
+            _maxSize(BytesQuantity<long long>(options["size"])),
+            _maxObjects(BytesQuantity<long long>(options["max"])),
             _currentObjects(0),
             _currentSize(0),
             _mutex("cappedMutex"),
