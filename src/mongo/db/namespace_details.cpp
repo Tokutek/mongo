@@ -1061,7 +1061,9 @@ namespace mongo {
         // Try to find it.
         BSONObj obj = BSONObj();
         struct findByPKCallbackExtra extra(obj);
-        const int r = cursor->c_getf_set(cursor, 0, &key_dbt, findByPKCallback, &extra);
+        const int flags = cc().opSettings().getQueryCursorMode() != DEFAULT_LOCK_CURSOR ?
+                          DB_SERIALIZABLE | DB_RMW : 0;
+        const int r = cursor->c_getf_set(cursor, flags, &key_dbt, findByPKCallback, &extra);
         if (extra.ex != NULL) {
             throw *extra.ex;
         }
