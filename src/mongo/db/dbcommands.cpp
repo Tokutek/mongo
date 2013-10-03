@@ -1798,8 +1798,7 @@ namespace mongo {
             return;
         }
 
-        if ( c->adminOnly() )
-            LOG( 2 ) << "command: " << cmdObj << endl;
+        LOG(c->adminOnly() ? 2 : 3) << "command: " << cmdObj << endl;
 
         // before we start this command, check if we can run in a multi statement transaction
         // If we cannot and are in a multi statement transaction, 
