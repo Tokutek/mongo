@@ -824,7 +824,9 @@ namespace mongo {
             uassert(15888, "must pass name of collection to create", cmdObj.firstElement().valuestrsafe()[0] != '\0');
             string ns = dbname + '.' + cmdObj.firstElement().valuestr();
             string err;
-            uassert(14832, "specify size:<n> when capped is true", !cmdObj["capped"].trueValue() || cmdObj["size"].isNumber() || cmdObj.hasField("$nExtents"));
+            if (cmdObj["capped"].trueValue()) {
+                uassert(14832, "specify size:<n> when capped is true", cmdObj["size"].isNumber() || (cmdObj["size"].type() == String) || cmdObj.hasField("$nExtents"));
+            }
             bool ok = userCreateNS(ns.c_str(), cmdObj, err, ! fromRepl );
             if ( !ok && !err.empty() )
                 errmsg = err;

@@ -25,6 +25,9 @@
 #include "mongo/base/parse_number.h"
 #include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
+#include "mongo/bson/bsontypes.h"
+#include "mongo/bson/oid.h"
+#include "mongo/bson/bsonelement.h"
 #include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
@@ -108,6 +111,16 @@ namespace mongo {
         BytesQuantity() : _value(0) {}
         BytesQuantity(T value) : _value(value) {}
         BytesQuantity(const StringData &s) : _value(fromString(s)) {}
+        BytesQuantity(const BSONElement &e) : _value(0) {
+            if (e.ok()) {
+                if (e.type() == String) {
+                    _value = fromString(e.Stringdata());
+                } else {
+                    uassert(17015, mongoutils::str::stream() << "element is not a number: " << e.wrap(), e.isNumber());
+                    _value = e.numberInt();
+                }
+            }
+        }
 
         T value() const { return _value; }
         operator T() const { return value(); }
