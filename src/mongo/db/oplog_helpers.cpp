@@ -198,6 +198,65 @@ namespace OpLogHelpers{
         }
     }
 
+    static void runColdIndexFromOplog(
+        const char* ns,
+        BSONObj row
+        )
+    {
+        Client::WriteContext ctx(ns);
+        NamespaceDetails* nsd = nsdetails(ns);
+        const string &coll = row["ns"].String();
+
+        NamespaceDetails* collNsd = nsdetails(coll);
+        const bool ok = collNsd->ensureIndex(row);
+        if (!ok) {
+            // the index already exists, so this is a no-op
+            // Note that for create index and drop index, we
+            // are tolerant of the fact that the operation may
+            // have already been done
+            return;
+        }
+        insertOneObject(nsd, row, NamespaceDetails::NO_UNIQUE_CHECKS);
+    }
+    static void runHotIndexFromOplog(
+        const char* ns,
+        BSONObj row
+        )
+    {
+        // The context and lock must outlive the indexer so that
+        // the indexer destructor gets called in a write locked.
+        scoped_ptr<Client::WriteContext> ctx;
+        scoped_ptr<NamespaceDetails::HotIndexer> indexer;
+
+        ctx.reset(new Client::WriteContext(ns));
+        NamespaceDetails* nsd = nsdetails(ns);
+
+        const string &coll = row["ns"].String();
+        NamespaceDetails* collNsd = nsdetails(coll);
+        if (collNsd->findIndexByKeyPattern(row["key"].Obj()) >= 0) {
+            // the index already exists, so this is a no-op
+            // Note that for create index and drop index, we
+            // are tolerant of the fact that the operation may
+            // have already been done
+            return;
+        }
+        insertOneObject(nsd, row, NamespaceDetails::NO_UNIQUE_CHECKS);
+        indexer.reset(new NamespaceDetails::HotIndexer(collNsd, row));
+        indexer->prepare();
+
+        try {
+            // Do the actual build in a read lock
+            ctx.reset();
+            Client::ReadContext rctx(ns);
+            indexer->build();
+        } catch (...) {
+            ctx.reset(new Client::WriteContext(ns));
+            throw;
+        }
+
+        ctx.reset(new Client::WriteContext(ns));
+        indexer->commit();
+    }
     static void runNonSystemInsertFromOplogWithLock(
         const char* ns, 
         BSONObj row
@@ -214,21 +273,11 @@ namespace OpLogHelpers{
         if (nsToCollectionSubstring(ns) == "system.indexes") {
             // do not build the index if the user has disabled
             if (theReplSet->buildIndexes()) {
-                Client::WriteContext ctx(ns);
-                NamespaceDetails* nsd = nsdetails(ns);
-                const string &coll = row["ns"].String();
-
-                NamespaceDetails* collNsd = nsdetails(coll);
-                const bool ok = collNsd->ensureIndex(row);
-                if (!ok) {
-                    // the index already exists, so this is a no-op
-                    // Note that for create index and drop index, we
-                    // are tolerant of the fact that the operation may
-                    // have already been done
-                    return;
+                if (row["background"].trueValue()) {
+                    runHotIndexFromOplog(ns, row);
+                } else {
+                    runColdIndexFromOplog(ns, row);
                 }
-                // overwrite set to true because we are running on a secondary
-                insertOneObject(nsd, row, NamespaceDetails::NO_UNIQUE_CHECKS);
             }
         }
         else {
