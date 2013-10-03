@@ -1,6 +1,33 @@
 tokumx news
 ===========
 
+tokumx 1.3.0
+------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    -
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Many numeric `"byte quantity"` parameters can now be specified with
+      units, for example `"1MB"` or `"32k"` or `"6T"`.  The allowed
+      suffixes are `"kmgt"`, either upper or lower case, and optionally
+      also with a `"b"` or `"B"`.  All suffixes use binary quantities, not
+      decimal, so `"1MB"` is `1 * 1024 * 1024`, not `1000000`.  The
+      command line parameters that accept these quantities are
+      `cacheSize`, `locktreeMaxMemory`, and `txnMemLimit`.  These
+      parameters, if passed in a BSON object, must be passed as strings,
+      and are accepted as parameters to `pageSize`, `readPageSize`, and
+      the `size` for capped collections, as well as the argument to the
+      `backupThrottle` command in the enterprise Hot Backup plugin.
+      (#266, 536, #545)
+
+
 tokumx 1.2.1
 ------------
 Release date: 2013-09-18
