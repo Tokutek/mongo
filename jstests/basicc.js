@@ -6,13 +6,13 @@ t1.drop();
 t2.drop();
 
 var db = db.getSisterDB("test_basicc");
-js = "for (i = 0; i < 50000; i++) { db.jstests_basicc1.save( {} ); }";
+js = "for (i = 0; i < 20000; i++) { db.jstests_basicc1.save( {} ); }";
 pid = startMongoProgramNoConnect( "mongo" , "--eval" , js , db.getMongo().host );
-for( var i = 0; i < 50000; ++i ) {
+for( var i = 0; i < 20000; ++i ) {
     t2.save( {} );
 }
 assert.automsg( "!db.getLastError()" );
-assert.soon( function() { return t1.count() == 50000 && t2.count() == 50000 }, 30, 1000 );
+assert.soon( function() { return t1.count() == 20000 && t2.count() == 20000 }, 60, 1000 );
 
 // put things back the way we found it
 t1.drop();
