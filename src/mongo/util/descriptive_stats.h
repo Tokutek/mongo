@@ -123,7 +123,7 @@ namespace mongo {
          * Updates the estimators with another observed value.
          */
         inline double quantile(std::size_t i) const {
-            massert(16476, "the requested value is out of the range of the computed quantiles",
+            massert(17016, "the requested value is out of the range of the computed quantiles",
                     i <= NumQuantiles + 1);
             return this->_heights[2 * i];
         }

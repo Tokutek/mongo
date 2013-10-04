@@ -63,7 +63,7 @@ namespace mongo {
     bool isQueryOkToSecondary(const string& ns, const BSONObj& queryObj) {
         // _secOkCmdList was not initialized! mongo::runGlobalInitializersOrDie
         // probably was not called.
-        fassert(16464, !_secOkCmdList.empty());
+        fassert(17017, !_secOkCmdList.empty());
 
         if (ns.find(".$cmd") == string::npos) {
             return true;
