@@ -1,10 +1,12 @@
-#!/bin/sh
+#!/bin/bash
 #
 # tokumx      init file for starting up the TokuMX server
 #
-# chkconfig:   - 90 10
-# description: Starts and stops the MongDB daemon that handles all \
-#              database requests.
+# chkconfig: 35 85 15
+# description: TokuMX is a high-performance, compressing version of MongoDB, a document-oriented database.
+# processname: mongod
+# config: /etc/tokumx.conf
+# pidfile: /var/run/tokumx/tokumx.pid
 
 # Source function library.
 . /etc/rc.d/init.d/functions
