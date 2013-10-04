@@ -619,6 +619,15 @@ namespace mongo {
             TOKULOG(1) << "cleaner iterations set to " << num_iterations << "." << endl;
         }
 
+        void set_lock_timeout(uint64_t timeout_ms) {
+            cmdLine.lockTimeout = timeout_ms;
+            int r = env->set_lock_timeout(env, timeout_ms);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
+            TOKULOG(1) << "lock timeout set to " << timeout_ms << " milliseconds." << endl;
+        }
+
         void handle_ydb_error(int error) {
             switch (error) {
                 case ENOENT:

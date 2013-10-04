@@ -132,6 +132,13 @@ namespace mongo {
                 log() << "setParameter cleanerIterations=" << x << endl;
                 s++;
             }
+            if( cmdObj.hasElement("lockTimeout") ) {
+                long long x = (long long) cmdObj["lockTimeout"].Number();
+                storage::set_lock_timeout(x);
+                uassert( 17016, "--lockTimeout must be >= 0", x >= 0 );
+                log() << "setParameter lockTimeout =" << x << endl;
+                s++;
+            }
             if( cmdObj.hasElement( "traceExceptions" ) ) {
                 if( s == 0 ) result.append( "was", DBException::traceExceptions );
                 DBException::traceExceptions = cmdObj["traceExceptions"].Bool();
