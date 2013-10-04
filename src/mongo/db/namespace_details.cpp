@@ -42,6 +42,7 @@
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
+#include "mongo/db/storage/dbt.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/txn.h"
 #include "mongo/db/storage/key.h"
@@ -805,8 +806,8 @@ namespace mongo {
             BSONObj pk = obj["_id"].wrap("");
 
             storage::Key sPK(pk, NULL);
-            DBT key = storage::make_dbt(sPK.buf(), sPK.size());
-            DBT val = storage::make_dbt(obj.objdata(), obj.objsize());
+            DBT key = storage::dbt_make(sPK.buf(), sPK.size());
+            DBT val = storage::dbt_make(obj.objdata(), obj.objsize());
             _loader->put(&key, &val);
         }
 
@@ -1114,42 +1115,6 @@ namespace mongo {
         return false;
     }
 
-    // Manages an array of DBT_ARRAYs and the lifetime of the objects they store.
-    //
-    // It may be a good idea to cache two of these in the client object so
-    // they're not created/destroyed every time a connection/transaction
-    // does a single write. (multi inserts/updates/deletes come to mind)
-    class DBTArrays : boost::noncopyable {
-    public:
-        DBTArrays(const size_t n) :
-            _arrays(new DBT_ARRAY[n]),
-            _n(n) {
-            memset(_arrays.get(), 0, n * sizeof(DBT_ARRAY));
-        }
-        ~DBTArrays() {
-            for (size_t i = 0; i < _n; i++) {
-                DBT_ARRAY *dbt_array = &_arrays[i];
-                for (size_t j = 0; j < dbt_array->capacity; j++) {
-                    DBT *dbt = &dbt_array->dbts[j];
-                    if (dbt->data != NULL && dbt->flags == DB_DBT_REALLOC) {
-                        free(dbt->data);
-                        dbt->data = NULL;
-                    }
-                }
-                if (dbt_array->dbts != NULL) {
-                    free(dbt_array->dbts);
-                    dbt_array->dbts = NULL;
-                }
-            }
-        }
-        DBT_ARRAY *arrays() const {
-            return _arrays.get();
-        }
-    private:
-        scoped_array<DBT_ARRAY> _arrays;
-        const size_t _n;
-    };
-
     void NamespaceDetails::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
@@ -1160,13 +1125,13 @@ namespace mongo {
 
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
-        DBTArrays keyArrays(n);
-        DBTArrays valArrays(n);
+        storage::DBTArrays keyArrays(n);
+        storage::DBTArrays valArrays(n);
         uint32_t put_flags[n];
 
         storage::Key sPK(pk, NULL);
-        DBT src_key = storage::make_dbt(sPK.buf(), sPK.size());
-        DBT src_val = storage::make_dbt(obj.objdata(), obj.objsize());
+        DBT src_key = storage::dbt_make(sPK.buf(), sPK.size());
+        DBT src_val = storage::dbt_make(obj.objdata(), obj.objsize());
 
         for (int i = 0; i < n; i++) {
             const bool isPK = i == 0;
@@ -1216,7 +1181,7 @@ namespace mongo {
         // The PK is always used, only secondarys may have keys generated.
         getPKIndex().noteInsert();
         for (int i = 0; i < n; i++) {
-            const DBT_ARRAY *array = &keyArrays.arrays()[i];
+            const DBT_ARRAY *array = &keyArrays[i];
             if (array->size > 0) {
                 IndexDetails &idx = *_indexes[i];
                 dassert(!isPKIndex(idx));
@@ -1231,12 +1196,12 @@ namespace mongo {
 
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
-        DBTArrays keyArrays(n);
+        storage::DBTArrays keyArrays(n);
         uint32_t del_flags[n];
 
         storage::Key sPK(pk, NULL);
-        DBT src_key = storage::make_dbt(sPK.buf(), sPK.size());
-        DBT src_val = storage::make_dbt(obj.objdata(), obj.objsize());
+        DBT src_key = storage::dbt_make(sPK.buf(), sPK.size());
+        DBT src_val = storage::dbt_make(obj.objdata(), obj.objsize());
 
         for (int i = 0; i < n; i++) {
             const bool prelocked = flags & NamespaceDetails::NO_LOCKTREE;
@@ -1258,7 +1223,7 @@ namespace mongo {
         // The PK is always used, only secondarys may have keys generated.
         getPKIndex().noteDelete();
         for (int i = 0; i < n; i++) {
-            const DBT_ARRAY *array = &keyArrays.arrays()[i];
+            const DBT_ARRAY *array = &keyArrays[i];
             if (array->size > 0) {
                 IndexDetails &idx = *_indexes[i];
                 dassert(!isPKIndex(idx));
@@ -1299,14 +1264,14 @@ namespace mongo {
 
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
-        DBTArrays keyArrays(n * 2);
-        DBTArrays valArrays(n);
+        storage::DBTArrays keyArrays(n * 2);
+        storage::DBTArrays valArrays(n);
         uint32_t update_flags[n];
 
         storage::Key sPK(pk, NULL);
-        DBT src_key = storage::make_dbt(sPK.buf(), sPK.size());
-        DBT new_src_val = storage::make_dbt(newObj.objdata(), newObj.objsize());
-        DBT old_src_val = storage::make_dbt(oldObj.objdata(), oldObj.objsize());
+        DBT src_key = storage::dbt_make(sPK.buf(), sPK.size());
+        DBT new_src_val = storage::dbt_make(newObj.objdata(), newObj.objsize());
+        DBT old_src_val = storage::dbt_make(oldObj.objdata(), oldObj.objsize());
 
         // Generate keys for each index, prepare data structures for del multiple.
         // We will end up abandoning del multiple if there are any multikey indexes.

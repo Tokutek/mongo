@@ -100,7 +100,7 @@ namespace mongo {
     }
 
     DBT Descriptor::dbt() const {
-        return storage::make_dbt(_data, _size);
+        return storage::dbt_make(_data, _size);
     }
 
     int Descriptor::compareKeys(const storage::Key &key1, const storage::Key &key2) const {

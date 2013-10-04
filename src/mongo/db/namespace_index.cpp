@@ -283,7 +283,7 @@ namespace mongo {
         BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
-        DBT ddbt = storage::make_dbt(serialized.objdata(), serialized.objsize());
+        DBT ddbt = storage::dbt_make(serialized.objdata(), serialized.objsize());
         DB *db = _nsdb->db();
         const int flags = overwrite ? 0 : DB_NOOVERWRITE;
         const int r = db->put(db, cc().txn().db_txn(), &ndbt, &ddbt, flags);

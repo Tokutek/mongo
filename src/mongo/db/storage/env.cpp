@@ -37,6 +37,7 @@
 #include "mongo/db/cmdline.h"
 #include "mongo/db/descriptor.h"
 #include "mongo/db/storage/assert_ids.h"
+#include "mongo/db/storage/dbt.h"
 #include "mongo/db/storage/exception.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/util/assert_util.h"

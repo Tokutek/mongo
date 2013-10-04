@@ -18,6 +18,8 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/storage/dbt.h"
+
 #include <db.h>
 
 // The dictionary key format is as follows:
@@ -109,15 +111,6 @@ namespace mongo {
             void traditional(const BSONObj& obj); // store as traditional bson not as compact format
         };
 
-        inline DBT make_dbt(const char *buf, size_t size, const int flags = 0) {
-            DBT dbt;
-            dbt.data = const_cast<char *>(buf);
-            dbt.size = size;
-            dbt.ulen = 0;
-            dbt.flags = flags;
-            return dbt;
-        }
-
         // Dictionary key format:
         // { KeyV1 key [, BSONObj primary key] }
         class Key {
@@ -199,7 +192,7 @@ namespace mongo {
             }
 
             DBT dbt() const {
-                return make_dbt(_buf, _size);
+                return dbt_make(_buf, _size);
             }
 
             // HACK This isn't so nice.

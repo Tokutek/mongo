@@ -501,9 +501,9 @@ namespace mongo {
     void IndexDetails::Builder::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val) {
         storage::Key skey(key, pk);
         DBT kdbt = skey.dbt();
-        DBT vdbt = storage::make_dbt(NULL, 0);
+        DBT vdbt = storage::dbt_make(NULL, 0);
         if (_idx.clustering()) {
-            vdbt = storage::make_dbt(val.objdata(), val.objsize());
+            vdbt = storage::dbt_make(val.objdata(), val.objsize());
         }
         const int r = _loader.put(&kdbt, &vdbt);
         if (r != 0) {
