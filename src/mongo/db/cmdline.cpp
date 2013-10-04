@@ -151,6 +151,12 @@ namespace {
         ("sslOnNormalPorts" , "use ssl on configured ports" )
         ("sslPEMKeyFile" , po::value<string>(&cmdLine.sslPEMKeyFile), "PEM file for ssl" )
         ("sslPEMKeyPassword" , new PasswordValue(&cmdLine.sslPEMKeyPassword) , "PEM file password" )
+        ("sslCAFile", po::value<std::string>(&cmdLine.sslCAFile), 
+         "Certificate Authority file for SSL")
+        ("sslCRLFile", po::value<std::string>(&cmdLine.sslCRLFile),
+         "Certificate Revocation List file for SSL")
+        ("sslWeakCertificateValidation", "allow client to connect without presenting a certificate")
+        ("sslFIPSMode", "activate FIPS 140-2 mode at startup")
 #endif
         ;
         
@@ -479,8 +485,32 @@ namespace {
         }
 
 #ifdef MONGO_SSL
-        if (params.count("sslOnNormalPorts") ) {
+        if (params.count("sslWeakCertificateValidation")) {
+            cmdLine.sslWeakCertificateValidation = true;
+        }
+        if (params.count("sslOnNormalPorts")) {
             cmdLine.sslOnNormalPorts = true;
+            if ( cmdLine.sslPEMKeyFile.size() == 0 ) {
+                log() << "need sslPEMKeyFile" << endl;
+                return false;
+            }
+            if (cmdLine.sslWeakCertificateValidation &&
+                cmdLine.sslCAFile.empty()) {
+                log() << "need sslCAFile with sslWeakCertificateValidation" << endl;
+                return false;
+            }
+            if (params.count("sslFIPSMode")) {
+                cmdLine.sslFIPSMode = true;
+            }
+        }
+        else if (cmdLine.sslPEMKeyFile.size() || 
+                 cmdLine.sslPEMKeyPassword.size() ||
+                 cmdLine.sslCAFile.size() ||
+                 cmdLine.sslCRLFile.size() ||
+                 cmdLine.sslWeakCertificateValidation ||
+                 cmdLine.sslFIPSMode) {
+            log() << "need to enable sslOnNormalPorts" << endl;
+            return false;
         }
 #endif
 

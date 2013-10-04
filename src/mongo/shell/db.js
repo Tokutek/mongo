@@ -1,6 +1,10 @@
 // db.js
 
-if ( typeof DB == "undefined" ){                     
+var DB;
+
+(function() {
+
+if (DB === undefined) {
     DB = function( mongo , name ){
         this._mongo = mongo;
         this._name = name;
@@ -361,7 +365,6 @@ DB.prototype.shutdownServer = function(opts) {
 */
 DB.prototype.cloneDatabase = function(from) { 
     assert( isString(from) && from.length );
-    //this.resetIndexCache();
     return this._dbCommand( { clone: from } );
 }
 
@@ -388,7 +391,6 @@ DB.prototype.cloneCollection = function(from, collection, query) {
     assert( isString(collection) && collection.length );
     collection = this._name + "." + collection;
     query = query || {};
-    //this.resetIndexCache();
     return this._dbCommand( { cloneCollection:collection, from:from, query:query } );
 }
 
@@ -485,12 +487,26 @@ DB.prototype.help = function() {
     return __magicNoPrint;
 }
 
-DB.prototype.printCollectionStats = function(){
+DB.prototype.printCollectionStats = function(scale) { 
+    if (arguments.length > 1) { 
+        print("printCollectionStats() has a single optional argument (scale)");
+        return;
+    }
+    if (typeof scale != 'undefined') {
+        if(typeof scale != 'number') {
+            print("scale has to be a number >= 1");
+            return;
+        }
+        if (scale < 1) {
+            print("scale has to be >= 1");
+            return;
+        }
+    }
     var mydb = this;
     this.getCollectionNames().forEach(
-        function(z){
+        function(z) {
             print( z );
-            printjson( mydb.getCollection(z).stats() );
+            printjson( mydb.getCollection(z).stats(scale) );
             print( "---" );
         }
     );
@@ -522,37 +538,6 @@ DB.prototype.setProfilingLevel = function(level,slowms) {
         cmd["slowms"] = slowms;
     return this._dbCommand( cmd );
 }
-
-DB.prototype._initExtraInfo = function() {
-    if ( typeof _verboseShell === 'undefined' || !_verboseShell ) return;
-    this.startTime = new Date().getTime();
-}
-
-DB.prototype._getExtraInfo = function(action) {
-    if ( typeof _verboseShell === 'undefined' || !_verboseShell ) {
-        __callLastError = true;
-        return;
-    }
-
-    // explicit w:1 so that replset getLastErrorDefaults aren't used here which would be bad.
-    var res = this.getLastErrorCmd(1); 
-    if (res) {
-        if (res.err != undefined && res.err != null) {
-            // error occurred, display it
-            print(res.err);
-            return;
-        }
-
-        var info = action + " ";  
-        // hack for inserted because res.n is 0
-        info += action != "Inserted" ? res.n : 1;
-        if (res.n > 0 && res.updatedExisting != undefined) info += " " + (res.updatedExisting ? "existing" : "new")  
-        info += " record(s)";  
-        var time = new Date().getTime() - this.startTime;  
-        info += " in " + time + "ms";
-        print(info);
-    }
-} 
 
 /**
  *  <p> Evaluate a js expression at the database server.</p>
@@ -780,7 +765,7 @@ DB.prototype.killOP = DB.prototype.killOp;
 
 DB.tsToSeconds = function(x){
     if ( x.t && x.i )
-        return x.t / 1000;
+        return x.t;
     return x / 4294967296; // low 32 bits are ordinal #s within a second
 }
 
@@ -961,8 +946,12 @@ DB.prototype.serverBuildInfo = function(){
     return this._adminCommand( "buildinfo" );
 }
 
-DB.prototype.serverStatus = function(){
-    return this._adminCommand( "serverStatus" );
+DB.prototype.serverStatus = function( options ){
+    var cmd = { serverStatus : 1 };
+    if ( options ) {
+        Object.extend( cmd, options );
+    }
+    return this._adminCommand( cmd );
 }
 
 DB.prototype.hostInfo = function(){
@@ -1043,3 +1032,5 @@ DB.prototype.getSlaveOk = function() {
 DB.prototype.loadServerScripts = function(){
     this.system.js.find().forEach(function(u){eval(u._id + " = " + u.value);});
 }
+
+}());

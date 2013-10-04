@@ -228,15 +228,25 @@ Object.keySet = function(o) {
 }
 
 // String
-String.prototype.trim = function() {
-    return this.replace(/^\s+|\s+$/g,"");
+if (String.prototype.trim === undefined) {
+    String.prototype.trim = function() {
+        return this.replace(/^\s+|\s+$/g,"");
+    }
 }
-String.prototype.ltrim = function() {
-    return this.replace(/^\s+/,"");
+if (String.prototype.trimLeft === undefined) {
+    String.prototype.trimLeft = function() {
+        return this.replace(/^\s+/,"");
+    }
 }
-String.prototype.rtrim = function() {
-    return this.replace(/\s+$/,"");
+if (String.prototype.trimRight === undefined) {
+    String.prototype.trimRight = function() {
+        return this.replace(/\s+$/,"");
+    }
 }
+
+// always provide ltrim and rtrim for backwards compatibility
+String.prototype.ltrim = String.prototype.trimLeft;
+String.prototype.rtrim = String.prototype.trimRight;
 
 String.prototype.startsWith = function(str){
     return this.indexOf(str) == 0
@@ -483,28 +493,45 @@ tojson = function(x, indent, nolint){
 
     switch (typeof x) {
     case "string": {
-        var s = "\"";
+        var out = new Array(x.length+1);
+        out[0] = '"';
         for (var i=0; i<x.length; i++){
-            switch (x[i]){
-                case '"': s += '\\"'; break;
-                case '\\': s += '\\\\'; break;
-                case '\b': s += '\\b'; break;
-                case '\f': s += '\\f'; break;
-                case '\n': s += '\\n'; break;
-                case '\r': s += '\\r'; break;
-                case '\t': s += '\\t'; break;
+            switch (x[i]) {
+                case '"':
+                  out[out.length] = '\\"';
+                  break;
+                case '\\':
+                  out[out.length] = '\\\\';
+                  break;
+                case '\b':
+                  out[out.length] = '\\b';
+                  break;
+                case '\f':
+                  out[out.length] = '\\f';
+                  break;
+                case '\n':
+                  out[out.length] = '\\n';
+                  break;
+                case '\r':
+                  out[out.length] = '\\r';
+                  break;
+                case '\t':
+                  out[out.length] = '\\t';
+                  break;
 
                 default: {
                     var code = x.charCodeAt(i);
                     if (code < 0x20){
-                        s += (code < 0x10 ? '\\u000' : '\\u00') + code.toString(16);
+                        out[out.length] =
+                          (code < 0x10 ? '\\u000' : '\\u00') + code.toString(16);
                     } else {
-                        s += x[i];
+                        out[out.length] = x[i];
                     }
                 }
             }
         }
-        return s + "\"";
+
+        return out.join('') + "\"";
     }
     case "number":
     case "boolean":
@@ -512,7 +539,7 @@ tojson = function(x, indent, nolint){
     case "object":{
         var s = tojsonObject(x, indent, nolint);
         if ((nolint == null || nolint == true) && s.length < 80 && (indent == null || indent.length == 0)){
-            s = s.replace(/[\s\r\n ]+/gm, " ");
+            s = s.replace(/[\t\r\n]+/gm, " ");
         }
         return s;
     }
@@ -573,7 +600,11 @@ tojsonObject = function(x, indent, nolint){
     var num = 1;
     for (var k in keys){
         var val = x[k];
-        if (val == DB.prototype || val == DBCollection.prototype)
+
+        // skip internal DB types to avoid issues with interceptors
+        if (typeof DB != 'undefined' && val == DB.prototype)
+            continue;
+        if (typeof DBCollection != 'undefined' && val == DBCollection.prototype)
             continue;
 
         s += indent + "\"" + k + "\" : " + tojson(val, indent, nolint);
@@ -587,6 +618,14 @@ tojsonObject = function(x, indent, nolint){
     // pop one level of indent
     indent = indent.substring(1);
     return s + indent + "}";
+}
+
+printjson = function(x){
+    print( tojson( x ) );
+}
+
+printjsononeline = function(x){
+    print( tojsononeline( x ) );
 }
 
 isString = function(x){

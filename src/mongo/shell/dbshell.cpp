@@ -41,6 +41,7 @@
 
 #ifdef _WIN32
 #define isatty _isatty
+#define fileno _fileno
 #else
 #include <unistd.h>
 #endif
@@ -158,11 +159,6 @@ void quitNicely( int sig ) {
         return;
     }
 
-#if !defined(_WIN32)
-    if ( sig == SIGPIPE )
-        mongo::rawOut( "mongo got signal SIGPIPE\n" );
-#endif
-
     killOps();
     shellHistoryDone();
     ::_exit(0);
@@ -231,6 +227,8 @@ void myterminate() {
     ::_exit( 14 );
 }
 
+static void ignoreSignal(int ignored) {}
+
 void setupSignals() {
     signal( SIGINT , quitNicely );
     signal( SIGTERM , quitNicely );
@@ -239,7 +237,12 @@ void setupSignals() {
     signal( SIGFPE , quitAbruptly );
 
 #if !defined(_WIN32) // surprisingly these are the only ones that don't work on windows
-    signal( SIGPIPE , quitNicely ); // Maybe just log and continue?
+    struct sigaction sigactionSignals;
+    sigactionSignals.sa_handler = ignoreSignal;
+    sigemptyset(&sigactionSignals.sa_mask);
+    sigactionSignals.sa_flags = 0;
+    sigaction(SIGPIPE, &sigactionSignals, NULL); // errors are handled in socket code directly
+
     signal( SIGBUS , quitAbruptly );
 #endif
 
@@ -490,6 +493,12 @@ static void edit( const string& whatToEdit ) {
 
     string js;
     if ( editingVariable ) {
+        // If "whatToEdit" is undeclared or uninitialized, declare 
+        int varType = shellMainScope->type( whatToEdit.c_str() );
+        if ( varType == Undefined ) {
+            shellMainScope->exec( "var " + whatToEdit , "(shell)", false, true, false );
+        }
+
         // Convert "whatToEdit" to JavaScript (JSON) text
         if ( !shellMainScope->exec( "__jsout__ = tojson(" + whatToEdit + ")", "tojs", false, false, false ) )
             return; // Error already printed
@@ -615,6 +624,10 @@ int _main( int argc, char* argv[], char **envp ) {
     string authenticationMechanism;
     string authenticationDatabase;
 
+    std::string sslPEMKeyFile;
+    std::string sslPEMKeyPassword;
+    std::string sslCAFile;
+
     bool runShell = false;
     bool nodb = false;
     bool norc = false;
@@ -648,6 +661,10 @@ int _main( int argc, char* argv[], char **envp ) {
     ( "ipv6", "enable IPv6 support (disabled by default)" )
 #ifdef MONGO_SSL
     ( "ssl", "use SSL for all connections" )
+    ( "sslCAFile", po::value<std::string>(&sslCAFile), "Certificate Authority for SSL" )
+    ( "sslPEMKeyFile", po::value<std::string>(&sslPEMKeyFile), "PEM certificate/key file for SSL" )
+    ( "sslPEMKeyPassword", po::value<std::string>(&sslPEMKeyFile), 
+      "password for key in PEM file for SSL" )
 #endif
     ;
 
@@ -720,6 +737,15 @@ int _main( int argc, char* argv[], char **envp ) {
 #ifdef MONGO_SSL
     if ( params.count( "ssl" ) ) {
         mongo::cmdLine.sslOnNormalPorts = true;
+    }
+    if (params.count("sslPEMKeyFile")) {
+        mongo::cmdLine.sslPEMKeyFile = params["sslPEMKeyFile"].as<std::string>();
+    }
+    if (params.count("sslPEMKeyPassword")) {
+        mongo::cmdLine.sslPEMKeyPassword = params["sslPEMKeyPassword"].as<std::string>();
+    }
+    if (params.count("sslCAFile")) {
+        mongo::cmdLine.sslCAFile = params["sslCAFile"].as<std::string>();
     }
 #endif
     if ( params.count( "nokillop" ) ) {
@@ -871,7 +897,7 @@ int _main( int argc, char* argv[], char **envp ) {
             }
         }
 
-        if ( !hasMongoRC && isatty(0) ) {
+        if ( !hasMongoRC && isatty(fileno(stdin)) ) {
            cout << "Welcome to the MongoDB shell.\n"
                    "For interactive help, type \"help\".\n"
                    "For more comprehensive documentation, see\n\thttp://docs.mongodb.org/\n"
@@ -879,6 +905,10 @@ int _main( int argc, char* argv[], char **envp ) {
            fstream f;
            f.open(rcLocation.c_str(), ios_base::out );
            f.close();
+        }
+
+        if ( !nodb && !mongo::cmdLine.quiet && isatty(fileno(stdin)) ) {
+            scope->exec( "shellHelper( 'show', 'startupWarnings' )", "(shellwarnings", false, true, false );
         }
 
         shellHistoryInit();
@@ -1012,21 +1042,16 @@ int _main( int argc, char* argv[], char **envp ) {
 #ifdef _WIN32
 int wmain( int argc, wchar_t* argvW[] ) {
     static mongo::StaticObserver staticObserver;
-    UINT initialConsoleInputCodePage = GetConsoleCP();
-    UINT initialConsoleOutputCodePage = GetConsoleOutputCP();
-    SetConsoleCP( CP_UTF8 );
-    SetConsoleOutputCP( CP_UTF8 );
-    int returnValue = -1;
+    int returnCode;
     try {
         WindowsCommandLine wcl( argc, argvW );
-        returnValue = _main( argc, wcl.argv(), NULL );  // TODO: Convert wide env to utf8 env.
+        returnCode = _main( argc, wcl.argv(), NULL );  // TODO: Convert wide env to utf8 env.
     }
     catch ( mongo::DBException& e ) {
         cerr << "exception: " << e.what() << endl;
+        returnCode = 1;
     }
-    SetConsoleCP( initialConsoleInputCodePage );
-    SetConsoleOutputCP( initialConsoleOutputCodePage );
-    ::_exit(returnValue);
+    ::_exit(returnCode);
 }
 #else // #ifdef _WIN32
 int main( int argc, char* argv[], char **envp ) {

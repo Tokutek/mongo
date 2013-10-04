@@ -197,8 +197,11 @@ if ( typeof _threadInject != "undefined" ){
                                    "jstests/bench_test1.js",
                                    "jstests/padding.js",
                                    "jstests/queryoptimizera.js",
-                                   "jstests/loglong.js" // log might overflow before 
-                                                        // this has a chance to see the message
+                                   "jstests/loglong.js", // log might overflow before 
+                                                         // this has a chance to see the message
+                                   "jstests/connections_opened.js", // counts connections, globally
+                                   "jstests/opcounters.js",
+                                   "jstests/currentop.js"// SERVER-8673, plus rwlock yielding issues
                                   ] );
         
         // some tests can't be run in parallel with each other
@@ -313,14 +316,6 @@ shellPrint = function( x ){
         }
         db.resetError();
     }
-}
-
-printjson = function(x){
-    print( tojson( x ) );
-}
-
-printjsononeline = function(x){
-    print( tojsononeline( x ) );
 }
 
 if ( typeof TestData == "undefined" ){
@@ -543,20 +538,23 @@ shellAutocomplete = function ( /*prefix*/ ) { // outer scope function called on 
     var universalMethods = "constructor prototype toString valueOf toLocaleString hasOwnProperty propertyIsEnumerable".split( ' ' );
 
     var builtinMethods = {}; // uses constructor objects as keys
-    builtinMethods[Array] = "length concat join pop push reverse shift slice sort splice unshift indexOf lastIndexOf every filter forEach map some".split( ' ' );
+    builtinMethods[Array] = "length concat join pop push reverse shift slice sort splice unshift indexOf lastIndexOf every filter forEach map some isArray reduce reduceRight".split( ' ' );
     builtinMethods[Boolean] = "".split( ' ' ); // nothing more than universal methods
-    builtinMethods[Date] = "getDate getDay getFullYear getHours getMilliseconds getMinutes getMonth getSeconds getTime getTimezoneOffset getUTCDate getUTCDay getUTCFullYear getUTCHours getUTCMilliseconds getUTCMinutes getUTCMonth getUTCSeconds getYear parse setDate setFullYear setHours setMilliseconds setMinutes setMonth setSeconds setTime setUTCDate setUTCFullYear setUTCHours setUTCMilliseconds setUTCMinutes setUTCMonth setUTCSeconds setYear toDateString toGMTString toLocaleDateString toLocaleTimeString toTimeString toUTCString UTC".split( ' ' );
-    builtinMethods[Math] = "E LN2 LN10 LOG2E LOG10E PI SQRT1_2 SQRT2 abs acos asin atan atan2 ceil cos exp floor log max min pow random round sin sqrt tan".split( ' ' );
+    builtinMethods[Date] = "getDate getDay getFullYear getHours getMilliseconds getMinutes getMonth getSeconds getTime getTimezoneOffset getUTCDate getUTCDay getUTCFullYear getUTCHours getUTCMilliseconds getUTCMinutes getUTCMonth getUTCSeconds getYear parse setDate setFullYear setHours setMilliseconds setMinutes setMonth setSeconds setTime setUTCDate setUTCFullYear setUTCHours setUTCMilliseconds setUTCMinutes setUTCMonth setUTCSeconds setYear toDateString toGMTString toISOString toLocaleDateString toLocaleTimeString toTimeString toUTCString UTC now".split( ' ' );
+    if (typeof JSON != "undefined") { // JSON is new in V8
+        builtinMethods["[object JSON]"] = "parse stringify".split(' ');
+    }
+    builtinMethods[Math] = "E LN2 LN10 LOG2E LOG10E PI SQRT1_2 SQRT2 abs acos asin atan atan2 ceil cos exp floor log max min pow random round sin sqrt tan".split(' ');
     builtinMethods[Number] = "MAX_VALUE MIN_VALUE NEGATIVE_INFINITY POSITIVE_INFINITY toExponential toFixed toPrecision".split( ' ' );
     builtinMethods[RegExp] = "global ignoreCase lastIndex multiline source compile exec test".split( ' ' );
-    builtinMethods[String] = "length charAt charCodeAt concat fromCharCode indexOf lastIndexOf match replace search slice split substr substring toLowerCase toUpperCase".split( ' ' );
-    builtinMethods[Function] = "call apply".split( ' ' );
-    builtinMethods[Object] = "bsonsize".split( ' ' );
+    builtinMethods[String] = "length charAt charCodeAt concat fromCharCode indexOf lastIndexOf match replace search slice split substr substring toLowerCase toUpperCase trim trimLeft trimRight".split(' ');
+    builtinMethods[Function] = "call apply bind".split( ' ' );
+    builtinMethods[Object] = "bsonsize create defineProperty defineProperties getPrototypeOf keys seal freeze preventExtensions isSealed isFrozen isExtensible getOwnPropertyDescriptor getOwnPropertyNames".split(' ');
 
-    builtinMethods[Mongo] = "find update insert remove".split( ' ' );
-    builtinMethods[BinData] = "hex base64 length subtype".split( ' ' );
+    builtinMethods[Mongo] = "find update insert remove".split(' ');
+    builtinMethods[BinData] = "hex base64 length subtype".split(' ');
 
-    var extraGlobals = "Infinity NaN undefined null true false decodeURI decodeURIComponent encodeURI encodeURIComponent escape eval isFinite isNaN parseFloat parseInt unescape Array Boolean Date Math Number RegExp String print load gc MinKey MaxKey Mongo NumberInt NumberLong ObjectId DBPointer UUID BinData HexData MD5 Map".split( ' ' );
+    var extraGlobals = "Infinity NaN undefined null true false decodeURI decodeURIComponent encodeURI encodeURIComponent escape eval isFinite isNaN parseFloat parseInt unescape Array Boolean Date Math Number RegExp String print load gc MinKey MaxKey Mongo NumberInt NumberLong ObjectId DBPointer UUID BinData HexData MD5 Map Timestamp JSON".split( ' ' );
 
     var isPrivate = function( name ) {
         if ( shellAutocomplete.showPrivate ) return false;
@@ -754,7 +752,7 @@ shellHelper.show = function (what) {
         return "";
     }
 
-    if (what == "dbs") {
+    if (what == "dbs" || what == "databases") {
         var dbs = db.getMongo().getDBs();
         var size = {};
         dbs.databases.forEach(function (x) { size[x.name] = x.sizeOnDisk; });
@@ -790,6 +788,38 @@ shellHelper.show = function (what) {
         return ""
     }
 
+    if (what == "startupWarnings" ) {
+        var dbDeclared, ex;
+        try {
+            // !!db essentially casts db to a boolean
+            // Will throw a reference exception if db hasn't been declared.
+            dbDeclared = !!db;
+        } catch (ex) {
+            dbDeclared = false;
+        }
+        if (dbDeclared) {
+            var res = db.adminCommand( { getLog : "startupWarnings" } );
+            if ( res.ok ) {
+                if (res.log.length == 0) {
+                    return "";
+                }
+                print( "Server has startup warnings: " );
+                for ( var i=0; i<res.log.length; i++){
+                    print( res.log[i] )
+                }
+                return "";
+            } else if (res.errmsg == "unauthorized") {
+                // Don't print of startupWarnings command failed due to auth
+                return "";
+            } else {
+                print("Error while trying to show server startup warnings: " + res.errmsg);
+                return "";
+            }
+        } else {
+            print("Cannot show startupWarnings, \"db\" is not set");
+            return "";
+        }
+    }
 
     throw "don't know how to show [" + what + "]";
 
@@ -915,6 +945,7 @@ rs.help = function () {
     print("\trs.slaveOk()                    shorthand for db.getMongo().setSlaveOk()");
     print();
     print("\tdb.isMaster()                   check who is primary");
+    print("\tdb.printReplicationInfo()       check oplog size and time range");
     print();
     print("\treconfiguration helpers disconnect from the database so the shell will display");
     print("\tan error, even if the command succeeds.");
@@ -1095,7 +1126,7 @@ help = shellHelper.help = function (x) {
         print();
         print("\to = new ObjectId()                  create a new ObjectId");
         print("\to.getTimestamp()                    return timestamp derived from first 32 bits of the OID");
-        print("\to.isObjectId()");
+        print("\to.isObjectId");
         print("\to.toString()");
         print("\to.equals(otherid)");
         print();

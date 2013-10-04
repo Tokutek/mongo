@@ -56,7 +56,8 @@ namespace mongo {
         ShardInfo();
         ShardInfo( long long maxSize, long long currSize, 
                    bool draining, bool opsQueued, 
-                   const set<string>& tags = set<string>() );
+                   const set<string>& tags = set<string>(),
+                   const string& _mongoVersion = string("") );
 
         void addTag( const string& tag );
 
@@ -85,6 +86,8 @@ namespace mongo {
 
         long long getCurrSize() const { return _currSize; }
 
+        string getMongoVersion() const { return _mongoVersion; }
+
         string toString() const;
         
     private:
@@ -93,6 +96,7 @@ namespace mongo {
         bool _draining;
         bool _hasOpsQueued;
         set<string> _tags;
+        string _mongoVersion;
     };
     
     struct MigrateInfo {

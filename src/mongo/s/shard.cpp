@@ -396,6 +396,7 @@ namespace mongo {
         _mapped = obj.getFieldDotted( "mem.mapped" ).numberLong();
         _hasOpsQueued = obj["writeBacksQueued"].Bool();
         _writeLock = 0; // TODO
+        _mongoVersion = obj["version"].String();
     }
 
     void ShardingConnectionHook::onCreate( DBClientBase * conn ) {
