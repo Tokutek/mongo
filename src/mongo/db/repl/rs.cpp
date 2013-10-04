@@ -1202,20 +1202,26 @@ namespace mongo {
         Client::initThread("optimizeOplog");
         replLocalAuth();
         while (_replBackgroundShouldRun) {
-            GTID gtid;
-            {
-                boost::unique_lock<boost::mutex> lock(_purgeMutex);
-                gtid = _lastPurgedGTID;
-            }
-            if (!gtid.isInitial()) {
-                hotOptimizeOplogTo(gtid);
-            }
-            {
-                boost::unique_lock<boost::mutex> lock(_purgeMutex);
-                _purgeCond.timed_wait(
-                    _purgeMutex, 
-                    boost::posix_time::milliseconds(5000)
-                    );                
+            try {
+                GTID gtid;
+                {
+                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                    gtid = _lastPurgedGTID;
+                }
+                if (!gtid.isInitial()) {
+                    hotOptimizeOplogTo(gtid);
+                }
+                {
+                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                    _purgeCond.timed_wait(
+                        _purgeMutex, 
+                        boost::posix_time::milliseconds(5000)
+                        );                
+                }
+            } catch (const DBException &ex) {
+                warning() << "optimizeOplogThread caught exception: " << ex.what()
+                          << ", continuing in 5 seconds..." << endl;
+                sleep(5);
             }
         }
         _replOplogOptimizeRunning = false;
