@@ -76,36 +76,6 @@ namespace mongo {
             }
         }
 
-        static void dbt_realloc(DBT *dbt, const void *data, const size_t size) {
-            if (dbt->flags != DB_DBT_REALLOC || dbt->ulen < size) {
-                dbt->ulen = size;
-                dbt->data = realloc(dbt->flags == DB_DBT_REALLOC ? dbt->data : NULL, dbt->ulen);
-                dbt->flags = DB_DBT_REALLOC;
-                // Calling realloc() with a size of 0 may return NULL on some platforms
-                verify(dbt->ulen == 0 || dbt->data != NULL);
-            }
-            dbt->size = size;
-            memcpy(dbt->data, data, size);
-        }
-
-        static void dbt_array_clear_and_resize(DBT_ARRAY *dbt_array,
-                                               const size_t new_capacity) {
-            const size_t old_capacity = dbt_array->capacity;
-            if (old_capacity < new_capacity) {
-                dbt_array->capacity = new_capacity;
-                dbt_array->dbts = static_cast<DBT *>(
-                                  realloc(dbt_array->dbts, new_capacity * sizeof(DBT)));
-                memset(&dbt_array->dbts[old_capacity], 0, (new_capacity - old_capacity) * sizeof(DBT));
-            }
-            dbt_array->size = 0;
-        }
-
-        static void dbt_array_push(DBT_ARRAY *dbt_array, const void *data, const size_t size) {
-            verify(dbt_array->size < dbt_array->capacity);
-            dbt_realloc(&dbt_array->dbts[dbt_array->size], data, size);
-            dbt_array->size++;
-        }
-
         static int generate_keys(DB *dest_db, DB *src_db,
                                  DBT_ARRAY *dest_keys,
                                  const DBT *src_key, const DBT *src_val) {
