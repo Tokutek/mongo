@@ -12,7 +12,7 @@ for( var i = 0; i < 20000; ++i ) {
     t2.save( {} );
 }
 assert.automsg( "!db.getLastError()" );
-assert.soon( function() { return t1.count() == 20000 && t2.count() == 20000 }, 60, 1000 );
+assert.soon( function() { return t1.count() == 20000 && t2.count() == 20000 }, 30, 10000 );
 
 // put things back the way we found it
 t1.drop();
