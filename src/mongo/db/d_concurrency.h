@@ -101,6 +101,8 @@ namespace mongo {
             virtual ~GlobalRead();
         };
 
+        class DBRead;
+
         // lock this database. do not shared_lock globally first, that is handledin herein. 
         class DBWrite : public ScopedLock {
             /**
@@ -137,13 +139,13 @@ namespace mongo {
                 scoped_ptr<Lock::DBRead> _rdlk;
               public:
                 Downgrade(scoped_ptr<Lock::DBWrite> &wrlk)
-                        : _ns(_wrlk->_what), _wrlk(wrlk) {
+                        : _ns(wrlk->_what), _wrlk(wrlk) {
                     _wrlk.reset();
                     _rdlk.reset(new Lock::DBRead(_ns));
                 }
                 ~Downgrade() {
-                    _lk.reset();
-                    _lk.reset(new Lock::DBWrite>(_ns));
+                    _rdlk.reset();
+                    _wrlk.reset(new Lock::DBWrite(_ns));
                 }
             };
 
