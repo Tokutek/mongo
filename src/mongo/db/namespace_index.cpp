@@ -202,11 +202,20 @@ namespace mongo {
         BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
-        DB_TXN *db_txn = cc().hasTxn() ? cc().txn().db_txn() : NULL;
-        DB *db = _nsdb->db();
+
+        // If this transaction is read only, then we cannot possible already
+        // hold a lock in the nsindex and we certainly don't need to hold one
+        // for the duration of this operation. So we use an alternate txn stack.
+        const bool needAltTxn = !cc().hasTxn() || cc().txn().readOnly();
+        scoped_ptr<Client::AlternateTransactionStack> altStack(!needAltTxn ? NULL :
+                                                               new Client::AlternateTransactionStack());
+        scoped_ptr<Client::Transaction> altTxn(!needAltTxn ? NULL :
+                                               new Client::Transaction(0));
+
         // Pass flags that get us a write lock on the nsindex row
         // for the ns we'd like to open.
-        const int r = db->getf_set(db, db_txn, DB_SERIALIZABLE | DB_RMW,
+        DB *db = _nsdb->db();
+        const int r = db->getf_set(db, cc().txn().db_txn(), DB_SERIALIZABLE | DB_RMW,
                                    &ndbt, getf_serialized, &serialized);
         if (r == 0) {
             // We found an entry for this ns and we have the row lock.
