@@ -131,11 +131,14 @@ namespace mongo {
         return true;
     }
 
+    bool Member::syncable() const {
+        bool buildIndexes = theReplSet ? theReplSet->buildIndexes() : true;
+        return hbinfo().up() && (config().buildIndexes || !buildIndexes) && state().readable();
+    }
+
     Member* ReplSetImpl::getMemberToSyncTo() {
         lock lk(this);
         GTID lastGTID = gtidManager->getLiveState();
-
-        bool buildIndexes = true;
 
         // if we have a target we've requested to sync from, use it
 
@@ -156,8 +159,6 @@ namespace mongo {
                 OCCASIONALLY log() << "waiting for " << needMorePings << " pings from other members before syncing" << endl;
                 return NULL;
             }
-
-            buildIndexes = myConfig().buildIndexes;
 
             // If we are only allowed to sync from the primary, return that
             if (!_cfg->chainingAllowed()) {
@@ -197,14 +198,9 @@ namespace mongo {
         // This loop attempts to set 'closest'.
         for (int attempts = 0; attempts < 2; ++attempts) {
             for (Member *m = _members.head(); m; m = m->next()) {
-                if (!m->hbinfo().up())
-                    continue;
-                // make sure members with buildIndexes sync from other members w/indexes
-                if (buildIndexes && !m->config().buildIndexes)
-                    continue;
-
-                if (!m->state().readable())
-                    continue;
+                if (!m->syncable()) {
+                     continue;
+                }
 
                 if (m->state() == MemberState::RS_SECONDARY) {
                     // only consider secondaries that are ahead of where we are
@@ -212,7 +208,7 @@ namespace mongo {
                         continue;
                     }
                     // omit secondaries that are excessively behind, on the first attempt at least.
-                    if (attempts == 0 && 
+                    if (attempts == 0 &&
                         m->hbinfo().opTime < oldestSyncOpTime) 
                     {
                         continue;
@@ -220,7 +216,7 @@ namespace mongo {
                 }
 
                 // omit nodes that are more latent than anything we've already considered
-                if (closest && 
+                if (closest &&
                     (m->hbinfo().ping > closest->hbinfo().ping))
                     continue;
 

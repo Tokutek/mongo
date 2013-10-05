@@ -168,6 +168,16 @@ namespace mongo {
         }
     }
 
+    bool ReplSetImpl::shouldChangeSyncTarget(const uint64_t& targetOpTime) const {
+        for (Member *m = _members.head(); m; m = m->next()) {
+            if (m->syncable() && targetOpTime + 30000 < m->hbinfo().opTime) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     void GhostSync::starting() {
         Client::initThread("rsGhostSync");
         replLocalAuth();
