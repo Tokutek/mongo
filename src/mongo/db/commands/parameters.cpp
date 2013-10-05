@@ -135,7 +135,7 @@ namespace mongo {
             if( cmdObj.hasElement("lockTimeout") ) {
                 long long x = (long long) cmdObj["lockTimeout"].Number();
                 storage::set_lock_timeout(x);
-                uassert( 17016, "--lockTimeout must be >= 0", x >= 0 );
+                uassert(17018, "--lockTimeout must be >= 0", x >= 0 );
                 log() << "setParameter lockTimeout =" << x << endl;
                 s++;
             }
