@@ -35,6 +35,8 @@ namespace mongo {
 
     using namespace bson;
    
+    const int ReplSetImpl::maxSyncSourceLagSecs = 30;
+
     /* should be in RECOVERING state on arrival here.
        readlocks
        On input, should have repl lock and global write lock held
@@ -170,7 +172,7 @@ namespace mongo {
 
     bool ReplSetImpl::shouldChangeSyncTarget(const uint64_t& targetOpTime) const {
         for (Member *m = _members.head(); m; m = m->next()) {
-            if (m->syncable() && targetOpTime + 30000 < m->hbinfo().opTime) {
+            if (m->syncable() && targetOpTime + (maxSyncSourceLagSecs*1000) < m->hbinfo().opTime) {
                 return true;
             }
         }

@@ -556,6 +556,7 @@ namespace mongo {
         map<string,time_t> _veto;
 
     public:
+        static const int maxSyncSourceLagSecs;
 
         const ReplSetConfig::MemberCfg& myConfig() const { return _config; }
         void tryToGoLiveAsASecondary(); // readlocks
