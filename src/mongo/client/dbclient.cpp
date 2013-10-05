@@ -1365,16 +1365,24 @@ namespace mongo {
     }
 
 #ifdef MONGO_SSL
-    SSLManager* DBClientConnection::sslManager() {
-        if ( _sslManager )
-            return _sslManager;
-        
-        SSLManager* s = new SSLManager(true);
-        _sslManager = s;
-        return s;
-    }
+    static SimpleMutex s_mtx("SSLManager");
+    static SSLManager* s_sslMgr(NULL);
 
-    SSLManager* DBClientConnection::_sslManager = 0;
+    SSLManager* DBClientConnection::sslManager() {
+        SimpleMutex::scoped_lock lk(s_mtx);
+        if (s_sslMgr) 
+            return s_sslMgr;
+        const SSLParams params(cmdLine.sslPEMKeyFile, 
+                               cmdLine.sslPEMKeyPassword,
+                               cmdLine.sslCAFile,
+                               cmdLine.sslCRLFile,
+                               cmdLine.sslWeakCertificateValidation,
+                               cmdLine.sslFIPSMode);
+        s_sslMgr = new SSLManager(params);
+        
+
+        return s_sslMgr;
+    }
 #endif
 
     AtomicUInt DBClientConnection::_numConnections;

@@ -8,7 +8,7 @@ import sys
 
 import buildscripts.utils
 
-Import('env windows')
+Import('env windows usev8 usesm')
 
 def getSysInfo():
     if windows:
@@ -27,6 +27,9 @@ buildinfo_template = '''
 namespace mongo {
     const char * gitVersion() { return "%(git_version)s"; }
     const char *tokukvVersion() { return "%(tokukv_version)s"; }
+    const char * compiledJSEngine() { return "%(js_engine)s"; }
+    const char * loaderFlags() { return "%(loader_flags)s"; }
+    const char * compilerFlags() { return "%(compiler_flags)s"; }
     std::string sysInfo() { return "%(sys_info)s BOOST_LIB_VERSION=" BOOST_LIB_VERSION ; }
 }  // namespace mongo
 '''
@@ -43,9 +46,21 @@ def generate_buildinfo(env, target, source, **kw):
     else:
         tokukv_version = buildscripts.utils.getTokukvVersion(env['TOKUKV_PATH'])
 
+    if usev8:
+        js_engine = "V8"
+    elif usesm:
+        js_engine = "SpiderMonkey"
+    else:
+        js_engine = "Unknown"
+
     contents = str(source[0]) % dict(git_version=git_version,
                                      tokukv_version=tokukv_version,
-                                     sys_info=getSysInfo())
+                                     js_engine=js_engine,
+                                     sys_info=getSysInfo(),
+                                     loader_flags=env.subst('$LINKFLAGS $LDFLAGS',
+                                                            source=source, target=target),
+                                     compiler_flags=env.subst('$CXXFLAGS $CCFLAGS $CFLAGS',
+                                                              source=source, target=target))
     out = open(str(target[0]), 'wb')
     try:
         out.write(contents)

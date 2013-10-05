@@ -115,9 +115,19 @@ env.CppUnitTest('bson_validate_test', ['bson/bson_validate_test.cpp'],
 
 env.CppUnitTest('bson_extract_test', ['bson/util/bson_extract_test.cpp'], LIBDEPS=['bson'])
 
+env.CppUnitTest('descriptive_stats_test',
+                ['util/descriptive_stats_test.cpp'],
+                LIBDEPS=['foundation', 'bson']);
+
+env.CppUnitTest('sock_test', ['util/net/sock_test.cpp'],
+                LIBDEPS=['mongocommon', 'notmongodormongos'],
+                NO_CRUTCH=True)
+
+env.StaticLibrary( 'mongohasher', [ "db/hasher.cpp" ] )
+
+
 commonFiles = [ "pch.cpp",
                 "buildinfo.cpp",
-                "db/hasher.cpp",
                 "db/lasterror.cpp",
                 "shell/mongo.cpp",
                 "util/background.cpp",
@@ -136,6 +146,7 @@ commonFiles = [ "pch.cpp",
                 "util/stack_introspect.cpp",
                 "util/concurrency/synchronization.cpp",
                 "util/net/sock.cpp",
+                "util/net/ssl_manager.cpp",
                 "util/net/httpclient.cpp",
                 "util/net/message.cpp",
                 "util/net/message_port.cpp",
@@ -202,6 +213,7 @@ env.StaticLibrary("fail_point",
 env.StaticLibrary('mongocommon', commonFiles,
                   LIBDEPS=['bson',
                            'foundation',
+                           'mongohasher',
                            'md5',
                            'processinfo',
                            'stacktrace',

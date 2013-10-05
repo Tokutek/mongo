@@ -79,6 +79,7 @@ clientSourceBasic = [
     'mongo/util/net/message.cpp',
     'mongo/util/net/message_port.cpp',
     'mongo/util/net/sock.cpp',
+    'mongo/util/net/ssl_manager.cpp',
     'mongo/util/password.cpp',
     'mongo/util/processinfo.cpp',
     env.File('mongo/util/processinfo_${PYSYSPLATFORM}.cpp'),

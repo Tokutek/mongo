@@ -29,6 +29,7 @@
 #include "mongo/base/parse_number.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/scripting/engine.h"
 #include "mongo/util/file.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/ramlog.h"
@@ -56,7 +57,7 @@ namespace mongo {
     }
 
     // See unit test for example outputs
-    static BSONArray _versionArray(const char* version){
+    BSONArray toVersionArray(const char* version){
         // this is inefficient, but cached so it doesn't matter
         BSONArrayBuilder b;
         string curPart;
@@ -94,7 +95,24 @@ namespace mongo {
         return b.arr();
     }
 
-    const BSONArray versionArray = _versionArray(mongodbVersionString);
+    bool isSameMajorVersion( const char* version ) {
+
+        BSONArray remoteVersionArray = toVersionArray( version );
+
+        BSONObjIterator remoteIt(remoteVersionArray);
+        BSONObjIterator myIt(versionArray);
+
+        // Compare only the first two fields of the version
+        int compareLen = 2;
+        while (compareLen > 0 && remoteIt.more() && myIt.more()) {
+            if (remoteIt.next().numberInt() != myIt.next().numberInt()) break;
+            compareLen--;
+        }
+
+        return compareLen == 0;
+    }
+
+    const BSONArray versionArray = toVersionArray(mongodbVersionString);
 
     string mongodVersion() {
         stringstream ss;
@@ -105,6 +123,9 @@ namespace mongo {
 #ifndef _SCONS
     // only works in scons
     const char * gitVersion() { return "not-scons"; }
+    const char * compiledJSEngine() { return ""; }
+    const char * loaderFlags() { return ""; }
+    const char * compilerFlags() { return ""; }
 #endif
 
     void printGitVersion() { log() << "git version: " << gitVersion() << endl; }
@@ -124,6 +145,7 @@ namespace mongo {
     }
 #else
     string sysInfo() { return ""; }
+
 #endif
 #endif
 
@@ -138,6 +160,22 @@ namespace mongo {
 
     void printTokukvVersion() { log() << "TokuKV version: " << tokukvVersion() << endl; }
 
+    void appendBuildInfo(BSONObjBuilder& result) {
+        result << "version" << mongodbVersionString
+               << "tokumxVersion" << tokumxVersionString
+               << "gitVersion" << gitVersion()
+               << "tokukvVersion" << tokukvVersion()
+               << "sysInfo" << sysInfo()
+               << "loaderFlags" << loaderFlags()
+               << "compilerFlags" << compilerFlags()
+               << "versionArray" << versionArray
+               << "javascriptEngine" << compiledJSEngine()
+/*TODO: add this back once the module system is in place -- maybe once we do something like serverstatus with callbacks*/
+//               << "interpreterVersion" << globalScriptEngine->getInterpreterVersionString()
+               << "bits" << ( sizeof( int* ) == 4 ? 32 : 64 );
+        result.appendBool( "debug" , debug );
+        result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
+    }
 
     Tee * startupWarningsLog = new RamLog("startupWarnings"); //intentionally leaked
 
@@ -322,22 +360,22 @@ namespace mongo {
     class VersionArrayTest : public StartupTest {
     public:
         void run() {
-            verify( _versionArray("1.2.3") == BSON_ARRAY(1 << 2 << 3 << 0) );
-            verify( _versionArray("1.2.0") == BSON_ARRAY(1 << 2 << 0 << 0) );
-            verify( _versionArray("2.0.0") == BSON_ARRAY(2 << 0 << 0 << 0) );
+            verify( toVersionArray("1.2.3") == BSON_ARRAY(1 << 2 << 3 << 0) );
+            verify( toVersionArray("1.2.0") == BSON_ARRAY(1 << 2 << 0 << 0) );
+            verify( toVersionArray("2.0.0") == BSON_ARRAY(2 << 0 << 0 << 0) );
 
-            verify( _versionArray("1.2.3-pre-") == BSON_ARRAY(1 << 2 << 3 << -100) );
-            verify( _versionArray("1.2.0-pre-") == BSON_ARRAY(1 << 2 << 0 << -100) );
-            verify( _versionArray("2.0.0-pre-") == BSON_ARRAY(2 << 0 << 0 << -100) );
+            verify( toVersionArray("1.2.3-pre-") == BSON_ARRAY(1 << 2 << 3 << -100) );
+            verify( toVersionArray("1.2.0-pre-") == BSON_ARRAY(1 << 2 << 0 << -100) );
+            verify( toVersionArray("2.0.0-pre-") == BSON_ARRAY(2 << 0 << 0 << -100) );
 
-            verify( _versionArray("1.2.3-rc0") == BSON_ARRAY(1 << 2 << 3 << -10) );
-            verify( _versionArray("1.2.0-rc1") == BSON_ARRAY(1 << 2 << 0 << -9) );
-            verify( _versionArray("2.0.0-rc2") == BSON_ARRAY(2 << 0 << 0 << -8) );
+            verify( toVersionArray("1.2.3-rc0") == BSON_ARRAY(1 << 2 << 3 << -10) );
+            verify( toVersionArray("1.2.0-rc1") == BSON_ARRAY(1 << 2 << 0 << -9) );
+            verify( toVersionArray("2.0.0-rc2") == BSON_ARRAY(2 << 0 << 0 << -8) );
 
             // Note that the pre of an rc is the same as the rc itself
-            verify( _versionArray("1.2.3-rc3-pre-") == BSON_ARRAY(1 << 2 << 3 << -7) );
-            verify( _versionArray("1.2.0-rc4-pre-") == BSON_ARRAY(1 << 2 << 0 << -6) );
-            verify( _versionArray("2.0.0-rc5-pre-") == BSON_ARRAY(2 << 0 << 0 << -5) );
+            verify( toVersionArray("1.2.3-rc3-pre-") == BSON_ARRAY(1 << 2 << 3 << -7) );
+            verify( toVersionArray("1.2.0-rc4-pre-") == BSON_ARRAY(1 << 2 << 0 << -6) );
+            verify( toVersionArray("2.0.0-rc5-pre-") == BSON_ARRAY(2 << 0 << 0 << -5) );
 
             LOG(1) << "versionArrayTest passed" << endl;
         }

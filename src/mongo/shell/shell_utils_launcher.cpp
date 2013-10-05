@@ -241,7 +241,11 @@ namespace mongo {
 
         void ProgramRunner::start() {
             int pipeEnds[ 2 ];
-            verify( pipe( pipeEnds ) != -1 );
+            int status = pipe(pipeEnds);
+            if (status != 0) {
+                error() << "failed to create pipe: " << errnoWithDescription() << endl;
+                fassertFailed(16701);
+            }
 
             fflush( 0 );
             launchProcess(pipeEnds[1]); //sets _pid
@@ -722,7 +726,8 @@ namespace mongo {
 
         /** stopMongoProgram(port[, signal]) */
         BSONObj StopMongoProgram( const BSONObj &a, void* data ) {
-            verify( a.nFields() >= 1 || a.nFields() <= 3 );
+            int nFields = a.nFields();
+            verify( nFields >= 1 && nFields <= 3 );
             uassert( 15853 , "stopMongo needs a number" , a.firstElement().isNumber() );
             int port = int( a.firstElement().number() );
             int code = killDb( port, 0, getSignal( a ), getStopMongodOpts( a ));

@@ -110,6 +110,7 @@ MongoRunner.logicalOptions = { runId : true,
                                startClean : true,
                                forceLock : true,
                                useLogFiles : true,
+                               logFile : true,
                                useHostName : true,
                                useHostname : true,
                                noReplSet : true,
@@ -401,6 +402,10 @@ MongoRunner.mongodOptions = function( opts ){
     else if( opts.logFile ){
         opts.logFile = MongoRunner.toRealFile( opts.logFile, opts.pathOpts )
     }
+
+    if ( opts.logFile !== undefined ) {
+        opts.logpath = opts.logFile;
+    }
     
     if( jsTestOptions().noJournalPrealloc || opts.noJournalPrealloc )
         opts.nopreallocj = ""
@@ -438,6 +443,10 @@ MongoRunner.mongosOptions = function( opts ){
         opts.logFile = MongoRunner.toRealFile( opts.logFile, opts.pathOpts )
     }
 
+    if ( opts.logFile !== undefined ){
+        opts.logpath = opts.logFile;
+    }
+
     if( jsTestOptions().keyFile && !opts.keyFile) {
         opts.keyFile = jsTestOptions().keyFile
     }
@@ -471,10 +480,12 @@ MongoRunner.runMongod = function( opts ){
     var useHostName = false;
     var runId = null;
     var waitForConnect = true;
+    var fullOptions = opts;
     
     if( isObject( opts ) ) {
         
-        opts = MongoRunner.mongodOptions( opts )
+        opts = MongoRunner.mongodOptions( opts );
+        fullOptions = opts;
         
         useHostName = opts.useHostName || opts.useHostname;
         runId = opts.runId;
@@ -498,7 +509,8 @@ MongoRunner.runMongod = function( opts ){
     mongod.host = mongod.name
     mongod.port = parseInt( mongod.commandLine.port )
     mongod.runId = runId || ObjectId()
-    mongod.savedOptions = MongoRunner.savedOptions[ mongod.runId ]
+    mongod.savedOptions = MongoRunner.savedOptions[ mongod.runId ];
+    mongod.fullOptions = fullOptions;
     
     return mongod
 }
@@ -509,10 +521,12 @@ MongoRunner.runMongos = function( opts ){
     var useHostName = false;
     var runId = null;
     var waitForConnect = true;
+    var fullOptions = opts;
     
     if( isObject( opts ) ) {
         
-        opts = MongoRunner.mongosOptions( opts )
+        opts = MongoRunner.mongosOptions( opts );
+        fullOptions = opts;
         
         useHostName = opts.useHostName || opts.useHostname;
         runId = opts.runId;
@@ -531,7 +545,8 @@ MongoRunner.runMongos = function( opts ){
     mongos.port = parseInt( mongos.commandLine.port ) 
     mongos.runId = runId || ObjectId()
     mongos.savedOptions = MongoRunner.savedOptions[ mongos.runId ]
-        
+    mongos.fullOptions = fullOptions;
+
     return mongos
 }
 

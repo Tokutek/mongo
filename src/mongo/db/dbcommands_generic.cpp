@@ -1,6 +1,7 @@
 /** @file dbcommands_generic.cpp commands suited for any mongo server (both mongod, mongos) */
 
 /**
+*    Copyright (C) 2012 10gen Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -58,24 +59,17 @@ namespace mongo {
             help << "get version #, etc.\n";
             help << "{ buildinfo:1 }";
         }
+
         bool run(const std::string& dbname,
                  BSONObj& jsobj,
                  int, // options
                  std::string& errmsg,
                  BSONObjBuilder& result,
                  bool fromRepl) {
-            result << "version"             << mongodbVersionString
-                   << "tokumxVersion"       << tokumxVersionString
-                   << "gitVersion"          << gitVersion()
-                   << "tokukvVersion"       << tokukvVersion()
-                   << "sysInfo"             << sysInfo()
-                   << "versionArray"        << versionArray
-                   << "interpreterVersion"  << globalScriptEngine->getInterpreterVersionString()
-                   << "bits"                << ( sizeof( int* ) == 4 ? 32 : 64 );
-            result.appendBool( "debug" , debug );
-            result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
+            appendBuildInfo(result);
             return true;
         }
+
     } cmdBuildInfo;
 
     class PingCommand : public InformationCommand {

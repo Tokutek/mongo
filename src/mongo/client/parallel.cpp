@@ -1003,6 +1003,7 @@ namespace mongo {
             }
             catch( SocketException& e ){
                 warning() << "socket exception when initializing on " << shard << ", current connection state is " << mdata.toBSON() << causedBy( e ) << endl;
+                e._shard = shard.getName();
                 mdata.errored = true;
                 if( returnPartial ){
                     mdata.cleanup();
@@ -1012,6 +1013,7 @@ namespace mongo {
             }
             catch( DBException& e ){
                 warning() << "db exception when initializing on " << shard << ", current connection state is " << mdata.toBSON() << causedBy( e ) << endl;
+                e._shard = shard.getName();
                 mdata.errored = true;
                 if( returnPartial && e.getCode() == 15925 /* From above! */ ){
                     mdata.cleanup();
