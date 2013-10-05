@@ -59,13 +59,13 @@ namespace mongo {
         Lock::assertAtLeastReadLocked(ns);
         Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         try {
-            shared_ptr<Cursor> cursor =
-                    getOptimizedCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
-                                        // Avoid using a Matcher when a Cursor can
-                                        // exactly match the query using a
-                                        // FieldRangeVector.  See SERVER-1752.
-                                        false /* requestMatcher */ );
-            for ( ; cursor->ok() ; cursor->advance() ) {
+            for (shared_ptr<Cursor> cursor =
+                         getOptimizedCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
+                                             // Avoid using a Matcher when a Cursor can
+                                             // exactly match the query using a
+                                             // FieldRangeVector.  See SERVER-1752.
+                                             false /* requestMatcher */ ) ;
+                 cursor->ok() ; cursor->advance() ) {
                 if ( cursor->currentMatches() && !cursor->getsetdup( cursor->currPK() ) ) {
                     if ( skip > 0 ) {
                         --skip;
