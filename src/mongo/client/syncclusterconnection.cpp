@@ -84,22 +84,23 @@ namespace mongo {
         bool ok = true;
         errmsg = "";
         for ( size_t i=0; i<_conns.size(); i++ ) {
-            BSONObj res;
+            string singleErr;
             try {
-                if ( _conns[i]->simpleCommand( "admin" , &res , "fsync" ) )
+                // this is fsync=true
+                // which with journalling on is a journal commit
+                // without journalling, is a full fsync
+                _conns[i]->simpleCommand( "admin", NULL, "resetError" );
+                singleErr = _conns[i]->getLastError( true );
+
+                if ( singleErr.size() == 0 )
                     continue;
+
             }
             catch ( DBException& e ) {
-                errmsg += e.toString();
-            }
-            catch ( std::exception& e ) {
-                errmsg += e.what();
-            }
-            catch ( ... ) {
-                warning() << "unknown exception in SyncClusterConnection::fsync" << endl;
+                singleErr = e.toString();
             }
             ok = false;
-            errmsg += " " + _conns[i]->toString() + ":" + res.toString();
+            errmsg += " " + _conns[i]->toString() + ":" + singleErr;
         }
         return ok;
     }
@@ -320,7 +321,7 @@ namespace mongo {
                 log() << "query failed to: " << _conns[i]->toString() << " exception" << endl;
             }
         }
-        throw UserException( 8002 , "all servers down!" );
+        throw UserException( 8002 , str::stream() << "all servers down/unreachable when querying: " << _address );
     }
 
     auto_ptr<DBClientCursor> SyncClusterConnection::getMore( const string &ns, long long cursorId, int nToReturn, int options ) {
@@ -347,6 +348,11 @@ namespace mongo {
     }
 
     void SyncClusterConnection::insert( const string &ns, const vector< BSONObj >& v , int flags) {
+        if (v.size() == 1){
+            insert(ns, v[0], flags);
+            return;
+        }
+
         uassert( 10023 , "SyncClusterConnection bulk insert not implemented" , 0);
     }
 
@@ -434,7 +440,7 @@ namespace mongo {
                 log() << "call failed to: " << _conns[i]->toString() << " exception" << endl;
             }
         }
-        throw UserException( 8008 , "all servers down!" );
+        throw UserException( 8008 , str::stream() << "all servers down/unreachable: " << _address );
     }
 
     void SyncClusterConnection::say( Message &toSend, bool isRetry , string * actualServer ) {

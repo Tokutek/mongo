@@ -31,10 +31,80 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/json.h"
 #include "mongo/util/background.h"
+#include "mongo/util/concurrency/mutex.h" // for StaticObserver
 #include "mongo/util/scopeguard.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
+
+    /*  Replica Set statics:
+     *      If a program (such as one built with the C++ driver) exits (by either calling exit()
+     *      or by returning from main()), static objects will be destroyed in the reverse order
+     *      of their creation (within each translation unit (source code file)).  This makes it
+     *      vital that the order be explicitly controlled within the source file so that destroyed
+     *      objects never reference objects that have been destroyed earlier.
+     *
+     *      The order chosen below is intended to allow safe destruction in reverse order from
+     *      construction order:
+     *          _setsLock                -- mutex protecting _seedServers and _sets, destroyed last
+     *          _seedServers             -- list (map) of servers
+     *          _sets                    -- list (map) of ReplicaSetMonitors
+     *          replicaSetMonitorWatcher -- background job to check Replica Set members
+     *          staticObserver           -- sentinel to detect process termination
+     *
+     *      Related to:
+     *          SERVER-8891 -- Simple client fail with segmentation fault in mongoclient library
+     */
+    mongo::mutex ReplicaSetMonitor::_setsLock( "ReplicaSetMonitor" );
+    map<string, vector<HostAndPort> > ReplicaSetMonitor::_seedServers;
+    map<string, ReplicaSetMonitorPtr> ReplicaSetMonitor::_sets;
+
+    // global background job responsible for checking every X amount of time
+    class ReplicaSetMonitorWatcher : public BackgroundJob {
+    public:
+        ReplicaSetMonitorWatcher() : _safego("ReplicaSetMonitorWatcher::_safego") , _started(false) {}
+
+        virtual string name() const { return "ReplicaSetMonitorWatcher"; }
+
+        void safeGo() {
+            // check outside of lock for speed
+            if ( _started )
+                return;
+
+            scoped_lock lk( _safego );
+            if ( _started )
+                return;
+            _started = true;
+
+            go();
+        }
+
+    protected:
+        void run() {
+            log() << "starting" << endl;
+            sleepsecs( 10 );
+            while ( !inShutdown() && !StaticObserver::_destroyingStatics ) {
+                try {
+                    ReplicaSetMonitor::checkAll( true );
+                }
+                catch ( std::exception& e ) {
+                    error() << "check failed: " << e.what() << endl;
+                }
+                catch ( ... ) {
+                    error() << "unknown error" << endl;
+                }
+                sleepsecs( 10 );
+            }
+        }
+
+        mongo::mutex _safego;
+        bool _started;
+
+    } replicaSetMonitorWatcher;
+
+    static StaticObserver staticObserver;
+
+
     /*
      * Set of commands that can be used with $readPreference
      */
@@ -250,47 +320,6 @@ namespace mongo {
     // ----- ReplicaSetMonitor ---------
     // --------------------------------
 
-    // global background job responsible for checking every X amount of time
-    class ReplicaSetMonitorWatcher : public BackgroundJob {
-    public:
-        ReplicaSetMonitorWatcher() : _safego("ReplicaSetMonitorWatcher::_safego") , _started(false) {}
-
-        virtual string name() const { return "ReplicaSetMonitorWatcher"; }
-        
-        void safeGo() {
-            // check outside of lock for speed
-            if ( _started )
-                return;
-            
-            scoped_lock lk( _safego );
-            if ( _started )
-                return;
-            _started = true;
-
-            go();
-        }
-    protected:
-        void run() {
-            log() << "starting" << endl;
-            while ( ! inShutdown() ) {
-                sleepsecs( 10 );
-                try {
-                    ReplicaSetMonitor::checkAll( true );
-                }
-                catch ( std::exception& e ) {
-                    error() << "check failed: " << e.what() << endl;
-                }
-                catch ( ... ) {
-                    error() << "unkown error" << endl;
-                }
-            }
-        }
-
-        mongo::mutex _safego;
-        bool _started;
-
-    } replicaSetMonitorWatcher;
-
     string seedString( const vector<HostAndPort>& servers ){
         string seedStr;
         for ( unsigned i = 0; i < servers.size(); i++ ){
@@ -374,6 +403,15 @@ namespace mongo {
             }
         }
         return ReplicaSetMonitorPtr();
+    }
+
+    void ReplicaSetMonitor::getAllTrackedSets(set<string>* activeSets) {
+        scoped_lock lk( _setsLock );
+        for (map<string,ReplicaSetMonitorPtr>::const_iterator it = _sets.begin();
+             it != _sets.end(); ++it)
+        {
+            activeSets->insert(it->first);
+        }
     }
 
     void ReplicaSetMonitor::checkAll( bool checkAllSecondaries ) {
@@ -593,7 +631,7 @@ namespace mongo {
         if ( !authenticatedConn->get()->runCommand( "admin",
                                                     BSON( "replSetGetStatus" << 1 ),
                                                     status )) {
-            LOG(1) << "dbclient_rs replSetGetStatus failed" << endl;
+            LOG(1) << "dbclient_rs replSetGetStatus failed" << status << endl;
             authenticatedConn->done(); // connection worked properly, but we got an error from server
             return;
         }
@@ -756,7 +794,7 @@ namespace mongo {
                 errmsg = ex.toString();
             }
 
-            if (!errmsg.empty()) {
+            if (errmsg.empty()) {
                 log() << "successfully connected to new host " << *i
                         << " in replica set " << this->_name << endl;
             }
@@ -1378,9 +1416,6 @@ namespace mongo {
         return builder.obj();
     }
 
-    mongo::mutex ReplicaSetMonitor::_setsLock( "ReplicaSetMonitor" );
-    map<string,ReplicaSetMonitorPtr> ReplicaSetMonitor::_sets;
-    map<string,vector<HostAndPort> > ReplicaSetMonitor::_seedServers;
     ReplicaSetMonitor::ConfigChangeHook ReplicaSetMonitor::_hook;
     int ReplicaSetMonitor::_maxFailedChecks = 30; // At 1 check every 10 seconds, 30 checks takes 5 minutes
 
@@ -1480,7 +1515,7 @@ namespace mongo {
             try {
                 conn->auth(i->second);
             }
-            catch (const UserException& ex) {
+            catch (const UserException&) {
                 warning() << "cached auth failed for set: " << _setName <<
                     " db: " << i->second[saslCommandPrincipalSourceFieldName].str() <<
                     " user: " << i->second[saslCommandPrincipalFieldName].str() << endl;
@@ -1729,8 +1764,8 @@ namespace mongo {
         DBClientConnection* newConn = dynamic_cast<DBClientConnection*>(
                 connStr.connect(errmsg, _so_timeout));
 
-	// Assert here instead of returning NULL since the contract of this method is such
-	// that returning NULL means none of the nodes were good, which is not the case here.
+        // Assert here instead of returning NULL since the contract of this method is such
+        // that returning NULL means none of the nodes were good, which is not the case here.
         uassert(16532, str::stream() << "Failed to connect to "
                 << _lastSlaveOkHost.toString(true),
                 newConn != NULL);

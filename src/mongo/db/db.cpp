@@ -345,8 +345,10 @@ namespace mongo {
             log() << startupWarningsLog;
             log() << "** warning: mongod started without --replSet yet " << missingRepl
                   << " documents are present in local.system.replset" << startupWarningsLog;
-            log() << "**          restart with --replSet unless you are doing maintenance and no"
-                  << " other clients are connected" << startupWarningsLog;
+            log() << "**          Restart with --replSet unless you are doing maintenance and no"
+                  << " other clients are connected." << startupWarningsLog;
+            log() << "**          The TTL collection monitor will not start because of this." << startupWarningsLog;
+            log() << "**          For more info see http://dochub.mongodb.org/core/ttlcollections" << startupWarningsLog;
             log() << startupWarningsLog;
         }
 

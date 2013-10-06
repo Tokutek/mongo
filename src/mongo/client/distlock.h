@@ -183,6 +183,12 @@ namespace mongo {
 
     };
 
+    // Helper functions for tests, allows us to turn the creation of a lock pinger on and off.
+    // *NOT* thread-safe
+    bool isLockPingerEnabled();
+    void setLockPingerEnabled(bool enabled);
+
+
     class dist_lock_try {
     public:
 
@@ -250,6 +256,72 @@ namespace mongo {
         bool _got;
         BSONObj _other;
         string _why;
+    };
+
+    /**
+     * Scoped wrapper for a distributed lock acquisition attempt.  One or more attempts to acquire
+     * the distributed lock are managed by this class, and the distributed lock is unlocked if
+     * successfully acquired on object destruction.
+     */
+    class ScopedDistributedLock {
+    public:
+        ScopedDistributedLock(const ConnectionString& conn,
+                              const string& name,
+                              const string& why,
+                              int lockTryIntervalMillis = 1000,
+                              unsigned long long lockTimeout = 0,
+                              bool asProcess = false);
+
+        virtual ~ScopedDistributedLock();
+
+        /**
+         * Tries once to obtain a lock, and can fail with an error message.
+         *
+         * Subclasses of this lock can override this method (and are also required to call the base
+         * in the overridden method).
+         *
+         * @return if the lock was successfully acquired
+         */
+        virtual bool tryAcquireOnce(string* errMsg);
+
+        /**
+         * Tries to unlock the lock if acquired.  Cannot report an error or block indefinitely
+         * (though it may log messages or continue retrying in a non-blocking way).
+         *
+         * Subclasses should define their own destructor unlockXXX() methods.
+         */
+        void unlock();
+
+        /**
+         * Tries multiple times to unlock the lock, using the specified lock try interval, until
+         * a certain amount of time has passed.  An error message is immediately returned if the
+         * lock acquisition attempt fails with an error message.
+         * waitForMillis = 0 indicates there should only be one attempt to acquire the lock, and
+         * no waiting.
+         * waitForMillis = -1 indicates we should retry indefinitely.
+         * @return true if the lock was acquired
+         */
+        bool tryAcquire(long long waitForMillis, string* errMsg);
+
+        bool isAcquired() const {
+            return _acquired;
+        }
+
+        ConnectionString getConfigConnectionString() const {
+            return _lock._conn;
+        }
+
+        string getLockWhy() const {
+            return _why;
+        }
+
+    private:
+        DistributedLock _lock;
+        string _why;
+        long long _lockTryIntervalMillis;
+
+        bool _acquired;
+        BSONObj _other;
     };
 
 }

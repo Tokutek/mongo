@@ -120,7 +120,7 @@ namespace mongo {
             DBClientReplicaSet * set = new DBClientReplicaSet( _setName , _servers , socketTimeout );
             if( ! set->connect() ) {
                 delete set;
-                errmsg = "connect failed to set ";
+                errmsg = "connect failed to replica set ";
                 errmsg += toString();
                 return 0;
             }
@@ -923,7 +923,8 @@ namespace mongo {
         }
     }
 
-    const uint64_t DBClientBase::INVALID_SOCK_CREATION_TIME = 0xFFFFFFFFFFFFFFFF;
+    const uint64_t DBClientBase::INVALID_SOCK_CREATION_TIME =
+            static_cast<uint64_t>(0xFFFFFFFFFFFFFFFFULL);
 
     auto_ptr<DBClientCursor> DBClientBase::query(const string &ns, Query query, int nToReturn,
             int nToSkip, const BSONObj *fieldsToReturn, int queryOptions , int batchSize ) {
@@ -1201,7 +1202,15 @@ namespace mongo {
         return ss.str();
     }
 
-    bool DBClientWithCommands::ensureIndex( const string &ns , BSONObj keys , bool unique, bool clustering, const string & name , bool cache, bool background, int version ) {
+    bool DBClientWithCommands::ensureIndex( const string &ns,
+                                            BSONObj keys,
+                                            bool unique,
+                                            bool clustering,
+                                            const string & name,
+                                            bool cache,
+                                            bool background,
+                                            int version,
+                                            int ttl ) {
         BSONObjBuilder toSave;
         toSave.append( "ns" , ns );
         toSave.append( "key" , keys );
@@ -1237,6 +1246,9 @@ namespace mongo {
 
         if ( cache )
             _seenIndexes.insert( cacheKey );
+
+        if ( ttl > 0 )
+            toSave.append( "expireAfterSeconds", ttl );
 
         insert( getSisterNS( ns, "system.indexes" ).c_str() , toSave.obj() );
         return 1;
