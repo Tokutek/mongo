@@ -92,6 +92,8 @@ env.StaticLibrary('bson', [
 env.CppUnitTest('string_map_test', ['util/string_map_test.cpp'],
                 LIBDEPS=['bson','foundation'])
 
+env.CppUnitTest('partitioned_counter_test', ['util/concurrency/partitioned_counter_test.cpp'])
+
 env.CppUnitTest('mutable_bson_test', ['bson/mutable/mutable_bson_test.cpp'],
                  LIBDEPS=['bson'])
 
