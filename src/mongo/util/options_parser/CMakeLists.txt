@@ -4,6 +4,7 @@ add_library(options_parser STATIC
   constraints
   option_section
   options_parser
+  startup_option_init
   )
 add_dependencies(options_parser generate_error_codes generate_action_types)
 target_link_libraries(options_parser LINK_PUBLIC

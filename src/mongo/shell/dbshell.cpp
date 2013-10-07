@@ -24,7 +24,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "mongo/base/init.h"
+#include "mongo/base/initializer.h"
 #include "mongo/base/status.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/client/sasl_client_authenticate.h"
@@ -39,9 +39,6 @@
 #include "mongo/shell/shell_utils_launcher.h"
 #include "mongo/util/file.h"
 #include "mongo/util/net/ssl_options.h"
-#include "mongo/util/options_parser/environment.h"
-#include "mongo/util/options_parser/option_section.h"
-#include "mongo/util/options_parser/options_parser.h"
 #include "mongo/util/password.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/startup_test.h"
@@ -433,7 +430,6 @@ string finishCode( string code ) {
 }
 
 namespace mongo {
-    namespace moe = mongo::optionenvironment;
     extern bool isShell;
 }
 
@@ -594,46 +590,6 @@ static void edit( const string& whatToEdit ) {
     else {
         linenoisePreloadBuffer( sb.str().c_str() );
     }
-}
-
-MONGO_INITIALIZER_GENERAL(ParseStartupConfiguration,
-                            ("GlobalLogManager"),
-                            ("default", "completedStartupConfig"))(InitializerContext* context) {
-
-    mongoShellOptions = moe::OptionSection("options");
-    moe::OptionsParser parser;
-
-    Status retStatus = addMongoShellOptions(&mongoShellOptions);
-    if (!retStatus.isOK()) {
-        return retStatus;
-    }
-
-    retStatus = parser.run(mongoShellOptions, context->args(), context->env(),
-                           &mongoShellParsedOptions);
-    if (!retStatus.isOK()) {
-        std::cerr << retStatus.reason() << std::endl;
-        std::cerr << "try '" << context->args()[0]
-                  << " --help' for more information" << std::endl;
-        ::_exit(EXIT_BADOPTIONS);
-    }
-
-    retStatus = handlePrevalidationMongoShellOptions(mongoShellParsedOptions, context->args());
-    if (!retStatus.isOK()) {
-        return retStatus;
-    }
-
-    retStatus = mongoShellParsedOptions.validate();
-    if (!retStatus.isOK()) {
-        return retStatus;
-    }
-
-    retStatus = storeMongoShellOptions(mongoShellParsedOptions, context->args());
-    if (!retStatus.isOK()) {
-        std::cerr << "Failed to store mongo shell options: " << retStatus.toString() << std::endl;
-        ::_exit(EXIT_BADOPTIONS);
-    }
-
-    return Status::OK();
 }
 
 int _main( int argc, char* argv[], char **envp ) {
