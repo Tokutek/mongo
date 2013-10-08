@@ -410,6 +410,17 @@ MongoRunner.mongoOptions = function( opts ){
     // Default for waitForConnect is true
     if (waitForConnect == undefined || waitForConnect == null) opts.waitForConnect = true;
     
+    if( jsTestOptions().useSSL ) {
+        opts.sslMode = "sslOnly";
+        opts.sslPEMKeyFile = "jstests/libs/server.pem";
+        opts.sslCAFile = "jstests/libs/ca.pem";
+        opts.sslWeakCertificateValidation = "";
+    }
+
+    if ( jsTestOptions().useX509 ) {
+        opts.clusterAuthMode = "x509";
+    }
+    
     opts.port = opts.port || MongoRunner.nextOpenPort()
     MongoRunner.usedPortMap[ "" + parseInt( opts.port ) ] = true
     
@@ -461,6 +472,17 @@ MongoRunner.mongodOptions = function( opts ){
 
     if( jsTestOptions().keyFile && !opts.keyFile) {
         opts.keyFile = jsTestOptions().keyFile
+    }
+
+    if( jsTestOptions().useSSL ) {
+        opts.sslMode = "sslOnly";
+        opts.sslPEMKeyFile = "jstests/libs/server.pem";
+        opts.sslCAFile = "jstests/libs/ca.pem";
+        opts.sslWeakCertificateValidation = "";
+    }
+
+    if ( jsTestOptions().useX509 ) {
+        opts.clusterAuthMode = "x509";
     }
 
     if( opts.noReplSet ) opts.replSet = null
@@ -686,6 +708,17 @@ startMongodTest = function (port, dirname, restart, extraOptions ) {
     if( jsTestOptions().noJournalPrealloc ) options["nopreallocj"] = ""
     if( jsTestOptions().auth ) options["auth"] = ""
     if( jsTestOptions().keyFile && (!extraOptions || !extraOptions['keyFile']) ) options['keyFile'] = jsTestOptions().keyFile
+
+    if( jsTestOptions().useSSL ) {
+        options["sslMode"] = "sslOnly";
+        options["sslPEMKeyFile"] = "jstests/libs/server.pem";
+        options["sslCAFile"] = "jstests/libs/ca.pem";
+        options["sslWeakCertificateValidation"] = "";
+    }
+
+    if ( jsTestOptions().useX509 ) {
+        options["clusterAuthMode"] = "x509";
+    }
 
     if ( extraOptions )
         Object.extend( options , extraOptions );

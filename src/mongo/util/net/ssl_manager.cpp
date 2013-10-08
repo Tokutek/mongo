@@ -34,7 +34,6 @@
 #endif
 
 namespace mongo {
-
     SSLGlobalParams sslGlobalParams;
 
 #ifndef MONGO_SSL   
@@ -273,7 +272,7 @@ namespace mongo {
     
     MONGO_INITIALIZER(SSLManager)(InitializerContext* context) {
         SimpleMutex::scoped_lock lck(sslManagerMtx);
-        if (sslGlobalParams.sslOnNormalPorts) {
+        if (sslGlobalParams.sslMode.load() != SSLGlobalParams::SSLMode_noSSL) {
             const Params params(
                 sslGlobalParams.sslPEMKeyFile,
                 sslGlobalParams.sslPEMKeyPassword,

@@ -275,8 +275,8 @@ class mongod(object):
             argv += ['--logpath', server_log_file]
         if len(smoke_server_opts) > 0:
             argv += [smoke_server_opts]
-        if self.kwargs.get('use_ssl'):
-            argv += ['--sslOnNormalPorts',
+        if self.kwargs.get('use_ssl') or self.kwargs.get('use_x509'):
+            argv += ['--sslMode', "sslOnly",
                      '--sslPEMKeyFile', 'jstests/libs/server.pem',
                      '--sslCAFile', 'jstests/libs/ca.pem',
                      '--sslWeakCertificateValidation']

@@ -163,6 +163,20 @@ ReplTest.prototype.getOptions = function( master , extra , putBinaryFirst, norep
         a.push( jsTestOptions().keyFile )
     }
 
+    if( jsTestOptions().useSSL ) {
+        a.push( "--sslMode" )
+        a.push( "sslOnly" )
+        a.push( "--sslPEMKeyFile" )
+        a.push( "jstests/libs/server.pem" )
+        a.push( "--sslCAFile" )
+        a.push( "jstests/libs/ca.pem" )
+        a.push( "--sslWeakCertificateValidation" )
+    }
+    if( jsTestOptions().useX509 ) {
+        a.push( "--clusterAuthMode" )
+        a.push( "x509" )
+    }
+
     if ( !norepl ) {
         if ( master ){
             a.push( "--master" );
