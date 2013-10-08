@@ -1,6 +1,7 @@
 // Check $match pipeline stage.
 // - Filtering behavior equivalent to a mongo query.
 // - $where and geo operators are not allowed
+load('jstests/aggregation/extras/utils.js');
 
 t = db.jstests_aggregation_match;
 t.drop();
@@ -11,9 +12,9 @@ identityProjection = { _id:'$_id', a:'$a' };
 function assertError( expectedCode, matchSpec ) {
     matchStage = { $match:matchSpec };
     // Check where matching is folded in to DocumentSourceCursor.
-    assert.eq( expectedCode, t.aggregate( matchStage ).code );
+    assertErrorCode(t, [matchStage], expectedCode)
     // Check where matching is not folded in to DocumentSourceCursor.
-    assert.eq( expectedCode, t.aggregate( { $project:identityProjection }, matchStage ).code );
+    assertErrorCode(t, [{$project: identityProjection}, matchStage], expectedCode)
 }
 
 /** Assert that the contents of two arrays are equal, ignoring element ordering. */
@@ -149,9 +150,7 @@ function checkMatchResults( indexed ) {
     t.save( { a:NumberLong( 2 ) } );
     t.save( { a:66.6 } );
     t.save( { a:'abc' } );
-    if ( 0 ) { // SERVER-6470
     t.save( { a:/xyz/ } );
-    }
     t.save( { a:{ q:1 } } );
     t.save( { a:true } );
     t.save( { a:new Date() } );

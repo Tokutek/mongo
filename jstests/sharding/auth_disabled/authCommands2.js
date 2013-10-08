@@ -56,7 +56,6 @@ while ( str.length < 8000 ) {
 for ( var i = 0; i < 100; i++ ) {
     for ( var j = 0; j < 10; j++ ) {
         testDB.foo.save({i:i, j:j, str:str});
-        testDB.bar.save({i:i, j:j, str:str}); // non-sharded collection with same data
     }
 }
 testDB.getLastError( 'majority' );
@@ -108,8 +107,8 @@ var checkReadOps = function( hasReadAuth ) {
         checkCommandSucceeded( testDB, {dbstats : 1} );
         checkCommandSucceeded( testDB, {collstats : 'foo'} );
 
-        // inline map-reduce works read-only on non-sharded collections
-        var res = checkCommandSucceeded( testDB, {mapreduce : 'bar', map : map, reduce : reduce,
+        // inline map-reduce works read-only
+        var res = checkCommandSucceeded( testDB, {mapreduce : 'foo', map : map, reduce : reduce,
                                                   out : {inline : 1}});
         assert.eq( 100, res.results.length );
         assert.eq( 45, res.results[0].value );
@@ -119,13 +118,9 @@ var checkReadOps = function( hasReadAuth ) {
                                       pipeline: [ {$project : {j : 1}},
                                                   {$group : {_id : 'j', sum : {$sum : '$j'}}}]} );
         assert.eq( 4500, res.result[0].sum );
-
-        res = checkCommandSucceeded( testDB, { $eval : 'return db.bar.findOne();'} );
-        assert.eq(str, res.retval.str);
     } else {
         print( "Checking read operations, should fail" );
         assert.throws( function() { testDB.foo.find().itcount(); } );
-        assert.eq(0, testDB.runCommand({getlasterror : 1}).ok);
         checkCommandFailed( testDB, {dbstats : 1} );
         checkCommandFailed( testDB, {collstats : 'foo'} );
         checkCommandFailed( testDB, {mapreduce : 'foo', map : map, reduce : reduce,
@@ -133,8 +128,6 @@ var checkReadOps = function( hasReadAuth ) {
         checkCommandFailed( testDB, {aggregate:'foo',
                                      pipeline: [ {$project : {j : 1}},
                                                  {$group : {_id : 'j', sum : {$sum : '$j'}}}]} );
-
-        checkCommandFailed( testDB, { $eval : 'return db.bar.findOne();'} );
     }
 }
 
@@ -151,11 +144,6 @@ var checkWriteOps = function( hasWriteAuth ) {
         assert.eq( null, testDB.runCommand({getlasterror : 1}).err );
         checkCommandSucceeded( testDB, {reIndex:'foo'} );
         checkCommandSucceeded( testDB, {repairDatabase : 1} );
-        // Test both inline and regular map-reduce
-        var res = checkCommandSucceeded( testDB, {mapreduce : 'foo', map : map, reduce : reduce,
-                                                  out : {inline : 1}});
-        assert.eq( 100, res.results.length );
-        assert.eq( 45, res.results[0].value );
         checkCommandSucceeded( testDB, {mapreduce : 'foo', map : map, reduce : reduce,
                                         out : 'mrOutput'} );
         assert.eq( 100, testDB.mrOutput.count() );
@@ -168,8 +156,6 @@ var checkWriteOps = function( hasWriteAuth ) {
         checkCommandSucceeded( testDB, {dropDatabase : 1} );
         assert.eq( 0, testDB.foo.count() );
         checkCommandSucceeded( testDB, {create : 'baz'} );
-        checkCommandSucceeded( testDB, { $eval : 'db.baz.insert({a:1});'} );
-        assert.eq(1, testDB.baz.findOne().a);
     } else {
         print( "Checking write operations, should fail" );
         testDB.foo.insert({a : 1, i : 1, j : 1});
@@ -178,9 +164,6 @@ var checkWriteOps = function( hasWriteAuth ) {
                                       update: {$set: {b:1}}} );
         checkCommandFailed( testDB, {reIndex:'foo'} );
         checkCommandFailed( testDB, {repairDatabase : 1} );
-        // Test both inline and regular map-reduce.  Inline MR on sharded collections requires write access.
-        checkCommandFailed( testDB, {mapreduce : 'foo', map : map, reduce : reduce,
-                                     out : {inline : 1}} );
         checkCommandFailed( testDB, {mapreduce : 'foo', map : map, reduce : reduce,
                                      out : 'mrOutput'} );
         checkCommandFailed( testDB, {drop : 'foo'} );
@@ -198,11 +181,6 @@ var checkWriteOps = function( hasWriteAuth ) {
             passed = false;
         }
         assert( !passed );
-        var res = testDB.runCommand( { $eval : 'db.baz.insert({a:1});'} );
-        printjson( res );
-        // If you have read-only auth and try to do a $eval that writes, the $eval command succeeds,
-        // but the write fails
-        assert( !res.ok || testDB.baz.count() == 0 );
     }
 }
 
@@ -220,8 +198,8 @@ var checkAdminReadOps = function( hasReadAuth ) {
         checkCommandFailed( adminDB, {getCmdLineOpts : 1} );
         checkCommandFailed( adminDB, {serverStatus : 1} );
         checkCommandFailed( adminDB, {listShards : 1} );
-        checkCommandFailed( adminDB, {whatsmyuri : 1} );
-        // isdbgrid and ismaster don't require any auth
+        // whatsmyuri, isdbgrid, and ismaster don't require any auth
+        checkCommandSucceeded( adminDB, {whatsmyuri : 1} );
         checkCommandSucceeded( adminDB, {isdbgrid : 1} );
         checkCommandSucceeded( adminDB, {ismaster : 1} );
     }
@@ -233,11 +211,20 @@ var checkAdminWriteOps = function( hasWriteAuth ) {
         chunk = configDB.chunks.findOne({ shard : st.rs0.name });
         checkCommandSucceeded( adminDB, {moveChunk : 'test.foo', find : chunk.min,
                                          to : st.rs1.name} );
+        // $eval is now an admin operation
+        checkCommandSucceeded( testDB, { $eval : 'db.baz.insert({a:1});'} );
+        assert.eq(1, testDB.baz.findOne().a);
+        res = checkCommandSucceeded( testDB, { $eval : 'return db.baz.findOne();'} );
+        assert.eq(1, res.retval.a);
     } else {
         checkCommandFailed( adminDB, {split : 'test.foo', find : {i : 1, j : 1}} );
         chunkKey = { i : { $minKey : 1 }, j : { $minKey : 1 } };
         checkCommandFailed( adminDB, {moveChunk : 'test.foo', find : chunkKey,
                                       to : st.rs1.name} );
+        checkCommandFailed( testDB, { $eval : 'return db.baz.insert({a:1});'} );
+        // Takes full admin privilege to run $eval, even if it's only doing a read operation
+        checkCommandFailed( testDB, { $eval : 'return db.baz.findOne();'} );
+
     }
 }
 

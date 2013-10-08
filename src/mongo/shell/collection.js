@@ -121,11 +121,14 @@ DBCollection.prototype._massageObject = function( q ){
 
 
 DBCollection.prototype._validateObject = function( o ){
+    if (typeof(o) != "object")
+        throw "attempted to save a " + typeof(o) + " value.  document expected.";
+
     if ( o._ensureSpecial && o._checkModify )
         throw "can't save a DBQuery object";
 }
 
-DBCollection._allowedFields = { $id : 1 , $ref : 1 , $db : 1 , $MinKey : 1, $MaxKey : 1 };
+DBCollection._allowedFields = { $id : 1 , $ref : 1 , $db : 1 };
 
 DBCollection.prototype._validateForStorage = function( o ){
     this._validateObject( o );
@@ -146,13 +149,22 @@ DBCollection.prototype._validateForStorage = function( o ){
 
 
 DBCollection.prototype.find = function( query , fields , limit , skip, batchSize, options ){
-    return new DBQuery( this._mongo , this._db , this ,
+    var cursor = new DBQuery( this._mongo , this._db , this ,
                         this._fullName , this._massageObject( query ) , fields , limit , skip , batchSize , options || this.getQueryOptions() );
+
+    var connObj = this.getMongo();
+    var readPrefMode = connObj.getReadPrefMode();
+    if (readPrefMode != null) {
+        cursor.readPref(readPrefMode, connObj.getReadPrefTagSet());
+    }
+
+    return cursor;
 }
 
 DBCollection.prototype.findOne = function( query , fields, options ){
-    var cursor = this._mongo.find( this._fullName , this._massageObject( query ) || {} , fields , 
-        -1 /* limit */ , 0 /* skip*/, 0 /* batchSize */ , options || this.getQueryOptions() /* options */ );
+    var cursor = this.find(query, fields, -1 /* limit */, 0 /* skip*/,
+        0 /* batchSize */, options);
+
     if ( ! cursor.hasNext() )
         return null;
     var ret = cursor.next();
@@ -162,12 +174,15 @@ DBCollection.prototype.findOne = function( query , fields, options ){
     return ret;
 }
 
-DBCollection.prototype.insert = function( obj , _allow_dot ){
+DBCollection.prototype.insert = function( obj , options, _allow_dot ){
     if ( ! obj )
         throw "no object passed to insert!";
     if ( ! _allow_dot ) {
         this._validateForStorage( obj );
     }
+    
+    if ( typeof( options ) == "undefined" ) options = 0;
+    
     if ( typeof( obj._id ) == "undefined" && ! Array.isArray( obj ) ){
         var tmp = obj; // don't want to modify input
         obj = {_id: new ObjectId()};
@@ -175,10 +190,11 @@ DBCollection.prototype.insert = function( obj , _allow_dot ){
             obj[key] = tmp[key];
         }
     }
-    this._db._initExtraInfo();
-    this._mongo.insert( this._fullName , obj );
+    var startTime = (typeof(_verboseShell) === 'undefined' ||
+                     !_verboseShell) ? 0 : new Date().getTime();
+    this._mongo.insert( this._fullName , obj, options );
     this._lastID = obj._id;
-    this._db._getExtraInfo("Inserted");
+    this._printExtraInfo("Inserted", startTime);
 }
 
 DBCollection.prototype.remove = function( t , justOne ){
@@ -187,9 +203,10 @@ DBCollection.prototype.remove = function( t , justOne ){
             throw "can't have _id set to undefined in a remove expression"
         }
     }
-    this._db._initExtraInfo();
+    var startTime = (typeof(_verboseShell) === 'undefined' ||
+                     !_verboseShell) ? 0 : new Date().getTime();
     this._mongo.remove( this._fullName , this._massageObject( t ) , justOne ? true : false );
-    this._db._getExtraInfo("Removed");
+    this._printExtraInfo("Removed", startTime);
 }
 
 DBCollection.prototype.update = function( query , obj , upsert , multi ){
@@ -216,9 +233,10 @@ DBCollection.prototype.update = function( query , obj , upsert , multi ){
         upsert = opts.upsert;
     }
 
-    this._db._initExtraInfo();
+    var startTime = (typeof(_verboseShell) === 'undefined' ||
+                     !_verboseShell) ? 0 : new Date().getTime();
     this._mongo.update( this._fullName , query , obj , upsert ? true : false , multi ? true : false );
-    this._db._getExtraInfo("Updated");
+    this._printExtraInfo("Updated", startTime);
 }
 
 DBCollection.prototype.save = function( obj ){
@@ -320,24 +338,16 @@ DBCollection.prototype._indexSpec = function( keys, options ) {
 
 DBCollection.prototype.createIndex = function( keys , options ){
     var o = this._indexSpec( keys, options );
-    this._db.getCollection( "system.indexes" ).insert( o , true );
+    this._db.getCollection( "system.indexes" ).insert( o , 0, true );
 }
 
 DBCollection.prototype.ensureIndex = function( keys , options ){
-    var name = this._indexSpec( keys, options ).name;
-    this._indexCache = this._indexCache || {};
-    if ( this._indexCache[ name ] ){
-        return;
+    this.createIndex(keys, options);
+    err = this.getDB().getLastErrorObj();
+    if (err.err) {
+        return err;
     }
-
-    this.createIndex( keys , options );
-    if ( this.getDB().getLastError() == "" ) {
-	this._indexCache[name] = true;
-    }
-}
-
-DBCollection.prototype.resetIndexCache = function(){
-    this._indexCache = {};
+    // nothing returned on success
 }
 
 DBCollection.prototype.reIndex = function() {
@@ -345,8 +355,6 @@ DBCollection.prototype.reIndex = function() {
 }
 
 DBCollection.prototype.dropIndexes = function(){
-    this.resetIndexCache();
-
     var res = this._db.runCommand( { deleteIndexes: this.getName(), index: "*" } );
     assert( res , "no result from dropIndex result" );
     if ( res.ok )
@@ -362,7 +370,6 @@ DBCollection.prototype.dropIndexes = function(){
 DBCollection.prototype.drop = function(){
     if ( arguments.length > 0 )
         throw "drop takes no argument";
-    this.resetIndexCache();
     var ret = this._db.runCommand( { drop: this.getName() } );
     if ( ! ret.ok ){
         if ( ret.errmsg == "ns not found" )
@@ -392,6 +399,34 @@ DBCollection.prototype.renameCollection = function( newName , dropTarget ){
     return this._db._adminCommand( { renameCollection : this._fullName , 
                                      to : this._db._name + "." + newName , 
                                      dropTarget : dropTarget } )
+}
+
+// Display verbose information about the operation
+DBCollection.prototype._printExtraInfo = function(action, startTime) {
+    if ( typeof _verboseShell === 'undefined' || !_verboseShell ) {
+        __callLastError = true;
+        return;
+    }
+
+    // explicit w:1 so that replset getLastErrorDefaults aren't used here which would be bad.
+    var res = this._db.getLastErrorCmd(1);
+    if (res) {
+        if (res.err != undefined && res.err != null) {
+            // error occurred, display it
+            print(res.err);
+            return;
+        }
+
+        var info = action + " ";
+        // hack for inserted because res.n is 0
+        info += action != "Inserted" ? res.n : 1;
+        if (res.n > 0 && res.updatedExisting != undefined)
+            info += " " + (res.updatedExisting ? "existing" : "new")
+        info += " record(s)";
+        var time = new Date().getTime() - startTime;
+        info += " in " + time + "ms";
+        print(info);
+    }
 }
 
 DBCollection.prototype.validate = function(full) {
@@ -477,7 +512,6 @@ DBCollection.prototype.clean = function() {
 DBCollection.prototype.dropIndex =  function(index) {
     assert(index, "need to specify index to dropIndex" );
     var res = this._dbCommand( "deleteIndexes", { index: index } );
-    this.resetIndexCache();
     return res;
 }
 
@@ -574,18 +608,61 @@ DBCollection.prototype.distinct = function( keyString , query ){
 }
 
 
+DBCollection.prototype.aggregateCursor = function(pipeline, extraOpts) {
+    // This function should replace aggregate() in SERVER-10165.
+
+    var cmd = {pipeline: pipeline};
+
+    if (!(pipeline instanceof Array)) {
+        // support varargs form
+        cmd.pipeline = [];
+        for (var i=0; i<arguments.length; i++) {
+            cmd.pipeline.push(arguments[i]);
+        }
+    }
+    else {
+        Object.extend(cmd, extraOpts);
+    }
+
+    if (cmd.cursor === undefined) {
+        cmd.cursor = {};
+    }
+
+    var cursorRes = this.runCommand("aggregate", cmd);
+    assert.commandWorked(cursorRes, "aggregate with cursor failed");
+    return new DBCommandCursor(this._mongo, cursorRes);
+}
+
 DBCollection.prototype.aggregate = function( ops ) {
     
     var arr = ops;
     
-    if ( ! ops.length ) {
+    if (!ops.length) {
         arr = [];
-        for ( var i=0; i<arguments.length; i++ ) {
-            arr.push( arguments[i] )
+        for (var i=0; i<arguments.length; i++) {
+            arr.push(arguments[i]);
         }
     }
-    
-    return this.runCommand( "aggregate" , { pipeline : arr } );
+
+    var res = this.runCommand("aggregate", {pipeline: arr});
+    if (!res.ok) {
+        printStackTrace();
+        throw "aggregate failed: " + tojson(res);
+    }
+
+    if (TestData) {
+        // If we are running in a test, make sure cursor output is the same.
+        // This block should go away with work on SERVER-10165.
+
+        if (this._db.isMaster().msg !== "isdbgrid") {
+            // agg cursors not supported sharded yet
+
+            var cursor = this.aggregateCursor(arr, {cursor: {batchSize: 0}});
+            assert.eq(cursor.toArray(), res.result);
+        }
+    }
+
+    return res;
 }
 
 DBCollection.prototype.group = function( params ){

@@ -184,6 +184,115 @@ namespace UpdateTests {
         }
     };
 
+    class SetOnInsertFromEmpty : public SetBase {
+    public:
+        void run() {
+            // Try with upsert false first.
+            client().insert( ns(), BSONObj() /* empty document */);
+            client().update( ns(), Query(), BSON( "$setOnInsert" << BSON( "a" << 1 ) ), false );
+            ASSERT( client().findOne( ns(), BSON( "a" << 1 ) ).isEmpty() );
+
+            // Then with upsert true.
+            client().update( ns(), Query(), BSON( "$setOnInsert" << BSON( "a" << 1 ) ), true );
+            ASSERT( client().findOne( ns(), BSON( "a" << 1 ) ).isEmpty() );
+
+        }
+    };
+
+    class SetOnInsertFromNonExistent : public SetBase {
+    public:
+        void run() {
+            // Try with upsert false first.
+            client().update( ns(), Query(), BSON( "$setOnInsert" << BSON( "a" << 1 ) ), false );
+            ASSERT( client().findOne( ns(), BSON( "a" << 1 ) ).isEmpty() );
+
+            // Then with upsert true.
+            client().update( ns(), Query(), BSON( "$setOnInsert" << BSON( "a" << 1 ) ), true );
+            ASSERT( !client().findOne( ns(), BSON( "a" << 1 ) ).isEmpty() );
+
+        }
+    };
+
+    class SetOnInsertFromNonExistentWithQuery : public SetBase {
+    public:
+        void run() {
+            Query q("{a:1}");
+
+            // Try with upsert false first.
+            client().update( ns(), q, BSON( "$setOnInsert" << BSON( "b" << 1 ) ), false );
+            ASSERT( client().findOne( ns(), BSON( "a" << 1 ) ).isEmpty() );
+
+            // Then with upsert true.
+            client().update( ns(), q, BSON( "$setOnInsert" << BSON( "b" << 1 ) ), true );
+            ASSERT( !client().findOne( ns(), BSON( "a" << 1 << "b" << 1) ).isEmpty() );
+
+        }
+    };
+
+    class SetOnInsertFromNonExistentWithQueryOverField : public SetBase {
+    public:
+        void run() {
+            Query q("{a:1}"); // same field that we'll setOnInsert on
+
+            // Try with upsert false first.
+            client().update( ns(), q, BSON( "$setOnInsert" << BSON( "a" << 2 ) ), false );
+            ASSERT( client().findOne( ns(), BSON( "a" << 1 ) ).isEmpty() );
+
+            // Then with upsert true.
+            client().update( ns(), q, BSON( "$setOnInsert" << BSON( "a" << 2 ) ), true );
+            ASSERT( !client().findOne( ns(), BSON( "a" << 2 ) ).isEmpty() );
+
+        }
+    };
+
+    class SetOnInsertMissingField : public SetBase {
+    public:
+        void run() {
+            BSONObj res = fromjson("{'_id':0, a:1}");
+            client().insert( ns(), res );
+            client().update( ns(), Query(), BSON( "$setOnInsert" << BSON( "b" << 1 ) ) );
+            ASSERT( client().findOne( ns(), BSON( "a" << 1 ) ).woCompare( res ) == 0 );
+        }
+    };
+
+    class SetOnInsertExisting : public SetBase {
+    public:
+        void run() {
+            client().insert( ns(), BSON( "a" << 1 ) );
+            client().update( ns(), Query(), BSON( "$setOnInsert" << BSON( "a" << 2 ) ) );
+            ASSERT( !client().findOne( ns(), BSON( "a" << 1 ) ).isEmpty() );
+        }
+    };
+
+    class SetOnInsertMixed : public SetBase {
+    public:
+        void run() {
+            // Try with upsert false first.
+            client().update( ns(), Query(), BSON( "$set" << BSON( "a" << 1 ) <<
+                                                  "$setOnInsert" << BSON( "b" << 2 ) ), false );
+            ASSERT( client().findOne( ns(), BSON( "a" << 1 << "b" << 2 ) ).isEmpty() );
+
+            // Then with upsert true.
+            client().update( ns(), Query(), BSON( "$set" << BSON( "a" << 1 ) <<
+                                                  "$setOnInsert" << BSON( "b" << 2 ) ), true );
+            ASSERT( !client().findOne( ns(), BSON( "a" << 1 << "b" << 2 ) ).isEmpty() );
+        }
+    };
+
+    class SetOnInsertMissingParent : public SetBase {
+    public:
+        void run() {
+            // In a mod that uses dontApply, we should be careful not to create a
+            // parent unneccesarily.
+            BSONObj initial = fromjson( "{'_id':0}" );
+            BSONObj final = fromjson( "{'_id':0, d:1}" );
+            client().insert( ns(), initial );
+            client().update( ns(), initial, BSON( "$setOnInsert" << BSON( "a.b" << 1 ) <<
+                                                  "$set" << BSON( "d" << 1 ) ) );
+            ASSERT_EQUALS( client().findOne( ns(), initial ), final );
+        }
+    };
+
     class ModDotted : public SetBase {
     public:
         void run() {
@@ -678,6 +787,20 @@ namespace UpdateTests {
                 modSetState->createNewFromMods();
                 ASSERT_EQUALS( BSON( "$set" << BSON( "a" << 1 << "b" << 2)),
                                modSetState->getOpLogRewrite() );
+            }
+        };
+
+        // A no-op $setOnInsert that was forced not in-place doesn't log.
+        class SetOnInsertRewriteExistingField {
+        public:
+            void run() {
+                BSONObj obj = BSON( "a" << 2 );
+                BSONObj mod = BSON( "$setOnInsert" << BSON( "a" << 1 ) );
+                ModSet modSet( mod );
+                auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
+                // force not in place
+                modSetState->createNewFromMods();
+                ASSERT_EQUALS( BSONObj(), modSetState->getOpLogRewrite() );
             }
         };
 
@@ -1246,6 +1369,14 @@ namespace UpdateTests {
             add< SetStringDifferentLength >();
             add< SetStringToNum >();
             add< SetStringToNumInPlace >();
+            add< SetOnInsertFromEmpty >();
+            add< SetOnInsertFromNonExistent >();
+            add< SetOnInsertFromNonExistentWithQuery >();
+            add< SetOnInsertFromNonExistentWithQueryOverField >();
+            add< SetOnInsertMissingField >();
+            add< SetOnInsertExisting >();
+            add< SetOnInsertMixed >();
+            add< SetOnInsertMissingParent >();
             add< ModDotted >();
             add< SetInPlaceDotted >();
             add< SetRecreateDotted >();
@@ -1293,6 +1424,7 @@ namespace UpdateTests {
             add< ModSetTests::InRewriteForceNotInPlace >();
             add< ModSetTests::IncRewriteExistingField >();
             add< ModSetTests::IncRewriteNonExistingField >();
+            add< ModSetTests::SetOnInsertRewriteExistingField >();
             add< ModSetTests::PushRewriteExistingField >();
             add< ModSetTests::PushRewriteNonExistingField >();
             add< ModSetTests::PushAllRewriteExistingField >();

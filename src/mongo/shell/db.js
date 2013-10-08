@@ -1,6 +1,10 @@
 // db.js
 
-if ( typeof DB == "undefined" ){                     
+var DB;
+
+(function() {
+
+if (DB === undefined) {
     DB = function( mongo , name ){
         this._mongo = mongo;
         this._name = name;
@@ -59,19 +63,10 @@ DB.prototype.adminCommand = function( obj ){
 
 DB.prototype._adminCommand = DB.prototype.adminCommand; // alias old name
 
-DB.prototype.addUser = function( username , pass, readOnly, replicatedTo, timeout ){
-    if ( pass == null || pass.length == 0 )
-        throw "password can't be empty";
-
-    readOnly = readOnly || false;
+DB.prototype._createUser = function(userObj, replicatedTo, timeout) {
     var c = this.getCollection( "system.users" );
-    
-    var u = c.findOne( { user : username } ) || { user : username };
-    u.readOnly = readOnly;
-    u.pwd = hex_md5( username + ":mongo:" + pass );
-
     try {
-        c.save( u );
+        c.save(userObj);
     } catch (e) {
         // SyncClusterConnections call GLE automatically after every write and will throw an
         // exception if the insert failed.
@@ -83,7 +78,7 @@ DB.prototype.addUser = function( username , pass, readOnly, replicatedTo, timeou
             throw "Could not insert into system.users: " + tojson(e);
         }
     }
-    print( tojson( u ) );
+    print(tojson(userObj));
 
     //
     // When saving users to replica sets, the shell user will want to know if the user hasn't
@@ -108,21 +103,88 @@ DB.prototype.addUser = function( username , pass, readOnly, replicatedTo, timeou
         }
         print( "could not find getLastError object : " + tojson( e ) )
     }
-    
+
+    if (!le.err) {
+        return;
+    }
+
     // We can't detect replica set shards via mongos, so we'll sometimes get this error
     // In this case though, we've already checked the local error before returning norepl, so
     // the user has been written and we're happy
-    if( le.err == "norepl" ){
-        return
-    }        
-    
-    if ( le.err == "timeout" ){
+    if (le.err == "norepl" || le.err == "noreplset") {
+        // nothing we can do
+        return;
+    }
+
+    if (le.err == "timeout") {
         throw "timed out while waiting for user authentication to replicate - " +
               "database will not be fully secured until replication finishes"
     }
-    
-    if ( le.err )
-        throw "couldn't add user: " + le.err
+
+    if (le.err.startsWith("E11000 duplicate key error")) {
+        throw "User already exists with that username/userSource combination";
+    }
+
+    throw "couldn't add user: " + le.err;
+}
+
+function _hashPassword(username, password) {
+    return hex_md5(username + ":mongo:" + password);
+}
+
+// For adding old-style user documents for backwards compatibily with pre-2.4 versions of MongoDB.
+DB.prototype._addUserV22 = function( username , pass, readOnly, replicatedTo, timeout ) {
+    if ( pass == null || pass.length == 0 )
+        throw "password can't be empty";
+
+    readOnly = readOnly || false;
+    var c = this.getCollection( "system.users" );
+    var u = c.findOne({user : username, userSource:null}) || { user : username };
+    u.readOnly = readOnly;
+    u.pwd = _hashPassword(username, pass);
+
+    this._createUser(u, replicatedTo, timeout);
+}
+
+DB.prototype._addUser = function(userObj, replicatedTo, timeout) {
+    var roles = userObj['roles'];
+    var oldPwd;
+
+    // To prevent creating old-style privilege documents
+    if (roles == null) {
+        throw Error("'roles' field must be provided");
+    }
+
+    if (userObj.pwd != null) {
+        oldPwd = userObj.pwd;
+        userObj.pwd = _hashPassword(userObj.user, userObj.pwd);
+    }
+    try {
+        this._createUser(userObj, replicatedTo, timeout);
+    } finally {
+        if (userObj.pwd != null)
+            userObj.pwd = oldPwd;
+    }
+}
+
+DB.prototype.addUser = function() {
+    if (arguments.length == 0) {
+        throw Error("No arguments provided to addUser");
+    }
+    if (typeof arguments[0] == "object") {
+        this._addUser.apply(this, arguments);
+    } else {
+        this._addUserV22.apply(this, arguments);
+    }
+}
+
+DB.prototype.changeUserPassword = function(username, password) {
+    var hashedPassword = _hashPassword(username, password);
+    db.system.users.update({user : username, userSource : null}, {$set : {pwd : hashedPassword}});
+    var err = db.getLastError();
+    if (err) {
+        throw "Changing password failed: " + err;
+    }
 }
 
 DB.prototype.logout = function(){
@@ -134,16 +196,45 @@ DB.prototype.removeUser = function( username ){
 }
 
 DB.prototype.__pwHash = function( nonce, username, pass ) {
-    return hex_md5( nonce + username + hex_md5( username + ":mongo:" + pass ) );
+    return hex_md5(nonce + username + _hashPassword(username, pass));
 }
 
-DB.prototype.auth = function( username , pass ){
-    var result = 0;
-    try {
-        result = this.getMongo().auth(this.getName(), username, pass);
+DB.prototype._defaultAuthenticationMechanism = "MONGODB-CR";
+
+DB.prototype._authOrThrow = function () {
+    var params;
+    if (arguments.length == 2) {
+        params = { user: arguments[0], pwd: arguments[1] };
     }
-    catch (e) {
-        print(e);
+    else if (arguments.length == 1) {
+        if (typeof(arguments[0]) != "object")
+            throw Error("Single-argument form of auth expects a parameter object");
+        params = arguments[0];
+    }
+    else {
+        throw Error(
+            "auth expects either (username, password) or ({ user: username, pwd: password })");
+    }
+
+    if (params.mechanism === undefined)
+        params.mechanism = this._defaultAuthenticationMechanism;
+
+    if (params.userSource !== undefined) {
+        throw Error("Do not override userSource field on db.auth().  " +
+                    "Use getMongo().auth(), instead.");
+    }
+
+    params.userSource = this.getName();
+    return this.getMongo().auth(params);
+}
+
+
+DB.prototype.auth = function() {
+    var ex;
+    try {
+        this._authOrThrow.apply(this, arguments);
+    } catch (ex) {
+        print(ex);
         return 0;
     }
     return 1;
@@ -178,11 +269,15 @@ DB.prototype.auth = function( username , pass ){
 */
 DB.prototype.createCollection = function(name, opt) {
     var options = opt || {};
-    var cmd = { create: name, capped: options.capped, size: options.size };
+    var cmd = { create: name };
     if (options.max != undefined)
         cmd.max = options.max;
     if (options.autoIndexId != undefined)
         cmd.autoIndexId = options.autoIndexId;
+    if (options.capped != undefined)
+        cmd.capped = options.capped;
+    if (options.size != undefined)
+        cmd.size = options.size;
     var res = this._dbCommand(cmd);
     return res;
 }
@@ -270,7 +365,6 @@ DB.prototype.shutdownServer = function(opts) {
 */
 DB.prototype.cloneDatabase = function(from) { 
     assert( isString(from) && from.length );
-    //this.resetIndexCache();
     return this._dbCommand( { clone: from } );
 }
 
@@ -297,7 +391,6 @@ DB.prototype.cloneCollection = function(from, collection, query) {
     assert( isString(collection) && collection.length );
     collection = this._name + "." + collection;
     query = query || {};
-    //this.resetIndexCache();
     return this._dbCommand( { cloneCollection:collection, from:from, query:query } );
 }
 
@@ -346,7 +439,7 @@ DB.prototype.repairDatabase = function() {
 
 DB.prototype.help = function() {
     print("DB methods:");
-    print("\tdb.addUser(username, password[, readOnly=false])");
+    print("\tdb.addUser(userDocument)");
     print("\tdb.adminCommand(nameOrDocument) - switches to 'admin' db, and runs command [ just calls db.runCommand(...) ]");
     print("\tdb.auth(username, password)");
     print("\tdb.cloneDatabase(fromhost)");
@@ -394,12 +487,26 @@ DB.prototype.help = function() {
     return __magicNoPrint;
 }
 
-DB.prototype.printCollectionStats = function(){
+DB.prototype.printCollectionStats = function(scale) { 
+    if (arguments.length > 1) { 
+        print("printCollectionStats() has a single optional argument (scale)");
+        return;
+    }
+    if (typeof scale != 'undefined') {
+        if(typeof scale != 'number') {
+            print("scale has to be a number >= 1");
+            return;
+        }
+        if (scale < 1) {
+            print("scale has to be >= 1");
+            return;
+        }
+    }
     var mydb = this;
     this.getCollectionNames().forEach(
-        function(z){
+        function(z) {
             print( z );
-            printjson( mydb.getCollection(z).stats() );
+            printjson( mydb.getCollection(z).stats(scale) );
             print( "---" );
         }
     );
@@ -431,37 +538,6 @@ DB.prototype.setProfilingLevel = function(level,slowms) {
         cmd["slowms"] = slowms;
     return this._dbCommand( cmd );
 }
-
-DB.prototype._initExtraInfo = function() {
-    if ( typeof _verboseShell === 'undefined' || !_verboseShell ) return;
-    this.startTime = new Date().getTime();
-}
-
-DB.prototype._getExtraInfo = function(action) {
-    if ( typeof _verboseShell === 'undefined' || !_verboseShell ) {
-        __callLastError = true;
-        return;
-    }
-
-    // explicit w:1 so that replset getLastErrorDefaults aren't used here which would be bad.
-    var res = this.getLastErrorCmd(1); 
-    if (res) {
-        if (res.err != undefined && res.err != null) {
-            // error occured, display it
-            print(res.err);
-            return;
-        }
-
-        var info = action + " ";  
-        // hack for inserted because res.n is 0
-        info += action != "Inserted" ? res.n : 1;
-        if (res.n > 0 && res.updatedExisting != undefined) info += " " + (res.updatedExisting ? "existing" : "new")  
-        info += " record(s)";  
-        var time = new Date().getTime() - this.startTime;  
-        info += " in " + time + "ms";
-        print(info);
-    }
-} 
 
 /**
  *  <p> Evaluate a js expression at the database server.</p>
@@ -689,7 +765,7 @@ DB.prototype.killOP = DB.prototype.killOp;
 
 DB.tsToSeconds = function(x){
     if ( x.t && x.i )
-        return x.t / 1000;
+        return x.t;
     return x / 4294967296; // low 32 bits are ordinal #s within a second
 }
 
@@ -838,12 +914,44 @@ DB.prototype.printSlaveReplicationInfo = function() {
     }
 }
 
+DB.prototype.engineStatus = function(){
+    return this.runCommand('engineStatus');
+}
+
+DB.prototype.beginTransaction = function(iso){
+    var cmd = {beginTransaction: 1};
+    if (iso) {
+        cmd.isolation = iso;
+    }
+    return this.runCommand(cmd);
+}
+
+DB.prototype.commitTransaction = function(){
+    return this.runCommand('commitTransaction');
+}
+
+DB.prototype.rollbackTransaction = function(){
+    return this.runCommand('rollbackTransaction');
+}
+
+DB.prototype.showLiveTransactions = function(){
+    return this.runCommand('showLiveTransactions');
+}
+
+DB.prototype.showPendingLockRequests = function(){
+    return this.runCommand('showPendingLockRequests');
+}
+
 DB.prototype.serverBuildInfo = function(){
     return this._adminCommand( "buildinfo" );
 }
 
-DB.prototype.serverStatus = function(){
-    return this._adminCommand( "serverStatus" );
+DB.prototype.serverStatus = function( options ){
+    var cmd = { serverStatus : 1 };
+    if ( options ) {
+        Object.extend( cmd, options );
+    }
+    return this._adminCommand( cmd );
 }
 
 DB.prototype.hostInfo = function(){
@@ -924,3 +1032,5 @@ DB.prototype.getSlaveOk = function() {
 DB.prototype.loadServerScripts = function(){
     this.system.js.find().forEach(function(u){eval(u._id + " = " + u.value);});
 }
+
+}());

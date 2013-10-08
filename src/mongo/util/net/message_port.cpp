@@ -141,6 +141,10 @@ namespace mongo {
         ports.insert(this);
     }
 
+    void MessagingPort::setSocketTimeout(double timeout) {
+        psock->setTimeout(timeout);
+    }
+
     void MessagingPort::shutdown() {
         psock->close();
     }
@@ -162,7 +166,7 @@ again:
             int lft = 4;
             psock->recv( lenbuf, lft );
 
-            if ( len < 16 || len > 48000000 ) { // messages must be large enough for headers
+            if ( len < 16 || len > MaxMessageSizeBytes ) { // messages must be large enough for headers
                 if ( len == -1 ) {
                     // Endian check from the client, after connecting, to see what mode server is running in.
                     unsigned foo = 0x10203040;
@@ -180,7 +184,8 @@ again:
                     send( s.c_str(), s.size(), "http" );
                     return false;
                 }
-                LOG(0) << "recv(): message len " << len << " is too large" << len << endl;
+                LOG(0) << "recv(): message len " << len << " is too large. "
+                       << "Max is " << MaxMessageSizeBytes << endl;
                 return false;
             }
 

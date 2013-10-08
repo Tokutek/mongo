@@ -17,14 +17,17 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "database.h"
-#include "instance.h"
-#include "introspect.h"
-#include "clientcursor.h"
-#include "databaseholder.h"
+#include "mongo/pch.h"
+
+#include "mongo/db/database.h"
 
 #include <boost/filesystem/operations.hpp>
+
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/databaseholder.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/introspect.h"
+#include "mongo/db/namespacestring.h"
 
 namespace mongo {
 
@@ -33,30 +36,9 @@ namespace mongo {
         return _dbHolder;
     }
 
-    void assertDbAtLeastReadLocked(const Database *db) { 
-        if( db ) { 
-            Lock::assertAtLeastReadLocked(db->name());
-        }
-        else {
-            verify( Lock::isLocked() );
-        }
-    }
-
-    void assertDbWriteLocked(const Database *db) { 
-        if( db ) { 
-            Lock::assertWriteLocked(db->name());
-        }
-        else {
-            verify( Lock::isW() );
-        }
-    }
-
-    Database::~Database() {
-    }
-
     Database::Database(const StringData &name, const StringData &path)
         : _name(name.toString()), _path(path.toString()), _nsIndex( _path, _name ),
-          _profileName(_name + ".system.profile")
+          _profileName(getSisterNS(_name, "system.profile"))
     {
         try {
             // check db name is valid
@@ -84,7 +66,6 @@ namespace mongo {
             // The underlying dbname.ns dictionary is opend if it exists,
             // and created lazily on the next write.
             _nsIndex.init();
-            _magic = 781231;
         } catch (std::exception &e) {
             log() << "warning database " << _path << " " << _name << " could not be opened" << endl;
             DBException* dbe = dynamic_cast<DBException*>(&e);
@@ -97,7 +78,6 @@ namespace mongo {
             throw;
         }
     }    
-
 
     bool Database::setProfilingLevel( int newLevel , string& errmsg ) {
         if ( _profile == newLevel )
@@ -120,6 +100,27 @@ namespace mongo {
 
         _profile = newLevel;
         return true;
+    }
+
+    /* db - database name
+       path - db directory
+    */
+    void Database::closeDatabase( const StringData &name, const StringData &path ) {
+        verify( Lock::isW() );
+
+        Client::Context * ctx = cc().getContext();
+        verify( ctx );
+        verify( ctx->inDB( name , path ) );
+        Database *database = ctx->db();
+        verify( database->name() == name );
+
+        /* important: kill all open cursors on the database */
+        string prefix(name.toString() + ".");
+        ClientCursor::invalidate(prefix);
+
+        dbHolderW().erase( name, path );
+        ctx->_clear();
+        delete database; // closes files
     }
 
     void DatabaseHolder::closeDatabases(const StringData &path) {

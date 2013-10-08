@@ -18,6 +18,8 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/storage/dbt.h"
+
 #include <db.h>
 
 // The dictionary key format is as follows:
@@ -109,15 +111,6 @@ namespace mongo {
             void traditional(const BSONObj& obj); // store as traditional bson not as compact format
         };
 
-        inline DBT make_dbt(const char *buf, size_t size) {
-            DBT dbt;
-            dbt.data = const_cast<char *>(buf);
-            dbt.size = size;
-            dbt.ulen = 0;
-            dbt.flags = 0;
-            return dbt;
-        }
-
         // Dictionary key format:
         // { KeyV1 key [, BSONObj primary key] }
         class Key {
@@ -150,6 +143,8 @@ namespace mongo {
             static int woCompare(const Key &key1, const Key &key2, const Ordering &ordering) {
                 // Interpret the beginning of the Key's buf as KeyV1. The size of the Key
                 // must be at least as big as the size of the KeyV1 (otherwise format error).
+                dassert(key1.buf());
+                dassert(key2.buf());
                 const KeyV1 k1(static_cast<const char *>(key1.buf()));
                 const KeyV1 k2(static_cast<const char *>(key2.buf()));
                 dassert((int) key1.size() >= k1.dataSize());
@@ -192,12 +187,12 @@ namespace mongo {
 
             // The real comparison function is a function of two keys
             // and an ordering, which is a bit more clear.
-            int woCompare(const Key &key, const Ordering &ordering) {
+            int woCompare(const Key &key, const Ordering &ordering) const {
                 return woCompare(*this, key, ordering);
             }
 
             DBT dbt() const {
-                return make_dbt(_buf, _size);
+                return dbt_make(_buf, _size);
             }
 
             // HACK This isn't so nice.

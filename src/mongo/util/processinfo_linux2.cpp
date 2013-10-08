@@ -49,7 +49,7 @@ namespace mongo {
                 msgassertedNoTrace( 13538 , s.c_str() );
             }
             int found = fscanf(f,
-                               "%d %s %c "
+                               "%d %127s %c "
                                "%d %d %d %d %d "
                                "%lu %lu %lu %lu %lu "
                                "%lu %lu %ld %ld "  /* utime stime cutime cstime */
@@ -373,6 +373,21 @@ namespace mongo {
         return (int)( p.getResidentSize() / ( 1024.0 * 1024 ) );
     }
 
+    string ProcessInfo::getExePath() const {
+        char name[128];
+        sprintf(name, "/proc/%d/exe", _pid);
+        shared_ptr<char> real(realpath(name, NULL), free);
+        if (!real.get()) {
+            stringstream ss;
+            ss << "couldn't realpath [" << name << "] " << errnoWithDescription();
+            string s = ss.str();
+            // help the assert# control uasserted( 16898 , s.c_str() );
+            msgassertedNoTrace( 16898 , s.c_str() );
+        }
+        string exePath(real.get());
+        return exePath;
+    }
+
     void ProcessInfo::getExtraInfo( BSONObjBuilder& info ) {
         // [dm] i don't think mallinfo works. (64 bit.)  ??
         struct mallinfo malloc_info = mallinfo(); // structure has same name as function that returns it. (see malloc.h)
@@ -406,6 +421,7 @@ namespace mongo {
         memSize = LinuxSysHelper::getSystemMemorySize();
         addrSize = (string( unameData.machine ).find( "x86_64" ) != string::npos ? 64 : 32);
         numCores = cpuCount;
+        pageSize = static_cast<unsigned long long>(sysconf( _SC_PAGESIZE ));
         cpuArch = unameData.machine;
         hasNuma = checkNumaEnabled();
         
@@ -419,7 +435,7 @@ namespace mongo {
         bExtra.append( "kernelVersion", unameData.release );
         bExtra.append( "cpuFrequencyMHz", cpuFreq);
         bExtra.append( "cpuFeatures", cpuFeatures);
-        bExtra.append( "pageSize", static_cast< int >(sysconf( _SC_PAGESIZE ) ) );
+        bExtra.append( "pageSize", static_cast<long long>(pageSize) );
         bExtra.append( "numPages", static_cast< int >(sysconf( _SC_PHYS_PAGES ) ) );
         bExtra.append( "maxOpenFiles", static_cast< int >(sysconf( _SC_OPEN_MAX ) ) );
 

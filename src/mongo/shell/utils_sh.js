@@ -41,17 +41,18 @@ sh.help = function() {
     print( "\tsh.moveChunk(fullName,find,to)            move the chunk where 'find' is to 'to' (name of shard)");
     
     print( "\tsh.setBalancerState( <bool on or not> )   turns the balancer on or off true=on, false=off" );
-    print( "\tsh.getBalancerState()                     return true if on, off if not" );
-    print( "\tsh.isBalancerRunning()                    return true if the balancer is running on any mongos" );
+    print( "\tsh.getBalancerState()                     return true if enabled" );
+    print( "\tsh.isBalancerRunning()                    return true if the balancer has work in progress on any mongos" );
 
     print( "\tsh.addShardTag(shard,tag)                 adds the tag to the shard" );
     print( "\tsh.removeShardTag(shard,tag)              removes the tag from the shard" );
-    
+    print( "\tsh.addTagRange(fullName,min,max,tag)      tags the specified range of the given collection" );
+
     print( "\tsh.status()                               prints a general overview of the cluster" )
 }
 
 sh.status = function( verbose , configDB ) { 
-    // TODO: move the actual commadn here
+    // TODO: move the actual command here
     printShardingStatus( configDB , verbose );
 }
 

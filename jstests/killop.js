@@ -8,7 +8,8 @@ function debug( x ) {
 }
 
 t.save( {} );
-db.getLastError();
+assert(!db.getLastError());
+assert.eq(1, t.count());
 
 function ops() {
     p = db.currentOp().inprog;

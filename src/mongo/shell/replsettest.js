@@ -27,6 +27,12 @@
  *        Note: For both formats, a special boolean property 'arbiter' can be
  *          specified to denote a member is an arbiter.
  * 
+ *     nodeOptions {Object}: Options to apply to all nodes in the replica set.
+ *        Format for Object:
+ *          { cmdline-param-with-no-arg : "",
+ *            param-with-arg : arg }
+ *        This turns into "mongod --cmdline-param-with-no-arg --param-with-arg arg" 
+ *  
  *     oplogSize {number}: Default: 40
  *     useSeedList {boolean}: Use the connection string format of this set
  *        as the replica set name (overrides the name property). Default: false
@@ -59,16 +65,21 @@ ReplSetTest = function( opts ){
     if( isObject( this.numNodes ) ){
         var len = 0
         for( var i in this.numNodes ){
-            var options = this.nodeOptions[ "n" + len ] = this.numNodes[i]
-            if( i.startsWith( "a" ) ) options.arbiter = true
+            var options = this.nodeOptions[ "n" + len ] = Object.merge(opts.nodeOptions, 
+                                                                       this.numNodes[i]);
+            if( i.startsWith( "a" ) ) options.arbiter = true;
             len++
         }
         this.numNodes = len
     }
     else if( Array.isArray( this.numNodes ) ){
         for( var i = 0; i < this.numNodes.length; i++ )
-            this.nodeOptions[ "n" + i ] = this.numNodes[i]
+            this.nodeOptions[ "n" + i ] = Object.merge(opts.nodeOptions, this.numNodes[i]);
         this.numNodes = this.numNodes.length
+    }
+    else {
+        for ( var i =0; i < this.numNodes; i++ )
+            this.nodeOptions[ "n" + i ] = opts.nodeOptions;
     }
     
     if(this.bridged) {
@@ -309,8 +320,8 @@ ReplSetTest.prototype.callIsMaster = function() {
       }
 
     }
-    catch(err) {
-      print("ReplSetTest Could not call ismaster on node " + i);
+    catch (err) {
+      print("ReplSetTest Could not call ismaster on node " + i + ": " + tojson(err));
     }
   }
 
@@ -370,28 +381,38 @@ ReplSetTest.awaitRSClientHosts = function( conn, host, hostOk, rs ) {
 }
 
 ReplSetTest.prototype.awaitSecondaryNodes = function( timeout ) {
-  var master = this.getMaster();
-  var slaves = this.liveNodes.slaves;
-  var len = slaves.length;
-
-  jsTest.attempt({context: this, timeout: 60000, desc: "Awaiting secondaries"}, function() {
-     var ready = true;
-     for(var i=0; i<len; i++) {
-       var isMaster = slaves[i].getDB("admin").runCommand({ismaster: 1});
-       var arbiter = isMaster['arbiterOnly'] == undefined ? false : isMaster['arbiterOnly'];
-       ready = ready && ( isMaster['secondary'] || arbiter );
-     }
-     return ready;
-  });
-}
+  this.getMaster(timeout); // Wait for a primary to be selected.
+  var tmo = timeout || 60000;
+  var replTest = this;
+  assert.soon(
+      function() {
+          replTest.getMaster(); // Reload who the current slaves are.
+          var slaves = replTest.liveNodes.slaves;
+          var len = slaves.length;
+          var ready = true;
+          for(var i=0; i<len; i++) {
+              var isMaster = slaves[i].getDB("admin").runCommand({ismaster: 1});
+              var arbiter = isMaster['arbiterOnly'] == undefined ? false : isMaster['arbiterOnly'];
+              ready = ready && ( isMaster['secondary'] || arbiter );
+          }
+          return ready;
+      }, "Awaiting secondaries", tmo);
+};
 
 ReplSetTest.prototype.getMaster = function( timeout ) {
   var tries = 0;
   var sleepTime = 500;
-  var t = timeout || 000;
+  var tmo = timeout || 60000;
   var master = null;
 
-  master = jsTest.attempt({context: this, timeout: 60000, desc: "Finding master"}, this.callIsMaster);
+  try {
+    master = jsTest.attempt({context: this, timeout: tmo, desc: "Finding master"}, this.callIsMaster);
+  }
+  catch (err) {
+    print("ReplSetTest getMaster failed: " + tojson(err));
+    printStackTrace();
+    throw err;
+  }
   return master;
 }
 
@@ -449,23 +470,23 @@ ReplSetTest.prototype.initiate = function( cfg , initCmd , timeout ) {
     var config  = cfg || this.getReplSetConfig();
     var cmd     = {};
     var cmdKey  = initCmd || 'replSetInitiate';
-    var timeout = timeout || 30000;
+    var tmo     = timeout || 30000;
     cmd[cmdKey] = config;
     printjson(cmd);
 
-    jsTest.attempt({context:this, timeout: timeout, desc: "Initiate replica set"}, function() {
+    jsTest.attempt({context:this, timeout: tmo, desc: "Initiate replica set"}, function() {
         var result = master.runCommand(cmd);
         printjson(result);
         return result['ok'] == 1;
     });
 
+    this.awaitSecondaryNodes(timeout);
+
     // Setup authentication if running test with authentication
     if (jsTestOptions().keyFile && !this.keyFile) {
-        if (!this.shardSvr) {
-            master = this.getMaster();
-            jsTest.addAuth(master);
-            jsTest.authenticateNodes(this.nodes);
-        }
+        master = this.getMaster();
+        jsTest.addAuth(master);
+        jsTest.authenticateNodes(this.nodes);
     }
 }
 
@@ -605,7 +626,7 @@ ReplSetTest.prototype.start = function( n , options , restart , wait ){
                  dbpath : "$set-$node" }
     
     defaults = Object.merge( defaults, ReplSetTest.nodeOptions || {} )
-        
+
     // TODO : should we do something special if we don't currently know about this node?
     n = this.getNodeId( n )
     
@@ -1019,16 +1040,30 @@ ReplSetTest.prototype.bridge = function( opts ) {
  * the connection between nodes 0 and 2 by calling replTest.partition(0,2) or
  * replTest.partition(2,0) (either way is identical). Then the replica set would
  * have the following bridges: 0->1, 1->0, 1->2, 2->1.
+ *
+ * The bidirectional parameter, which defaults to true, determines whether
+ * replTest.partition(0,2) will stop the bridges for 0->2 and 2->0 (true), or
+ * just 0->2 (false).
  */
-ReplSetTest.prototype.partition = function(from, to) {
+ReplSetTest.prototype.partition = function(from, to, bidirectional) {
+    bidirectional = typeof bidirectional !== 'undefined' ? bidirectional : true;
+
     this.bridges[from][to].stop();
-    this.bridges[to][from].stop();
+
+    if (bidirectional) {
+        this.bridges[to][from].stop();
+    }
 };
 
 /**
  * This reverses a partition created by partition() above.
  */
-ReplSetTest.prototype.unPartition = function(from, to) {
+ReplSetTest.prototype.unPartition = function(from, to, bidirectional) {
+    bidirectional = typeof bidirectional !== 'undefined' ? bidirectional : true;
+
     this.bridges[from][to].start();
-    this.bridges[to][from].start();
+
+    if (bidirectional) {
+        this.bridges[to][from].start();
+    }
 };

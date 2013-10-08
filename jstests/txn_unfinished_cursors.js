@@ -15,8 +15,9 @@ function rollback() {
 // cursors, only partially iterate through the results, and
 // then commit/abort.
 
+db.dropDatabase();
+
 t = db.txnunfinishedcursors;
-t.drop();
 
 for ( i = 0; i < 15000; i++ ) {
     t.insert({ _id: i });

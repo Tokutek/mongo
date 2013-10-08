@@ -47,6 +47,11 @@ namespace mongo {
         int getResidentSize();
 
         /**
+         * Get the path to the binary that's running.
+         */
+        string getExePath() const;
+
+        /**
          * Get the type of os (e.g. Windows, Linux, Mac OS)
          */
         const string& getOsType() const { return sysInfo().osType; }
@@ -75,6 +80,11 @@ namespace mongo {
          * Get the number of CPUs
          */
         const unsigned getNumCores() const { return sysInfo().numCores; }
+
+        /**
+         * Get the system page size in bytes.
+         */
+        static unsigned long long getPageSize() { return systemInfo->pageSize; }
 
         /**
          * Get the CPU architecture (e.g. x86, x86_64)
@@ -116,6 +126,7 @@ namespace mongo {
             unsigned addrSize;
             unsigned long long memSize;
             unsigned numCores;
+            unsigned long long pageSize;
             string cpuArch;
             bool hasNuma;
             BSONObj _extraStats;
@@ -123,6 +134,7 @@ namespace mongo {
                     addrSize( 0 ),
                     memSize( 0 ),
                     numCores( 0 ),
+                    pageSize( 0 ),
                     hasNuma( false ) { 
                 // populate SystemInfo during construction
                 collectSystemInfo();
@@ -137,18 +149,14 @@ namespace mongo {
 
         static bool checkNumaEnabled();
 
-        const SystemInfo& sysInfo() const {
-            // initialize and collect sysInfo on first call
-            // TODO: SERVER-5112
-            static ProcessInfo::SystemInfo *initSysInfo = NULL;
-            if ( ! initSysInfo ) {
-                scoped_lock lk( _sysInfoLock );
-                if ( ! initSysInfo ) {
-                    initSysInfo = new SystemInfo();
-                }
-            }
-            return *initSysInfo;
+        static ProcessInfo::SystemInfo* systemInfo;
+
+        inline const SystemInfo& sysInfo() const {
+            return *systemInfo;
         }
+
+    public:
+        static void initializeSystemInfo();
 
     };
 

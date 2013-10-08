@@ -168,6 +168,7 @@ add_option( "32" , "whether to force 32 bit" , 0 , True , "force32" )
 
 add_option( "cxx", "compiler to use" , 1 , True )
 add_option( "cc", "compiler to use for c" , 1 , True )
+add_option( "ld", "linker to use" , 1 , True )
 
 add_option( "cpppath", "Include path if you have headers in a nonstandard directory" , 1 , True )
 add_option( "libpath", "Library path if you have libraries in a nonstandard directory" , 1 , True )
@@ -218,6 +219,8 @@ add_option("smoke-server-opts", "additional options for the mongod for smoke tes
 add_option("smoke-quiet", "make smoke.py be quiet", 0 , False )
 add_option("smokeauth", "run smoke tests with --auth", 0 , False )
 
+add_option("use-sasl-client", "Support SASL authentication in the client library", 0, False)
+
 add_option( "use-system-tcmalloc", "use system version of tcmalloc library", 0, True )
 
 add_option( "use-system-pcre", "use system version of pcre library", 0, True )
@@ -225,12 +228,9 @@ add_option( "use-system-pcre", "use system version of pcre library", 0, True )
 add_option( "use-system-boost", "use system version of boost libraries", 0, True )
 
 add_option( "use-system-sm", "use system version of spidermonkey library", 0, True )
+add_option( "use-system-v8", "use system version of v8 library", 0, True )
 
 add_option( "use-system-all" , "use all system libraries", 0 , True )
-
-add_option( "use-cpu-profiler",
-            "Link against the google-perftools profiler library",
-            0, True )
 
 add_option("mongod-concurrency-level", "Concurrency level, \"global\" or \"db\"", 1, True,
            type="choice", choices=["global", "db"])
@@ -299,6 +299,9 @@ env = Environment( BUILD_DIR=variantDir,
                    DIST_ARCHIVE_SUFFIX='.tgz',
                    EXTRAPATH=get_option("extrapath"),
                    MODULE_BANNERS=[],
+                   MODULE_LIBDEPS_MONGOD=[],
+                   MODULE_LIBDEPS_MONGOS=[],
+                   MODULE_LIBDEPS_MONGOSHELL=[],
                    MODULETEST_LIST='#build/moduletests.txt',
                    MSVS_ARCH=msarch ,
                    PYTHON=utils.find_python(),
@@ -320,7 +323,10 @@ env['_LIBDEPS'] = '$_LIBDEPS_OBJS'
 if has_option('mute'):
     env.Append( CCCOMSTR = "Compiling $TARGET" )
     env.Append( CXXCOMSTR = env["CCCOMSTR"] )
+    env.Append( SHCCCOMSTR = "Compiling $TARGET" )
+    env.Append( SHCXXCOMSTR = env["SHCCCOMSTR"] )
     env.Append( LINKCOMSTR = "Linking $TARGET" )
+    env.Append( SHLINKCOMSTR = env["LINKCOMSTR"] )
     env.Append( ARCOMSTR = "Generating library $TARGET" )
 
 if has_option('mongod-concurrency-level'):
@@ -354,6 +360,9 @@ if env['CC']:
 
 if has_option( "cc" ):
     env["CC"] = get_option( "cc" )
+
+if has_option( "ld" ):
+    env["LINK"] = get_option( "ld" )
 
 if env['PYSYSPLATFORM'] in ('linux2', 'freebsd'):
     env['LINK_LIBGROUP_START'] = '-Wl,--start-group'
@@ -414,8 +423,8 @@ else:
     boostVersion = "-" + boostVersion
 
 if ( not ( usesm or usev8 or justClientLib) ):
-    usesm = True
-    options_topass["usesm"] = True
+    usev8 = True
+    options_topass["usev8"] = True
 
 extraLibPlaces = []
 
@@ -722,7 +731,7 @@ if nix:
             pass
 
     if linux and has_option( "sharedclient" ):
-        env.Append( LINKFLAGS=" -Wl,--as-needed -Wl,-zdefs " )
+        env.Append( SHLINKFLAGS=" -Wl,--as-needed -Wl,-zdefs " )
 
     if linux and has_option( "gcov" ):
         env.Append( CXXFLAGS=" -fprofile-arcs -ftest-coverage " )
@@ -762,10 +771,6 @@ if nix:
     elif os.path.exists( env.File("$BUILD_DIR/mongo/pch.h$GCHSUFFIX").abspath ):
         print( "removing precompiled headers" )
         os.unlink( env.File("$BUILD_DIR/mongo/pch.h.$GCHSUFFIX").abspath ) # gcc uses the file if it exists
-
-if usev8:
-    env.Prepend( EXTRACPPPATH=["#/../v8/include/"] )
-    env.Prepend( EXTRALIBPATH=["#/../v8/"] )
 
 if usesm:
     env.Append( CPPDEFINES=["JS_C_STRINGS_ARE_UTF8"] )
@@ -813,7 +818,12 @@ if FindFile('README-TOKUDB', env['TOKUKV_PATH']) is None:
     print( 'tokukv not found in %s!' % env['TOKUKV_PATH'] )
     Exit(1)
 
+# discover modules, and load the (python) module for each module's build.py
+mongo_modules = moduleconfig.discover_modules('src/mongo/db/modules')
+env['MONGO_MODULES'] = [m.name for m in mongo_modules]
+
 # --- check system ---
+
 
 def doConfigure(myenv):
     conf = Configure(myenv)
@@ -851,13 +861,19 @@ def doConfigure(myenv):
     if solaris:
         conf.CheckLib( "nsl" )
 
-    if usev8:
+    if usev8 and use_system_version_of_library("v8"):
         if debugBuild:
             v8_lib_choices = ["v8_g", "v8"]
         else:
             v8_lib_choices = ["v8"]
         if not conf.CheckLib( v8_lib_choices ):
             Exit(1)
+
+    conf.env['MONGO_BUILD_SASL_CLIENT'] = bool(has_option("use-sasl-client"))
+    if conf.env['MONGO_BUILD_SASL_CLIENT'] and not conf.CheckLibWithHeader(
+        "sasl2", "sasl/sasl.h", "C", "sasl_version_info(0, 0, 0, 0, 0, 0);", autoadd=False):
+
+        Exit(1)
 
     # requires ports devel/libexecinfo to be installed
     if freebsd or openbsd:
@@ -876,13 +892,8 @@ def doConfigure(myenv):
 
     myenv.Append(RPATH=[Literal("'%s'" % p) for p in ['$$ORIGIN/../lib', '$$ORIGIN/../lib64']])
 
-    # discover modules (subdirectories of db/modules/), and
-    # load the (python) module for each module's build.py
-    modules = moduleconfig.discover_modules('src/mongo/')
-
-    # ask each module to configure itself, and return a
-    # dictionary of name => list_of_sources for each module.
-    env["MONGO_MODULES"] = moduleconfig.configure_modules(modules, conf, env)
+    # ask each module to configure itself and the build environment.
+    moduleconfig.configure_modules(mongo_modules, conf, env)
 
     return conf.Finish()
 
@@ -958,8 +969,8 @@ def getSystemInstallName():
     if nix and os.uname()[2].startswith( "8." ):
         n += "-tiger"
 
-    if len(env.get("MONGO_MODULES", None)):
-            n += "-" + "-".join(env["MONGO_MODULES"].keys())
+    if len(mongo_modules):
+            n += "-" + "-".join(m.name for m in mongo_modules)
 
     try:
         findSettingsSetup()
@@ -1105,12 +1116,7 @@ if len(COMMAND_LINE_TARGETS) > 0 and 'uninstall' in COMMAND_LINE_TARGETS:
     BUILD_TARGETS.remove("uninstall")
     BUILD_TARGETS.append("install")
 
-clientEnv = env.Clone()
-clientEnv['CPPDEFINES'].remove('MONGO_EXPOSE_MACROS')
-
-if not use_system_version_of_library("boost"):
-    clientEnv.Append(LIBS=['boost_thread', 'boost_filesystem', 'boost_system'])
-    clientEnv.Prepend(LIBPATH=['$BUILD_DIR/third_party/boost/'])
+module_sconscripts = moduleconfig.get_module_sconscripts(mongo_modules)
 
 # The following symbols are exported for use in subordinate SConscript files.
 # Ideally, the SConscript files would be purely declarative.  They would only
@@ -1121,17 +1127,18 @@ if not use_system_version_of_library("boost"):
 # conditional decision making that hasn't been moved up to this SConstruct file,
 # and they are exported here, as well.
 Export("env")
-Export("clientEnv")
 Export("shellEnv")
 Export("testEnv")
 Export("has_option use_system_version_of_library")
 Export("installSetup")
 Export("usesm usev8")
-Export("darwin windows solaris linux nix")
+Export("darwin windows solaris linux freebsd nix")
+Export('module_sconscripts')
+Export("debugBuild")
 
-env.SConscript( 'src/SConscript', variant_dir='$BUILD_DIR', duplicate=False )
-env.SConscript( 'src/SConscript.client', variant_dir='$BUILD_DIR/client_build', duplicate=False )
-env.SConscript( ['SConscript.buildinfo', 'SConscript.smoke'] )
+env.SConscript('src/SConscript', variant_dir='$BUILD_DIR', duplicate=False)
+env.SConscript('src/SConscript.client', variant_dir='$BUILD_DIR/client_build', duplicate=False)
+env.SConscript(['SConscript.buildinfo', 'SConscript.smoke'])
 
 def clean_old_dist_builds(env, target, source):
     prefix = "mongodb-%s-%s" % (platform, processor)

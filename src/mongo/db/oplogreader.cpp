@@ -10,7 +10,6 @@
 #include "mongo/util/background.h"
 #include "mongo/client/connpool.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/security.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/connections.h"
 #include "mongo/db/instance.h"
@@ -35,8 +34,8 @@ namespace mongo {
         if( noauth ) {
             return true;
         }
-        if( ! cc().isAdmin() ) {
-            log() << "replauthenticate: requires admin permissions, failing\n";
+        if (!cc().getAuthorizationManager()->hasInternalAuthorization()) {
+            log() << "replauthenticate: requires internal authorization, failing" << endl;
             return false;
         }
 
@@ -49,7 +48,7 @@ namespace mongo {
         else {
             BSONObj user;
             {
-                const char *ns = "local.system.users";
+                StringData ns("local.system.users");
                 Client::ReadContext ctx(ns);
                 NamespaceDetails *d = nsdetails(ns);
                 if( d == NULL || !d->findOne(userReplQuery, user) ||
@@ -70,10 +69,7 @@ namespace mongo {
             log() << "replauthenticate: can't authenticate to master server, user:" << u << endl;
             return false;
         }
-        if ( internalSecurity.pwd.length() > 0 ) {
-            conn->setAuthenticationTable(
-                    AuthenticationTable::getInternalSecurityAuthenticationTable() );
-        }
+
         return true;
     }
 
@@ -86,6 +82,13 @@ namespace mongo {
                           !me.hasField("host") ||
              me["host"].String() != myname ) {
         
+            // cleaning out local.me requires write
+            // lock. This is a rare operation, so it should
+            // be ok
+            if (!Lock::isWriteLocked("local")) {
+                throw RetryWithWriteLock();
+            }
+
             // clean out local.me
             if (d != NULL) {
                 d->empty();
@@ -137,7 +140,9 @@ namespace mongo {
 
     bool OplogReader::commonConnect(const string& hostName) {
         if( conn() == 0 ) {
-            _conn = shared_ptr<DBClientConnection>(new DBClientConnection( false, 0, 60*10 /* tcp timeout */));
+            _conn = shared_ptr<DBClientConnection>(new DBClientConnection(false,
+                                                                          0,
+                                                                          30 /* tcp timeout */));
             string errmsg;
             if ( !_conn->connect(hostName.c_str(), errmsg) ||
                  (!noauth && !replAuthenticate(_conn.get())) ) {

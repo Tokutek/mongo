@@ -17,25 +17,28 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-#include "query.h"
-#include "../clientcursor.h"
-#include "../oplog.h"
-#include "../../bson/util/builder.h"
-#include "../replutil.h"
-#include "../scanandorder.h"
-#include "../commands.h"
-#include "../queryoptimizer.h"
-#include "../../s/d_logic.h"
-#include "../../server.h"
-#include "../queryoptimizercursor.h"
+#include "mongo/pch.h"
+
+#include "mongo/db/ops/query.h"
+
+#include "mongo/bson/util/builder.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/parsed_query.h"
+#include "mongo/db/query_plan_summary.h"
+#include "mongo/db/query_optimizer.h"
+#include "mongo/db/query_optimizer_internal.h"
+#include "mongo/db/replutil.h"
+#include "mongo/db/scanandorder.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/server.h"
 
 namespace mongo {
 
     /* We cut off further objects once we cross this threshold; thus, you might get
        a little bit more than this, it is a threshold rather than a limit.
     */
-    const int MaxBytesToReturnToClientAtOnce = 4 * 1024 * 1024;
+    const int32_t MaxBytesToReturnToClientAtOnce = 4 * 1024 * 1024;
 
     bool runCommands(const char *ns, BSONObj& jsobj, CurOp& curop, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions) {
         try {
@@ -222,6 +225,13 @@ namespace mongo {
         return qr;
     }
 
+    ResultDetails::ResultDetails() :
+        match(),
+        orderedMatch(),
+        loadedRecord(),
+        chunkSkip() {
+    }
+
     ExplainRecordingStrategy::ExplainRecordingStrategy
     ( const ExplainQueryInfo::AncillaryInfo &ancillaryInfo ) :
     _ancillaryInfo( ancillaryInfo ) {
@@ -248,10 +258,9 @@ namespace mongo {
     _orderedMatches() {
     }
     
-    void MatchCountingExplainStrategy::noteIterate( bool match, bool orderedMatch,
-                                                   bool loadedRecord, bool chunkSkip ) {
-        _noteIterate( match, orderedMatch, loadedRecord, chunkSkip );
-        if ( orderedMatch ) {
+    void MatchCountingExplainStrategy::noteIterate( const ResultDetails& resultDetails ) {
+        _noteIterate( resultDetails );
+        if ( resultDetails.orderedMatch ) {
             ++_orderedMatches;
         }
     }
@@ -268,9 +277,11 @@ namespace mongo {
         _explainInfo->notePlan( *_cursor, scanAndOrder, indexOnly );
     }
 
-    void SimpleCursorExplainStrategy::_noteIterate( bool match, bool orderedMatch,
-                                                   bool loadedRecord, bool chunkSkip ) {
-        _explainInfo->noteIterate( match, loadedRecord, chunkSkip, *_cursor );
+    void SimpleCursorExplainStrategy::_noteIterate( const ResultDetails& resultDetails ) {
+        _explainInfo->noteIterate( resultDetails.match,
+                                   resultDetails.loadedRecord,
+                                   resultDetails.chunkSkip,
+                                   *_cursor );
     }
 
     shared_ptr<ExplainQueryInfo> SimpleCursorExplainStrategy::_doneQueryInfo() {
@@ -285,11 +296,12 @@ namespace mongo {
     _cursor( cursor ) {
     }
     
-    void QueryOptimizerCursorExplainStrategy::_noteIterate( bool match, bool orderedMatch,
-                                                           bool loadedRecord, bool chunkSkip ) {
+    void QueryOptimizerCursorExplainStrategy::_noteIterate( const ResultDetails& resultDetails ) {
         // Note ordered matches only; if an unordered plan is selected, the explain result will
         // be updated with reviseN().
-        _cursor->noteIterate( orderedMatch, loadedRecord, chunkSkip );
+        _cursor->noteIterate( resultDetails.orderedMatch,
+                              resultDetails.loadedRecord,
+                              resultDetails.chunkSkip );
     }
 
     shared_ptr<ExplainQueryInfo> QueryOptimizerCursorExplainStrategy::_doneQueryInfo() {
@@ -310,7 +322,8 @@ namespace mongo {
         _buf.skip( sizeof( QueryResult ) );
     }
 
-    BSONObj ResponseBuildStrategy::current( bool allowCovered ) const {
+    BSONObj ResponseBuildStrategy::current( bool allowCovered,
+                                            ResultDetails* resultDetails ) const {
         if ( _parsedQuery.returnKey() ) {
             BSONObjBuilder bob;
             bob.appendKeys( _cursor->indexKeyPattern(), _cursor->currKey() );
@@ -322,6 +335,7 @@ namespace mongo {
                 return keyFieldsOnly->hydrate( _cursor->currKey(), _cursor->currPK() );
             }
         }
+        resultDetails->loadedRecord = true;
         BSONObj ret = _cursor->current();
         verify( ret.isValid() );
         return ret;
@@ -335,21 +349,25 @@ namespace mongo {
     _bufferedMatches() {
     }
     
-    bool OrderedBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
-        if ( _cursor->getsetdup(_cursor->currPK()) ) {
-            return orderedMatch = false;
+    bool OrderedBuildStrategy::handleMatch( ResultDetails* resultDetails ) {
+        const BSONObj pk = _cursor->currPK();
+        if ( _cursor->getsetdup( pk ) ) {
+            return false;
         }
         if ( _skip > 0 ) {
             --_skip;
-            return orderedMatch = false;
+            return false;
         }
+        BSONObj currentDocument = current( true, resultDetails );
         // Explain does not obey soft limits, so matches should not be buffered.
         if ( !_parsedQuery.isExplain() ) {
             fillQueryResultFromObj( _buf, _parsedQuery.getFields(),
-                                    current( true ), &details);
+                                    currentDocument, &resultDetails->matchDetails );
             ++_bufferedMatches;
         }
-        return orderedMatch = true;
+        resultDetails->match = true;
+        resultDetails->orderedMatch = true;
+        return true;
     }
 
     ReorderBuildStrategy* ReorderBuildStrategy::make( const ParsedQuery& parsedQuery,
@@ -372,17 +390,17 @@ namespace mongo {
         _scanAndOrder.reset( newScanAndOrder( queryPlan ) );
     }
 
-    bool ReorderBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
-        orderedMatch = false;
-        if ( _cursor->getsetdup(_cursor->currPK()) ) {
+    bool ReorderBuildStrategy::handleMatch( ResultDetails* resultDetails ) {
+        if ( _cursor->getsetdup( _cursor->currPK() ) ) {
             return false;
         }
-        _handleMatchNoDedup();
+        _handleMatchNoDedup( resultDetails );
+        resultDetails->match = true;
         return true;
     }
     
-    void ReorderBuildStrategy::_handleMatchNoDedup() {
-        _scanAndOrder->add( current( false ) );
+    void ReorderBuildStrategy::_handleMatchNoDedup( ResultDetails* resultDetails ) {
+        _scanAndOrder->add( current( false, resultDetails ) );
     }
 
     int ReorderBuildStrategy::rewriteMatches() {
@@ -399,7 +417,7 @@ namespace mongo {
         verify( _cursor->ok() );
         const FieldRangeSet *fieldRangeSet = 0;
         if ( queryPlan.valid() ) {
-            fieldRangeSet = queryPlan._fieldRangeSetMulti.get();
+            fieldRangeSet = queryPlan.fieldRangeSetMulti.get();
         }
         else {
             verify( _queryOptimizerCursor );
@@ -433,20 +451,21 @@ namespace mongo {
                                                          QueryPlanSummary() ) );
     }
 
-    bool HybridBuildStrategy::handleMatch( bool &orderedMatch, MatchDetails& details ) {
+    bool HybridBuildStrategy::handleMatch( ResultDetails* resultDetails ) {
         if ( !_queryOptimizerCursor->currentPlanScanAndOrderRequired() ) {
-            return _orderedBuild.handleMatch( orderedMatch, details );
+            return _orderedBuild.handleMatch( resultDetails );
         }
-        orderedMatch = false;
-        return handleReorderMatch();
+        return handleReorderMatch( resultDetails );
     }
     
-    bool HybridBuildStrategy::handleReorderMatch() {
-        if ( _scanAndOrderDups.getsetdup(_cursor->currPK()) ) {
+    bool HybridBuildStrategy::handleReorderMatch( ResultDetails* resultDetails ) {
+        const BSONObj pk = _cursor->currPK();
+        if ( _scanAndOrderDups.getsetdup( pk ) ) {
             return false;
         }
+        resultDetails->match = true;
         try {
-            _reorderBuild->_handleMatchNoDedup();
+            _reorderBuild->_handleMatchNoDedup( resultDetails );
         } catch ( const UserException &e ) {
             if ( e.getCode() == ScanAndOrderMemoryLimitExceededAssertionCode ) {
                 if ( _queryOptimizerCursor->hasPossiblyExcludedPlans() ) {
@@ -507,22 +526,19 @@ namespace mongo {
     }
 
     bool QueryResponseBuilder::addMatch() {
-        MatchDetails details;
+        ResultDetails resultDetails;
 
         if ( _parsedQuery.getFields() && _parsedQuery.getFields()->getArrayOpType() == Projection::ARRAY_OP_POSITIONAL ) {
             // field projection specified, and contains an array operator
-            details.requestElemMatchKey();
+            resultDetails.matchDetails.requestElemMatchKey();
         }
 
-        if ( !currentMatches( details ) ) {
-            return false;
-        }
-        if ( !chunkMatches() ) {
-            return false;
-        }
-        bool orderedMatch = false;
-        bool match = _builder->handleMatch( orderedMatch, details );
-        _explain->noteIterate( match, orderedMatch, true, false );
+        bool match =
+                currentMatches( &resultDetails ) &&
+                chunkMatches( &resultDetails ) &&
+                _builder->handleMatch( &resultDetails );
+
+        _explain->noteIterate( resultDetails );
         return match;
     }
 
@@ -582,8 +598,8 @@ namespace mongo {
         }
         shared_ptr<ExplainRecordingStrategy> ret
         ( new SimpleCursorExplainStrategy( ancillaryInfo, _cursor ) );
-        ret->notePlan( queryPlan.valid() && queryPlan._scanAndOrderRequired,
-                      queryPlan._keyFieldsOnly );
+        ret->notePlan( queryPlan.valid() && queryPlan.scanAndOrderRequired,
+                       queryPlan.keyFieldsOnly );
         return ret;
     }
 
@@ -593,7 +609,7 @@ namespace mongo {
         bool empty = !_cursor->ok();
         bool singlePlan = !_queryOptimizerCursor;
         bool singleOrderedPlan =
-        singlePlan && ( !queryPlan.valid() || !queryPlan._scanAndOrderRequired );
+                singlePlan && ( !queryPlan.valid() || !queryPlan.scanAndOrderRequired );
         CandidatePlanCharacter queryOptimizerPlans;
         if ( _queryOptimizerCursor ) {
             queryOptimizerPlans = _queryOptimizerCursor->initialCandidatePlans();
@@ -614,23 +630,24 @@ namespace mongo {
         ( HybridBuildStrategy::make( _parsedQuery, _queryOptimizerCursor, _buf ) );
     }
 
-    bool QueryResponseBuilder::currentMatches( MatchDetails& details ) {
-        if ( _cursor->currentMatches( &details ) ) {
-            return true;
+    bool QueryResponseBuilder::currentMatches( ResultDetails* resultDetails ) {
+        bool matches = _cursor->currentMatches( &resultDetails->matchDetails );
+        if ( resultDetails->matchDetails.hasLoadedRecord() ) {
+            resultDetails->loadedRecord = true;
         }
-        _explain->noteIterate( false, false, details.hasLoadedRecord(), false );
-        return false;
+        return matches;
     }
 
-    bool QueryResponseBuilder::chunkMatches() {
+    bool QueryResponseBuilder::chunkMatches( ResultDetails* resultDetails ) {
         if ( !_chunkManager ) {
             return true;
         }
         // TODO: should make this covered at some point
+        resultDetails->loadedRecord = true;
         if ( _chunkManager->belongsToMe( _cursor->current() ) ) {
             return true;
         }
-        _explain->noteIterate( false, false, true, true );
+        resultDetails->chunkSkip = true;
         return false;
     }
     
@@ -661,9 +678,8 @@ namespace mongo {
             oldPlan = mps->cachedPlanExplainSummary();
         }
         
-        cursor =
-            NamespaceDetailsTransient::getCursor( ns.c_str(), query, order, QueryPlanSelectionPolicy::any(),
-                                                  0, pq_shared, false, &queryPlan );
+        cursor = getOptimizedCursor( ns.c_str(), query, order, QueryPlanSelectionPolicy::any(),
+                                     true, pq_shared, false, &queryPlan );
         verify( cursor );
 
         // Tailable cursors must be marked as such before any use. This is so that
@@ -892,8 +908,7 @@ namespace mongo {
         curop.debug().query = jsobj;
         curop.setQuery(jsobj);
 
-        const NamespaceString nsString( ns ); // TODO: Use a c string for speed
-        uassert( 16256, str::stream() << "Invalid ns [" << ns << "]", nsString.isValid() );
+        uassert( 16256, str::stream() << "Invalid ns [" << ns << "]", NamespaceString::isValid(ns) );
 
         // Run a command.
         

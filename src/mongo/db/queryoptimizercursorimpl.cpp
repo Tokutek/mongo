@@ -1,5 +1,3 @@
-// @file queryoptimizercursorimpl.cpp - A cursor interleaving multiple candidate cursors.
-
 /**
  *    Copyright (C) 2011 10gen Inc.
  *    Copyright (C) 2013 Tokutek Inc.
@@ -17,7 +15,6 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 #include "mongo/pch.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/namespace_details.h"
@@ -25,497 +22,252 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/explain.h"
-#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/query_plan_summary.h"
+#include "mongo/db/query_optimizer_internal.h"
+#include "mongo/db/queryutil.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/exception.h"
 
 namespace mongo {
     
     extern bool useHints;
-    
-    static const int OutOfOrderDocumentsAssertionCode = 14810;
-        
-    QueryPlanSelectionPolicy::Any QueryPlanSelectionPolicy::__any;
-    const QueryPlanSelectionPolicy &QueryPlanSelectionPolicy::any() { return __any; }
-    
-    bool QueryPlanSelectionPolicy::IndexOnly::permitPlan( const QueryPlan &plan ) const {
-        return !plan.willScanTable();
+
+    QueryOptimizerCursorImpl* QueryOptimizerCursorImpl::make
+            ( auto_ptr<MultiPlanScanner>& mps,
+              const QueryPlanSelectionPolicy& planPolicy,
+              bool requireOrder,
+              bool explain ) {
+        auto_ptr<QueryOptimizerCursorImpl> ret( new QueryOptimizerCursorImpl( mps, planPolicy,
+                                                                              requireOrder ) );
+        ret->init( explain );
+        return ret.release();
     }
-    QueryPlanSelectionPolicy::IndexOnly QueryPlanSelectionPolicy::__indexOnly;
-    const QueryPlanSelectionPolicy &QueryPlanSelectionPolicy::indexOnly() { return __indexOnly; }
-    
-    bool QueryPlanSelectionPolicy::IdElseNatural::permitPlan( const QueryPlan &plan ) const {
-        return !plan.indexed() || plan.index()->isIdIndex();
+        
+    bool QueryOptimizerCursorImpl::ok() {
+        return _takeover ? _takeover->ok() : !_currPK().isEmpty();
     }
-    BSONObj QueryPlanSelectionPolicy::IdElseNatural::planHint( const StringData& ns ) const {
-        NamespaceDetails *nsd = nsdetails( ns );
-        if ( !nsd || !nsd->hasIdIndex() ) {
-            return BSON( "$hint" << BSON( "$natural" << 1 ) );
+        
+    BSONObj QueryOptimizerCursorImpl::current() {
+        if ( _takeover ) {
+            return _takeover->current();
         }
-        return BSON( "$hint" << nsd->idx( nsd->findIdIndex() ).indexName() );
+        assertOk();
+        return _currRunner->current();
     }
-    QueryPlanSelectionPolicy::IdElseNatural QueryPlanSelectionPolicy::__idElseNatural;
-    const QueryPlanSelectionPolicy &QueryPlanSelectionPolicy::idElseNatural() {
-        return __idElseNatural;
+        
+    BSONObj QueryOptimizerCursorImpl::currPK() const {
+        return _takeover ? _takeover->currPK() : _currPK();
+    }
+        
+    BSONObj QueryOptimizerCursorImpl::_currPK() const {
+        dassert( !_takeover );
+        return _currRunner ? _currRunner->currPK() : BSONObj();
     }
 
-    /**
-     * A QueryOp implementation utilized by the QueryOptimizerCursor
-     */
-    class QueryOptimizerCursorOp : public QueryOp {
-    public:
-        /**
-         * @param aggregateNscanned - shared long long counting total nscanned for
-         * query ops for all cursors.
-         */
-        QueryOptimizerCursorOp( long long &aggregateNscanned, const QueryPlanSelectionPolicy &selectionPolicy,
-                               const bool &requireOrder, bool alwaysCountMatches, int cumulativeCount = 0 ) :
-        _matchCounter( aggregateNscanned, cumulativeCount ),
-        _countingMatches(),
-        _mustAdvance(),
-        _capped(),
-        _selectionPolicy( selectionPolicy ),
-        _requireOrder( requireOrder ),
-        _alwaysCountMatches( alwaysCountMatches ) {
-        }
-        
-        virtual void init() {
-            checkCursorOrdering();
-            if ( !_selectionPolicy.permitPlan( queryPlan() ) ) {
-                throw MsgAssertionException( 9011,
-                                            str::stream()
-                                            << "Plan not permitted by query plan selection policy '"
-                                            << _selectionPolicy.name()
-                                            << "'" );
-            }
-            
-            _c = queryPlan().newCursor();
-            // The basic and index cursors used by this implementation do not supply their own
-            // matchers, and a matcher from a query plan will be used instead.
-            verify( !_c->matcher() );
+    bool QueryOptimizerCursorImpl::advance() {
+        return _advance( false );
+    }
 
-            // The query plan must have a matcher.  The matcher's constructor performs some aspects
-            // of query validation that should occur as part of this class's init() if not handled
-            // already.
-            fassert( 16249, queryPlan().matcher() );
+    BSONObj QueryOptimizerCursorImpl::currKey() const {
+        if ( _takeover ) {
+            return _takeover->currKey();
+        }
+        assertOk();
+        return _currRunner->currKey();
+    }
 
-            _capped = _c->capped();
+    BSONObj QueryOptimizerCursorImpl::indexKeyPattern() const {
+        if ( _takeover ) {
+            return _takeover->indexKeyPattern();
+        }
+        assertOk();
+        return _currRunner->cursor()->indexKeyPattern();
+    }
 
-            // TODO This violates the current Cursor interface abstraction, but for now it's simpler to keep our own set of
-            // dups rather than avoid poisoning the cursor's dup set with unreturned documents.  Deduping documents
-            // matched in this QueryOptimizerCursorOp will run against the takeover cursor.
-            _matchCounter.setCheckDups( countMatches() && _c->isMultiKey() );
-            // TODO ok if cursor becomes multikey later?
-
-            _matchCounter.updateNscanned( _c->nscanned() );
-        }
-        
-        virtual long long nscanned() const {
-            return _c ? _c->nscanned() : _matchCounter.nscanned();
-        }
-        
-        virtual void next() {
-            checkCursorOrdering();
-
-            mayAdvance();
-            
-            if ( countMatches() && _matchCounter.enoughCumulativeMatchesToChooseAPlan() ) {
-                setStop();
-                if ( _explainPlanInfo ) _explainPlanInfo->notePicked();
-                return;
-            }
-            if ( !_c || !_c->ok() ) {
-                if ( _explainPlanInfo && _c ) _explainPlanInfo->noteDone( *_c );
-                setComplete();
-                return;
-            }
-            
-            _mustAdvance = true;
-        }
-        virtual QueryOp *createChild() const {
-            return new QueryOptimizerCursorOp( _matchCounter.aggregateNscanned(), _selectionPolicy, _requireOrder, _alwaysCountMatches, _matchCounter.cumulativeCount() );
-        }
-        BSONObj currKey() const { return _c ? _c->currKey() : BSONObj(); }
-        BSONObj currPK() const { return _c ? _c->currPK() : BSONObj(); }
-        BSONObj current() const { return _c ? _c->current() : BSONObj(); }
-        bool currentMatches( MatchDetails *details ) {
-            if ( !_c || !_c->ok() ) {
-                _matchCounter.setMatch( false );
-                return false;
-            }
-            
-            MatchDetails myDetails;
-            if ( !details && _explainPlanInfo ) {
-                details = &myDetails;
-            }
-
-            bool match = queryPlan().matcher()->matchesCurrent( _c.get(), details );
-            // Cache the match, so we can count it in mayAdvance().
-            bool newMatch = _matchCounter.setMatch( match );
-
-            if ( _explainPlanInfo ) {
-                bool countableMatch = newMatch && _matchCounter.wouldCountMatch( _c->currPK() );
-                _explainPlanInfo->noteIterate( countableMatch,
-                                              countableMatch || details->hasLoadedRecord(),
-                                              *_c );
-            }
-
-            return match;
-        }
-        virtual bool mayRecordPlan() const {
-            return complete() && ( !stopRequested() || _matchCounter.enoughMatchesToRecordPlan() );
-        }
-        shared_ptr<Cursor> cursor() const { return _c; }
-        virtual shared_ptr<ExplainPlanInfo> generateExplainInfo() {
-            if ( !_c ) {
-                return QueryOp::generateExplainInfo();
-            }
-            _explainPlanInfo.reset( new ExplainPlanInfo() );
-            _explainPlanInfo->notePlan( *_c, queryPlan().scanAndOrderRequired(),
-                                        queryPlan().keyFieldsOnly() );
-            return _explainPlanInfo;
-        }
-        shared_ptr<ExplainPlanInfo> explainInfo() const { return _explainPlanInfo; }
-        
-        virtual const Projection::KeyOnly *keyFieldsOnly() const {
-            return queryPlan().keyFieldsOnly().get();
-        }
-        
-    private:
-        void mayAdvance() {
-            if ( !_c ) {
-                return;
-            }
-            if ( countingMatches() ) {
-                // Check match if not yet known.
-                if ( !_matchCounter.knowMatch() ) {
-                    currentMatches( 0 );
-                }
-                _matchCounter.countMatch( currPK() );
-            }
-            if ( _mustAdvance ) {
-                _c->advance();
-                handleCursorAdvanced();
-            }
-            _matchCounter.updateNscanned( _c->nscanned() );
-        }
-        bool countingMatches() {
-            if ( _countingMatches ) {
+    bool QueryOptimizerCursorImpl::getsetdup(const BSONObj &pk) {
+        if ( _takeover ) {
+            if ( getdupInternal( pk ) ) {
                 return true;
             }
-            if ( countMatches() ) {
-                // Only count matches after the first call to next(), which occurs before the first
-                // result is returned.
-                _countingMatches = true;
-            }
+            return _takeover->getsetdup( pk );
+        }
+        assertOk();
+        return getsetdupInternal( pk );
+    }
+        
+    bool QueryOptimizerCursorImpl::isMultiKey() const {
+        if ( _takeover ) {
+            return _takeover->isMultiKey();
+        }
+        assertOk();
+        return _currRunner->cursor()->isMultiKey();
+    }
+        
+    bool QueryOptimizerCursorImpl::capped() const {
+        // Initial capped wrapping cases (before takeover) are handled internally by a component
+        // ClientCursor.
+        return _takeover ? _takeover->capped() : false;
+    }
+
+    long long QueryOptimizerCursorImpl::nscanned() const {
+        return _takeover ? _takeover->nscanned() : _nscanned;
+    }
+
+    CoveredIndexMatcher* QueryOptimizerCursorImpl::matcher() const {
+        if ( _takeover ) {
+            return _takeover->matcher();
+        }
+        assertOk();
+        return _currRunner->queryPlan().matcher().get();
+    }
+
+    bool QueryOptimizerCursorImpl::currentMatches( MatchDetails* details ) {
+        if ( _takeover ) {
+            return _takeover->currentMatches( details );
+        }
+        assertOk();
+        return _currRunner->currentMatches( details );
+    }
+        
+    const FieldRangeSet* QueryOptimizerCursorImpl::initialFieldRangeSet() const {
+        if ( _takeover ) {
+            return 0;
+        }
+        assertOk();
+        return &_currRunner->queryPlan().multikeyFrs();
+    }
+        
+    bool QueryOptimizerCursorImpl::currentPlanScanAndOrderRequired() const {
+        if ( _takeover ) {
+            return _takeover->queryPlan().scanAndOrderRequired();
+        }
+        assertOk();
+        return _currRunner->queryPlan().scanAndOrderRequired();
+    }
+        
+    const Projection::KeyOnly* QueryOptimizerCursorImpl::keyFieldsOnly() const {
+        if ( _takeover ) {
+            return _takeover->keyFieldsOnly();
+        }
+        assertOk();
+        return _currRunner->keyFieldsOnly();
+    }
+        
+    bool QueryOptimizerCursorImpl::runningInitialInOrderPlan() const {
+        if ( _takeover ) {
             return false;
         }
-        bool countMatches() const {
-            return _alwaysCountMatches || !queryPlan().scanAndOrderRequired();
-        }
+        assertOk();
+        return _mps->haveInOrderPlan();
+    }
 
-        void handleCursorAdvanced() {
-            _mustAdvance = false;
-            _matchCounter.resetMatch();
+    bool QueryOptimizerCursorImpl::hasPossiblyExcludedPlans() const {
+        if ( _takeover ) {
+            return false;
         }
-        void checkCursorOrdering() {
-            if ( _requireOrder && queryPlan().scanAndOrderRequired() ) {
-                throw MsgAssertionException( OutOfOrderDocumentsAssertionCode, "order spec cannot be satisfied with index" );
-            }
-        }
+        assertOk();
+        return _mps->hasPossiblyExcludedPlans();
+    }
 
-        CachedMatchCounter _matchCounter;
-        bool _countingMatches;
-        bool _mustAdvance;
-        bool _capped;
-        shared_ptr<Cursor> _c;
-        ClientCursor::Holder _cc;
-        const QueryPlanSelectionPolicy &_selectionPolicy;
-        const bool &_requireOrder; // TODO don't use a ref for this, but signal change explicitly
-        shared_ptr<ExplainPlanInfo> _explainPlanInfo;
-        bool _alwaysCountMatches;
-    };
-    
-    /**
-     * This cursor runs a MultiPlanScanner iteratively and returns results from
-     * the scanner's cursors as they become available.  Once the scanner chooses
-     * a single plan, this cursor becomes a simple wrapper around that single
-     * plan's cursor (called the 'takeover' cursor).
-     */
-    class QueryOptimizerCursorImpl : public QueryOptimizerCursor {
-    public:
-        static QueryOptimizerCursorImpl *make( auto_ptr<MultiPlanScanner> &mps,
-                                              const QueryPlanSelectionPolicy &planPolicy,
-                                              bool requireOrder,
-                                              bool explain ) {
-            auto_ptr<QueryOptimizerCursorImpl> ret( new QueryOptimizerCursorImpl( mps, planPolicy,
-                                                                                 requireOrder ) );
-            ret->init( explain );
-            return ret.release();
+    void QueryOptimizerCursorImpl::clearIndexesForPatterns() {
+        if ( !_takeover ) {
+            _mps->clearIndexesForPatterns();
         }
+    }
         
-        virtual bool ok() { return _takeover ? _takeover->ok() : !_currPK().isEmpty(); }
-        
-        virtual BSONObj current() {
-            if ( _takeover ) {
-                return _takeover->current();
-            }
-            assertOk();
-            return _currOp->current();
-        }
-        
-        virtual BSONObj currPK() const { return _takeover ? _takeover->currPK() : _currPK(); }
-        
-        BSONObj _currPK() const {
-            dassert( !_takeover );
-            return _currOp ? _currOp->currPK() : BSONObj();
-        }
-        
-        virtual bool advance() {
-            return _advance( false );
-        }
-        
-        virtual BSONObj currKey() const {
-            if ( _takeover ) {
-             	return _takeover->currKey();   
-            }
-            assertOk();
-            return _currOp->currKey();
-        }
-        
-        virtual BSONObj indexKeyPattern() const {
-            if ( _takeover ) {
-                return _takeover->indexKeyPattern();
-            }
-            assertOk();
-            return _currOp->cursor()->indexKeyPattern();
-        }
-        
-        virtual bool supportGetMore() { return true; }
+    void QueryOptimizerCursorImpl::abortOutOfOrderPlans() {
+        _requireOrder = true;
+    }
 
-        virtual string toString() const { return "QueryOptimizerCursor"; }
+    void QueryOptimizerCursorImpl::noteIterate( bool match, bool loadedDocument, bool chunkSkip ) {
+        if ( _explainQueryInfo ) {
+            _explainQueryInfo->noteIterate( match, loadedDocument, chunkSkip );
+        }
+        if ( _takeover ) {
+            _takeover->noteIterate( match, loadedDocument );
+        }
+    }
         
-        virtual bool getsetdup(const BSONObj &pk) {
-            if ( _takeover ) {
-                if ( _dups.getdup( pk ) ) {
-                    return true;   
-                }
-             	return _takeover->getsetdup( pk );   
-            }
-            assertOk();
-            return _dups.getsetdup( pk );
-        }
-        
-        /** Matcher needs to know if the the cursor being forwarded to is multikey. */
-        virtual bool isMultiKey() const {
-            if ( _takeover ) {
-                return _takeover->isMultiKey();
-            }
-            assertOk();
-            return _currOp->cursor()->isMultiKey();
-        }
-        
-        // TODO fix
-        virtual bool modifiedKeys() const { return true; }
-
-        /** Initial capped wrapping cases (before takeover) are handled internally by a component ClientCursor. */
-        virtual bool capped() const { return _takeover ? _takeover->capped() : false; }
-
-        virtual long long nscanned() const { return _takeover ? _takeover->nscanned() : _nscanned; }
-
-        virtual shared_ptr<CoveredIndexMatcher> matcherPtr() const {
-            if ( _takeover ) {
-                return _takeover->matcherPtr();
-            }
-            assertOk();
-            return _currOp->queryPlan().matcher();
-        }
-
-        virtual CoveredIndexMatcher *matcher() const {
-            if ( _takeover ) {
-                return _takeover->matcher();
-            }
-            assertOk();
-            return _currOp->queryPlan().matcher().get();
-        }
-
-        virtual bool currentMatches( MatchDetails *details = 0 ) {
-            if ( _takeover ) {
-                return _takeover->currentMatches( details );
-            }
-            assertOk();
-            return _currOp->currentMatches( details );
-        }
-        
-        virtual CandidatePlanCharacter initialCandidatePlans() const {
-            return _initialCandidatePlans;
-        }
-        
-        virtual const FieldRangeSet *initialFieldRangeSet() const {
-            if ( _takeover ) {
-                return 0;
-            }
-            assertOk();
-            return &_currOp->queryPlan().multikeyFrs();
-        }
-        
-        virtual bool currentPlanScanAndOrderRequired() const {
-            if ( _takeover ) {
-                return _takeover->queryPlan().scanAndOrderRequired();
-            }
-            assertOk();
-            return _currOp->queryPlan().scanAndOrderRequired();
-        }
-        
-        virtual const Projection::KeyOnly *keyFieldsOnly() const {
-            if ( _takeover ) {
-                return _takeover->keyFieldsOnly();
-            }
-            assertOk();
-            return _currOp->keyFieldsOnly();
-        }
-        
-        virtual bool runningInitialInOrderPlan() const {
-            if ( _takeover ) {
-                return false;
-            }
-            assertOk();
-            return _mps->haveInOrderPlan();
-        }
-
-        virtual bool hasPossiblyExcludedPlans() const {
-            if ( _takeover ) {
-                return false;
-            }
-            assertOk();
-            return _mps->hasPossiblyExcludedPlans();
-        }
-
-        virtual bool completePlanOfHybridSetScanAndOrderRequired() const {
-            return _completePlanOfHybridSetScanAndOrderRequired;
-        }
-        
-        virtual void clearIndexesForPatterns() {
-            if ( !_takeover ) {
-                _mps->clearIndexesForPatterns();
-            }
-        }
-        
-        virtual void abortOutOfOrderPlans() {
-            _requireOrder = true;
-        }
-
-        virtual void noteIterate( bool match, bool loadedDocument, bool chunkSkip ) {
-            if ( _explainQueryInfo ) {
-                _explainQueryInfo->noteIterate( match, loadedDocument, chunkSkip );
-            }
-            if ( _takeover ) {
-                _takeover->noteIterate( match, loadedDocument );
-            }
-        }
-        
-        virtual shared_ptr<ExplainQueryInfo> explainQueryInfo() const {
-            return _explainQueryInfo;
-        }
-        
-    private:
-        
-        QueryOptimizerCursorImpl( auto_ptr<MultiPlanScanner> &mps,
-                                 const QueryPlanSelectionPolicy &planPolicy,
-                                 bool requireOrder ) :
+    QueryOptimizerCursorImpl::QueryOptimizerCursorImpl( auto_ptr<MultiPlanScanner>& mps,
+                                                        const QueryPlanSelectionPolicy& planPolicy,
+                                                        bool requireOrder ) :
         _requireOrder( requireOrder ),
         _mps( mps ),
         _initialCandidatePlans( _mps->possibleInOrderPlan(), _mps->possibleOutOfOrderPlan() ),
-        _originalOp( new QueryOptimizerCursorOp( _nscanned, planPolicy, _requireOrder,
-                                                !_initialCandidatePlans.hybridPlanSet() ) ),
-        _currOp(),
+        _originalRunner( new QueryPlanRunner( _nscanned,
+                                              planPolicy,
+                                              _requireOrder,
+                                              !_initialCandidatePlans.hybridPlanSet() ) ),
+        _currRunner(),
         _completePlanOfHybridSetScanAndOrderRequired(),
         _nscanned() {
-        }
+    }
         
-        void init( bool explain ) {
-            _mps->initialOp( _originalOp );
-            if ( explain ) {
-                _explainQueryInfo = _mps->generateExplainInfo();
+    void QueryOptimizerCursorImpl::init( bool explain ) {
+        _mps->initialRunner( _originalRunner );
+        if ( explain ) {
+            _explainQueryInfo = _mps->generateExplainInfo();
+        }
+        shared_ptr<QueryPlanRunner> runner = _mps->nextRunner();
+        rethrowOnError( runner );
+        if ( !runner->complete() ) {
+            _currRunner = runner.get();
+        }
+    }
+
+    bool QueryOptimizerCursorImpl::_advance( bool force ) {
+        if ( _takeover ) {
+            return _takeover->advance();
+        }
+
+        if ( !force && !ok() ) {
+            return false;
+        }
+
+        _currRunner = 0;
+        shared_ptr<QueryPlanRunner> runner = _mps->nextRunner();
+        rethrowOnError( runner );
+
+        if ( !runner->complete() ) {
+            // The 'runner' will be valid until we call _mps->nextOp() again.  We return 'current'
+            // values from this op.
+            _currRunner = runner.get();
+        }
+        else if ( runner->stopRequested() ) {
+            if ( runner->cursor() ) {
+                _takeover.reset( new MultiCursor( _mps,
+                                                  runner->cursor(),
+                                                  runner->queryPlan().matcher(),
+                                                  runner->explainInfo(),
+                                                  *runner,
+                                                  _nscanned - runner->cursor()->nscanned() ) );
             }
-            shared_ptr<QueryOp> op = _mps->nextOp();
-            rethrowOnError( op );
-            if ( !op->complete() ) {
-                _currOp = dynamic_cast<QueryOptimizerCursorOp*>( op.get() );
+        }
+        else {
+            if ( _initialCandidatePlans.hybridPlanSet() ) {
+                _completePlanOfHybridSetScanAndOrderRequired =
+                        runner->queryPlan().scanAndOrderRequired();
             }
         }
 
-        /**
-         * Advances the QueryPlanSet::Runner.
-         * @param force - advance even if the current query op is not valid.  The 'force' param should only be specified
-         * when there are plans left in the runner.
-         */
-        bool _advance( bool force ) {
-            if ( _takeover ) {
-                return _takeover->advance();
-            }
-
-            if ( !force && !ok() ) {
-                return false;
-            }
-
-            _currOp = 0;
-            shared_ptr<QueryOp> op = _mps->nextOp();
-            rethrowOnError( op );
-
-            // Avoiding dynamic_cast here for performance.  Soon we won't need to
-            // do a cast at all.
-            QueryOptimizerCursorOp *qocop = (QueryOptimizerCursorOp*)( op.get() );
-
-            if ( !op->complete() ) {
-                // The 'qocop' will be valid until we call _mps->nextOp() again.  We return 'current' values from this op.
-                _currOp = qocop;
-            }
-            else if ( op->stopRequested() ) {
-                if ( qocop->cursor() ) {
-                    _takeover.reset( new MultiCursor( _mps,
-                                                     qocop->cursor(),
-                                                     op->queryPlan().matcher(),
-                                                     qocop->explainInfo(),
-                                                     *op,
-                                                     _nscanned - qocop->cursor()->nscanned() ) );
-                }
-            }
-            else {
-                if ( _initialCandidatePlans.hybridPlanSet() ) {
-                    _completePlanOfHybridSetScanAndOrderRequired =
-                            op->queryPlan().scanAndOrderRequired();
-                }
-            }
-
-            return ok();
+        return ok();
+    }
+    
+    /** Forward an exception when the runner errs out. */
+    void QueryOptimizerCursorImpl::rethrowOnError( const shared_ptr< QueryPlanRunner > &runner ) {
+        if ( runner->error() ) {
+            throw MsgAssertionException( runner->exception() );   
         }
-        /** Forward an exception when the runner errs out. */
-        void rethrowOnError( const shared_ptr< QueryOp > &op ) {
-            if ( op->error() ) {
-                throw MsgAssertionException( op->exception() );   
-            }
-        }
-        
-        void assertOk() const {
-            // TODO: We should be calling ok() here, but for some reason that's not const.
-            // So instead we copy the implementation.
-            massert( 14809, "Invalid access for cursor that is not ok()", !currPK().isEmpty() );
-        }
+    }
 
-        bool _requireOrder;
-        auto_ptr<MultiPlanScanner> _mps;
-        CandidatePlanCharacter _initialCandidatePlans;
-        shared_ptr<QueryOptimizerCursorOp> _originalOp;
-        QueryOptimizerCursorOp *_currOp;
-        bool _completePlanOfHybridSetScanAndOrderRequired;
-        shared_ptr<MultiCursor> _takeover;
-        long long _nscanned;
-        // Using a SmallDupSet seems a bit hokey, but I've measured a 5% performance improvement
-        // with ~100 document non multi key scans.
-        SmallDupSet _dups;
-        shared_ptr<ExplainQueryInfo> _explainQueryInfo;
-    };
+    bool QueryOptimizerCursorImpl::getsetdupInternal(const BSONObj &pk) {
+        return _dups.getsetdup( pk );
+    }
+
+    bool QueryOptimizerCursorImpl::getdupInternal(const BSONObj &pk) {
+        dassert( _takeover );
+        return _dups.getdup( pk );
+    }
     
     shared_ptr<Cursor> newQueryOptimizerCursor( auto_ptr<MultiPlanScanner> mps,
                                                const QueryPlanSelectionPolicy &planPolicy,
@@ -535,33 +287,11 @@ namespace mongo {
         return shared_ptr<Cursor>();
     }
     
-    shared_ptr<Cursor>
-    NamespaceDetailsTransient::getCursor( const StringData &ns,
-                                         const BSONObj &query,
-                                         const BSONObj &order,
-                                         const QueryPlanSelectionPolicy &planPolicy,
-                                         bool *simpleEqualityMatch,
-                                         const shared_ptr<const ParsedQuery> &parsedQuery,
-                                         bool requireOrder,
-                                         QueryPlanSummary *singlePlanSummary ) {
-
-        try {
-            CursorGenerator generator( ns, query, order, planPolicy, simpleEqualityMatch, parsedQuery,
-                                       requireOrder, singlePlanSummary );
-            return generator.generate();
-        }
-        catch (storage::RetryableException::MvccDictionaryTooNew &e) {
-            shared_ptr<Cursor> ret;
-            ret.reset(new DummyCursor(1));
-            return ret;
-        }
-    }
-    
     CursorGenerator::CursorGenerator( const StringData &ns,
                                      const BSONObj &query,
                                      const BSONObj &order,
                                      const QueryPlanSelectionPolicy &planPolicy,
-                                     bool *simpleEqualityMatch,
+                                     bool requestMatcher,
                                      const shared_ptr<const ParsedQuery> &parsedQuery,
                                      bool requireOrder,
                                      QueryPlanSummary *singlePlanSummary ) :
@@ -569,19 +299,20 @@ namespace mongo {
     _query( query ),
     _order( order ),
     _planPolicy( planPolicy ),
-    _simpleEqualityMatch( simpleEqualityMatch ),
+    _requestMatcher( requestMatcher ),
     _parsedQuery( parsedQuery ),
     _requireOrder( requireOrder ),
     _singlePlanSummary( singlePlanSummary ) {
         // Initialize optional return variables.
-        if ( _simpleEqualityMatch ) {
-            *_simpleEqualityMatch = false;
-        }
         if ( _singlePlanSummary ) {
             *_singlePlanSummary = QueryPlanSummary();
         }
     }
     
+    BSONObj CursorGenerator::hint() const {
+        return _argumentsHint.isEmpty() ? _planPolicy.planHint( _ns ) : _argumentsHint;
+    }
+
     void CursorGenerator::setArgumentsHint() {
         if ( useHints && _parsedQuery ) {
             _argumentsHint = _parsedQuery->getHint();
@@ -592,8 +323,9 @@ namespace mongo {
             if ( d ) {
                 int i = d->findIdIndex();
                 if( i < 0 ) {
-                    if ( _ns.find( ".system." ) == string::npos )
+                    if ( !NamespaceString::isSystem(_ns) ) {
                         log() << "warning: no _id index on $snapshot query, ns:" << _ns << endl;
+                    }
                 }
                 else {
                     /* [dm] the name of an _id index tends to vary, so we build the hint the hard
@@ -653,15 +385,24 @@ namespace mongo {
         }
         shared_ptr<Cursor> single = singlePlan->newCursor();
         if ( !_query.isEmpty() && !single->matcher() ) {
-            single->setMatcher( singlePlan->matcher() );
+
+            // The query plan must have a matcher.  The matcher's constructor performs some aspects
+            // of query validation that should occur before a cursor is returned.
+            fassert( 16449, singlePlan->matcher() );
+
+            if ( // If a matcher is requested or ...
+                 _requestMatcher ||
+                 // ... the index ranges do not exactly match the query or ...
+                 singlePlan->mayBeMatcherNecessary() ||
+                 // ... the matcher must look at the full record ...
+                 singlePlan->matcher()->needRecord() ) {
+
+                // ... then set the cursor's matcher to the query plan's matcher.
+                single->setMatcher( singlePlan->matcher() );
+            }
         }
         if ( singlePlan->keyFieldsOnly() ) {
             single->setKeyFieldsOnly( singlePlan->keyFieldsOnly() );
-        }
-        if ( _simpleEqualityMatch ) {
-            if ( singlePlan->exactKeyMatch() && !single->matcher()->needRecord() ) {
-                *_simpleEqualityMatch = true;
-            }
         }
         return single;
     }

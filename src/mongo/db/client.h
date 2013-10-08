@@ -29,10 +29,9 @@
 
 #include <stack>
 
-#include "mongo/db/security.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/db/stats/top.h"
-#include "mongo/db/client_common.h"
+#include "mongo/db/client_basic.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/lockstate.h"
 #include "mongo/db/gtid.h"
@@ -40,7 +39,6 @@
 #include "mongo/db/opsettings.h"
 #include "mongo/util/paths.h"
 #include "mongo/util/concurrency/threadlocal.h"
-#include "mongo/util/net/message_port.h"
 #include "mongo/util/concurrency/rwlock.h"
 
 namespace mongo {
@@ -91,9 +89,6 @@ namespace mongo {
         bool shutdown();
 
         string clientAddress(bool includePort=false) const;
-        const AuthenticationInfo * getAuthenticationInfo() const { return &_ai; }
-        AuthenticationInfo * getAuthenticationInfo() { return &_ai; }
-        bool isAdmin() { return _ai.isAuthorized( "admin" ); }
         CurOp* curop() const { return _curOp; }
         Context* getContext() const { return _context; }
         Database* database() const {  return _context ? _context->db() : 0; }
@@ -117,17 +112,10 @@ namespace mongo {
         bool isGod() const { return _god; } /* this is for map/reduce writes */
         string toString() const;
         void gotHandshake( const BSONObj& o );
-        bool hasRemote() const { return _mp; }
-        HostAndPort getRemote() const { verify( _mp ); return _mp->remote(); }
         BSONObj getRemoteID() const { return _remoteId; }
         BSONObj getHandshake() const { return _handshake; }
-        AbstractMessagingPort * port() const { return _mp; }
         ConnectionId getConnectionId() const { return _connectionId; }
 
-        bool hasWrittenThisPass() const { return _hasWrittenThisPass; }
-        void writeHappened() { _hasWrittenThisPass = true; }
-        void newTopLevelRequest() { _hasWrittenThisPass = false; }
-        
         LockState& lockState() { return _ls; }
 
         /**
@@ -139,8 +127,11 @@ namespace mongo {
         class TransactionStack : boost::noncopyable {
             // If we had emplace we wouldn't need a shared_ptr...
             std::stack<shared_ptr<TxnContext> > _txns;
+            long long _rootTransactionId;
+            void push(shared_ptr<TxnContext> &newTxn);
+            void pop();
           public:
-            TransactionStack() {}
+            TransactionStack() : _txns(), _rootTransactionId(0) {}
             ~TransactionStack() {
                 // This ensures that things get destroyed in the right order, I don't know if std::stack gives that guarantee.
                 while (hasLiveTxn()) {
@@ -156,6 +147,7 @@ namespace mongo {
             /** Abort the innermost transaction. */
             void abortTxn();
             uint32_t numLiveTxns();
+            long long rootTransactionId() const { return _rootTransactionId; }
 
             /** @return true iff this transaction stack has a live txn. */
             bool hasLiveTxn() const;
@@ -197,6 +189,14 @@ namespace mongo {
                 return false;
             }
             return _transactions->hasLiveTxn();
+        }
+
+        long long rootTransactionId() const {
+            shared_ptr<TransactionStack> stack = txnStack();
+            if (!stack) {
+                return 0;
+            }
+            return stack->rootTransactionId();
         }
 
         const shared_ptr<TransactionStack> &txnStack() const {
@@ -268,6 +268,35 @@ namespace mongo {
             }
         };
 
+        /**
+         * Info about the load currently in progress for this client, if one exists.
+         */
+        class LoadInfo : boost::noncopyable {
+            Client::Transaction _txn;
+            string _bulkLoadNS;
+          public:
+            LoadInfo(const StringData &ns) : _txn(DB_SERIALIZABLE), _bulkLoadNS(ns.toString()) {}
+            void commitTxn() { _txn.commit(); }
+            const string &bulkLoadNS() const { return _bulkLoadNS; }
+        };
+
+        /** Enter load mode for a particular namespace, given indexes and options. */
+        void beginClientLoad(const StringData &ns, const vector<BSONObj> &indexes,
+                             const BSONObj &options);
+
+        /** Commit the client load. uasserts if none is in progress. */
+        void commitClientLoad();
+
+        /** Abort the client load. uasserts if none is in progress. */
+        void abortClientLoad();
+
+        /** @return true if a load is in progress. */
+        bool loadInProgress() const;
+
+        // HACK we need this until upserts go through the NamespaceDetails class
+        //      and can prevent writes on a bulk loaded collection automatically.
+        string bulkLoadNS() const { return _loadInfo ? _loadInfo->bulkLoadNS() : ""; }
+
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
         friend class CurOp;
@@ -276,24 +305,32 @@ namespace mongo {
         CurOp * _curOp;
         Context * _context;
         shared_ptr<TransactionStack> _transactions;
+        shared_ptr<LoadInfo> _loadInfo; // the txn and ns currently under-going bulk load by this client
         bool _shutdown; // to track if Client::shutdown() gets called
         std::string _desc;
         bool _god;
-        AuthenticationInfo _ai;
+        StringData _creatingSystemUsers;
         GTID _lastGTID;
         BSONObj _handshake;
         BSONObj _remoteId;
-        AbstractMessagingPort * const _mp;
         OpSettings _opSettings;
 
         // for CmdCopyDb and CmdCopyDbGetNonce
         shared_ptr< DBClientConnection > _authConn;
 
-        bool _hasWrittenThisPass;
-
         LockState _ls;
         
     public:
+
+        /* declare that we're creating system.users for some db
+           therefore we should not care about authing for ensureIndex on system colls */
+        class CreatingSystemUsersScope : boost::noncopyable {
+            StringData _prev;
+          public:
+            CreatingSystemUsersScope();
+            ~CreatingSystemUsersScope();
+        };
+        bool creatingSystemUsers() const;
 
         /* set _god=true temporarily, safely */
         class GodScope {
@@ -309,16 +346,16 @@ namespace mongo {
         class Context : boost::noncopyable {
         public:
             /** this is probably what you want */
-            Context(const StringData &ns, const StringData &path=dbpath, bool doauth=true, bool doVersion=true );
+            Context(const StringData &ns, const StringData &path=dbpath, bool doVersion=true);
 
             /** note: this does not call finishInit -- i.e., does not call 
                       shardVersionOk() for example. 
                 see also: reset().
             */
-            Context( const StringData &ns , Database * db, bool doauth=true );
+            Context(const StringData &ns , Database * db);
 
             // used by ReadContext
-            Context(const StringData &path, const StringData &ns, Database *db, bool doauth);
+            Context(const StringData &path, const StringData &ns, Database *db);
 
             ~Context();
             Client* getClient() const { return _client; }
@@ -344,8 +381,7 @@ namespace mongo {
 
         private:
             friend class CurOp;
-            void _finishInit( bool doauth=true);
-            void _auth( int lockState );
+            void _finishInit();
             void checkNotStale() const;
             void checkNsAccess( bool doauth );
             void checkNsAccess( bool doauth, int lockState );
@@ -363,7 +399,7 @@ namespace mongo {
          */
         class ReadContext : boost::noncopyable { 
         public:
-            ReadContext(const StringData &ns, const StringData &path=dbpath, bool doauth=true);
+            ReadContext(const StringData &ns, const StringData &path=dbpath);
             Context& ctx() { return _c; }
         private:
             Lock::DBRead _lk;
@@ -372,7 +408,7 @@ namespace mongo {
 
         class WriteContext : boost::noncopyable {
         public:
-            WriteContext(const StringData &ns, const StringData &path=dbpath, bool doauth=true );
+            WriteContext(const StringData &ns, const StringData &path=dbpath);
             Context& ctx() { return _c; }
         private:
             Lock::DBWrite _lk;

@@ -18,6 +18,9 @@
 */
 
 #include "mongo/pch.h"
+
+#include <vector>
+
 #include "mongo/db/oplog.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/repl_block.h"
@@ -25,7 +28,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/stats/counters.h"
-#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
@@ -33,6 +36,7 @@
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/jsobjmanipulator.h"
+#include "mongo/util/elapsed_tracker.h"
 
 namespace mongo {
 
@@ -46,7 +50,7 @@ namespace mongo {
         rsOplogRefsDetails = NULL;
         replInfoDetails = NULL;
         
-        Client::Context ctx( rsoplog, dbpath, false);
+        Client::Context ctx(rsoplog, dbpath);
         // TODO: code review this for possible error cases
         // although, I don't think we care about error cases,
         // just that after we exit, oplog files don't exist
@@ -60,17 +64,17 @@ namespace mongo {
     void openOplogFiles() {
         const char *logns = rsoplog;
         if (rsOplogDetails == NULL) {
-            Client::Context ctx(logns , dbpath, false);
+            Client::Context ctx(logns , dbpath);
             rsOplogDetails = nsdetails(logns);
             massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
         }
         if (rsOplogRefsDetails == NULL) {
-            Client::Context ctx(rsOplogRefs , dbpath, false);
+            Client::Context ctx(rsOplogRefs , dbpath);
             rsOplogRefsDetails = nsdetails(rsOplogRefs);
             massert(16814, "local.oplog.refs missing. did you drop it? if so restart server", rsOplogRefsDetails);
         }
         if (replInfoDetails == NULL) {
-            Client::Context ctx(rsReplInfo , dbpath, false);
+            Client::Context ctx(rsReplInfo , dbpath);
             replInfoDetails = nsdetails(rsReplInfo);
             massert(16747, "local.replInfo missing. did you drop it? if so restart server", replInfoDetails);
         }
@@ -81,7 +85,7 @@ namespace mongo {
 
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
-        b.appendTimestamp("ts", timestamp);
+        b.appendDate("ts", timestamp);
         b.append("h", (long long)hash);
         b.append("a", true);
         b.append("ops", opInfo);
@@ -118,7 +122,7 @@ namespace mongo {
         Lock::DBRead lk1("local");
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
-        b.appendTimestamp("ts", timestamp);
+        b.appendDate("ts", timestamp);
         b.append("h", (long long)hash);
         b.append("a", true);
         b.append("ref", oid);
@@ -184,13 +188,12 @@ namespace mongo {
         Client::ReadContext ctx(rsoplog);
         // TODO: Should this be using rsOplogDetails, verifying non-null?
         NamespaceDetails *d = nsdetails(rsoplog);
-        char gtidBin[GTID::GTIDBinarySize()];
-        gtid.serializeBinaryData(gtidBin);
+        BSONObjBuilder q;
         BSONObj result;
-        BSONObj query(BSON("_id" << gtidBin));
+        addGTIDToBSON("_id", gtid, q);
         const bool found = d != NULL &&
             d->findOne(
-               query, 
+               q.done(),
                result
                );
         return found;
@@ -403,5 +406,14 @@ namespace mongo {
         const uint32_t hours = days * 24 + cmdLine.expireOplogHours;
         const uint64_t millisPerHour = 3600 * 1000;
         return hours * millisPerHour;
+    }
+
+    void hotOptimizeOplogTo(GTID gtid) {
+        Client::ReadContext ctx(rsoplog);
+
+        // do a hot optimize up until gtid;
+        BSONObjBuilder q;
+        addGTIDToBSON("", gtid, q);
+        rsOplogDetails->optimizePK(minKey, q.done());
     }
 }

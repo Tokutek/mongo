@@ -26,6 +26,7 @@
 
 #include "mongo/client/dbclient_rs.h"
 #include "mongo/db/databaseholder.h"
+#include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/json.h"
 #include "mongo/db/storage/env.h"
@@ -66,6 +67,12 @@ namespace mongo {
 
             ("username,u",po::value<string>(), "username" )
             ("password,p", new PasswordValue( &_password ), "password" )
+            ("authenticationDatabase",
+             po::value<string>(&_authenticationDatabase)->default_value(""),
+             "user source (defaults to dbname)" )
+            ("authenticationMechanism",
+             po::value<string>(&_authenticationMechanism)->default_value("MONGODB-CR"),
+             "authentication mechanism")
             ;
 
         if ( access & LOCAL_SERVER )
@@ -113,12 +120,6 @@ namespace mongo {
     }
     int Tool::main( int argc , char ** argv ) {
         static StaticObserver staticObserver;
-
-#if( BOOST_VERSION >= 104500 )
-    boost::filesystem::path::default_name_check( boost::filesystem2::no_check );
-#else
-    boost::filesystem::path::default_name_check( boost::filesystem::no_check );
-#endif
 
         _name = argv[0];
 
@@ -264,6 +265,8 @@ namespace mongo {
 
         int ret = -1;
         try {
+            if (!useDirectClient)
+                auth();
             ret = run();
         }
         catch ( DBException& e ) {
@@ -397,15 +400,11 @@ namespace mongo {
     }
 
     /**
-     * Validate authentication on the server for the given dbname.  populates
-     * level (if supplied) with the user's credentials.
+     * Validate authentication on the server for the given dbname.
      */
-    void Tool::auth( string dbname, Auth::Level * level ) {
+    void Tool::auth() {
 
-        if ( ! dbname.size() )
-            dbname = _db;
-
-        if ( ! ( _username.size() || _password.size() ) ) {
+        if ( _username.empty() ) {
             // Make sure that we don't need authentication to connect to this db
             // findOne throws an AssertionException if it's not authenticated.
             if (_coll.size() > 0) {
@@ -413,26 +412,23 @@ namespace mongo {
                 conn().findOne(getNS(), Query("{}"), 0, QueryOption_SlaveOk);
             }
 
-            // set write-level access if authentication is disabled
-            if ( level != NULL )
-                *level = Auth::WRITE;
-
             return;
         }
 
-        string errmsg;
-        if (dbname.size()) {
-            if ( _conn->auth( dbname , _username , _password , errmsg, true, level ) ) {
-                return;
+        std::string userSource = _authenticationDatabase;
+        if ( userSource.empty() ) {
+            if ( !_db.empty() ) {
+                userSource = _db;
+            }
+            else {
+                userSource = "admin";
             }
         }
 
-        // try against the admin db
-        if ( _conn->auth( "admin" , _username , _password , errmsg, true, level ) ) {
-            return;
-        }
-
-        throw UserException( 9997 , (string)"authentication failed: " + errmsg );
+        _conn->auth( BSON( saslCommandPrincipalSourceFieldName << userSource <<
+                           saslCommandPrincipalFieldName << _username <<
+                           saslCommandPasswordFieldName << _password  <<
+                           saslCommandMechanismFieldName << _authenticationMechanism ) );
     }
 
     BSONTool::BSONTool( const char * name, DBAccess access , bool objcheck )
@@ -440,13 +436,17 @@ namespace mongo {
 
         add_options()
         ("objcheck" , "validate object before inserting" )
+        ("noobjcheck" , "validate object before inserting" )
         ("filter" , po::value<string>() , "filter to apply before inserting" )
         ;
     }
 
 
     int BSONTool::run() {
-        _objcheck = hasParam( "objcheck" );
+        if ( hasParam( "objcheck" ) )
+            _objcheck = true;
+        else if ( hasParam( "noobjcheck" ) )
+            _objcheck = false;
 
         if ( hasParam( "filter" ) )
             _matcher.reset( new Matcher( fromjson( getParam( "filter" ) ) ) );

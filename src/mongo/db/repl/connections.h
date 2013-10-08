@@ -21,7 +21,7 @@
 #include <map>
 
 #include "mongo/db/repl/rs.h"
-#include "mongo/db/security_common.h"
+#include "mongo/db/auth/authorization_manager.h"
 
 namespace mongo {
 
@@ -43,28 +43,31 @@ namespace mongo {
     */
     class ScopedConn {
     public:
+        // A flag to keep ScopedConns open when all other sockets are disconnected
+        static const unsigned keepOpen;
+
         /** throws assertions if connect failure etc. */
         ScopedConn(const std::string& hostport);
         ~ScopedConn() {
             // conLock releases...
         }
         void reconnect() {
-            connInfo->cc.reset(new DBClientConnection(true, 0, 10));
+            connInfo->cc.reset(new DBClientConnection(true, 0, connInfo->getTimeout()));
             connInfo->cc->_logLevel = 2;
             connInfo->connected = false;
             connect();
+        }
+
+        void setTimeout(time_t timeout) {
+            connInfo->setTimeout(timeout);
         }
 
         /* If we were to run a query and not exhaust the cursor, future use of the connection would be problematic.
            So here what we do is wrapper known safe methods and not allow cursor-style queries at all.  This makes
            ScopedConn limited in functionality but very safe.  More non-cursor wrappers can be added here if needed.
            */
-        bool runCommand(const string &dbname,
-                        const BSONObj& cmd,
-                        BSONObj &info,
-                        int options=0,
-                        const AuthenticationTable* auth=NULL) {
-            return conn()->runCommand(dbname, cmd, info, options, auth);
+        bool runCommand(const string &dbname, const BSONObj& cmd, BSONObj &info, int options=0) {
+            return conn()->runCommand(dbname, cmd, info, options);
         }
         unsigned long long count(const string &ns) {
             return conn()->count(ns);
@@ -81,10 +84,29 @@ namespace mongo {
             scoped_ptr<DBClientConnection> cc;
             bool connected;
             ConnectionInfo() : lock("ConnectionInfo"),
-                               cc(new DBClientConnection(/*reconnect*/ true, 0, /*timeout*/ 10.0)),
-                               connected(false) {
+                cc(new DBClientConnection(/*reconnect*/ true,
+                                          /*replicaSet*/ 0,
+                                          /*timeout*/ ReplSetConfig::DEFAULT_HB_TIMEOUT)),
+                connected(false) {
                 cc->_logLevel = 2;
             }
+
+            void tagPort() {
+                MessagingPort& mp = cc->port();
+                mp.tag |= ScopedConn::keepOpen;
+            }
+
+            void setTimeout(time_t timeout) {
+                _timeout = timeout;
+                cc->setSoTimeout(_timeout);
+            }
+
+            int getTimeout() {
+                return _timeout;
+            }
+
+        private:
+            int _timeout;
         } *connInfo;
         typedef map<string,ScopedConn::ConnectionInfo*> M;
         static M& _map;
@@ -99,6 +121,7 @@ namespace mongo {
             return false;
           }
           connInfo->connected = true;
+          connInfo->tagPort();
 
           // if we cannot authenticate against a member, then either its key file
           // or our key file has to change.  if our key file has to change, we'll
@@ -113,8 +136,6 @@ namespace mongo {
                   log() << "could not authenticate against " << _hostport << ", " << err << rsLog;
                   return false;
               }
-              connInfo->cc->setAuthenticationTable(
-                      AuthenticationTable::getInternalSecurityAuthenticationTable() );
           }
 
           return true;
@@ -147,5 +168,4 @@ namespace mongo {
         // Keep trying to connect if we're not yet connected
         connect();
     }
-
 }

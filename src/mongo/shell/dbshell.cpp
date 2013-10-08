@@ -26,6 +26,7 @@
 
 #include "mongo/base/initializer.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/repl/rs_member.h"
 #include "mongo/scripting/engine.h"
@@ -40,6 +41,7 @@
 
 #ifdef _WIN32
 #define isatty _isatty
+#define fileno _fileno
 #else
 #include <unistd.h>
 #endif
@@ -157,11 +159,6 @@ void quitNicely( int sig ) {
         return;
     }
 
-#if !defined(_WIN32)
-    if ( sig == SIGPIPE )
-        mongo::rawOut( "mongo got signal SIGPIPE\n" );
-#endif
-
     killOps();
     shellHistoryDone();
     ::_exit(0);
@@ -230,6 +227,8 @@ void myterminate() {
     ::_exit( 14 );
 }
 
+static void ignoreSignal(int ignored) {}
+
 void setupSignals() {
     signal( SIGINT , quitNicely );
     signal( SIGTERM , quitNicely );
@@ -238,7 +237,12 @@ void setupSignals() {
     signal( SIGFPE , quitAbruptly );
 
 #if !defined(_WIN32) // surprisingly these are the only ones that don't work on windows
-    signal( SIGPIPE , quitNicely ); // Maybe just log and continue?
+    struct sigaction sigactionSignals;
+    sigactionSignals.sa_handler = ignoreSignal;
+    sigemptyset(&sigactionSignals.sa_mask);
+    sigactionSignals.sa_flags = 0;
+    sigaction(SIGPIPE, &sigactionSignals, NULL); // errors are handled in socket code directly
+
     signal( SIGBUS , quitAbruptly );
 #endif
 
@@ -489,6 +493,12 @@ static void edit( const string& whatToEdit ) {
 
     string js;
     if ( editingVariable ) {
+        // If "whatToEdit" is undeclared or uninitialized, declare 
+        int varType = shellMainScope->type( whatToEdit.c_str() );
+        if ( varType == Undefined ) {
+            shellMainScope->exec( "var " + whatToEdit , "(shell)", false, true, false );
+        }
+
         // Convert "whatToEdit" to JavaScript (JSON) text
         if ( !shellMainScope->exec( "__jsout__ = tojson(" + whatToEdit + ")", "tojs", false, false, false ) )
             return; // Error already printed
@@ -611,6 +621,12 @@ int _main( int argc, char* argv[], char **envp ) {
 
     string username;
     string password;
+    string authenticationMechanism;
+    string authenticationDatabase;
+
+    std::string sslPEMKeyFile;
+    std::string sslPEMKeyPassword;
+    std::string sslCAFile;
 
     bool runShell = false;
     bool nodb = false;
@@ -633,12 +649,22 @@ int _main( int argc, char* argv[], char **envp ) {
     ( "eval", po::value<string>( &script ), "evaluate javascript" )
     ( "username,u", po::value<string>(&username), "username for authentication" )
     ( "password,p", new mongo::PasswordValue( &password ), "password for authentication" )
+    ("authenticationDatabase",
+     po::value<string>(&authenticationDatabase)->default_value(""),
+     "user source (defaults to dbname)" )
+    ("authenticationMechanism",
+     po::value<string>(&authenticationMechanism)->default_value("MONGODB-CR"),
+     "authentication mechanism")
     ( "help,h", "show this usage information" )
     ( "version", "show version information" )
     ( "verbose", "increase verbosity" )
     ( "ipv6", "enable IPv6 support (disabled by default)" )
 #ifdef MONGO_SSL
     ( "ssl", "use SSL for all connections" )
+    ( "sslCAFile", po::value<std::string>(&sslCAFile), "Certificate Authority for SSL" )
+    ( "sslPEMKeyFile", po::value<std::string>(&sslPEMKeyFile), "PEM certificate/key file for SSL" )
+    ( "sslPEMKeyPassword", po::value<std::string>(&sslPEMKeyFile), 
+      "password for key in PEM file for SSL" )
 #endif
     ;
 
@@ -712,6 +738,15 @@ int _main( int argc, char* argv[], char **envp ) {
     if ( params.count( "ssl" ) ) {
         mongo::cmdLine.sslOnNormalPorts = true;
     }
+    if (params.count("sslPEMKeyFile")) {
+        mongo::cmdLine.sslPEMKeyFile = params["sslPEMKeyFile"].as<std::string>();
+    }
+    if (params.count("sslPEMKeyPassword")) {
+        mongo::cmdLine.sslPEMKeyPassword = params["sslPEMKeyPassword"].as<std::string>();
+    }
+    if (params.count("sslCAFile")) {
+        mongo::cmdLine.sslCAFile = params["sslCAFile"].as<std::string>();
+    }
 #endif
     if ( params.count( "nokillop" ) ) {
         mongo::shell_utils::_nokillop = true;
@@ -774,11 +809,40 @@ int _main( int argc, char* argv[], char **envp ) {
         if ( params.count( "password" ) && password.empty() )
             password = mongo::askPassword();
 
-        if ( username.size() && password.size() ) {
-            stringstream ss;
-            ss << "if ( ! db.auth( \"" << username << "\" , \"" << password << "\" ) ){ throw 'login failed'; }";
-            mongo::shell_utils::_dbAuth = ss.str();
+        // Construct the authentication-related code to execute on shell startup.
+        //
+        // This constructs and immediately executes an anonymous function, to avoid
+        // the shell's default behavior of printing statement results to the console.
+        //
+        // It constructs a statement of the following form:
+        //
+        // (function() {
+        //    // Set default authentication mechanism and, maybe, authenticate.
+        //  }())
+        stringstream authStringStream;
+        authStringStream << "(function() { " << endl;
+        if ( !authenticationMechanism.empty() ) {
+            authStringStream << "DB.prototype._defaultAuthenticationMechanism = \"" <<
+                authenticationMechanism << "\";" << endl;
         }
+
+        if ( username.size() ) {
+            authStringStream << "var username = \"" << username << "\";" << endl;
+            authStringStream << "var password = \"" << password << "\";" << endl;
+            if (authenticationDatabase.empty()) {
+                authStringStream << "var authDb = db;" << endl;
+            }
+            else {
+                authStringStream << "var authDb = db.getSiblingDB(\"" << authenticationDatabase <<
+                    "\");" << endl;
+            }
+            authStringStream << "authDb._authOrThrow({ " <<
+                saslCommandPrincipalFieldName << ": username, " <<
+                saslCommandPasswordFieldName << ": password });" << endl;
+        }
+        authStringStream << "}())";
+
+        mongo::shell_utils::_dbAuth = authStringStream.str();
     }
 
     mongo::ScriptEngine::setConnectCallback( mongo::shell_utils::onConnect );
@@ -826,14 +890,14 @@ int _main( int argc, char* argv[], char **envp ) {
 #endif
             if ( !rcLocation.empty() && fileExists(rcLocation) ) {
                 hasMongoRC = true;
-                if ( ! scope->execFile( rcLocation , false , true , false , 0 ) ) {
+                if ( ! scope->execFile( rcLocation , false , true ) ) {
                     cout << "The \".mongorc.js\" file located in your home folder could not be executed" << endl;
                     return -5;
                 }
             }
         }
 
-        if ( !hasMongoRC && isatty(0) ) {
+        if ( !hasMongoRC && isatty(fileno(stdin)) ) {
            cout << "Welcome to the MongoDB shell.\n"
                    "For interactive help, type \"help\".\n"
                    "For more comprehensive documentation, see\n\thttp://docs.mongodb.org/\n"
@@ -841,6 +905,10 @@ int _main( int argc, char* argv[], char **envp ) {
            fstream f;
            f.open(rcLocation.c_str(), ios_base::out );
            f.close();
+        }
+
+        if ( !nodb && !mongo::cmdLine.quiet && isatty(fileno(stdin)) ) {
+            scope->exec( "shellHelper( 'show', 'startupWarnings' )", "(shellwarnings", false, true, false );
         }
 
         shellHistoryInit();
@@ -974,21 +1042,16 @@ int _main( int argc, char* argv[], char **envp ) {
 #ifdef _WIN32
 int wmain( int argc, wchar_t* argvW[] ) {
     static mongo::StaticObserver staticObserver;
-    UINT initialConsoleInputCodePage = GetConsoleCP();
-    UINT initialConsoleOutputCodePage = GetConsoleOutputCP();
-    SetConsoleCP( CP_UTF8 );
-    SetConsoleOutputCP( CP_UTF8 );
-    int returnValue = -1;
+    int returnCode;
     try {
         WindowsCommandLine wcl( argc, argvW );
-        returnValue = _main( argc, wcl.argv(), NULL );  // TODO: Convert wide env to utf8 env.
+        returnCode = _main( argc, wcl.argv(), NULL );  // TODO: Convert wide env to utf8 env.
     }
     catch ( mongo::DBException& e ) {
         cerr << "exception: " << e.what() << endl;
+        returnCode = 1;
     }
-    SetConsoleCP( initialConsoleInputCodePage );
-    SetConsoleOutputCP( initialConsoleOutputCodePage );
-    ::_exit(returnValue);
+    ::_exit(returnCode);
 }
 #else // #ifdef _WIN32
 int main( int argc, char* argv[], char **envp ) {

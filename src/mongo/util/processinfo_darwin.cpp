@@ -21,6 +21,8 @@
 #include "log.h"
 #include <db/jsobj.h>
 
+#include <boost/scoped_array.hpp>
+
 #include <mach/vm_statistics.h>
 #include <mach/task_info.h>
 #include <mach/mach_init.h>
@@ -29,6 +31,7 @@
 #include <mach/task.h>
 #include <mach/vm_map.h>
 #include <mach/shared_region.h>
+#include <mach-o/dyld.h>
 #include <iostream>
 
 #include <sys/types.h>
@@ -96,6 +99,17 @@ namespace mongo {
         return (int)( ti.resident_size / (1024 * 1024 ) );
     }
 
+    string ProcessInfo::getExePath() const {
+        uint32_t bufsize = 128;
+        boost::scoped_array<char> path(new char[bufsize]);
+        int r;
+        while ((r = _NSGetExecutablePath(path.get(), &bufsize)) != 0) {
+            path.reset(new char[bufsize]);
+        }
+        string pathStr(path.get());
+        return pathStr;
+    }
+
     void ProcessInfo::getExtraInfo(BSONObjBuilder& info) {
         struct task_events_info taskInfo;
         mach_msg_type_number_t taskInfoCount = TASK_EVENTS_INFO_COUNT;
@@ -159,6 +173,7 @@ namespace mongo {
         addrSize = (getSysctlByName< NumberVal >( "hw.cpu64bit_capable" ) ? 64 : 32);
         memSize = getSysctlByName< NumberVal >( "hw.memsize" );
         numCores = getSysctlByName< NumberVal >( "hw.ncpu" ); // includes hyperthreading cores
+        pageSize = static_cast<unsigned long long>(sysconf( _SC_PAGESIZE ));
         cpuArch = getSysctlByName< string >( "hw.machine" );
         hasNuma = checkNumaEnabled();
         

@@ -19,50 +19,44 @@
 #include "mongo/db/curop.h"
 #include "mongo/db/interrupt_status.h"
 #include "mongo/db/storage/env.h"
-#include "mongo/db/storage/loader.h"
+#include "mongo/db/storage/builder.h"
 
 namespace mongo {
 
     namespace storage {
 
-        Loader::Loader(DB *db) :
-            _db(db), _loader(NULL),
-            _poll_extra(cc()), _closed(false) {
+        // TODO: Use a command line option for LOADER_COMPRESS_INTERMEDIATES
+
+        Loader::Loader(DB **dbs, const int n) :
+            _dbs(dbs), _n(n),
+            _loader(NULL), _closed(false) {
 
             uint32_t db_flags = 0;
             uint32_t dbt_flags = 0;
-            // TODO: Use a command line option for LOADER_COMPRESS_INTERMEDIATES
             const int loader_flags = 0; 
             int r = storage::env->create_loader(storage::env, cc().txn().db_txn(),
-                                                &_loader, _db, 1, &_db,
+                                                &_loader, _dbs[0], _n, _dbs,
                                                 &db_flags, &dbt_flags, loader_flags);
             if (r != 0) {
                 handle_ydb_error(r);
             }
-            r = _loader->set_poll_function(_loader, poll_function, &_poll_extra);
+            r = _loader->set_poll_function(_loader, BuilderBase::poll_function, &_poll_extra);
             if (r != 0) {
-                handle_ydb_error(r);
+                handle_ydb_error_fatal(r);
+            }
+            r = _loader->set_error_callback(_loader, BuilderBase::error_callback, &_error_extra);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
             }
         }
 
         Loader::~Loader() {
             if (!_closed && _loader != NULL) {
-                int r = _loader->abort(_loader);
+                const int r = _loader->abort(_loader);
                 if (r != 0) {
                     problem() << "storage::~Loader, failed to close DB_LOADER, error: "
                               << r << endl;
                 }
-            }
-        }
-
-        int Loader::poll_function(void *extra, float progress) {
-            poll_function_extra *info = static_cast<poll_function_extra *>(extra);
-            try {
-                killCurrentOp.checkForInterrupt(info->c); // uasserts if we should stop
-                return 0;
-            } catch (std::exception &e) {
-                info->ex = &e;
-                return -1;
             }
         }
 
@@ -72,13 +66,18 @@ namespace mongo {
 
         int Loader::close() {
             const int r = _loader->close(_loader);
+
+            // Doesn't matter if the close succeeded or not. It's dead to us now.
+            _closed = true;
             if (r == -1) {
-                verify(_poll_extra.ex != NULL);
-                throw *_poll_extra.ex;
+                _poll_extra.throwException();
             }
-            if (r == 0) {
-                _closed = true;
-            }
+            // Forward any callback-generated exception. Could be an error
+            // from the error callback or an interrupt from the poll function.
+            uassert( 16860, _error_extra.errmsg, _error_extra.errmsg.empty() );
+            // Any other non-zero error code that didn't trigger the error
+            // callback or come from the poll function should be handled
+            // in some generic fashion by the caller.
             return r;
         }
 

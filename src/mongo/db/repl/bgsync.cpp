@@ -353,11 +353,8 @@ namespace mongo {
 
                     verify(!theReplSet->isPrimary());
 
-                    {
-                        boost::unique_lock<boost::mutex> lock(_mutex);
-                        if (!_currentSyncTarget || !_currentSyncTarget->hbinfo().hbstate.readable()) {
-                            return 0;
-                        }
+                    if (shouldChangeSyncTarget()) {
+                        return 0;
                     }
 
                     r.more();
@@ -429,13 +426,9 @@ namespace mongo {
                 }
             } // end while
 
-            {
-                boost::unique_lock<boost::mutex> lock(_mutex);
-                if (!_currentSyncTarget || !_currentSyncTarget->hbinfo().hbstate.readable()) {
-                    return 0;
-                }
+            if (shouldChangeSyncTarget()) {
+                return 0;
             }
-
 
             r.tailCheck();
             if( !r.haveCursor() ) {
@@ -446,6 +439,19 @@ namespace mongo {
             // looping back is ok because this is a tailable cursor
         }
         return 0;
+    }
+
+    bool BackgroundSync::shouldChangeSyncTarget() {
+        boost::unique_lock<boost::mutex> lock(_mutex);
+
+        // is it even still around?
+        if (!_currentSyncTarget || !_currentSyncTarget->hbinfo().hbstate.readable()) {
+            return true;
+        }
+
+        // check other members: is any member's optime more than 30 seconds ahead of the guy we're
+        // syncing from?
+        return theReplSet->shouldChangeSyncTarget(_currentSyncTarget->hbinfo().opTime);
     }
 
     bool BackgroundSync::isStale(OplogReader& r, BSONObj& remoteOldestOp) {

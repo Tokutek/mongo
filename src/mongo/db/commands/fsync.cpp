@@ -1,12 +1,36 @@
 // fsync.cpp
 
+/**
+*    Copyright (C) 2012 10gen Inc.
+*
+*    This program is free software: you can redistribute it and/or  modify
+*    it under the terms of the GNU Affero General Public License, version 3,
+*    as published by the Free Software Foundation.
+*
+*    This program is distributed in the hope that it will be useful,
+*    but WITHOUT ANY WARRANTY; without even the implied warranty of
+*    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*    GNU Affero General Public License for more details.
+*
+*    You should have received a copy of the GNU Affero General Public License
+*    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 #include "mongo/pch.h"
 
 #include "mongo/db/commands/fsync.h"
 
+#include <string>
+#include <vector>
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/client.h"
+#include "mongo/db/jsobj.h"
 #include "mongo/util/background.h"
 
 namespace mongo {
@@ -53,6 +77,13 @@ namespace mongo {
         virtual OpSettings getOpSettings() const { return OpSettings(); }
         virtual bool adminOnly() const { return true; }
         virtual void help(stringstream& h) const { h << url(); }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::fsync);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
 
             if (Lock::isLocked()) {
@@ -62,7 +93,6 @@ namespace mongo {
 
             bool sync = !cmdObj["async"].trueValue(); // async means do an fsync, but return immediately
             bool lock = cmdObj["lock"].trueValue();
-            log() << "CMD fsync: sync:" << sync << " lock:" << lock << endl;
             if( lock ) {
                 if ( ! sync ) {
                     errmsg = "fsync: sync option must be true when using lock";
@@ -92,11 +122,11 @@ namespace mongo {
                 // the simple fsync command case
                 if (sync) {
                     Lock::GlobalWrite w; // can this be GlobalRead? and if it can, it should be nongreedy.
-                    problem() << " flushAll/commitNow not implemented, doing nothing!" << endl;
+                    DEV LOG(0) << "in fsync: flushAll/commitNow not implemented, doing nothing!" << endl;
                 }
                 // question : is it ok this is not in the dblock? i think so but this is a change from past behavior, 
                 // please advise.
-                problem() << " number of files flushed not known, arbitrarily reporting 1!" << endl;
+                DEV LOG(0) << "in fsync: number of files flushed not known, arbitrarily reporting 1!" << endl;
                 result.append( "numFiles" , 1 );
             }
             return 1;

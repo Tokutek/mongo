@@ -50,6 +50,7 @@ var conn = st.s;
 // Wait until the ReplicaSetMonitor refreshes its view and see the tags
 ReplSetTest.awaitRSClientHosts( conn, primaryNode,
         { ok: true, tags: PRI_TAG }, replTest.name );
+replTest.awaitReplication();
 
 jsTest.log( 'connpool: ' + tojson(conn.getDB('admin').runCommand({ connPoolStats: 1 })));
 

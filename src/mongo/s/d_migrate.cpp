@@ -23,27 +23,32 @@
    mostly around shard management and checking
  */
 
-
+#include <algorithm>
 #include <map>
 #include <string>
-#include <algorithm>
+#include <vector>
 
 #include <boost/thread/thread.hpp>
 
 #include "mongo/pch.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/database.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/hasher.h"
 #include "mongo/db/cmdline.h"
-#include "mongo/db/queryoptimizer.h"
+#include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/repl.h"
+#include "mongo/db/repl/rs.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/insert.h"
@@ -58,6 +63,7 @@
 #include "mongo/util/startup_test.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/ramlog.h"
+#include "mongo/util/elapsed_tracker.h"
 
 #include "mongo/s/shard.h"
 #include "mongo/s/d_logic.h"
@@ -442,13 +448,13 @@ namespace mongo {
 
         void writeObjToMigrateLog(BSONObj &obj) {
             Client::ReadContext ctx(MIGRATE_LOG_NS);
-            insertOneObject(_migrateLogDetails, NULL, obj,
+            insertOneObject(_migrateLogDetails, obj,
                             NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         }
 
         void writeObjToMigrateLogRef(BSONObj &obj) {
             Client::ReadContext ctx(MIGRATE_LOG_REF_NS);
-            insertOneObject(_migrateLogRefDetails, NULL, obj,
+            insertOneObject(_migrateLogRefDetails, obj,
                             NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         }
 
@@ -566,7 +572,8 @@ namespace mongo {
                 bool empty = true;
                 for (; _cc->ok(); _cc->advance()) {
                     BSONObj obj = _cc->current();
-                    if (result.len() + obj.objsize() + 1024 >= BSONObjMaxUserSize) {
+                    if (a.arrSize() > 0 &&
+                        result.len() + obj.objsize() + 1024 >= BSONObjMaxUserSize) {
                         // have to do another batch after this
                         break;
                     }
@@ -676,7 +683,7 @@ namespace mongo {
                                                         OID::gen().toString()).c_str());
 
         if (!noauth) {
-            cc().getAuthenticationInfo()->authorize("local", internalSecurity.user);
+            cc().getAuthorizationManager()->grantInternalAuthorization("_cleanupOldData");
         }
 
         log() << " (start) waiting to cleanup " << cleanup
@@ -754,7 +761,13 @@ namespace mongo {
     class TransferModsCommand : public ChunkCommandHelper {
     public:
         TransferModsCommand() : ChunkCommandHelper( "_transferMods" ) {}
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_transferMods);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             return migrateFromStatus.transferMods( errmsg, result );
         }
@@ -764,7 +777,13 @@ namespace mongo {
     class InitialCloneCommand : public ChunkCommandHelper {
     public:
         InitialCloneCommand() : ChunkCommandHelper( "_migrateClone" ) {}
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_migrateClone);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             return migrateFromStatus.clone( errmsg, result );
         }
@@ -793,6 +812,13 @@ namespace mongo {
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::moveChunk);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
 
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             // 1. parse options
@@ -1329,18 +1355,10 @@ namespace mongo {
                 c.min = min.getOwned();
                 c.max = max.getOwned();
                 c.shardKeyPattern = shardKeyPattern.getOwned();
-                ClientCursor::find( ns , c.initial );
-                if ( c.initial.size() ) {
-                    log() << "forking for cleaning up chunk data" << migrateLog;
-                    boost::thread t( boost::bind( &cleanupOldData , c ) );
-                }
-                else {
-                    log() << "doing delete inline" << migrateLog;
-                    // 7.
-                    c.doRemove();
-                }
-
-
+                // Vanilla MongoDB checks for cursors in the chunk, and if any exist, it starts a background thread that waits for those cursors to leave before doing the delete.
+                // We have MVCC so we don't need to wait, we can just do the delete.
+                // TODO: get rid of the OldDataCleanup class and just do the removeRange right here.
+                c.doRemove();
             }
             timing.done(6);
 
@@ -1410,11 +1428,10 @@ namespace mongo {
             verify( ! min.isEmpty() );
             verify( ! max.isEmpty() );
             
-            slaveCount = ( getSlaveCount() / 2 ) + 1;
+            replSetMajorityCount = theReplSet ? theReplSet->config().getMajority() : 0;
 
             log() << "starting receiving-end of migration of chunk " << min << " -> " << max <<
-                    " for collection " << ns << " from " << from <<
-                    " (" << getSlaveCount() << " slaves detected)" << endl;
+                    " for collection " << ns << " from " << from << endl;
 
             string errmsg;
             MoveTimingHelper timing( "to" , ns , min , max , 5 /* steps */ , errmsg );
@@ -1592,7 +1609,15 @@ namespace mongo {
                 // 5. wait for commit
 
                 state = STEADY;
+                bool transferAfterCommit = false;
                 while ( state == STEADY || state == COMMIT_START ) {
+
+                    // Make sure we do at least one transfer after recv'ing the commit message
+                    // If we aren't sure that at least one transfer happens *after* our state
+                    // changes to COMMIT_START, there could be mods still on the FROM shard that
+                    // got logged *after* our _transferMods but *before* the critical section.
+                    if ( state == COMMIT_START ) transferAfterCommit = true;
+
                     BSONObj res;
                     if ( ! conn->runCommand( "admin" , BSON( "_transferMods" << 1 ) , res ) ) {
                         log() << "_transferMods failed in STEADY state: " << res << migrateLog;
@@ -1612,12 +1637,16 @@ namespace mongo {
                         return;
                     }
 
-                    if ( state == COMMIT_START ) {
+                    // We know we're finished when:
+                    // 1) The from side has told us that it has locked writes (COMMIT_START)
+                    // 2) We've checked at least one more time for un-transmitted mods
+                    if ( state == COMMIT_START && transferAfterCommit == true ) {
                         if ( flushPendingWrites( lastGTID ) )
                             break;
                     }
 
-                    sleepmillis( 10 );
+                    // Only sleep if we aren't committing
+                    if ( state == STEADY ) sleepmillis( 10 );
                 }
 
                 if ( state == FAIL ) {
@@ -1687,12 +1716,12 @@ namespace mongo {
             // if replication is on, try to force enough secondaries to catch up
             // TODO opReplicatedEnough should eventually honor priorities and geo-awareness
             //      for now, we try to replicate to a sensible number of secondaries
-            return mongo::opReplicatedEnough( lastGTID , slaveCount );
+            return mongo::opReplicatedEnough( lastGTID , replSetMajorityCount );
         }
 
         bool flushPendingWrites( const GTID& lastGTID ) {
             if ( ! opReplicatedEnough( lastGTID ) ) {
-                OCCASIONALLY warning() << "migrate commit waiting for " << slaveCount 
+                OCCASIONALLY warning() << "migrate commit waiting for " << replSetMajorityCount 
                                        << " slaves for '" << ns << "' " << min << " -> " << max 
                                        << " waiting for: " << lastGTID.toString()
                                        << migrateLog;
@@ -1773,7 +1802,7 @@ namespace mongo {
         long long numCatchup;
         long long numSteady;
 
-        int slaveCount;
+        int replSetMajorityCount;
 
         enum State { READY , CLONE , CATCHUP , STEADY , COMMIT_START , DONE , FAIL , ABORT } state;
         string errmsg;
@@ -1784,7 +1813,7 @@ namespace mongo {
         Client::initThread( "migrateThread" );
         if (!noauth) {
             ShardedConnectionInfo::addHook();
-            cc().getAuthenticationInfo()->authorize("local", internalSecurity.user);
+            cc().getAuthorizationManager()->grantInternalAuthorization("_migrateThread");
         }
         migrateStatus.go();
         cc().shutdown();
@@ -1795,7 +1824,13 @@ namespace mongo {
         RecvChunkStartCommand() : ChunkCommandHelper( "_recvChunkStart" ) {}
 
         virtual LockType locktype() const { return WRITE; }  // this is so don't have to do locking internally
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_recvChunkStart);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
 
             if ( migrateStatus.getActive() ) {
@@ -1850,7 +1885,13 @@ namespace mongo {
     class RecvChunkStatusCommand : public ChunkCommandHelper {
     public:
         RecvChunkStatusCommand() : ChunkCommandHelper( "_recvChunkStatus" ) {}
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_recvChunkStatus);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             migrateStatus.status( result );
             return 1;
@@ -1861,7 +1902,13 @@ namespace mongo {
     class RecvChunkCommitCommand : public ChunkCommandHelper {
     public:
         RecvChunkCommitCommand() : ChunkCommandHelper( "_recvChunkCommit" ) {}
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_recvChunkCommit);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             bool ok = migrateStatus.startCommit();
             migrateStatus.status( result );
@@ -1873,7 +1920,13 @@ namespace mongo {
     class RecvChunkAbortCommand : public ChunkCommandHelper {
     public:
         RecvChunkAbortCommand() : ChunkCommandHelper( "_recvChunkAbort" ) {}
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_recvChunkAbort);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             migrateStatus.abort();
             migrateStatus.status( result );

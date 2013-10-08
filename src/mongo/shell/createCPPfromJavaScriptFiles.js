@@ -24,15 +24,7 @@
 
 var whitespace = " \t";
 function cppEscape( s ) {
-    for ( var i = 0, len = s.length; i < len; ++i ) {
-        if ( whitespace.indexOf( s.charAt( i ) ) === -1 ) {
-            s = s.substring( i );
-            break;
-        }
-    }
-    if ( i == len )
-        return "";
-    for ( i = s.length - 1; i >= 0; --i ) {
+    for ( var i = s.length - 1; i >= 0; --i ) {
         if ( whitespace.indexOf( s.charAt( i ) ) === -1 ) {
             s = s.substr( 0, i + 1 );
             break;
@@ -101,5 +93,9 @@ var shell = new ActiveXObject( "WScript.Shell" );
 shell.CurrentDirectory = WScript.Arguments.Unnamed.Item( 0 );
 
 var fso = new ActiveXObject( "Scripting.FileSystemObject" );
-rebuildIfNeeded( fso, "shell/mongo.cpp", ["shell/utils.js", "shell/utils_sh.js", "shell/db.js", "shell/mongo.js", "shell/mr.js", "shell/query.js", "shell/collection.js"] );
-rebuildIfNeeded( fso, "shell/mongo-server.cpp", ["shell/servers.js", "shell/shardingtest.js", "shell/servers_misc.js", "shell/replsettest.js", "shell/replsetbridge.js"] );
+rebuildIfNeeded(fso, "shell/mongo.cpp", ["shell/assert.js", "shell/types.js", "shell/utils.js", "shell/utils_sh.js",
+                                         "shell/db.js", "shell/mongo.js", "shell/mr.js",
+                                         "shell/query.js", "shell/collection.js"]);
+rebuildIfNeeded(fso, "shell/mongo-server.cpp", ["shell/servers.js", "shell/shardingtest.js",
+                                                "shell/servers_misc.js", "shell/replsettest.js",
+                                                "shell/replsetbridge.js"]);

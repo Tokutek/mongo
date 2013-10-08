@@ -34,11 +34,11 @@ namespace mongo {
         md5(str, strlen(str), digest);
     }
     
-    inline std::string digestToString( md5digest digest ){
+    inline std::string digestToString( const md5digest digest ){
         static const char * letters = "0123456789abcdef";
         stringstream ss;
         for ( int i=0; i<16; i++){
-            unsigned char c = digest[i];
+            const unsigned char c = digest[i];
             ss << letters[ ( c >> 4 ) & 0xf ] << letters[ c & 0xf ];
         }
         return ss.str();

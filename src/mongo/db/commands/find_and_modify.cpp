@@ -1,6 +1,7 @@
 // find_and_modify.cpp
 
 /**
+*    Copyright (C) 2012 10gen Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -16,13 +17,16 @@
 */
 
 #include "mongo/pch.h"
+
+#include "mongo/db/commands/find_and_modify.h"
+
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
-#include "../queryutil.h"
+#include "mongo/db/queryutil.h"
 #include "mongo/db/relock.h"
 
 namespace mongo {
@@ -46,8 +50,19 @@ namespace mongo {
         virtual bool requiresSync() const { return true; }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return DB_SERIALIZABLE; }
-        virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual OpSettings getOpSettings() const {
+            // We set justOne to true because findAndModify modifies at most one document.
+            OpSettings settings;
+            settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
+            settings.setJustOne(true);
+            return settings;
+        }
         
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            find_and_modify::addPrivilegesRequiredForFindAndModify(dbname, cmdObj, out);
+        }
         /* this will eventually replace run,  once sort is handled */
         bool runNoDirectClient( const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             verify( cmdObj["sort"].eoo() );

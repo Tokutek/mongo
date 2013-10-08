@@ -111,6 +111,8 @@ namespace mongo {
         // throws a RollbackOplogException
         void runRollback(OplogReader& r, uint64_t oplogTS);
         void getOplogReader(OplogReader& r);
+        // Evaluate if the current sync target is still good
+        bool shouldChangeSyncTarget();
         // check latest GTID against the remote's earliest GTID, filling in remoteOldestOp.
         bool isStale(OplogReader& r, BSONObj& remoteOldestOp);
 

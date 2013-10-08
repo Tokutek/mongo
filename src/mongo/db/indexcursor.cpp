@@ -150,59 +150,22 @@ namespace mongo {
 
     /* ---------------------------------------------------------------------- */
 
-    // Cursor for findOne queries, justOne deletes, !multi updates, etc.
-    // Skip prelocking, get row locks on getf if necessary, and don't prefetch.
-    class FindOneCursor : public IndexCursor {
-    public:
-        FindOneCursor( NamespaceDetails *d, const IndexDetails &idx,
-                       const BSONObj &startKey, const BSONObj &endKey,
-                       bool endKeyInclusive, int direction ) :
-            IndexCursor( d, idx, startKey, endKey, endKeyInclusive, direction, 1 ) {
-        }
-        FindOneCursor( NamespaceDetails *d, const IndexDetails &idx,
-                       const shared_ptr< FieldRangeVector > &bounds,
-                       int singleIntervalLimit, int direction ) :
-            IndexCursor( d, idx, bounds, singleIntervalLimit, direction, 1 ) {
-        }
-        void prelock() {
-        }
-        int cursor_flags() {
-            return 0;
-        }
-        int getf_flags() {
-            const int idxCursorFlags = IndexCursor::cursor_flags();
-            return idxCursorFlags | DBC_DISABLE_PREFETCHING;
-        }
-    };
-
-    /* ---------------------------------------------------------------------- */
-
     shared_ptr<IndexCursor> IndexCursor::make( NamespaceDetails *d, const IndexDetails &idx,
                                                const BSONObj &startKey, const BSONObj &endKey,
                                                bool endKeyInclusive, int direction,
                                                int numWanted ) {
-        if (cc().opSettings().getJustOne() || numWanted == 1) {
-            return shared_ptr<IndexCursor>( new FindOneCursor( d, idx, startKey, endKey,
-                                                               endKeyInclusive, direction ) );
-        } else {
-            return shared_ptr<IndexCursor>( new IndexCursor( d, idx, startKey, endKey,
-                                                             endKeyInclusive, direction,
-                                                             numWanted ) );
-        }
+        return shared_ptr<IndexCursor>( new IndexCursor( d, idx, startKey, endKey,
+                                                         endKeyInclusive, direction,
+                                                         numWanted ) );
     }
 
     shared_ptr<IndexCursor> IndexCursor::make( NamespaceDetails *d, const IndexDetails &idx,
                                                const shared_ptr< FieldRangeVector > &bounds,
                                                int singleIntervalLimit, int direction,
                                                int numWanted ) {
-        if (cc().opSettings().getJustOne() || numWanted == 1) {
-            return shared_ptr<IndexCursor>( new FindOneCursor( d, idx, bounds,
-                                                               singleIntervalLimit, direction ) );
-        } else {
-            return shared_ptr<IndexCursor>( new IndexCursor( d, idx, bounds,
-                                                             singleIntervalLimit, direction,
-                                                             numWanted ) );
-        }
+        return shared_ptr<IndexCursor>( new IndexCursor( d, idx, bounds,
+                                                         singleIntervalLimit, direction,
+                                                         numWanted ) );
     }
 
     IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
@@ -211,16 +174,16 @@ namespace mongo {
         _d(d),
         _idx(idx),
         _ordering(Ordering::make(_idx.keyPattern())),
-        _startKey(_idx.getSpec().getType() ?
-                _idx.getSpec().getType()->fixKey( startKey ) : startKey),
-        _endKey(_idx.getSpec().getType() ?
-                _idx.getSpec().getType()->fixKey( endKey ) : endKey),
+        _startKey(startKey),
+        _endKey(endKey),
         _endKeyInclusive(endKeyInclusive),
         _multiKey(_d->isMultikey(_d->idxNo(_idx))),
         _direction(direction),
         _bounds(),
+        _boundsMustMatch(true),
         _nscanned(0),
-        _numWanted(numWanted),
+        _nscannedObjects(0),
+        _prelock(!cc().opSettings().getJustOne() && numWanted == 0),
         _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
@@ -243,8 +206,10 @@ namespace mongo {
         _multiKey(_d->isMultikey(_d->idxNo(_idx))),
         _direction(direction),
         _bounds(bounds),
+        _boundsMustMatch(true),
         _nscanned(0),
-        _numWanted(numWanted),
+        _nscannedObjects(0),
+        _prelock(!cc().opSettings().getJustOne() && numWanted == 0),
         _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
@@ -260,6 +225,8 @@ namespace mongo {
     }
 
     IndexCursor::~IndexCursor() {
+        // Book-keeping for index access patterns.
+        _idx.noteQuery(_nscanned, _nscannedObjects);
     }
 
     int IndexCursor::cursor_getf(const DBT *key, const DBT *val, void *extra) {
@@ -278,8 +245,8 @@ namespace mongo {
                 }
             }
             return 0;
-        } catch (std::exception &e) {
-            info->ex = &e;
+        } catch (const std::exception &ex) {
+            info->saveException(ex);
         }
         return -1;
     }
@@ -332,7 +299,7 @@ namespace mongo {
         DBT end = eKey.dbt();
 
         DBC *cursor = _cursor.dbc();
-        const int r = cursor->c_pre_acquire_range_lock( cursor, &start, &end );
+        const int r = cursor->c_set_bounds( cursor, &start, &end, true, 0 );
         if ( r != 0 ) {
             storage::handle_ydb_error(r);
         }
@@ -402,7 +369,7 @@ namespace mongo {
     // transactions, serializable cursors, and RMW (write) cursors.
     //
     // If row locks are to be acquired, we _must_ prelock here, since we
-    // pass DB_PRELOCKED to cursor operations.
+    // pass DB_PRELOCKED | DB_PRELOCKED_WRITE to cursor operations.
     //
     // We would ideally use the ydb prelocking API to prelock each interval
     // as we iterated (via advance()), because there may be multiple intervals
@@ -432,8 +399,10 @@ namespace mongo {
     }
 
     void IndexCursor::initializeDBC() {
-        // We need to prelock first, then position the cursor.
-        prelock();
+        if (_prelock) {
+            // We need to prelock first, then position the cursor.
+            prelock();
+        }
 
         if ( _bounds != NULL ) {
             const int r = skipToNextKey( _startKey );
@@ -452,26 +421,28 @@ namespace mongo {
     }
 
     int IndexCursor::cursor_flags() {
-        QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
-        switch ( mode ) {
-            // All locks are grabbed up front, during initializeDBC().
-            // These flags determine the type of lock. Serializable
-            // gets you a read lock. Both serializable and rmw gets
-            // you a write lock.
-            case WRITE_LOCK_CURSOR:
-                return DB_SERIALIZABLE | DB_RMW;
-            case READ_LOCK_CURSOR:
-                return DB_SERIALIZABLE;
-            default:
-                return 0;
+        if (_prelock) {
+            QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
+            switch ( mode ) {
+                // These flags determine the type of lock. Serializable
+                // gets you a read lock. Both serializable and rmw gets
+                // you a write lock.
+                case WRITE_LOCK_CURSOR:
+                    return DB_SERIALIZABLE | DB_RMW;
+                case READ_LOCK_CURSOR:
+                    return DB_SERIALIZABLE;
+                default:
+                    return 0;
+            }
         }
+        return 0;
     }
 
     int IndexCursor::getf_flags() {
-        // Since all locktree locks are acquired on cursor creation,
-        // we should pass DB_PRELOCKED (see cursor_flags()).
-        const int lockFlags = DB_PRELOCKED;
-        const int prefetchFlags = _numWanted > 0 ? DBC_DISABLE_PREFETCHING : 0;
+        // Prelocked cursors do not need locks on getf().
+        // Prelocked cursors should prefetch.
+        const int lockFlags = _prelock ? (DB_PRELOCKED | DB_PRELOCKED_WRITE) : 0;
+        const int prefetchFlags = _prelock ? 0 : DBC_DISABLE_PREFETCHING;
         return lockFlags | prefetchFlags;
     }
 
@@ -536,6 +507,7 @@ namespace mongo {
             throw *extra.ex;
         }
         if ( r != 0 && r != DB_NOTFOUND ) {
+            extra.throwException();
             storage::handle_ydb_error(r);
         }
 
@@ -557,10 +529,19 @@ namespace mongo {
                 ++_nscanned;
             }
         } else {
-            long long startNscanned = _nscanned;
+            // If nscanned is increased by more than 20 before a matching key is found, abort
+            // skipping through the index to find a matching key.  This iteration cutoff
+            // prevents unbounded internal iteration within IndexCursor::initializeDBC and
+            // IndexCursor::advance(). See SERVER-3448.
+            const long long startNscanned = _nscanned;
             if ( skipOutOfRangeKeysAndCheckEnd() ) {
                 do {
                     if ( _nscanned > startNscanned + 20 ) {
+                        // If iteration is aborted before a key matching _bounds is identified, the
+                        // cursor may be left pointing at a key that is not within bounds
+                        // (_bounds->matchesKey( currKey() ) may be false).  Set _boundsMustMatch to
+                        // false accordingly.
+                        _boundsMustMatch = false;
                         break;
                     }
                 } while ( skipOutOfRangeKeysAndCheckEnd() );
@@ -721,6 +702,7 @@ again:      while ( !allInclusive && ok() ) {
             throw *extra.ex;
         }
         if ( r != 0 && r != DB_NOTFOUND ) {
+            extra.throwException();
             storage::handle_ydb_error(r);
         }
 
@@ -729,6 +711,10 @@ again:      while ( !allInclusive && ok() ) {
     }
 
     void IndexCursor::_advance() {
+        // Reset this flag at the start of a new iteration.
+        // See IndexCursor::checkCurrentAgainstBounds()
+        _boundsMustMatch = true;
+
         // first try to get data from the bulk fetch buffer
         _ok = _buffer.next();
         // if there is not data remaining in the bulk fetch buffer,
@@ -782,6 +768,7 @@ again:      while ( !allInclusive && ok() ) {
         // If the index is not clustering, _currObj starts as empty and gets filled
         // with the full document on the first call to current().
         if ( _currObj.isEmpty() ) {
+            _nscannedObjects++;
             bool found = _d->findByPK( _currPK, _currObj );
             if ( !found ) {
                 // If we didn't find the associated object, we must be either:
@@ -806,6 +793,16 @@ again:      while ( !allInclusive && ok() ) {
             return b.obj();
         }
         return _currObj;
+    }
+
+    bool IndexCursor::currentMatches( MatchDetails *details ) {
+         // If currKey() might not match the specified _bounds, check whether or not it does.
+         if ( !_boundsMustMatch && _bounds && !_bounds->matchesKey( currKey() ) ) {
+             // If the key does not match _bounds, it does not match the query.
+             return false;
+         }
+         // Forward to the base class implementation, which may utilize a Matcher.
+         return Cursor::currentMatches( details );
     }
 
     string IndexCursor::toString() const {

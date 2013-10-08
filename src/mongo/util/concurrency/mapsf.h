@@ -1,5 +1,23 @@
 #pragma once
 
+/**
+*    Copyright (C) 2012 10gen Inc.
+*
+*    This program is free software: you can redistribute it and/or  modify
+*    it under the terms of the GNU Affero General Public License, version 3,
+*    as published by the Free Software Foundation.
+*
+*    This program is distributed in the hope that it will be useful,
+*    but WITHOUT ANY WARRANTY; without even the implied warranty of
+*    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*    GNU Affero General Public License for more details.
+*
+*    You should have received a copy of the GNU Affero General Public License
+*    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include "mongo/platform/unordered_map.h"
+
 namespace mongo {
 
     /** Thread safe map.  
@@ -25,11 +43,11 @@ namespace mongo {
     template< class K, class V >
     struct mapsf : boost::noncopyable {
         SimpleMutex m;
-        map<K,V> val;
+        unordered_map<K,V> val;
         friend struct ref;
     public:
         mapsf() : m("mapsf") { }
-        void swap(map<K,V>& rhs) {
+        void swap(unordered_map<K,V>& rhs) {
             SimpleMutex::scoped_lock lk(m);
             val.swap(rhs);
         }
@@ -40,7 +58,7 @@ namespace mongo {
         // safe as we pass by value:
         V get(K k) { 
             SimpleMutex::scoped_lock lk(m);
-            typename map<K,V>::iterator i = val.find(k);
+            typename unordered_map<K,V>::iterator i = val.find(k);
             if( i == val.end() )
                 return V();
             return i->second;
@@ -50,7 +68,7 @@ namespace mongo {
         struct ref {
             SimpleMutex::scoped_lock lk;
         public:
-            map<K,V> &r;
+            unordered_map<K,V> &r;
             ref(mapsf<K,V> &m) : lk(m.m), r(m.val) { }
             V& operator[](const K& k) { return r[k]; }
         };

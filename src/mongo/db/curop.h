@@ -41,7 +41,21 @@ namespace mongo {
         bool vetoLog( const CurOp& curop ) const;
         
         string report( const CurOp& curop ) const;
-        void append( const CurOp& curop, BSONObjBuilder& b ) const;
+
+        /**
+         * Appends stored data and information from curop to the builder.
+         *
+         * @param curop information about the current operation which will be
+         *     use to append data to the builder.
+         * @param builder the BSON builder to use for appending data. Data can
+         *     still be appended even if this method returns false.
+         * @param maxSize the maximum allowed combined size for the query object
+         *     and update object
+         *
+         * @return false if the sum of the sizes for the query object and update
+         *     object exceeded maxSize
+         */
+        bool append(const CurOp& curop, BSONObjBuilder& builder, size_t maxSize) const;
 
         // -------------------
         
@@ -73,6 +87,7 @@ namespace mongo {
 
         // error handling
         ExceptionInfo exceptionInfo;
+        BSONObj lockNotGrantedInfo;
         
         // response info
         int executionTime;
@@ -103,8 +118,8 @@ namespace mongo {
 
         void set( const BSONObj& o ) {
             scoped_spinlock lk(_lock);
-            int sz = o.objsize();
-            if ( sz > (int) sizeof(_buf) ) {
+            size_t sz = o.objsize();
+            if ( sz > sizeof(_buf) ) {
                 _reset(TOO_BIG_SENTINEL);
             }
             else {
@@ -154,7 +169,7 @@ namespace mongo {
         ~CurOp();
 
         bool haveQuery() const { return _query.have(); }
-        BSONObj query() { return _query.get();  }
+        BSONObj query() const { return _query.get();  }
         void appendQuery( BSONObjBuilder& b , const StringData& name ) const { _query.append( b , name ); }
         
         void ensureStarted();
@@ -203,7 +218,6 @@ namespace mongo {
         void setQuery(const BSONObj& query) { _query.set( query ); }
         Client * getClient() const { return _client; }
         BSONObj info();
-        BSONObj infoNoauth();
         string getRemoteString( bool includePort = true ) { return _remote.toString(includePort); }
         ProgressMeter& setMessage( const char * msg , unsigned long long progressMeterTotal = 0 , int secondsBetween = 3 );
         string getMessage() const { return _message.toString(); }
@@ -265,14 +279,12 @@ namespace mongo {
         /** @return true if global interrupt and should terminate the operation */
         bool globalInterruptCheck() const { return _globalKill; }
 
-        /**
-         * @param heedMutex if true and have a write lock, won't kill op since it might be unsafe
-         */
-        void checkForInterrupt( bool heedMutex = true );
+        void checkForInterrupt();
         void checkForInterrupt( Client &c );
 
         /** @return "" if not interrupted.  otherwise, you should stop. */
         const char *checkForInterruptNoAssert();
+        const char *checkForInterruptNoAssert(Client &c);
 
         // increments _killForTransition, thereby making
         // checkForInterrupt uassert and kill operations
@@ -291,7 +303,7 @@ namespace mongo {
 
     private:
         void interruptJs( AtomicUInt *op );
-        void _checkForInterrupt( Client &c, bool heedMutex );
+        void _checkForInterrupt( Client &c );
         volatile bool _globalKill;
         // number of threads that want operations killed
         // because there will be a state transition

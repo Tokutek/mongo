@@ -82,16 +82,6 @@ namespace mongo {
         return _progressMeter;
     }
 
-
-    BSONObj CurOp::info() {
-        if( ! cc().getAuthenticationInfo()->isAuthorized("admin") ) {
-            BSONObjBuilder b;
-            b.append("err", "unauthorized");
-            return b.obj();
-        }
-        return infoNoauth();
-    }
-
     CurOp::~CurOp() {
         if ( _wrapped ) {
             scoped_lock bl(Client::clientsMutex);
@@ -122,7 +112,7 @@ namespace mongo {
         }
     }
 
-    BSONObj CurOp::infoNoauth() {
+    BSONObj CurOp::info() {
         BSONObjBuilder b;
         b.append("opid", _opNum);
         bool a = _active && _start;
@@ -148,6 +138,7 @@ namespace mongo {
                 b.append( "threadId" , _client->_threadId );
             if ( _client->_connectionId )
                 b.appendNumber( "connectionId" , _client->_connectionId );
+            b.appendNumber( "rootTxnid" , _client->rootTransactionId() );
             _client->_ls.reportState(b);
         }
         
@@ -174,17 +165,15 @@ namespace mongo {
         return b.obj();
     }
 
-    void KillCurrentOp::checkForInterrupt( bool heedMutex ) {
-        return _checkForInterrupt( cc(), heedMutex );
+    void KillCurrentOp::checkForInterrupt() {
+        return _checkForInterrupt( cc() );
     }
 
     void KillCurrentOp::checkForInterrupt( Client &c ) {
-        return _checkForInterrupt( c, false );
+        return _checkForInterrupt( c );
     }
 
-    void KillCurrentOp::_checkForInterrupt( Client &c, bool heedMutex ) {
-        if ( heedMutex && Lock::somethingWriteLocked() && c.hasWrittenThisPass() )
-            return;
+    void KillCurrentOp::_checkForInterrupt( Client &c ) {
         if (_killForTransition > 0) {
             uasserted(16809, "interrupted due to state transition");
         }
@@ -197,6 +186,10 @@ namespace mongo {
     
     const char * KillCurrentOp::checkForInterruptNoAssert() {
         Client& c = cc();
+        return checkForInterruptNoAssert(c);
+    }
+
+    const char * KillCurrentOp::checkForInterruptNoAssert(Client &c) {
         if (_killForTransition > 0) {
             return "interrupted due to state transition";
         }

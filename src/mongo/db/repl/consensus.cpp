@@ -28,6 +28,13 @@ namespace mongo {
     class CmdReplSetFresh : public ReplSetCommand {
     public:
         CmdReplSetFresh() : ReplSetCommand("replSetFresh") { }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::replSetFresh);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
     private:
 
         bool shouldVeto(const BSONObj& cmdObj, string& errmsg) {
@@ -114,6 +121,13 @@ namespace mongo {
     class CmdReplSetElect : public ReplSetCommand {
     public:
         CmdReplSetElect() : ReplSetCommand("replSetElect") { }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::replSetElect);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
     private:
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if( !check(errmsg, result) )
@@ -142,11 +156,10 @@ namespace mongo {
 
     bool Consensus::shouldRelinquish() const {
         int vUp = rs._self->config().votes;
-        const long long T = rs.config().ho.heartbeatTimeoutMillis * rs.config().ho.heartbeatConnRetries;
         for( Member *m = rs.head(); m; m=m->next() ) {
-            long long dt = m->hbinfo().timeDown();
-            if( dt < T )
+            if (m->hbinfo().up()) {
                 vUp += m->config().votes;
+            }
         }
 
         // the manager will handle calling stepdown if another node should be

@@ -23,30 +23,29 @@
 #include "mongo/db/oplog.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/db/oplog_helpers.h"
 
 namespace mongo {
 
-    void deleteOneObject(NamespaceDetails *d, NamespaceDetailsTransient *nsdt, const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
+    void deleteOneObject(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         d->deleteObject(pk, obj, flags);
-        if (nsdt != NULL) {
-            nsdt->notifyOfWriteOp();
-        }
+        d->notifyOfWriteOp();
     }
     
     long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
         NamespaceDetails *d = nsdetails( ns );
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
         if ( ! d )
             return 0;
 
         uassert( 10101 ,  "can't remove from a capped collection" , ! d->isCapped() );
 
-        shared_ptr< Cursor > c = NamespaceDetailsTransient::getCursor( ns, pattern );
-        if( !c->ok() )
+        shared_ptr< Cursor > c = getOptimizedCursor( ns, pattern );
+        if ( !c->ok() ) {
             return 0;
+        }
 
         shared_ptr< Cursor > cPtr = c;
         auto_ptr<ClientCursor> ccc( new ClientCursor( QueryOption_NoCursorTimeout, cPtr, ns) );
@@ -78,7 +77,7 @@ namespace mongo {
                 OpLogHelpers::logDelete(ns, obj, false, &cc().txn());
             }
 
-            deleteOneObject(d, nsdt, pk, obj);
+            deleteOneObject(d, pk, obj);
             nDeleted++;
 
             if ( justOne ) {
@@ -93,16 +92,16 @@ namespace mongo {
        justOne: stop after 1 match
     */
     long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
-        if ( strstr(ns, ".system.") ) {
+        if ( NamespaceString::isSystem(ns) ) {
             /* note a delete from system.indexes would corrupt the db
                if done here, as there are pointers into those objects in
                NamespaceDetails.
             */
             uassert(12050, "cannot delete from system namespace", legalClientSystemNS( ns , true ) );
         }
-        if ( strchr( ns , '$' ) ) {
+        if ( !NamespaceString::normal(ns) ) {
             log() << "cannot delete from collection with reserved $ in name: " << ns << endl;
-            uassert( 10100 ,  "cannot delete from collection with reserved $ in name", strchr(ns, '$') == 0 );
+            uasserted( 10100 ,  "cannot delete from collection with reserved $ in name" );
         }
 
         long long nDeleted = _deleteObjects(ns, pattern, justOne, logop);

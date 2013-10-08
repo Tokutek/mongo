@@ -37,6 +37,8 @@ files.forEach(
 
 	// shellkillop: dunno yet.  SERVER-1445
 
+        // update_setOnInsert: db.setProfilingLevel is not working. SERVER-8653
+
 	// These should simply not be run under sharding:
 	// dbadmin: Uncertain  Cut-n-pasting its contents into mongo worked.
 	// error1: getpreverror not supported under sharding 
@@ -67,12 +69,12 @@ files.forEach(
 	    return;
 	}
 	// These are bugs (some might be fixed now):
-	if (/[\/\\](apply_ops1|count5|cursor8|or4|shellkillop|update4|profile\d*)\.js$/.test(x.name)) {
+	if (/[\/\\](apply_ops1|count5|cursor8|or4|shellkillop|update4|update_setOnInsert|profile\d*)\.js$/.test(x.name)) {
 	    print(" !!!!!!!!!!!!!!! skipping test that has failed under sharding but might not anymore " + x.name)	    
 	    return;
 	}
 	// These aren't supposed to get run under sharding:
-	if (/[\/\\](6072_touch|dbadmin|error1|fsync|fsync2|geo.*|indexh|remove5|update4|loglong|logpath|notablescan|compact.*|check_shard_index|bench_test.*|mr_replaceIntoDB|mr_auth|queryoptimizera|txn_.*|query_write_lock|collection_exists_cmd|getNamespaces_after_close|ops_after_close)\.js$/.test(x.name)) {
+	if (/[\/\\](6072_touch|auth_mst|lock_diag_size_limit|dbadmin|error1|fsync|fsync2|geo.*|indexh|remove5|update4|loglong|logpath|notablescan|compact.*|check_shard_index|bench_test.*|mr_replaceIntoDB|mr_auth|queryoptimizera|txn_.*|loader_.*|query_write_lock|bug301|collection_exists_cmd|getNamespaces_after_close|ops_after_close|collections_exist_cmd)\.js$/.test(x.name)) {
 	    print(" >>>>>>>>>>>>>>> skipping test that would correctly fail under sharding " + x.name)	    
 	    return;
 	}
@@ -83,7 +85,6 @@ files.forEach(
 		  function() {
 		      load(x.name);
 		  }, 1) + "ms");
-        
     }
 );
 

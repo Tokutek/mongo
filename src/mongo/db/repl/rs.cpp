@@ -16,20 +16,30 @@
 */
 
 #include "pch.h"
-#include "../cmdline.h"
-#include "../../util/net/sock.h"
-#include "../client.h"
-#include "../../s/d_logic.h"
-#include "rs.h"
-#include "connections.h"
-#include "../repl.h"
-#include "../instance.h"
+#include "mongo/platform/basic.h"
+
+#include "mongo/base/owned_pointer_vector.h"
+#include "mongo/base/status.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/principal.h"
+#include "mongo/db/client.h"
+#include "mongo/db/cmdline.h"
+#include "mongo/db/dbhelpers.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/repl.h"
 #include "mongo/db/repl/bgsync.h"
+#include "mongo/db/repl/connections.h"
+#include "mongo/db/repl/rs.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/platform/bits.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/util/time_support.h"
 #include "mongo/db/oplog.h"
+#include "mongo/db/replutil.h"
+#include "mongo/db/oplog_helpers.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/db/query_optimizer.h"
 
 using namespace std;
 
@@ -40,7 +50,11 @@ namespace mongo {
     bool replSet = false;
     ReplSet *theReplSet = 0;
 
-    bool isCurrentlyAReplSetPrimary() { 
+    // This is a bitmask with the first bit set. It's used to mark connections that should be kept
+    // open during stepdowns
+    const unsigned ScopedConn::keepOpen = 1;
+
+    bool isCurrentlyAReplSetPrimary() {
         return theReplSet && theReplSet->isPrimary();
     }
 
@@ -215,7 +229,7 @@ namespace mongo {
                 // will fail with "not master" (of course client could check result code, but in
                 // case they are not)
                 log() << "replSet closing client sockets after relinquishing primary" << rsLog;
-                MessagingPort::closeAllSockets(1);
+                MessagingPort::closeAllSockets(ScopedConn::keepOpen);
 
                 // abort all transactions lying around in clients. There should be no
                 // transaction happening. Because we have global write lock,  and
@@ -420,6 +434,9 @@ namespace mongo {
     ReplSetImpl::ReplSetImpl(ReplSetCmdline& replSetCmdline) : 
         _replInfoUpdateRunning(false),
         _replOplogPurgeRunning(false),
+        _replKeepOplogAliveRunning(false),
+        _keepOplogPeriodMillis(600*1000), // 10 minutes
+        _replOplogOptimizeRunning(false),
         _replBackgroundShouldRun(true),
         elect(this),
         _forceSyncTarget(0),
@@ -1017,58 +1034,133 @@ namespace mongo {
     void replLocalAuth() {
         if ( noauth )
             return;
-        cc().getAuthenticationInfo()->authorize("local","_repl");
+        cc().getAuthorizationManager()->grantInternalAuthorization("_repl");
+    }
+
+    // for testing only
+    void ReplSetImpl::setKeepOplogAlivePeriod(uint64_t val) {
+        boost::unique_lock<boost::mutex> lock(_keepOplogAliveMutex);
+        _keepOplogPeriodMillis = val;
+        _keepOplogAliveCond.notify_all();
+    }
+
+    void ReplSetImpl::keepOplogAliveThread() {
+        _replKeepOplogAliveRunning = true;
+        GTID lastSeenGTID = gtidManager->getLiveState();
+        Client::initThread("keepOplogAlive");
+        replLocalAuth();
+        while (_replBackgroundShouldRun) {
+            // make it 10 minutes
+            {
+                boost::unique_lock<boost::mutex> lock(_keepOplogAliveMutex);
+                _keepOplogAliveCond.timed_wait(
+                    _keepOplogAliveMutex,
+                    boost::posix_time::milliseconds(_keepOplogPeriodMillis)
+                    );
+            }
+            GTID curr = gtidManager->getLiveState();
+            RWLockRecursive::Shared lk(operationLock);
+            if (_replBackgroundShouldRun && _isMaster() && GTID::cmp(curr, lastSeenGTID) == 0) {
+                Client::Transaction txn (DB_SERIALIZABLE);
+                OpLogHelpers::logComment(BSON("comment" << "keepOplogAlive"), &cc().txn());
+                txn.commit(DB_TXN_NOSYNC);
+                lastSeenGTID = gtidManager->getLiveState();
+            }
+            else {
+                lastSeenGTID = curr;
+            }
+        }
+        _replKeepOplogAliveRunning = false;
+    }
+
+    void ReplSetImpl::changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours) {
+        boost::unique_lock<boost::mutex> lock(_purgeMutex);
+        cmdLine.expireOplogDays = expireOplogDays;
+        cmdLine.expireOplogHours = expireOplogHours;
+        _purgeCond.notify_all();
     }
 
     void ReplSetImpl::purgeOplogThread() {
         _replOplogPurgeRunning = true;
-        GTID lastTimeRead;
         Client::initThread("purgeOplog");
+        replLocalAuth();
         while (_replBackgroundShouldRun) {
-            const uint64_t expireMillis = expireOplogMilliseconds();
+            // need to grab _purgeMutex here to protect against races
+            // of expireOplogMilliseconds() changing
+            uint64_t expireMillis = 0;
+            {
+                boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                expireMillis = expireOplogMilliseconds();
+            }
+
             if (expireMillis) {
                 // Allow an additional slack period of one hour.
-                const uint64_t ageAllowed = expireMillis + (3600 * 1000);
+                const uint64_t ageAllowed = expireMillis + (3600*1000);
                 const uint64_t minTime = curTimeMillis64() - ageAllowed;
-                // now get the minimum entry in the oplog, if it has timestamp
-                // less than minTime, delete it, otherwise, 
                 uint64_t millisToWait = 0;
-                // do a possible deletion from the oplog, if we find an entry
-                // old enough. If not, we will sleep
+                // delete some entries from the oplog. We use a cursor
+                // to get up to 1000 entries and delete them, all with a single
+                // transaction.
                 try {
-                    BSONObj result;
-                    bool found = false;
-
                     Client::ReadContext ctx(rsoplog);
-                    Client::Transaction transaction(DB_SERIALIZABLE);
+                    Client::Transaction transaction(DB_READ_UNCOMMITTED);
                     NamespaceDetails *d = nsdetails(rsoplog);
+                    vector<BSONObj> docs;
+                    // We set the default wait time to 2 seconds.
+                    // If we find nothing in the oplog, we will wait 2 seconds
+                    millisToWait = 2000;
                     if (d != NULL) {
-                        if (lastTimeRead.isInitial()) {
-                            found = d->findOne(BSONObj(), result);
-                        }
-                        else {
-                            BSONObjBuilder q;
-                            addGTIDToBSON("$gt", lastTimeRead, q);
-                            BSONObjBuilder query;
-                            query.append("_id", q.done());
-                            found = d->findOne(query.done(), result, false);
+                        BSONObjBuilder query;
+                        BSONObjBuilder q(query.subobjStart("_id"));
+                        addGTIDToBSON("$gte", _lastPurgedGTID, q);
+                        q.doneFast();
+                        shared_ptr<Cursor> c(
+                            getOptimizedCursor(
+                                rsoplog,
+                                query.done(),
+                                BSONObj(),
+                                QueryPlanSelectionPolicy::indexOnly()
+                                )
+                            );
+                        // add entries to docs from a cursor
+                        while (c->ok()) {
+                            BSONObj curr = c->current();
+                            uint64_t ts = curr["ts"]._numberLong();
+                            if (ts > minTime) {
+                                // we only set millisToWait, which has us sleep,
+                                // if we are not deleting anything in this loop.
+                                // If we are deleting even just one entry,
+                                // we do not sleep.
+                                if (docs.empty()) {
+                                    // set the time to way to be 1 second longer
+                                    // than when the next entry expires, so that
+                                    // when we wake up, we can hopefully
+                                    // delete a bunch of entries in bulk
+                                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                                    _lastPurgedGTID = getGTIDFromBSON("_id", curr);
+                                    millisToWait = ts - minTime + 1000;
+                                }
+                                break;
+                            }
+                            docs.push_back(curr.copy());
+                            if (curr.hasElement("ref") || docs.size() > 1000) {
+                                break;
+                            }
+                            c->advance();
                         }
                     }
-                    if (found) {
-                        lastTimeRead = getGTIDFromBSON("_id", result);                    
-                        uint64_t ts = result["ts"]._numberLong();
-                        if (ts < minTime) {
-                            // delete the row "result"
-                            purgeEntryFromOplog(result);
+
+                    if (!docs.empty()) {
+                        // we are deleting something, so let's not sleep
+                        millisToWait = 0;
+                        for (vector<BSONObj>::const_iterator it = docs.begin(); it != docs.end(); ++it) {
+                            // delete the row
+                            purgeEntryFromOplog(*it);                            
                         }
-                        else {
-                            millisToWait = ts - minTime;
+                        {
+                            boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                            _lastPurgedGTID = getGTIDFromBSON("_id", docs.back());
                         }
-                    }
-                    // there is no data, just sleep for now
-                    // this should be rare
-                    else {
-                        millisToWait = 2000;
                     }
                     transaction.commit(DB_TXN_NOSYNC);
                 }
@@ -1077,20 +1169,62 @@ namespace mongo {
                     millisToWait = 2000;
                 }
                 // do a timed_wait, if necessary
+                // at this point, we have use a transaction to delete
+                // up to 1000 entries from the oplog. If we deleted anything, we
+                // will NOT sleep. If we deleted nothing, we will sleep for
+                // some amount, as determined by the code above
                 if (millisToWait > 0) {
                     boost::unique_lock<boost::mutex> lock(_purgeMutex);
-                    _purgeCond.timed_wait(
-                        _purgeMutex, 
-                        boost::posix_time::milliseconds(millisToWait)
-                        );
+                    // It is possible that while we were doing our deleting,
+                    // that expireOplogHours or expireOplogDays has changed.
+                    // This is rare, but still possible. In that case, the amount
+                    // of time we are planning to sleep may be in accurate.
+                    // Therefore, if we see a change, we simply
+                    // don't sleep and continue with another iteration
+                    if (expireMillis == expireOplogMilliseconds()) {
+                        _purgeCond.timed_wait(
+                            _purgeMutex,
+                            boost::posix_time::milliseconds(millisToWait)
+                            );
+                    }
                 }
             }
-            else {                
+            else {
                 _purgeCond.wait(_purgeMutex);
             }
         }        
         cc().shutdown();
         _replOplogPurgeRunning = false;
+    }
+    
+    void ReplSetImpl::optimizeOplogThread() {
+        _replOplogOptimizeRunning = true;
+        Client::initThread("optimizeOplog");
+        replLocalAuth();
+        while (_replBackgroundShouldRun) {
+            try {
+                GTID gtid;
+                {
+                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                    gtid = _lastPurgedGTID;
+                }
+                if (!gtid.isInitial()) {
+                    hotOptimizeOplogTo(gtid);
+                }
+                {
+                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                    _purgeCond.timed_wait(
+                        _purgeMutex, 
+                        boost::posix_time::milliseconds(5000)
+                        );                
+                }
+            } catch (const DBException &ex) {
+                warning() << "optimizeOplogThread caught exception: " << ex.what()
+                          << ", continuing in 5 seconds..." << endl;
+                sleep(5);
+            }
+        }
+        _replOplogOptimizeRunning = false;
     }
 
     void ReplSetImpl::forceUpdateReplInfo() {
@@ -1168,6 +1302,14 @@ namespace mongo {
             sleepsecs(1);
             log() << "still waiting for oplog purge thread to end..." << endl;
         }
+        {
+            boost::unique_lock<boost::mutex> lock(_keepOplogAliveMutex);
+            _keepOplogAliveCond.notify_all();
+        }
+        while (_replKeepOplogAliveRunning) {
+            sleepsecs(1);
+            log() << "still waiting for keep oplog alive thread to end..." << endl;
+        }
     }
 
     // look at comments in BackgroundSync::stopOpSyncThread for rules
@@ -1187,5 +1329,39 @@ namespace mongo {
             BackgroundSync::get()->startOpSyncThread();
         }
     }
+
+    class ReplIndexPrefetch : public ServerParameter {
+    public:
+        ReplIndexPrefetch()
+            : ServerParameter( ServerParameterSet::getGlobal(), "replIndexPrefetch" ) {
+        }
+
+        virtual ~ReplIndexPrefetch() {
+        }
+
+        const char * _value() {
+            if (!theReplSet)
+                return "uninitialized";
+            return "none";
+        }
+
+        virtual void append( BSONObjBuilder& b, const string& name ) {
+            b.append( name, _value() );
+        }
+
+        virtual Status set( const BSONElement& newValueElement ) {
+            if (!theReplSet) {
+                return Status( ErrorCodes::BadValue, "replication is not enabled" );
+            }
+
+            std::string prefetch = newValueElement.valuestrsafe();
+            return setFromString( prefetch );
+        }
+
+        virtual Status setFromString( const string& prefetch ) {
+            return Status( ErrorCodes::IllegalOperation, "replIndexPrefetch is a deprecated parameter" );
+        }
+
+    } replIndexPrefetch;
 }
 

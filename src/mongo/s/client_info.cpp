@@ -18,6 +18,9 @@
  */
 
 #include "pch.h"
+
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/auth_external_state_s.h"
 #include "server.h"
 #include "../util/scopeguard.h"
 #include "../db/commands.h"
@@ -34,14 +37,14 @@
 #include "cursors.h"
 #include "grid.h"
 #include "s/writeback_listener.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
-    ClientInfo::ClientInfo() {
+    ClientInfo::ClientInfo(AbstractMessagingPort* messagingPort) : ClientBasic(messagingPort) {
         _cur = &_a;
         _prev = &_b;
         _autoSplitOk = true;
-        newRequest();
     }
 
     ClientInfo::~ClientInfo() {
@@ -71,16 +74,31 @@ namespace mongo {
         _cur = _prev;
         _prev = temp;
         _cur->clear();
-        _ai.startRequest();
+        getAuthorizationManager()->startRequest();
     }
 
-    ClientInfo * ClientInfo::get() {
+    ClientInfo* ClientInfo::create(AbstractMessagingPort* messagingPort) {
         ClientInfo * info = _tlInfo.get();
-        if ( ! info ) {
-            info = new ClientInfo();
-            _tlInfo.reset( info );
-            info->newRequest();
+        massert(17007, "A ClientInfo already exists for this thread", !info);
+        info = new ClientInfo(messagingPort);
+        info->setAuthorizationManager(new AuthorizationManager(new AuthExternalStateMongos()));
+        _tlInfo.reset( info );
+        info->newRequest();
+        return info;
+    }
+
+    ClientInfo * ClientInfo::get(AbstractMessagingPort* messagingPort) {
+        ClientInfo * info = _tlInfo.get();
+        if (!info) {
+            info = create(messagingPort);
         }
+        massert(17008,
+                mongoutils::str::stream() << "AbstractMessagingPort was provided to ClientInfo::get"
+                        << " but differs from the one stored in the current ClientInfo object. "
+                        << "Current ClientInfo messaging port "
+                        << (info->port() ? "is not" : "is")
+                        << " NULL",
+                messagingPort == NULL || messagingPort == info->port());
         return info;
     }
 

@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <boost/cstdint.hpp>
+#include <stdint.h> // uint32_t with glibc 2.18
 #include <string.h> // strlen
 #include <string>
 #include <vector>
@@ -116,11 +118,8 @@ namespace mongo {
         */
         BSONElement operator[] (const std::string& field) const;
 
-        /** returns the tyoe of the element fixed for the main type
-            the main purpose is numbers.  any numeric type will return NumberDouble
-            Note: if the order changes, indexes have to be re-built or than can be corruption
-        */
-        int canonicalType() const;
+        /** See canonicalizeBSONType in bsontypes.h */
+        int canonicalType() const { return canonicalizeBSONType(type()); }
 
         /** Indicates if it is the end-of-object element, which is present at the end of
             every BSON object.
@@ -242,8 +241,8 @@ namespace mongo {
         }
 
         // for objects the size *includes* the size of the size field
-        int objsize() const {
-            return *reinterpret_cast< const int* >( value() );
+        size_t objsize() const {
+            return static_cast< const size_t >( *reinterpret_cast< const uint32_t* >( value() ) );
         }
 
         /** Get a string's value.  Also gives you start of the real data for an embedded object.
@@ -460,6 +459,8 @@ namespace mongo {
         std::string _asCode() const;
         OpTime _opTime() const;
 
+        template<typename T> bool coerce( T* out ) const;
+
     private:
         const char *data;
         mutable int fieldNameSize_; // cached value
@@ -484,51 +485,6 @@ namespace mongo {
             return *this;
         }
     };
-
-    inline int BSONElement::canonicalType() const {
-        BSONType t = type();
-        switch ( t ) {
-        case MinKey:
-        case MaxKey:
-            return t;
-        case EOO:
-        case Undefined:
-            return 0;
-        case jstNULL:
-            return 5;
-        case NumberDouble:
-        case NumberInt:
-        case NumberLong:
-            return 10;
-        case mongo::String:
-        case Symbol:
-            return 15;
-        case Object:
-            return 20;
-        case mongo::Array:
-            return 25;
-        case BinData:
-            return 30;
-        case jstOID:
-            return 35;
-        case mongo::Bool:
-            return 40;
-        case mongo::Date:
-        case Timestamp:
-            return 45;
-        case RegEx:
-            return 50;
-        case DBRef:
-            return 55;
-        case Code:
-            return 60;
-        case CodeWScope:
-            return 65;
-        default:
-            verify(0);
-            return -1;
-        }
-    }
 
     inline bool BSONElement::trueValue() const {
         // NOTE Behavior changes must be replicated in Value::coerceToBool().

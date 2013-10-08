@@ -21,11 +21,19 @@
 
 #include "pch.h"
 
+#include <string>
+#include <vector>
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/index.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/jsobj.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
@@ -41,6 +49,13 @@ namespace mongo {
         }
         virtual bool requiresAuth() { return true; }
         TouchCmd() : QueryCommand("touch") {}
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::touch);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
@@ -55,7 +70,7 @@ namespace mongo {
             }
                         
             string ns = db + '.' + coll;
-            if ( ! NamespaceString::normal(ns.c_str()) ) {
+            if ( ! NamespaceString::normal(ns) ) {
                 errmsg = "bad namespace name";
                 return false;
             }

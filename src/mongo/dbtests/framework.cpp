@@ -197,8 +197,10 @@ namespace mongo {
                 boost::filesystem::create_directory(p);
             }
 
-            string dbpathString = p.native_directory_string();
+            string dbpathString = p.string();
             dbpath = dbpathString.c_str();
+
+            Logstream::setLogFile(stderr);
 
             Client::initThread("testsuite");
             acquirePathLock();

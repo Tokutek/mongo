@@ -21,12 +21,11 @@
 
 #include "mongo/db/jsobj.h"
 #include "mongo/db/curop.h"
-#include "mongo/db/queryoptimizercursor.h"
+#include "mongo/db/query_plan_selection_policy.h"
 
 namespace mongo {
 
     class NamespaceDetails;
-    class NamespaceDetailsTransient;
 
     // ---------- public -------------
 
@@ -47,18 +46,19 @@ namespace mongo {
     };
     
     struct LogOpUpdateDetails {
-        bool logop;
-        const char* ns;
-        bool fromMigrate;
+        LogOpUpdateDetails(bool log = false, bool m = false) :
+            logop(log), fromMigrate(m) {
+        }
+        const bool logop;
+        const bool fromMigrate;
     };
 
     void updateOneObject(
         NamespaceDetails *d, 
-        NamespaceDetailsTransient *nsdt, 
         const BSONObj &pk, 
         const BSONObj &oldObj, 
         const BSONObj &newObj, 
-        struct LogOpUpdateDetails* loud,
+        const LogOpUpdateDetails &logDetails,
         uint64_t flags = 0
         );
 

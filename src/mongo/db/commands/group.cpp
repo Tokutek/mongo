@@ -1,6 +1,7 @@
 // group.cpp
 
 /**
+*    Copyright (C) 2012 10gen Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -16,9 +17,18 @@
 */
 
 #include "mongo/pch.h"
+
+#include <vector>
+
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/privilege.h"
+#include "mongo/db/client_basic.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/scripting/engine.h"
 
@@ -32,7 +42,13 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << "http://dochub.mongodb.org/core/aggregation";
         }
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::find);
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+        }
         BSONObj getKey( const BSONObj& obj , const BSONObj& keyPattern , ScriptingFunction func , double avgSize , Scope * s ) {
             if ( func ) {
                 BSONObjBuilder b( obj.objsize() + 32 );
@@ -40,9 +56,9 @@ namespace mongo {
                 const BSONObj& key = b.obj();
                 int res = s->invoke( func , &key, 0 );
                 uassert( 10041 ,  (string)"invoke failed in $keyf: " + s->getError() , res == 0 );
-                int type = s->type("return");
+                int type = s->type("__returnValue");
                 uassert( 10042 ,  "return of $key has to be an object" , type == Object );
-                return s->getObject( "return" );
+                return s->getObject( "__returnValue" );
             }
             return obj.extractFields( keyPattern , true ).getOwned();
         }
@@ -59,16 +75,17 @@ namespace mongo {
                     string& errmsg,
                     BSONObjBuilder& result ) {
 
-            auto_ptr<Scope> s = globalScriptEngine->getPooledScope( realdbname );
-            s->localConnect( realdbname.c_str() );
+            const string userToken = ClientBasic::getCurrent()->getAuthorizationManager()
+                                                              ->getAuthenticatedPrincipalNamesToken();
+            auto_ptr<Scope> s = globalScriptEngine->getPooledScope(realdbname, "group" + userToken);
 
             if ( reduceScope )
                 s->init( reduceScope );
 
             s->setObject( "$initial" , initial , true );
 
-            s->exec( "$reduce = " + reduceCode , "reduce setup" , false , true , true , 100 );
-            s->exec( "$arr = [];" , "reduce setup 2" , false , true , true , 100 );
+            s->exec( "$reduce = " + reduceCode , "$group reduce setup" , false , true , true , 100 );
+            s->exec( "$arr = [];" , "$group reduce setup 2" , false , true , true , 100 );
             ScriptingFunction f = s->createFunction(
                                       "function(){ "
                                       "  if ( $arr[n] == null ){ "
@@ -93,7 +110,7 @@ namespace mongo {
             map<BSONObj,int,BSONObjCmp> map;
             list<BSONObj> blah;
 
-            shared_ptr<Cursor> cursor = NamespaceDetailsTransient::getCursor(ns.c_str() , query);
+            shared_ptr<Cursor> cursor = getOptimizedCursor(ns.c_str() , query);
             ClientCursor::Holder ccPointer( new ClientCursor( QueryOption_NoCursorTimeout, cursor,
                                                              ns ) );
 
@@ -125,7 +142,7 @@ namespace mongo {
             ccPointer.reset();
 
             if (!finalize.empty()) {
-                s->exec( "$finalize = " + finalize , "finalize define" , false , true , true , 100 );
+                s->exec( "$finalize = " + finalize , "$group finalize define" , false , true , true , 100 );
                 ScriptingFunction g = s->createFunction(
                                           "function(){ "
                                           "  for(var i=0; i < $arr.length; i++){ "
@@ -140,7 +157,7 @@ namespace mongo {
             result.appendArray( "retval" , s->getObject( "$arr" ) );
             result.append( "count" , keynum - 1 );
             result.append( "keys" , (int)(map.size()) );
-            s->exec( "$arr = [];" , "reduce setup 2" , false , true , true , 100 );
+            s->exec( "$arr = [];" , "$group reduce setup 2" , false , true , true , 100 );
             s->gc();
 
             return true;

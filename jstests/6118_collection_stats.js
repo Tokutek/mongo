@@ -41,6 +41,19 @@ assert.eq(1000000, stats.indexDetails[1].pageSize);
 assert.eq(32000, stats.indexDetails[1].readPageSize);
 assert.eq("zlib", stats.indexDetails[1].compression);
 
+// verify that this also works with "units" pageSize and readPageSize
+o = f.ensureIndex({b:1}, {pageSize:"1M", compression:"zlib", readPageSize:"32kb"});
+printjson(o);
+print(db.getLastError());
+stats = f.stats();
+printjson(stats);
+assert.eq(3, stats.nindexes);
+var d = stats.indexDetails[2];
+assert.eq("b_1", d.name);
+assert.eq(1048576, d.pageSize);
+assert.eq(32768, d.readPageSize);
+assert.eq("zlib", d.compression);
+
 // basic test that scale works
 kb_stats = f.stats(1000);
 assert.eq(1000, kb_stats.indexDetails[1].pageSize);

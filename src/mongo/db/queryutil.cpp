@@ -1,5 +1,3 @@
-// @file queryutil.cpp
-
 /*    Copyright 2009 10gen Inc.
  *    Copyright (C) 2013 Tokutek Inc.
  *
@@ -22,18 +20,11 @@
 #include "mongo/db/querypattern.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/queryutil.h"
-#include "../util/startup_test.h"
-#include "dbmessage.h"
-#include "../util/mongoutils/str.h"
+#include "mongo/util/startup_test.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
-    ParsedQuery::ParsedQuery( QueryMessage& qm )
-    : _ns( qm.ns ) , _ntoskip( qm.ntoskip ) , _ntoreturn( qm.ntoreturn ) , _options( qm.queryOptions ) {
-        init( qm.query );
-        initFields( qm.fields );
-    }
-    
     extern BSONObj staticNull;
     extern BSONObj staticUndefined;
 
@@ -196,6 +187,12 @@ namespace mongo {
                         }                        
                         vals.insert( temp );
                     }
+                    if ( ie.isNull() ) {
+                        // A null index key will not always match a null query value (eg
+                        // SERVER-4529).  As a result, a field range containing null cannot be an
+                        // exact match representation.
+                        exactMatchesOnly = false;
+                    }
                 }
             }
 
@@ -287,14 +284,27 @@ namespace mongo {
             }
             return;
         }
-        
-        if ( optimize && !isNot && ( e.type() != Array ) ) {
+
+        // Identify simple cases where this FieldRange represents the exact set of BSONElement
+        // values matching the query expression element used to construct the FieldRange.
+
+        if ( // If type bracketing is enabled (see 'optimize' case at the end of this function) ...
+             optimize &&
+             // ... and the operator isn't within a $not clause ...
+             !isNot &&
+             // ... and the operand is of a type that implements exact type bracketing and will be
+             // exactly represented in an index key (eg is not null or an array) ...
+             e.isSimpleType() ) {
             switch( op ) {
+                // ... and the operator is one for which this constructor will determine exact
+                // bounds on the values that match ...
                 case BSONObj::Equality:
                 case BSONObj::LT:
                 case BSONObj::LTE:
                 case BSONObj::GT:
                 case BSONObj::GTE:
+                    // ... then this FieldRange exactly characterizes those documents that match the
+                    // operator.
                     _exactMatchRepresentation = true;
                 default:
                     break;
@@ -448,18 +458,38 @@ namespace mongo {
             break;
         }
 
+        // If 'optimize' is set, then bracket the field range by bson type.  For example, if this
+        // FieldRange is constructed with the operator { $gt:5 }, then the lower bound will be 5
+        // at this point but the upper bound will be MaxKey.  If 'optimize' is true, the upper bound
+        // is bracketed to the highest possible bson numeric value.  This is consistent with the
+        // Matcher's $gt implementation.
+
         if ( optimize ) {
             if ( lower.type() != MinKey && upper.type() == MaxKey && lower.isSimpleType() ) { // TODO: get rid of isSimpleType
                 BSONObjBuilder b;
                 b.appendMaxForType( lower.fieldName() , lower.type() );
                 upper = addObj( b.obj() ).firstElement();
+                if ( upper.canonicalType() != lower.canonicalType() ) {
+                    // _exactMatchRepresentation will be set if lower.isSimpleType(), requiring that
+                    // this field range exactly describe the values matching its query operator.  If
+                    // lower's max for type is not of the same canonical type as lower, it is
+                    // assumed to be the lowest value of the next canonical type meaning the upper
+                    // bound should be exclusive.
+                    upperInclusive = false;
+                }
             }
             else if ( lower.type() == MinKey && upper.type() != MaxKey && upper.isSimpleType() ) { // TODO: get rid of isSimpleType
-                if( upper.type() == Date ) 
-                    lowerInclusive = false;
                 BSONObjBuilder b;
                 b.appendMinForType( upper.fieldName() , upper.type() );
                 lower = addObj( b.obj() ).firstElement();
+                if ( lower.canonicalType() != upper.canonicalType() ) {
+                    // _exactMatchRepresentation will be set if upper.isSimpleType(), requiring that
+                    // this field range exactly describe the values matching its query operator.  If
+                    // upper's min for type is not of the same canonical type as upper, it is
+                    // assumed to be the highest value of the previous canonical type meaning the
+                    // lower bound should be exclusive.
+                    lowerInclusive = false;
+                }
             }
         }
 
@@ -475,6 +505,8 @@ namespace mongo {
             _specialNeedsIndex = other._specialNeedsIndex;
         }
         _exactMatchRepresentation = exactMatchRepresentation;
+        // A manipulated FieldRange may no longer be valid within a parent context.
+        _elemMatchContext = BSONElement();
     }
 
     /** @return the maximum of two lower bounds, considering inclusivity. */
@@ -506,13 +538,22 @@ namespace mongo {
     }
 
     const FieldRange &FieldRange::intersect( const FieldRange &other, bool singleKey ) {
+        // If 'this' FieldRange is universal(), intersect by copying the 'other' range into 'this'.
+        if ( universal() ) {
+            string intersectSpecial = !_special.empty() ? _special : other._special;
+            *this = other;
+            _special = intersectSpecial;
+            return *this;
+        }
         // Range intersections are not taken for multikey indexes.  See SERVER-958.
         if ( !singleKey && !universal() ) {
+            string intersectSpecial = !_special.empty() ? _special : other._special;
             // Pick 'other' range if it is smaller than or equal to 'this'.
             if ( other <= *this ) {
              	*this = other;
             }
             _exactMatchRepresentation = false;
+            _special = intersectSpecial;
             return *this;
         }
         vector<FieldInterval> newIntervals;
@@ -960,8 +1001,18 @@ namespace mongo {
             *this &= elemMatchRanges;
         }
         else {
-            // Handle $elemMatch applied to nested elements ($elemMatch fields are not operators).
+            // Handle $elemMatch applied to nested elements ($elemMatch fields are not operators,
+            // but full match specifications).
+
             FieldRangeSet elemMatchRanges( _ns.c_str(), elemMatchObj, _singleKey, optimize );
+            // Set the parent $elemMatch context on direct $elemMatch children (those with undotted
+            // field names).
+            for( map<string,FieldRange>::iterator i = elemMatchRanges._ranges.begin();
+                 i != elemMatchRanges._ranges.end(); ++i ) {
+                if ( !str::contains( i->first, '.' ) ) {
+                    i->second.setElemMatchContext( elemMatch );
+                }
+            }
             scoped_ptr<FieldRangeSet> prefixedRanges
                     ( elemMatchRanges.prefixed( matchFieldName ) );
             *this &= *prefixedRanges;
@@ -1084,7 +1135,7 @@ namespace mongo {
         _boundElemMatch( boundElemMatch ) {
         init( optimize );
     }
-    
+
     void FieldRangeSet::init( bool optimize ) {
         BSONObjIterator i( _queries[ 0 ] );
         while( i.more() ) {
@@ -1109,29 +1160,64 @@ namespace mongo {
         }
     }
 
-    FieldRangeVector::FieldRangeVector( const FieldRangeSet &frs, const IndexSpec &indexSpec,
-                                       int direction )
-    :_indexSpec( indexSpec ), _direction( direction >= 0 ? 1 : -1 ) {
-        verify(  frs.matchPossibleForIndex( _indexSpec.keyPattern ) );
+    FieldRangeVector::FieldRangeVector( const FieldRangeSet &frs, const BSONObj &keyPattern,
+                                        int direction ) :
+        _keyPattern( keyPattern.getOwned() ),
+        _direction( direction >= 0 ? 1 : -1 ),
+        _hasAllIndexedRanges( true ) {
+        verify(  frs.matchPossibleForIndex( _keyPattern ) );
         _queries = frs._queries;
-        BSONObjIterator i( _indexSpec.keyPattern );
-        set< string > baseObjectNonUniversalPrefixes;
+
+        // For key generation
+        for (BSONObjIterator it(_keyPattern); it.more(); ) {
+            const BSONElement &e = it.next();
+            _fieldNames.push_back(e.fieldName());
+        }    
+        _keyGenerator.reset(new KeyGenerator(_fieldNames, false));
+
+        BSONObjIterator i( _keyPattern );
+        map<string,BSONElement> topFieldElemMatchContexts;
         while( i.more() ) {
             BSONElement e = i.next();
             const FieldRange *range = &frs.range( e.fieldName() );
-            verify(  !range->empty() );
+            verify( !range->empty() );
+
             if ( !frs.singleKey() ) {
-                string prefix = str::before( e.fieldName(), '.' );
-                if ( baseObjectNonUniversalPrefixes.count( prefix ) > 0 ) {
-                    // A field with the same parent field has already been
-                    // constrainted, and with a multikey index we cannot
-                    // constrain this field.  SERVER-958
-                    range = &frs.universalRange();
+                // Some constraints across different fields cannot be correctly intersected on a
+                // multikey index.  SERVER-958
+                //
+                // Given a multikey index { 'a.b':1, 'a.c':1 } and query { 'a.b':3, 'a.c':3 } only
+                // the index field 'a.b' is constrained to the range [3, 3], while the index
+                // field 'a.c' is just constrained to be within minkey and maxkey.  This
+                // implementation ensures that the document { a:[ { b:3 }, { c:3 } ] }, which
+                // generates index keys { 'a.b':3, 'a.c':null } and { 'a.b':null and 'a.c':3 } will
+                // be retrieved for the query.
+                //
+                // However, if the query is instead { a:{ $elemMatch:{ b:3, c:3 } } } then the
+                // document { a:[ { b:3 }, { c:3 } ] } should not match the query and both index
+                // fields 'a.b' and 'a.c' are constrained to the range [3, 3].
+
+                // If no other field with the same topField has been constrained ...
+                string topField = str::before( e.fieldName(), '.' );
+                if ( topFieldElemMatchContexts.count( topField ) == 0 ) {
+                    // ... and this field is constrained ...
+                    if ( !range->universal() ) {
+                        // ... record this field's elemMatchContext for its topField.
+                        topFieldElemMatchContexts[ topField ] = range->elemMatchContext();
+                    }
                 }
-                else if ( !range->universal() ) {
-                    baseObjectNonUniversalPrefixes.insert( prefix );
+
+                // Else if an already constrained field is not an $elemMatch sibling of this field
+                // (does not share its elemMatchContext) ...
+                else if ( range->elemMatchContext().eoo() ||
+                          range->elemMatchContext().rawdata() !=
+                              topFieldElemMatchContexts[ topField ].rawdata() ) {
+                    // ... this field's parsed range cannot be used.
+                    range = &frs.universalRange();
+                    _hasAllIndexedRanges = false;
                 }
             }
+
             int number = (int) e.number(); // returns 0.0 if not numeric
             bool forward = ( ( number >= 0 ? 1 : -1 ) * ( direction >= 0 ? 1 : -1 ) > 0 );
             if ( forward ) {
@@ -1167,7 +1253,7 @@ namespace mongo {
 
     BSONObj FieldRangeVector::obj() const {
         BSONObjBuilder b;
-        BSONObjIterator k( _indexSpec.keyPattern );
+        BSONObjIterator k( _keyPattern );
         for( int i = 0; i < (int)_ranges.size(); ++i ) {
             BSONArrayBuilder a( b.subarrayStart( k.next().fieldName() ) );
             for( vector<FieldInterval>::const_iterator j = _ranges[ i ].intervals().begin();
@@ -1197,37 +1283,6 @@ namespace mongo {
         }
         return *ret;
     }
-
-    BSONObj FieldRangeSet::simplifiedQuery( const BSONObj &_fields ) const {
-        BSONObj fields = _fields;
-        if ( fields.isEmpty() ) {
-            BSONObjBuilder b;
-            for( map<string,FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {
-                b.append( i->first, 1 );
-            }
-            fields = b.obj();
-        }
-        BSONObjBuilder b;
-        BSONObjIterator i( fields );
-        while( i.more() ) {
-            BSONElement e = i.next();
-            const char *name = e.fieldName();
-            const FieldRange &eRange = range( name );
-            verify( !eRange.empty() );
-            if ( eRange.equality() )
-                b.appendAs( eRange.min(), name );
-            else if ( !eRange.universal() ) {
-                BSONObj o;
-                BSONObjBuilder c;
-                c.appendAs( eRange.min(), eRange.minInclusive() ? "$gte" : "$gt" );
-                c.appendAs( eRange.max(), eRange.maxInclusive() ? "$lte" : "$lt" );
-                o = c.obj();
-                b.append( name, o );
-            }
-        }
-        return b.obj();
-    }
-
 
     bool FieldRangeSet::isPointIntervalSet( const string& fieldname ) const {
 
@@ -1314,10 +1369,6 @@ namespace mongo {
                     ).jsonString();
     }
     
-    BSONObj FieldRangeSetPair::simplifiedQueryForIndex( NamespaceDetails *d, int idxNo, const BSONObj &keyPattern ) const {
-        return frsForIndex( d, idxNo ).simplifiedQuery( keyPattern );
-    }    
-    
     void FieldRangeSetPair::assertValidIndex( const NamespaceDetails *d, int idxNo ) const {
         massert( 14048, "FieldRangeSetPair invalid index specified", idxNo >= 0 && idxNo < d->nIndexes() );   
     }
@@ -1387,7 +1438,7 @@ namespace mongo {
 
     bool FieldRangeVector::matchesKey( const BSONObj &key ) const {
         BSONObjIterator j( key );
-        BSONObjIterator k( _indexSpec.keyPattern );
+        BSONObjIterator k( _keyPattern );
         for( int l = 0; l < (int)_ranges.size(); ++l ) {
             int number = (int) k.next().number();
             bool forward = ( number >= 0 ? 1 : -1 ) * ( _direction >= 0 ? 1 : -1 ) > 0;
@@ -1405,10 +1456,10 @@ namespace mongo {
         // TODO The representation of matching keys could potentially be optimized
         // more for the case at hand.  (For example, we can potentially consider
         // fields individually instead of constructing several bson objects using
-        // multikey arrays.)  But getKeys() canonically defines the key set for a
+        // multikey arrays.)  But getKeysFromObject() canonically defines the key set for a
         // given object and for now we are using it as is.
         BSONObjSet keys;
-        _indexSpec.getKeys( obj, keys );
+        _keyGenerator->getKeys(obj, keys);
         for( BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); ++i ) {
             if ( matchesKey( *i ) ) {
                 ok = true;
@@ -1424,8 +1475,9 @@ namespace mongo {
     BSONObj FieldRangeVector::firstMatch( const BSONObj &obj ) const {
         // NOTE Only works in forward direction.
         verify( _direction >= 0 );
-        BSONObjSet keys( BSONObjCmp( _indexSpec.keyPattern ) );
-        _indexSpec.getKeys( obj, keys );
+        BSONObjCmp cmp( _keyPattern );
+        BSONObjSet keys( cmp );
+        _keyGenerator->getKeys(obj, keys);
         for( BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); ++i ) {
             if ( matchesKey( *i ) ) {
                 return *i;
@@ -1436,7 +1488,7 @@ namespace mongo {
     
     string FieldRangeVector::toString() const {
         BSONObjBuilder bob;
-        BSONObjIterator i( _indexSpec.keyPattern );
+        BSONObjIterator i( _keyPattern );
         for( vector<FieldRange>::const_iterator r = _ranges.begin();
             r != _ranges.end() && i.more(); ++r ) {
             BSONElement e = i.next();
@@ -1466,7 +1518,7 @@ namespace mongo {
     // TODO optimize more SERVER-5450.
     int FieldRangeVectorIterator::advance( const BSONObj &curr ) {
         BSONObjIterator j( curr );
-        BSONObjIterator o( _v._indexSpec.keyPattern );
+        BSONObjIterator o( _v._keyPattern );
         // track first field for which we are not at the end of the valid values,
         // since we may need to advance from the key prefix ending with this field
         int latestNonEndpoint = -1;
@@ -1715,9 +1767,8 @@ namespace mongo {
         assertMayPopOrClause();
         auto_ptr<FieldRangeSet> holder;
         const FieldRangeSet *toDiff = &_originalOrSets.front().frsForIndex( nsd, idxNo );
-        BSONObj indexSpec = keyPattern;
-        if ( !indexSpec.isEmpty() && toDiff->matchPossibleForIndex( indexSpec ) ) {
-            holder.reset( toDiff->subset( indexSpec ) );
+        if ( !keyPattern.isEmpty() && toDiff->matchPossibleForIndex( keyPattern ) ) {
+            holder.reset( toDiff->subset( keyPattern ) );
             toDiff = holder.get();
         }
         _popOrClause( toDiff, nsd, idxNo, keyPattern );
@@ -1734,7 +1785,7 @@ namespace mongo {
      * removes the field ranges it covers from all subsequent or clauses.  As a
      * side effect, this function may invalidate the return values of topFrs()
      * calls made before this function was called.
-     * @param indexSpec - Keys of the index that was used to satisfy the last or
+     * @param keyPattern - Keys of the index that was used to satisfy the last or
      * clause.  Used to determine the range of keys that were scanned.  If
      * empty we do not constrain the previous clause's ranges using index keys,
      * which may reduce opportunities for range elimination.

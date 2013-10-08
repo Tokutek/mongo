@@ -44,7 +44,7 @@ namespace mongo {
             vector<BSONObj> indexes;
             {
                 auto_ptr<DBClientCursor> cursor =
-                                db.query( dbName + ".system.indexes" ,
+                                db.query( getSisterNS(dbName, "system.indexes") ,
                                           BSON( secondsExpireField << BSON( "$exists" << true ) ) ,
                                           0 , /* default nToReturn */
                                           0 , /* default nToSkip */

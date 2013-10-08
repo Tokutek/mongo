@@ -1,14 +1,10 @@
 // This should get skipped when testing replication.
 
+db.dropDatabase();
 t = db.cursor8;
-t.drop();
 t.save( {} );
 t.save( {} );
 t.save( {} );
-
-assert.eq( 3 , t.find().count() , "A0" );
-
-db.getMongo().getDB( "admin" ).runCommand( {closeAllDatabases:1} );
 
 function test( want , msg ){
     var res = db.runCommand( { cursorInfo:1 } );

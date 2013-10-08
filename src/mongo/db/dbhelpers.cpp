@@ -108,7 +108,6 @@ namespace mongo {
         Client::Transaction txn(DB_SERIALIZABLE);
 
         NamespaceDetails *d = nsdetails( ns.c_str() );
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get( ns.c_str() );
         IndexDetails &i = d->idx(d->findIndexByKeyPattern(keyPattern));
         // Extend min to get (min, MinKey, MinKey, ....)
         BSONObj newMin = Helpers::modifiedRangeBound( min , keyPattern , -1 );
@@ -121,7 +120,7 @@ namespace mongo {
             BSONObj pk = c->currPK();
             BSONObj obj = c->current();
             OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate, &cc().txn());
-            deleteOneObject(d, nsdt, pk, obj);
+            deleteOneObject(d, pk, obj);
             numDeleted++;
         }
 

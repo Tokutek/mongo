@@ -154,7 +154,7 @@ doTest = function (signal, txnMemLimit, startPort) {
 
 	var num = 3;
 	var host = getHostName();
-	var name = "tags";
+	var name = "rollback_simple";
 	var timeout = 60000;
 
 	var replTest = new ReplSetTest( {name: name, nodes: num, startPort:startPort, txnMemLimit: txnMemLimit} );
@@ -200,8 +200,15 @@ doTest = function (signal, txnMemLimit, startPort) {
 
     master = replTest.getMaster();
 	print("disconnect primary from everywhere");
-	replTest.partition(0,1);
-	replTest.partition(0,2);
+        if (master == conns[0]) {
+            replTest.partition(1,0,false);
+            replTest.partition(2,0,false);
+        }
+        else {
+            replTest.partition(0,1,false);
+            replTest.partition(2,1,false);
+            assert(master == conns[1]);
+        }
 	// do some writes to a before it realizes it can no longer be primary
 	print("do Items to Rollback");
     doItemsToRollBack(a);
@@ -213,8 +220,15 @@ doTest = function (signal, txnMemLimit, startPort) {
     doWritesToKeep2(b);
 	// now bring a back
 	print("connect A back");
-	replTest.unPartition(0,1);
-	replTest.unPartition(0,2);
+        if (master == conns[0]) {
+            replTest.unPartition(1,0,false);
+            replTest.unPartition(2,0,false);
+        }
+        else {
+            replTest.unPartition(0,1,false);
+            replTest.unPartition(2,1,false);
+            assert(master == conns[1]);
+        }
     sleep(5000);
 
     // everyone is up here...

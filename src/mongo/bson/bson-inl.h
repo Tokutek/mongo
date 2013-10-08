@@ -273,17 +273,17 @@ dodouble:
         return BSONElement();
     }
 
-    inline int BSONObj::getIntField(const char *name) const {
+    inline int BSONObj::getIntField(const StringData& name) const {
         BSONElement e = getField(name);
         return e.isNumber() ? (int) e.number() : std::numeric_limits< int >::min();
     }
 
-    inline bool BSONObj::getBoolField(const char *name) const {
+    inline bool BSONObj::getBoolField(const StringData& name) const {
         BSONElement e = getField(name);
         return e.type() == Bool ? e.boolean() : false;
     }
 
-    inline const char * BSONObj::getStringField(const char *name) const {
+    inline const char * BSONObj::getStringField(const StringData& name) const {
         BSONElement e = getField(name);
         return e.type() == String ? e.valuestr() : "";
     }
@@ -334,29 +334,41 @@ dodouble:
     }
 
     inline BSONObjBuilderValueStream::BSONObjBuilderValueStream( BSONObjBuilder * builder ) {
-        _fieldName = 0;
         _builder = builder;
     }
 
     template<class T>
     inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<( T value ) {
         _builder->append(_fieldName, value);
-        _fieldName = 0;
+        _fieldName = StringData();
         return *_builder;
     }
 
     inline BSONObjBuilder& BSONObjBuilderValueStream::operator<<( const BSONElement& e ) {
         _builder->appendAs( e , _fieldName );
-        _fieldName = 0;
+        _fieldName = StringData();
         return *_builder;
+    }
+
+    inline BufBuilder& BSONObjBuilderValueStream::subobjStart() {
+        StringData tmp = _fieldName;
+        _fieldName = StringData();
+        return _builder->subobjStart(tmp);
+    }
+
+    inline BufBuilder& BSONObjBuilderValueStream::subarrayStart() {
+        StringData tmp = _fieldName;
+        _fieldName = StringData();
+        return _builder->subarrayStart(tmp);
     }
 
     inline Labeler BSONObjBuilderValueStream::operator<<( const Labeler::Label &l ) {
         return Labeler( l, this );
     }
 
-    inline void BSONObjBuilderValueStream::endField( const char *nextFieldName ) {
-        if ( _fieldName && haveSubobj() ) {
+    inline void BSONObjBuilderValueStream::endField( const StringData& nextFieldName ) {
+        if ( haveSubobj() ) {
+            verify( _fieldName.rawData() );
             _builder->append( _fieldName, subobj()->done() );
         }
         _subobj.reset();
@@ -787,21 +799,22 @@ dodouble:
     /* return has eoo() true if no match
        supports "." notation to reach into embedded objects
     */
-    inline BSONElement BSONObj::getFieldDotted(const char *name) const {
-        BSONElement e = getField( name );
-        if ( e.eoo() ) {
-            const char *p = strchr(name, '.');
-            if ( p ) {
-                std::string left(name, p-name);
-                BSONObj sub = getObjectField(left.c_str());
-                return sub.isEmpty() ? BSONElement() : sub.getFieldDotted(p+1);
+    inline BSONElement BSONObj::getFieldDotted(const StringData& name) const {
+        BSONElement e = getField(name);
+        if (e.eoo()) {
+            size_t dot_offset = name.find('.');
+            if (dot_offset != string::npos) {
+                StringData left = name.substr(0, dot_offset);
+                StringData right = name.substr(dot_offset + 1);
+                BSONObj sub = getObjectField(left);
+                return sub.isEmpty() ? BSONElement() : sub.getFieldDotted(right);
             }
         }
 
         return e;
     }
 
-    inline BSONObj BSONObj::getObjectField(const char *name) const {
+    inline BSONObj BSONObj::getObjectField(const StringData& name) const {
         BSONElement e = getField(name);
         BSONType t = e.type();
         return t == Object || t == Array ? e.embeddedObject() : BSONObj();
@@ -1000,4 +1013,51 @@ dodouble:
         }
         return b.obj();
     }
+
+    template<typename T> bool BSONObj::coerceVector( std::vector<T>* out ) const {
+        BSONObjIterator i( *this );
+        while ( i.more() ) {
+            BSONElement e = i.next();
+            T t;
+            if ( ! e.coerce<T>( &t ) )
+                return false;
+            out->push_back( t );
+        }
+        return true;
+    }
+
+
+    template<> inline bool BSONElement::coerce<std::string>( std::string* out ) const {
+        if ( type() != mongo::String )
+            return false;
+        *out = String();
+        return true;
+    }
+
+    template<> inline bool BSONElement::coerce<int>( int* out ) const {
+        if ( !isNumber() )
+            return false;
+        *out = numberInt();
+        return true;
+    }
+
+    template<> inline bool BSONElement::coerce<double>( double* out ) const {
+        if ( !isNumber() )
+            return false;
+        *out = numberDouble();
+        return true;
+    }
+
+    template<> inline bool BSONElement::coerce<bool>( bool* out ) const {
+        *out = trueValue();
+        return true;
+    }
+
+    template<> inline bool BSONElement::coerce< std::vector<std::string> >( std::vector<std::string>* out ) const {
+        if ( type() != mongo::Array )
+            return false;
+        return Obj().coerceVector<std::string>( out );
+    }
+
+
 }

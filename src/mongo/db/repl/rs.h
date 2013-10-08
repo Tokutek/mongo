@@ -78,6 +78,9 @@ namespace mongo {
 
         bool potentiallyHot() const { return _config.potentiallyHot(); } // not arbiter, not priority 0
         void summarizeMember(stringstream& s) const;
+        // If we could sync from this member.  This doesn't tell us anything about the quality of
+        // this member, just if they are a possible sync target.
+        bool syncable() const;
 
     private:
         friend class ReplSetImpl;
@@ -345,6 +348,9 @@ namespace mongo {
         // rslock.
         boost::mutex stateChangeMutex;
         bool forceSyncFrom(const string& host, string& errmsg, BSONObjBuilder& result);
+        // Check if the current sync target is suboptimal. This must be called while holding a mutex
+        // that prevents the sync source from changing.
+        bool shouldChangeSyncTarget(const uint64_t& target) const;
 
         /**
          * Find the closest member (using ping time) with a higher latest GTID.
@@ -359,14 +365,21 @@ namespace mongo {
         // for replInfoUpdate
         boost::mutex _replInfoMutex;
         bool _replInfoUpdateRunning;
-        // for oplog purge
+        // for oplog purge thread
         bool _replOplogPurgeRunning;
-        bool _replBackgroundShouldRun;
-
-        // for purge thread
         boost::mutex _purgeMutex;
         boost::condition _purgeCond;
+        GTID _lastPurgedGTID;
+        // for keepOplogAlive
+        bool _replKeepOplogAliveRunning;
+        uint64_t _keepOplogPeriodMillis;
+        boost::mutex _keepOplogAliveMutex;
+        boost::condition _keepOplogAliveCond;
+        // for optimize oplog thread, uses same _purgeMutex
+        bool _replOplogOptimizeRunning;
 
+        bool _replBackgroundShouldRun;
+        
         set<ReplSetHealthPollTask*> healthTasks;
         void endOldHealthTasks();
         void startHealthTaskFor(Member *m);
@@ -513,11 +526,17 @@ namespace mongo {
     public:
         const Member* findById(unsigned id) const;
         void stopReplInfoThread();
+        Member* findByName(const std::string& hostname) const;
+        // for testing
+        void setKeepOplogAlivePeriod(uint64_t val);
+        void changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours);
     private:
         void _getTargets(list<Target>&, int &configVersion);
         void getTargets(list<Target>&, int &configVersion);
         void startThreads();
+        void keepOplogAliveThread();
         void purgeOplogThread();
+        void optimizeOplogThread();
         void updateReplInfoThread();
         friend class FeedbackThread;
         friend class CmdReplSetElect;
@@ -537,6 +556,7 @@ namespace mongo {
         map<string,time_t> _veto;
 
     public:
+        static const int maxSyncSourceLagSecs;
 
         const ReplSetConfig::MemberCfg& myConfig() const { return _config; }
         void tryToGoLiveAsASecondary(); // readlocks
@@ -626,22 +646,6 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual void help( stringstream &help ) const { help << "internal"; }
 
-        /**
-         * Some replica set commands call this and then call check(). This is
-         * intentional, as they might do things before theReplSet is initialized
-         * that still need to be checked for auth.
-         */
-        bool checkAuth(string& errmsg, BSONObjBuilder& result) {
-            if( !noauth ) {
-                AuthenticationInfo *ai = cc().getAuthenticationInfo();
-                if (!ai->isAuthorizedForLock("admin", locktype())) {
-                    errmsg = "replSet command unauthorized";
-                    return false;
-                }
-            }
-            return true;
-        }
-
         bool check(string& errmsg, BSONObjBuilder& result) {
             if( !replSet ) {
                 errmsg = "not running with --replSet";
@@ -660,7 +664,7 @@ namespace mongo {
                 return false;
             }
 
-            return checkAuth(errmsg, result);
+            return true;
         }
     };
 

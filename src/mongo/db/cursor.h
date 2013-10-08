@@ -31,9 +31,6 @@ namespace mongo {
     class NamespaceDetails;
     class CoveredIndexMatcher;
 
-    extern BSONObj minKey;
-    extern BSONObj maxKey;
-
     /**
      * Query cursors, base class.  This is for our internal cursors.  "ClientCursor" is a separate
      * concept and is for the user's cursor.
@@ -110,8 +107,6 @@ namespace mongo {
 
         // Used when we want fast matcher lookup
         virtual CoveredIndexMatcher *matcher() const { return 0; }
-        // Used when we need to share this matcher with someone else
-        virtual shared_ptr< CoveredIndexMatcher > matcherPtr() const { return shared_ptr< CoveredIndexMatcher >(); }
 
         virtual bool currentMatches( MatchDetails *details = 0 ) {
             return !matcher() || matcher()->matchesCurrent( this, details );
@@ -136,6 +131,9 @@ namespace mongo {
         }
         
         virtual void explainDetails( BSONObjBuilder& b ) const { return; }
+
+        /// Should this cursor be destroyed when it's namespace is deleted
+        virtual bool shouldDestroyOnNSDeletion() { return true; }
     };
 
     class FieldRange;
@@ -233,24 +231,19 @@ namespace mongo {
 
         BSONObj currPK() const { return _currPK; }
         BSONObj currKey() const { return _currKey; }
+        BSONObj current();
         BSONObj indexKeyPattern() const { return _idx.keyPattern(); }
 
-        BSONObj current();
         string toString() const;
-
+        BSONObj prettyIndexBounds() const;
         BSONObj prettyKey( const BSONObj &key ) const {
             return key.replaceFieldNames( indexKeyPattern() ).clientReadable();
         }
 
-        BSONObj prettyIndexBounds() const;
-
         CoveredIndexMatcher *matcher() const { return _matcher.get(); }
-        shared_ptr< CoveredIndexMatcher > matcherPtr() const { return _matcher; }
-
         void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { _matcher = matcher;  }
-
+        bool currentMatches( MatchDetails *details = NULL );
         const Projection::KeyOnly *keyFieldsOnly() const { return _keyFieldsOnly.get(); }
-        
         void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
             _keyFieldsOnly = keyFieldsOnly;
         }
@@ -302,7 +295,7 @@ namespace mongo {
         void _advance();
 
         /** ydb cursor callback + flags */
-        struct cursor_getf_extra {
+        struct cursor_getf_extra : public ExceptionSaver {
             RowBuffer *buffer;
             int rows_fetched;
             int rows_to_fetch;
@@ -324,6 +317,13 @@ namespace mongo {
         bool checkCurrentAgainstBounds();
         void skipPrefix(const BSONObj &key, const int k);
         int skipToNextKey(const BSONObj &currentKey);
+        /**
+         * Attempt to locate the next index key matching _bounds.  This may mean advancing to the
+         * next successive key in the index, or skipping to a new position in the index.  If an
+         * internal iteration cutoff is reached before a matching key is found, then the search for
+         * a matching key will be aborted, leaving the cursor pointing at a key that is not within
+         * bounds.
+         */
         bool skipOutOfRangeKeysAndCheckEnd();
         void checkEnd();
 
@@ -340,10 +340,24 @@ namespace mongo {
         const int _direction;
         shared_ptr< FieldRangeVector > _bounds; // field ranges to iterate over, if non-null
         auto_ptr< FieldRangeVectorIterator > _boundsIterator;
+        bool _boundsMustMatch; // If iteration is aborted before a key matching _bounds is
+                               // identified, the cursor may be left pointing at a key that is not
+                               // within bounds (_bounds->matchesKey( currKey() ) may be false).
+                               // _boundsMustMatch will be set to false accordingly.
         shared_ptr< CoveredIndexMatcher > _matcher;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
         long long _nscanned;
-        const int _numWanted;
+        long long _nscannedObjects;
+
+        // Prelock is true if the caller does not want a limited result set from the cursor.
+        // Even if the query looks like { a: { $gte: 5 } }, the caller may want limited results for:
+        // - a delete has justOne = true
+        // - an update has multi = false
+        // - any findAndModify (since it's implemented as an update with multi = false)
+        // The caller can let us know a limited result set is requested when all of these are true:
+        // - the numWanted parameter is not zero (zero means "unlimited want", in the constructor)
+        // - cc().opSettings().justOne() is true.
+        const bool _prelock;
 
         IndexDetails::Cursor _cursor;
         // An exhausted cursor has no more rows and is done iterating,

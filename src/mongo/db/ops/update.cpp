@@ -22,6 +22,7 @@
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/delete.h"
@@ -33,29 +34,27 @@ namespace mongo {
 
     void updateOneObject(
         NamespaceDetails *d, 
-        NamespaceDetailsTransient *nsdt, 
         const BSONObj &pk, 
         const BSONObj &oldObj, 
         const BSONObj &newObj, 
-        struct LogOpUpdateDetails* loud,
+        const LogOpUpdateDetails &logDetails,
         uint64_t flags
         ) 
     {
         BSONObj newObjModified = newObj;
         d->updateObject(pk, oldObj, newObjModified, flags);
-        if (loud && loud->logop) {
+        if (logDetails.logop) {
+            const string &ns = d->ns();
             OpLogHelpers::logUpdate(
-                loud->ns,
+                ns.c_str(),
                 pk,
                 oldObj,
                 newObjModified,
-                loud->fromMigrate,
+                logDetails.fromMigrate,
                 &cc().txn()
                 );
         }
-        if (nsdt != NULL) {
-            nsdt->notifyOfWriteOp();
-        }
+        d->notifyOfWriteOp();
     }
 
     static void checkNoMods( const BSONObj &o ) {
@@ -87,28 +86,34 @@ namespace mongo {
         }
     } _storageUpdateCallback; // installed as the ydb update callback in db.cpp via set_update_callback
 
-    static void updateUsingMods(NamespaceDetails *d, NamespaceDetailsTransient *nsdt,
-            const BSONObj &pk, const BSONObj &obj, ModSetState &mss, struct LogOpUpdateDetails* loud) {
+    static void updateUsingMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
+                                ModSetState &mss, const LogOpUpdateDetails &logDetails) {
 
         BSONObj newObj = mss.createNewFromMods();
         checkTooLarge( newObj );
         TOKULOG(3) << "updateUsingMods used mod set, transformed " << obj << " to " << newObj << endl;
 
-        updateOneObject( d, nsdt, pk, obj, newObj, loud );
+        updateOneObject( d, pk, obj, newObj, logDetails );
     }
 
-    static void updateNoMods(NamespaceDetails *d, NamespaceDetailsTransient *nsdt,
-            const BSONObj &pk, const BSONObj &obj, const BSONObj &updateobj, struct LogOpUpdateDetails* loud) {
+    static void updateNoMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
+                             const BSONObj &updateobj, const LogOpUpdateDetails &logDetails) {
 
         BSONElementManipulator::lookForTimestamps( updateobj );
         checkNoMods( updateobj );
         TOKULOG(3) << "updateNoMods replacing pk " << pk << ", obj " << obj << " with updateobj " << updateobj << endl;
 
-        updateOneObject( d, nsdt, pk, obj, updateobj, loud );
+        updateOneObject( d, pk, obj, updateobj, logDetails );
     }
 
-    static void insertAndLog(const char *ns, NamespaceDetails *d, NamespaceDetailsTransient *nsdt,
-            BSONObj &newObj, bool logop, bool fromMigrate) {
+    static void checkBulkLoad(const StringData &ns) {
+        uassert(16893, str::stream() <<
+                       "Cannot update a collection under-going bulk load: " << ns,
+                       ns != cc().bulkLoadNS());
+    }
+
+    static void insertAndLog(const char *ns, NamespaceDetails *d, BSONObj &newObj,
+                             bool logop, bool fromMigrate) {
 
         checkNoMods( newObj );
         TOKULOG(3) << "insertAndLog for upsert: " << newObj << endl;
@@ -116,7 +121,8 @@ namespace mongo {
         // We cannot pass NamespaceDetails::NO_UNIQUE_CHECKS because we still need to check secondary indexes.
         // We know if we are in this function that we did a query for the object and it didn't exist yet, so the unique check on the PK won't fail.
         // To prove this to yourself, look at the callers of insertAndLog and see that they return an UpdateResult that says the object didn't exist yet.
-        insertOneObject(d, nsdt, newObj);
+        checkBulkLoad(ns);
+        insertOneObject(d, newObj);
         if (logop) {
             OpLogHelpers::logInsert(ns, newObj, &cc().txn());
         }
@@ -144,51 +150,47 @@ namespace mongo {
                                     bool isOperatorUpdate,
                                     ModSet* mods,
                                     NamespaceDetails* d,
-                                    NamespaceDetailsTransient *nsdt,
                                     const char* ns,
                                     const BSONObj& updateobj,
                                     bool logop,
                                     OpDebug& debug,
                                     bool fromMigrate = false) {
 
-        struct LogOpUpdateDetails loud; // TODO: Write a constructor for me
-        loud.logop = logop;
-        loud.ns = ns;
-        loud.fromMigrate = fromMigrate;
-
-        if ( cmdLine.fastupdates && !hasClusteringSecondaryKey(d) ) {
-            // Fast update path, no _id query, which is okay
-            // because we have no secondary clustering keys
-            // to maintain.
+        if ( cmdLine.fastupdates && !mods->isIndexed() &&
+             !hasClusteringSecondaryKey(d) ) {
+            // Fast update path that skips the _id query.
+            // We know no indexes need to be updated so we
+            // don't need to read the full object.
             d->updateObjectMods(pk, updateobj);
-            if ( nsdt != NULL ) {
-                nsdt->notifyOfWriteOp();
-            }
-            // TODO: Log this fast update
+            d->notifyOfWriteOp();
+            debug.fastmod = true;
+            // TODO: Log this update for replication.
             return UpdateResult( 0, 0, 0, BSONObj() );
         }
 
         BSONObj obj;
         const bool found = d->findByPK( pk, obj );
         if ( !found ) {
-            // TODO: No reason we can't upsert here, right?
             // no upsert support in _updateById yet, so we are done.
             return UpdateResult( 0 , 0 , 1 , BSONObj() );
         }
 
+        d->notifyOfWriteOp();
+
         /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
            regular ones at the moment. */
+        LogOpUpdateDetails logDetails(logop, fromMigrate);
         if ( isOperatorUpdate ) {
-            auto_ptr<ModSetState> mss = mods->prepare( obj );
+            auto_ptr<ModSetState> mss = mods->prepare( obj, false /* not an insertion */ );
 
             // mod set update, ie: $inc: 10 increments by 10.
-            updateUsingMods( d, nsdt, pk, obj, *mss, &loud );
+            updateUsingMods( d, pk, obj, *mss, logDetails );
             return UpdateResult( 1 , 1 , 1 , BSONObj() );
 
         } // end $operator update
 
         // replace-style update
-        updateNoMods( d, nsdt, pk, obj, updateobj, &loud );
+        updateNoMods( d, pk, obj, updateobj, logDetails );
         return UpdateResult( 1 , 0 , 1 , BSONObj() );
     }
 
@@ -210,27 +212,25 @@ namespace mongo {
         debug.updateobj = updateobj;
 
         NamespaceDetails *d = getAndMaybeCreateNS(ns, logop);
-        NamespaceDetailsTransient *nsdt = &NamespaceDetailsTransient::get(ns);
 
         auto_ptr<ModSet> mods;
         const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
-        bool modsAreIndexed = false;
 
         if ( isOperatorUpdate ) {
             if ( d->indexBuildInProgress() ) {
                 set<string> bgKeys;
                 d->inProgIdx().keyPattern().getFieldNames(bgKeys);
-                mods.reset( new ModSet(updateobj, nsdt->indexKeys(), &bgKeys) );
+                mods.reset( new ModSet(updateobj, d->indexKeys(), &bgKeys) );
             }
             else {
-                mods.reset( new ModSet(updateobj, nsdt->indexKeys()) );
+                mods.reset( new ModSet(updateobj, d->indexKeys()) );
             }
-            modsAreIndexed = mods->isIndexed();
         }
 
         int idIdxNo = -1;
-        if ( planPolicy.permitOptimalIdPlan() && !multi && !modsAreIndexed && !d->isCapped() &&
-             (idIdxNo = d->findIdIndex()) >= 0 && isSimpleIdQuery(patternOrig) ) {
+        if ( planPolicy.permitOptimalIdPlan() && !multi && !d->isCapped() &&
+             (idIdxNo = d->findIdIndex()) >= 0 &&
+             d->mayFindById() && isSimpleIdQuery(patternOrig) ) {
             debug.idhack = true;
             IndexDetails &idx = d->idx(idIdxNo);
             BSONObj pk = idx.getKeyFromQuery(patternOrig);
@@ -239,7 +239,6 @@ namespace mongo {
                                                isOperatorUpdate,
                                                mods.get(),
                                                d,
-                                               nsdt,
                                                ns,
                                                updateobj,
                                                logop,
@@ -249,19 +248,16 @@ namespace mongo {
                 return result;
             }
             else if ( upsert && ! isOperatorUpdate && ! logop) {
-                // this handles repl inserts
-                checkNoMods( updateobj );
                 debug.upsert = true;
                 BSONObj objModified = updateobj;
-                insertOneObject( d, nsdt, objModified );
+                insertAndLog( ns, d, objModified, logop, fromMigrate );
                 return UpdateResult( 0 , 0 , 1 , updateobj );
             }
         }
 
         int numModded = 0;
         debug.nscanned = 0;
-        shared_ptr<Cursor> c =
-                NamespaceDetailsTransient::getCursor( ns, patternOrig, BSONObj(), planPolicy );
+        shared_ptr<Cursor> c = getOptimizedCursor( ns, patternOrig, BSONObj(), planPolicy );
 
         if( c->ok() ) {
             set<BSONObj> seenObjects;
@@ -311,10 +307,7 @@ namespace mongo {
 
                 /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
                    regular ones at the moment. */
-                struct LogOpUpdateDetails loud;
-                loud.logop = logop;
-                loud.ns = ns;
-                loud.fromMigrate = fromMigrate;
+                LogOpUpdateDetails logDetails(logop, fromMigrate);
                 if ( isOperatorUpdate ) {
 
                     if ( multi ) {
@@ -349,8 +342,9 @@ namespace mongo {
                         mymodset.reset( useMods );
                     }
 
-                    auto_ptr<ModSetState> mss = useMods->prepare( currentObj );
-                    updateUsingMods( d, nsdt, currPK, currentObj, *mss, &loud );
+                    auto_ptr<ModSetState> mss = useMods->prepare( currentObj,
+                                                                  false /* not an insertion */ );
+                    updateUsingMods( d, currPK, currentObj, *mss, logDetails );
 
                     numModded++;
                     if ( ! multi )
@@ -361,7 +355,7 @@ namespace mongo {
 
                 uassert( 10158 ,  "multi update only works with $ operators" , ! multi );
 
-                updateNoMods( d, nsdt, currPK, currentObj, updateobj, &loud );
+                updateNoMods( d, currPK, currentObj, updateobj, logDetails );
 
                 return UpdateResult( 1 , 0 , 1 , BSONObj() );
             } while ( c->ok() );
@@ -376,12 +370,12 @@ namespace mongo {
                 // upsert of an $operation. build a default object
                 BSONObj newObj = mods->createNewFromQuery( patternOrig );
                 debug.fastmodinsert = true;
-                insertAndLog( ns, d, nsdt, newObj, logop, fromMigrate );
+                insertAndLog( ns, d, newObj, logop, fromMigrate );
                 return UpdateResult( 0 , 1 , 1 , newObj );
             }
             uassert( 10159 ,  "multi update only works with $ operators" , ! multi );
             debug.upsert = true;
-            insertAndLog( ns, d, nsdt, newObj, logop, fromMigrate );
+            insertAndLog( ns, d, newObj, logop, fromMigrate );
             return UpdateResult( 0 , 0 , 1 , newObj );
         }
 
@@ -389,8 +383,8 @@ namespace mongo {
     }
 
     void validateUpdate( const char* ns , const BSONObj& updateobj, const BSONObj& patternOrig ) {
-        uassert( 10155 , "cannot update reserved $ collection", strchr(ns, '$') == 0 );
-        if ( strstr(ns, ".system.") ) {
+        uassert( 10155 , "cannot update reserved $ collection", NamespaceString::normal(ns) );
+        if ( NamespaceString::isSystem(ns) ) {
             /* dm: it's very important that system.indexes is never updated as IndexDetails
                has pointers into it */
             uassert( 10156,

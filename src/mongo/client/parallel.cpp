@@ -98,7 +98,7 @@ namespace mongo {
             throw UserException( o["code"].numberInt() , o["$err"].String() );
         }
 
-        if ( NamespaceString( cursor->getns() ).isCommand() ) {
+        if ( NamespaceString::isCommand( cursor->getns() ) ) {
             // For backwards compatibility with v2.0 mongods because in 2.0 commands that care about
             // versioning (like the count command) will return with the stale config error code, but
             // don't set the ShardConfigStale result flag on the cursor.
@@ -1003,6 +1003,7 @@ namespace mongo {
             }
             catch( SocketException& e ){
                 warning() << "socket exception when initializing on " << shard << ", current connection state is " << mdata.toBSON() << causedBy( e ) << endl;
+                e._shard = shard.getName();
                 mdata.errored = true;
                 if( returnPartial ){
                     mdata.cleanup();
@@ -1012,6 +1013,7 @@ namespace mongo {
             }
             catch( DBException& e ){
                 warning() << "db exception when initializing on " << shard << ", current connection state is " << mdata.toBSON() << causedBy( e ) << endl;
+                e._shard = shard.getName();
                 mdata.errored = true;
                 if( returnPartial && e.getCode() == 15925 /* From above! */ ){
                     mdata.cleanup();
@@ -1675,12 +1677,7 @@ namespace mongo {
             }
 
             if ( _conn->lazySupported() ) {
-                BSONObj actualCommand = _cmd;
-                if ( !noauth ) {
-                    actualCommand = ClientBasic::getCurrent()->getAuthenticationInfo()->
-                        getAuthTable().copyCommandObjAddingAuth( _cmd );
-                }
-                _cursor.reset( new DBClientCursor(_conn, _db + ".$cmd", actualCommand,
+                _cursor.reset( new DBClientCursor(_conn, _db + ".$cmd", _cmd,
                                                   -1/*limit*/, 0, NULL, _options, 0));
                 _cursor->initLazy();
             }
@@ -1690,7 +1687,7 @@ namespace mongo {
             }
         }
         catch ( std::exception& e ) {
-            error() << "Future::spawnComand (part 1) exception: " << e.what() << endl;
+            error() << "Future::spawnCommand (part 1) exception: " << e.what() << endl;
             _ok = false;
             _done = true;
         }
@@ -1729,13 +1726,13 @@ namespace mongo {
                 if( staleNS.size() == 0 ) staleNS = _db;
 
                 if( i >= maxRetries ){
-                    error() << "Future::spawnComand (part 2) stale config exception" << causedBy( e ) << endl;
+                    error() << "Future::spawnCommand (part 2) stale config exception" << causedBy( e ) << endl;
                     throw e;
                 }
 
                 if( i >= maxRetries / 2 ){
                     if( ! versionManager.forceRemoteCheckShardVersionCB( staleNS ) ){
-                        error() << "Future::spawnComand (part 2) no config detected" << causedBy( e ) << endl;
+                        error() << "Future::spawnCommand (part 2) no config detected" << causedBy( e ) << endl;
                         throw e;
                     }
                 }
@@ -1759,7 +1756,7 @@ namespace mongo {
                 continue;
             }
             catch ( std::exception& e ) {
-                error() << "Future::spawnComand (part 2) exception: " << causedBy( e ) << endl;
+                error() << "Future::spawnCommand (part 2) exception: " << causedBy( e ) << endl;
                 break;
             }
 

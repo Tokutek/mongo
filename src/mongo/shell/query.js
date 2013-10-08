@@ -243,6 +243,7 @@ DBQuery.prototype.showDiskLoc = function() {
  * 
  * @param mode {string} read prefrence mode to use.
  * @param tagSet {Array.<Object>} optional. The list of tags to use, order matters.
+ *     Note that this object only keeps a shallow copy of this array.
  * 
  * @return this cursor
  */
@@ -358,7 +359,7 @@ DBQuery.prototype.shellPrint = function(){
 }
 
 DBQuery.prototype.toString = function(){
-    return "DBQuery: " + this._ns + " -> " + tojson( this.query );
+    return "DBQuery: " + this._ns + " -> " + tojson( this._query );
 }
 
 DBQuery.shellBatchSize = 20;
@@ -376,4 +377,43 @@ DBQuery.Option = {
     exhaust: 0x40,
     partial: 0x80
 };
+
+function DBCommandCursor(mongo, cmdResult, batchSize) {
+    assert.commandWorked(cmdResult)
+    this._firstBatch = cmdResult.cursor.firstBatch.reverse(); // modifies input to allow popping
+    this._cursor = mongo.cursorFromId(cmdResult.cursor.ns, cmdResult.cursor.id, batchSize);
+}
+
+DBCommandCursor.prototype = {};
+DBCommandCursor.prototype.hasNext = function() {
+    return this._firstBatch.length || this._cursor.hasNext();
+}
+DBCommandCursor.prototype.next = function() {
+    if (this._firstBatch.length) {
+        // $err wouldn't be in _firstBatch since ok was true.
+        return this._firstBatch.pop();
+    }
+    else {
+        var ret = this._cursor.next();
+        if ( ret.$err )
+            throw "error: " + tojson( ret );
+        return ret;
+    }
+}
+DBCommandCursor.prototype.objsLeftInBatch = function() {
+    if (this._firstBatch.length) {
+        return this._firstBatch.length;
+    }
+    else {
+        return this._cursor.objsLeftInBatch();
+    }
+}
+
+// Copy these methods from DBQuery
+DBCommandCursor.prototype.toArray = DBQuery.prototype.toArray
+DBCommandCursor.prototype.forEach = DBQuery.prototype.forEach
+DBCommandCursor.prototype.map = DBQuery.prototype.map
+DBCommandCursor.prototype.itcount = DBQuery.prototype.itcount
+DBCommandCursor.prototype.shellPrint = DBQuery.prototype.shellPrint
+DBCommandCursor.prototype.pretty = DBQuery.prototype.pretty
 

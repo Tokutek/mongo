@@ -75,19 +75,25 @@ namespace mongo {
     public:
         HeartbeatInfo()
                 : _id(0xffffffff), hbstate(MemberState::RS_UNKNOWN), health(-1.0),
-                  downSince(0), opTime(0), skew(INT_MIN), authIssue(false), ping(0) {}
+	  downSince(0), lastHeartbeatRecv(0), opTime(0), skew(INT_MIN), authIssue(false), ping(0) {}
         HeartbeatInfo(unsigned id)
                 : _id(id), hbstate(MemberState::RS_UNKNOWN), health(-1.0), upSince(0),
-                  downSince(0), lastHeartbeat(0), opTime(0), skew(INT_MIN), authIssue(false), ping(0) {}
+                  downSince(0), lastHeartbeat(0), lastHeartbeatRecv(0), opTime(0), skew(INT_MIN), authIssue(false), ping(0) {}
         unsigned id() const { return _id; }
         MemberState hbstate;
         double health;
         time_t upSince;
         long long downSince;
+        // This is the last time we got a response from a heartbeat request to a given member.
         time_t lastHeartbeat;
+        // This is the last time we got a heartbeat request from a given member.
+        time_t lastHeartbeatRecv;
         DiagStr lastHeartbeatMsg;
         uint64_t opTime;
         GTID gtid;
+        GTID lastUnappliedGTID;
+        GTID minLiveGTID;
+        GTID minUnappliedGTID;
         int skew;
         bool authIssue;
         unsigned int ping; // milliseconds
@@ -102,6 +108,8 @@ namespace mongo {
 
         /* true if changed in a way of interest to the repl set manager. */
         bool changed(const HeartbeatInfo& old) const;
+
+        void recvHeartbeat();
     };
 
     inline bool HeartbeatInfo::changed(const HeartbeatInfo& old) const {

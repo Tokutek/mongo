@@ -48,23 +48,25 @@ namespace mongo {
     class RemoteTransaction : boost::noncopyable {
         DBClientWithCommands *_conn;
       public:
-        /** Creates a remote transaction using a ScopedDbConnection.
+        /** Creates a remote transaction using a connection.
             @param conn -- The connection to use for this transaction.
             @param isolation -- What isolation level to use.  Possible values are serializable, mvcc (default), and readUncommitted.
         */
         RemoteTransaction(DBClientWithCommands &conn, const string &isolation = "mvcc");
-        /** Rolls back the transaction if necessary, and releases the underlying connection. */
+        /** Rolls back the transaction if necessary. */
         ~RemoteTransaction();
-        /** Commits the transaction and releases the underlying connection.
-            @param res pointer to object to return the result of the commit
-            @return true iff the commit was successful
+        /** Commits the transaction.
+            @param res -- pointer to object to return the result of the commit
+            @return true -- iff the commit was successful
          */
         bool commit(BSONObj *res = NULL);
-        /** Rolls back the transaction and releases the underlying connection.
-            @param res pointer to object to return the result of the rollback
-            @return true iff the rollback was successful
+        /** Rolls back the transaction.
+            @param res -- pointer to object to return the result of the rollback
+            @return true -- iff the rollback was successful
          */
         bool rollback(BSONObj *res = NULL);
+        /** @return true -- iff the transaction is live */
+        bool isLive() const { return _conn != NULL; }
     };
 
 } // namespace mongo

@@ -19,6 +19,9 @@
 #include "processinfo.h"
 #include <iostream>
 #include <psapi.h>
+#include <Windows.h>
+
+#include <boost/scoped_array.hpp>
 
 using namespace std;
 
@@ -95,6 +98,36 @@ namespace mongo {
         }
     }
 
+    static inline string LPCTSTRtostring(LPCTSTR tstr, DWORD len) {
+#ifdef UNICODE
+        boost::scoped_array<char> buf(new char[len]);
+        size_t sz = wcstombs(buf.get(), tstr, len);
+        verify(sz < (size_t)-1);
+        string s(buf.get());
+#else
+        string s(tstr, len);
+#endif
+        return s;
+    }
+
+    string ProcessInfo::getExePath() const {
+        DWORD nSize = 128;
+        boost::scoped_array<TCHAR> buf(new TCHAR[nSize]);
+        DWORD len;
+        while (true) {
+            len = GetModuleFileName(NULL, buf, 128);
+            verify(len != 0);
+            verify(len <= nSize);
+            if (len < nSize) {
+                break;
+            }
+            nSize *= 2;
+            buf.reset(new TCHAR[nSize]);
+        }
+        string exePath = LPCTSTRtostring(buf.get(), len);
+        return exePath;
+    }
+
     void ProcessInfo::SystemInfo::collectSystemInfo() {
         BSONObjBuilder bExtra;
         stringstream verstr;
@@ -106,7 +139,8 @@ namespace mongo {
         GetNativeSystemInfo( &ntsysinfo );
         addrSize = (ntsysinfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ? 64 : 32);
         numCores = ntsysinfo.dwNumberOfProcessors;
-        bExtra.append( "pageSize", static_cast< int >(ntsysinfo.dwPageSize) );
+        pageSize = static_cast<unsigned long long>(ntsysinfo.dwPageSize);
+        bExtra.append("pageSize", static_cast<long long>(pageSize));
 
         // get memory info
         mse.dwLength = sizeof( mse );

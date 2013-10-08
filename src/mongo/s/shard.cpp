@@ -18,18 +18,25 @@
  */
 
 #include "pch.h"
-#include "shard.h"
-#include "config.h"
-#include "request.h"
-#include "client_info.h"
-#include "../db/commands.h"
+
+#include <set>
+#include <string>
+#include <vector>
+
 #include "mongo/client/dbclient_rs.h"
 #include "mongo/client/dbclientcursor.h"
-#include <set>
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/s/config.h"
+#include "mongo/s/client_info.h"
+#include "mongo/s/request.h"
+#include "mongo/s/shard.h"
 
 namespace mongo {
-
-    typedef shared_ptr<Shard> ShardPtr;
 
     class StaticShardInfo {
     public:
@@ -258,9 +265,16 @@ namespace mongo {
 
     class CmdGetShardMap : public InformationCommand {
       public:
-        CmdGetShardMap() : InformationCommand("getShardMap", false) {}
+        CmdGetShardMap() : InformationCommand("getShardMap") {}
         virtual void help( stringstream &help ) const { help<<"internal"; }
         virtual bool adminOnly() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::getShardMap);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
         virtual bool run(const string&, mongo::BSONObj&, int, std::string& errmsg , mongo::BSONObjBuilder& result, bool) {
             return staticShardInfo.getShardMap( result , errmsg );
         }
@@ -382,6 +396,7 @@ namespace mongo {
         _mapped = obj.getFieldDotted( "mem.mapped" ).numberLong();
         _hasOpsQueued = obj["writeBacksQueued"].Bool();
         _writeLock = 0; // TODO
+        _mongoVersion = obj["version"].String();
     }
 
     void ShardingConnectionHook::onCreate( DBClientBase * conn ) {
@@ -397,12 +412,6 @@ namespace mongo {
 
             uassert( 15847, str::stream() << "can't authenticate to server "
                                           << conn->getServerAddress() << causedBy( err ), result );
-
-            if ( conn->type() == ConnectionString::SYNC ) {
-                // Connections to the config servers should always have full access.
-                conn->setAuthenticationTable(
-                        AuthenticationTable::getInternalSecurityAuthenticationTable() );
-            }
         }
 
         if ( _shardedConnections && versionManager.isVersionableCB( conn ) ) {

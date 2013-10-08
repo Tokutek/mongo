@@ -23,6 +23,8 @@
 
 namespace mongo {
 
+    class Descriptor;
+
     namespace storage {
 
         extern DB_ENV *env;
@@ -30,12 +32,12 @@ namespace mongo {
         void startup(void);
         void shutdown(void);
 
-        int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create);
-        void db_close(DB *db);
         void db_remove(const string &name);
         void db_rename(const string &old_name, const string &new_name);
 
         void get_status(BSONObjBuilder &status);
+        void get_pending_lock_request_status(BSONObjBuilder &status);
+        void get_live_transaction_status(BSONObjBuilder &status);
         void log_flush();
         void checkpoint();
 
@@ -43,15 +45,17 @@ namespace mongo {
         void set_checkpoint_period(uint32_t period_seconds);
         void set_cleaner_period(uint32_t period_seconds);
         void set_cleaner_iterations(uint32_t num_iterations);
+        void set_lock_timeout(uint64_t timeout_ms);
+        void set_loader_max_memory(uint64_t bytes);
 
         void handle_ydb_error(int error);
-        void handle_ydb_error_fatal(int error);
+        MONGO_COMPILER_NORETURN void handle_ydb_error_fatal(int error);
 
         class UpdateCallback : boost::noncopyable {
         public:
             virtual ~UpdateCallback() { }
             virtual BSONObj apply(const BSONObj &oldObj, const BSONObj &msg) {
-                msgasserted( 16854, "bug: update callback not properly installed" );
+                msgasserted( 17020, "bug: update callback not properly installed" );
             }
         };
 

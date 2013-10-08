@@ -18,11 +18,13 @@
 #include "pch.h"
 
 #include "mongo/shell/shell_utils.h"
+
+#include "mongo/client/dbclientinterface.h"
+#include "mongo/scripting/engine.h"
 #include "mongo/shell/shell_utils_extended.h"
 #include "mongo/shell/shell_utils_launcher.h"
 #include "mongo/util/processinfo.h"
-#include "mongo/client/dbclientinterface.h"
-#include "mongo/scripting/engine.h"
+#include "mongo/util/version.h"
 
 namespace mongo {
 
@@ -124,12 +126,26 @@ namespace mongo {
 #endif
         }
 
+        BSONObj getBuildInfo(const BSONObj& a, void* data) {
+            uassert( 16822, "getBuildInfo accepts no arguments", a.nFields() == 0 );
+            BSONObjBuilder b;
+            appendBuildInfo(b);
+            return BSON( "" << b.done() );
+        }
+
+        BSONObj interpreterVersion(const BSONObj& a, void* data) {
+            uassert( 16453, "interpreterVersion accepts no arguments", a.nFields() == 0 );
+            return BSON( "" << globalScriptEngine->getInterpreterVersionString() );
+        }
+
         void installShellUtils( Scope& scope ) {
             scope.injectNative( "quit", Quit );
             scope.injectNative( "getMemInfo" , JSGetMemInfo );
             scope.injectNative( "_srand" , JSSrand );
             scope.injectNative( "_rand" , JSRand );
             scope.injectNative( "_isWindows" , isWindows );
+            scope.injectNative( "interpreterVersion", interpreterVersion );
+            scope.injectNative( "getBuildInfo", getBuildInfo );
 
 #ifndef MONGO_SAFE_SHELL
             //can't launch programs
@@ -146,6 +162,7 @@ namespace mongo {
             scope.execSetup(JSFiles::servers_misc);
             scope.execSetup(JSFiles::replsettest);
             scope.execSetup(JSFiles::replsetbridge);
+            scope.installBenchRun();
 
             if ( !_dbConnect.empty() ) {
                 uassert( 12513, "connect failed", scope.exec( _dbConnect , "(connect)" , false , true , false ) );

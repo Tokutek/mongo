@@ -93,9 +93,9 @@ namespace ThreadedTests {
             }
 
             Timer t;
-            cout << "MongoMutexTest N:" << N << endl;
+            cerr << "MongoMutexTest N:" << N << endl;
             ThreadedTest<nthr>::run();
-            cout << "MongoMutexTest " << t.millis() << "ms" << endl;
+            cerr << "MongoMutexTest " << t.millis() << "ms" << endl;
         }
     private:
         virtual void setup() {
@@ -374,10 +374,10 @@ namespace ThreadedTests {
              * note: this test will deadlock if the code breaks
              */            
             RWLockRecursiveNongreedy lk( "eliot2" , 120 * 1000 );
-            cout << "RWLock impl: " << lk.implType() << endl;
+            cerr << "RWLock impl: " << lk.implType() << endl;
             auto_ptr<RWLockRecursiveNongreedy::Shared> a( new RWLockRecursiveNongreedy::Shared(lk) );            
             AtomicUInt32 x1(0);
-            cout << "A : " << &x1 << endl;
+            cerr << "A : " << &x1 << endl;
             boost::thread t1( boost::bind( worker1 , &lk , &x1 ) );
             while ( ! x1.load() );
             verify( x1.load() == 1 );
@@ -431,22 +431,22 @@ namespace ThreadedTests {
 #if defined(__linux__) || defined(__APPLE__)
         static void worker1( pthread_rwlock_t * lk , AtomicUInt32 * x ) {
             x->fetchAndAdd(1); // 1
-            cout << "lock b try" << endl;
+            cerr << "lock b try" << endl;
             while ( 1 ) {
                 if ( pthread_rwlock_trywrlock( lk ) == 0 )
                     break;
                 sleepmillis(10);
             }
-            cout << "lock b got" << endl;
+            cerr << "lock b got" << endl;
             x->fetchAndAdd(1); // 2
             pthread_rwlock_unlock( lk );
         }
 
         static void worker2( pthread_rwlock_t * lk , AtomicUInt32 * x ) {
-            cout << "lock c try" << endl;
+            cerr << "lock c try" << endl;
             pthread_rwlock_rdlock( lk );
             x->fetchAndAdd(1);
-            cout << "lock c got" << endl;
+            cerr << "lock c got" << endl;
             pthread_rwlock_unlock( lk );
         }
 #endif
@@ -680,9 +680,9 @@ namespace ThreadedTests {
         virtual void validate() { 
             if( once++ == 0 ) {
                 // <= 1.35 we use a different rwmutex impl so worth noting
-                cout << "Boost version : " << BOOST_VERSION << endl;
+                cerr << "Boost version : " << BOOST_VERSION << endl;
             }
-            cout << typeid(whichmutex).name() <<
+            cerr << typeid(whichmutex).name() <<
              " Slack useful work fraction: " << ((double)a)/b << " locks:" << locks << endl;
         }
         void watch() {
@@ -735,7 +735,7 @@ namespace ThreadedTests {
     private:
         unsigned a, b;
         virtual void validate() { 
-            cout << "CondSlack useful work fraction: " << ((double)a)/b << " locks:" << locks << endl;
+            cerr << "CondSlack useful work fraction: " << ((double)a)/b << " locks:" << locks << endl;
         }
         unsigned locks;
         volatile int k;

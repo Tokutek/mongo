@@ -75,13 +75,13 @@ namespace BasicTests {
             if ( ! broke )
                 return;
 
-            cout << s << endl;
+            cerr << s << endl;
             for ( int i=0; i<len; i++ )
-                cout << hex << ( data[i] & 0xFF ) << dec << " ";
-            cout << endl;
+                cerr << hex << ( data[i] & 0xFF ) << dec << " ";
+            cerr << endl;
             for ( int i=0; i<len; i++ )
-                cout << hex << ( out[i] & 0xFF ) << dec << " ";
-            cout << endl;
+                cerr << hex << ( out[i] & 0xFF ) << dec << " ";
+            cerr << endl;
 
             ASSERT(0);
         }
@@ -229,7 +229,7 @@ namespace BasicTests {
                 {
                     int x = t.millis();
                     if ( x < 1000 || x > 2500 ) {
-                        cout << "sleeptest finds sleep accuracy to be not great. x: " << x << endl;
+                        cerr << "sleeptest finds sleep accuracy to be not great. x: " << x << endl;
                         ASSERT( x >= 1000 );
                         ASSERT( x <= 20000 );
                     }
@@ -248,7 +248,7 @@ namespace BasicTests {
                 {
                     int y = t.millis();
                     if ( y < 1000 || y > 2500 ) {
-                        cout << "sleeptest y: " << y << endl;
+                        cerr << "sleeptest y: " << y << endl;
                         ASSERT( y >= 1000 );
                         /* ASSERT( y <= 100000 ); */
                     }
@@ -393,7 +393,8 @@ namespace BasicTests {
 
             ASSERT( NamespaceString::normal( "asdads" ) );
             ASSERT( ! NamespaceString::normal( "asda$ds" ) );
-            ASSERT( NamespaceString::normal( "local.oplog.$main" ) );
+            // This is no longer the case in TokuMX, see the comment on NamespaceString::normal.
+            //ASSERT( NamespaceString::normal( "local.oplog.$main" ) );
         }
     };
 

@@ -31,15 +31,16 @@ namespace NamespaceTests {
         class Base {
             Lock::GlobalWrite lk;
             Client::Context _context;
-            shared_ptr<IndexSpec> _spec;
+            shared_ptr<IndexDetails> _idx;
         public:
-            Base() : _context(ns()), _spec() {
+            IndexDetails &idx() { return *_idx; }
+            Base() : _context(ns()), _idx() {
             }
             virtual ~Base() {
             }
         protected:
             void create() {
-                _spec.reset(new IndexSpec(key(), info()));
+                _idx.reset(new IndexDetails(info()));
             }
             virtual bool isSparse() const {
                 return false;
@@ -61,7 +62,7 @@ namespace NamespaceTests {
                 return k.obj();
             }
             void _getKeysFromObject( const BSONObj &obj, BSONObjSet &keys ) {
-                _spec->getKeys( obj, keys );
+                idx().getKeysFromObject( obj, keys );
             }
             BSONObj aDotB() const {
                 BSONObjBuilder k;
@@ -102,8 +103,6 @@ namespace NamespaceTests {
                 b.appendNull( "" );
                 return b.obj();
             }
-        private:
-            Lock::GlobalWrite lk_;
         };
 
         class GetKeysFromObjectSimple : public Base {
@@ -904,41 +903,44 @@ namespace NamespaceTests {
             BSONObj key() const { return BSON( "a.0.b.0" << 1 ); }
         };
         
-        // also test numeric string field names
-        
-    } // namespace IndexDetailsTests
-
-    namespace IndexSpecTests {
-        
-        class Suitability {
+        class Suitability : public Base {
         public:
             void run() {
-                IndexSpec spec( BSON( "a" << 1 ), BSONObj() );
-                ASSERT_EQUALS( HELPFUL,
-                              spec.suitability( BSON( "a" << 2 << "b" << 3 ), BSONObj() ) );
-                ASSERT_EQUALS( USELESS,
-                              spec.suitability( BSON( "b" << 3 ), BSONObj() ) );
-                ASSERT_EQUALS( HELPFUL,
-                              spec.suitability( BSON( "b" << 3 ), BSON( "a" << 1 ) ) );
+                create();
+                FieldRangeSet frs1( "", BSON( "a" << 2 << "b" << 3 ), true , true );
+                FieldRangeSet frs2( "", BSON( "b" << 3 ), true , true );
+                ASSERT_EQUALS( IndexDetails::HELPFUL,
+                               idx().suitability( frs1, BSONObj() ) );
+                ASSERT_EQUALS( IndexDetails::USELESS,
+                               idx().suitability( frs2, BSONObj() ) );
+                ASSERT_EQUALS( IndexDetails::HELPFUL,
+                               idx().suitability( frs2, BSON( "a" << 1 ) ) );
             }
+        protected:
+            BSONObj key() const { return BSON( "a" << 1 ); }
         };
         
         /** Lexical rather than numeric comparison should be used to determine index suitability. */
-        class NumericFieldSuitability {
+        class NumericFieldSuitability : public Base {
         public:
             void run() {
-                IndexSpec spec( BSON( "1" << 1 ), BSONObj() );
-                ASSERT_EQUALS( HELPFUL,
-                              spec.suitability( BSON( "1" << 2 ), BSONObj() ) );
-                ASSERT_EQUALS( USELESS,
-                              spec.suitability( BSON( "01" << 3 ), BSON( "01" << 1 ) ) );
-                ASSERT_EQUALS( HELPFUL,
-                              spec.suitability( BSONObj(), BSON( "1" << 1 ) ) );                
+                create();
+                FieldRangeSet frs1( "", BSON( "1" << 2 ), true , true );
+                FieldRangeSet frs2( "", BSON( "01" << 3), true , true );
+                FieldRangeSet frs3( "", BSONObj() , true , true );
+                ASSERT_EQUALS( IndexDetails::HELPFUL,
+                               idx().suitability( frs1, BSONObj() ) );
+                ASSERT_EQUALS( IndexDetails::USELESS,
+                               idx().suitability( frs2, BSON( "01" << 1 ) ) );
+                ASSERT_EQUALS( IndexDetails::HELPFUL,
+                               idx().suitability( frs3, BSON( "1" << 1 ) ) );                
             }
+        protected:
+            BSONObj key() const { return BSON( "1" << 1 ); }
         };
         
-    } // namespace IndexSpecTests
-    
+    } // namespace IndexDetailsTests
+
     namespace NamespaceDetailsTests {
 
         class Base {
@@ -977,11 +979,11 @@ namespace NamespaceTests {
             const char *ns() const {
                 return ns_;
             }
-            NamespaceDetails *nsd() const {
+            NamespaceDetails *nsd() {
+                if (nsdetails(ns()) == NULL) {
+                    create();
+                }
                 return nsdetails( ns() );
-            }
-            NamespaceDetailsTransient &nsdt() const {
-                return NamespaceDetailsTransient::get( ns() );
             }
             static BSONObj bigObj(bool bGenID=false) {
                 BSONObjBuilder b;
@@ -990,21 +992,6 @@ namespace NamespaceTests {
                 string as( 187, 'a' );
                 b.append( "a", as );
                 return b.obj();
-            }
-        };
-
-        /* test  NamespaceDetails::cappedTruncateAfter
-        */
-        class TruncateCapped : public Base {
-            virtual string spec() const {
-                return "{\"capped\":true,\"size\":512,\"$nExtents\":2}";
-            }
-            void pass(int p) {
-                log() << "******** NOT RUNNING TruncateCapped test yet ************" << endl;
-            }
-        public:
-            void run() {
-                pass(0);
             }
         };
 
@@ -1035,12 +1022,12 @@ namespace NamespaceTests {
                 
             }
         protected:
-            void assertCachedIndexKey( const BSONObj &indexKey ) const {
+            void assertCachedIndexKey( const BSONObj &indexKey ) {
                 ASSERT_EQUALS( indexKey,
-                              nsdt().cachedQueryPlanForPattern( _pattern ).indexKey() );
+                              nsd()->cachedQueryPlanForPattern( _pattern ).indexKey() );
             }
             void registerIndexKey( const BSONObj &indexKey ) {
-                nsdt().registerCachedQueryPlanForPattern
+                nsd()->registerCachedQueryPlanForPattern
                         ( _pattern,
                          CachedQueryPlan( indexKey, 1, CandidatePlanCharacter( true, false ) ) );                
             }
@@ -1063,20 +1050,16 @@ namespace NamespaceTests {
 
                 ASSERT( !nsd()->isMultikey( 1 ) );
                 
-                nsd()->setIndexIsMultikey( ns(), 1 );
+                nsd()->setIndexIsMultikey( 1 );
                 ASSERT( nsd()->isMultikey( 1 ) );
                 assertCachedIndexKey( BSONObj() );
                 
                 registerIndexKey( BSON( "a" << 1 ) );
-                nsd()->setIndexIsMultikey( ns(), 1 );
+                nsd()->setIndexIsMultikey( 1 );
                 assertCachedIndexKey( BSON( "a" << 1 ) );
             }
         };
-        
-    } // namespace NamespaceDetailsTests
 
-    namespace NamespaceDetailsTransientTests {
-        
         /** clearQueryCache() clears the query plan cache. */
         class ClearQueryCache : public NamespaceDetailsTests::CachedPlanBase {
         public:
@@ -1086,13 +1069,13 @@ namespace NamespaceTests {
                 assertCachedIndexKey( BSON( "a" << 1 ) );
                 
                 // The query plan is cleared.
-                nsdt().clearQueryCache();
+                nsd()->clearQueryCache();
                 assertCachedIndexKey( BSONObj() );
             }
         };                                                                                         
         
-    } // namespace NamespaceDetailsTransientTests
-                                                                                 
+    } // namespace NamespaceDetailsTests
+
     class All : public Suite {
     public:
         All() : Suite( "namespace" ) {
@@ -1134,11 +1117,10 @@ namespace NamespaceTests {
             add< IndexDetailsTests::MissingField >();
             add< IndexDetailsTests::SubobjectMissing >();
             add< IndexDetailsTests::CompoundMissing >();
-            add< IndexSpecTests::Suitability >();
-            add< IndexSpecTests::NumericFieldSuitability >();
-            add< NamespaceDetailsTests::TruncateCapped >();
+            add< IndexDetailsTests::Suitability >();
+            add< IndexDetailsTests::NumericFieldSuitability >();
             add< NamespaceDetailsTests::SetIndexIsMultikey >();
-            add< NamespaceDetailsTransientTests::ClearQueryCache >();
+            add< NamespaceDetailsTests::ClearQueryCache >();
         }
     } myall;
 } // namespace NamespaceTests

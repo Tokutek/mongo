@@ -25,7 +25,7 @@ m = runMongoProgram( "mongod", "--keyFile", path+"key1", "--port", port[0], "--d
 
 
 print("should fail with wrong permissions");
-assert.eq(m, _isWindows()? 100 : 2, "mongod should exit w/ 2: permissions too open");
+assert.eq(m, _isWindows()? 100 : 1, "mongod should exit w/ 1 (EXIT_FAILURE): permissions too open");
 stopMongod(port[0]);
 
 
@@ -81,11 +81,11 @@ function doQueryOn(p) {
         if (typeof(JSON) != "undefined") {
             err = JSON.parse(e.substring(6));
         }
-        else if (e.indexOf("10057") > 0) {
-            err.code = 10057;
+        else if (e.indexOf("16550") > 0) {
+            err.code = 16550;
         }
     }
-    assert.eq(err.code, 10057);
+    assert.eq(err.code, 16550);
 };
 
 doQueryOn(slave);

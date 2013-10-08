@@ -23,8 +23,7 @@ function checkLiveCursors(n) {
 }
 
 function runTest(doCommit) {
-    t.drop();
-    db.unrelated.drop();
+    db.dropDatabase();
 
     for ( i = 0; i < 1500; i++ ) {
         t.insert({ _id: i });

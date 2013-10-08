@@ -1,6 +1,370 @@
 tokumx news
 ===========
 
+tokumx 1.3.0
+------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    -
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Many numeric `"byte quantity"` parameters can now be specified with
+      units, for example `"1MB"` or `"32k"` or `"6T"`.  The allowed
+      suffixes are `"kmgt"`, either upper or lower case, and optionally
+      also with a `"b"` or `"B"`.  All suffixes use binary quantities, not
+      decimal, so `"1MB"` is `1 * 1024 * 1024`, not `1000000`.  The
+      command line parameters that accept these quantities are
+      `cacheSize`, `locktreeMaxMemory`, and `txnMemLimit`.  These
+      parameters, if passed in a BSON object, must be passed as strings,
+      and are accepted as parameters to `pageSize`, `readPageSize`, and
+      the `size` for capped collections, as well as the argument to the
+      `backupThrottle` command in the enterprise Hot Backup plugin.
+      (#266, 536, #545)
+
+    - Added mongo shell wrapper functions `db.showLiveTransactions()` and
+      `db.showPendingLockRequests()`.  (#437, #526)
+
+
+tokumx 1.2.1
+------------
+Release date: 2013-09-18
+
+General
+~~~~~~~
+
+    - This release adds new diagnostic and performance analysis tools, and
+      bug fixes since 1.2.0.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added index usage stats.  The `db.coll.stats()` command now shows
+      cumulative statistics for how each index has been used since the
+      last reboot.  See the user's guide for more details.  (#285, #286,
+      #501)
+
+    - Added document-level lock debugging information.  With new commands
+      `showLiveTransactions` and `showPendingLockRequests`, you can show
+      the state of all document-level locks currently held in TokuMX,
+      which helps diagnose why a workload might get "lock not granted" or
+      "deadlock" errors.  In addition, when an operation fails for one of
+      these reasons, some of this information is immediately printed to
+      the error log.  See the user's guide for more details.  (#297, #437,
+      #490)
+
+    - Added mongo shell wrapper functions `db.beginTransaction()`,
+      `db.commitTransaction()`, `db.rollbackTransaction()`, and
+      `db.engineStatus()`.  (#488)
+
+    - Added to `mongo2toku` persistent save/resume functionality.  When
+      the tool exits, it will write the timestamp to a file, and resume
+      from that file, rather than just by printing out the argument to use
+      for the next invocation.  (#495)
+
+    - Increased the default `numInitialChunks` for sharding empty
+      collections on a hashed key.  This should reduce the number of
+      migrations experienced during an initial load or at the beginning of
+      a workload.  (#513)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a deadlock that occurred when multiple clients tried to create
+      the same collection concurrently.  (#477)
+
+    - Improved the reliability and usability of mongorestore when using
+      the bulk loader.  (#492, #512, #514, #515)
+
+    - Fixed a race condition that occurred when multiple clients tried to
+      open the same database concurrently.  (#499)
+
+    - Reduced lock contention for profiling and diagnostics logging.
+      (#505, #506, #508)
+
+    - Includes a fix for a rare memory allocation error exposed by large
+      keys in the fractal tree library.  (Tokutek/ft-index#70)
+
+
+tokumx 1.2.0
+------------
+Release date: 2013-09-05
+
+General
+~~~~~~~
+
+    - This release adds a hot backup tool as an enterprise component.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The enterprise version of TokuMX now comes with a hot backup plugin
+      that offers fast, non-blocking backup of a live running system.  See
+      the user's guide for more details.
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Removed unnecessary unique checks done for updates and deletes.
+      (#483)
+
+    - Prevent overlocking on findAndModify and point update/delete
+      operations.  (#485)
+
+
+tokumx 1.1.2
+------------
+Release date: 2013-08-29
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.1.1.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The maximum amount of memory that will be used by the document-level
+      locking data structures is now configurable with the parameter
+      `locktreeMaxMemory=<bytes>`, which defaults to 10% of
+      `cacheSize`. (#340)
+
+    - It is now possible to get more debugging information in the log
+      during a crash.  To use this, download and unpack the `-debuginfo`
+      tarball along with the binary tarball, and run with
+      `--gdbPath=/path/to/gdb`.
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a bug in background indexing and the bulk loader that caused
+      indexes to be built as multi-key indexes, which causes the query
+      planner to create non-optimal query plans. (#469)
+
+    - Optimized deletes, especially those performed on the oplog. (#471)
+
+
+tokumx 1.1.1
+------------
+Release date: 2013-08-23
+
+General
+~~~~~~~
+
+    - This release fixes a memory leak introduced in 1.1.0
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a memory leak in insert/update/delete workloads.  #465
+
+
+tokumx 1.1.0
+------------
+Release date: 2013-08-21
+
+General
+~~~~~~~
+
+    - This release introduces background indexing support and a fast bulk
+      loader for `mongoimport` and `mongorestore`.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Background indexing is now supported. (#9, #372)
+
+    - A bulk load API has been introduced (`beginLoad`, `commitLoad`, and
+      `abortLoad` commands) that increases the throughput of initial bulk
+      collection loading.  This API is used automatically by `mongoimport`
+      and `mongorestore` when loading into a non-existent collection or
+      when using the `--drop` option, and is documented in the User's
+      Guide. (#287, #288, #313, #371, #386, #387)
+
+    - Reduced the recovery logging overhead of insert/update/delete
+      workloads. (#10, #370)
+
+    - Improved the reliability of index builds. (#290, #295, #296)
+
+    - Improved the concurrency of certain highly multi-threaded
+      modification workloads. (#342, #343, #358, #432)
+
+    - Optimized the thread that purges old entries from the oplog. (#399,
+      #435, #447)
+
+    - Improved the reliability of distributed locks used in
+      sharding. (#451)
+
+
+tokumx 1.0.4
+------------
+Release date: 2013-08-14
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.0.3.
+
+    - This release fixes a critical bug in replication present in all
+      versions up to and including 1.0.3.  See below for details.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added a thread to do periodic optimization of the oplog, which
+      should clear space from it more aggressively. (#399)
+
+    - Added new commands `replGetExpireOplog` and `replSetExpireOplog` for
+      dynamically controlling the size of the oplog. (#415)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Backported https://jira.mongodb.org/browse/SERVER-1929[SERVER-1929]
+      from mongodb 2.4 to prevent replica set failover thrashing. (#344)
+
+    - Prevented the oplog purging thread from completely emptying the
+      oplog during long idle periods. (#345)
+
+    - Backported https://jira.mongodb.org/browse/SERVER-7951[SERVER-7951]
+      from mongodb 2.4 to allow replace-style updates when using hashed
+      shard keys. (#347)
+
+    - Improved the concurrency model used by authentication.  This also
+      fixes a deadlock that can occur most often when running with
+      authentication but without any admin users declared. (#366, #375,
+      #401)
+
+    - Resolved a crash when using the web UI on a server running with
+      authentication. (#378)
+
+    - Data cleanup after a successful chunk migration no longer happens on
+      a background thread.  This fixes some performance issues triggered
+      by a large number of migrations piling up. (#379, #393)
+
+    - Improved reliability of the distributed locking used by
+      sharding. (#413)
+
+    - Fixed a race condition that could result in data loss on
+      secondaries, under multi-threaded workloads.  This bug can produce a
+      secondary that appears to be fully synced but is missing some data,
+      and if this secondary is ever elected primary, could result in the
+      permanent loss of that data.  All servers should immediately be
+      upgraded to 1.0.4 or greater, all secondaries should be re-synced
+      from an empty state, and any possible internal consistency
+      invariants should be checked. (#433)
+
+    - Fixed a bug that prevented the oplog from getting trimmed properly
+      in certain cases. (#435)
+
+    - Backported fixes for
+      https://jira.mongodb.org/browse/SERVER-10458[SERVER-10458],
+      https://jira.mongodb.org/browse/SERVER-10478[SERVER-10478], and
+      https://jira.mongodb.org/browse/SERVER-10498[SERVER-10498] from
+      upstream.  This brings tokumx current with mongodb 2.2.6. (#436)
+
+
+tokumx 1.0.3
+------------
+Release date: 2013-07-23
+
+General
+~~~~~~~
+
+    - This release adds a tool for performing online data migration from
+      vanilla MongoDB.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added the `mongo2toku` tool that reads and replays the vanilla
+      MongoDB replication format, which allows TokuMX to sync from vanilla
+      MongoDB. (#320)
+
+    - Added a storage layer optimization that improves the processor
+      caching behavior and performance of point queries and especially
+      non-covering secondary range queries. (#312)
+
+    - Improved the concurrency behavior of the storage layer when, for a
+      large transaction, the commit or abort itself is expensive. (#334)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a few race conditions and strange behaviors related to
+      replication. (#322, #325, #328, #329)
+
+    - Fixed a resource leak that could occur if the creation of an index
+      fails for any reason. (#331)
+
+
+tokumx 1.0.2
+------------
+Release date: 2013-07-11
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.0.1.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Backported SERVER-1752 to improve the performance of some count()
+      queries by a factor of 2. (#300)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a bug introduced in tokumx 1.0.1 where lock timeouts and
+      deadlocks caused the connection to die unnecessarily. (#293, #301)
+
+    - Properly handle errors that arise during operation of the bulk
+      loader. (#295, #296)
+
+
+tokumx 1.0.1
+------------
+Release date: 2013-06-26
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The default compression method is now zlib. (#189)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a bug causing concurrent insertions on different keys in
+      certain (typically nearly-sequential insertion order) scenarios to
+      block.  This should improve the performance of workloads with
+      multiple writers.  (#273)
+
+    - The code that takes distributed locks in a cluster now correctly
+      handles row lock error codes.  This eliminates what were previously
+      rare crashes.  (#249)
+
+
 tokumx 1.0.0
 ------------
 Release date: 2013-06-19

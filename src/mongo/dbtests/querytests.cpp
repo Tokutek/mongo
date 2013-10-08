@@ -30,6 +30,7 @@
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/query.h"
 #include "mongo/dbtests/dbtests.h"
+#include "mongo/db/parsed_query.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
@@ -55,7 +56,7 @@ namespace QueryTests {
         ~Base() {
             try {
                 for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) ); c->ok(); c->advance() ) {
-                    deleteOneObject( nsdetails(ns()), &NamespaceDetailsTransient::get(ns()), c->currPK(), c->current() );
+                    deleteOneObject( nsdetails(ns()), c->currPK(), c->current() );
                 }
                 _transaction.commit();
                 DBDirectClient cl;
@@ -1058,7 +1059,7 @@ namespace QueryTests {
                 fast = t.micros();
             }
 
-            cout << "HelperTest  slow:" << slow << " fast:" << fast << endl;
+            cerr << "HelperTest  slow:" << slow << " fast:" << fast << endl;
             transaction.commit();
         }
     };

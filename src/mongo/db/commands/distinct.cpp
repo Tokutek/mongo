@@ -1,6 +1,7 @@
 // distinct.cpp
 
 /**
+*    Copyright (C) 2012 10gen Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -15,10 +16,20 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mongo/db/commands.h"
-#include "mongo/db/instance.h"
+#include <string>
+#include <vector>
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
@@ -26,6 +37,13 @@ namespace mongo {
     class DistinctCommand : public QueryCommand {
     public:
         DistinctCommand() : QueryCommand("distinct") {}
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::find);
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+        }
         virtual void help( stringstream &help ) const {
             help << "{ distinct : 'collection name' , key : 'a.b' , query : {} }";
         }
@@ -61,7 +79,7 @@ namespace mongo {
 
             shared_ptr<Cursor> cursor;
             if ( ! query.isEmpty() ) {
-                cursor = NamespaceDetailsTransient::getCursor(ns.c_str() , query , BSONObj() );
+                cursor = getOptimizedCursor(ns.c_str() , query , BSONObj() );
             }
             else {
 
@@ -75,16 +93,17 @@ namespace mongo {
                         continue;
 
                     if ( idx.inKeyPattern( key ) ) {
-                        cursor = NamespaceDetailsTransient::bestGuessCursor( ns.c_str() ,
-                                                                            BSONObj() ,
-                                                                            idx.keyPattern() );
+                        cursor = getBestGuessCursor( ns.c_str() ,
+                                                     BSONObj() ,
+                                                     idx.keyPattern() );
                         if( cursor.get() ) break;
                     }
 
                 }
 
-                if ( ! cursor.get() )
-                    cursor = NamespaceDetailsTransient::getCursor(ns.c_str() , query , BSONObj() );
+                if ( ! cursor.get() ) {
+                    cursor = getOptimizedCursor(ns.c_str() , query , BSONObj() );
+                }
 
             }
 

@@ -19,6 +19,12 @@
 */
 
 #include "pch.h"
+
+#include <vector>
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/privilege.h"
 #include "../cmdline.h"
 #include "../commands.h"
 #include "../../util/mongoutils/str.h"
@@ -101,7 +107,7 @@ namespace mongo {
                     uasserted(13145, "set name does not match the set name host " + i->h.toString() + " expects");
                 if( *res.getStringField("set") ) {
                     if( cfg.version <= 1 ) {
-                        // this was to be initiation, no one shoudl be initiated already.
+                        // this was to be initiation, no one should be initiated already.
                         uasserted(13256, "member " + i->h.toString() + " is already initiated");
                     }
                     else {
@@ -159,6 +165,13 @@ namespace mongo {
         virtual void help(stringstream& h) const {
             h << "Initiate/christen a replica set.";
             h << "\nhttp://dochub.mongodb.org/core/replicasetcommands";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::replSetInitiate);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
         }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             log() << "replSet replSetInitiate admin command received from client" << rsLog;

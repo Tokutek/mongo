@@ -19,11 +19,15 @@
  */
 
 #include "pch.h"
-#include "../util/timer.h"
-#include "../db/matcher.h"
-#include "../db/json.h"
-#include "dbtests.h"
-#include "../db/namespace_details.h"
+
+#include "mongo/db/matcher.h"
+
+#include "mongo/db/cursor.h"
+#include "mongo/db/json.h"
+#include "mongo/db/namespace_details.h"
+#include "mongo/db/query_optimizer.h"
+#include "mongo/dbtests/dbtests.h"
+#include "mongo/util/timer.h"
 
 namespace MatcherTests {
 
@@ -202,7 +206,7 @@ namespace MatcherTests {
                 CoveredIndexMatcher matcher( BSON( "a.b" << 1 ), BSON( "$natural" << 1 ) );
                 MatchDetails details;
                 details.requestElemMatchKey();
-                boost::shared_ptr<Cursor> cursor = NamespaceDetailsTransient::getCursor( ns(), BSONObj() );
+                boost::shared_ptr<Cursor> cursor = getOptimizedCursor( ns(), BSONObj() );
                 // Verify that the cursor is unindexed.
                 ASSERT_EQUALS( "BasicCursor", cursor->toString() );
                 ASSERT( matcher.matchesCurrent( cursor.get(), &details ) );
@@ -229,7 +233,7 @@ namespace MatcherTests {
                 CoveredIndexMatcher matcher( query, BSON( "a.b" << 1 ) );
                 MatchDetails details;
                 details.requestElemMatchKey();
-                boost::shared_ptr<Cursor> cursor = NamespaceDetailsTransient::getCursor( ns(), query );
+                boost::shared_ptr<Cursor> cursor = getOptimizedCursor( ns(), query );
                 // Verify that the cursor is indexed.
                 ASSERT_EQUALS( "IndexCursor a.b_1", cursor->toString() );
                 ASSERT( matcher.matchesCurrent( cursor.get(), &details ) );
@@ -257,7 +261,7 @@ namespace MatcherTests {
                 CoveredIndexMatcher matcher( query, BSON( "a.b" << 1 ) );
                 MatchDetails details;
                 details.requestElemMatchKey();
-                boost::shared_ptr<Cursor> cursor = NamespaceDetailsTransient::getCursor( ns(), query );
+                boost::shared_ptr<Cursor> cursor = getOptimizedCursor( ns(), query );
                 // Verify that the cursor is indexed.
                 ASSERT_EQUALS( "IndexCursor a.b_1", cursor->toString() );
                 // Verify that the cursor is not multikey.
@@ -290,7 +294,7 @@ namespace MatcherTests {
             long normal = time( BSON( "x" << 5 ) , BSON( "x" << 5 ) );
             long all = time( BSON( "x" << BSON( "$all" << BSON_ARRAY( 5 ) ) ) , BSON( "x" << 5 ) );
 
-            cout << "normal: " << normal << " all: " << all << endl;
+            cerr << "normal: " << normal << " all: " << all << endl;
         }
     };
 

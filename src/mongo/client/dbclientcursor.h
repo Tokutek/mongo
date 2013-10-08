@@ -62,6 +62,9 @@ namespace mongo {
            on an error at the remote server, you will get back:
              { $err: <string> }
            if you do not want to handle that yourself, call nextSafe().
+
+           Warning: The returned BSONObj will become invalid after the next batch
+               is fetched or when this cursor is destroyed.
         */
         BSONObj next();
 
@@ -126,6 +129,9 @@ namespace mongo {
             _assertIfNull();
             return (resultFlags & flag) != 0;
         }
+
+        /// Change batchSize after construction. Can change after requesting first batch.
+        void setBatchSize(int newBatchSize) { batchSize = newBatchSize; }
 
         DBClientCursor( DBClientBase* client, const string &_ns, BSONObj _query, int _nToReturn,
                         int _nToSkip, const BSONObj *_fieldsToReturn, int queryOptions , int bs ) :

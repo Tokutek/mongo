@@ -166,10 +166,10 @@ namespace DocumentSourceTests {
                 ASSERT( Lock::isReadLocked() );
                 // The cursor will produce a result.
                 ASSERT( !source()->eof() );
-                // The read lock is stil held.
+                // The read lock is still held.
                 ASSERT( Lock::isReadLocked() );
                 // The result is as expected.
-                ASSERT_EQUALS( 1, source()->getCurrent()->getValue( "a" )->coerceToInt() );
+                ASSERT_EQUALS( 1, source()->getCurrent()->getValue( "a" ).coerceToInt() );
                 // There are no more results.
                 ASSERT( !source()->advance() );
                 // Exhausting the source releases the read lock.
@@ -202,11 +202,11 @@ namespace DocumentSourceTests {
                 createSource();
                 ASSERT( !source()->eof() );
                 // The result is as expected.
-                ASSERT_EQUALS( 1, source()->getCurrent()->getValue( "a" )->coerceToInt() );
+                ASSERT_EQUALS( 1, source()->getCurrent()->getValue( "a" ).coerceToInt() );
                 // Get the next result.
                 ASSERT( source()->advance() );
                 // The result is as expected.
-                ASSERT_EQUALS( 2, source()->getCurrent()->getValue( "a" )->coerceToInt() );
+                ASSERT_EQUALS( 2, source()->getCurrent()->getValue( "a" ).coerceToInt() );
                 // The source still holds the lock.
                 ASSERT( Lock::isReadLocked() );
                 source()->dispose();
@@ -215,7 +215,6 @@ namespace DocumentSourceTests {
                 // The source cannot be advanced further.
                 ASSERT( !source()->advance() );
                 ASSERT( source()->eof() );
-                ASSERT( !source()->getCurrent() );
             }
         };
 
@@ -306,7 +305,7 @@ namespace DocumentSourceTests {
                 // The limit is not exhauted.
                 ASSERT( !limit()->eof() );
                 // The limit's result is as expected.
-                ASSERT_EQUALS( 1, limit()->getCurrent()->getValue( "a" )->coerceToInt() );
+                ASSERT_EQUALS( 1, limit()->getCurrent()->getValue( "a" ).coerceToInt() );
                 // The limit is exhausted.
                 ASSERT( !limit()->advance() );
                 // The limit disposes the source, releasing the read lock.
@@ -334,7 +333,7 @@ namespace DocumentSourceTests {
                 // The limit is not exhauted.
                 ASSERT( !limit()->eof() );
                 // The limit's result is as expected.
-                ASSERT_EQUALS( 1, limit()->getCurrent()->getValue( "a" )->coerceToInt() );
+                ASSERT_EQUALS( 1, limit()->getCurrent()->getValue( "a" ).coerceToInt() );
                 // The limit is exhausted.
                 ASSERT( !limit()->advance() );
                 // The limit disposes the match, which disposes the source and releases the read
@@ -379,10 +378,7 @@ namespace DocumentSourceTests {
             void assertExhausted( const intrusive_ptr<DocumentSource> &source ) const {
                 // eof() is true.
                 ASSERT( source->eof() );
-                // advance() can't be called (a verify assertion will be triggered) in this context.
-                // ASSERT( !_group->advance() );
-                // getCurrent() does not assert, and returns an empty pointer.
-                ASSERT( !source->getCurrent() );
+                // advance() and getCurrent() are illegal to call if eof() is true
             }
         private:
             /** Check that the group's spec round trips. */
@@ -510,7 +506,7 @@ namespace DocumentSourceTests {
         };
 
         /** $group _id is a regular expression (not supported). */
-        class IdRegularExpression : public ParseErrorBase {
+        class IdRegularExpression : public IdConstantBase {
             BSONObj spec() { return fromjson( "{_id:/a/}" ); }
         };
 
@@ -575,12 +571,11 @@ namespace DocumentSourceTests {
         };
 
         struct ValueCmp {
-            bool operator()( const intrusive_ptr<const Value> &a,
-                            const intrusive_ptr<const Value> &b ) {
+            bool operator()(const Value& a, const Value& b) {
                 return Value::compare( a, b ) < 0;
             }
         };
-        typedef map<intrusive_ptr<const Value>,intrusive_ptr<Document>,ValueCmp> IdMap;
+        typedef map<Value,Document,ValueCmp> IdMap;
 
         class CheckResultsBase : public Base {
         public:
@@ -632,14 +627,10 @@ namespace DocumentSourceTests {
                 // Load the results from the DocumentSourceGroup and sort them by _id.
                 IdMap resultSet;
                 while( !sink->eof() ) {
-                    
-                    intrusive_ptr<Document> current = sink->getCurrent();
-                    
-                    // If not eof, current is non null.
-                    ASSERT( current );
+                    Document current = sink->getCurrent();
                     
                     // Save the current result.
-                    intrusive_ptr<const Value> id = current->getValue( "_id" );
+                    Value id = current->getValue( "_id" );
                     resultSet[ id ] = current;
                     
                     // Advance.
@@ -700,7 +691,7 @@ namespace DocumentSourceTests {
                 client.insert( ns, BSONObj() );
                 createSource();
                 createGroup( BSON( "_id" << 1 ) );
-                ASSERT_EQUALS( 1, group()->getCurrent()->getValue( "_id" )->getInt() );
+                ASSERT_EQUALS( 1, group()->getCurrent()->getValue( "_id" ).getInt() );
             }
         };
 
@@ -787,11 +778,19 @@ namespace DocumentSourceTests {
         /** A complex _id expression. */
         class ComplexId : public CheckResultsBase {
             void populateData() {
-                client.insert( ns, BSON( "a" << "de" << "b" << "ad" << "c" << "beef" ) );
-                client.insert( ns, BSON( "a" << "d" << "b" << "eadbe" << "d" << "ef" ) );
+                client.insert( ns, BSON( "a" << "de"
+                                      << "b" << "ad"
+                                      << "c" << "beef"
+                                      << "d" << ""
+                                      ));
+                client.insert( ns, BSON( "a" << "d"
+                                      << "b" << "eadbe"
+                                      << "c" << ""
+                                      << "d" << "ef"
+                                      ));
             }
             virtual BSONObj groupSpec() {
-                return BSON( "_id" << BSON( "$add"
+                return BSON( "_id" << BSON( "$concat"
                                             << BSON_ARRAY( "$a" << "$b" << "$c" << "$d" ) ) );
             }
             virtual string expectedResultSetString() { return "[{_id:'deadbeef'}]"; }
@@ -805,7 +804,7 @@ namespace DocumentSourceTests {
             virtual BSONObj groupSpec() {
                 return BSON( "_id" << 0 << "first" << BSON( "$first" << "$missing" ) );
             }
-            virtual string expectedResultSetString() { return "[{_id:0}]"; }            
+            virtual string expectedResultSetString() { return "[{_id:0, first:null}]"; }
         };
 
         /** Simulate merging sharded results in the router. */ 
@@ -944,20 +943,7 @@ namespace DocumentSourceTests {
                 createProject();
                 // Another result is available, so advance() succeeds.
                 ASSERT( project()->advance() );
-                ASSERT_EQUALS( 2, project()->getCurrent()->getField( "a" )->getInt() );
-            }
-        };
-        
-        /** getCurrent() is the first member function called. */
-        class GetCurrentInit : public Base {
-        public:
-            void run() {
-                client.insert( ns, BSON( "_id" << 0 << "a" << 1 ) );
-                createSource();
-                createProject();
-                // The first result exists and is as expected.
-                ASSERT( project()->getCurrent() );
-                ASSERT_EQUALS( 1, project()->getCurrent()->getField( "a" )->getInt() );
+                ASSERT_EQUALS( 2, project()->getCurrent()->getField( "a" ).getInt() );
             }
         };
 
@@ -969,15 +955,15 @@ namespace DocumentSourceTests {
                 createSource();
                 createProject( BSON( "a" << true << "c" << BSON( "d" << true ) ) );
                 // The first result exists and is as expected.
-                ASSERT( project()->getCurrent() );
-                ASSERT_EQUALS( 1, project()->getCurrent()->getField( "a" )->getInt() );
-                ASSERT( !project()->getCurrent()->getField( "b" ) );
+                ASSERT(!project()->eof());
+                ASSERT_EQUALS( 1, project()->getCurrent()->getField( "a" ).getInt() );
+                ASSERT( project()->getCurrent()->getField( "b" ).missing() );
                 // The _id field is included by default in the root document.
-                ASSERT_EQUALS( 0, project()->getCurrent()->getField( "_id" )->getInt() );
+                ASSERT_EQUALS( 0, project()->getCurrent()->getField( "_id" ).getInt() );
                 // The nested c.d inclusion.
                 ASSERT_EQUALS( 1,
-                               project()->getCurrent()->getField( "c" )->getDocument()->
-                                getField( "d" )->getInt() );
+                               project()->getCurrent()->getField( "c" ).getDocument()->
+                                getField( "d" ).getInt() );
             }
         };
 
@@ -1038,12 +1024,12 @@ namespace DocumentSourceTests {
                 createSource();
                 createProject();
                 ASSERT( !project()->eof() );
-                ASSERT_EQUALS( 1, project()->getCurrent()->getField( "a" )->getInt() );
-                ASSERT( !project()->getCurrent()->getField( "b" ) );
+                ASSERT_EQUALS( 1, project()->getCurrent()->getField( "a" ).getInt() );
+                ASSERT( project()->getCurrent()->getField( "b" ).missing() );
                 ASSERT( project()->advance() );
                 ASSERT( !project()->eof() );
-                ASSERT_EQUALS( 3, project()->getCurrent()->getField( "a" )->getInt() );
-                ASSERT( !project()->getCurrent()->getField( "b" ) );
+                ASSERT_EQUALS( 3, project()->getCurrent()->getField( "a" ).getInt() );
+                ASSERT( project()->getCurrent()->getField( "b" ).missing() );
                 ASSERT( !project()->advance() );
                 assertExhausted();
             }
@@ -1085,15 +1071,12 @@ namespace DocumentSourceTests {
                 checkBsonRepresentation( spec );
                 _sort->setSource( source() );
             }
-            DocumentSource* sort() { return _sort.get(); }
+            DocumentSourceSort* sort() { return dynamic_cast<DocumentSourceSort*>(_sort.get()); }
             /** Assert that iterator state accessors consistently report the source is exhausted. */
             void assertExhausted() const {
                 // eof() is true.
                 ASSERT( _sort->eof() );
-                // advance() triggers a verify assertion.
-                //ASSERT( !_sort->advance() );
-                // getCurrent() does not assert, and returns an empty pointer.
-                ASSERT( !_sort->getCurrent() );
+                // advance() and getCurrent() are illegal to call if eof() is true
             }
         private:
             /**
@@ -1131,20 +1114,45 @@ namespace DocumentSourceTests {
                 createSort();
                 // Another result is available, so advance() succeeds.
                 ASSERT( sort()->advance() );
-                ASSERT_EQUALS( 2, sort()->getCurrent()->getField( "a" )->getInt() );
+                ASSERT_EQUALS( 2, sort()->getCurrent()->getField( "a" ).getInt() );
             }
         };
-        
-        /** getCurrent() is the first member function called. */
-        class GetCurrentInit : public Base {
+
+        class SortWithLimit : public Base {
         public:
             void run() {
-                client.insert( ns, BSON( "_id" << 0 << "a" << 1 ) );
-                createSource();
-                createSort();
-                // The first result exists and is as expected.
-                ASSERT( sort()->getCurrent() );
-                ASSERT_EQUALS( 1, sort()->getCurrent()->getField( "a" )->getInt() );
+                createSort(BSON("a" << 1));
+                ASSERT_EQUALS(sort()->getLimit(), -1);
+
+                { // pre-limit checks
+                    BSONArrayBuilder arr;
+                    sort()->addToBsonArray(&arr, false);
+                    ASSERT_EQUALS(arr.arr(), BSON_ARRAY(BSON("$sort" << BSON("a" << 1))));
+
+                    ASSERT(sort()->getShardSource() == NULL);
+                    ASSERT(sort()->getRouterSource() != NULL);
+                }
+
+                ASSERT_TRUE(sort()->coalesce(mkLimit(10)));
+                ASSERT_EQUALS(sort()->getLimit(), 10);
+                ASSERT_TRUE(sort()->coalesce(mkLimit(15)));
+                ASSERT_EQUALS(sort()->getLimit(), 10); // unchanged
+                ASSERT_TRUE(sort()->coalesce(mkLimit(5)));
+                ASSERT_EQUALS(sort()->getLimit(), 5); // reduced
+
+                BSONArrayBuilder arr;
+                sort()->addToBsonArray(&arr, false);
+                ASSERT_EQUALS(arr.arr(), BSON_ARRAY(BSON("$sort" << BSON("a" << 1))
+                                                 << BSON("$limit" << sort()->getLimit())));
+
+                ASSERT(sort()->getShardSource() != NULL);
+                ASSERT(sort()->getRouterSource() != NULL);
+            }
+
+            intrusive_ptr<DocumentSource> mkLimit(int limit) {
+                BSONObj obj = BSON("$limit" << limit);
+                BSONElement e = obj.firstElement();
+                return mongo::DocumentSourceLimit::createFromBson(&e, ctx());
             }
         };
 
@@ -1157,12 +1165,8 @@ namespace DocumentSourceTests {
                 createSort( sortSpec() );
                 
                 // Load the results from the DocumentSourceUnwind.
-                vector<intrusive_ptr<Document> > resultSet;
+                vector<Document> resultSet;
                 while( !sort()->eof() ) {
-                    
-                    // If not eof, current is non null.
-                    ASSERT( sort()->getCurrent() );
-                    
                     // Get the current result.
                     resultSet.push_back( sort()->getCurrent() );
                     
@@ -1178,7 +1182,7 @@ namespace DocumentSourceTests {
                 // Convert results to BSON once they all have been retrieved (to detect any errors
                 // resulting from incorrectly shared sub objects).
                 BSONArrayBuilder bsonResultSet;
-                for( vector<intrusive_ptr<Document> >::const_iterator i = resultSet.begin();
+                for( vector<Document>::const_iterator i = resultSet.begin();
                     i != resultSet.end(); ++i ) {
                     BSONObjBuilder bob;
                     (*i)->toBson( &bob );
@@ -1338,10 +1342,13 @@ namespace DocumentSourceTests {
         };
 
         /** Sorting different types is not supported. */
-        class InconsistentTypeSort : public InvalidOperationBase {
+        class InconsistentTypeSort : public CheckResultsBase {
             void populateData() {
-                client.insert( ns, BSON( "a" << 1 ) );
-                client.insert( ns, BSON( "a" << "foo" ) );
+                client.insert( ns, BSON("_id" << 0 << "a" << 1) );
+                client.insert( ns, BSON("_id" << 1 << "a" << "foo") );
+            }
+            string expectedResultSetString() {
+                return "[{_id:0,a:1},{_id:1,a:\"foo\"}]";
             }
         };
 
@@ -1378,11 +1385,14 @@ namespace DocumentSourceTests {
             }
         };
 
-        /** A missing nested object within an array is not supported. */
-        class MissingObjectWithinArray : public InvalidOperationBase {
+        /** A missing nested object within an array returns an empty array. */
+        class MissingObjectWithinArray : public CheckResultsBase {
             void populateData() {
                 client.insert( ns, BSON( "_id" << 0 << "a" << BSON_ARRAY( 1 ) ) );
-                client.insert( ns, BSON( "_id" << 1 << "a" << BSON_ARRAY( 0 ) ) );
+                client.insert( ns, BSON( "_id" << 1 << "a" << BSON_ARRAY( BSON("b" << 1) ) ) );
+            }
+            string expectedResultSetString() {
+                return "[{_id:0,a:[1]},{_id:1,a:[{b:1}]}]";
             }
             BSONObj sortSpec() { return BSON( "a.b" << 1 ); }
         };
@@ -1432,14 +1442,11 @@ namespace DocumentSourceTests {
             void assertExhausted() const {
                 // eof() is true.
                 ASSERT( _unwind->eof() );
-                // advance() does not assert, and returns false.
-                ASSERT( !_unwind->advance() );
-                // getCurrent() does not assert, and returns an empty pointer.
-                ASSERT( !_unwind->getCurrent() );
+                // advance() and getCurrent() are illegal to call if eof() is true
             }
         private:
             /**
-             * Check that the BSON representation generated by the souce matches the BSON it was
+             * Check that the BSON representation generated by the source matches the BSON it was
              * created with.
              */
             void checkBsonRepresentation( const BSONObj& spec ) {
@@ -1472,20 +1479,7 @@ namespace DocumentSourceTests {
                 createUnwind();
                 // Another result is available, so advance() succeeds.
                 ASSERT( unwind()->advance() );
-                ASSERT_EQUALS( 2, unwind()->getCurrent()->getField( "a" )->coerceToInt() );
-            }
-        };
-
-        /** getCurrent() is the first member function called. */
-        class GetCurrentInit : public Base {
-        public:
-            void run() {
-                client.insert( ns, BSON( "_id" << 0 << "a" << BSON_ARRAY( 1 ) ) );
-                createSource();
-                createUnwind();
-                // The first result exists and is as expected.
-                ASSERT( unwind()->getCurrent() );
-                ASSERT_EQUALS( 1, unwind()->getCurrent()->getField( "a" )->coerceToInt() );
+                ASSERT_EQUALS( 2, unwind()->getCurrent()->getField( "a" ).coerceToInt() );
             }
         };
 
@@ -1498,12 +1492,8 @@ namespace DocumentSourceTests {
                 createUnwind( unwindFieldPath() );
 
                 // Load the results from the DocumentSourceUnwind.
-                vector<intrusive_ptr<Document> > resultSet;
+                vector<Document> resultSet;
                 while( !unwind()->eof() ) {
-
-                    // If not eof, current is non null.
-                    ASSERT( unwind()->getCurrent() );
-
                     // Get the current result.
                     resultSet.push_back( unwind()->getCurrent() );
 
@@ -1519,7 +1509,7 @@ namespace DocumentSourceTests {
                 // Convert results to BSON once they all have been retrieved (to detect any errors
                 // resulting from incorrectly shared sub objects).
                 BSONArrayBuilder bsonResultSet;
-                for( vector<intrusive_ptr<Document> >::const_iterator i = resultSet.begin();
+                for( vector<Document>::const_iterator i = resultSet.begin();
                      i != resultSet.end(); ++i ) {
                     BSONObjBuilder bob;
                     (*i)->toBson( &bob );
@@ -1726,6 +1716,29 @@ namespace DocumentSourceTests {
 
     } // namespace DocumentSourceUnwind
 
+    namespace DocumentSourceGeoNear {
+        using mongo::DocumentSourceGeoNear;
+        using mongo::DocumentSourceLimit;
+
+        class LimitCoalesce : public DocumentSourceCursor::Base {
+        public:
+            void run() {
+                intrusive_ptr<DocumentSourceGeoNear> geoNear = DocumentSourceGeoNear::create(ctx());
+
+                ASSERT_EQUALS(geoNear->getLimit(), 100);
+
+                ASSERT(geoNear->coalesce(DocumentSourceLimit::create(ctx(), 200)));
+                ASSERT_EQUALS(geoNear->getLimit(), 100);
+
+                ASSERT(geoNear->coalesce(DocumentSourceLimit::create(ctx(), 50)));
+                ASSERT_EQUALS(geoNear->getLimit(), 50);
+
+                ASSERT(geoNear->coalesce(DocumentSourceLimit::create(ctx(), 30)));
+                ASSERT_EQUALS(geoNear->getLimit(), 30);
+            }
+        };
+    } // namespace DocumentSourceGeoNear
+
     class All : public Suite {
     public:
         All() : Suite( "documentsource" ) {
@@ -1774,7 +1787,7 @@ namespace DocumentSourceTests {
             add<DocumentSourceGroup::FourValuesTwoKeys>();
             add<DocumentSourceGroup::FourValuesTwoKeysTwoAccumulators>();
             add<DocumentSourceGroup::GroupNullUndefinedIds>();
-            //add<DocumentSourceGroup::ComplexId>(); uncomment after 6195
+            add<DocumentSourceGroup::ComplexId>();
             add<DocumentSourceGroup::UndefinedAccumulatorValue>();
             add<DocumentSourceGroup::RouterMerger>();
             add<DocumentSourceGroup::Dependencies>();
@@ -1783,7 +1796,6 @@ namespace DocumentSourceTests {
 
             add<DocumentSourceProject::EofInit>();
             add<DocumentSourceProject::AdvanceInit>();
-            add<DocumentSourceProject::GetCurrentInit>();
             add<DocumentSourceProject::Inclusion>();
             add<DocumentSourceProject::Optimize>();
             add<DocumentSourceProject::NonObjectSpec>();
@@ -1795,7 +1807,6 @@ namespace DocumentSourceTests {
 
             add<DocumentSourceSort::EofInit>();
             add<DocumentSourceSort::AdvanceInit>();
-            add<DocumentSourceSort::GetCurrentInit>();
             add<DocumentSourceSort::Empty>();
             add<DocumentSourceSort::SingleValue>();
             add<DocumentSourceSort::TwoValues>();
@@ -1818,7 +1829,6 @@ namespace DocumentSourceTests {
 
             add<DocumentSourceUnwind::EofInit>();
             add<DocumentSourceUnwind::AdvanceInit>();
-            add<DocumentSourceUnwind::GetCurrentInit>();
             add<DocumentSourceUnwind::Empty>();
             add<DocumentSourceUnwind::MissingField>();
             add<DocumentSourceUnwind::NullField>();
@@ -1837,6 +1847,8 @@ namespace DocumentSourceTests {
             add<DocumentSourceUnwind::SeveralDocuments>();
             add<DocumentSourceUnwind::SeveralMoreDocuments>();
             add<DocumentSourceUnwind::Dependencies>();
+
+            add<DocumentSourceGeoNear::LimitCoalesce>();
         }
     } myall;
 

@@ -32,8 +32,12 @@
 #endif
 #include <fcntl.h>
 
+#include "mongo/db/curop.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/descriptor.h"
+#include "mongo/db/storage/assert_ids.h"
+#include "mongo/db/storage/dbt.h"
 #include "mongo/db/storage/exception.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/util/assert_util.h"
@@ -55,10 +59,13 @@ namespace mongo {
 
         static int dbt_key_compare(DB *db, const DBT *dbt1, const DBT *dbt2) {
             try {
+                const DBT *desc = &db->cmp_descriptor->dbt;
+                verify(desc->data != NULL);
+
+                Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
                 Key key1(dbt1);
                 Key key2(dbt2);
-                const Ordering &ordering(*reinterpret_cast<const Ordering *>(db->cmp_descriptor->dbt.data));
-                return key1.woCompare(key2, ordering);
+                return descriptor.compareKeys(key1, key2);
             } catch (std::exception &e) {
                 // We don't have a way to return an error from a comparison (through the ydb), and the ydb isn't exception-safe.
                 // Of course, if a comparison throws, something is very wrong anyway.
@@ -88,7 +95,7 @@ namespace mongo {
                 // Apply the message, set the new value.
                 const BSONObj msg(static_cast<char *>(extra->data));
                 const BSONObj newObj = _updateCallback->apply( oldObj, msg );
-                DBT new_val = make_dbt(newObj.objdata(), newObj.objsize());
+                DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
                 set_val(&new_val, set_extra);
                 return 0;
             } catch (...) { 
@@ -98,6 +105,79 @@ namespace mongo {
             return -1;
         }
 
+        static int generate_keys(DB *dest_db, DB *src_db,
+                                 DBT_ARRAY *dest_keys,
+                                 const DBT *src_key, const DBT *src_val) {
+            try {
+                const DBT *desc = &dest_db->cmp_descriptor->dbt;
+                Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+
+                const Key sPK(src_key);
+                dassert(sPK.pk().isEmpty());
+                const BSONObj pk(sPK.key());
+                const BSONObj obj(reinterpret_cast<const char *>(src_val->data));
+
+                // The ydb knows that src_db does not need keys generated,
+                // because the one and only key is src_key
+                verify(dest_db != src_db);
+
+                // Generate keys for a secondary index.
+                BSONObjSet keys;
+                descriptor.generateKeys(obj, keys);
+                dbt_array_clear_and_resize(dest_keys, keys.size());
+                for (BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); i++) {
+                    const Key sKey(*i, &pk);
+                    dbt_array_push(dest_keys, sKey.buf(), sKey.size());
+                }
+                // Set the multiKey bool if it's provided and we generated multiple keys.
+                // See NamespaceDetails::Indexer::Indexer()
+                if (dest_db->app_private != NULL && keys.size() > 1) {
+                    bool *multiKey = reinterpret_cast<bool *>(dest_db->app_private);
+                    if (!*multiKey) {
+                        *multiKey = true;
+                    }
+                }
+            } catch (const DBException &ex) {
+                verify(ex.getCode() > 0);
+                return ex.getCode();
+            } catch (const std::exception &ex) {
+                problem() << "Unhandled std::exception in storage::generate_keys()" << endl;
+                verify(false);
+            }
+            return 0;
+        }
+
+        static int generate_row_for_del(DB *dest_db, DB *src_db,
+                                        DBT_ARRAY *dest_keys,
+                                        const DBT *src_key, const DBT *src_val) {
+            // Delete just needs keys, generate them.
+            return generate_keys(dest_db, src_db, dest_keys, src_key, src_val);
+        }
+
+        static int generate_row_for_put(DB *dest_db, DB *src_db,
+                                        DBT_ARRAY *dest_keys, DBT_ARRAY *dest_vals,
+                                        const DBT *src_key, const DBT *src_val) {
+            // Put needs keys and possibly vals (for clustering indexes.)
+            const int r = generate_keys(dest_db, src_db, dest_keys, src_key, src_val);
+            if (r != 0) {
+                return r;
+            }
+
+            const DBT *desc = &dest_db->cmp_descriptor->dbt;
+            Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+            if (dest_vals != NULL) {
+                // TODO: This copies each value once, which is not good. Find a way to avoid that.
+                dbt_array_clear_and_resize(dest_vals, dest_keys->size);
+                for (size_t i = 0; i < dest_keys->size; i++) {
+                    if (descriptor.clustering()) {
+                        dbt_array_push(dest_vals, src_val->data, src_val->size);
+                    } else {
+                        dbt_array_push(dest_vals, NULL, 0);
+                    }
+                }
+            }
+            return 0; 
+        }
 
         static uint64_t calculate_cachesize(void) {
             uint64_t physmem, maxdata;
@@ -115,6 +195,10 @@ namespace mongo {
         static void tokudb_print_error(const DB_ENV * db_env, const char *db_errpfx, const char *buffer) {
             tokulog() << db_errpfx << ": " << buffer << endl;
         }
+
+        static void lock_not_granted_callback(DB *db, uint64_t requesting_txnid,
+                                              const DBT *left_key, const DBT *right_key,
+                                              uint64_t blocking_txnid);
 
         void startup(void) {
             tokulog() << "startup" << endl;
@@ -135,7 +219,7 @@ namespace mongo {
             env->set_errpfx(env, "TokuMX");
 
             const uint64_t cachesize = (cmdLine.cacheSize > 0
-                                        ? cmdLine.cacheSize
+                                        ? (uint64_t) cmdLine.cacheSize
                                         : calculate_cachesize());
             const uint32_t bytes = cachesize % (1024L * 1024L * 1024L);
             const uint32_t gigabytes = cachesize >> 30;
@@ -146,12 +230,15 @@ namespace mongo {
             TOKULOG(1) << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
 
             // Use 10% the size of the cachetable for lock tree memory
-            const uint64_t lock_memory = cachesize / 10;
+            // if no value was specified on the command line.
+            const uint64_t lock_memory = (cmdLine.locktreeMaxMemory > 0
+                                          ? (uint64_t) cmdLine.locktreeMaxMemory
+                                          : (cachesize / 10));
             r = env->set_lk_max_memory(env, lock_memory);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            tokulog() << "locktree max memory set to " << lock_memory << " bytes." << endl;
+            TOKULOG(1) << "locktree max memory set to " << lock_memory << " bytes." << endl;
 
             const uint64_t lock_timeout = cmdLine.lockTimeout;
             r = env->set_lock_timeout(env, lock_timeout);
@@ -160,10 +247,31 @@ namespace mongo {
             }
             TOKULOG(1) << "lock timeout set to " << lock_timeout << " milliseconds." << endl;
 
+            const uint64_t loader_memory = cmdLine.loaderMaxMemory > 0 ?
+                                           (uint64_t) cmdLine.loaderMaxMemory : 100 * 1024 * 1024;
+            env->set_loader_memory_size(env, loader_memory);
+            TOKULOG(1) << "loader memory size set to " << loader_memory << " bytes." << endl;
+
             r = env->set_default_bt_compare(env, dbt_key_compare);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
+
+            r = env->set_generate_row_callback_for_put(env, generate_row_for_put);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
+            
+            r = env->set_generate_row_callback_for_del(env, generate_row_for_del);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
+
+            r = env->set_lock_timeout_callback(env, lock_not_granted_callback);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
+
             env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
             env->set_update(env, update_callback);
 
@@ -229,129 +337,6 @@ namespace mongo {
                 if (r != 0) {
                     handle_ydb_error_fatal(r);
                 }
-            }
-        }
-
-        // set a descriptor for the given dictionary. the descriptor is
-        // a serialization of the index's ordering bits.
-        static void set_db_descriptor(DB *db, DB_TXN *txn, const BSONObj &key_pattern) {
-            const Ordering ordering = Ordering::make(key_pattern);
-            DBT dbt = make_dbt((const char *) &ordering, sizeof(Ordering));
-            const int flags = DB_UPDATE_CMP_DESCRIPTOR;
-            int r = db->change_descriptor(db, txn, &dbt, flags);
-            if (r != 0) {
-                handle_ydb_error_fatal(r);
-            }
-            TOKULOG(1) << "set db " << db << " descriptor to key pattern: " << key_pattern << endl;
-        }
-
-        static void verify_db_descriptor(DB *db, const BSONObj &key_pattern) {
-            verify(db->cmp_descriptor->dbt.size == sizeof(Ordering));
-            const Ordering ordering = Ordering::make(key_pattern);
-            const int c = memcmp(db->cmp_descriptor->dbt.data, &ordering, sizeof(Ordering));
-            if (c != 0) {
-                problem() << " bad db descriptor on open, key pattern " << key_pattern << endl;
-            }
-            verify(c == 0);
-        }
-
-        int db_open(DB **dbp, const string &name, const BSONObj &info, bool may_create) {
-            // TODO: Refactor this option setting code to someplace else. It's here because
-            // the YDB api doesn't allow a db->close to be called before db->open, and we
-            // would leak memory if we chose to do nothing. So we validate all the
-            // options here before db_create + db->open.
-            int readPageSize = 65536;
-            int pageSize = 4*1024*1024;
-            TOKU_COMPRESSION_METHOD compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
-            BSONObj key_pattern = info["key"].Obj();
-            
-            BSONElement e;
-            e = info["readPageSize"];
-            if (e.ok() && !e.isNull()) {
-                readPageSize = e.numberInt();
-                uassert(16743, "readPageSize must be a number > 0.", e.isNumber () && readPageSize > 0);
-                TOKULOG(1) << "db " << name << ", using read page size " << readPageSize << endl;
-            }
-            e = info["pageSize"];
-            if (e.ok() && !e.isNull()) {
-                pageSize = e.numberInt();
-                uassert(16445, "pageSize must be a number > 0.", e.isNumber () && pageSize > 0);
-                TOKULOG(1) << "db " << name << ", using page size " << pageSize << endl;
-            }
-            e = info["compression"];
-            if (e.ok() && !e.isNull()) {
-                std::string str = e.String();
-                if (str == "lzma") {
-                    compression = TOKU_LZMA_METHOD;
-                } else if (str == "quicklz") {
-                    compression = TOKU_QUICKLZ_METHOD;
-                } else if (str == "zlib") {
-                    compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
-                } else if (str == "none") {
-                    compression = TOKU_NO_COMPRESSION;
-                } else {
-                    uassert(16442, "compression must be one of: lzma, quicklz, zlib, none.", false);
-                }
-                TOKULOG(1) << "db " << name << ", using compression method \"" << str << "\"" << endl;
-            }
-
-            DB *db;
-            int r = db_create(&db, env, 0);
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-
-            r = db->set_readpagesize(db, readPageSize);
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-
-            r = db->set_pagesize(db, pageSize);
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-
-            r = db->set_compression_method(db, compression);
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-
-            // If this is a non-creating open for a read-only (or non-existent)
-            // transaction, we can use an alternate stack since there's nothing
-            // to roll back and no locktree locks to hold.
-            const bool needAltTxn = !may_create && (!cc().hasTxn() || cc().txn().readOnly());
-            scoped_ptr<Client::AlternateTransactionStack> altStack(!needAltTxn ? NULL :
-                                                                   new Client::AlternateTransactionStack());
-            scoped_ptr<Client::Transaction> altTxn(!needAltTxn ? NULL :
-                                                   new Client::Transaction(0));
-
-            const int db_flags = may_create ? DB_CREATE : 0;
-            DB_TXN *txn = cc().txn().db_txn();
-            r = db->open(db, txn, name.c_str(), NULL, DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
-            if (r == ENOENT) {
-                verify(!may_create);
-                goto exit;
-            }
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-            if (altTxn.get() != NULL) {
-                altTxn->commit();
-            }
-
-            if (may_create) {
-                set_db_descriptor(db, txn, key_pattern);
-            }
-            verify_db_descriptor(db, key_pattern);
-            *dbp = db;
-        exit:
-            return r;
-        }
-
-        void db_close(DB *db) {
-            int r = db->close(db, 0);
-            if (r != 0) {
-                handle_ydb_error(r);
             }
         }
 
@@ -425,7 +410,14 @@ namespace mongo {
                     {
                         time_t t = row->value.num;
                         char tbuf[26];
-                        status.appendNumber( row->keyname, (long long) ctime_r(&t, tbuf) );
+                        char *tstr = ctime_r(&t, tbuf);
+                        verify(tstr != NULL);
+                        // Remove any trailing newline.
+                        size_t len = strlen(tstr);
+                        if (len > 0 && tstr[len - 1] == '\n') {
+                            tstr[len - 1] = '\0';
+                        }
+                        status.append( row->keyname, tstr );
                     }
                     break;
                 case TOKUTIME:
@@ -446,6 +438,170 @@ namespace mongo {
                     break;                
                 }
             }
+        }
+
+        static BSONObj pretty_key(const DBT *key, DB *db) {
+            BSONObjBuilder b;
+            const Key sKey(key);
+            const DBT *desc = (db != NULL && db->cmp_descriptor != NULL)
+                              ? &db->cmp_descriptor->dbt
+                              : NULL;
+            if (desc != NULL && desc->data != NULL && desc->size > 0) {
+                Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+                const BSONObj key = sKey.key();
+
+                // Use the descriptor to match key parts with field names
+                vector<const char *> fields;
+                descriptor.fieldNames(fields);
+                BSONObjIterator o(key);
+                for (vector<const char *>::const_iterator i = fields.begin();
+                     i != fields.end(); i++) {
+                    b.appendAs(o.next(), *i);
+                }
+                // The primary key itself will have its value in sKey.key(),
+                // but fields will be empty so nothing is in the bsonobj yet.
+                const BSONObj pk = fields.empty() ? key : sKey.pk();
+                if (!pk.isEmpty()) {
+                    b.appendAs(pk.firstElement(), "$primaryKey");
+                }
+            } else {
+                b.append("$key", string(reinterpret_cast<const char *>(key->data), key->size));
+            }
+            return b.obj();
+        }
+
+        static const char *get_index_name(DB *db) {
+            if (db != NULL) {
+                return db->get_dname(db);
+            } else {
+                return "$ydb_internal";
+            }
+        }
+
+        static void pretty_bounds(DB *db, const DBT *left_key, const DBT *right_key,
+                                  BSONArrayBuilder &bounds) {
+            if (left_key->data == NULL) {
+                bounds.append("-infinity");
+            } else {
+                bounds.append(pretty_key(left_key, db));
+            }
+
+            if (right_key->data == NULL) {
+                bounds.append("+infinity");
+            } else {
+                bounds.append(pretty_key(right_key, db));
+            }
+        }
+
+        static void lock_not_granted_callback(DB *db, uint64_t requesting_txnid,
+                                              const DBT *left_key, const DBT *right_key,
+                                              uint64_t blocking_txnid) {
+            CurOp *op = cc().curop();
+            if (op != NULL) {
+                BSONObjBuilder info;
+                info.append("index", get_index_name(db));
+                info.appendNumber("requestingTxnid", requesting_txnid);
+                info.appendNumber("blockingTxnid", blocking_txnid);
+                BSONArrayBuilder bounds(info.subarrayStart("bounds"));
+                pretty_bounds(db, left_key, right_key, bounds);
+                bounds.done();
+                op->debug().lockNotGrantedInfo = info.obj();
+            }
+        }
+
+        void get_pending_lock_request_status(BSONObjBuilder &status) {
+            struct iterate_lock_requests : public ExceptionSaver {
+                iterate_lock_requests() { }
+                static int callback(DB *db, uint64_t requesting_txnid,
+                                    const DBT *left_key, const DBT *right_key,
+                                    uint64_t blocking_txnid, uint64_t start_time,
+                                    void *extra) {
+                    iterate_lock_requests *info = reinterpret_cast<iterate_lock_requests *>(extra);
+                    try {
+                        if (info->array.len() + left_key->size + right_key->size > BSONObjMaxUserSize - 1024) {
+                            // We're running out of space, better stop here.
+                            info->array.append("too many results to return");
+                            return ERANGE;
+                        }
+                        BSONObjBuilder status(info->array.subobjStart());
+                        status.append("index", get_index_name(db));
+                        status.appendNumber("requestingTxnid", requesting_txnid);
+                        status.appendNumber("blockingTxnid", blocking_txnid);
+                        status.appendDate("started", start_time);
+                        {
+                            BSONArrayBuilder bounds(status.subarrayStart("bounds"));
+                            pretty_bounds(db, left_key, right_key, bounds);
+                            bounds.done();
+                        }
+                        status.done();
+                        return 0;
+                    } catch (const std::exception &ex) {
+                        info->saveException(ex);
+                    }
+                    return -1;
+                }
+                BSONArrayBuilder array;
+            } e;
+            const int r = env->iterate_pending_lock_requests(env, iterate_lock_requests::callback, &e);
+            if (r != 0 && r != ERANGE) {
+                e.throwException();
+                handle_ydb_error(r);
+            }
+            status.appendArray("requests", e.array.done());
+        }
+
+        void get_live_transaction_status(BSONObjBuilder &status) {
+            struct iterate_transactions : public ExceptionSaver {
+                iterate_transactions() { }
+                static int callback(uint64_t txnid, uint64_t client_id,
+                                    iterate_row_locks_callback iterate_locks,
+                                    void *locks_extra, void *extra) {
+                    iterate_transactions *info = reinterpret_cast<iterate_transactions *>(extra);
+                    try {
+                        // We ignore client_id because txnid is sufficient for finding
+                        // the associated operation in db.currentOp()
+                        BSONObjBuilder status(info->array.subobjStart());
+                        status.appendNumber("txnid", txnid);
+                        BSONArrayBuilder locks(status.subarrayStart("rowLocks"));
+                        {
+                            DB *db;
+                            DBT left_key, right_key;
+                            while (iterate_locks(&db, &left_key, &right_key, locks_extra) == 0) {
+                                if (locks.len() + left_key.size + right_key.size > BSONObjMaxUserSize - 1024) {
+                                    // We're running out of space, better stop here.
+                                    locks.append("too many results to return");
+                                    break;
+                                }
+                                BSONObjBuilder row_lock(locks.subobjStart());
+                                row_lock.append("index", get_index_name(db));
+                                BSONArrayBuilder bounds(row_lock.subarrayStart("bounds"));
+                                pretty_bounds(db, &left_key, &right_key, bounds);
+                                bounds.done();
+                                row_lock.done();
+                            }
+                            locks.done();
+                        }
+                        status.done();
+                        if (info->array.len() > BSONObjMaxUserSize - 1024) {
+                            // We're running out of space, better stop here.
+                            locks.append("too many results to return");
+                            return ERANGE;
+                        }
+                        return 0;
+                    } catch (const std::exception &ex) {
+                        info->saveException(ex);
+                    }
+                    return -1;
+                }
+                BSONArrayBuilder array;
+            } e;
+            const int r = env->iterate_live_transactions(env, iterate_transactions::callback, &e);
+            if (r != 0 && r != ERANGE) {
+                e.throwException();
+                handle_ydb_error(r);
+            }
+            status.appendArray("transactions", e.array.done());
+
         }
 
         void log_flush() {
@@ -498,36 +654,60 @@ namespace mongo {
             TOKULOG(1) << "cleaner iterations set to " << num_iterations << "." << endl;
         }
 
+        void set_lock_timeout(uint64_t timeout_ms) {
+            cmdLine.lockTimeout = timeout_ms;
+            int r = env->set_lock_timeout(env, timeout_ms);
+            if (r != 0) {
+                handle_ydb_error_fatal(r);
+            }
+            TOKULOG(1) << "lock timeout set to " << timeout_ms << " milliseconds." << endl;
+        }
+
+        void set_loader_max_memory(uint64_t bytes) {
+            cmdLine.loaderMaxMemory = bytes;
+            env->set_loader_memory_size(env, bytes);
+            TOKULOG(1) << "loader max memory set to " << bytes << "." << endl;
+        }
+
         void handle_ydb_error(int error) {
             switch (error) {
                 case ENOENT:
                     throw SystemException::Enoent();
+                case ENAMETOOLONG:
+                    throw UserException(16917, "Index name too long (must be shorter than the filesystem's max path)");
+                case ASSERT_IDS::AmbiguousFieldNames:
+                    uasserted( storage::ASSERT_IDS::AmbiguousFieldNames,
+                               mongoutils::str::stream() << "Ambiguous field name found in array" );
+                case ASSERT_IDS::CannotHashArrays:
+                    uasserted( storage::ASSERT_IDS::CannotHashArrays,
+                               "Error: hashed indexes do not currently support array values" );
                 default:
                     // fall through
                     ;
             }
             if (error > 0) {
-                throw SystemException("You may have hit a bug. Check the error log for more details.", error, 16770);
+                throw SystemException(error, 16770, "You may have hit a bug. Check the error log for more details.");
             }
             switch (error) {
                 case DB_LOCK_NOTGRANTED:
-                    throw LockException("Lock not granted. Try restarting the transaction.", 16759);
+                    throw LockException(16759, "Lock not granted. Try restarting the transaction.");
                 case DB_LOCK_DEADLOCK:
-                    throw LockException("Deadlock detected during lock acquisition. Try restarting the transaction.", 16760);
+                    throw LockException(storage::ASSERT_IDS::LockDeadlock,
+                                        "Deadlock detected during lock acquisition. Try restarting the transaction.");
                 case DB_KEYEXIST:
-                    throw Exception("Duplicate key error.", ASSERT_ID_DUPKEY);
+                    throw UserException(ASSERT_ID_DUPKEY, "E11000 duplicate key error.");
                 case DB_NOTFOUND:
-                    throw Exception("Index key not found.", 16761);
+                    throw UserException(16761, "Index key not found.");
                 case DB_RUNRECOVERY:
-                    throw DataCorruptionException("Automatic environment recovery failed.", 16762);
+                    throw DataCorruptionException(16762, "Automatic environment recovery failed.");
                 case DB_BADFORMAT:
-                    throw DataCorruptionException("File-format error when reading dictionary from disk.", 16763);
+                    throw DataCorruptionException(16763, "File-format error when reading dictionary from disk.");
                 case TOKUDB_BAD_CHECKSUM:
-                    throw DataCorruptionException("Checksum mismatch when reading dictionary from disk.", 16764);
+                    throw DataCorruptionException(16764, "Checksum mismatch when reading dictionary from disk.");
                 case TOKUDB_NEEDS_REPAIR:
-                    throw DataCorruptionException("Repair requested when reading dictionary from disk.", 16765);
+                    throw DataCorruptionException(16765, "Repair requested when reading dictionary from disk.");
                 case TOKUDB_DICTIONARY_NO_HEADER:
-                    throw DataCorruptionException("No header found when reading dictionary from disk.", 16766);
+                    throw DataCorruptionException(16766, "No header found when reading dictionary from disk.");
                 case TOKUDB_MVCC_DICTIONARY_TOO_NEW:
                     throw RetryableException::MvccDictionaryTooNew();
                 case TOKUDB_HUGE_PAGES_ENABLED:
@@ -553,21 +733,30 @@ namespace mongo {
                                   << "************************************************************" << endl
                                   << endl;
                     verify(false);
-                default:
-                    throw Exception(str::stream() << "Unhandled ydb error: " << error, 16767);
+                default: 
+                {
+                    string s = str::stream() << "Unhandled ydb error: " << error;
+                    throw MsgAssertionException(16767, s);
+                }
             }
         }
 
-        void handle_ydb_error_fatal(int error) {
+        NOINLINE_DECL void handle_ydb_error_fatal(int error) {
             try {
                 handle_ydb_error(error);
             }
-            catch (Exception &e) {
+            catch (UserException &e) {
                 problem() << "fatal error " << e.getCode() << ": " << e.what() << endl;
                 problem() << e << endl;
                 fassertFailed(e.getCode());
             }
-            msgasserted(16853, mongoutils::str::stream() << "No storage exception thrown but one should have been thrown for error " << error);
+            catch (MsgAssertionException &e) {
+                problem() << "fatal error " << e.getCode() << ": " << e.what() << endl;
+                problem() << e << endl;
+                fassertFailed(e.getCode());
+            }                
+            problem() << "No storage exception thrown but one should have been thrown for error " << error << endl;
+            fassertFailed(16853);
         }
     
     } // namespace storage

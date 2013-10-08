@@ -19,11 +19,22 @@
 
 #include "pch.h"
 
-#include "../db/commands.h"
-#include "../util/queue.h"
-#include "../util/net/listen.h"
-#include "../db/curop.h"
-#include "../db/client.h"
+#include "mongo/s/d_writeback.h"
+
+#include <string>
+#include <vector>
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
+#include "mongo/db/client.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/platform/random.h"
+#include "mongo/util/net/listen.h"
+#include "mongo/util/queue.h"
 #include "mongo/util/stacktrace.h"
 
 #include "d_writeback.h"
@@ -142,7 +153,13 @@ namespace mongo {
         virtual LockType lockType() const { return OPLOCK; }
 
         void help(stringstream& h) const { h<<"internal"; }
-
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::writebacklisten);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
         bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
 
             cc().curop()->suppressFromCurop();
@@ -169,12 +186,13 @@ namespace mongo {
             }
 
 #ifdef _DEBUG
+            PseudoRandom r(static_cast<int64_t>(time(0)));
             // Sleep a short amount of time usually
-            int sleepFor = rand() % 10;
+            int sleepFor = r.nextInt32( 10 );
             sleepmillis( sleepFor );
 
             // Sleep a longer amount of time every once and awhile
-            int sleepLong = rand() % 50;
+            int sleepLong = r.nextInt32( 50 );
             if( sleepLong == 0 ) sleepsecs( 2 );
 #endif
 
@@ -186,6 +204,14 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return true; }
         WriteBacksQueuedCommand() : InformationCommand("writeBacksQueued") {}
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::writeBacksQueued);
+            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+        }
+
         void help(stringstream& help) const {
             help << "Returns whether there are operations in the writeback queue at the time the command was called. "
                  << "This is an internal command";

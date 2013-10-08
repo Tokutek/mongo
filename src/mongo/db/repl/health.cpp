@@ -353,6 +353,20 @@ namespace mongo {
         return closest;
     }
 
+    Member* ReplSetImpl::findByName(const std::string& hostname) const {
+        if (_self && hostname == _self->fullName()) {
+            return _self;
+        }
+
+        for (Member *m = head(); m; m = m->next()) {
+            if (m->fullName() == hostname) {
+                return m;
+            }
+        }
+
+        return NULL;
+    }
+
     const uint64_t ReplSetImpl::lastOtherOpTime() const {
         uint64_t closest = 0;
 
@@ -387,8 +401,21 @@ namespace mongo {
             bb.append("stateStr", myState.toString());
             bb.append("uptime", (unsigned)(time(0) - cmdLine.started));
             if (!_self->config().arbiterOnly) {
+                GTID lastLive;
+                GTID lastUnapplied;
+                GTID minLive;
+                GTID minUnapplied;
+                gtidManager->getGTIDs(
+                    &lastLive,
+                    &lastUnapplied,
+                    &minLive,
+                    &minUnapplied
+                    );
                 bb.appendDate("optimeDate", gtidManager->getCurrTimestamp());
-                bb.append("lastGTID", gtidManager->getLiveState().toString());
+                bb.append("lastGTID", lastLive.toString());
+                bb.append("lastUnappliedGTID", lastUnapplied.toString());
+                bb.append("minLiveGTID", minLive.toString());
+                bb.append("minUnappliedGTID", minUnapplied.toString());                
             }
 
             int maintenance = _maintenanceMode;
@@ -424,8 +451,12 @@ namespace mongo {
             if (!m->config().arbiterOnly) {
                 bb.appendDate("optimeDate", m->hbinfo().opTime);
                 bb.append("lastGTID", m->hbinfo().gtid.toString());
+                bb.append("lastUnappliedGTID", m->hbinfo().lastUnappliedGTID.toString());
+                bb.append("minLiveGTID", m->hbinfo().minLiveGTID.toString());
+                bb.append("minUnappliedGTID", m->hbinfo().minUnappliedGTID.toString());
             }
             bb.appendTimeT("lastHeartbeat", m->hbinfo().lastHeartbeat);
+            bb.appendTimeT("lastHeartbeatRecv", m->hbinfo().lastHeartbeatRecv);
             bb.append("pingMs", m->hbinfo().ping);
             string s = m->lhb();
             if( !s.empty() )
