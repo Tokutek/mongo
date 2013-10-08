@@ -137,6 +137,13 @@ namespace mongo {
                 storage::set_lock_timeout(x);
                 uassert(17018, "--lockTimeout must be >= 0", x >= 0 );
                 log() << "setParameter lockTimeout =" << x << endl;
+            }
+            if( cmdObj.hasElement("loaderMaxMemory") ) { 
+                long long x = BytesQuantity<long long>(cmdObj["loaderMaxMemory"]);
+                uassert(17019, "bad --loaderMaxMemory arg (should never be less than 32mb)",
+                                 x >= 32 * 1024 * 1024);
+                storage::set_loader_max_memory(x);
+                log() << "setParameter loaderMemory=" << x << endl;
                 s++;
             }
             if( cmdObj.hasElement( "traceExceptions" ) ) {

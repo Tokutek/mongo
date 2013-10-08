@@ -46,6 +46,7 @@ namespace mongo {
         void set_cleaner_period(uint32_t period_seconds);
         void set_cleaner_iterations(uint32_t num_iterations);
         void set_lock_timeout(uint64_t timeout_ms);
+        void set_loader_max_memory(uint64_t bytes);
 
         void handle_ydb_error(int error);
         MONGO_COMPILER_NORETURN void handle_ydb_error_fatal(int error);

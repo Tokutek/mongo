@@ -494,6 +494,7 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("jsonp","allow JSONP access via http (has security implications)")
     ("lockTimeout", po::value(&cmdLine.lockTimeout), "tokumx row lock wait timeout (in ms), 0 means wait as long as necessary")
     ("locktreeMaxMemory", po::value(&cmdLine.locktreeMaxMemory), "tokumx memory limit (in bytes) for storing transactions' row locks.")
+    ("loaderMaxMemory", po::value(&cmdLine.loaderMaxMemory), "tokumx memory limit (in bytes) for a single bulk loader to use. the bulk loader is used to build foreground indexes and is also utilized by mongorestore/import")
     ("noauth", "run without security")
     ("nohttpinterface", "disable http interface")
     ("nojournal", "DEPRECATED)")
@@ -824,6 +825,13 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             uint64_t x = (uint64_t) params["locktreeMaxMemory"].as<BytesQuantity<uint64_t> >();
             if (x < 65536) {
                 out() << "bad --locktreeMaxMemory arg (should never be less than 64kb)" << endl;
+                dbexit( EXIT_BADOPTIONS );
+            }
+        }
+        if (params.count("loaderMaxMemory")) {
+            uint64_t x = (uint64_t) params["loaderMaxMemory"].as<BytesQuantity<uint64_t> >();
+            if (x < 32 * 1024 * 1024) {
+                out() << "bad --loaderMaxMemory arg (should never be less than 32mb)" << endl;
                 dbexit( EXIT_BADOPTIONS );
             }
         }
