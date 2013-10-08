@@ -15,7 +15,6 @@ function rollback() {
 // a cursor that reads more than one batchSize() and also
 // does writes to the same and other collections.
 
-db.dropDatabase();
 t = db.txncursor;
 
 function checkLiveCursors(n) {
@@ -24,8 +23,7 @@ function checkLiveCursors(n) {
 }
 
 function runTest(doCommit) {
-    t.drop();
-    db.unrelated.drop();
+    db.dropDatabase();
 
     for ( i = 0; i < 1500; i++ ) {
         t.insert({ _id: i });
