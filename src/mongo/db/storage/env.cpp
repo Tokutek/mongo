@@ -270,6 +270,12 @@ namespace mongo {
                 TOKULOG(1) << "temporary bulk loader directory set to " << tmpDir << endl;
             }
 
+            if (cmdLine.debug) {
+                // The default number of bucket mutexes is 1 million, which is a nightmare for
+                // valgrind's drd tool to keep track of.
+                db_env_set_num_bucket_mutexes(32);
+            }
+
             const int env_flags = DB_INIT_LOCK|DB_INIT_MPOOL|DB_INIT_TXN|DB_CREATE|DB_PRIVATE|DB_INIT_LOG|DB_RECOVER;
             const int env_mode = S_IRWXU|S_IRGRP|S_IROTH|S_IXGRP|S_IXOTH;
             r = env->open(env, dbpath.c_str(), env_flags, env_mode);

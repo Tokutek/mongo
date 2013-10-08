@@ -482,7 +482,7 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
     ("logDir", po::value<string>(), "directory to store transaction log files (default is --dbpath)")
     ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
-    ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers (development use only).")
+    ("debug", "go into a debug-friendly mode (development use only).")
     ("gdbPath", po::value<string>(), "if specified, debugging information will be gathered on fatal error by launching gdb at the given path")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
@@ -1120,7 +1120,7 @@ namespace mongo {
 
     void setupSignals( bool ignored ) {
         sigemptyset( &asyncSignals );
-        if ( !cmdLine.gdb ) {
+        if ( !cmdLine.debug ) {
             sigaddset( &asyncSignals, SIGINT );
             sigaddset( &asyncSignals, SIGTERM );
             sigaddset( &asyncSignals, SIGUSR1 );

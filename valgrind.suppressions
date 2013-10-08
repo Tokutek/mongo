@@ -5,10 +5,3 @@
    fun:_ZNSsC1EPKcRKSaIcE
    ...
 }
-{
-   mongod-writes-uninitialized-data-for-journal
-   Memcheck:Param
-   write(buf)
-   obj:/lib64/libpthread-2.14.90.so
-   fun:_ZN5mongo7LogFile17synchronousAppendEPKvm
-}

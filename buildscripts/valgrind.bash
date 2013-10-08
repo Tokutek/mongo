@@ -1,6 +1,13 @@
 #!/bin/bash
 
-(valgrind --soname-synonyms=somalloc=NONE "$@" 2>&1 | tee __valgrind.log) &
+tool="valgrind"
+for arg in $@; do 
+    if [ $arg = '--tool=drd' ] ; then
+        tool="drd"
+    fi
+done
+
+(valgrind --suppressions=${tool}.suppressions --soname-synonyms=somalloc=NONE "$@" 2>&1 | tee __valgrind.log) &
 pid=$!
 function cleanup {
     # send sigint to valgrind while it's still alive

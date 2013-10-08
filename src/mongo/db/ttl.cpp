@@ -106,11 +106,6 @@ namespace mongo {
             while ( ! inShutdown() ) {
                 sleepsecs( 60 );
 
-                if ( cmdLine.gdb ) {
-                    // Disable TTL while debugging.
-                    continue;
-                }
-                
                 LOG(3) << "TTLMonitor thread awake" << endl;
                 
                 if ( lockedForWriting() ) {
