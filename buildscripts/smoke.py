@@ -71,6 +71,8 @@ shell_executable = None
 continue_on_failure = None
 file_of_commands_mode = False
 start_mongod = True
+valgrind = False
+drd = False
 
 tests = []
 winners = []
@@ -270,6 +272,10 @@ class mongod(object):
         child processes of this process can be killed with a single
         call to TerminateJobObject (see self.stop()).
         """
+        if valgrind:
+            argv = [ 'buildscripts/valgrind.bash', '--show-reachable=yes', '--leak-check=full', '--suppressions=valgrind.suppressions' ] + argv
+        elif drd:
+            argv = [ 'buildscripts/valgrind.bash', '--tool=drd' ] + argv
         proc = Popen(argv, stdout=self.outfile)
 
         if os.sys.platform == "win32":
@@ -640,17 +646,6 @@ def run_tests(tests):
 
                     if small_oplog or small_oplog_rs:
                         master.wait_for_repl()
-                    elif test[1]: # reach inside test and see if startmongod is true
-                        if (tests_run+1) % 20 == 0:
-                            # restart mongo every 20 times, for our 32-bit machines
-                            master.__exit__(None, None, None)
-                            master = mongod(small_oplog_rs=small_oplog_rs,
-                                            small_oplog=small_oplog,
-                                            no_journal=no_journal,
-                                            no_preallocj=no_preallocj,
-                                            auth=auth,
-                                            authMechanism=authMechanism,
-                                            use_ssl=use_ssl).__enter__()
 
                 except TestFailure, f:
                     try:
@@ -797,6 +792,7 @@ def set_globals(options, tests):
     global no_journal, no_preallocj, auth, authMechanism, keyFile, smoke_db_prefix, smoke_server_opts, server_log_file, tests_log, quiet, test_path, start_mongod
     global use_ssl
     global file_of_commands_mode
+    global valgrind, drd
     start_mongod = options.start_mongod
     use_ssl = options.use_ssl
     #Careful, this can be called multiple times
@@ -852,6 +848,12 @@ def set_globals(options, tests):
         server_log_file = options.server_log_file
     elif quiet:
         server_log_file = os.path.join(smoke_db_prefix, "server.log")
+
+    valgrind = options.valgrind
+    drd = options.drd
+    if valgrind and drd:
+        print "Both --valgrind and --drd specified: assuming drd..."
+        valgrind = False
 
 def clear_failfile():
     if os.path.exists(failfile):
@@ -984,6 +986,12 @@ def main():
     parser.add_option('--quiet', dest='quiet', default=False,
                       action="store_true",
                       help='Generate a quieter report (use with --tests-log)')
+    parser.add_option('--valgrind', dest='valgrind', default=False,
+                      action="store_true",
+                      help='Run mongod under valgrind')
+    parser.add_option('--drd', dest='drd', default=False,
+                      action="store_true",
+                      help='Run mongod under drd')
     parser.add_option('--shuffle', dest='shuffle', default=False,
                       action="store_true",
                       help='Shuffle tests instead of running them in alphabetical order')
