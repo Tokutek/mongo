@@ -51,15 +51,6 @@ namespace ReplSetTests {
             delete _myConfig;
             delete _config;
         }
-<<<<<<< HEAD
-        ReplSetTest() /*: SyncTail(0)*/ {
-            BSONArrayBuilder members;
-            members.append(BSON("_id" << 0 << "host" << "host1"));
-            _config = new ReplSetConfig(BSON("_id" << "foo" << "members" << members.arr()));
-            _myConfig = new ReplSetConfig::MemberCfg();
-        }
-=======
->>>>>>> fda5845... SERVER-7028 Move complex initialization (that may trigger page fault exceptions) out of ReplSetConfig and ReplSet constructors.
         virtual bool isSecondary() {
             return true;
         }
@@ -82,12 +73,10 @@ namespace ReplSetTests {
         void setSyncTail(BackgroundSyncInterface *syncTail) {
             _syncTail = syncTail;
         }
-<<<<<<< HEAD
         */
-=======
     private:
-        ReplSetTest() :
-            _syncTail(0) {
+        ReplSetTest()
+            {
         }
         void init() {
             BSONArrayBuilder members;
@@ -95,7 +84,6 @@ namespace ReplSetTests {
             _config = ReplSetConfig::make(BSON("_id" << "foo" << "members" << members.arr()));
             _myConfig = new ReplSetConfig::MemberCfg();
         }
->>>>>>> fda5845... SERVER-7028 Move complex initialization (that may trigger page fault exceptions) out of ReplSetConfig and ReplSet constructors.
     };
 
     /*

@@ -674,9 +674,9 @@ namespace mongo {
 
     ReplSetConfig::ReplSetConfig() :
         version(EMPTYCONFIG),
-        _chainingAllowed(true),
         protocolVersion(CURRENT_PROTOCOL_VERSION),
         _ok(false),
+        _chainingAllowed(true),
         _majority(-1),
         _heartbeatTimeout(DEFAULT_HB_TIMEOUT) {
     }

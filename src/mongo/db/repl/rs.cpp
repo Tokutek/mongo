@@ -818,7 +818,7 @@ namespace mongo {
         int n = 0;
         for( vector<ReplSetConfig*>::iterator i = cfgs.begin(); i != cfgs.end(); i++ ) {
             ReplSetConfig* cfg = *i;
-            DEV log(1) << n+1 << " config shows version " << cfg->version << rsLog;
+            DEV LOG(1) << n+1 << " config shows version " << cfg->version << rsLog;
             if( ++n == 1 ) myVersion = cfg->version;
             if( cfg->ok() && cfg->version > v ) {
                 highest = cfg;
