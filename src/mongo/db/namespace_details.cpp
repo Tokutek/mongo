@@ -767,31 +767,33 @@ namespace mongo {
         }
 
         void close(const bool abortingLoad) {
-            try {
-                if (!abortingLoad) {
-                    const int r = _loader->close();
-                    if (r != 0) {
-                        storage::handle_ydb_error(r);
+            class FinallyClose : boost::noncopyable {
+            public:
+                FinallyClose(BulkLoadedCollection &coll) : c(coll) {}
+                ~FinallyClose() {
+                    c._close();
+                }
+            private:
+                BulkLoadedCollection &c;
+            } finallyClose(*this);
+
+            if (!abortingLoad) {
+                const int r = _loader->close();
+                if (r != 0) {
+                    storage::handle_ydb_error(r);
+                }
+                verify(!_indexBuildInProgress);
+                for (int i = 0; i < _nIndexes; i++) {
+                    IndexDetails &idx = *_indexes[i];
+                    // The PK's uniqueness is verified on loader close, so we should not check it again.
+                    if (!isPKIndex(idx) && idx.unique()) {
+                        checkIndexUniqueness(idx);
                     }
-                    verify(!_indexBuildInProgress);
-                    for (int i = 0; i < _nIndexes; i++) {
-                        IndexDetails &idx = *_indexes[i];
-                        // The PK's uniqueness is verified on loader close, so we should not check it again.
-                        if (!isPKIndex(idx) && idx.unique()) {
-                            checkIndexUniqueness(idx);
-                        }
-                        if (_multiKeyTrackers[i]->isMultiKey()) {
-                            setIndexIsMultikey(i);
-                        }
+                    if (_multiKeyTrackers[i]->isMultiKey()) {
+                        setIndexIsMultikey(i);
                     }
                 }
-            } catch (...) {
-                _loader.reset();
-                NamespaceDetails::close();
-                throw;
             }
-            _loader.reset();
-            NamespaceDetails::close();
         }
 
         virtual void validateConnectionId(const ConnectionId &id) {
@@ -832,6 +834,15 @@ namespace mongo {
         }
 
     private:
+        // When closing a BulkLoadedCollection, we need to make sure the key trackers and
+        // loaders are destructed before we call up to the parent destructor, because they
+        // reference storage::Dictionaries that get destroyed in the parent destructor.
+        void _close() {
+            _loader.reset();
+            _multiKeyTrackers.reset();
+            NamespaceDetails::close();
+        }
+
         void createIndex(const BSONObj &info) {
             uasserted( 16867, "Cannot create an index on a collection under-going bulk load." );
         }
