@@ -1064,6 +1064,7 @@ namespace mongo {
                 lastSeenGTID = curr;
             }
         }
+        cc().shutdown();
         _replKeepOplogAliveRunning = false;
     }
 
@@ -1218,6 +1219,7 @@ namespace mongo {
                 sleep(5);
             }
         }
+        cc().shutdown();
         _replOplogOptimizeRunning = false;
     }
 
