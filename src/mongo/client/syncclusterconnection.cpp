@@ -357,7 +357,7 @@ namespace mongo {
             BSONObj obj = *it;
             if ( obj["_id"].type() == EOO ) {
                 string assertMsg = "SyncClusterConnection::insert (batched) obj misses an _id: ";
-                uasserted( 16743, assertMsg + obj.jsonString() );
+                uasserted( 17020, assertMsg + obj.jsonString() );
             }
         }
 
