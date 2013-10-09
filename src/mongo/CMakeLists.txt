@@ -174,6 +174,7 @@ set(client_sources
   util/net/listen.cpp
   util/net/message.cpp
   util/net/message_port.cpp
+  util/net/socket_poll.cpp
   util/net/sock.cpp
   util/net/ssl_manager.cpp
   util/password.cpp

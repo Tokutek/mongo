@@ -21,7 +21,6 @@
 #include "mongo/util/net/sock.h"
 
 #if !defined(_WIN32)
-# include <sys/poll.h>
 # include <sys/socket.h>
 # include <sys/types.h>
 # include <sys/un.h>
@@ -35,13 +34,14 @@
 # endif
 #endif
 
+#include "mongo/db/cmdline.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/value.h"
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/net/message.h"
 #include "mongo/util/net/ssl_manager.h"
-#include "mongo/db/cmdline.h"
+#include "mongo/util/net/socket_poll.h"
 
 namespace mongo {
     MONGO_FP_DECLARE(throwSockExcep);
@@ -792,16 +792,6 @@ namespace mongo {
     // -1 : never check
     const int Socket::errorPollIntervalSecs( 5 );
 
-#if defined(NTDDI_VERSION) && ( !defined(NTDDI_VISTA) || ( NTDDI_VERSION < NTDDI_VISTA ) )
-    // Windows XP
-
-    // pre-Vista windows doesn't have WSAPoll, so don't test connections
-    bool Socket::isStillConnected() {
-        return true;
-    }
-
-#else // Not Windows XP
-
     // Patch to allow better tolerance of flaky network connections that get broken
     // while we aren't looking.
     // TODO: Remove when better async changes come.
@@ -811,6 +801,7 @@ namespace mongo {
     bool Socket::isStillConnected() {
 
         if ( errorPollIntervalSecs < 0 ) return true;
+        if ( ! isPollSupported() ) return true; // nothing we can do
 
         time_t now = time( 0 );
         time_t idleTimeSecs = now - _lastValidityCheckAtSecs;
@@ -828,11 +819,7 @@ namespace mongo {
         pollInfo.events = POLLIN;
 
         // Poll( info[], size, timeout ) - timeout == 0 => nonblocking
-#if defined(_WIN32)
-        int nEvents = WSAPoll( &pollInfo, 1, 0 );
-#else
-        int nEvents = ::poll( &pollInfo, 1, 0 );
-#endif
+        int nEvents = socketPoll( &pollInfo, 1, 0 );
 
         LOG( 2 ) << "polling for status of connection to " << remoteString()
                  << ", " << ( nEvents == 0 ? "no events" :
@@ -924,8 +911,6 @@ namespace mongo {
 
         return false;
     }
-
-#endif // End Not Windows XP
 
 #if defined(_WIN32)
     struct WinsockInit {

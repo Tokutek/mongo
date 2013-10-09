@@ -51,6 +51,7 @@ add_library(mongocommon_util STATIC
   text_startuptest
   stack_introspect
   net/sock
+  net/socket_poll
   net/ssl_manager
   net/ssl_options
   net/httpclient
