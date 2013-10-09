@@ -193,7 +193,7 @@ namespace mongo {
 #endif
 
     void setupSignals( bool inFork ) {
-        if ( !cmdLine.gdb ) {
+        if ( !cmdLine.debug ) {
             signal(SIGTERM, sighandler);
             signal(SIGINT, sighandler);
 
@@ -358,7 +358,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
 
     general_options.add_options()
     ("nohttpinterface", "disable http interface")
-    ("gdb", "go into a debug-friendly mode, disabling SIGINT/TERM handlers");
+    ("debug", "go into a debug-friendly mode (development use only).");
 
     hidden_options.add_options()
     ("releaseConnectionsAfterResponse", "" )
