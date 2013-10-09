@@ -1199,6 +1199,9 @@ namespace mongo {
                                 config.mapper->map( o );
                                 if ( config.verbose ) mapTime += mt.micros();
 
+                                // check if map needs to be dumped to disk
+                                state.checkSize();
+
                                 num++;
                                 pm.hit();
 
