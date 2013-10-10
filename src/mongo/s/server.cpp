@@ -195,7 +195,7 @@ namespace mongo {
 #endif  // not _WIN32
 
     void setupSignals( bool inFork ) {
-        if ( !cmdLine.gdb ) {
+        if ( !cmdLine.debug ) {
             signal(SIGTERM, sighandler);
             signal(SIGINT, sighandler);
 
