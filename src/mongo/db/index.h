@@ -247,6 +247,37 @@ namespace mongo {
             _accessStats.deletes.fetchAndAdd(1);
         }
 
+        struct Stats {
+            string name;
+            uint64_t count;
+            uint64_t dataSize;
+            uint64_t storageSize;
+            uint32_t pageSize;
+            uint32_t readPageSize;
+            enum toku_compression_method compressionMethod;
+            uint64_t queries;
+            uint64_t nscanned;
+            uint64_t nscannedObjects;
+            uint64_t inserts;
+            uint64_t deletes;
+
+            Stats() : name(""),
+                      count(0),
+                      dataSize(0),
+                      storageSize(0),
+                      pageSize(0),
+                      readPageSize(0),
+                      compressionMethod(TOKU_ZLIB_METHOD),
+                      queries(0),
+                      nscanned(0),
+                      nscannedObjects(0),
+                      inserts(0),
+                      deletes(0) {}
+            void appendInfo(BSONObjBuilder &b, int scale) const;
+        };
+
+        Stats getStats() const;
+
         class Cursor : public storage::Cursor {
         public:
             Cursor(const IndexDetails &idx, const int flags = 0) :
@@ -306,44 +337,6 @@ namespace mongo {
 
         friend class NamespaceDetails;
         friend class BulkLoadedCollection;
-    };
-
-    // class to store statistics about an IndexDetails
-    class IndexStats {
-    public:
-        explicit IndexStats(const IndexDetails &idx);
-        BSONObj obj(int scale) const;
-        uint64_t getCount() const {
-            return _stats.bt_nkeys;
-        }
-        uint64_t getDataSize() const {
-            return _stats.bt_dsize;
-        }
-        uint64_t getStorageSize() const {
-            return _stats.bt_fsize;
-        }
-        uint64_t getQueryCount() const {
-            return _accessStats.queries.load();
-        }
-        uint64_t getNscanned() const {
-            return _accessStats.nscanned.load();
-        }
-        uint64_t getNscannedObjects() const {
-            return _accessStats.nscannedObjects.load();
-        }
-        uint64_t getInsertCount() const {
-            return _accessStats.inserts.load();
-        }
-        uint64_t getDeleleCount() const {
-            return _accessStats.deletes.load();
-        }
-    private:
-        string _name;
-        DB_BTREE_STAT64 _stats;
-        enum toku_compression_method _compressionMethod;
-        uint32_t _readPageSize;
-        uint32_t _pageSize;
-        const IndexDetails::AccessStats &_accessStats;
     };
 
     template<class Callback>

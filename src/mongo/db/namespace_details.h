@@ -78,18 +78,6 @@ namespace mongo {
     void commitBulkLoad(const StringData &ns);
     void abortBulkLoad(const StringData &ns);
 
-    // struct for storing the accumulated states of a NamespaceDetails
-    // all values, except for nIndexes, are estiamtes
-    // note that the id index is used as the main store.
-    struct NamespaceDetailsAccStats {
-        uint64_t count; // number of rows in id index
-        uint64_t size; // size of main store, which is the id index
-        uint64_t storageSize; // size on disk of id index
-        uint64_t nIndexes; // number of indexes, including id index
-        uint64_t indexSize; // size of secondary indexes, NOT including id index
-        uint64_t indexStorageSize; // size on disk for secondary indexes, NOT including id index
-    };
-
     /* NamespaceDetails : this is the "header" for a namespace that has all its details.
        It is stored in the NamespaceIndex (a TokuMX dictionary named foo.ns, for Database foo).
     */
@@ -271,7 +259,36 @@ namespace mongo {
                                  const BSONArray &indexes_array);
         BSONObj serialize(const bool includeHotIndex = false) const;
 
-        void fillCollectionStats(struct NamespaceDetailsAccStats* accStats, BSONObjBuilder* result, int scale) const;
+        // struct for storing the accumulated states of a NamespaceDetails
+        // all values, except for nIndexes, are estimates
+        // note that the id index is used as the main store.
+        struct Stats {
+            uint64_t count; // number of rows in id index
+            uint64_t size; // size of main store, which is the id index
+            uint64_t storageSize; // size on disk of id index
+            uint64_t nIndexes; // number of indexes, including id index
+            uint64_t indexSize; // size of secondary indexes, NOT including id index
+            uint64_t indexStorageSize; // size on disk for secondary indexes, NOT including id index
+
+            Stats() : count(0),
+                      size(0),
+                      storageSize(0),
+                      nIndexes(0),
+                      indexSize(0),
+                      indexStorageSize(0) {}
+            Stats& operator+=(const Stats &o) {
+                count += o.count;
+                size += o.size;
+                storageSize += o.storageSize;
+                nIndexes += o.nIndexes;
+                indexSize += o.indexSize;
+                indexStorageSize += o.indexStorageSize;
+                return *this;
+            }
+            void appendInfo(BSONObjBuilder &b, int scale) const;
+        };
+
+        void fillCollectionStats(Stats &aggStats, BSONObjBuilder *result, int scale) const;
 
         // Find the first object that matches the query. Force index if requireIndex is true.
         bool findOne(const BSONObj &query, BSONObj &result, const bool requireIndex = false) const;
@@ -300,7 +317,7 @@ namespace mongo {
         }
         
         // optional to implement, populate the obj builder with collection specific stats
-        virtual void fillSpecificStats(BSONObjBuilder *result, int scale) const {
+        virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const {
         }
 
         // optional to implement, return true if the namespace is capped
@@ -440,10 +457,6 @@ namespace mongo {
 
         // generate an index info BSON for this namespace, with the same options
         BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) const;
-
-        // fill the statistics for each index in the NamespaceDetails,
-        // indexStats is an array of length nIndexes
-        void fillIndexStats(std::vector<IndexStats> &indexStats) const;
 
         const string _ns;
         // The options used to create this namespace details. We serialize

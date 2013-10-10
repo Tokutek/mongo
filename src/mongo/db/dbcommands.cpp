@@ -1425,8 +1425,8 @@ namespace mongo {
                 return false;
             }
 
-            struct NamespaceDetailsAccStats accStats;
-            nsd->fillCollectionStats(&accStats, &result, scale);
+            NamespaceDetails::Stats aggStats;
+            nsd->fillCollectionStats(aggStats, &result, scale);
 
             return true;
         }
@@ -1468,12 +1468,7 @@ namespace mongo {
             }
 
             uint64_t ncollections = 0;
-            uint64_t objects = 0;
-            uint64_t size = 0;
-            uint64_t storageSize = 0;
-            uint64_t indexes = 0;
-            uint64_t indexSize = 0;
-            uint64_t indexStorageSize = 0;
+            NamespaceDetails::Stats aggStats;
 
             for (list<string>::const_iterator it = collections.begin(); it != collections.end(); ++it) {
                 const string ns = *it;
@@ -1486,26 +1481,12 @@ namespace mongo {
                 }
 
                 ncollections += 1;
-                indexes += nsd->nIndexes();
-                BSONObjBuilder dummy;
-                struct NamespaceDetailsAccStats accStats;
-                nsd->fillCollectionStats(&accStats, &dummy, scale);
-                objects += accStats.count;
-                size += accStats.size;
-                storageSize += accStats.storageSize;
-                indexSize += accStats.indexSize;
-                indexStorageSize += accStats.indexStorageSize;
+                nsd->fillCollectionStats(aggStats, NULL, scale);
             }
             
             result.append      ( "db" , dbname );
             result.appendNumber( "collections" , (long long) ncollections );
-            result.appendNumber( "objects" , (long long) objects );
-            result.append      ( "avgObjSize" , objects == 0 ? 0 : double(size) / double(objects) );
-            result.appendNumber( "dataSize" , (long long) size / scale );
-            result.appendNumber( "storageSize" , (long long) storageSize / scale);
-            result.appendNumber( "indexes" , (long long) indexes );
-            result.appendNumber( "indexSize" , (long long) indexSize / scale );
-            result.appendNumber( "indexStorageSize" , (long long) indexStorageSize / scale );
+            aggStats.appendInfo(result, scale);
             return true;
         }
     } cmdDBStats;

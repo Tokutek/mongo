@@ -424,14 +424,14 @@ namespace mongo {
             verify((_currentSize.load() > 0) == (_currentObjects.load() > 0));
         }
 
-        void fillSpecificStats(BSONObjBuilder *result, int scale) const {
-            result->appendBool("capped", true);
+        void fillSpecificStats(BSONObjBuilder &result, int scale) const {
+            result.appendBool("capped", true);
             if (_maxObjects) {
-                result->appendNumber("max", _maxObjects);
+                result.appendNumber("max", _maxObjects);
             }
-            result->appendNumber("cappedCount", _currentObjects.load());
-            result->appendNumber("cappedSizeMax", _maxSize);
-            result->appendNumber("cappedSizeCurrent", _currentSize.load());
+            result.appendNumber("cappedCount", _currentObjects.load());
+            result.appendNumber("cappedSizeMax", _maxSize);
+            result.appendNumber("cappedSizeCurrent", _currentSize.load());
         }
 
         bool isCapped() const {
@@ -1479,57 +1479,59 @@ namespace mongo {
     }
 
     void NamespaceDetails::fillCollectionStats(
-        struct NamespaceDetailsAccStats* accStats, 
-        BSONObjBuilder* result, 
-        int scale) const  
+        Stats &aggStats,
+        BSONObjBuilder *result,
+        int scale) const
     {
-        uint32_t numIndexes = nIndexes();
-        accStats->nIndexes = numIndexes;
+        Stats stats;
+        stats.nIndexes += nIndexes();
         // also sum up some stats of secondary indexes,
         // calculate their total data size and storage size
-        uint64_t collectionCount = 0;
-        uint64_t pkDataSize = 0;
-        uint64_t pkStorageSize = 0;
-        uint64_t totalIndexDataSize = 0;
-        uint64_t totalIndexStorageSize = 0;
-        BSONArrayBuilder index_info;
-        for (uint32_t i = 0; i < numIndexes; i++) {
+        BSONArrayBuilder ab;
+        for (int i = 0; i < nIndexes(); i++) {
             IndexDetails &idx = *_indexes[i];
-            IndexStats stats(idx);
-            index_info.append(stats.obj(scale));
+            IndexDetails::Stats idxStats = idx.getStats();
+            BSONObjBuilder infoBuilder(ab.subobjStart());
+            idxStats.appendInfo(infoBuilder, scale);
+            infoBuilder.done();
             if (isPKIndex(idx)) {
-                verify(collectionCount == 0);
-                collectionCount = stats.getCount();
-                pkDataSize = stats.getDataSize();
-                pkStorageSize = stats.getStorageSize();
+                stats.count += idxStats.count;
+                stats.size += idxStats.dataSize;
+                stats.storageSize += idxStats.storageSize;
             } else {
                 // Only count secondary indexes here
-                totalIndexDataSize += stats.getDataSize();
-                totalIndexStorageSize += stats.getStorageSize();
+                stats.indexSize += idxStats.dataSize;
+                stats.indexStorageSize += idxStats.storageSize;
             }
         }
 
-        accStats->count = collectionCount;
-        result->appendNumber("count", (long long) accStats->count);
+        if (result != NULL) {
+            // unfortunately, this protocol's format is a little unorthodox
+            // TODO: unify this with appendInfo, if we can somehow unify the interface
+            result->appendNumber("count", (long long) stats.count);
+            result->appendNumber("nindexes", nIndexes());
+            result->appendNumber("nindexesbeingbuilt", nIndexesBeingBuilt());
+            result->appendNumber("size", (long long) stats.size/scale);
+            result->appendNumber("storageSize", (long long) stats.storageSize/scale);
+            result->appendNumber("totalIndexSize", (long long) stats.indexSize/scale);
+            result->appendNumber("totalIndexStorageSize", (long long) stats.indexStorageSize/scale);
+            result->appendArray("indexDetails", ab.done());
 
-        result->append("nindexes" , numIndexes );
-        result->append("nindexesbeingbuilt" , nIndexesBeingBuilt() );
+            fillSpecificStats(*result, scale);
+        }
 
-        accStats->size = pkDataSize;
-        result->appendNumber("size", (long long) accStats->size/scale);
+        // This must happen last in order to scale the values in the result bson above
+        aggStats += stats;
+    }
 
-        accStats->storageSize = pkStorageSize;
-        result->appendNumber("storageSize", (long long) accStats->storageSize/scale);
-
-        accStats->indexSize = totalIndexDataSize;
-        result->appendNumber("totalIndexSize", (long long) totalIndexDataSize/scale);
-
-        accStats->indexStorageSize = totalIndexStorageSize;
-        result->appendNumber("totalIndexStorageSize", (long long) totalIndexStorageSize/scale);
-
-        result->append("indexDetails", index_info.arr());        
-
-        fillSpecificStats(result, scale);
+    void NamespaceDetails::Stats::appendInfo(BSONObjBuilder &b, int scale) const {
+        b.appendNumber("objects", (long long) count);
+        b.appendNumber("avgObjSize", count == 0 ? 0.0 : double(size) / double(count));
+        b.appendNumber("dataSize", (long long) size / scale);
+        b.appendNumber("storageSize", (long long) storageSize / scale);
+        b.appendNumber("indexes", (long long) nIndexes);
+        b.appendNumber("indexSize", (long long) indexSize / scale);
+        b.appendNumber("indexStorageSize", (long long) indexStorageSize / scale);
     }
 
     void NamespaceDetails::addDefaultIndexesToCatalog() {
