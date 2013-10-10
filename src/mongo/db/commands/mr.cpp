@@ -22,7 +22,6 @@
 #include "mongo/client/parallel.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/db.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/matcher.h"
@@ -531,6 +530,7 @@ namespace mongo {
             else if ( _config.outputOptions.outType == Config::MERGE ) {
                 // merge: upsert new docs into old collection
                 op->setMessage("m/r: merge post processing",
+                               "M/R Merge Post Processing Progress",
                                _safeCount(_db, _config.tempNamespace, BSONObj()));
                 {
                     Client::ReadContext ctx( _config.outputOptions.finalNamespace );
@@ -548,6 +548,7 @@ namespace mongo {
                 // reduce: apply reduce op on new result and existing one
                 BSONList values;
                 op->setMessage("m/r: reduce post processing",
+                               "M/R Reduce Post Processing Progress",
                                _safeCount(_db, _config.tempNamespace, BSONObj()));
                 {
                     Client::ReadContext ctx( _config.outputOptions.finalNamespace );
@@ -880,7 +881,9 @@ namespace mongo {
             BSONObj prev;
             BSONList all;
 
-            verify( pm == op->setMessage( "m/r: (3/3) final reduce to collection" , _safeCount( _db, _config.incLong, BSONObj(), QueryOption_SlaveOk ) ) );
+            verify(pm == op->setMessage("m/r: (3/3) final reduce to collection" ,
+                                        "M/R: (3/3) Final Reduce Progress",
+                                        _safeCount( _db, _config.incLong, BSONObj(), QueryOption_SlaveOk)));
 
             shared_ptr<Cursor> temp = getBestGuessCursor(_config.incLong.c_str(),
                                                          BSONObj(),

@@ -53,6 +53,9 @@ namespace mongo {
         void setUnits( const std::string& units ) { _units = units; }
         std::string getUnit() const { return _units; }
 
+        void setName(std::string name) { _name = name; }
+        std::string getName() const { return _name; }
+
         void setTotalWhileRunning( unsigned long long total ) {
             _total = total;
         }
@@ -85,6 +88,7 @@ namespace mongo {
         int _lastTime;
 
         std::string _units;
+        std::string _name;
     };
 
     // e.g.: 
