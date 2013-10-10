@@ -31,7 +31,7 @@
 #include "mongo/base/initializer.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/tools/tool.h"
-#include "mongo/util/version.h"
+#include "mongo/util/stringutils.h"
 #include "mongo/db/json.h"
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/client/remote_loader.h"

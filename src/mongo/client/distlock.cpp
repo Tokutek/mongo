@@ -24,6 +24,9 @@
 
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/storage/exception.h"
+#include "mongo/s/type_locks.h"
+#include "mongo/s/type_lockpings.h"
+#include "mongo/util/timer.h"
 
 namespace mongo {
 
@@ -72,6 +75,12 @@ namespace mongo {
         return s;
     }
 
+    // Used for disabling the lock pinger during tests
+    // Should *always* be true otherwise.
+    static bool lockPingerEnabled = true;
+
+    bool isLockPingerEnabled() { return lockPingerEnabled; }
+    void setLockPingerEnabled(bool enabled) { lockPingerEnabled = enabled; }
 
     class DistributedLockPinger {
     public:
@@ -108,9 +117,9 @@ namespace mongo {
                     pingTime = jsTime();
 
                     // refresh the entry corresponding to this process in the lockpings collection
-                    conn->update( DistributedLock::lockPingNS ,
-                                  BSON( "_id" << process ) ,
-                                  BSON( "$set" << BSON( "ping" << pingTime ) ) ,
+                    conn->update( LockpingsType::ConfigNS,
+                                  BSON( LockpingsType::process(process) ),
+                                  BSON( "$set" << BSON( LockpingsType::ping(pingTime) ) ),
                                   true );
 
                     string err = conn->getLastError();
@@ -128,20 +137,22 @@ namespace mongo {
                     // (this may happen if an instance of a process was taken down and no new instance came up to
                     // replace it for a quite a while)
                     // if the lock is taken, the take-over mechanism should handle the situation
-                    auto_ptr<DBClientCursor> c = conn->query( DistributedLock::locksNS , BSONObj() );
+                    auto_ptr<DBClientCursor> c = conn->query( LocksType::ConfigNS , BSONObj() );
                     // TODO:  Would be good to make clear whether query throws or returns empty on errors
                     uassert( 16060, str::stream() << "cannot query locks collection on config server " << conn.getHost(), c.get() );
 
                     set<string> pids;
                     while ( c->more() ) {
                         BSONObj lock = c->next();
-                        if ( ! lock["process"].eoo() ) {
-                            pids.insert( lock["process"].valuestrsafe() );
+                        if ( ! lock[LocksType::process()].eoo() ) {
+                            pids.insert( lock[LocksType::process()].valuestrsafe() );
                         }
                     }
 
                     Date_t fourDays = pingTime - ( 4 * 86400 * 1000 ); // 4 days
-                    conn->remove( DistributedLock::lockPingNS , BSON( "_id" << BSON( "$nin" << pids ) << "ping" << LT << fourDays ) );
+                    conn->remove( LockpingsType::ConfigNS,
+                                  BSON( LockpingsType::process() << NIN << pids <<
+                                        LockpingsType::ping() << LT << fourDays ) );
                     err = conn->getLastError();
                     if ( ! err.empty() ) {
                         warning() << "ping cleanup for distributed lock pinger '" << pingId << " failed."
@@ -155,7 +166,7 @@ namespace mongo {
 
                     // create index so remove is fast even with a lot of servers
                     if ( loops++ == 0 ) {
-                        conn->ensureIndex( DistributedLock::lockPingNS , BSON( "ping" << 1 ) );
+                        conn->ensureIndex( LockpingsType::ConfigNS, BSON( LockpingsType::ping(1) ) );
                     }
 
                     LOG( DistributedLock::logLvl - ( loops % 10 == 0 ? 1 : 0 ) ) << "cluster " << addr << " pinged successfully at " << pingTime
@@ -176,9 +187,9 @@ namespace mongo {
                         removed = false;
                         try {
                             // Got OID from lock with id, so we don't need to specify id again
-                            conn->update( DistributedLock::locksNS ,
-                                          BSON( "ts" << *i ),
-                                          BSON( "$set" << BSON( "state" << 0 ) ) );
+                            conn->update( LocksType::ConfigNS ,
+                                          BSON( LocksType::lockID(*i) ),
+                                          BSON( "$set" << BSON( LocksType::state(0) ) ) );
 
                             // Either the update went through or it didn't, either way we're done trying to
                             // unlock
@@ -240,6 +251,8 @@ namespace mongo {
         }
 
         string got( DistributedLock& lock, unsigned long long sleepTime ) {
+
+            if (!lockPingerEnabled) return "";
 
             // Make sure we don't start multiple threads for a process id
             scoped_lock lk( _mutex );
@@ -305,6 +318,8 @@ namespace mongo {
 
         }
 
+        static bool _pingerEnabled;
+
         set<string> _kill;
         set<string> _seen;
         mongo::mutex _mutex;
@@ -312,18 +327,16 @@ namespace mongo {
 
     } distLockPinger;
 
-
-    const string DistributedLock::lockPingNS = "config.lockpings";
-    const string DistributedLock::locksNS = "config.locks";
-
     /**
      * Create a new distributed lock, potentially with a custom sleep and takeover time.  If a custom sleep time is
      * specified (time between pings)
      */
     DistributedLock::DistributedLock( const ConnectionString& conn , const string& name , unsigned long long lockTimeout, bool asProcess )
-        : _conn(conn) , _name(name) , _id( BSON( "_id" << name ) ), _processId( asProcess ? getDistLockId() : getDistLockProcess() ),
-          _lockTimeout( lockTimeout == 0 ? LOCK_TIMEOUT : lockTimeout ), _maxClockSkew( _lockTimeout / LOCK_SKEW_FACTOR ), _maxNetSkew( _maxClockSkew ), _lockPing( _maxClockSkew ),
-          _mutex( "DistributedLock" )
+        : _conn(conn), _name(name),
+          _processId( asProcess ? getDistLockId() : getDistLockProcess() ),
+          _lockTimeout( lockTimeout == 0 ? LOCK_TIMEOUT : lockTimeout ),
+          _maxClockSkew( _lockTimeout / LOCK_SKEW_FACTOR ), _maxNetSkew( _maxClockSkew ),
+          _lockPing( _maxClockSkew ), _mutex( "DistributedLock" )
     {
         LOG( logLvl ) << "created new distributed lock for " << name << " on " << conn
                       << " ( lock timeout : " << _lockTimeout
@@ -518,12 +531,57 @@ namespace mongo {
         return false;
     }
 
+    bool DistributedLock::isLockHeld( double timeout, string* errMsg ) {
+        scoped_ptr<ScopedDbConnection> connPtr(
+                        ScopedDbConnection::getInternalScopedDbConnection( _conn.toString(), timeout ) );
+        ScopedDbConnection& conn = *connPtr;
+
+        BSONObj lockObj;
+        try {
+            lockObj = conn->findOne( LocksType::ConfigNS,
+                                     BSON( LocksType::name(_name) ) ).getOwned();
+        }
+        catch ( DBException& e ) {
+            *errMsg = str::stream() << "error checking whether lock " << _name << " is held "
+                                    << causedBy( e );
+            return false;
+        }
+        conn.done();
+
+        if ( lockObj.isEmpty() ) {
+            *errMsg = str::stream() << "no lock for " << _name << " exists in the locks collection";
+            return false;
+        }
+
+        if ( lockObj[LocksType::state()].numberInt() < 2 ) {
+            *errMsg = str::stream() << "lock " << _name << " current state is not held ("
+                                    << lockObj[LocksType::state()].numberInt() << ")";
+            return false;
+        }
+
+        if ( lockObj[LocksType::process()].String() != _processId ) {
+            *errMsg = str::stream() << "lock " << _name << " is currently being held by "
+                                    << "another process ("
+                                    << lockObj[LocksType::process()].String() << ")";
+            return false;
+        }
+
+        if ( distLockPinger.willUnlockOID( lockObj[LocksType::lockID()].OID() ) ) {
+            *errMsg = str::stream() << "lock " << _name << " is not held and is currently being "
+                                    << "scheduled for lazy unlock by "
+                                    << lockObj[LocksType::lockID()].OID();
+            return false;
+        }
+
+        return true;
+    }
+
     // Semantics of this method are basically that if the lock cannot be acquired, returns false, can be retried.
     // If the lock should not be tried again (some unexpected error) a LockException is thrown.
     // If we are only trying to re-enter a currently held lock, reenter should be true.
     // Note:  reenter doesn't actually make this lock re-entrant in the normal sense, since it can still only
     // be unlocked once, instead it is used to verify that the lock is already held.
-    bool DistributedLock::lock_try( const string& why , bool reenter, BSONObj * other ) {
+    bool DistributedLock::lock_try( const string& why , bool reenter, BSONObj * other, double timeout ) {
 
         // TODO:  Start pinging only when we actually get the lock?
         // If we don't have a thread pinger, make sure we shouldn't have one
@@ -546,22 +604,22 @@ namespace mongo {
             other = &dummyOther;
 
         scoped_ptr<ScopedDbConnection> connPtr(
-                ScopedDbConnection::getInternalScopedDbConnection( _conn.toString() ) );
+                ScopedDbConnection::getInternalScopedDbConnection( _conn.toString(), timeout ) );
         ScopedDbConnection& conn = *connPtr;
 
         BSONObjBuilder queryBuilder;
-        queryBuilder.appendElements( _id );
-        queryBuilder.append( "state" , 0 );
+        queryBuilder.append( LocksType::name() , _name );
+        queryBuilder.append( LocksType::state() , 0 );
 
         try {
             // make sure its there so we can use simple update logic below
-            BSONObj o = conn->findOne( locksNS , _id ).getOwned();
+            BSONObj o = conn->findOne( LocksType::ConfigNS , BSON( LocksType::name(_name) ) ).getOwned();
 
             // Case 1: No locks
             if ( o.isEmpty() ) {
                 try {
-                    LOG( logLvl ) << "inserting initial doc in " << locksNS << " for lock " << _name << endl;
-                    conn->insert( locksNS , BSON( "_id" << _name << "state" << 0 << "who" << "" ) );
+                    LOG( logLvl ) << "inserting initial doc in " << LocksType::ConfigNS << " for lock " << _name << endl;
+                    conn->insert( LocksType::ConfigNS , BSON( LocksType::name(_name) << LocksType::state(0) << LocksType::who("") ) );
                 }
                 catch ( UserException& e ) {
                     warning() << "could not insert initial doc for distributed lock " << _name << causedBy( e ) << endl;
@@ -569,16 +627,26 @@ namespace mongo {
             }
 
             // Case 2: A set lock that we might be able to force
-            else if ( o["state"].numberInt() > 0 ) {
+            else if ( o[LocksType::state()].numberInt() > 0 ) {
 
-                string lockName = o["_id"].String() + string("/") + o["process"].String();
+                string lockName = o[LocksType::name()].String() + string("/") + o[LocksType::process()].String();
 
-                bool canReenter = reenter && o["process"].String() == _processId && ! distLockPinger.willUnlockOID( o["ts"].OID() ) && o["state"].numberInt() == 2;
+                bool canReenter = reenter &&
+                                  o[LocksType::process()].String() == _processId &&
+                                  !distLockPinger.willUnlockOID( o[LocksType::lockID()].OID() ) &&
+                                  o[LocksType::state()].numberInt() == 2;
                 if( reenter && ! canReenter ) {
+
                     LOG( logLvl - 1 ) << "not re-entering distributed lock " << lockName;
-                    if( o["process"].String() != _processId ) LOG( logLvl - 1 ) << ", different process " << _processId << endl;
-                    else if( o["state"].numberInt() == 2 ) LOG( logLvl - 1 ) << ", state not finalized" << endl;
-                    else LOG( logLvl - 1 ) << ", ts " << o["ts"].OID() << " scheduled for late unlock" << endl;
+                    if ( o[LocksType::process()].String() != _processId ) {
+                        LOG( logLvl - 1 ) << ", different process " << _processId << endl;
+                    }
+                    else if ( o[LocksType::state()].numberInt() == 2 ) {
+                        LOG( logLvl - 1 ) << ", state not finalized" << endl;
+                    }
+                    else {
+                        LOG( logLvl - 1 ) << ", ts " << o[LocksType::lockID()].OID() << " scheduled for late unlock" << endl;
+                    }
 
                     // reset since we've been bounced by a previous lock not being where we thought it was,
                     // and should go through full forcing process if required.
@@ -587,11 +655,12 @@ namespace mongo {
                     return false;
                 }
 
-                BSONObj lastPing = conn->findOne( lockPingNS , o["process"].wrap( "_id" ) );
+                BSONObj lastPing = conn->findOne( LockpingsType::ConfigNS, o[LocksType::process()].wrap( LockpingsType::process() ) );
                 if ( lastPing.isEmpty() ) {
                     LOG( logLvl ) << "empty ping found for process in lock '" << lockName << "'" << endl;
                     // TODO:  Using 0 as a "no time found" value Will fail if dates roll over, but then, so will a lot.
-                    lastPing = BSON( "_id" << o["process"].String() << "ping" << (Date_t) 0 );
+                    lastPing = BSON( LockpingsType::process(o[LocksType::process()].String()) <<
+                                     LockpingsType::ping((Date_t) 0) );
                 }
 
                 unsigned long long elapsed = 0;
@@ -607,12 +676,16 @@ namespace mongo {
                     // Timeout the elapsed time using comparisons of remote clock
                     // For non-finalized locks, timeout 15 minutes since last seen (ts)
                     // For finalized locks, timeout 15 minutes since last ping
-                    bool recPingChange = o["state"].numberInt() == 2 && ( _lastPingCheck.id != lastPing["_id"].String() || _lastPingCheck.lastPing != lastPing["ping"].Date() );
-                    bool recTSChange = _lastPingCheck.ts != o["ts"].OID();
+                    bool recPingChange = o[LocksType::state()].numberInt() == 2 &&
+                                         ( _lastPingCheck.id != lastPing[LockpingsType::process()].String() ||
+                                           _lastPingCheck.lastPing != lastPing[LockpingsType::ping()].Date() );
+                    bool recTSChange = _lastPingCheck.ts != o[LocksType::lockID()].OID();
 
                     if( recPingChange || recTSChange ) {
                         // If the ping has changed since we last checked, mark the current date and time
-                        setLastPing( PingData( lastPing["_id"].String().c_str(), lastPing["ping"].Date(), remote, o["ts"].OID() ) );
+                        setLastPing( PingData( lastPing[LockpingsType::process()].String().c_str(),
+                                               lastPing[LockpingsType::ping()].Date(),
+                                               remote, o[LocksType::lockID()].OID() ) );
                     }
                     else {
 
@@ -666,8 +739,11 @@ namespace mongo {
 
                         // Make sure we break the lock with the correct "ts" (OID) value, otherwise
                         // we can overwrite a new lock inserted in the meantime.
-                        conn->update( locksNS , BSON( "_id" << _id["_id"].String() << "state" << o["state"].numberInt() << "ts" << o["ts"] ),
-                                      BSON( "$set" << BSON( "state" << 0 ) ) );
+                        conn->update( LocksType::ConfigNS,
+                                      BSON( LocksType::name(_name) <<
+                                            LocksType::state(o[LocksType::state()].numberInt()) <<
+                                            LocksType::lockID(o[LocksType::lockID()].OID()) ),
+                                      BSON( "$set" << BSON( LocksType::state(0) ) ) );
 
                         BSONObj err = conn->getLastErrorDetailed();
                         string errMsg = DBClientWithCommands::getLastErrorString(err);
@@ -712,8 +788,11 @@ namespace mongo {
                     try {
 
                         // Test the lock with the correct "ts" (OID) value
-                        conn->update( locksNS , BSON( "_id" << _id["_id"].String() << "state" << 2 << "ts" << o["ts"] ),
-                                      BSON( "$set" << BSON( "state" << 2 ) ) );
+                        conn->update( LocksType::ConfigNS,
+                                      BSON( LocksType::name(_name) <<
+                                            LocksType::state(2) <<
+                                            LocksType::lockID(o[LocksType::lockID()].OID()) ),
+                                      BSON( "$set" << BSON( LocksType::state(2) ) ) );
 
                         BSONObj err = conn->getLastErrorDetailed();
                         string errMsg = DBClientWithCommands::getLastErrorString(err);
@@ -757,8 +836,8 @@ namespace mongo {
                 // We don't need the ts value in the query, since we will only ever replace locks with state=0.
             }
             // Case 3: We have an expired lock
-            else if ( o["ts"].type() ) {
-                queryBuilder.append( o["ts"] );
+            else if ( o[LocksType::lockID()].type() ) {
+                queryBuilder.append( o[LocksType::lockID()] );
             }
         }
         catch (storage::RetryableException) {
@@ -780,8 +859,12 @@ namespace mongo {
         bool gotLock = false;
         BSONObj currLock;
 
-        BSONObj lockDetails = BSON( "state" << 1 << "who" << getDistLockId() << "process" << _processId <<
-                                    "when" << jsTime() << "why" << why << "ts" << OID::gen() );
+        BSONObj lockDetails = BSON( LocksType::state(1)
+                << LocksType::who(getDistLockId())
+                << LocksType::process(_processId)
+                << "when" << jsTime()
+                << LocksType::why(why)
+                << LocksType::lockID(OID::gen()) );
         BSONObj whatIWant = BSON( "$set" << lockDetails );
 
         BSONObj query = queryBuilder.obj();
@@ -796,12 +879,12 @@ namespace mongo {
                           <<  lockDetails.jsonString(Strict, true) << "\n"
                           << query.jsonString(Strict, true) << endl;
 
-            conn->update( locksNS , query , whatIWant );
+            conn->update( LocksType::ConfigNS , query , whatIWant );
 
             BSONObj err = conn->getLastErrorDetailed();
             string errMsg = DBClientWithCommands::getLastErrorString(err);
 
-            currLock = conn->findOne( locksNS , _id );
+            currLock = conn->findOne( LocksType::ConfigNS , BSON( LocksType::name(_name) ) );
 
             if ( !errMsg.empty() || !err["n"].type() || err["n"].numberInt() < 1 ) {
                 ( errMsg.empty() ? LOG( logLvl - 1 ) : warning() ) << "could not acquire lock '" << lockName << "' "
@@ -833,29 +916,31 @@ namespace mongo {
 
                 try {
 
-                    indUpdate = indDB->findOne( locksNS , _id );
+                    indUpdate = indDB->findOne( LocksType::ConfigNS , BSON( LocksType::name(_name) ) );
 
                     // If we override this lock in any way, grab and protect it.
                     // We assume/ensure that if a process does not have all lock documents, it is no longer
                     // holding the lock.
                     // Note - finalized locks may compete too, but we know they've won already if competing
                     // in this round.  Cleanup of crashes during finalizing may take a few tries.
-                    if( indUpdate["ts"] < lockDetails["ts"] || indUpdate["state"].numberInt() == 0 ) {
+                    if( indUpdate[LocksType::lockID()] < lockDetails[LocksType::lockID()] || indUpdate[LocksType::state()].numberInt() == 0 ) {
 
-                        BSONObj grabQuery = BSON( "_id" << _id["_id"].String() << "ts" << indUpdate["ts"].OID() );
+                        BSONObj grabQuery = BSON( LocksType::name(_name)
+                                << LocksType::lockID(indUpdate[LocksType::lockID()].OID()) );
 
                         // Change ts so we won't be forced, state so we won't be relocked
-                        BSONObj grabChanges = BSON( "ts" << lockDetails["ts"].OID() << "state" << 1 );
+                        BSONObj grabChanges = BSON( LocksType::lockID(lockDetails[LocksType::lockID()].OID())
+                                << LocksType::state(1) );
 
                         // Either our update will succeed, and we'll grab the lock, or it will fail b/c some other
                         // process grabbed the lock (which will change the ts), but the lock will be set until forcing
-                        indDB->update( locksNS, grabQuery, BSON( "$set" << grabChanges ) );
+                        indDB->update( LocksType::ConfigNS, grabQuery, BSON( "$set" << grabChanges ) );
 
-                        indUpdate = indDB->findOne( locksNS, _id );
+                        indUpdate = indDB->findOne( LocksType::ConfigNS, BSON( LocksType::name(_name) ) );
 
                         // Our lock should now be set until forcing.
                         // It's possible another lock has won entirely by now, so state could be 1 or 2 here
-                        verify( indUpdate["state"].numberInt() > 0 );
+                        verify( indUpdate[LocksType::state()].numberInt() > 0 );
 
                     }
                     // else our lock is the same, in which case we're safe, or it's a bigger lock,
@@ -876,7 +961,7 @@ namespace mongo {
                 verify( !indUpdate.isEmpty() );
 
                 // Find max TS value
-                if ( currLock.isEmpty() || currLock["ts"] < indUpdate["ts"] ) {
+                if ( currLock.isEmpty() || currLock[LocksType::lockID()] < indUpdate[LocksType::lockID()] ) {
                     currLock = indUpdate.getOwned();
                 }
 
@@ -886,7 +971,7 @@ namespace mongo {
 
             // Locks on all servers are now set and safe until forcing
 
-            if ( currLock["ts"] == lockDetails["ts"] ) {
+            if ( currLock[LocksType::lockID()] == lockDetails[LocksType::lockID()] ) {
                 LOG( logLvl - 1 ) << "lock update won, completing lock propagation for '" << lockName << "'" << endl;
                 gotLock = true;
             }
@@ -895,7 +980,7 @@ namespace mongo {
 
                 // Register the lock for deletion, to speed up failover
                 // Not strictly necessary, but helpful
-                distLockPinger.addUnlockOID( lockDetails["ts"].OID() );
+                distLockPinger.addUnlockOID( lockDetails[LocksType::lockID()].OID() );
 
                 gotLock = false;
             }
@@ -931,17 +1016,17 @@ namespace mongo {
                 BSONObjIterator bi( lockDetails );
                 while( bi.more() ) {
                     BSONElement el = bi.next();
-                    if( (string) ( el.fieldName() ) == "state" )
-                        finalLockDetails.append( "state", 2 );
+                    if( (string) ( el.fieldName() ) == LocksType::state() )
+                        finalLockDetails.append( LocksType::state(), 2 );
                     else finalLockDetails.append( el );
                 }
 
-                conn->update( locksNS , _id , BSON( "$set" << finalLockDetails.obj() ) );
+                conn->update( LocksType::ConfigNS , BSON( LocksType::name(_name) ) , BSON( "$set" << finalLockDetails.obj() ) );
 
                 BSONObj err = conn->getLastErrorDetailed();
                 string errMsg = DBClientWithCommands::getLastErrorString(err);
 
-                currLock = conn->findOne( locksNS , _id );
+                currLock = conn->findOne( LocksType::ConfigNS , BSON( LocksType::name(_name) ) );
 
                 if ( !errMsg.empty() || !err["n"].type() || err["n"].numberInt() < 1 ) {
                     warning() << "could not finalize winning lock " << lockName
@@ -969,7 +1054,7 @@ namespace mongo {
                 conn.done();
 
                 // Register the bad final lock for deletion, in case it exists
-                distLockPinger.addUnlockOID( lockDetails["ts"].OID() );
+                distLockPinger.addUnlockOID( lockDetails[LocksType::lockID()].OID() );
 
                 throw LockException( str::stream() << "exception finalizing winning lock"
                                      << causedBy( e ), 13662 );
@@ -982,7 +1067,8 @@ namespace mongo {
 
         // Log our lock results
         if(gotLock)
-            LOG( logLvl - 1 ) << "distributed lock '" << lockName << "' acquired, ts : " << currLock["ts"].OID() << endl;
+            LOG( logLvl - 1 ) << "distributed lock '" << lockName <<
+                "' acquired, ts : " << currLock[LocksType::lockID()].OID() << endl;
         else
             LOG( logLvl - 1 ) << "distributed lock '" << lockName << "' was not acquired." << endl;
 
@@ -1015,18 +1101,21 @@ namespace mongo {
             try {
 
                 if( oldLock.isEmpty() )
-                    oldLock = conn->findOne( locksNS, _id );
+                    oldLock = conn->findOne( LocksType::ConfigNS, BSON( LocksType::name(_name) ) );
 
-                if( oldLock["state"].eoo() || oldLock["state"].numberInt() != 2 || oldLock["ts"].eoo() ) {
+                if( oldLock[LocksType::state()].eoo() ||
+                    oldLock[LocksType::state()].numberInt() != 2 ||
+                    oldLock[LocksType::lockID()].eoo() ) {
                     warning() << "cannot unlock invalid distributed lock " << oldLock << endl;
                     conn.done();
                     break;
                 }
 
                 // Use ts when updating lock, so that new locks can be sure they won't get trampled.
-                conn->update( locksNS ,
-                              BSON( "_id" << _id["_id"].String() << "ts" << oldLock["ts"].OID() ),
-                              BSON( "$set" << BSON( "state" << 0 ) ) );
+                conn->update( LocksType::ConfigNS ,
+                              BSON( LocksType::name(_name) <<
+                                    LocksType::lockID(oldLock[LocksType::lockID()].OID()) ),
+                              BSON( "$set" << BSON( LocksType::state(0) ) ) );
 
                 // Check that the lock was actually unlocked... if not, try again
                 BSONObj err = conn->getLastErrorDetailed();
@@ -1069,13 +1158,13 @@ namespace mongo {
             }
         }
 
-        if( attempted > maxAttempts && ! oldLock.isEmpty() && ! oldLock["ts"].eoo() ) {
+        if( attempted > maxAttempts && ! oldLock.isEmpty() && ! oldLock[LocksType::lockID()].eoo() ) {
 
-            LOG( logLvl - 1 ) << "could not unlock distributed lock with ts " << oldLock["ts"].OID()
-                              << ", will attempt again later" << endl;
+            LOG( logLvl - 1 ) << "could not unlock distributed lock with ts " <<
+                oldLock[LocksType::lockID()].OID() << ", will attempt again later" << endl;
 
             // We couldn't unlock the lock at all, so try again later in the pinging thread...
-            distLockPinger.addUnlockOID( oldLock["ts"].OID() );
+            distLockPinger.addUnlockOID( oldLock[LocksType::lockID()].OID() );
         }
         else if( attempted > maxAttempts ) {
             warning() << "could not unlock untracked distributed lock, a manual force may be required" << endl;
@@ -1086,6 +1175,79 @@ namespace mongo {
                   << " minutes timeout." << endl;
     }
 
+    ScopedDistributedLock::ScopedDistributedLock(const ConnectionString& conn, const string& name) :
+            _lock(conn, name), _why(""), _lockTryIntervalMillis(1000), _acquired(false)
+    {
+    }
 
+    ScopedDistributedLock::~ScopedDistributedLock() {
+        if (_acquired) {
+            unlock();
+        }
+    }
+
+    bool ScopedDistributedLock::tryAcquire(string* errMsg) {
+        try {
+            _acquired = _lock.lock_try(_why, false, &_other);
+        }
+        catch (const DBException& e) {
+
+            *errMsg = str::stream() << "error acquiring distributed lock " << _lock._name << " for "
+                                    << _why << causedBy(e);
+
+            return false;
+        }
+
+        return _acquired;
+    }
+
+    void ScopedDistributedLock::unlock() {
+        _lock.unlock(&_other);
+    }
+
+    bool ScopedDistributedLock::acquire(long long waitForMillis, string* errMsg) {
+
+        string dummy;
+        if (!errMsg) errMsg = &dummy;
+
+        Timer timer;
+        Timer msgTimer;
+
+        while (!_acquired && (waitForMillis <= 0 || timer.millis() < waitForMillis)) {
+
+            string acquireErrMsg;
+            _acquired = tryAcquire(&acquireErrMsg);
+
+            if (_acquired) break;
+
+            // Set our error message to the last error, in case we break with !_acquired
+            *errMsg = acquireErrMsg;
+
+            if (waitForMillis == 0) break;
+
+            // Periodically message for debugging reasons
+            if (msgTimer.seconds() > 10) {
+
+                log() << "waited " << timer.seconds() << "s for distributed lock " << _lock._name
+                      << " for " << _why << endl;
+
+                msgTimer.reset();
+            }
+
+            long long timeRemainingMillis = std::max(0LL, waitForMillis - timer.millis());
+            sleepmillis(std::min(_lockTryIntervalMillis, timeRemainingMillis));
+        }
+
+        if (_acquired) {
+            verify(!_other.isEmpty());
+            return true;
+        }
+
+        *errMsg = str::stream() << "could not acquire distributed lock " << _lock._name << " for "
+                                << _why << " after " << timer.seconds()
+                                << "s, other lock may be held: " << _other << causedBy(errMsg);
+
+        return false;
+    }
 
 }

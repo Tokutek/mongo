@@ -21,6 +21,7 @@
 #include "mongo/client/dbclient_rs.h"
 
 #include <fstream>
+#include <memory>
 
 #include "mongo/base/init.h"
 #include "mongo/bson/util/builder.h"
@@ -31,10 +32,80 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/json.h"
 #include "mongo/util/background.h"
+#include "mongo/util/concurrency/mutex.h" // for StaticObserver
 #include "mongo/util/scopeguard.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
+
+    /*  Replica Set statics:
+     *      If a program (such as one built with the C++ driver) exits (by either calling exit()
+     *      or by returning from main()), static objects will be destroyed in the reverse order
+     *      of their creation (within each translation unit (source code file)).  This makes it
+     *      vital that the order be explicitly controlled within the source file so that destroyed
+     *      objects never reference objects that have been destroyed earlier.
+     *
+     *      The order chosen below is intended to allow safe destruction in reverse order from
+     *      construction order:
+     *          _setsLock                -- mutex protecting _seedServers and _sets, destroyed last
+     *          _seedServers             -- list (map) of servers
+     *          _sets                    -- list (map) of ReplicaSetMonitors
+     *          replicaSetMonitorWatcher -- background job to check Replica Set members
+     *          staticObserver           -- sentinel to detect process termination
+     *
+     *      Related to:
+     *          SERVER-8891 -- Simple client fail with segmentation fault in mongoclient library
+     */
+    mongo::mutex ReplicaSetMonitor::_setsLock( "ReplicaSetMonitor" );
+    map<string, vector<HostAndPort> > ReplicaSetMonitor::_seedServers;
+    map<string, ReplicaSetMonitorPtr> ReplicaSetMonitor::_sets;
+
+    // global background job responsible for checking every X amount of time
+    class ReplicaSetMonitorWatcher : public BackgroundJob {
+    public:
+        ReplicaSetMonitorWatcher() : _safego("ReplicaSetMonitorWatcher::_safego") , _started(false) {}
+
+        virtual string name() const { return "ReplicaSetMonitorWatcher"; }
+
+        void safeGo() {
+            // check outside of lock for speed
+            if ( _started )
+                return;
+
+            scoped_lock lk( _safego );
+            if ( _started )
+                return;
+            _started = true;
+
+            go();
+        }
+
+    protected:
+        void run() {
+            log() << "starting" << endl;
+            sleepsecs( 10 );
+            while ( !inShutdown() && !StaticObserver::_destroyingStatics ) {
+                try {
+                    ReplicaSetMonitor::checkAll( true );
+                }
+                catch ( std::exception& e ) {
+                    error() << "check failed: " << e.what() << endl;
+                }
+                catch ( ... ) {
+                    error() << "unknown error" << endl;
+                }
+                sleepsecs( 10 );
+            }
+        }
+
+        mongo::mutex _safego;
+        bool _started;
+
+    } replicaSetMonitorWatcher;
+
+    static StaticObserver staticObserver;
+
+
     /*
      * Set of commands that can be used with $readPreference
      */
@@ -55,31 +126,50 @@ namespace mongo {
     }
 
     /**
-     * @param ns the namespace of the query
-     * @param queryObj the query object to check
+     * @param ns the namespace of the query.
+     * @param queryOptionFlags the flags for the query.
+     * @param queryObj the query object to check.
      *
-     * @return true if the given query can be sent to a secondary node.
+     * @return true if the given query can be sent to a secondary node without taking the
+     *     slaveOk flag into account.
      */
-    bool isQueryOkToSecondary(const string& ns, const BSONObj& queryObj) {
+    bool _isQueryOkToSecondary(const string& ns, int queryOptionFlags, const BSONObj& queryObj) {
+        if (queryOptionFlags & QueryOption_SlaveOk) {
+            return true;
+        }
+
         // _secOkCmdList was not initialized! mongo::runGlobalInitializersOrDie
         // probably was not called.
         fassert(17017, !_secOkCmdList.empty());
+
+        if (!hasReadPreference(queryObj)) {
+            return false;
+        }
 
         if (ns.find(".$cmd") == string::npos) {
             return true;
         }
 
-        const string cmdName = queryObj.firstElementFieldName();
+        BSONObj actualQueryObj;
+        if (strcmp(queryObj.firstElement().fieldName(), "query") == 0) {
+            actualQueryObj = queryObj["query"].embeddedObject();
+        }
+        else {
+            actualQueryObj = queryObj;
+        }
+
+        const string cmdName = actualQueryObj.firstElementFieldName();
         if (_secOkCmdList.count(cmdName) == 1) {
             return true;
         }
 
         if (cmdName == "mapReduce" || cmdName == "mapreduce") {
-            if (!queryObj.hasField("out")) {
+            if (!actualQueryObj.hasField("out")) {
                 return false;
             }
 
-            if (queryObj["out"]["inline"].trueValue()) {
+            BSONElement outElem(actualQueryObj["out"]);
+            if (outElem.isABSONObj() && outElem["inline"].trueValue()) {
                 return true;
             }
         }
@@ -164,7 +254,16 @@ namespace mongo {
     }
 
     /**
-     * Extracts the read preference settings from the query document.
+     * Extracts the read preference settings from the query document. Note that this method
+     * assumes that the query is ok for secondaries so it defaults to
+     * ReadPreference_SecondaryPreferred when nothing is specified. Supports the following
+     * format:
+     *
+     * Format A (official format):
+     * { query: <actual query>, $readPreference: <read pref obj> }
+     *
+     * Format B (unofficial internal format from mongos):
+     * { <actual query>, $queryOptions: { $readPreference: <read pref obj> }}
      *
      * @param query the raw query document
      * @param pref an out parameter and will contain the read preference mode extracted
@@ -177,13 +276,22 @@ namespace mongo {
      * @throws AssertionException if the read preference object is malformed
      */
     TagSet* _extractReadPref(const BSONObj& query, ReadPreference* pref) {
-        if (!query.hasField("$readPreference")) {
+        if (!hasReadPreference(query)) {
             *pref = mongo::ReadPreference_SecondaryPreferred;
         }
         else {
+            BSONElement readPrefElement;
+
+            if (query.hasField("$readPreference")) {
+                readPrefElement = query["$readPreference"];
+            }
+            else {
+                readPrefElement = query["$queryOptions"]["$readPreference"];
+            }
+
             uassert(16381, "$readPreference should be an object",
-                    query["$readPreference"].isABSONObj());
-            const BSONObj& prefDoc = query["$readPreference"].Obj();
+                    readPrefElement.isABSONObj());
+            const BSONObj& prefDoc = readPrefElement.Obj();
 
             uassert(16382, "mode not specified for read preference", prefDoc.hasField("mode"));
 
@@ -209,14 +317,19 @@ namespace mongo {
             }
 
             if (prefDoc.hasField("tags")) {
-                uassert(16384, "Cannot specify tags for primary only read preference",
-                        *pref != mongo::ReadPreference_PrimaryOnly);
+
 
                 const BSONElement& tagsElem = prefDoc["tags"];
                 uassert(16385, "tags for read preference should be an array",
                         tagsElem.type() == mongo::Array);
 
-                return new TagSet(BSONArray(tagsElem.Obj()));
+                std::auto_ptr<TagSet> tags(new TagSet(BSONArray(tagsElem.Obj())));
+                if (*pref == mongo::ReadPreference_PrimaryOnly && !tags->isExhausted()) {
+                    uassert(16384, "Only empty tags are allowed with primary read preference",
+                            tags->getCurrentTag().isEmpty());
+                }
+
+                return tags.release();
             }
         }
 
@@ -249,47 +362,6 @@ namespace mongo {
     // --------------------------------
     // ----- ReplicaSetMonitor ---------
     // --------------------------------
-
-    // global background job responsible for checking every X amount of time
-    class ReplicaSetMonitorWatcher : public BackgroundJob {
-    public:
-        ReplicaSetMonitorWatcher() : _safego("ReplicaSetMonitorWatcher::_safego") , _started(false) {}
-
-        virtual string name() const { return "ReplicaSetMonitorWatcher"; }
-        
-        void safeGo() {
-            // check outside of lock for speed
-            if ( _started )
-                return;
-            
-            scoped_lock lk( _safego );
-            if ( _started )
-                return;
-            _started = true;
-
-            go();
-        }
-    protected:
-        void run() {
-            log() << "starting" << endl;
-            while ( ! inShutdown() ) {
-                sleepsecs( 10 );
-                try {
-                    ReplicaSetMonitor::checkAll( true );
-                }
-                catch ( std::exception& e ) {
-                    error() << "check failed: " << e.what() << endl;
-                }
-                catch ( ... ) {
-                    error() << "unkown error" << endl;
-                }
-            }
-        }
-
-        mongo::mutex _safego;
-        bool _started;
-
-    } replicaSetMonitorWatcher;
 
     string seedString( const vector<HostAndPort>& servers ){
         string seedStr;
@@ -374,6 +446,15 @@ namespace mongo {
             }
         }
         return ReplicaSetMonitorPtr();
+    }
+
+    void ReplicaSetMonitor::getAllTrackedSets(set<string>* activeSets) {
+        scoped_lock lk( _setsLock );
+        for (map<string,ReplicaSetMonitorPtr>::const_iterator it = _sets.begin();
+             it != _sets.end(); ++it)
+        {
+            activeSets->insert(it->first);
+        }
     }
 
     void ReplicaSetMonitor::checkAll( bool checkAllSecondaries ) {
@@ -593,7 +674,7 @@ namespace mongo {
         if ( !authenticatedConn->get()->runCommand( "admin",
                                                     BSON( "replSetGetStatus" << 1 ),
                                                     status )) {
-            LOG(1) << "dbclient_rs replSetGetStatus failed" << endl;
+            LOG(1) << "dbclient_rs replSetGetStatus failed" << status << endl;
             authenticatedConn->done(); // connection worked properly, but we got an error from server
             return;
         }
@@ -756,7 +837,7 @@ namespace mongo {
                 errmsg = ex.toString();
             }
 
-            if (!errmsg.empty()) {
+            if (errmsg.empty()) {
                 log() << "successfully connected to new host " << *i
                         << " in replica set " << this->_name << endl;
             }
@@ -1378,9 +1459,6 @@ namespace mongo {
         return builder.obj();
     }
 
-    mongo::mutex ReplicaSetMonitor::_setsLock( "ReplicaSetMonitor" );
-    map<string,ReplicaSetMonitorPtr> ReplicaSetMonitor::_sets;
-    map<string,vector<HostAndPort> > ReplicaSetMonitor::_seedServers;
     ReplicaSetMonitor::ConfigChangeHook ReplicaSetMonitor::_hook;
     int ReplicaSetMonitor::_maxFailedChecks = 30; // At 1 check every 10 seconds, 30 checks takes 5 minutes
 
@@ -1480,7 +1558,7 @@ namespace mongo {
             try {
                 conn->auth(i->second);
             }
-            catch (const UserException& ex) {
+            catch (const UserException&) {
                 warning() << "cached auth failed for set: " << _setName <<
                     " db: " << i->second[saslCommandPrincipalSourceFieldName].str() <<
                     " user: " << i->second[saslCommandPrincipalFieldName].str() << endl;
@@ -1582,9 +1660,7 @@ namespace mongo {
                                                        const BSONObj *fieldsToReturn,
                                                        int queryOptions,
                                                        int batchSize) {
-        if ((queryOptions & QueryOption_SlaveOk) ||
-                (query.obj.hasField("$readPreference") &&
-                        isQueryOkToSecondary(ns, query.obj["query"].Obj()))) {
+        if (_isQueryOkToSecondary(ns, queryOptions, query.obj)) {
             ReadPreference pref;
             scoped_ptr<TagSet> tags(_extractReadPref(query.obj, &pref));
 
@@ -1621,8 +1697,7 @@ namespace mongo {
                                         const Query& query,
                                         const BSONObj *fieldsToReturn,
                                         int queryOptions) {
-        if ((queryOptions & QueryOption_SlaveOk) ||
-                query.obj.hasField("$readPreference")) {
+        if (_isQueryOkToSecondary(ns, queryOptions, query.obj)) {
             ReadPreference pref;
             scoped_ptr<TagSet> tags(_extractReadPref(query.obj, &pref));
 
@@ -1729,8 +1804,8 @@ namespace mongo {
         DBClientConnection* newConn = dynamic_cast<DBClientConnection*>(
                 connStr.connect(errmsg, _so_timeout));
 
-	// Assert here instead of returning NULL since the contract of this method is such
-	// that returning NULL means none of the nodes were good, which is not the case here.
+        // Assert here instead of returning NULL since the contract of this method is such
+        // that returning NULL means none of the nodes were good, which is not the case here.
         uassert(16532, str::stream() << "Failed to connect to "
                 << _lastSlaveOkHost.toString(true),
                 newConn != NULL);
@@ -1756,7 +1831,7 @@ namespace mongo {
             QueryMessage qm(dm);
 
             const bool slaveOk = qm.queryOptions & QueryOption_SlaveOk;
-            if (slaveOk || qm.query.hasField("$readPreference")) {
+            if (_isQueryOkToSecondary(qm.ns, qm.queryOptions, qm.query)) {
                 ReadPreference pref;
                 scoped_ptr<TagSet> tags(_extractReadPref(qm.query, &pref));
 
@@ -1899,8 +1974,7 @@ namespace mongo {
             QueryMessage qm(dm);
             ns = qm.ns;
 
-            if ((qm.queryOptions & QueryOption_SlaveOk) ||
-                    qm.query.hasField("$readPreference")) {
+            if (_isQueryOkToSecondary(ns, qm.queryOptions, qm.query)) {
                 ReadPreference pref;
                 scoped_ptr<TagSet> tags(_extractReadPref(qm.query, &pref));
 

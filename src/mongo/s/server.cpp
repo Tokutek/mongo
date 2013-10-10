@@ -44,12 +44,14 @@
 #include "balance.h"
 #include "grid.h"
 #include "cursors.h"
-#include "shard_version.h"
 #include "../util/processinfo.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/plugins/loader.h"
+#include "mongo/s/config_server_checker_service.h"
+#include "mongo/s/config_upgrade.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/log.h"
+#include "mongo/util/exception_filter_win32.h"
 
 #if defined(_WIN32)
 # include "../util/ntservice.h"
@@ -190,7 +192,7 @@ namespace mongo {
         verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
         boost::thread it( signalProcessingThread );
     }
-#endif
+#endif  // not _WIN32
 
     void setupSignals( bool inFork ) {
         if ( !cmdLine.debug ) {
@@ -216,6 +218,8 @@ namespace mongo {
         sigaddset( &asyncSignals, SIGUSR1 );
         startSignalProcessingThread();
 #endif
+
+        setWindowsUnhandledExceptionFilter();
         set_new_handler( my_new_handler );
     }
 
@@ -294,25 +298,24 @@ static bool runMongosServer( bool doUpgrade ) {
         return false;
     }
 
-    {
-        class CheckConfigServers : public task::Task {
-            virtual string name() const { return "CheckConfigServers"; }
-            virtual void doWork() { configServer.ok(true); }
-        };
+    startConfigServerChecker();
 
-        task::repeat(new CheckConfigServers, 60*1000);
-    }
+    VersionType initVersionInfo;
+    VersionType versionInfo;
+    string errMsg;
+    bool upgraded = checkAndUpgradeConfigVersion(ConnectionString(configServer.getPrimary()
+                                                         .getConnString()),
+                                                 doUpgrade,
+                                                 &initVersionInfo,
+                                                 &versionInfo,
+                                                 &errMsg);
 
-    int configError = configServer.checkConfigVersion( doUpgrade );
-    if ( configError ) {
-        if ( configError > 0 ) {
-            log() << "upgrade success!" << endl;
-        }
-        else {
-            log() << "config server error: " << configError << endl;
-        }
+    if (!upgraded) {
+        error() << "error upgrading config database to v" << CURRENT_CONFIG_VERSION
+                << causedBy(errMsg) << endl;
         return false;
     }
+
     configServer.reloadSettings();
 
     init();
@@ -421,7 +424,10 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             ::_exit(EXIT_FAILURE);
         }
 
-        Chunk::MaxChunkSize = csize * 1024 * 1024;
+        if ( !Chunk::setMaxChunkSizeSizeMB( csize ) ) {
+            out() << "MaxChunkSize invalid" << endl;
+            ::_exit(EXIT_FAILURE);
+        }
     }
 
     if ( params.count( "localThreshold" ) ) {

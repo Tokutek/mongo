@@ -18,13 +18,19 @@
 */
 
 #include "pch.h"
-#include "shard.h"
-#include "config.h"
-#include "request.h"
+
+#include <set>
+
 #include "mongo/db/client.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/server_parameters.h"
+#include "mongo/s/config.h"
+#include "mongo/s/request.h"
+#include "mongo/s/shard.h"
+#include "mongo/s/stale_exception.h"
+#include "mongo/s/version_manager.h"
+#include "mongo/server.h"
 #include "mongo/util/stacktrace.h"
-#include <set>
 
 namespace mongo {
 
@@ -426,12 +432,6 @@ namespace mongo {
         ClientConnections::threadInstance()->checkVersions( ns );
     }
 
-    bool ShardConnection::releaseConnectionsAfterResponse( false );
-
-    void ShardConnection::releaseMyConnections() {
-        ClientConnections::threadInstance()->releaseAll();
-    }
-
     ShardConnection::~ShardConnection() {
         if ( _conn ) {
             if (_conn->isFailed()) {
@@ -453,6 +453,20 @@ namespace mongo {
                 kill();
             }
         }
+    }
+
+    bool ShardConnection::releaseConnectionsAfterResponse( false );
+
+    ExportedServerParameter<bool> ReleaseConnectionsAfterResponse(
+        ServerParameterSet::getGlobal(),
+        "releaseConnectionsAfterResponse",
+         &ShardConnection::releaseConnectionsAfterResponse,
+        true,
+        true
+    );
+
+    void ShardConnection::releaseMyConnections() {
+        ClientConnections::threadInstance()->releaseAll();
     }
 
     void ShardConnection::clearPool() {

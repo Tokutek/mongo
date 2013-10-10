@@ -183,7 +183,6 @@ namespace {
         clusterAdminRoleReadActions.addAction(ActionType::writeBacksQueued);
 
         clusterAdminRoleWriteActions.addAction(ActionType::addShard);
-        clusterAdminRoleWriteActions.addAction(ActionType::applyOps); // TODO: remove all action types for deprecated commands
         clusterAdminRoleWriteActions.addAction(ActionType::backupStart);
         clusterAdminRoleWriteActions.addAction(ActionType::backupThrottle);
         clusterAdminRoleWriteActions.addAction(ActionType::checkpoint);

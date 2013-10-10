@@ -41,6 +41,7 @@
 #include "mongo/s/d_logic.h"
 #include "mongo/util/net/sock.h"
 #include "mongo/db/query_optimizer.h"
+#include "mongo/db/kill_current_op.h"
 
 using namespace std;
 
@@ -846,14 +847,14 @@ namespace mongo {
             try {
                 OwnedPointerVector<ReplSetConfig> configs;
                 try {
-                    configs.vector().push_back(ReplSetConfig::makeDirect());
+                    configs.mutableVector().push_back(ReplSetConfig::makeDirect());
                 }
                 catch(DBException& e) {
                     log() << "replSet exception loading our local replset configuration object : " << e.toString() << rsLog;
                 }
                 for( vector<HostAndPort>::const_iterator i = _seeds->begin(); i != _seeds->end(); i++ ) {
                     try {
-                        configs.vector().push_back( ReplSetConfig::make(*i) );
+                        configs.mutableVector().push_back( ReplSetConfig::make(*i) );
                     }
                     catch( DBException& e ) {
                         log() << "replSet exception trying to load config from " << *i << " : " << e.toString() << rsLog;
@@ -866,7 +867,7 @@ namespace mongo {
                              i != replSettings.discoveredSeeds.end(); 
                              i++) {
                             try {
-                                configs.vector().push_back( ReplSetConfig::make(HostAndPort(*i)) );
+                                configs.mutableVector().push_back( ReplSetConfig::make(HostAndPort(*i)) );
                             }
                             catch( DBException& ) {
                                 LOG(1) << "replSet exception trying to load config from discovered seed " << *i << rsLog;
@@ -878,7 +879,7 @@ namespace mongo {
 
                 if (!replSettings.reconfig.isEmpty()) {
                     try {
-                        configs.vector().push_back(ReplSetConfig::make(replSettings.reconfig,
+                        configs.mutableVector().push_back(ReplSetConfig::make(replSettings.reconfig,
                                                                        true));
                     }
                     catch( DBException& re) {
@@ -889,8 +890,8 @@ namespace mongo {
 
                 int nok = 0;
                 int nempty = 0;
-                for( vector<ReplSetConfig*>::iterator i = configs.vector().begin();
-                     i != configs.vector().end(); i++ ) {
+                for( vector<ReplSetConfig*>::iterator i = configs.mutableVector().begin();
+                     i != configs.mutableVector().end(); i++ ) {
                     if( (*i)->ok() )
                         nok++;
                     if( (*i)->empty() )
@@ -898,7 +899,7 @@ namespace mongo {
                 }
                 if( nok == 0 ) {
 
-                    if( nempty == (int) configs.vector().size() ) {
+                    if( nempty == (int) configs.mutableVector().size() ) {
                         startupStatus = EMPTYCONFIG;
                         startupStatusMsg.set("can't get " + rsConfigNs + " config from self or any seed (EMPTYCONFIG)");
                         log() << "replSet can't get " << rsConfigNs << " config from self or any seed (EMPTYCONFIG)" << rsLog;
@@ -920,7 +921,7 @@ namespace mongo {
                     continue;
                 }
 
-                if( !_loadConfigFinish(configs.vector()) ) {
+                if( !_loadConfigFinish(configs.mutableVector()) ) {
                     log() << "replSet info Couldn't load config yet. Sleeping 20sec and will try again." << rsLog;
                     sleepsecs(20);
                     continue;

@@ -19,8 +19,9 @@
 
 #include "pch.h"
 
-#include "mongo/db/oplog.h"
+#include "mongo/db/field_ref.h"
 #include "mongo/db/jsobjmanipulator.h"
+#include "mongo/db/oplog.h"
 #include "mongo/util/mongoutils/str.h"
 
 #include "update_internal.h"

@@ -33,6 +33,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/commands/rename_collection.h"
 #include "mongo/db/instance.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/ops/insert.h"
@@ -45,7 +46,7 @@ namespace mongo {
 
     BSONElement getErrField(const BSONObj& o);
 
-    bool replAuthenticate(DBClientBase *);
+    bool replAuthenticate(DBClientBase *, bool);
 
     void mayInterrupt( bool mayBeInterrupted ) {
         if ( mayBeInterrupted ) {
@@ -87,7 +88,7 @@ namespace mongo {
         verify(!masterSameProcess(masterHost));
         ConnectionString cs = ConnectionString::parse(masterHost, errmsg);
         shared_ptr<DBClientConnection> conn(static_cast<DBClientConnection *>(cs.connect(errmsg)));
-        if (!replAuthenticate(conn.get())) {
+        if (!replAuthenticate(conn.get(), false)) {
             errmsg = "can't authenticate replication";
             conn.reset();
         }
@@ -974,7 +975,7 @@ namespace mongo {
             // source DB.
             ActionSet actions;
             actions.addAction(ActionType::copyDBTarget);
-            out->push_back(Privilege(dbname, actions));
+            out->push_back(Privilege(dbname, actions)); // NOTE: dbname is always admin
         }
         virtual void help( stringstream &help ) const {
             help << "copy a database from another host to this host\n";
