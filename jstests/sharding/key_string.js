@@ -44,7 +44,7 @@ assert.eq( "sara,mark,joe,eliot,bob,allan" ,  db.foo.find().sort( { name : -1 } 
 // [allan->joe) 
 assert.throws( function(){ s.adminCommand( { split : "test.foo" , middle : { name : "allan" } } ) } );
 // this might not always be the key we expect because of estimates
-assert.throws( function(){ s.adminCommand( { split : "test.foo" , middle : { name : "mark" } } ) } );
+assert.throws( function(){ s.adminCommand( { split : "test.foo" , middle : { name : "eliot" } } ) } );
 
 s.stop();
 
