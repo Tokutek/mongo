@@ -38,7 +38,7 @@ public:
     BSONDump() : BSONTool() { }
 
     virtual void printHelp(ostream& out) {
-        printBSONDumpHelp(toolsOptions, &out);
+        printBSONDumpHelp(&out);
     }
 
     virtual int doRun() {
@@ -55,7 +55,7 @@ public:
 
         boost::filesystem::path root = bsonDumpGlobalParams.file;
         if ( root == "" ) {
-            printBSONDumpHelp(toolsOptions, &std::cout);
+            printBSONDumpHelp(&std::cout);
             return 1;
         }
 

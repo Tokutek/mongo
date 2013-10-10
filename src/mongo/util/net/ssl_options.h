@@ -26,8 +26,6 @@ namespace mongo {
 
     namespace moe = mongo::optionenvironment;
 
-    extern moe::Environment sslParsedOptions;
-
     struct SSLGlobalParams {
         bool sslOnNormalPorts;      // --sslOnNormalPorts
         std::string sslPEMKeyFile;       // --sslPEMKeyFile

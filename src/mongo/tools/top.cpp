@@ -37,7 +37,7 @@ namespace mongo {
         }
 
         virtual void printHelp( ostream & out ) {
-            printMongoTopHelp(toolsOptions, &out);
+            printMongoTopHelp(&out);
         }
 
         NamespaceStats getData() {

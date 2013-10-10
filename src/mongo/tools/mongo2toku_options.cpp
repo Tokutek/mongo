@@ -18,11 +18,8 @@
 
 #include "mongo/base/status.h"
 #include "mongo/util/log.h"
-#include "mongo/util/options_parser/environment.h"
-#include "mongo/util/options_parser/option_description.h"
-#include "mongo/util/options_parser/option_section.h"
-#include "mongo/util/options_parser/options_parser.h"
 #include "mongo/util/options_parser/startup_option_init.h"
+#include "mongo/util/options_parser/startup_options.h"
 #include "mongo/util/password.h"
 
 namespace mongo {
@@ -109,15 +106,15 @@ namespace mongo {
         return Status::OK();
     }
 
-    void printMongo2TokuHelp(const moe::OptionSection options, std::ostream* out) {
+    void printMongo2TokuHelp(std::ostream* out) {
         *out << "Pull and replay a remote MongoDB oplog.\n" << std::endl;
-        *out << options.helpString();
+        *out << moe::startupOptions.helpString();
         *out << std::flush;
     }
 
     Status handlePreValidationMongo2TokuOptions(const moe::Environment& params) {
-        if (toolsParsedOptions.count("help")) {
-            printMongo2TokuHelp(toolsOptions, &std::cout);
+        if (params.count("help")) {
+            printMongo2TokuHelp(&std::cout);
             ::_exit(0);
         }
 
@@ -139,61 +136,48 @@ namespace mongo {
             mongo2TokuGlobalParams.from = getParam("from");
         }
 
-        if (toolsParsedOptions.count("ts")) {
-            mongo2TokuGlobalParams.ts = toolsParsedOptions["ts"].as<string>();
+        if (params.count("ts")) {
+            mongo2TokuGlobalParams.ts = params["ts"].as<string>();
         }
-        if (toolsParsedOptions.count("oplogns")) {
-            mongo2TokuGlobalParams.oplogns = toolsParsedOptions["oplogns"].as<string>();
+        if (params.count("oplogns")) {
+            mongo2TokuGlobalParams.oplogns = params["oplogns"].as<string>();
         }
-        if (toolsParsedOptions.count("reportingPeriod")) {
-            mongo2TokuGlobalParams.reportingPeriod = toolsParsedOptions["reportingPeriod"].as<int>();
+        if (params.count("reportingPeriod")) {
+            mongo2TokuGlobalParams.reportingPeriod = params["reportingPeriod"].as<int>();
         }
-        if (toolsParsedOptions.count("ruser")) {
-            mongo2TokuGlobalParams.ruser = toolsParsedOptions["ruser"].as<string>();
-            if (!toolsParsedOptions.count("rpass")) {
+        if (params.count("ruser")) {
+            mongo2TokuGlobalParams.ruser = params["ruser"].as<string>();
+            if (!params.count("rpass")) {
                 log() << "if doing auth on source, must specify both --ruser and --rpass" << endl;
                 ::_exit(-1);
             }
         }
-        if (toolsParsedOptions.count("rpass")) {
-            mongo2TokuGlobalParams.rpass = toolsParsedOptions["rpass"].as<string>();
+        if (params.count("rpass")) {
+            mongo2TokuGlobalParams.rpass = params["rpass"].as<string>();
             if (mongo2TokuGlobalParams.rpass.empty()) {
                 mongo2TokuGlobalParams.rpass = askPassword();
             }
         }
-        if (toolsParsedOptions.count("rauthenticationDatabase")) {
-            mongo2TokuGlobalParams.rauthenticationDatabase = toolsParsedOptions["rauthenticationDatabase"].as<string>();
+        if (params.count("rauthenticationDatabase")) {
+            mongo2TokuGlobalParams.rauthenticationDatabase = params["rauthenticationDatabase"].as<string>();
         }
-        if (toolsParsedOptions.count("rauthenticationMechanism")) {
-            mongo2TokuGlobalParams.rauthenticationMechanism = toolsParsedOptions["rauthenticationMechanism"].as<string>();
+        if (params.count("rauthenticationMechanism")) {
+            mongo2TokuGlobalParams.rauthenticationMechanism = params["rauthenticationMechanism"].as<string>();
         }
 
         return Status::OK();
     }
 
     MONGO_GENERAL_STARTUP_OPTIONS_REGISTER(Mongo2TokuOptions)(InitializerContext* context) {
-        return addMongo2TokuOptions(&toolsOptions);
-    }
-
-    MONGO_STARTUP_OPTIONS_PARSE(Mongo2TokuOptions)(InitializerContext* context) {
-        moe::OptionsParser parser;
-        Status ret = parser.run(toolsOptions, context->args(), context->env(),
-                                &toolsParsedOptions);
-        if (!ret.isOK()) {
-            std::cerr << ret.reason() << std::endl;
-            std::cerr << "try '" << context->args()[0]
-                      << " --help' for more information" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
-        }
-        return Status::OK();
+        return addMongo2TokuOptions(&moe::startupOptions);
     }
 
     MONGO_STARTUP_OPTIONS_VALIDATE(Mongo2TokuOptions)(InitializerContext* context) {
-        Status ret = handlePreValidationMongo2TokuOptions(toolsParsedOptions);
+        Status ret = handlePreValidationMongo2TokuOptions(moe::startupOptionsParsed);
         if (!ret.isOK()) {
             return ret;
         }
-        ret = toolsParsedOptions.validate();
+        ret = moe::startupOptionsParsed.validate();
         if (!ret.isOK()) {
             return ret;
         }
@@ -202,6 +186,6 @@ namespace mongo {
     }
 
     MONGO_STARTUP_OPTIONS_STORE(Mongo2TokuOptions)(InitializerContext* context) {
-        return storeMongo2TokuOptions(toolsParsedOptions, context->args());
+        return storeMongo2TokuOptions(moe::startupOptionsParsed, context->args());
     }
 }

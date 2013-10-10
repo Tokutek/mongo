@@ -43,7 +43,7 @@ namespace mongo {
         }
 
         virtual void printHelp( ostream & out ) {
-            printMongoStatHelp(toolsOptions, &out);
+            printMongoStatHelp(&out);
         }
 
         BSONObj stats() {

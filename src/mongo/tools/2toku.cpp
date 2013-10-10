@@ -324,7 +324,7 @@ public:
     OplogTool() : Tool(true), _logAtExit(true), _player(), _reportingTimer() {}
 
     virtual void printHelp(ostream& out) {
-        printMongo2TokuHelp(toolsOptions, &out);
+        printMongo2TokuHelp(&out);
     }
 
     void report() const {
