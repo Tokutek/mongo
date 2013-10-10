@@ -78,9 +78,18 @@ namespace mongo {
         unsigned minChunks = numeric_limits<unsigned>::max();
         
         for ( ShardInfoMap::const_iterator i = _shardInfo.begin(); i != _shardInfo.end(); ++i ) {
-            
-            if ( i->second.isSizeMaxed() || i->second.isDraining() || i->second.hasOpsQueued() ) {
-                LOG(1) << i->first << " is unavailable" << endl;
+            if ( i->second.isSizeMaxed() ) {
+                LOG(1) << i->first << " has already reached the maximum total chunk size." << endl;
+                continue;
+            }
+
+            if ( i->second.isDraining() ) {
+                LOG(1) << i->first << " is currently draining." << endl;
+                continue;
+            }
+
+            if ( i->second.hasOpsQueued() ) {
+                LOG(1) << i->first << " has writebacks queued." << endl;
                 continue;
             }
             
@@ -170,7 +179,7 @@ namespace mongo {
         if ( _tagRanges.size() == 0 )
             return "";
 
-        BSONObj min = chunk["min"].Obj();
+        BSONObj min = chunk[ChunkType::min()].Obj();
 
         map<BSONObj,TagRange>::const_iterator i = _tagRanges.upper_bound( min );
         if ( i == _tagRanges.end() )
@@ -205,6 +214,13 @@ namespace mongo {
         }
     }
 
+    bool BalancerPolicy::_isJumbo( const BSONObj& chunk ) {
+        if ( chunk[ChunkType::jumbo()].trueValue() ) {
+            LOG(1) << "chunk: " << chunk << "is marked as jumbo" << endl;
+            return true;
+        }
+        return false;
+    }
     MigrateInfo* BalancerPolicy::balance( const string& ns,
                                           const DistributionStatus& distribution, 
                                           int balancedLastTime ) {
@@ -239,10 +255,16 @@ namespace mongo {
                 }
                 
                 const vector<BSONObj>& chunks = distribution.getChunks( shard );
-            
+                unsigned numJumboChunks = 0;
+
                 // since we have to move all chunks, lets just do in order
                 for ( unsigned i=0; i<chunks.size(); i++ ) {
                     BSONObj chunkToMove = chunks[i];
+                    if ( _isJumbo( chunkToMove ) ) {
+                        numJumboChunks++;
+                        continue;
+                    }
+
                     string tag = distribution.getTagForChunk( chunkToMove );
                     string to = distribution.getBestReceieverShard( tag );
                     
@@ -256,8 +278,11 @@ namespace mongo {
                 
                     return new MigrateInfo( ns, to, shard, chunkToMove.getOwned() );
                 }
-                
-                warning() << "can't find any chunk to move from: " << shard << " but we want to" << endl;
+
+                warning() << "can't find any chunk to move from: " << shard
+                          << " but we want to. "
+                          << " numJumboChunks: " << numJumboChunks
+                          << endl;
             }
         }
         
@@ -278,8 +303,15 @@ namespace mongo {
                         continue;
                     
                     // uh oh, this chunk is in the wrong place
-                    log() << "chunk " << chunks[j] << " is not on a shard with the right tag: " << tag << endl;
-                    
+                    log() << "chunk " << chunks[j]
+                          << " is not on a shard with the right tag: "
+                          << tag << endl;
+
+                    if ( _isJumbo( chunks[j] ) ) {
+                        warning() << "chunk " << chunks[j] << " is jumbo, so cannot be moved" << endl;
+                        continue;
+                    }
+
                     string to = distribution.getBestReceieverShard( tag );
                     if ( to.size() == 0 ) {
                         log() << "no where to put it :(" << endl;
@@ -343,14 +375,30 @@ namespace mongo {
                 continue;
 
             const vector<BSONObj>& chunks = distribution.getChunks( from );
+            unsigned numJumboChunks = 0;
             for ( unsigned j = 0; j < chunks.size(); j++ ) {
                 if ( distribution.getTagForChunk( chunks[j] ) != tag )
                     continue;
-                log() << " ns: " << ns << " going to move " << chunks[j] 
+
+                if ( _isJumbo( chunks[j] ) ) {
+                    numJumboChunks++;
+                    continue;
+                }
+
+                log() << " ns: " << ns << " going to move " << chunks[j]
                       << " from: " << from << " to: " << to << " tag [" << tag << "]"
                       << endl;
                 return new MigrateInfo( ns, to, from, chunks[j] );
             }
+
+            if ( numJumboChunks ) {
+                error() << "shard: " << from << "ns: " << ns
+                        << "has too many chunks, but they are all jumbo "
+                        << " numJumboChunks: " << numJumboChunks
+                        << endl;
+                continue;
+            }
+
             verify( false ); // should be impossible
         }
 
@@ -414,7 +462,7 @@ namespace mongo {
     string ChunkInfo::toString() const {
         StringBuilder buf;
         buf << " min: " << min;
-        buf << " max: " << min;
+        buf << " max: " << max;
         return buf.str();
     }
 

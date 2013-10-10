@@ -17,7 +17,7 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
 #include <fstream>
 #if !defined(_WIN32)
@@ -40,6 +40,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/db/json.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/d_concurrency.h"
@@ -60,7 +61,7 @@
 #include "mongo/plugins/loader.h"
 
 #include "mongo/s/d_logic.h"
-
+#include "mongo/s/stale_exception.h" // for SendStaleConfigException
 #include "mongo/util/goodies.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/time_support.h"
@@ -1012,6 +1013,11 @@ namespace mongo {
     HostAndPort DBDirectClient::_clientHost = HostAndPort( "0.0.0.0" , 0 );
 
     unsigned long long DBDirectClient::count(const string &ns, const BSONObj& query, int options, int limit, int skip ) {
+        if ( skip < 0 ) {
+            warning() << "setting negative skip value: " << skip
+                << " to zero in query: " << query << endl;
+            skip = 0;
+        }
         string errmsg;
         int errCode;
 

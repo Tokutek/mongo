@@ -39,6 +39,55 @@ namespace mongo {
         void flipInclusive() { _inclusive = !_inclusive; }
     };
 
+    // Keep track of what special indices we're using.  This can be nontrivial
+    // because an index could be required by one operator but not by another.
+    struct SpecialIndices {
+        // Unlike true/false, this is readable.  :)
+        enum IndexRequired {
+            INDEX_REQUIRED,
+            NO_INDEX_REQUIRED,
+        };
+        map<string, bool> _indexRequired;
+
+        bool has(const string& name) const {
+            return _indexRequired.end() != _indexRequired.find(name);
+        }
+
+        SpecialIndices combineWith(const SpecialIndices& other) {
+            SpecialIndices ret = *this;
+            for (map<string, bool>::const_iterator it = other._indexRequired.begin();
+                 it != other._indexRequired.end(); ++it) {
+                ret._indexRequired[it->first] = ret._indexRequired[it->first] || it->second;
+            }
+            return ret;
+        }
+
+
+        void add(const string& name, IndexRequired req) {
+            _indexRequired[name] = _indexRequired[name] || (req == INDEX_REQUIRED);
+        }
+
+        bool anyRequireIndex() const {
+            for (map<string, bool>::const_iterator it = _indexRequired.begin();
+                 it != _indexRequired.end(); ++it) {
+                if (it->second) { return true; }
+            }
+            return false;
+        }
+
+        bool empty() const { return _indexRequired.empty(); }
+        string toString() const {
+            stringstream ss;
+            for (map<string, bool>::const_iterator it = _indexRequired.begin();
+                 it != _indexRequired.end(); ++it) {
+                ss << it->first;
+                ss << (it->second ? " (needs index)" : " (no index needed)");
+                ss << ", ";
+            }
+            return ss.str();
+        }
+    };
+
     /** An interval defined between a lower and an upper FieldBound. */
     struct FieldInterval {
         FieldInterval() : _cachedEquality( -1 ) {}
@@ -137,7 +186,7 @@ namespace mongo {
         /** Empty the range so it includes no BSONElements. */
         void makeEmpty() { _intervals.clear(); }
         const vector<FieldInterval> &intervals() const { return _intervals; }
-        string getSpecial() const { return _special; }
+        const SpecialIndices& getSpecial() const { return _special; }
         /** Make component intervals noninclusive. */
         void setExclusiveBounds();
         /**
@@ -147,8 +196,6 @@ namespace mongo {
          */
         void reverse( FieldRange &ret ) const;
 
-        bool hasSpecialThatNeedsIndex() const { verify( _special.size() ); return _specialNeedsIndex; }
-
         string toString() const;
     private:
         BSONObj addObj( const BSONObj &o );
@@ -157,9 +204,8 @@ namespace mongo {
         vector<FieldInterval> _intervals;
         // Owns memory for our BSONElements.
         vector<BSONObj> _objData;
-        string _special; // Index type name of a non standard (eg '2d') index required by a parsed
-                         // query operator (eg '$near').
-        bool _specialNeedsIndex;
+        SpecialIndices _special; // Index type name of a non standard (eg '2d') index required by a
+                              // parsed query operator (eg '$near').  Could be >1.
         bool _exactMatchRepresentation;
         BSONElement _elemMatchContext; // Parent $elemMatch object of the field constraint that
                                        // generated this FieldRange.  For example if the query is
@@ -236,8 +282,7 @@ namespace mongo {
         const char *ns() const { return _ns.c_str(); }
         
         QueryPattern pattern( const BSONObj &sort = BSONObj() ) const;
-        string getSpecial() const;
-        bool hasSpecialThatNeedsIndex() const;
+        SpecialIndices getSpecial() const;
 
         /**
          * @return a FieldRangeSet approximation of the documents in 'this' but
@@ -346,8 +391,7 @@ namespace mongo {
         
         const char *ns() const { return _singleKey.ns(); }
 
-        string getSpecial() const { return _singleKey.getSpecial(); }
-        bool hasSpecialThatNeedsIndex() const { return _singleKey.hasSpecialThatNeedsIndex(); }
+        SpecialIndices getSpecial() const { return _singleKey.getSpecial(); }
 
         /** Intersect with another FieldRangeSetPair. */
         FieldRangeSetPair &operator&=( const FieldRangeSetPair &other );
@@ -617,7 +661,7 @@ namespace mongo {
          */
         FieldRangeSetPair *topFrspOriginal() const;
         
-        string getSpecial() const { return _baseSet.getSpecial(); }
+        SpecialIndices getSpecial() const { return _baseSet.getSpecial(); }
     private:
         void assertMayPopOrClause();
         void _popOrClause( const FieldRangeSet *toDiff, NamespaceDetails *d, int idxNo, const BSONObj &keyPattern );

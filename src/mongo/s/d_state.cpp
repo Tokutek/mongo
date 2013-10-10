@@ -32,13 +32,14 @@
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/privilege.h"
-#include "mongo/client/connpool.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/replutil.h"
-#include "mongo/s/shard.h"
-#include "mongo/s/d_logic.h"
+#include "mongo/client/connpool.h"
+#include "mongo/s/chunk_version.h"
 #include "mongo/s/config.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/s/shard.h"
 #include "mongo/util/queue.h"
 #include "mongo/util/concurrency/mutex.h"
 #include "mongo/util/concurrency/ticketholder.h"
@@ -154,7 +155,7 @@ namespace mongo {
         }
     }
 
-    void ShardingState::donateChunk( const string& ns , const BSONObj& min , const BSONObj& max , ShardChunkVersion version ) {
+    void ShardingState::donateChunk( const string& ns , const BSONObj& min , const BSONObj& max , ChunkVersion version ) {
         scoped_lock lk( _mutex );
 
         ChunkManagersMap::const_iterator it = _chunks.find( ns );
@@ -162,7 +163,7 @@ namespace mongo {
         ShardChunkManagerPtr p = it->second;
 
         // empty shards should have version 0
-        version = ( p->getNumChunks() > 1 ) ? version : ShardChunkVersion( 0 , OID() );
+        version = ( p->getNumChunks() > 1 ) ? version : ChunkVersion( 0 , OID() );
 
         ShardChunkManagerPtr cloned( p->cloneMinus( min , max , version ) );
         // TODO: a bit dangerous to have two different zero-version states - no-manager and
@@ -170,7 +171,7 @@ namespace mongo {
         _chunks[ns] = cloned;
     }
 
-    void ShardingState::undoDonateChunk( const string& ns , const BSONObj& min , const BSONObj& max , ShardChunkVersion version ) {
+    void ShardingState::undoDonateChunk( const string& ns , const BSONObj& min , const BSONObj& max , ChunkVersion version ) {
         scoped_lock lk( _mutex );
         log() << "ShardingState::undoDonateChunk acquired _mutex" << endl;
 
@@ -181,7 +182,7 @@ namespace mongo {
     }
 
     void ShardingState::splitChunk( const string& ns , const BSONObj& min , const BSONObj& max , const vector<BSONObj>& splitKeys ,
-                                    ShardChunkVersion version ) {
+                                    ChunkVersion version ) {
         scoped_lock lk( _mutex );
 
         ChunkManagersMap::const_iterator it = _chunks.find( ns );
@@ -275,6 +276,10 @@ namespace mongo {
         }
 
         {
+            // NOTE: This lock prevents the ns version from changing while a write operation occurs.
+            Lock::DBRead readLk(ns);
+            
+            // This lock prevents simultaneous metadata changes using the same map
             scoped_lock lk( _mutex );
 
             // since we loaded the chunk manager unlocked, other thread may have done the same
@@ -284,7 +289,7 @@ namespace mongo {
                 _chunks[ns] = p;
             }
 
-            ShardChunkVersion oldVersion = version;
+            ChunkVersion oldVersion = version;
             version = p->getVersion();
             return oldVersion.isEquivalentTo( version );
         }
@@ -638,12 +643,12 @@ namespace mongo {
             
             if ( oldVersion.isSet() && ! globalVersion.isSet() ) {
                 // this had been reset
-                info->setVersion( ns , ShardChunkVersion( 0, OID() ) );
+                info->setVersion( ns , ChunkVersion( 0, OID() ) );
             }
 
             if ( ! version.isSet() && ! globalVersion.isSet() ) {
                 // this connection is cleaning itself
-                info->setVersion( ns , ShardChunkVersion( 0, OID() ) );
+                info->setVersion( ns , ChunkVersion( 0, OID() ) );
                 return true;
             }
 
@@ -660,7 +665,7 @@ namespace mongo {
                 // only setting global version on purpose
                 // need clients to re-find meta-data
                 shardingState.resetVersion( ns );
-                info->setVersion( ns , ShardChunkVersion( 0, OID() ) );
+                info->setVersion( ns , ChunkVersion( 0, OID() ) );
                 return true;
             }
 
@@ -676,9 +681,9 @@ namespace mongo {
             // TODO: Refactor all of this
             if ( version < globalVersion && version.hasCompatibleEpoch( globalVersion ) ) {
                 while ( shardingState.inCriticalMigrateSection() ) {
+                    log() << "waiting till out of critical section" << endl;
                     SetShardVersionLock::temprelease temp(setShardVersionLock);
-                    sleepmillis(20);
-                    OCCASIONALLY log() << "waiting till out of critical section" << endl;
+                    shardingState.waitTillNotInCriticalSection( 10 );
                 }
                 errmsg = "shard global version for collection is higher than trying to set to '" + ns + "'";
                 result.append( "ns" , ns );
@@ -691,11 +696,10 @@ namespace mongo {
             if ( ! globalVersion.isSet() && ! authoritative ) {
                 // Needed b/c when the last chunk is moved off a shard, the version gets reset to zero, which
                 // should require a reload.
-                // TODO: Maybe a more elegant way of doing this
                 while ( shardingState.inCriticalMigrateSection() ) {
+                    log() << "waiting till out of critical section" << endl;
                     SetShardVersionLock::temprelease temp(setShardVersionLock);
-                    sleepmillis(2);
-                    OCCASIONALLY log() << "waiting till out of critical section for version reset" << endl;
+                    shardingState.waitTillNotInCriticalSection( 10 );
                 }
 
                 // need authoritative for first look
@@ -709,7 +713,7 @@ namespace mongo {
             {
                 SetShardVersionLock::temprelease temp(setShardVersionLock);
 
-                ShardChunkVersion currVersion = version;
+                ChunkVersion currVersion = version;
                 if ( ! shardingState.trySetVersion( ns , currVersion ) ) {
                     errmsg = str::stream() << "client version differs from config's for collection '" << ns << "'";
                     result.append( "ns" , ns );

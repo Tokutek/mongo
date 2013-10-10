@@ -21,6 +21,7 @@
 #include "mongo/pch.h"
 #include "mongo/db/client.h"
 #include "mongo/db/curop.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/timer.h"
 

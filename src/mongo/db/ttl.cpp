@@ -83,7 +83,7 @@ namespace mongo {
 
                     Client::ReadContext ctx(ns);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    NamespaceDetails* nsd = nsdetails(ns.c_str());
+                    NamespaceDetails* nsd = nsdetails(ns);
                     if (!nsd) {
                         // collection was dropped
                         continue;

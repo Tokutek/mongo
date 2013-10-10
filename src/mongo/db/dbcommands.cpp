@@ -38,6 +38,7 @@
 #include "mongo/db/introspect.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/json.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/replutil.h"
@@ -55,6 +56,7 @@
 #include "mongo/db/storage/env.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/s/d_writeback.h"
+#include "mongo/s/stale_exception.h"  // for SendStaleConfigException
 #include "mongo/scripting/engine.h"
 #include "mongo/util/version.h"
 #include "mongo/util/lruishmap.h"
@@ -780,6 +782,20 @@ namespace mongo {
             out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
         }
         virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
+
+            long long skip = 0;
+            if ( cmdObj["skip"].isNumber() ) {
+                skip = cmdObj["skip"].numberLong();
+                if ( skip < 0 ) {
+                    errmsg = "skip value is negative in count query";
+                    return false;
+                }
+            }
+            else if ( cmdObj["skip"].ok() ) {
+                errmsg = "skip value is not a valid number";
+                return false;
+            }
+
             string ns = parseNs(dbname, cmdObj);
             string err;
             int errCode;
@@ -855,7 +871,7 @@ namespace mongo {
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
             BSONElement e = jsobj.firstElement();
             string toDeleteNs = dbname + '.' + e.valuestr();
-            NamespaceDetails *d = nsdetails(toDeleteNs.c_str());
+            NamespaceDetails *d = nsdetails(toDeleteNs);
             if ( !cmdLine.quiet )
                 tlog() << "CMD: dropIndexes " << toDeleteNs << endl;
             if ( d ) {
@@ -909,7 +925,7 @@ namespace mongo {
 
             BSONElement e = jsobj.firstElement();
             string toDeleteNs = dbname + '.' + e.valuestr();
-            NamespaceDetails *d = nsdetails(toDeleteNs.c_str());
+            NamespaceDetails *d = nsdetails(toDeleteNs);
             tlog() << "CMD: reIndex " << toDeleteNs << endl;
 
             if ( ! d ) {
@@ -977,7 +993,7 @@ namespace mongo {
 
             Client::Context ctx( target );
 
-            if ( nsdetails( target.c_str() ) ) {
+            if (nsdetails(target)) {
                 uassert( 10027 ,  "target namespace exists", cmdObj["dropTarget"].trueValue() );
                 BSONObjBuilder bb( result.subobjStart( "dropTarget" ) );
                 dropCollection( target , errmsg , bb );
@@ -1284,7 +1300,7 @@ namespace mongo {
             bool estimate = jsobj["estimate"].trueValue();
 
             Client::Context ctx( ns );
-            NamespaceDetails *d = nsdetails(ns.c_str());
+            NamespaceDetails *d = nsdetails(ns);
 
             if ( ! d /* || d->stats.nrecords == 0 */) {
                 result.appendNumber( "size" , 0 );
@@ -1305,7 +1321,7 @@ namespace mongo {
                     return 1;
                 }
 #endif
-                NamespaceDetails *d = nsdetails( ns.c_str() );
+                NamespaceDetails *d = nsdetails(ns);
                 c =  BasicCursor::make( d );
             }
             else if ( min.isEmpty() || max.isEmpty() ) {
@@ -1315,7 +1331,8 @@ namespace mongo {
             else {
 
                 if ( keyPattern.isEmpty() ){
-                    Helpers::toKeyFormat( min , keyPattern );
+                    // if keyPattern not provided, try to infer it from the fields in 'min'
+                    keyPattern = Helpers::inferKeyPattern( min );
                 }
 
                 const IndexDetails *idx = d->findIndexByPrefix( keyPattern ,
@@ -1325,8 +1342,9 @@ namespace mongo {
                     return false;
                 }
                 // If both min and max non-empty, append MinKey's to make them fit chosen index
-                min = Helpers::modifiedRangeBound( min , idx->keyPattern() , -1 );
-                max = Helpers::modifiedRangeBound( max , idx->keyPattern() , -1 );
+                KeyPattern kp( idx->keyPattern() );
+                min = Helpers::toKeyFormat( kp.extendRangeBound( min, false ) );
+                max = Helpers::toKeyFormat( kp.extendRangeBound( max, false ) );
 
                 c = IndexCursor::make( d, *idx, min, max, false, 1 );
             }
@@ -1386,7 +1404,7 @@ namespace mongo {
             string ns = dbname + "." + jsobj.firstElement().valuestr();
             Client::Context cx( ns );
 
-            NamespaceDetails * nsd = nsdetails( ns.c_str() );
+            NamespaceDetails * nsd = nsdetails( ns );
             if ( ! nsd ) {
                 errmsg = "ns not found";
                 return false;
@@ -1460,7 +1478,7 @@ namespace mongo {
             for (list<string>::const_iterator it = collections.begin(); it != collections.end(); ++it) {
                 const string ns = *it;
 
-                NamespaceDetails * nsd = nsdetails( ns.c_str() );
+                NamespaceDetails * nsd = nsdetails( ns );
                 if ( ! nsd ) {
                     errmsg = "missing ns: ";
                     errmsg += ns;
@@ -1521,6 +1539,21 @@ namespace mongo {
             out->push_back(Privilege(dbname, actions));
         }
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
+            Timer timer;
+
+            set<string> desiredCollections;
+            if ( cmdObj["collections"].type() == Array ) {
+                BSONObjIterator i( cmdObj["collections"].Obj() );
+                while ( i.more() ) {
+                    BSONElement e = i.next();
+                    if ( e.type() != String ) {
+                        errmsg = "collections entries have to be strings";
+                        return false;
+                    }
+                    desiredCollections.insert( e.String() );
+                }
+            }
+
             list<string> colls;
             NamespaceIndex *ni = nsindex(dbname.c_str());
             if ( ni != NULL )
@@ -1535,25 +1568,28 @@ namespace mongo {
 
             BSONObjBuilder bb( result.subobjStart( "collections" ) );
             for ( list<string>::iterator i=colls.begin(); i != colls.end(); i++ ) {
-                string c = *i;
-                if ( nsToCollectionSubstring(c) == "system.profile" ) {
+                StringData ns(*i);
+                if (NamespaceString::isSystem(ns)) {
                     continue;
                 }
 
-                NamespaceDetails * nsd = nsdetails( c.c_str() );
+                string coll = nsToCollection(ns);
+
+                if (desiredCollections.size() > 0 &&
+                    desiredCollections.count(coll) == 0) {
+                    continue;
+                }
+
+                NamespaceDetails * nsd = nsdetails(ns);
 
                 // debug SERVER-761
                 NamespaceDetails::IndexIterator ii = nsd->ii();
                 while( ii.more() ) {
                     const IndexDetails &idx = ii.next();
                     if ( !idx.info().isValid() ) {
-                        log() << "invalid index for ns: " << c << " " << idx.info();
+                        log() << "invalid index for ns: " << ns << " " << idx.info();
                         log() << endl;
                     }
-                }
-
-                if ( NamespaceString::isSystem(c) ) {
-                    continue;
                 }
 
                 md5_state_t st;
@@ -1567,7 +1603,7 @@ namespace mongo {
                 md5_finish(&st, d);
                 string hash = digestToString( d );
 
-                bb.append( c.c_str() + ( dbname.size() + 1 ) , hash );
+                bb.append( coll, hash );
 
                 md5_append( &globalState , (const md5_byte_t*)hash.c_str() , hash.size() );
             }
@@ -1578,7 +1614,7 @@ namespace mongo {
             string hash = digestToString( d );
 
             result.append( "md5" , hash );
-
+            result.appendNumber( "timeMillis", timer.millis() );
             return 1;
         }
 
@@ -1636,7 +1672,7 @@ namespace mongo {
             string coll = cmdObj[ "emptycapped" ].valuestrsafe();
             uassert( 13428, "emptycapped must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
-            NamespaceDetails *nsd = nsdetails( ns.c_str() );
+            NamespaceDetails *nsd = nsdetails( ns );
             massert( 13429, "emptycapped no such collection", nsd );
             massert( 13424, "collection must be capped", nsd->isCapped() );
             nsd->empty();
@@ -1923,9 +1959,6 @@ namespace mongo {
                                          : str::equals("query", e.fieldName())))
             {
                 jsobj = e.embeddedObject();
-                if (_cmdobj.hasField("$readPreference")) {
-                    queryOptions |= QueryOption_SlaveOk;
-                }
             }
             else {
                 jsobj = _cmdobj;

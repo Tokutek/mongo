@@ -188,6 +188,9 @@ namespace mongo {
      *    server:port
      *    foo/server:port,server:port   SET
      *    server,server,server          SYNC
+     *                                    Warning - you usually don't want "SYNC", it's used 
+     *                                    for some special things such as sharding config servers.
+     *                                    See syncclusterconnection.h for more info.
      *
      * tyipcal use
      * string errmsg,
@@ -928,12 +931,19 @@ namespace mongo {
            @param cache if set to false, the index cache for the connection won't remember this call
            @param background build index in the background (see mongodb docs for details)
            @param v index version. leave at default value. (unit tests set this parameter.)
+           @param ttl. The value of how many seconds before data should be removed from a collection.
            @return whether or not sent message to db.
              should be true on first call, false on subsequent unless resetIndexCache was called
          */
-        virtual bool ensureIndex( const string &ns , BSONObj keys , bool unique = false, bool clustering = false,
-                                  const string &name = "", bool cache = true, bool background = false, int v = -1 );
-
+        virtual bool ensureIndex( const string &ns,
+                                  BSONObj keys,
+                                  bool unique = false,
+                                  bool clustering = false,
+                                  const string &name = "",
+                                  bool cache = true,
+                                  bool background = false,
+                                  int v = -1,
+                                  int ttl = 0 );
         /**
            clears the index cache, so the subsequent call to ensureIndex for any index will go to the server
          */

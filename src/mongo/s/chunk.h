@@ -19,14 +19,11 @@
 
 #pragma once
 
-#include "mongo/pch.h"
-
-#include "../bson/util/atomic_int.h"
-#include "../client/distlock.h"
-
-#include "shardkey.h"
-#include "shard.h"
-#include "util.h"
+#include "mongo/bson/util/atomic_int.h"
+#include "mongo/client/distlock.h"
+#include "mongo/s/chunk_version.h"
+#include "mongo/s/shard.h"
+#include "mongo/s/shardkey.h"
 #include "mongo/util/concurrency/ticketholder.h"
 
 namespace mongo {
@@ -59,13 +56,13 @@ namespace mongo {
                const BSONObj& min,
                const BSONObj& max,
                const Shard& shard,
-               ShardChunkVersion lastmod = ShardChunkVersion() );
+               ChunkVersion lastmod = ChunkVersion() );
 
         //
         // serialization support
         //
 
-        void serialize(BSONObjBuilder& to, ShardChunkVersion myLastMod=ShardChunkVersion(0,OID()));
+        void serialize(BSONObjBuilder& to, ChunkVersion myLastMod=ChunkVersion(0,OID()));
 
         //
         // chunk boundary support
@@ -94,8 +91,8 @@ namespace mongo {
 
         void appendShortVersion( const char * name , BSONObjBuilder& b ) const;
 
-        ShardChunkVersion getLastmod() const { return _lastmod; }
-        void setLastmod( ShardChunkVersion v ) { _lastmod = v; }
+        ChunkVersion getLastmod() const { return _lastmod; }
+        void setLastmod( ChunkVersion v ) { _lastmod = v; }
 
         //
         // split support
@@ -177,13 +174,19 @@ namespace mongo {
         /**
          * Attempt to refresh maximum chunk size from config.
          */
-         static void refreshChunkSize();
+        static void refreshChunkSize();
+
+        /**
+         * sets MaxChunkSize
+         * 1 <= newMaxChunkSize <= 1024
+         * @return true if newMaxChunkSize is valid and was set
+         */
+        static bool setMaxChunkSizeSizeMB( int newMaxChunkSize );
 
         //
         // public constants
         //
 
-        static string chunkMetadataNS;
         static int MaxChunkSize;
         static bool ShouldAutoSplit;
 
@@ -200,7 +203,6 @@ namespace mongo {
         bool operator!=(const Chunk& s) const { return ! ( *this == s ); }
 
         string getns() const;
-        const char * getNS() { return "config.chunks"; }
         Shard getShard() const { return _shard; }
         const ChunkManager* getManager() const { return _manager; }
         
@@ -214,7 +216,7 @@ namespace mongo {
         BSONObj _min;
         BSONObj _max;
         Shard _shard;
-        ShardChunkVersion _lastmod;
+        ChunkVersion _lastmod;
         mutable bool _jumbo;
 
         // transient stuff
@@ -322,7 +324,7 @@ namespace mongo {
     */
     class ChunkManager {
     public:
-        typedef map<Shard,ShardChunkVersion> ShardVersionMap;
+        typedef map<Shard,ChunkVersion> ShardVersionMap;
 
         // Loads a new chunk manager from a collection document
         ChunkManager( const BSONObj& collDoc );
@@ -398,7 +400,7 @@ namespace mongo {
         void getShardsForQuery( set<Shard>& shards , const BSONObj& query ) const;
         void getAllShards( set<Shard>& all ) const;
         /** @param shards set to the shards covered by the interval [min, max], see SERVER-4791 */
-        void getShardsForRange(set<Shard>& shards, const BSONObj& min, const BSONObj& max, bool fullKeyReq = true) const;
+        void getShardsForRange( set<Shard>& shards, const BSONObj& min, const BSONObj& max ) const;
 
         ChunkMap getChunkMap() const { return _chunkMap; }
 
@@ -413,14 +415,10 @@ namespace mongo {
 
         string toString() const;
 
-        ShardChunkVersion getVersion( const Shard& shard ) const;
-        ShardChunkVersion getVersion() const;
+        ChunkVersion getVersion( const Shard& shard ) const;
+        ChunkVersion getVersion() const;
 
-        void getInfo( BSONObjBuilder& b ) const {
-            b.append( "key" , _key.key() );
-            b.appendBool( "unique" , _unique );
-            _version.addEpochToBSON( b, "lastmod" );
-        }
+        void getInfo( BSONObjBuilder& b ) const;
 
         /**
          * @param me - so i don't get deleted before i'm done
@@ -433,8 +431,8 @@ namespace mongo {
 
         ChunkManagerPtr reload(bool force=true) const; // doesn't modify self!
 
-        void markMinorForReload( ShardChunkVersion majorVersion ) const;
-        void getMarkedMinorVersions( set<ShardChunkVersion>& minorVersions ) const;
+        void markMinorForReload( ChunkVersion majorVersion ) const;
+        void getMarkedMinorVersions( set<ChunkVersion>& minorVersions ) const;
 
     private:
 
@@ -460,7 +458,7 @@ namespace mongo {
         const ShardVersionMap _shardVersions; // max version per shard
 
         // max version of any chunk
-        ShardChunkVersion _version;
+        ChunkVersion _version;
 
         // the previous manager this was based on
         // cleared after loading chunks
@@ -483,8 +481,8 @@ namespace mongo {
                 _staleMinorSetMutex( "SplitHeuristics::staleMinorSet" ),
                 _staleMinorCount( 0 ) {}
 
-            void markMinorForReload( const string& ns, ShardChunkVersion majorVersion );
-            void getMarkedMinorVersions( set<ShardChunkVersion>& minorVersions );
+            void markMinorForReload( const string& ns, ChunkVersion majorVersion );
+            void getMarkedMinorVersions( set<ChunkVersion>& minorVersions );
 
             TicketHolder _splitTickets;
 
@@ -492,7 +490,7 @@ namespace mongo {
 
             // mutex protects below
             int _staleMinorCount;
-            set<ShardChunkVersion> _staleMinorSet;
+            set<ChunkVersion> _staleMinorSet;
 
             // Test whether we should split once data * splitTestFactor > chunkSize (approximately)
             static const int splitTestFactor = 5;
@@ -558,6 +556,11 @@ namespace mongo {
     */
     inline string Chunk::genID() const { return genID(_manager->getns(), _min); }
 
-    bool setShardVersion( DBClientBase & conn , const string& ns , ShardChunkVersion version , bool authoritative , BSONObj& result );
+    bool setShardVersion( DBClientBase & conn,
+                          const string& ns,
+                          ChunkVersion version,
+                          ChunkManagerPtr manager,
+                          bool authoritative,
+                          BSONObj& result );
 
 } // namespace mongo

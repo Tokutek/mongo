@@ -35,7 +35,10 @@ namespace mongo {
         ~OwnedPointerVector();
 
         /** Access the vector. */
-        std::vector<T*>& vector() { return _vector; }
+        const std::vector<T*>& vector() { return _vector; }
+        std::vector<T*>& mutableVector() { return _vector; }
+
+        void clear();
 
     private:
         std::vector<T*> _vector;
@@ -47,9 +50,15 @@ namespace mongo {
 
     template<class T>
     OwnedPointerVector<T>::~OwnedPointerVector() {
+        clear();
+    }
+
+    template<class T>
+    void OwnedPointerVector<T>::clear() {
         for( typename std::vector<T*>::iterator i = _vector.begin(); i != _vector.end(); ++i ) {
             delete *i;
         }
+        _vector.clear();
     }
 
 } // namespace mongo

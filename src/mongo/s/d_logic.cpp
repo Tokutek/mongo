@@ -102,7 +102,8 @@ namespace mongo {
             return true;
         }
 
-        uassert( 9517 , "writeback" , ( d.reservedField() & Reserved_FromWriteback ) == 0 );
+        uassert(9517, "cannot queue a writeback operation to the writeback queue",
+                (d.reservedField() & Reserved_FromWriteback) == 0);
 
         const OID& clientID = ShardedConnectionInfo::get(false)->getID();
         massert( 10422 ,  "write with bad shard config and no server id!" , clientID.isSet() );
@@ -126,7 +127,11 @@ namespace mongo {
 
         b.appendBinData( "msg" , m.header()->len , bdtCustom , (char*)(m.singleData()) );
         LOG(2) << "writing back msg with len: " << m.header()->len << " op: " << m.operation() << endl;
-
+        
+        // we pass the builder to queueWriteBack so that it can select the writebackId
+        // this is important so that the id is guaranteed to be ascending 
+        // that is important since mongos assumes if its seen a greater writeback
+        // that all former have been processed
         OID writebackID = writeBackManager.queueWriteBack( clientID.str() , b );
 
         lastError.getSafe()->writeback( writebackID );

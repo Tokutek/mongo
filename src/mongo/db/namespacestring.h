@@ -175,6 +175,10 @@ namespace mongo {
         return nsToDatabaseSubstring( ns ).toString();
     }
 
+    inline string nsToCollection(const StringData &ns) {
+        return nsToCollectionSubstring( ns ).toString();
+    }
+
     inline bool isValidNS( const StringData &ns ) {
         // TODO: should check for invalid characters
 
