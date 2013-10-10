@@ -1300,7 +1300,9 @@ namespace mongo {
                 continue;
             }
 
-            if (!isPK) {
+            // There's no need to generate keys etc for secondary indexes
+            // if we know they were not affected by this update.
+            if (!isPK && !(flags & NamespaceDetails::INDEXES_UNAFFECTED_HINT)) {
                 BSONObjSet oldIdxKeys;
                 BSONObjSet newIdxKeys;
                 idx.getKeysFromObject(oldObj, oldIdxKeys);

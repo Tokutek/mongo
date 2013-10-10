@@ -100,6 +100,7 @@ namespace mongo {
         // Flags for write operations. For performance reasons only. Use with caution.
         static const uint64_t NO_LOCKTREE = 1; // skip acquiring locktree row locks
         static const uint64_t NO_UNIQUE_CHECKS = 2; // skip uniqueness checks
+        static const uint64_t INDEXES_UNAFFECTED_HINT = 4; // an update did not update secondary indexes
 
         // Creates the appropriate NamespaceDetails implementation based on options.
         static shared_ptr<NamespaceDetails> make(const StringData &ns, const BSONObj &options);
