@@ -98,7 +98,7 @@ namespace mongo {
 
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             string ns = dbname + "." + cmdObj.firstElement().valuestrsafe();
-            NamespaceDetails * d = nsdetails( ns.c_str() );
+            NamespaceDetails * d = nsdetails(ns);
             if ( !cmdLine.quiet )
                 tlog() << "CMD: validate " << ns << endl;
 

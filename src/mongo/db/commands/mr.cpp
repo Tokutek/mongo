@@ -16,27 +16,29 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "mongo/pch.h"
-
-#include "mongo/client/connpool.h"
-#include "mongo/client/parallel.h"
-#include "mongo/db/auth/authorization_manager.h"
-#include "mongo/db/instance.h"
-#include "mongo/db/commands.h"
-#include "mongo/db/matcher.h"
-#include "mongo/db/clientcursor.h"
-#include "mongo/db/replutil.h"
-#include "mongo/db/query_optimizer.h"
-#include "mongo/db/ops/insert.h"
-#include "mongo/db/ops/update.h"
-#include "mongo/s/d_chunk_manager.h"
-#include "mongo/s/d_logic.h"
-#include "mongo/s/grid.h"
-#include "mongo/scripting/engine.h"
+#include "pch.h"
 
 #include "mongo/db/commands/mr.h"
 
 #include "mongo/util/scopeguard.h"
+
+#include "mongo/client/connpool.h"
+#include "mongo/client/parallel.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/clientcursor.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/kill_current_op.h"
+#include "mongo/db/matcher.h"
+#include "mongo/db/query_optimizer.h"
+#include "mongo/db/replutil.h"
+#include "mongo/db/ops/insert.h"
+#include "mongo/db/ops/update.h"
+#include "mongo/scripting/engine.h"
+#include "mongo/s/d_chunk_manager.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/s/grid.h"
+#include "mongo/s/stale_exception.h"
 
 namespace mongo {
 
@@ -302,8 +304,13 @@ namespace mongo {
          */
         void State::dropTempCollections() {
             _db.dropCollection(_config.tempNamespace);
-            if (_useIncremental)
+            // Always forget about temporary namespaces, so we don't cache lots of them
+            ShardConnection::forgetNS( _config.tempNamespace );
+            if (_useIncremental) {
                 _db.dropCollection(_config.incLong);
+                ShardConnection::forgetNS( _config.incLong );
+            }
+
         }
 
         /**
@@ -524,6 +531,7 @@ namespace mongo {
             else if ( _config.outputOptions.outType == Config::MERGE ) {
                 // merge: upsert new docs into old collection
                 op->setMessage("m/r: merge post processing",
+                               "M/R Merge Post Processing Progress",
                                _safeCount(_db, _config.tempNamespace, BSONObj()));
                 {
                     Client::ReadContext ctx( _config.outputOptions.finalNamespace );
@@ -541,6 +549,7 @@ namespace mongo {
                 // reduce: apply reduce op on new result and existing one
                 BSONList values;
                 op->setMessage("m/r: reduce post processing",
+                               "M/R Reduce Post Processing Progress",
                                _safeCount(_db, _config.tempNamespace, BSONObj()));
                 {
                     Client::ReadContext ctx( _config.outputOptions.finalNamespace );
@@ -549,7 +558,7 @@ namespace mongo {
                         BSONObj temp = cursor->next();
                         BSONObj old;
 
-                        NamespaceDetails *d = nsdetails( _config.outputOptions.finalNamespace.c_str() );
+                        NamespaceDetails *d = nsdetails(_config.outputOptions.finalNamespace);
                         const bool found = d != NULL && d->findOne( temp["_id"].wrap() , old , true );
                         if ( found ) {
                             // need to reduce
@@ -625,7 +634,7 @@ namespace mongo {
                             _scope->createFunction("delete _emitCt; delete _keyCt; delete _mrMap;");
                     _scope->invoke(cleanup, 0, 0, 0, true);
                 }
-                catch (const DBException &dbEx) {
+                catch (const DBException &) {
                     // not important because properties will be reset if scope is reused
                     LOG(1) << "MapReduce terminated during state destruction" << endl;
                 }
@@ -873,7 +882,9 @@ namespace mongo {
             BSONObj prev;
             BSONList all;
 
-            verify( pm == op->setMessage( "m/r: (3/3) final reduce to collection" , _safeCount( _db, _config.incLong, BSONObj(), QueryOption_SlaveOk ) ) );
+            verify(pm == op->setMessage("m/r: (3/3) final reduce to collection" ,
+                                        "M/R: (3/3) Final Reduce Progress",
+                                        _safeCount( _db, _config.incLong, BSONObj(), QueryOption_SlaveOk)));
 
             shared_ptr<Cursor> temp = getBestGuessCursor(_config.incLong.c_str(),
                                                          BSONObj(),
@@ -1159,7 +1170,23 @@ namespace mongo {
                         state.init();
                         state.prepTempCollection();
                         ON_BLOCK_EXIT_OBJ(state, &State::dropTempCollections);
-                        ProgressMeterHolder pm( op->setMessage( "m/r: (1/3) emit phase" , state.incomingDocuments() ) );
+
+                        int progressTotal = 0;
+                        bool showTotal = true;
+                        if ( state.config().filter.isEmpty() ) {
+                            progressTotal = state.incomingDocuments();
+                        }
+                        else {
+                            showTotal = false;
+                            // Set an arbitrary total > 0 so the meter will be activated.
+                            progressTotal = 1;
+                        }
+
+                        ProgressMeter& progress( op->setMessage("m/r: (1/3) emit phase",
+                                                 "M/R: (1/3) Emit Progress",
+                                                 progressTotal ));
+                        progress.showTotal(showTotal);
+                        ProgressMeterHolder pm(progress);
 
                         wassert( config.limit < 0x4000000 ); // see case on next line to 32 bit unsigned
                         long long mapTime = 0;
@@ -1429,6 +1456,9 @@ namespace mongo {
                     if (++index >= chunks.size())
                         break;
                 }
+
+                // Forget temporary input collection, if output is sharded collection
+                ShardConnection::forgetNS( inputNS );
 
                 result.append( "chunkSizes" , chunkSizes.arr() );
 

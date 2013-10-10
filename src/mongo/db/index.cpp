@@ -67,7 +67,8 @@ namespace mongo {
             _hashedField(_keyPattern.firstElement().fieldName()),
             // Default seed/version to 0 if not specified or not an integer.
             _seed(_info["seed"].numberInt()),
-            _hashVersion(_info["hashVersion"].numberInt()) {
+            _hashVersion(_info["hashVersion"].numberInt()),
+            _hashedNullObj(BSON("" << HashKeyGenerator::makeSingleKey(nullElt, _seed, _hashVersion))) {
 
             // change these if single-field limitation lifted later
             uassert( 16241, "Currently only single field hashed index supported.",
@@ -77,6 +78,7 @@ namespace mongo {
 
             // Create a descriptor with hashed = true and the appropriate hash seed.
             _descriptor.reset(new Descriptor(_keyPattern, true, _seed, _sparse, _clustering));
+
         }
 
         // @return the "special" name for this index.
@@ -149,12 +151,18 @@ namespace mongo {
             return cursor;
         }
 
+        // A missing field is represented by a hashed null element.
+        virtual BSONElement missingField() const {
+            return _hashedNullObj.firstElement();
+        }
+
     private:
         const string _hashedField;
         const HashSeed _seed;
         // In case we have hashed indexes based on other hash functions in
         // the future, we store a hashVersion number.
         const HashVersion _hashVersion;
+        const BSONObj _hashedNullObj;
     };
 
     static string findSpecialIndexName(const BSONObj &keyPattern) {

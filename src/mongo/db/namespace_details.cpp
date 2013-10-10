@@ -1589,7 +1589,7 @@ namespace mongo {
             BSONElement e = options.getField("size");
             if (e.isNumber()) {
                 long long size = e.numberLong();
-                uassert(10083, "create collection invalid size spec", size > 0);
+                uassert(10083, "create collection invalid size spec", size >= 0);
             }
         }
 
@@ -1788,7 +1788,7 @@ namespace mongo {
         BSONObj newSpec;
         {
             BSONObj oldSpec;
-            NamespaceDetails *d = nsdetails( sysNamespaces.c_str() );
+            NamespaceDetails *d = nsdetails(sysNamespaces);
             verify( d != NULL && d->findOne( BSON( "name" << from ), oldSpec ) );
             BSONObjBuilder b;
             BSONObjIterator i( oldSpec.getObjectField( "options" ) );

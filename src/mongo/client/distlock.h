@@ -123,7 +123,15 @@ namespace mongo {
          * details if not
          * @return true if it managed to grab the lock
          */
-        bool lock_try( const string& why , bool reenter = false, BSONObj * other = 0 );
+        bool lock_try( const string& why , bool reenter = false, BSONObj * other = 0, double timeout = 0.0 );
+
+        /**
+         * Returns true if we currently believe we hold this lock and it was possible to
+         * confirm that, within 'timeout' seconds, if provided, with the config servers. If the
+         * lock is not held or if we failed to contact the config servers within the timeout,
+         * returns false.
+         */
+        bool isLockHeld( double timeout, string* errMsg );
 
         /**
          * Releases a previously taken lock.
@@ -162,7 +170,6 @@ namespace mongo {
 
         const ConnectionString _conn;
         const string _name;
-        const BSONObj _id;
         const string _processId;
 
         // Timeout for lock, usually LOCK_TIMEOUT
@@ -182,6 +189,12 @@ namespace mongo {
         string _threadId;
 
     };
+
+    // Helper functions for tests, allows us to turn the creation of a lock pinger on and off.
+    // *NOT* thread-safe
+    bool isLockPingerEnabled();
+    void setLockPingerEnabled(bool enabled);
+
 
     class dist_lock_try {
     public:
@@ -218,9 +231,9 @@ namespace mongo {
     	    return *this;
     	}
 
-        dist_lock_try( DistributedLock * lock , const std::string& why )
+        dist_lock_try( DistributedLock * lock , const std::string& why, double timeout = 0.0 )
             : _lock(lock), _why(why) {
-            _got = _lock->lock_try( why , false , &_other );
+            _got = _lock->lock_try( why , false , &_other, timeout );
         }
 
         ~dist_lock_try() {
@@ -230,16 +243,23 @@ namespace mongo {
             }
         }
 
-        bool reestablish(){
-            return retry();
-        }
+        /**
+         * Returns false if the lock is known _not_ to be held, otherwise asks the underlying
+         * lock to issue a 'isLockHeld' call and returns whatever that calls does.
+         */
+        bool isLockHeld( double timeout, string* errMsg) {
+            if ( !_lock ) {
+                *errMsg = "Lock is not currently set up";
+                return false;
+            }
 
-        bool retry() {
-            verify( _lock );
-            verify( _got );
-            verify( ! _other.isEmpty() );
+            if ( !_got ) {
+                *errMsg = str::stream() << "Lock " << _lock->_name << " is currently held by "
+                                        << _other;
+                return false;
+            }
 
-            return _got = _lock->lock_try( _why , true, &_other );
+            return _lock->isLockHeld( timeout, errMsg );
         }
 
         bool got() const { return _got; }
@@ -250,6 +270,80 @@ namespace mongo {
         bool _got;
         BSONObj _other;
         string _why;
+    };
+
+    /**
+     * Scoped wrapper for a distributed lock acquisition attempt.  One or more attempts to acquire
+     * the distributed lock are managed by this class, and the distributed lock is unlocked if
+     * successfully acquired on object destruction.
+     */
+    class ScopedDistributedLock {
+    public:
+
+        ScopedDistributedLock(const ConnectionString& conn, const string& name);
+
+        virtual ~ScopedDistributedLock();
+
+        /**
+         * Tries once to obtain a lock, and can fail with an error message.
+         *
+         * Subclasses of this lock can override this method (and are also required to call the base
+         * in the overridden method).
+         *
+         * @return if the lock was successfully acquired
+         */
+        virtual bool tryAcquire(string* errMsg);
+
+        /**
+         * Tries to unlock the lock if acquired.  Cannot report an error or block indefinitely
+         * (though it may log messages or continue retrying in a non-blocking way).
+         *
+         * Subclasses should define their own destructor unlockXXX() methods.
+         */
+        void unlock();
+
+        /**
+         * Tries multiple times to unlock the lock, using the specified lock try interval, until
+         * a certain amount of time has passed.  An error message is immediately returned if the
+         * lock acquisition attempt fails with an error message.
+         * waitForMillis = 0 indicates there should only be one attempt to acquire the lock, and
+         * no waiting.
+         * waitForMillis = -1 indicates we should retry indefinitely.
+         * @return true if the lock was acquired
+         */
+        bool acquire(long long waitForMillis, string* errMsg);
+
+        bool isAcquired() const {
+            return _acquired;
+        }
+
+        ConnectionString getConfigConnectionString() const {
+            return _lock._conn;
+        }
+
+        void setLockTryIntervalMillis(long long lockTryIntervalMillis) {
+            _lockTryIntervalMillis = lockTryIntervalMillis;
+        }
+
+        long long getLockTryIntervalMillis() const {
+            return _lockTryIntervalMillis;
+        }
+
+        void setLockMessage(const string& why) {
+            _why = why;
+        }
+
+        string getLockMessage() const {
+            return _why;
+        }
+
+    private:
+        DistributedLock _lock;
+        string _why;
+        long long _lockTryIntervalMillis;
+
+        bool _acquired;
+        BSONObj _other;
     };
 
 }

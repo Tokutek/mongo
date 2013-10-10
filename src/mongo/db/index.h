@@ -85,6 +85,10 @@ namespace mongo {
                                 indexNamespace() );
         }
 
+        virtual BSONElement missingField() const {
+            return nullElt;
+        }
+
         // Closes the underlying ydb dictionary.
         void close();
 

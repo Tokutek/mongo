@@ -38,13 +38,16 @@
 #include "mongo/db/database.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/json.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/dbwebserver.h"
 #include "mongo/db/json.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/s/chunk_version.h"
 #include "mongo/s/d_logic.h"
+#include "mongo/s/stale_exception.h" // for SendStaleConfigException
 #include "mongo/scripting/engine.h"
 #include "mongo/util/mongoutils/html.h"
 #include "mongo/util/mongoutils/str.h"
@@ -220,8 +223,8 @@ namespace mongo {
             break;
         default: {
             string errmsg;
-            ShardChunkVersion received;
-            ShardChunkVersion wanted;
+            ChunkVersion received;
+            ChunkVersion wanted;
             if ( ! shardVersionOk( _ns , errmsg, received, wanted ) ) {
                 ostringstream os;
                 os << "[" << _ns << "] shard version not ok in Client::Context: " << errmsg;
@@ -302,43 +305,6 @@ namespace mongo {
         if ( !c )
             return "no client";
         return c->toString();
-    }
-
-    void KillCurrentOp::interruptJs( AtomicUInt *op ) {
-        if ( !globalScriptEngine )
-            return;
-        if ( !op ) {
-            globalScriptEngine->interruptAll();
-        }
-        else {
-            globalScriptEngine->interrupt( *op );
-        }
-    }
-
-    void KillCurrentOp::killAll() {
-        _globalKill = true;
-        interruptJs( 0 );
-    }
-
-    void KillCurrentOp::kill(AtomicUInt i) {
-        bool found = false;
-        {
-            scoped_lock l( Client::clientsMutex );
-            for( set< Client* >::const_iterator j = Client::clients.begin(); !found && j != Client::clients.end(); ++j ) {
-                for( CurOp *k = ( *j )->curop(); !found && k; k = k->parent() ) {
-                    if ( k->opNum() == i ) {
-                        k->kill();
-                        for( CurOp *l = ( *j )->curop(); l != k; l = l->parent() ) {
-                            l->kill();
-                        }
-                        found = true;
-                    }
-                }
-            }
-        }
-        if ( found ) {
-            interruptJs( &i );
-        }
     }
 
     // used to establish a slave for 'w' write concern

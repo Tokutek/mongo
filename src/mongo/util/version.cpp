@@ -199,9 +199,14 @@ namespace mongo {
 
         if ( sizeof(int*) == 4 ) {
             log() << startupWarningsLog;
-            log() << "** NOTE: when using MongoDB 32 bit, you are limited to about 2 gigabytes of data" << startupWarningsLog;
-            log() << "**       see http://blog.mongodb.org/post/137788967/32-bit-limitations" << startupWarningsLog;
-            log() << "**       with --journal, the limit is lower" << startupWarningsLog;
+            log() << "** NOTE: This is a 32 bit MongoDB binary." << startupWarningsLog;
+            log() << "**       32 bit builds are limited to less than 2GB of data (or less with --journal)." << startupWarningsLog;
+#if 0
+            if( !cmdLine.dur ) { 
+                log() << "**       Note that journaling defaults to off for 32 bit and is currently off." << startupWarningsLog;
+            }
+#endif
+            log() << "**       See http://dochub.mongodb.org/core/32bit" << startupWarningsLog;
             warned = true;
         }
 
@@ -321,41 +326,6 @@ namespace mongo {
             log() << startupWarningsLog;
         }
     }
-
-    int versionCmp(StringData rhs, StringData lhs) {
-        if ( rhs == lhs )
-            return 0;
-
-        // handle "1.2.3-" and "1.2.3-pre"
-        if (rhs.size() < lhs.size()) {
-            if (strncmp(rhs.rawData(), lhs.rawData(), rhs.size()) == 0 && lhs[rhs.size()] == '-')
-                return +1;
-        }
-        else if (rhs.size() > lhs.size()) {
-            if (strncmp(rhs.rawData(), lhs.rawData(), lhs.size()) == 0 && rhs[lhs.size()] == '-')
-                return -1;
-        }
-
-        return LexNumCmp::cmp(rhs, lhs, false);
-    }
-
-    class VersionCmpTest : public StartupTest {
-    public:
-        void run() {
-            verify( versionCmp("1.2.3", "1.2.3") == 0 );
-            verify( versionCmp("1.2.3", "1.2.4") < 0 );
-            verify( versionCmp("1.2.3", "1.2.20") < 0 );
-            verify( versionCmp("1.2.3", "1.20.3") < 0 );
-            verify( versionCmp("2.2.3", "10.2.3") < 0 );
-            verify( versionCmp("1.2.3", "1.2.3-") > 0 );
-            verify( versionCmp("1.2.3", "1.2.3-pre") > 0 );
-            verify( versionCmp("1.2.3", "1.2.4-") < 0 );
-            verify( versionCmp("1.2.3-", "1.2.3") < 0 );
-            verify( versionCmp("1.2.3-pre", "1.2.3") < 0 );
-
-            LOG(1) << "versionCmpTest passed" << endl;
-        }
-    } versionCmpTest;
 
     class VersionArrayTest : public StartupTest {
     public:

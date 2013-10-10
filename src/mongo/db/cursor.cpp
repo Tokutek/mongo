@@ -19,6 +19,7 @@
 
 #include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/namespace_details.h"
 
 namespace mongo {
