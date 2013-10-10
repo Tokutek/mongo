@@ -29,7 +29,6 @@
 namespace mongo {
 
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
-        Client::ReadContext ctx(ns);
         NamespaceDetails *d = nsdetails( ns );
         if ( !d ) {
             err = "ns missing";
@@ -57,7 +56,6 @@ namespace mongo {
         cc().setOpSettings(settings);
 
         Lock::assertAtLeastReadLocked(ns);
-        Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         try {
             for (shared_ptr<Cursor> cursor =
                          getOptimizedCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
@@ -78,7 +76,6 @@ namespace mongo {
                     }
                 }
             }
-            transaction.commit();
             return count;
         }
         catch ( const DBException &e ) {
@@ -91,9 +88,7 @@ namespace mongo {
             errCode = 0;
             count = -2;
         }
-        if ( count != -2 ) { // keeping the magical -2 return value for legacy reasons...
-            transaction.commit();
-        } else {
+        if ( count == -2 ) {
             // Historically we have returned zero in many count assertion cases - see SERVER-2291.
             log() << "Count with ns: " << ns << " and query: " << query
                   << " failed with exception: " << err << " code: " << errCode

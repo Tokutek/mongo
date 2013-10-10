@@ -1014,12 +1014,16 @@ namespace mongo {
     unsigned long long DBDirectClient::count(const string &ns, const BSONObj& query, int options, int limit, int skip ) {
         string errmsg;
         int errCode;
+
+        Client::ReadContext ctx(ns);
+        Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         long long res = runCount( ns.c_str() , _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
         if ( res == -1 ) {
             // namespace doesn't exist
             return 0;
         }
         massert( errCode , str::stream() << "count failed in DBDirectClient: " << errmsg , res >= 0 );
+        transaction.commit();
         return (unsigned long long )res;
     }
 
