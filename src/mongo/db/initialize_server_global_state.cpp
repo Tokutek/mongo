@@ -174,7 +174,9 @@ namespace mongo {
         if (serverGlobalParams.logWithSyslog) {
             StringBuilder sb;
             sb << serverGlobalParams.binaryName << "." << serverGlobalParams.port;
-            openlog(strdup(sb.str().c_str()), LOG_PID | LOG_CONS, LOG_USER);
+            openlog(strdup(sb.str().c_str()),
+                    LOG_PID | LOG_CONS,
+                    serverGlobalParams.syslogFacility);
             LogManager* manager = logger::globalLogManager();
             manager->getGlobalDomain()->clearAppenders();
             manager->getGlobalDomain()->attachAppender(

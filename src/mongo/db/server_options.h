@@ -75,6 +75,7 @@ namespace mongo {
         std::string logpath;   // Path to log file, if logging to a file; otherwise, empty.
         bool logAppend;        // True if logging to a file in append mode.
         bool logWithSyslog;    // True if logging to syslog; must not be set if logpath is set.
+        int syslogFacility;    // Facility used when appending messages to the syslog.
 
         bool isHttpInterfaceEnabled; // True if the dbwebserver should be enabled.
 
