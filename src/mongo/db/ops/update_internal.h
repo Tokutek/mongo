@@ -51,6 +51,8 @@ namespace mongo {
         boost::shared_ptr<Matcher> matcher;
         bool matcherOnPrimitive;
 
+        Mod() : matcherOnPrimitive(false) { }
+
         void init( Op o , BSONElement& e ) {
             op = o;
             elt = e;
