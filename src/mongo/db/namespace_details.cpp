@@ -1589,7 +1589,7 @@ namespace mongo {
             BSONElement e = options.getField("size");
             if (e.isNumber()) {
                 long long size = e.numberLong();
-                uassert(10083, "create collection invalid size spec", size > 0);
+                uassert(10083, "create collection invalid size spec", size >= 0);
             }
         }
 
