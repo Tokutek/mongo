@@ -526,7 +526,7 @@ namespace mongo {
                             currCount++;
 
                             // we want ~half-full chunks
-                            if (2 * currSize >= maxChunkSize && !forceMedianSplit) {
+                            if (2 * currSize > maxChunkSize && !forceMedianSplit) {
                                 BSONObj currKey = c->prettyKey(c->currKey()).extractFields(keyPattern);
                                 // Do not use this split key if it is the same used in the previous split point.
                                 if (currKey.woCompare(splitKeys.back()) == 0) {
@@ -564,6 +564,7 @@ namespace mongo {
 
                         forceMedianSplit = false;
                         maxChunkSize = currSize;
+                        currSize = 0;
                         currCount = 0;
                         LOG(0) << "splitVector doing another cycle because of force, maxChunkSize now: " << maxChunkSize << endl;
 
