@@ -67,10 +67,15 @@ assert.eq( 6 , db.foo.find().sort( { name : 1 } ).count() , "basic count after s
 // part 4
 s.adminCommand( { movechunk : "test.foo" , find : { name : "eliot" } , to : secondary.getMongo().name , _waitForDelete : true } );
 
-assert.eq( 3 , primary.foo.find().toArray().length , "primary count" );
-assert.eq( 3 , secondary.foo.find().toArray().length , "secondary count" );
-assert.eq( 3 , primary.foo.find().sort( { name : 1 } ).toArray().length , "primary count sorted" );
-assert.eq( 3 , secondary.foo.find().sort( { name : 1 } ).toArray().length , "secondary count sorted" );
+var assertClose = function(expected, actual, msg) {
+    assert.lte(expected-1, actual, msg);
+    assert.gte(expected+1, actual, msg);
+}
+
+assertClose( 3 , primary.foo.find().toArray().length , "primary count" );
+assertClose( 3 , secondary.foo.find().toArray().length , "secondary count" );
+assertClose( 3 , primary.foo.find().sort( { name : 1 } ).toArray().length , "primary count sorted" );
+assertClose( 3 , secondary.foo.find().sort( { name : 1 } ).toArray().length , "secondary count sorted" );
 
 // part 5
 // Some redundant tests, but better safe than sorry. These are fast tests, anyway.
