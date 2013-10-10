@@ -1332,13 +1332,19 @@ namespace mongo {
                 continue;
             }
 
-            if (!isPK) {
+            // We only need to generate keys etc for secondary indexes when:
+            // - The keys may have changed, which is possible if the keys unaffected
+            //   hint was not given.
+            // - The index is clustering. It doesn't matter if keys have changed because
+            //   we need to update the clustering document.
+            const bool keysMayHaveChanged = !(flags & NamespaceDetails::KEYS_UNAFFECTED_HINT);
+            if (!isPK && (keysMayHaveChanged || idx.clustering())) {
                 BSONObjSet oldIdxKeys;
                 BSONObjSet newIdxKeys;
                 idx.getKeysFromObject(oldObj, oldIdxKeys);
                 idx.getKeysFromObject(newObj, newIdxKeys);
-                if (idx.unique() && doUniqueChecks) {
-                    // Only perform the unique check if the key actually changed.
+                if (idx.unique() && doUniqueChecks && keysMayHaveChanged) {
+                    // Only perform the unique check for those keys that actually changed.
                     for (BSONObjSet::iterator o = newIdxKeys.begin(); o != newIdxKeys.end(); ++o) {
                         const BSONObj &k = *o;
                         if (!orderedSetContains(oldIdxKeys, k)) {
