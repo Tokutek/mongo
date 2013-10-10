@@ -166,7 +166,7 @@ namespace mongo {
     template<typename Value>
     PartitionedCounter<Value>& PartitionedCounter<Value>::dec(Value x) {
         if (!std::numeric_limits<Value>::is_signed) {
-            massert(17019, "cannot decrement partitioned counter below zero", ts()._sum > x);
+            massert(17020, "cannot decrement partitioned counter below zero", ts()._sum > x);
         }
         ts()._sum -= x;
         return *this;
