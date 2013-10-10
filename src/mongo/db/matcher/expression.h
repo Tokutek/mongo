@@ -59,7 +59,10 @@ namespace mongo {
             TYPE_OPERATOR, GEO, WHERE,
 
             // things that maybe shouldn't even be nodes
-            ATOMIC, ALWAYS_FALSE
+            ATOMIC, ALWAYS_FALSE,
+
+            // Things that we parse but cannot be answered without an index.
+            GEO_NEAR, TEXT,
         };
 
         MatchExpression( MatchType type );

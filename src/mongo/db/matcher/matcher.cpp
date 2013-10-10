@@ -318,6 +318,7 @@ namespace mongo {
 
         case MatchExpression::NOT:
         case MatchExpression::NOR:
+        case MatchExpression::TEXT:
             // maybe?
             return NULL;
 

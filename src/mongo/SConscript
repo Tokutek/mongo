@@ -34,12 +34,6 @@ tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
 
 env.SConscript(['base/SConscript',
                 'db/auth/SConscript',
-<<<<<<< HEAD
-=======
-                'db/exec/SConscript',
-                'db/fts/SConscript',
-                'db/ops/SConscript',
->>>>>>> b8f0ec5... SERVER-10026 fetch limit skip or
                 'db/SConscript',
                 'platform/SConscript',
                 's/SConscript',
@@ -164,6 +158,11 @@ env.StaticLibrary('expressions_geo',
                    'db/matcher/expression_parser_geo.cpp'],
                   LIBDEPS=['expressions','geoquery','geoparser'] )
 
+env.StaticLibrary('expressions_text',
+                  ['db/matcher/expression_text.cpp',
+                   'db/matcher/expression_parser_text.cpp'],
+                  LIBDEPS=['expressions','db/fts/base'] )
+
 env.StaticLibrary('expressions_where',
                   ['db/matcher/expression_where.cpp'],
                   LIBDEPS=['expressions'] )
@@ -179,6 +178,10 @@ env.CppUnitTest('expression_geo_test',
                 ['db/matcher/expression_geo_test.cpp',
                  'db/matcher/expression_parser_geo_test.cpp'],
                 LIBDEPS=['expressions_geo'] )
+
+env.CppUnitTest('expression_text_test',
+                ['db/matcher/expression_parser_text_test.cpp'],
+                LIBDEPS=['expressions_text'] )
 
 env.CppUnitTest('expression_parser_test',
                 ['db/matcher/expression_parser_test.cpp',
@@ -372,10 +375,7 @@ env.StaticLibrary("coredb", [
                            'expressions',
                            'expressions_geo',
                            'expressions_where',
-<<<<<<< HEAD
-=======
-                           'db/exec/working_set',
->>>>>>> b8f0ec5... SERVER-10026 fetch limit skip or
+                           'expressions_text',
                            '$BUILD_DIR/mongo/foundation'])
 
 coreServerFiles = [ "db/client_basic.cpp",
@@ -453,43 +453,10 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/repl/rs_sync.cpp",
                     "db/repl/rs_initialsync.cpp",
                     "db/repl/bgsync.cpp",
-<<<<<<< HEAD
                     "db/oplog.cpp",
                     "db/oplog_helpers.cpp",
                     "db/repl_block.cpp",
                     "db/indexcursor.cpp",
-=======
-                    "db/repl/master_slave.cpp",
-                    "db/repl/finding_start_cursor.cpp",
-                    "db/repl/sync.cpp",
-                    "db/repl/sync_source_feedback.cpp",
-                    "db/repl/optime.cpp",
-                    "db/repl/oplogreader.cpp",
-                    "db/repl/replication_server_status.cpp",
-                    "db/repl/repl_reads_ok.cpp",
-                    "db/repl/oplog.cpp",
-                    "db/prefetch.cpp",
-                    "db/repl/write_concern.cpp",
-                    "db/btreecursor.cpp",
-                    "db/index_legacy.cpp",
-                    "db/index_selection.cpp",
-                    "db/index/2d_access_method.cpp",
-                    "db/index/2d_index_cursor.cpp",
-                    "db/index/btree_access_method.cpp",
-                    "db/index/btree_based_builder.cpp",
-                    "db/index/btree_index_cursor.cpp",
-                    "db/index/btree_interface.cpp",
-                    "db/index/fts_access_method.cpp",
-                    "db/index/hash_access_method.cpp",
-                    "db/index/hash_index_cursor.cpp",
-                    "db/index/haystack_access_method.cpp",
-                    "db/index/s2_access_method.cpp",
-                    "db/index/s2_index_cursor.cpp",
-                    "db/index/s2_near_cursor.cpp",
-                    "db/index/s2_simple_cursor.cpp",
-                    "db/intervalbtreecursor.cpp",
-                    "db/btreeposition.cpp",
->>>>>>> b8f0ec5... SERVER-10026 fetch limit skip or
                     "db/cloner.cpp",
                     "db/indexer.cpp",
                     "db/namespace_details.cpp",
@@ -653,73 +620,13 @@ serverOnlyFiles += [ "s/d_logic.cpp",
 
 env.StaticLibrary("defaultversion", "s/default_version.cpp")
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-env.StaticLibrary("working_set", [ "db/exec/working_set.cpp", ],
-                  LIBDEPS = [ "bson",])
-env.CppUnitTest("working_set_test", [ "db/exec/working_set_test.cpp" ], LIBDEPS = ["working_set"])
-
-=======
-# Geo
->>>>>>> b8f0ec5... SERVER-10026 fetch limit skip or
-env.StaticLibrary("geometry", [ "db/geo/hash.cpp", "db/geo/shapes.cpp", ], LIBDEPS = [ "bson" ])
-env.StaticLibrary("geoparser", [ "db/geo/geoparser.cpp", ],
-                  LIBDEPS = [ "bson",
-                              "geometry",
-                              '$BUILD_DIR/third_party/s2/s2' ])
-env.StaticLibrary("geoquery", [ "db/geo/geoquery.cpp", ],
-                  LIBDEPS = [ "bson",
-                              "geometry",
-                              '$BUILD_DIR/third_party/s2/s2' ])
-
-env.CppUnitTest("hash_test", [ "db/geo/hash_test.cpp" ], LIBDEPS = ["geometry" ])
-env.CppUnitTest("geoparser_test", [ "db/geo/geoparser_test.cpp" ], LIBDEPS = ["geoparser"])
-
-env.StaticLibrary('range_deleter',
-                  [ 'db/range_deleter.cpp',
-                    'db/range_deleter_mock_env.cpp',
-                    'db/range_deleter_stats.cpp'
-                  ],
-                  LIBDEPS = [
-                      '$BUILD_DIR/mongo/s/base', # range_arithmetic.cpp
-                      'base/base',
-                      'bson',
-                      'synchronization'
-                  ])
-
-env.CppUnitTest('range_deleter_test',
-                [ 'db/range_deleter_test.cpp' ],
-                LIBDEPS = [ 'range_deleter', 'db/common' ]);
-
-env.CppUnitTest('range_deleter_stat_test',
-                [ 'db/range_deleter_stat_test.cpp' ],
-                LIBDEPS = [ 'range_deleter', 'db/common' ]);
-
-
->>>>>>> f45a246... SERVER-10026 interfaces, index scan stage, debug cmd, jstest
 env.StaticLibrary("serveronly", serverOnlyFiles,
                   LIBDEPS=["coreshard",
                            "db/auth/authmongod",
                            "db/common",
                            "dbcmdline",
                            "defaultversion",
-<<<<<<< HEAD
                            "index_set"])
-=======
-                           "geoparser",
-                           "geoquery",
-                           "index_set",
-                           'range_deleter',
-                           's/metadata',
-                           "working_set",
-<<<<<<< HEAD
-=======
-                           "writebatch",
-                           "db/exec/exec",
->>>>>>> b8f0ec5... SERVER-10026 fetch limit skip or
-                           '$BUILD_DIR/third_party/shim_snappy'])
->>>>>>> f45a246... SERVER-10026 interfaces, index scan stage, debug cmd, jstest
 
 
 # These files go into mongos and mongod only, not into the shell or any tools.
@@ -819,13 +726,7 @@ test = testEnv.Install(
                        "gridfs",
                        "notmongodormongos",
                        "s/upgrade",
-<<<<<<< HEAD
                        "mocklib"]))
-=======
-                       "mocklib",
-                       "db/exec/mock_stage",
-                       "$BUILD_DIR/mongo/db/auth/authmocks"]))
->>>>>>> b8f0ec5... SERVER-10026 fetch limit skip or
 
 if len(testEnv.subst('$PROGSUFFIX')):
     testEnv.Alias( "test", "#/${PROGPREFIX}test${PROGSUFFIX}" )
