@@ -1162,8 +1162,8 @@ namespace mongo {
                 continue;
             }
 
-            BSONObjSet idxKeys;
             if (!isPK) {
+                BSONObjSet idxKeys;
                 idx.getKeysFromObject(obj, idxKeys);
                 if (idx.unique() && doUniqueChecks) {
                     for (BSONObjSet::const_iterator o = idxKeys.begin(); o != idxKeys.end(); ++o) {
@@ -1172,6 +1172,14 @@ namespace mongo {
                 }
                 if (idxKeys.size() > 1) {
                     setIndexIsMultikey(i);
+                }
+                // Store the keys we just generated, so we won't do it twice in
+                // the generate keys callback. See storage::generate_keys()
+                DBT_ARRAY *array = &keyArrays[i];
+                storage::dbt_array_clear_and_resize(array, idxKeys.size());
+                for (BSONObjSet::const_iterator it = idxKeys.begin(); it != idxKeys.end(); it++) {
+                    const storage::Key sKey(*it, &pk);
+                    storage::dbt_array_push(array, sKey.buf(), sKey.size());
                 }
             }
         }
@@ -1215,10 +1223,29 @@ namespace mongo {
         DBT src_val = storage::dbt_make(obj.objdata(), obj.objsize());
 
         for (int i = 0; i < n; i++) {
+            const bool isPK = i == 0;
             const bool prelocked = flags & NamespaceDetails::NO_LOCKTREE;
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
             del_flags[i] = DB_DELETE_ANY | (prelocked ? DB_PRELOCKED_WRITE : 0);
+
+            if (!isPK) {
+                BSONObjSet idxKeys;
+                idx.getKeysFromObject(obj, idxKeys);
+
+                if (idxKeys.size() > 1) {
+                    verify(isMultikey(i));
+                }
+
+                // Store the keys we just generated, so we won't do it twice in
+                // the generate keys callback. See storage::generate_keys()
+                DBT_ARRAY *array = &keyArrays[i];
+                storage::dbt_array_clear_and_resize(array, idxKeys.size());
+                for (BSONObjSet::const_iterator it = idxKeys.begin(); it != idxKeys.end(); it++) {
+                    const storage::Key sKey(*it, &pk);
+                    storage::dbt_array_push(array, sKey.buf(), sKey.size());
+                }
+            }
         }
 
         DB_ENV *env = storage::env;
@@ -1316,6 +1343,21 @@ namespace mongo {
                 }
                 if (newIdxKeys.size() > 1) {
                     setIndexIsMultikey(i);
+                }
+
+                // Store the keys we just generated, so we won't do it twice in
+                // the generate keys callback. See storage::generate_keys()
+                DBT_ARRAY *array = &keyArrays[i];
+                storage::dbt_array_clear_and_resize(array, newIdxKeys.size());
+                for (BSONObjSet::const_iterator it = newIdxKeys.begin(); it != newIdxKeys.end(); it++) {
+                    const storage::Key sKey(*it, &pk);
+                    storage::dbt_array_push(array, sKey.buf(), sKey.size());
+                }
+                array = &keyArrays[i + n];
+                storage::dbt_array_clear_and_resize(array, oldIdxKeys.size());
+                for (BSONObjSet::const_iterator it = oldIdxKeys.begin(); it != oldIdxKeys.end(); it++) {
+                    const storage::Key sKey(*it, &pk);
+                    storage::dbt_array_push(array, sKey.buf(), sKey.size());
                 }
             }
         }
