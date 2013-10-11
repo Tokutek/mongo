@@ -41,21 +41,7 @@ namespace mongo {
         bool vetoLog( const CurOp& curop ) const;
         
         string report( const CurOp& curop ) const;
-
-        /**
-         * Appends stored data and information from curop to the builder.
-         *
-         * @param curop information about the current operation which will be
-         *     use to append data to the builder.
-         * @param builder the BSON builder to use for appending data. Data can
-         *     still be appended even if this method returns false.
-         * @param maxSize the maximum allowed combined size for the query object
-         *     and update object
-         *
-         * @return false if the sum of the sizes for the query object and update
-         *     object exceeded maxSize
-         */
-        bool append(const CurOp& curop, BSONObjBuilder& builder, size_t maxSize) const;
+        void append( const CurOp& curop, BSONObjBuilder& b ) const;
 
         // -------------------
         
@@ -169,7 +155,7 @@ namespace mongo {
         ~CurOp();
 
         bool haveQuery() const { return _query.have(); }
-        BSONObj query() const { return _query.get();  }
+        BSONObj query() { return _query.get();  }
         void appendQuery( BSONObjBuilder& b , const StringData& name ) const { _query.append( b , name ); }
         
         void ensureStarted();
@@ -219,7 +205,10 @@ namespace mongo {
         Client * getClient() const { return _client; }
         BSONObj info();
         string getRemoteString( bool includePort = true ) { return _remote.toString(includePort); }
-        ProgressMeter& setMessage( const char * msg , unsigned long long progressMeterTotal = 0 , int secondsBetween = 3 );
+        ProgressMeter& setMessage(const char * msg,
+                                  const std::string &name = "Progress",
+                                  unsigned long long progressMeterTotal = 0,
+                                  int secondsBetween = 3);
         string getMessage() const { return _message.toString(); }
         ProgressMeter& getProgressMeter() { return _progressMeter; }
         CurOp *parent() const { return _wrapped; }
@@ -263,74 +252,5 @@ namespace mongo {
         // so this should be 30000 in that case
         long long _expectedLatencyMs; 
                                      
-
     };
-
-    /* _globalKill: we are shutting down
-       otherwise kill attribute set on specified CurOp
-       this class does not handle races between interruptJs and the checkForInterrupt functions - those must be
-       handled by the client of this class
-    */
-    extern class KillCurrentOp {
-    public:
-        void killAll();
-        void kill(AtomicUInt i);
-
-        /** @return true if global interrupt and should terminate the operation */
-        bool globalInterruptCheck() const { return _globalKill; }
-
-        void checkForInterrupt();
-        void checkForInterrupt( Client &c );
-
-        /** @return "" if not interrupted.  otherwise, you should stop. */
-        const char *checkForInterruptNoAssert();
-        const char *checkForInterruptNoAssert(Client &c);
-
-        // increments _killForTransition, thereby making
-        // checkForInterrupt uassert and kill operations
-        void killForTransition() {
-            boost::unique_lock<boost::mutex> lock(_transitionLock);
-            dassert(_killForTransition >= 0);
-            _killForTransition++;
-        }
-        // decrements _killForTransition, thereby reallowing
-        // operations to complete successfully
-        void transitionComplete() {
-            boost::unique_lock<boost::mutex> lock(_transitionLock);
-            dassert(_killForTransition >= 0);
-            _killForTransition--;
-        }
-
-    private:
-        void interruptJs( AtomicUInt *op );
-        void _checkForInterrupt( Client &c );
-        volatile bool _globalKill;
-        // number of threads that want operations killed
-        // because there will be a state transition
-        volatile uint32_t _killForTransition;
-        // protects _killForTransition variable
-        boost::mutex _transitionLock;
-    } killCurrentOp;
-
-    class NoteStateTransition {
-        bool _noted;
-        public:
-            NoteStateTransition() {
-                killCurrentOp.killForTransition();
-                _noted = true;
-            }
-            ~NoteStateTransition() {
-                if (_noted) {
-                    killCurrentOp.transitionComplete();
-                }
-                _noted = false;
-            }
-            void noteTransitionComplete() {
-                verify(_noted);
-                killCurrentOp.transitionComplete();
-                _noted = false;
-            }
-            
-    };
-
 }

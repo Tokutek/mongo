@@ -938,6 +938,17 @@ namespace NamespaceTests {
         protected:
             BSONObj key() const { return BSON( "1" << 1 ); }
         };
+
+        /** A missing field is represented as null in an index. */
+        class IndexMissingField : public Base {
+        public:
+            void run() {
+                create();
+                ASSERT_EQUALS( jstNULL, idx().missingField().type() );
+            }
+        protected:
+            BSONObj key() const { return BSON( "a" << 1 ); }
+        };
         
     } // namespace IndexDetailsTests
 
@@ -1119,6 +1130,7 @@ namespace NamespaceTests {
             add< IndexDetailsTests::CompoundMissing >();
             add< IndexDetailsTests::Suitability >();
             add< IndexDetailsTests::NumericFieldSuitability >();
+            add< IndexDetailsTests::IndexMissingField >();
             add< NamespaceDetailsTests::SetIndexIsMultikey >();
             add< NamespaceDetailsTests::ClearQueryCache >();
         }

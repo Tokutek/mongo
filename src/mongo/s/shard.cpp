@@ -31,10 +31,12 @@
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/s/config.h"
 #include "mongo/s/client_info.h"
+#include "mongo/s/config.h"
 #include "mongo/s/request.h"
 #include "mongo/s/shard.h"
+#include "mongo/s/type_shard.h"
+#include "mongo/s/version_manager.h"
 
 namespace mongo {
 
@@ -47,8 +49,8 @@ namespace mongo {
             {
                 scoped_ptr<ScopedDbConnection> conn(
                         ScopedDbConnection::getInternalScopedDbConnection(
-                                configServer.getPrimary().getConnString() ) );
-                auto_ptr<DBClientCursor> c = conn->get()->query( ShardNS::shard , Query() );
+                                configServer.getPrimary().getConnString(), 30));
+                auto_ptr<DBClientCursor> c = conn->get()->query(ShardType::ConfigNS , Query());
                 massert( 13632 , "couldn't get updated shard list from config server" , c.get() );
                 while ( c->more() ) {
                     all.push_back( c->next().getOwned() );
@@ -76,25 +78,25 @@ namespace mongo {
             
             for ( list<BSONObj>::iterator i=all.begin(); i!=all.end(); ++i ) {
                 BSONObj o = *i;
-                string name = o["_id"].String();
-                string host = o["host"].String();
+                string name = o[ ShardType::name() ].String();
+                string host = o[ ShardType::host() ].String();
 
                 long long maxSize = 0;
-                BSONElement maxSizeElem = o[ ShardFields::maxSize.name() ];
+                BSONElement maxSizeElem = o[ ShardType::maxSize.name() ];
                 if ( ! maxSizeElem.eoo() ) {
                     maxSize = maxSizeElem.numberLong();
                 }
 
                 bool isDraining = false;
-                BSONElement isDrainingElem = o[ ShardFields::draining.name() ];
+                BSONElement isDrainingElem = o[ ShardType::draining.name() ];
                 if ( ! isDrainingElem.eoo() ) {
                     isDraining = isDrainingElem.Bool();
                 }
 
                 ShardPtr s( new Shard( name , host , maxSize , isDraining ) );
 
-                if ( o["tags"].type() == Array ) {
-                    vector<BSONElement> v = o["tags"].Array();
+                if ( o[ ShardType::tags() ].type() == Array ) {
+                    vector<BSONElement> v = o[ ShardType::tags() ].Array();
                     for ( unsigned j=0; j<v.size(); j++ ) {
                         s->addTag( v[j].String() );
                     }
@@ -305,6 +307,13 @@ namespace mongo {
 
         if ( _cs.type() == ConnectionString::SET ) {
             ReplicaSetMonitorPtr rs = ReplicaSetMonitor::get( _cs.getSetName(), true );
+
+            if (!rs) {
+                // Possibly still yet to be initialized. See SERVER-8194.
+                warning() << "Monitor not found for a known shard: " << _cs.getSetName() << endl;
+                return false;
+            }
+
             return rs->contains( node );
         }
 

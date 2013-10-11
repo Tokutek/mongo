@@ -50,6 +50,21 @@
 #include "mongo/util/paths.h"
 #include "mongo/util/timer.h"
 
+#include "mongo/db/btree.h"
+#include "mongo/db/cmdline.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/curop-inl.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/kill_current_op.h"
+#include "mongo/db/namespace-inl.h"
+#include "mongo/db/pdfile.h"
+#include "mongo/scripting/engine.h"
+#include "mongo/util/alignedbuilder.h"
+#include "mongo/util/background.h"
+#include "mongo/util/logfile.h"
+#include "mongo/util/paths.h"
+#include "mongo/util/timer.h"
+
 namespace mongo {
 
     class CleanCmd : public Command {
@@ -73,7 +88,7 @@ namespace mongo {
             if ( !cmdLine.quiet )
                 tlog() << "CMD: clean " << dropns << endl;
 
-            NamespaceDetails *d = nsdetails(dropns.c_str());
+            NamespaceDetails *d = nsdetails(dropns);
 
             if ( ! d ) {
                 errmsg = "ns not found";
@@ -198,7 +213,7 @@ namespace mongo {
 
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             string ns = dbname + "." + cmdObj.firstElement().valuestrsafe();
-            NamespaceDetails * d = nsdetails( ns.c_str() );
+            NamespaceDetails * d = nsdetails( ns );
             if ( !cmdLine.quiet )
                 tlog() << "CMD: validate " << ns << endl;
 

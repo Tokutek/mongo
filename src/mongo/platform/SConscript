@@ -2,7 +2,12 @@
 
 Import("env")
 
-env.Library( "platform", "random.cpp" )
+env.Library('platform', [
+        'backtrace.cpp',
+        'posix_fadvise.cpp',
+        'random.cpp',
+        'strcasestr.cpp',
+        ])
 
 env.CppUnitTest('atomic_word_test', 'atomic_word_test.cpp')
 env.CppUnitTest('bits_test', 'bits_test.cpp')

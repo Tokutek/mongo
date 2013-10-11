@@ -144,10 +144,12 @@ namespace mongo {
     }
 
     Client::AlternateTransactionStack::AlternateTransactionStack() {
+        _savedRootTransactionId = cc().rootTransactionId();
         cc().swapTransactionStack(_saved);
     }
     Client::AlternateTransactionStack::~AlternateTransactionStack() {
         cc().swapTransactionStack(_saved);
+        cc()._rootTransactionId = _savedRootTransactionId;
     }
 
 } // namespace mongo

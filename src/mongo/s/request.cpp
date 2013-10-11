@@ -102,11 +102,6 @@ namespace mongo {
         int op = _m.operation();
         verify( op > dbMsg );
 
-        if ( op == dbKillCursors ) {
-            cursorCache.gotKillCursors( _m );
-            return;
-        }
-
         int msgId = (int)(_m.header()->id);
 
         Timer t;
@@ -122,7 +117,10 @@ namespace mongo {
         _d.markSet();
 
         bool iscmd = false;
-        if ( op == dbQuery ) {
+        if ( op == dbKillCursors ) {
+            cursorCache.gotKillCursors( _m );
+        }
+        else if ( op == dbQuery ) {
             iscmd = isCommand();
             if (iscmd) {
                 SINGLE->queryOp(*this);

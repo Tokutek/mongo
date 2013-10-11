@@ -181,14 +181,7 @@ namespace mongo {
         const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
 
         if ( isOperatorUpdate ) {
-            if ( d->indexBuildInProgress() ) {
-                set<string> bgKeys;
-                d->inProgIdx().keyPattern().getFieldNames(bgKeys);
-                mods.reset( new ModSet(updateobj, d->indexKeys(), &bgKeys) );
-            }
-            else {
-                mods.reset( new ModSet(updateobj, d->indexKeys()) );
-            }
+            mods.reset( new ModSet(updateobj, d->indexKeys()) );
         }
 
         int idIdxNo = -1;
@@ -233,10 +226,6 @@ namespace mongo {
                 debug.nscanned++;
 
                 if ( mods.get() && mods->hasDynamicArray() ) {
-                    // The Cursor must have a Matcher to record an elemMatchKey.  But currently
-                    // a modifier on a dynamic array field may be applied even if there is no
-                    // elemMatchKey, so a matcher cannot be required.
-                    //verify( c->matcher() );
                     details.requestElemMatchKey();
                 }
 

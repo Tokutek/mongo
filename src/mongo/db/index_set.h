@@ -1,7 +1,7 @@
-// @file shard_version.h
+// index_set.h
 
 /**
-*    Copyright (C) 2010 10gen Inc.
+*    Copyright (C) 2013 10gen Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -18,15 +18,31 @@
 
 #pragma once
 
+#include <set>
+
+#include "mongo/base/string_data.h"
+
 namespace mongo {
 
-    /*
-     * Install chunk shard version callbacks in shardconnection code. This activates
-     * the chunk shard version control that mongos needs.
-     *
-     * MUST be called before accepting any connections.
+    /**
+     * a.$ -> a
+     * @return true if out is set and we made a change
      */
-    void installChunkShardVersioning();
+    bool getCanonicalIndexField( const StringData& fullName, std::string* out );
 
+    class IndexPathSet {
+    public:
+        void addPath( const StringData& path );
 
-}  // namespace mongo
+        void clear();
+
+        bool mightBeIndexed( const StringData& path ) const;
+
+    private:
+
+        bool _startsWith( const StringData& a, const StringData& b ) const;
+
+        std::set<std::string> _canonical;
+    };
+
+} // namespace mongo

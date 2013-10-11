@@ -1,5 +1,3 @@
-// s/commands_admin.cpp
-
 /**
 *    Copyright (C) 2008 10gen Inc.
 *    Copyright (C) 2013 Tokutek Inc.
@@ -17,15 +15,6 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* TODO
-   _ concurrency control.
-   _ limit() works right?
-   _ KillCursors
-
-   later
-   _ secondary indexes
-*/
-
 #include "pch.h"
 
 #include "mongo/client/connpool.h"
@@ -40,6 +29,17 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/stats/counters.h"
 
+#include "mongo/s/chunk.h"
+#include "mongo/s/client_info.h"
+#include "mongo/s/config.h"
+#include "mongo/s/field_parser.h"
+#include "mongo/s/grid.h"
+#include "mongo/s/stats.h"
+#include "mongo/s/strategy.h"
+#include "mongo/s/type_chunk.h"
+#include "mongo/s/type_database.h"
+#include "mongo/s/type_shard.h"
+#include "mongo/s/writeback_listener.h"
 #include "mongo/util/net/listen.h"
 #include "mongo/util/net/message.h"
 #include "mongo/util/processinfo.h"
@@ -47,14 +47,6 @@
 #include "mongo/util/stringutils.h"
 #include "mongo/util/timer.h"
 #include "mongo/util/version.h"
-
-#include "config.h"
-#include "chunk.h"
-#include "grid.h"
-#include "strategy.h"
-#include "stats.h"
-#include "writeback_listener.h"
-#include "client_info.h"
 
 namespace mongo {
 
@@ -951,21 +943,81 @@ namespace mongo {
                     }
                 }
 
-                BSONObj find = cmdObj.getObjectField( "find" );
-                if ( find.isEmpty() ) {
-                    find = cmdObj.getObjectField( "middle" );
+                const BSONField<BSONObj> findField("find", BSONObj());
+                const BSONField<BSONArray> boundsField("bounds", BSONArray());
+                const BSONField<BSONObj> middleField("middle", BSONObj());
 
-                    if ( find.isEmpty() ) {
-                        errmsg = "need to specify find or middle";
+                BSONObj find;
+                if (FieldParser::extract(cmdObj, findField, &find, &errmsg) ==
+                        FieldParser::FIELD_INVALID) {
+                    return false;
+                }
+
+                BSONArray bounds;
+                if (FieldParser::extract(cmdObj, boundsField, &bounds, &errmsg) ==
+                        FieldParser::FIELD_INVALID) {
+                    return false;
+                }
+
+                if (!bounds.isEmpty()) {
+                    if (!bounds.hasField("0")) {
+                        errmsg = "lower bound not specified";
+                        return false;
+                    }
+
+                    if (!bounds.hasField("1")) {
+                        errmsg = "upper bound not specified";
                         return false;
                     }
                 }
 
-                ChunkManagerPtr info = config->getChunkManager( ns );
-                ChunkPtr chunk = info->findChunkForDoc( find );
-                BSONObj middle = cmdObj.getObjectField( "middle" );
+                if (!find.isEmpty() && !bounds.isEmpty()) {
+                    errmsg = "cannot specify bounds and find at the same time";
+                    return false;
+                }
 
-                verify( chunk.get() );
+                BSONObj middle;
+                if (FieldParser::extract(cmdObj, middleField, &middle, &errmsg) ==
+                        FieldParser::FIELD_INVALID) {
+                    return false;
+                }
+
+                if (find.isEmpty() && bounds.isEmpty() && middle.isEmpty()) {
+                    errmsg = "need to specify find/bounds or middle";
+                    return false;
+                }
+
+                if (!find.isEmpty() && !middle.isEmpty()) {
+                    errmsg = "cannot specify find and middle together";
+                    return false;
+                }
+
+                if (!bounds.isEmpty() && !middle.isEmpty()) {
+                    errmsg = "cannot specify bounds and middle together";
+                    return false;
+                }
+
+                ChunkManagerPtr info = config->getChunkManager( ns );
+                ChunkPtr chunk;
+
+                if (!find.isEmpty()) {
+                    chunk = info->findChunkForDoc(find);
+                }
+                else if (!bounds.isEmpty()) {
+                    chunk = info->findIntersectingChunk(bounds[0].Obj());
+                    verify(chunk.get());
+
+                    if (chunk->getMin() != bounds[0].Obj() ||
+                        chunk->getMax() != bounds[1].Obj()) {
+                        errmsg = "no chunk found from the given upper and lower bounds";
+                        return false;
+                    }
+                }
+                else { // middle
+                    chunk = info->findIntersectingChunk(middle);
+                }
+
+                verify(chunk.get());
                 log() << "splitting: " << ns << "  shard: " << chunk << endl;
 
                 BSONObj res;
@@ -1005,7 +1057,11 @@ namespace mongo {
         public:
             MoveChunkCmd() : GridAdminCmd( "moveChunk" ) {}
             virtual void help( stringstream& help ) const {
-                help << "{ movechunk : 'test.foo' , find : { num : 1 } , to : 'localhost:30001' }";
+                help << "Example: move chunk that contains the doc {num : 7} to shard001\n"
+                     << "  { movechunk : 'test.foo' , find : { num : 7 } , to : 'shard0001' }\n"
+                     << "Example: move chunk with lower bound 0 and upper bound 10 to shard001\n"
+                     << "  { movechunk : 'test.foo' , bounds : [ { num : 0 } , { num : 10 } ] "
+                     << " , to : 'shard001' }\n";
             }
             virtual void addRequiredPrivileges(const std::string& dbname,
                                                const BSONObj& cmdObj,
@@ -1037,12 +1093,6 @@ namespace mongo {
                     }
                 }
 
-                BSONObj find = cmdObj.getObjectField( "find" );
-                if ( find.isEmpty() ) {
-                    errmsg = "need to specify find.  see help";
-                    return false;
-                }
-
                 string toString = cmdObj["to"].valuestrsafe();
                 if ( ! toString.size()  ) {
                     errmsg = "you have to specify where you want to move the chunk";
@@ -1051,16 +1101,34 @@ namespace mongo {
 
                 Shard to = Shard::make( toString );
 
-                tlog() << "CMD: movechunk: " << cmdObj << endl;
+                BSONObj find = cmdObj.getObjectField( "find" );
+                BSONObj bounds = cmdObj.getObjectField( "bounds" );
+
+                // check that only one of the two chunk specification methods is used
+                if ( find.isEmpty() == bounds.isEmpty() ) {
+                    errmsg = "need to specify either a find query, or both lower and upper bounds.";
+                    return false;
+                }
 
                 ChunkManagerPtr info = config->getChunkManager( ns );
-                ChunkPtr c = info->findChunkForDoc( find );
+                ChunkPtr c = find.isEmpty() ?
+                                info->findIntersectingChunk( bounds[0].Obj() ) :
+                                info->findChunkForDoc( find );
+
+                if ( ! bounds.isEmpty() && ( c->getMin() != bounds[0].Obj() ||
+                                             c->getMax() != bounds[1].Obj() ) ) {
+                    errmsg = "no chunk found with those upper and lower bounds";
+                    return false;
+                }
+
                 const Shard& from = c->getShard();
 
                 if ( from == to ) {
                     errmsg = "that chunk is already on that shard";
                     return false;
                 }
+
+                tlog() << "CMD: movechunk: " << cmdObj << endl;
 
                 BSONObj res;
                 if ( ! c->moveAndCommit(to, res) ) {
@@ -1094,11 +1162,11 @@ namespace mongo {
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection( configServer.getPrimary()
-                                                                           .getConnString() ) );
+                        ScopedDbConnection::getInternalScopedDbConnection(
+                                configServer.getPrimary().getConnString(), 30));
 
                 vector<BSONObj> all;
-                auto_ptr<DBClientCursor> cursor = conn->get()->query( "config.shards" , BSONObj() );
+                auto_ptr<DBClientCursor> cursor = conn->get()->query( ShardType::ConfigNS , BSONObj() );
                 while ( cursor->more() ) {
                     BSONObj o = cursor->next();
                     all.push_back( o );
@@ -1162,8 +1230,8 @@ namespace mongo {
 
                 // maxSize is the space usage cap in a shard in MBs
                 long long maxSize = 0;
-                if ( cmdObj[ ShardFields::maxSize.name() ].isNumber() ) {
-                    maxSize = cmdObj[ ShardFields::maxSize.name() ].numberLong();
+                if ( cmdObj[ ShardType::maxSize() ].isNumber() ) {
+                    maxSize = cmdObj[ ShardType::maxSize() ].numberLong();
                 }
 
                 if ( ! grid.addShard( &name , servers , maxSize , errmsg ) ) {
@@ -1202,26 +1270,29 @@ namespace mongo {
                 }
 
                 scoped_ptr<ScopedDbConnection> connPtr(
-                        ScopedDbConnection::getInternalScopedDbConnection( configServer.getPrimary()
-                                                                           .getConnString() ) );
+                        ScopedDbConnection::getInternalScopedDbConnection(
+                                configServer.getPrimary().getConnString(), 30));
                 ScopedDbConnection& conn = *connPtr;
 
-                if (conn->count("config.shards", BSON("_id" << NE << s.getName() << ShardFields::draining(true)))){
+                if (conn->count(ShardType::ConfigNS,
+                                BSON(ShardType::name() << NE << s.getName() <<
+                                     ShardType::draining(true)))){
                     conn.done();
                     errmsg = "Can't have more than one draining shard at a time";
                     return false;
                 }
 
-                if (conn->count("config.shards", BSON("_id" << NE << s.getName())) == 0){
+                if (conn->count(ShardType::ConfigNS, BSON(ShardType::name() << NE << s.getName())) == 0){
                     conn.done();
                     errmsg = "Can't remove last shard";
                     return false;
                 }
 
-                BSONObj primaryDoc = BSON( "_id" << NE << "local" << "primary" << s.getName() );
+                BSONObj primaryDoc = BSON(DatabaseType::name.ne("local") <<
+                                          DatabaseType::primary(s.getName()));
                 BSONObj dbInfo; // appended at end of result on success
                 {
-                    boost::scoped_ptr<DBClientCursor> cursor (conn->query("config.databases", primaryDoc));
+                    boost::scoped_ptr<DBClientCursor> cursor (conn->query(DatabaseType::ConfigNS, primaryDoc));
                     if (cursor->more()) { // skip block and allocations if empty
                         BSONObjBuilder dbInfoBuilder;
                         dbInfoBuilder.append("note", "you need to drop or movePrimary these databases");
@@ -1229,7 +1300,7 @@ namespace mongo {
 
                         while (cursor->more()){
                             BSONObj db = cursor->nextSafe();
-                            dbs.append(db["_id"]);
+                            dbs.append(db[DatabaseType::name()]);
                         }
                         dbs.doneFast();
 
@@ -1238,16 +1309,16 @@ namespace mongo {
                 }
 
                 // If the server is not yet draining chunks, put it in draining mode.
-                BSONObj searchDoc = BSON( "_id" << s.getName() );
-                BSONObj drainingDoc = BSON( "_id" << s.getName() << ShardFields::draining(true) );
-                BSONObj shardDoc = conn->findOne( "config.shards", drainingDoc );
+                BSONObj searchDoc = BSON(ShardType::name() << s.getName());
+                BSONObj drainingDoc = BSON(ShardType::name() << s.getName() << ShardType::draining(true));
+                BSONObj shardDoc = conn->findOne(ShardType::ConfigNS, drainingDoc);
                 if ( shardDoc.isEmpty() ) {
 
                     // TODO prevent move chunks to this shard.
 
                     log() << "going to start draining shard: " << s.getName() << endl;
-                    BSONObj newStatus = BSON( "$set" << BSON( ShardFields::draining(true) ) );
-                    conn->update( "config.shards" , searchDoc , newStatus, false /* do no upsert */);
+                    BSONObj newStatus = BSON( "$set" << BSON( ShardType::draining(true) ) );
+                    conn->update( ShardType::ConfigNS , searchDoc , newStatus, false /* do no upsert */);
 
                     errmsg = conn->getLastError();
                     if ( errmsg.size() ) {
@@ -1255,11 +1326,12 @@ namespace mongo {
                         return false;
                     }
 
-                    BSONObj primaryLocalDoc = BSON("_id" << "local" <<  "primary" << s.getName() );
+                    BSONObj primaryLocalDoc = BSON(DatabaseType::name("local") <<
+                                                   DatabaseType::primary(s.getName()));
                     PRINT(primaryLocalDoc);
-                    if (conn->count("config.databases", primaryLocalDoc)) {
+                    if (conn->count(DatabaseType::ConfigNS, primaryLocalDoc)) {
                         log() << "This shard is listed as primary of local db. Removing entry." << endl;
-                        conn->remove("config.databases", BSON("_id" << "local"));
+                        conn->remove(DatabaseType::ConfigNS, BSON(DatabaseType::name("local")));
                         errmsg = conn->getLastError();
                         if ( errmsg.size() ) {
                             log() << "error removing local db: " << errmsg << endl;
@@ -1279,12 +1351,12 @@ namespace mongo {
 
                 // If the server has been completely drained, remove it from the ConfigDB.
                 // Check not only for chunks but also databases.
-                BSONObj shardIDDoc = BSON( "shard" << shardDoc[ "_id" ].str() );
-                long long chunkCount = conn->count( "config.chunks" , shardIDDoc );
-                long long dbCount = conn->count( "config.databases" , primaryDoc );
+                BSONObj shardIDDoc = BSON(ChunkType::shard(shardDoc[ShardType::name()].str()));
+                long long chunkCount = conn->count(ChunkType::ConfigNS, shardIDDoc);
+                long long dbCount = conn->count( DatabaseType::ConfigNS , primaryDoc );
                 if ( ( chunkCount == 0 ) && ( dbCount == 0 ) ) {
                     log() << "going to remove shard: " << s.getName() << endl;
-                    conn->remove( "config.shards" , searchDoc );
+                    conn->remove( ShardType::ConfigNS , searchDoc );
 
                     errmsg = conn->getLastError();
                     if ( errmsg.size() ) {
@@ -1292,7 +1364,7 @@ namespace mongo {
                         return false;
                     }
 
-                    string shardName = shardDoc[ "_id" ].str();
+                    string shardName = shardDoc[ ShardType::name() ].str();
                     Shard::removeShard( shardName );
                     shardConnectionPool.removeHost( shardName );
                     ReplicaSetMonitor::remove( shardName, true );
@@ -1525,8 +1597,8 @@ namespace mongo {
             
             { // get config db from the config servers (first one)
                 scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection( configServer.getPrimary()
-                                                                           .getConnString() ) );
+                        ScopedDbConnection::getInternalScopedDbConnection(
+                                configServer.getPrimary().getConnString(), 30));
                 BSONObj x;
                 if ( conn->get()->simpleCommand( "config" , &x , "dbstats" ) ){
                     BSONObjBuilder b;

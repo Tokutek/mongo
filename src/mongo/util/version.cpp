@@ -177,7 +177,7 @@ namespace mongo {
         result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
     }
 
-    Tee * startupWarningsLog = new RamLog("startupWarnings"); //intentionally leaked
+    Tee* const startupWarningsLog = new RamLog("startupWarnings"); //intentionally leaked
 
     //
     // system warnings
@@ -199,9 +199,14 @@ namespace mongo {
 
         if ( sizeof(int*) == 4 ) {
             log() << startupWarningsLog;
-            log() << "** NOTE: when using MongoDB 32 bit, you are limited to about 2 gigabytes of data" << startupWarningsLog;
-            log() << "**       see http://blog.mongodb.org/post/137788967/32-bit-limitations" << startupWarningsLog;
-            log() << "**       with --journal, the limit is lower" << startupWarningsLog;
+            log() << "** NOTE: This is a 32 bit MongoDB binary." << startupWarningsLog;
+            log() << "**       32 bit builds are limited to less than 2GB of data (or less with --journal)." << startupWarningsLog;
+#if 0
+            if( !cmdLine.dur ) { 
+                log() << "**       Note that journaling defaults to off for 32 bit and is currently off." << startupWarningsLog;
+            }
+#endif
+            log() << "**       See http://dochub.mongodb.org/core/32bit" << startupWarningsLog;
             warned = true;
         }
 
@@ -234,28 +239,26 @@ namespace mongo {
             // $ numactl --interleave=all cat /proc/self/numa_maps
             // 00400000 interleave:0-7 file=/bin/cat mapped=6 N4=6
 
-            File f;
-            f.open("/proc/self/numa_maps", /*read_only*/true);
-            if ( f.is_open() && ! f.bad() ) {
-                char line[100]; //we only need the first line
-                if (read(f.fd, line, sizeof(line)) < 0){
-                    warning() << "failed to read from /proc/self/numa_maps: " << errnoWithDescription() << startupWarningsLog;
+            std::ifstream f("/proc/self/numa_maps", std::ifstream::in);
+            if (f.is_open()) {
+                std::string line; //we only need the first line
+                std::getline(f, line);
+                if (f.fail()) {
+                    warning() << "failed to read from /proc/self/numa_maps: "
+                              << errnoWithDescription() << startupWarningsLog;
                     warned = true;
                 }
                 else {
-                    // just in case...
-                    line[98] = ' ';
-                    line[99] = '\0';
-                    
                     // skip over pointer
-                    const char* space = strchr(line, ' ');
-                    
-                    if ( ! space ) {
+                    std::string::size_type where = line.find(' ');
+                    if ( (where == std::string::npos) || (++where == line.size()) ) {
                         log() << startupWarningsLog;
-                        log() << "** WARNING: cannot parse numa_maps" << startupWarningsLog;
+                        log() << "** WARNING: cannot parse numa_maps line: '" << line << "'" << startupWarningsLog;
                         warned = true;
                     }
-                    else if ( ! startsWith(space+1, "interleave") ) {
+                    // if the text following the space doesn't begin with 'interleave', then
+                    // issue the warning.
+                    else if ( line.find("interleave", where) != where ) {
                         log() << startupWarningsLog;
                         log() << "** WARNING: You are running on a NUMA machine." << startupWarningsLog;
                         log() << "**          We suggest launching mongod like this to avoid performance problems:" << startupWarningsLog;
@@ -321,41 +324,6 @@ namespace mongo {
             log() << startupWarningsLog;
         }
     }
-
-    int versionCmp(StringData rhs, StringData lhs) {
-        if ( rhs == lhs )
-            return 0;
-
-        // handle "1.2.3-" and "1.2.3-pre"
-        if (rhs.size() < lhs.size()) {
-            if (strncmp(rhs.rawData(), lhs.rawData(), rhs.size()) == 0 && lhs[rhs.size()] == '-')
-                return +1;
-        }
-        else if (rhs.size() > lhs.size()) {
-            if (strncmp(rhs.rawData(), lhs.rawData(), lhs.size()) == 0 && rhs[lhs.size()] == '-')
-                return -1;
-        }
-
-        return LexNumCmp::cmp(rhs, lhs, false);
-    }
-
-    class VersionCmpTest : public StartupTest {
-    public:
-        void run() {
-            verify( versionCmp("1.2.3", "1.2.3") == 0 );
-            verify( versionCmp("1.2.3", "1.2.4") < 0 );
-            verify( versionCmp("1.2.3", "1.2.20") < 0 );
-            verify( versionCmp("1.2.3", "1.20.3") < 0 );
-            verify( versionCmp("2.2.3", "10.2.3") < 0 );
-            verify( versionCmp("1.2.3", "1.2.3-") > 0 );
-            verify( versionCmp("1.2.3", "1.2.3-pre") > 0 );
-            verify( versionCmp("1.2.3", "1.2.4-") < 0 );
-            verify( versionCmp("1.2.3-", "1.2.3") < 0 );
-            verify( versionCmp("1.2.3-pre", "1.2.3") < 0 );
-
-            LOG(1) << "versionCmpTest passed" << endl;
-        }
-    } versionCmpTest;
 
     class VersionArrayTest : public StartupTest {
     public:

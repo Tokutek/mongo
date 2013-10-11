@@ -31,6 +31,7 @@
 #include "mongo/db/replutil.h"
 #include "mongo/db/scanandorder.h"
 #include "mongo/s/d_logic.h"
+#include "mongo/s/stale_exception.h"  // for SendStaleConfigException
 #include "mongo/server.h"
 
 namespace mongo {
@@ -82,7 +83,13 @@ namespace mongo {
         return qr;
     }
 
-    QueryResult* processGetMore(const char *ns, int ntoreturn, long long cursorid , CurOp& curop, int pass, bool& exhaust ) {
+    QueryResult* processGetMore(const char* ns,
+                                int ntoreturn,
+                                long long cursorid,
+                                CurOp& curop,
+                                int pass,
+                                bool& exhaust,
+                                bool* isCursorAuthorized ) {
         exhaust = false;
         ClientCursor::Pin p(cursorid);
         ClientCursor *client_cursor = p.c();
@@ -126,6 +133,8 @@ namespace mongo {
                            !cc().hasTxn());
                 wts.reset(new Client::WithTxnStack(client_cursor->transactions)); 
             }
+
+            *isCursorAuthorized = true;
 
             if (pass == 0) {
                 client_cursor->updateSlaveLocation( curop );

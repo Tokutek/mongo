@@ -24,6 +24,7 @@
  */
 
 #include <algorithm>
+#include <boost/thread/thread.hpp>
 #include <map>
 #include <string>
 #include <vector>
@@ -48,6 +49,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/repl.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/namespace_details.h"
@@ -65,30 +67,44 @@
 #include "mongo/util/ramlog.h"
 #include "mongo/util/elapsed_tracker.h"
 
-#include "mongo/s/shard.h"
-#include "mongo/s/d_logic.h"
-#include "mongo/s/config.h"
 #include "mongo/s/chunk.h"
+#include "mongo/s/chunk_version.h"
+#include "mongo/s/config.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/s/shard.h"
+#include "mongo/s/type_chunk.h"
+#include "mongo/util/assert_util.h"
+#include "mongo/util/elapsed_tracker.h"
+#include "mongo/util/processinfo.h"
+#include "mongo/util/queue.h"
+#include "mongo/util/ramlog.h"
+#include "mongo/util/startup_test.h"
 
 using namespace std;
 
 namespace mongo {
 
-    BSONObj findShardKeyIndexPattern_locked( const string& ns , const BSONObj& shardKeyPattern ) {
+    bool findShardKeyIndexPattern_locked( const string& ns,
+                                          const BSONObj& shardKeyPattern,
+                                          BSONObj* indexPattern ) {
         verify( Lock::isLocked() );
-        NamespaceDetails* nsd = nsdetails( ns.c_str() );
-        verify( nsd );
+        NamespaceDetails* nsd = nsdetails( ns );
+        if ( !nsd )
+            return false;
         const IndexDetails* idx = nsd->findIndexByPrefix( shardKeyPattern , true );  /* require single key */
-        verify( idx );
-        return idx->keyPattern().getOwned();
+        if ( !idx )
+            return false;
+        *indexPattern = idx->keyPattern().getOwned();
+        return true;
     }
 
-
-    BSONObj findShardKeyIndexPattern_unlocked( const string& ns , const BSONObj& shardKeyPattern ) {
+    bool findShardKeyIndexPattern_unlocked( const string& ns,
+                                            const BSONObj& shardKeyPattern,
+                                            BSONObj* indexPattern ) {
         Client::ReadContext context( ns );
-        return findShardKeyIndexPattern_locked( ns , shardKeyPattern ).getOwned();
+        return findShardKeyIndexPattern_locked( ns, shardKeyPattern, indexPattern );
     }
-    
+
     Tee* migrateLog = new RamLog( "migrate" );
 
     class MoveTimingHelper {
@@ -201,7 +217,7 @@ namespace mongo {
         string toString() const {
             return str::stream() << ns << " from " << min << " -> " << max;
         }
-        
+
         void doRemove() {
             ShardForceVersionOkModeBlock sf;
             {
@@ -212,13 +228,19 @@ namespace mongo {
 
                 log() << "moveChunk starting delete for: " << this->toString() << migrateLog;
 
+                BSONObj indexKeyPattern;
+                if ( !findShardKeyIndexPattern_unlocked( ns, shardKeyPattern, &indexKeyPattern ) ) {
+                    warning() << "collection or index dropped before data could be cleaned" << endl;
+                    return;
+                }
+
                 long long numDeleted =
-                        Helpers::removeRange( ns ,
-                                              min ,
-                                              max ,
-                                              findShardKeyIndexPattern_unlocked( ns , shardKeyPattern ) , 
-                                              false , /*maxInclusive*/
-                                              /* cmdLine.moveParanoia ? &rs : 0 , */ /*callback*/
+                        Helpers::removeRange( ns,
+                                              min,
+                                              max,
+                                              indexKeyPattern,
+                                              false, /*maxInclusive*/
+                                              /* cmdLine.moveParanoia ? &rs : 0, */ /*callback*/
                                               true ); /*fromMigrate*/
 
                 log() << "moveChunk deleted " << numDeleted << " documents for "
@@ -277,7 +299,7 @@ namespace mongo {
     public:
 
         MigrateFromStatus()
-                : _m("MigrateFromStatus"),
+                : _mutex("MigrateFromStatus"),
                   _inCriticalSection(false),
                   _active(false),
                   _memoryUsed(0),
@@ -287,7 +309,11 @@ namespace mongo {
                   _nextMigrateLogId(0),
                   _snapshotTaken(false) {}
 
-        void start( const std::string& ns ,
+        /**
+         * @return false if cannot start. One of the reason for not being able to
+         *     start is there is already an existing migration in progress.
+         */
+        bool start( const std::string& ns ,
                     const BSONObj& min ,
                     const BSONObj& max ,
                     const BSONObj& shardKeyPattern ) {
@@ -298,9 +324,11 @@ namespace mongo {
 
             //scoped_lock ll(_workLock);
 
-            scoped_lock l(_m); // reads and writes _active
+            scoped_lock l(_mutex); // reads and writes _active
 
-            verify( ! _active );
+            if (_active) {
+                return false;
+            }
 
             verify( ! min.isEmpty() );
             verify( ! max.isEmpty() );
@@ -319,6 +347,7 @@ namespace mongo {
             _snapshotTaken = false;
             clearMigrateLog();
             _active = true;
+            return true;
         }
 
         void done() {
@@ -335,12 +364,13 @@ namespace mongo {
             }
             _memoryUsed = 0;
 
-            scoped_lock l(_m);
+            scoped_lock l(_mutex);
             disableLogTxnOpsForSharding();
             _snapshotTaken = false;
             clearMigrateLog();
             _active = false;
             _inCriticalSection = false;
+            _inCriticalSectionCV.notify_all();
         }
 
         void clearMigrateLog() {
@@ -538,7 +568,7 @@ namespace mongo {
                 _snapshotTaken = true;
                 _txn.reset(new Client::Transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY));
 
-                d = nsdetails(_ns.c_str());
+                d = nsdetails(_ns);
                 if (d == NULL) {
                     errmsg = "ns not found, should be impossible";
                     _txn.reset();
@@ -554,8 +584,9 @@ namespace mongo {
                     return false;
                 }
                 // Assume both min and max non-empty, append MinKey's to make them fit chosen index
-                BSONObj min = Helpers::modifiedRangeBound( _min , idx->keyPattern() , -1 );
-                BSONObj max = Helpers::modifiedRangeBound( _max , idx->keyPattern() , -1 );
+                KeyPattern kp( idx->keyPattern() );
+                BSONObj min = Helpers::toKeyFormat( kp.extendRangeBound( _min, false ) );
+                BSONObj max = Helpers::toKeyFormat( kp.extendRangeBound( _max, false ) );
 
                 shared_ptr<Cursor> idxCursor(IndexCursor::make( d , *idx , min , max , false , 1 ));
                 _cc.reset(new ClientCursor(QueryOption_NoCursorTimeout, idxCursor, _ns));
@@ -595,8 +626,35 @@ namespace mongo {
 
         long long mbUsed() const { return _memoryUsed / ( 1024 * 1024 ); }
 
-        bool getInCriticalSection() const { scoped_lock l(_m); return _inCriticalSection; }
-        void setInCriticalSection( bool b ) { scoped_lock l(_m); _inCriticalSection = b; }
+        bool getInCriticalSection() const {
+            scoped_lock l(_mutex);
+            return _inCriticalSection;
+        }
+
+        void setInCriticalSection( bool b ) {
+            scoped_lock l(_mutex);
+            _inCriticalSection = b;
+            _inCriticalSectionCV.notify_all();
+        }
+
+        /**
+         * @return true if we are NOT in the critical section
+         */
+        bool waitTillNotInCriticalSection( int maxSecondsToWait ) {
+            verify( !Lock::isLocked() );
+
+            boost::xtime xt;
+            boost::xtime_get(&xt, MONGO_BOOST_TIME_UTC);
+            xt.sec += maxSecondsToWait;
+
+            scoped_lock l(_mutex);
+            while ( _inCriticalSection ) {
+                if ( ! _inCriticalSectionCV.timed_wait( l.boost(), xt ) )
+                    return false;
+            }
+
+            return true;
+        }
 
         bool isActive() const { return _getActive(); }
         
@@ -618,7 +676,9 @@ namespace mongo {
         }
 
     private:
-        mutable mongo::mutex _m; // protect _inCriticalSection and _active
+        mutable mongo::mutex _mutex; // protect _inCriticalSection and _active
+        boost::condition _inCriticalSectionCV;
+
         bool _inCriticalSection;
         bool _active;
 
@@ -657,8 +717,8 @@ namespace mongo {
         shared_ptr<Client::TransactionStack> _txnStack;
         auto_ptr<ClientCursor> _cc;
 
-        bool _getActive() const { scoped_lock l(_m); return _active; }
-        void _setActive( bool b ) { scoped_lock l(_m); _active = b; }
+        bool _getActive() const { scoped_lock l(_mutex); return _active; }
+        void _setActive( bool b ) { scoped_lock l(_mutex); _active = b; }
 
     } migrateFromStatus;
 
@@ -670,11 +730,20 @@ namespace mongo {
                              const BSONObj& min ,
                              const BSONObj& max ,
                              const BSONObj& shardKeyPattern ) {
-            migrateFromStatus.start( ns , min , max , shardKeyPattern );
+            _isAnotherMigrationActive = !migrateFromStatus.start(ns, min, max, shardKeyPattern);
         }
         ~MigrateStatusHolder() {
-            migrateFromStatus.done();
+            if (!_isAnotherMigrationActive) {
+                migrateFromStatus.done();
+            }
         }
+
+        bool isAnotherMigrationActive() const {
+            return _isAnotherMigrationActive;
+        }
+
+    private:
+        bool _isAnotherMigrationActive;
     };
 
     void _cleanupOldData( OldDataCleanup cleanup ) {
@@ -922,7 +991,7 @@ namespace mongo {
             dist_lock_try dlk;
 
             try{
-                dlk = dist_lock_try( &lockSetup , (string)"migrate-" + min.toString() );
+                dlk = dist_lock_try( &lockSetup , (string)"migrate-" + min.toString(), 30.0 /*timeout*/ );
             }
             catch( LockException& e ){
                 errmsg = str::stream() << "error locking distributed lock for migration " << "migrate-" << min.toString() << causedBy( e );
@@ -938,21 +1007,23 @@ namespace mongo {
             BSONObj chunkInfo = BSON("min" << min << "max" << max << "from" << fromShard.getName() << "to" << toShard.getName() );
             configServer.logChange( "moveChunk.start" , ns , chunkInfo );
 
-            ShardChunkVersion maxVersion;
-            ShardChunkVersion startingVersion;
+            ChunkVersion maxVersion;
+            ChunkVersion startingVersion;
             string myOldShard;
             {
                 scoped_ptr<ScopedDbConnection> conn(
                         ScopedDbConnection::getInternalScopedDbConnection(
-                                shardingState.getConfigServer() ) );
+                                shardingState.getConfigServer(), 30));
 
                 BSONObj x;
                 BSONObj currChunk;
                 try{
-                    x = conn->get()->findOne( ShardNS::chunk,
-                                              Query( BSON( "ns" << ns ) )
-                                                  .sort( BSON( "lastmod" << -1 ) ) );
-                    currChunk = conn->get()->findOne( ShardNS::chunk , shardId.wrap( "_id" ) );
+                    x = conn->get()->findOne(ChunkType::ConfigNS,
+                                             Query(BSON(ChunkType::ns(ns)))
+                                                  .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
+
+                    currChunk = conn->get()->findOne(ChunkType::ConfigNS,
+                                                     shardId.wrap(ChunkType::name().c_str()));
                 }
                 catch( DBException& e ){
                     errmsg = str::stream() << "aborted moveChunk because could not get chunk data from config server " << shardingState.getConfigServer() << causedBy( e );
@@ -960,15 +1031,15 @@ namespace mongo {
                     return false;
                 }
 
-                maxVersion = ShardChunkVersion::fromBSON( x, "lastmod" );
-                verify( currChunk["shard"].type() );
-                verify( currChunk["min"].type() );
-                verify( currChunk["max"].type() );
-                myOldShard = currChunk["shard"].String();
+                maxVersion = ChunkVersion::fromBSON(x, ChunkType::DEPRECATED_lastmod());
+                verify(currChunk[ChunkType::shard()].type());
+                verify(currChunk[ChunkType::min()].type());
+                verify(currChunk[ChunkType::max()].type());
+                myOldShard = currChunk[ChunkType::shard()].String();
                 conn->done();
 
-                BSONObj currMin = currChunk["min"].Obj();
-                BSONObj currMax = currChunk["max"].Obj();
+                BSONObj currMin = currChunk[ChunkType::min()].Obj();
+                BSONObj currMax = currChunk[ChunkType::max()].Obj();
                 if ( currMin.woCompare( min ) || currMax.woCompare( max ) ) {
                     errmsg = "boundaries are outdated (likely a split occurred)";
                     result.append( "currMin" , currMin );
@@ -1033,6 +1104,11 @@ namespace mongo {
             }
 
             MigrateStatusHolder statusHolder( ns , min , max , shardKeyPattern );
+            if (statusHolder.isAnotherMigrationActive()) {
+                errmsg = "moveChunk is already in progress from this shard";
+                return false;
+            }
+
             {
                 scoped_ptr<ScopedDbConnection> connTo(
                         ScopedDbConnection::getScopedDbConnection( toShard.getConnString() ) );
@@ -1125,11 +1201,27 @@ namespace mongo {
             timing.done(4);
 
             // 5.
+
+            // Before we get into the critical section of the migration, let's double check
+            // that the config servers are reachable and the lock is in place.
+            log() << "About to check if it is safe to enter critical section";
+
+            string lockHeldMsg;
+            bool lockHeld = dlk.isLockHeld( 30.0 /* timeout */, &lockHeldMsg );
+            if ( !lockHeld ) {
+                errmsg = str::stream() << "not entering migrate critical section because "
+                                       << lockHeldMsg;
+                warning() << errmsg << endl;
+                return false;
+            }
+
+            log() << "About to enter migrate critical section";
+
             {
                 // 5.a
                 // we're under the collection lock here, so no other migrate can change maxVersion or ShardChunkManager state
                 migrateFromStatus.setInCriticalSection( true );
-                ShardChunkVersion myVersion = maxVersion;
+                ChunkVersion myVersion = maxVersion;
                 myVersion.incMajor();
 
                 {
@@ -1147,8 +1239,11 @@ namespace mongo {
                 // 5.b
                 // we're under the collection lock here, too, so we can undo the chunk donation because no other state change
                 // could be ongoing
-                {
-                    BSONObj res;
+
+                BSONObj res;
+                bool ok;
+
+                try {
                     // This timeout (330 seconds) is bigger than on vanilla mongodb, since the
                     // transferMods we have to do even though we think we're in a steady state could
                     // be much larger than in vanilla.
@@ -1156,50 +1251,47 @@ namespace mongo {
                             ScopedDbConnection::getScopedDbConnection( toShard.getConnString(),
                                                                        330.0 ) );
 
-                    bool ok;
-
-                    try{
-                        ok = connTo->get()->runCommand( "admin" ,
-                                                        BSON( "_recvChunkCommit" << 1 ) ,
-                                                        res );
-                    }
-                    catch( DBException& e ){
-                        errmsg = str::stream() << "moveChunk could not contact to: shard " << toShard.getConnString() << " to commit transfer" << causedBy( e );
-                        warning() << errmsg << endl;
-                        ok = false;
-                    }
-
+                    ok = connTo->get()->runCommand( "admin", BSON( "_recvChunkCommit" << 1 ), res );
                     connTo->done();
-
-                    if ( ! ok ) {
-                        log() << "moveChunk migrate commit not accepted by TO-shard: " << res
-                              << " resetting shard version to: " << startingVersion << migrateLog;
-                        {
-                            // TODO(leif): Why is this a global lock while the lock above at donateChunk is a db-level lock?
-                            Lock::GlobalWrite lk;
-                            log() << "moveChunk global lock acquired to reset shard version from "
-                                    "failed migration" << endl;
-
-                            // revert the chunk manager back to the state before "forgetting" about the chunk
-                            shardingState.undoDonateChunk( ns , min , max , startingVersion );
-                        }
-                        log() << "Shard version successfully reset to clean up failed migration"
-                                << endl;
-
-                        errmsg = "_recvChunkCommit failed!";
-                        result.append( "cause" , res );
-                        return false;
-                    }
-
-                    log() << "moveChunk migrate commit accepted by TO-shard: " << res << migrateLog;
                 }
+                catch( DBException& e ){
+                    errmsg = str::stream() << "moveChunk could not contact to: shard "
+                                           << toShard.getConnString() << " to commit transfer"
+                                           << causedBy( e );
+                    warning() << errmsg << endl;
+                    ok = false;
+                }
+
+                if ( !ok ) {
+                    log() << "moveChunk migrate commit not accepted by TO-shard: " << res
+                          << " resetting shard version to: " << startingVersion << migrateLog;
+                    {
+                        // TODO(leif): Why is this a global lock while the lock above at donateChunk is a db-level lock?
+                        Lock::GlobalWrite lk;
+                        log() << "moveChunk global lock acquired to reset shard version from "
+                              "failed migration"
+                              << endl;
+
+                        // revert the chunk manager back to the state before "forgetting" about the
+                        // chunk
+                        shardingState.undoDonateChunk( ns, min, max, startingVersion );
+                    }
+                    log() << "Shard version successfully reset to clean up failed migration"
+                          << endl;
+
+                    errmsg = "_recvChunkCommit failed!";
+                    result.append( "cause", res );
+                    return false;
+                }
+
+                log() << "moveChunk migrate commit accepted by TO-shard: " << res << migrateLog;
 
                 // 5.c
 
                 // version at which the next highest lastmod will be set
                 // if the chunk being moved is the last in the shard, nextVersion is that chunk's lastmod
                 // otherwise the highest version is from the chunk being bumped on the FROM-shard
-                ShardChunkVersion nextVersion;
+                ChunkVersion nextVersion;
 
                 // we want to go only once to the configDB but perhaps change two chunks, the one being migrated and another
                 // local one (so to bump version for the entire shard)
@@ -1210,14 +1302,14 @@ namespace mongo {
 
                     // Check the precondition
                     BSONObjBuilder b;
-                    b.appendTimestamp("lastmod", maxVersion.toLong());
-                    BSONObj expect = b.obj();
+                    b.appendTimestamp(ChunkType::DEPRECATED_lastmod(), maxVersion.toLong());
+                    BSONObj expect = b.done();
                     Matcher m(expect);
 
-                    BSONObj found = conn->get()->findOne(ShardNS::chunk, QUERY("ns" << ns).sort("lastmod", -1));
+                    BSONObj found = conn->get()->findOne(ChunkType::ConfigNS, QUERY(ChunkType::ns(ns)).sort(ChunkType::DEPRECATED_lastmod(), -1));
                     if (!m.matches(found)) {
                         // TODO(leif): Make sure that this means the sharding algorithm is broken and we should bounce the server.
-                        error() << "moveChunk commit failed: " << ShardChunkVersion::fromBSON(found["lastmod"])
+                        error() << "moveChunk commit failed: " << ChunkVersion::fromBSON(found[ChunkType::DEPRECATED_lastmod()])
                                 << " instead of " << maxVersion << migrateLog;
                         error() << "TERMINATING" << migrateLog;
                         dbexit(EXIT_SHARDING_ERROR);
@@ -1226,13 +1318,13 @@ namespace mongo {
                     try {
                         // update for the chunk being moved
                         BSONObjBuilder n;
-                        n.append( "_id" , Chunk::genID( ns , min ) );
-                        myVersion.addToBSON( n, "lastmod" );
-                        n.append( "ns" , ns );
-                        n.append( "min" , min );
-                        n.append( "max" , max );
-                        n.append( "shard" , toShard.getName() );
-                        conn->get()->update(ShardNS::chunk, QUERY("_id" << Chunk::genID(ns, min)), n.obj());
+                        n.append(ChunkType::name(), Chunk::genID(ns, min));
+                        myVersion.addToBSON(n, ChunkType::DEPRECATED_lastmod());
+                        n.append(ChunkType::ns(), ns);
+                        n.append(ChunkType::min(), min);
+                        n.append(ChunkType::max(), max);
+                        n.append(ChunkType::shard(), toShard.getName());
+                        conn->get()->update(ChunkType::ConfigNS, QUERY(ChunkType::name() << Chunk::genID(ns, min)), n.done());
                     }
                     catch (DBException &e) {
                         warning() << e << migrateLog;
@@ -1260,13 +1352,13 @@ namespace mongo {
                         nextVersion.incMinor();  // same as used on donateChunk
                         try {
                             BSONObjBuilder n;
-                            n.append( "_id" , Chunk::genID( ns , bumpMin ) );
-                            nextVersion.addToBSON( n, "lastmod" );
-                            n.append( "ns" , ns );
-                            n.append( "min" , bumpMin );
-                            n.append( "max" , bumpMax );
-                            n.append( "shard" , fromShard.getName() );
-                            conn->get()->update(ShardNS::chunk, QUERY("_id" << Chunk::genID(ns, bumpMin)), n.obj());
+                            n.append(ChunkType::name(), Chunk::genID(ns, bumpMin));
+                            nextVersion.addToBSON(n, ChunkType::DEPRECATED_lastmod());
+                            n.append(ChunkType::ns(), ns);
+                            n.append(ChunkType::min(), bumpMin);
+                            n.append(ChunkType::max(), bumpMax);
+                            n.append(ChunkType::shard(), fromShard.getName());
+                            conn->get()->update(ChunkType::ConfigNS, QUERY(ChunkType::name() << Chunk::genID(ns, bumpMin)), n.done());
                             log() << "moveChunk updating self version to: " << nextVersion << " through "
                                   << bumpMin << " -> " << bumpMax << " for collection '" << ns << "'" << migrateLog;
                         }
@@ -1282,6 +1374,42 @@ namespace mongo {
 
                     txn.commit();
                     conn->done();
+                }
+                catch (DBException& e) {
+                    warning() << e << migrateLog;
+                    int exceptionCode = e.getCode();
+
+                    if (exceptionCode == PrepareConfigsFailedCode) {
+
+                        // In the process of issuing the migrate commit, the SyncClusterConnection
+                        // checks that the config servers are reachable. If they are not, we are
+                        // sure that the applyOps command was not sent to any of the configs, so we
+                        // can safely back out of the migration here, by resetting the shard
+                        // version that we bumped up to in the donateChunk() call above.
+
+                        log() << "About to acquire moveChunk global lock to reset shard version from "
+                              << "failed migration" << endl;
+
+                        {
+                            Lock::GlobalWrite lk;
+
+                            // Revert the chunk manager back to the state before "forgetting"
+                            // about the chunk.
+                            shardingState.undoDonateChunk(ns, min, max, startingVersion);
+                        }
+
+                        log() << "Shard version successfully reset to clean up failed migration" << endl;
+                        e.getInfo().append(result);
+                        errmsg = "Failed to send migrate commit to configs because " + e.getInfo().toString();
+
+                        return false;
+                    }
+                    else {
+                        // same as if we catch any other exception
+                        error() << "moveChunk failed to get confirmation of commit" << migrateLog;
+                        error() << "TERMINATING" << migrateLog;
+                        dbexit(EXIT_SHARDING_ERROR);
+                    }
                 }
                 catch (...) {
                     // TODO(leif): Vanilla, if it fails, waits 10 seconds and does a query to see if somehow the commit made it through anyway.  Maybe we need such a mechanism too?
@@ -1312,13 +1440,16 @@ namespace mongo {
 
                         // look for the chunk in this shard whose version got bumped
                         // we assume that if that mod made it to the config, the applyOps was successful
-                        BSONObj doc = conn->get()->findOne( ShardNS::chunk,
-                                                            Query(BSON( "ns" << ns ))
-                                                                .sort( BSON("lastmod" << -1)));
-                        ShardChunkVersion checkVersion = ShardChunkVersion::fromBSON( doc["lastmod"] );
+                        BSONObj doc = conn->get()->findOne(ChunkType::ConfigNS,
+                                                           Query(BSON(ChunkType::ns(ns)))
+                                                               .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
+
+                        ChunkVersion checkVersion =
+                            ChunkVersion::fromBSON(doc[ChunkType::DEPRECATED_lastmod()]);
 
                         if ( checkVersion.isEquivalentTo( nextVersion ) ) {
                             log() << "moveChunk commit confirmed" << migrateLog;
+                            errmsg.clear();
 
                         }
                         else {
@@ -1370,6 +1501,10 @@ namespace mongo {
 
     bool ShardingState::inCriticalMigrateSection() {
         return migrateFromStatus.getInCriticalSection();
+    }
+
+    bool ShardingState::waitTillNotInCriticalSection( int maxSecondsToWait ) {
+        return migrateFromStatus.waitTillNotInCriticalSection( maxSecondsToWait );
     }
 
     /* -----
@@ -1448,7 +1583,7 @@ namespace mongo {
                 const string &dbname = cc().database()->name();
 
                 // Only copy if ns doesn't already exist
-                if ( ! nsdetails( ns.c_str() ) ) {
+                if (!nsdetails(ns)) {
                     string system_namespaces = dbname + ".system.namespaces";
                     BSONObj entry = conn->findOne( system_namespaces, BSON( "name" << ns ) );
                     if ( entry["options"].isABSONObj() ) {
@@ -1475,13 +1610,22 @@ namespace mongo {
             }
 
             {
+
+                BSONObj indexKeyPattern;
+                if ( !findShardKeyIndexPattern_unlocked( ns, shardKeyPattern, &indexKeyPattern ) ) {
+                    errmsg = "collection or index dropped during migrate";
+                    warning() << errmsg << endl;
+                    state = FAIL;
+                    return;
+                }
+
                 // 2. delete any data already in range
                 // removeRange makes a ReadContext and a Transaction
-                long long num = Helpers::removeRange( ns ,
-                                                      min ,
-                                                      max ,
-                                                      findShardKeyIndexPattern_unlocked( ns , shardKeyPattern ) , 
-                                                      false , /*maxInclusive*/
+                long long num = Helpers::removeRange( ns,
+                                                      min,
+                                                      max,
+                                                      indexKeyPattern,
+                                                      false, /*maxInclusive*/
                                                       true ); /* flag fromMigrate in oplog */
                 if ( num )
                     warning() << "moveChunkCmd deleted data already in chunk # objects: " << num << migrateLog;
@@ -1861,9 +2005,8 @@ namespace mongo {
                 // shardKeyPattern may not be provided if another shard is from pre 2.2
                 // In that case, assume the shard key pattern is the same as the range
                 // specifiers provided.
-                BSONObj keya , keyb;
-                Helpers::toKeyFormat( migrateStatus.min , keya );
-                Helpers::toKeyFormat( migrateStatus.max , keyb );
+                BSONObj keya = Helpers::inferKeyPattern( migrateStatus.min );
+                BSONObj keyb = Helpers::inferKeyPattern( migrateStatus.max );
                 verify( keya == keyb );
 
                 warning() << "No shard key pattern provided by source shard for migration."

@@ -1,5 +1,18 @@
-// Copyright 2009.  10gen, Inc.
-// Copyright (C) 2013 Tokutek Inc.
+/*    Copyright 2009 10gen Inc.
+ *    Copyright (C) 2013 Tokutek Inc.
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License");
+ *    you may not use this file except in compliance with the License.
+ *    You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS,
+ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *    See the License for the specific language governing permissions and
+ *    limitations under the License.
+ */
 
 #include "mongo/util/stacktrace.h"
 
@@ -9,49 +22,21 @@
 #include <map>
 #include <vector>
 
+#include "mongo/util/log.h"
+
 #ifdef _WIN32
-#include <sstream>
-#include <stdio.h>
 #include <boost/filesystem/operations.hpp>
 #include <boost/smart_ptr/scoped_array.hpp>
+#include <sstream>
+#include <stdio.h>
 #include "mongo/platform/windows_basic.h"
 #include <DbgHelp.h>
 #include "mongo/util/assert_util.h"
-#include "mongo/util/log.h"
+#else
+#include "mongo/platform/backtrace.h"
 #endif
 
-#ifdef MONGO_HAVE_EXECINFO_BACKTRACE
-
-#include <execinfo.h>
-
-namespace mongo {
-    static const int maxBackTraceFrames = 20;
-
-    /**
-     * Print a stack backtrace for the current thread to the specified ostream.
-     * 
-     * @param os    ostream& to receive printed stack backtrace
-     */
-    void printStackTrace( std::ostream& os ) {
-        
-        void *b[maxBackTraceFrames];
-        
-        int size = ::backtrace( b, maxBackTraceFrames );
-        for ( int i = 0; i < size; i++ )
-            os << std::hex << b[i] << std::dec << ' ';
-        os << std::endl;
-        
-        char **strings;
-        
-        strings = ::backtrace_symbols( b, size );
-        for ( int i = 0; i < size; i++ )
-            os << ' ' << strings[i] << '\n';
-        os.flush();
-        ::free( strings );
-    }
-}
-
-#elif defined(_WIN32)
+#if defined(_WIN32)
 
 namespace mongo {
 
@@ -289,13 +274,54 @@ namespace mongo {
             log() << ss.str() << std::endl;
         }
     }
-}
 
+    // Print error message from C runtime followed by stack trace
+    int crtDebugCallback(int, char* originalMessage, int*) {
+        StringData message(originalMessage);
+        log() << "*** C runtime error: "
+              << message.substr(0, message.find('\n')) << std::endl;
+        printStackTrace();
+        return 1;           // 0 == not handled, non-0 == handled
+    }
+
+}
 #else
 
 namespace mongo {
-    void printStackTrace( std::ostream &os ) {}
+    static const int maxBackTraceFrames = 20;
+
+    /**
+     * Print a stack backtrace for the current thread to the specified ostream.
+     * 
+     * @param os    ostream& to receive printed stack backtrace
+     */
+    void printStackTrace( std::ostream& os ) {
+
+        void* addresses[maxBackTraceFrames];
+
+        int addressCount = backtrace(addresses, maxBackTraceFrames);
+        if (addressCount == 0) {
+            const int err = errno;
+            os << "Unable to collect backtrace addresses (" << errnoWithDescription(err) << ")"
+               << std::endl;
+            return;
+        }
+        for (int i = 0; i < addressCount; i++)
+            os << std::hex << addresses[i] << std::dec << ' ';
+        os << std::endl;
+
+        char** backtraceStrings = backtrace_symbols(addresses, addressCount);
+        if (backtraceStrings == NULL) {
+            const int err = errno;
+            os << "Unable to collect backtrace symbols (" << errnoWithDescription(err) << ")"
+               << std::endl;
+            return;
+        }
+        for (int i = 0; i < addressCount; i++)
+            os << ' ' << backtraceStrings[i] << '\n';
+        os.flush();
+        free(backtraceStrings);
+    }
 }
 
 #endif
-

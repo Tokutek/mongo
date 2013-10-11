@@ -170,6 +170,22 @@ namespace DocumentTests {
                 ASSERT( md.peek().getValue( "c" ).missing() );
                 assertRoundTrips( md.peek() );
 
+                // Set a nested field using []
+                md["x"]["y"]["z"] = Value("nested");
+                ASSERT_EQUALS(md.peek()["x"]["y"]["z"], Value("nested"));
+
+                // Set a nested field using setNestedField
+                FieldPath xxyyzz = string("xx.yy.zz");
+                md.setNestedField(xxyyzz, Value("nested"));
+                ASSERT_EQUALS(md.peek().getNestedField(xxyyzz), Value("nested") );
+
+                // Set a nested fields through an existing empty document
+                md["xxx"] = Value(Document());
+                md["xxx"]["yyy"] = Value(Document());
+                FieldPath xxxyyyzzz = string("xxx.yyy.zzz");
+                md.setNestedField(xxxyyyzzz, Value("nested"));
+                ASSERT_EQUALS(md.peek().getNestedField(xxxyyyzzz), Value("nested") );
+
                 // Make sure nothing moved
                 ASSERT_EQUALS(apos, md.peek().positionOf("a"));
                 ASSERT_EQUALS(bpos, md.peek().positionOf("c"));
@@ -362,7 +378,7 @@ namespace DocumentTests {
 
                 // can't use append any more since arrBuilder is done
                 objBuilder << "mega array" << arr;
-                docBuilder["mega array"] = Value(values);
+                docBuilder["mega array"] = mongo::Value(values);
 
                 const BSONObj obj = objBuilder.obj();
                 const Document doc = docBuilder.freeze();
@@ -387,11 +403,11 @@ namespace DocumentTests {
             void append(const char* name, const T& thing) {
                 objBuilder << name << thing;
                 arrBuilder         << thing;
-                docBuilder[name] = Value(thing);
-                values.push_back(Value(thing));
+                docBuilder[name] = mongo::Value(thing);
+                values.push_back(mongo::Value(thing));
             }
 
-            vector<Value> values;
+            vector<mongo::Value> values;
             MutableDocument docBuilder;
             BSONObjBuilder objBuilder;
             BSONArrayBuilder arrBuilder;
@@ -774,7 +790,7 @@ namespace DocumentTests {
                 Value value() { return Value::createDate(0); }
             };
             
-            /** Coerce // to bool. */
+            /** Coerce js literal regex to bool. */
             class RegexToBool : public ToBoolTrue {
                 Value value() { return fromBson( fromjson( "{''://}" ) ); }
             };
@@ -933,9 +949,9 @@ namespace DocumentTests {
             class LongToDouble : public ToDoubleBase {
                 Value value() {
                     // A long that cannot be exactly represented as a double.
-                    return Value::createDouble( 0x8fffffffffffffffLL );
+                    return Value::createDouble( static_cast<double>( 0x8fffffffffffffffLL ) );
                 }
-                double expected() { return (double)0x8fffffffffffffffLL; }
+                double expected() { return static_cast<double>( 0x8fffffffffffffffLL ); }
             };
             
             /** Coerce double to double. */

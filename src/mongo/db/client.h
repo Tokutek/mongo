@@ -159,6 +159,7 @@ namespace mongo {
          * Swaps back the old one when it gets destroyed.
          */
         class AlternateTransactionStack : boost::noncopyable {
+            long long _savedRootTransactionId;
             shared_ptr<TransactionStack> _saved;
           public:
             AlternateTransactionStack();
