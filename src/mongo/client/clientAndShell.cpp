@@ -54,10 +54,6 @@ namespace mongo {
         return dbexitCalled;
     }
 
-    void setupSignals() {
-        // maybe should do SIGPIPE here, not sure
-    }
-
     string getDbContext() {
         return "in client only mode";
     }

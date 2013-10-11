@@ -167,35 +167,38 @@ namespace mongo {
         ::_exit(EXIT_ABRUPT);
     }
 
-#ifndef _WIN32
     sigset_t asyncSignals;
 
     void signalProcessingThread() {
         while (true) {
             int actualSignal = 0;
             int status = sigwait( &asyncSignals, &actualSignal );
-            fassert(16856, status == 0);
+            fassert(17025, status == 0);
             switch (actualSignal) {
             case SIGUSR1:
                 // log rotate signal
-                fassert(16857, rotateLogs());
+                fassert(17026, rotateLogs());
                 break;
             default:
                 // no one else should be here
-                fassertFailed(16858);
+                fassertFailed(17027);
                 break;
             }
         }
     }
 
     void startSignalProcessingThread() {
+#ifndef _WIN32
         verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
         boost::thread it( signalProcessingThread );
+#endif
     }
-#endif  // not _WIN32
 
-    void setupSignals( bool inFork ) {
-        if ( !cmdLine.debug ) {
+    void setupSignalHandlers() {
+        setupSIGTRAPforGDB();
+        setupCoreSignals();
+
+        if (!cmdLine.debug) {
             signal(SIGTERM, sighandler);
             signal(SIGINT, sighandler);
 
@@ -225,8 +228,6 @@ namespace mongo {
 
     void init() {
         serverID.init();
-        setupSIGTRAPforGDB();
-        setupCoreSignals();
 
         Logstream::get().addGlobalTee( new RamLog("global") );
     }
@@ -271,7 +272,7 @@ namespace mongo {
 using namespace mongo;
 
 static bool runMongosServer( bool doUpgrade ) {
-    setupSignals( false );
+    setupSignalHandlers();
     setThreadName( "mongosMain" );
     printShardingVersionInfo( false );
 

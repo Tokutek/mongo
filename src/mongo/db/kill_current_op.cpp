@@ -97,7 +97,7 @@ namespace mongo {
         return "";
     }
 
-
-
-
+    void KillCurrentOp::reset() {
+        _globalKill = false;
+    }
 }

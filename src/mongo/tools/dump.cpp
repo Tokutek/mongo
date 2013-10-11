@@ -220,8 +220,10 @@ public:
               continue;
             }
             
-            // Don't dump indexes
             if (nsToCollectionSubstring(name) == "system.indexes") {
+              // Create system.indexes.bson for compatibility with pre 2.2 mongorestore
+              writeCollectionFile( name.c_str() , outdir / ( filename + ".bson" ) );
+              // Don't dump indexes as *.metadata.json
               continue;
             }
             
@@ -325,6 +327,11 @@ public:
         string db = _db;
 
         if ( db == "" ) {
+            if ( _coll != "" ) {
+                error() << "--db must be specified with --collection" << endl;
+                return -1;
+            }
+
             log() << "all dbs" << endl;
 
             BSONObj res = conn( true ).findOne( "admin.$cmd" , BSON( "listDatabases" << 1 ) );

@@ -56,7 +56,8 @@ public:
     Restore() : BSONTool( "restore" ),
         _drop(false), _restoreOptions(false), _restoreIndexes(false),
         _w(0), _doBulkLoad(false) {
-
+        // Default values set here will show up in help text, but will supercede any default value
+        // used when calling getParam below.
         add_options()
         ("drop" , "drop each collection before import. RECOMMENDED, since only non-existent collections are eligible for the bulk load optimization.")
         ("oplogReplay", "deprecated")
@@ -64,7 +65,7 @@ public:
         ("keepIndexVersion" , "deprecated")
         ("noOptionsRestore" , "don't restore collection options")
         ("noIndexRestore" , "don't restore indexes")
-        ("w" , po::value<int>()->default_value(1) , "minimum number of replicas per write. WARNING, setting w > 0 prevents the bulk load optimization." )
+        ("w" , po::value<int>()->default_value(0) , "minimum number of replicas per write. WARNING, setting w > 1 prevents the bulk load optimization." )
         ;
         add_hidden_options()
         ("dir", po::value<string>()->default_value("dump"), "directory to restore from")
@@ -95,7 +96,8 @@ public:
         _drop = hasParam( "drop" );
         _restoreOptions = !hasParam("noOptionsRestore");
         _restoreIndexes = !hasParam("noIndexRestore");
-        _w = getParam( "w" , 1 );
+        // Make sure default value set here stays in sync with the one set in the constructor above.
+        _w = getParam( "w" , 0 );
         _doBulkLoad = _w <= 1;
         if (!_doBulkLoad) {
             log() << "warning: not using bulk loader due to --w > 1" << endl;
@@ -120,14 +122,15 @@ public:
          * .bson file, or a single .bson file itself (a collection).
          */
         drillDown(root, _db != "", _coll != "", true);
-        conn().getLastError(_db == "" ? "admin" : _db);
+        string err = conn().getLastError(_db == "" ? "admin" : _db);
+        if (!err.empty()) {
+            error() << err;
+        }
+
         return EXIT_CLEAN;
     }
 
-    void drillDown( boost::filesystem::path root,
-                    bool use_db,
-                    bool use_coll,
-                    bool top_level=false) {
+    void drillDown( boost::filesystem::path root, bool use_db, bool use_coll, bool top_level=false ) {
         LOG(2) << "drillDown: " << root.string() << endl;
 
         // skip hidden files and directories
@@ -195,13 +198,8 @@ public:
             ns += _db;
         }
         else {
-            string dir = root.branch_path().string();
-            if ( dir.find( "/" ) == string::npos )
-                ns += dir;
-            else
-                ns += dir.substr( dir.find_last_of( "/" ) + 1 );
-
-            if ( ns.size() == 0 )
+            ns = root.parent_path().filename().string();
+            if (ns.empty())
                 ns = "test";
         }
 
@@ -318,9 +316,12 @@ public:
             conn().insert( _curns , obj );
 
             // wait for insert to propagate to "w" nodes (doesn't warn if w used without replset)
-            if ( _w > 1 ) {
+            if ( _w > 0 ) {
                 verify( !_doBulkLoad );
-                conn().getLastErrorDetailed(_curdb, false, false, _w);
+                string err = conn().getLastError(_curdb, false, false, _w);
+                if (!err.empty()) {
+                    error() << err;
+                }
             }
         }
     }
@@ -362,24 +363,33 @@ private:
     }
 
     void createCollectionWithOptions(BSONObj cmdObj) {
-        if (!cmdObj.hasField("create") || cmdObj["create"].String() != _curcoll) {
-            BSONObjBuilder bo;
-            if (!cmdObj.hasField("create")) {
+
+        // Create a new cmdObj to skip undefined fields and fix collection name
+        BSONObjBuilder bo;
+
+        // Add a "create" field if it doesn't exist
+        if (!cmdObj.hasField("create")) {
+            bo.append("create", _curcoll);
+        }
+
+        BSONObjIterator i(cmdObj);
+        while ( i.more() ) {
+            BSONElement e = i.next();
+
+            // Replace the "create" field with the name of the collection we are actually creating
+            if (strcmp(e.fieldName(), "create") == 0) {
                 bo.append("create", _curcoll);
             }
-
-            BSONObjIterator i(cmdObj);
-            while ( i.more() ) {
-                BSONElement e = i.next();
-                if (strcmp(e.fieldName(), "create") == 0) {
-                    bo.append("create", _curcoll);
+            else {
+                if (e.type() == Undefined) {
+                    log() << _curns << ": skipping undefined field: " << e.fieldName() << endl;
                 }
                 else {
                     bo.append(e);
                 }
             }
-            cmdObj = bo.obj();
         }
+        cmdObj = bo.obj();
 
         BSONObj fields = BSON("options" << 1);
         scoped_ptr<DBClientCursor> cursor(conn().query(_curdb + ".system.namespaces", Query(BSON("name" << _curns)), 0, 0, &fields));

@@ -658,6 +658,7 @@ namespace mongo {
         GTID last;
         bool isOplog = false;
         while( 1 ) {
+            bool isCursorAuthorized = false;
             try {
                 uassert( 16258, str::stream() << "Invalid ns [" << ns << "]", NamespaceString::isValid(ns) );
 
@@ -701,9 +702,23 @@ namespace mongo {
 
                 // call this readlocked so state can't change
                 replVerifyReadsOk();
-                msgdata = processGetMore(ns, ntoreturn, cursorid, curop, pass, exhaust);
+                msgdata = processGetMore(ns,
+                                         ntoreturn,
+                                         cursorid,
+                                         curop,
+                                         pass,
+                                         exhaust,
+                                         &isCursorAuthorized);
             }
             catch ( AssertionException& e ) {
+                if ( isCursorAuthorized ) {
+                    // If a cursor with id 'cursorid' was authorized, it may have been advanced
+                    // before an exception terminated processGetMore.  Erase the ClientCursor
+                    // because it may now be out of sync with the client's iteration state.
+                    // SERVER-7952
+                    // TODO Temporary code, see SERVER-4563 for a cleanup overview.
+                    ClientCursor::erase( cursorid );
+                }
                 ex.reset( new AssertionException( e.getInfo().msg, e.getCode() ) );
                 ok = false;
                 break;

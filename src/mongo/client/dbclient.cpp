@@ -41,13 +41,6 @@ namespace mongo {
 
     AtomicInt64 DBClientBase::ConnectionIdSequence;
 
-    bool hasReadPreference(const BSONObj& queryObj) {
-        const bool isQueryEmbedded = strcmp(queryObj.firstElement().fieldName(), "query") == 0;
-        const bool hasReadPrefOption = queryObj["$queryOptions"].isABSONObj() &&
-                        queryObj["$queryOptions"].Obj().hasField("$readPreference");
-        return (isQueryEmbedded && queryObj.hasField("$readPreference")) || hasReadPrefOption;
-    }
-
     void ConnectionString::_fillServers( string s ) {
         
         //
@@ -245,6 +238,9 @@ namespace mongo {
         return "";
     }
 
+    const BSONField<BSONObj> Query::ReadPrefField("$readPreference");
+    const BSONField<string> Query::ReadPrefModeField("mode");
+    const BSONField<BSONArray> Query::ReadPrefTagsField("tags");
 
     Query::Query( const string &json ) : obj( fromjson( json ) ) {}
 
@@ -300,20 +296,66 @@ namespace mongo {
         return *this;
     }
 
-    bool Query::isComplex( bool * hasDollar ) const {
-        if ( obj.hasElement( "query" ) ) {
-            if ( hasDollar )
-                hasDollar[0] = false;
+    bool Query::isComplex(const BSONObj& obj, bool* hasDollar) {
+        if (obj.hasElement("query")) {
+            if (hasDollar) *hasDollar = false;
             return true;
         }
 
-        if ( obj.hasElement( "$query" ) ) {
-            if ( hasDollar )
-                hasDollar[0] = true;
+        if (obj.hasElement("$query")) {
+            if (hasDollar) *hasDollar = true;
             return true;
         }
 
         return false;
+    }
+
+    Query& Query::readPref(ReadPreference pref, const BSONArray& tags) {
+        string mode;
+
+        switch (pref) {
+        case ReadPreference_PrimaryOnly:
+            mode = "primary";
+            break;
+
+        case ReadPreference_PrimaryPreferred:
+            mode = "primaryPreferred";
+            break;
+
+        case ReadPreference_SecondaryOnly:
+            mode = "secondary";
+            break;
+
+        case ReadPreference_SecondaryPreferred:
+            mode = "secondaryPreferred";
+            break;
+
+        case ReadPreference_Nearest:
+            mode = "nearest";
+            break;
+        }
+
+        BSONObjBuilder readPrefDocBuilder;
+        readPrefDocBuilder << ReadPrefModeField(mode);
+
+        if (!tags.isEmpty()) {
+            readPrefDocBuilder << ReadPrefTagsField(tags);
+        }
+
+        appendComplex(ReadPrefField.name().c_str(), readPrefDocBuilder.done());
+        return *this;
+    }
+
+    bool Query::isComplex( bool * hasDollar ) const {
+        return isComplex(obj, hasDollar);
+    }
+
+    bool Query::hasReadPreference(const BSONObj& queryObj) {
+        const bool hasReadPrefOption = queryObj["$queryOptions"].isABSONObj() &&
+                        queryObj["$queryOptions"].Obj().hasField(ReadPrefField.name());
+        return (Query::isComplex(queryObj) &&
+                    queryObj.hasField(ReadPrefField.name())) ||
+                hasReadPrefOption;
     }
 
     BSONObj Query::getFilter() const {

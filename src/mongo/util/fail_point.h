@@ -85,8 +85,7 @@ namespace mongo {
          * @return slowOn if fail point is active.
          */
         inline RetCode shouldFailOpenBlock() {
-            // TODO: optimization - use unordered load once available
-            if (MONGO_likely((_fpInfo.load() & ACTIVE_BIT) == 0)) {
+            if (MONGO_likely((_fpInfo.loadRelaxed() & ACTIVE_BIT) == 0)) {
                 return fastOff;
             }
 
@@ -139,6 +138,11 @@ namespace mongo {
 
         // protects _mode, _timesOrPeriod, _data
         mutable mutex _modMutex;
+
+        /**
+         * Enables this fail point.
+         */
+        void enableFailPoint();
 
         /**
          * Disables this fail point.

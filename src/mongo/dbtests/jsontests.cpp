@@ -303,6 +303,18 @@ namespace JsonTests {
             }
         };
 
+        class DateNegative {
+        public:
+            void run() {
+                BSONObjBuilder b;
+                b.appendDate( "a", -1 );
+                BSONObj built = b.done();
+                ASSERT_EQUALS( "{ \"a\" : { \"$date\" : -1 } }", built.jsonString( Strict ) );
+                ASSERT_EQUALS( "{ \"a\" : Date( -1 ) }", built.jsonString( TenGen ) );
+                ASSERT_EQUALS( "{ \"a\" : Date( -1 ) }", built.jsonString( JS ) );
+            }
+        };
+
         class Regex {
         public:
             void run() {
@@ -358,11 +370,7 @@ namespace JsonTests {
                 BSONObjBuilder b;
                 b.appendTimestamp( "x" , 4000 , 10 );
                 BSONObj o = b.obj();
-                ASSERT_EQUALS( "{ \"x\" : { \"$timestamp\" : { \"t\" : 4, \"i\" : 10 } } }",
-                        o.jsonString( Strict ) );
-                ASSERT_EQUALS( "{ \"x\" : { \"$timestamp\" : { \"t\" : 4, \"i\" : 10 } } }",
-                        o.jsonString( JS ) );
-                ASSERT_EQUALS( "{ \"x\" : Timestamp( 4, 10 ) }", o.jsonString( TenGen ) );
+                ASSERT_EQUALS( "{ \"x\" : { \"t\" : 4000 , \"i\" : 10 } }" , o.jsonString() );
             }
         };
 
@@ -849,11 +857,9 @@ namespace JsonTests {
         class DBRefConstructor : public Base {
             virtual BSONObj bson() const {
                 BSONObjBuilder b;
-                OID o;
-                memset( &o, 0, 12 );
                 BSONObjBuilder subBuilder(b.subobjStart("a"));
                 subBuilder.append("$ref", "ns");
-                subBuilder.append("$id", o);
+                subBuilder.append("$id", "000000000000000000000000");
                 subBuilder.done();
                 return b.obj();
             }
@@ -866,11 +872,9 @@ namespace JsonTests {
         class DBRefConstructorCapitals : public Base {
             virtual BSONObj bson() const {
                 BSONObjBuilder b;
-                OID o;
-                memset( &o, 0, 12 );
                 BSONObjBuilder subBuilder(b.subobjStart("a"));
                 subBuilder.append("$ref", "ns");
-                subBuilder.append("$id", o);
+                subBuilder.append("$id", "000000000000000000000000");
                 subBuilder.done();
                 return b.obj();
             }
@@ -879,14 +883,40 @@ namespace JsonTests {
             }
         };
 
-        class DBRefObjectIDString : public Base {
+        class DBRefConstructorNumber : public Base {
             virtual BSONObj bson() const {
                 BSONObjBuilder b;
-                OID o;
-                memset( &o, 0, 12 );
                 BSONObjBuilder subBuilder(b.subobjStart("a"));
                 subBuilder.append("$ref", "ns");
-                subBuilder.append("$id", o);
+                subBuilder.append("$id", 1);
+                subBuilder.done();
+                return b.obj();
+            }
+            virtual string json() const {
+                return "{ \"a\" : Dbref( \"ns\", 1 ) }";
+            }
+        };
+
+        class DBRefNumberId : public Base {
+            virtual BSONObj bson() const {
+                BSONObjBuilder b;
+                BSONObjBuilder subBuilder(b.subobjStart("a"));
+                subBuilder.append("$ref", "ns");
+                subBuilder.append("$id", 1);
+                subBuilder.done();
+                return b.obj();
+            }
+            virtual string json() const {
+                return "{ \"a\" : { \"$ref\" : \"ns\", \"$id\" : 1 } }";
+            }
+        };
+
+        class DBRefStringId : public Base {
+            virtual BSONObj bson() const {
+                BSONObjBuilder b;
+                BSONObjBuilder subBuilder(b.subobjStart("a"));
+                subBuilder.append("$ref", "ns");
+                subBuilder.append("$id", "000000000000000000000000");
                 subBuilder.done();
                 return b.obj();
             }
@@ -1110,11 +1140,71 @@ namespace JsonTests {
             }
         };
 
-        class DateTooLong : public Bad {
+        class DateStrictTooLong : public Bad {
             virtual string json() const {
                 stringstream ss;
                 ss << "{ \"a\" : { \"$date\" : " << ~(0ULL) << "1" << " } }";
                 return ss.str();
+            }
+        };
+
+        class DateTooLong : public Bad {
+            virtual string json() const {
+                stringstream ss;
+                ss << "{ \"a\" : Date( " << ~(0ULL) << "1" << " ) }";
+                return ss.str();
+            }
+        };
+
+        /* Need to handle this because jsonString outputs the value of Date_t as unsigned.
+         * See SERVER-8330 and SERVER-8573 */
+        class DateStrictMaxUnsigned : public Base {
+            virtual BSONObj bson() const {
+                BSONObjBuilder b;
+                b.appendDate( "a", -1 );
+                return b.obj();
+            }
+            virtual string json() const {
+                stringstream ss;
+                ss << "{ \"a\" : { \"$date\" : "
+                   << std::numeric_limits<unsigned long long>::max() << " } }";
+                return ss.str();
+            }
+        };
+
+        class DateMaxUnsigned : public Base {
+            virtual BSONObj bson() const {
+                BSONObjBuilder b;
+                b.appendDate( "a", -1 );
+                return b.obj();
+            }
+            virtual string json() const {
+                stringstream ss;
+                ss << "{ \"a\" : Date( "
+                   << std::numeric_limits<unsigned long long>::max() << " ) }";
+                return ss.str();
+            }
+        };
+
+        class DateStrictNegative : public Base {
+            virtual BSONObj bson() const {
+                BSONObjBuilder b;
+                b.appendDate( "a", -1 );
+                return b.obj();
+            }
+            virtual string json() const {
+                return "{ \"a\" : { \"$date\" : -1 } }";
+            }
+        };
+
+        class DateNegative : public Base {
+            virtual BSONObj bson() const {
+                BSONObjBuilder b;
+                b.appendDate( "a", -1 );
+                return b.obj();
+            }
+            virtual string json() const {
+                return "{ \"a\" : Date( -1 ) }";
             }
         };
 
@@ -1489,6 +1579,7 @@ namespace JsonTests {
             add< JsonStringTests::BinData >();
             add< JsonStringTests::Symbol >();
             add< JsonStringTests::Date >();
+            add< JsonStringTests::DateNegative >();
             add< JsonStringTests::Regex >();
             add< JsonStringTests::RegexEscape >();
             add< JsonStringTests::RegexManyOptions >();
@@ -1533,7 +1624,8 @@ namespace JsonTests {
             add< FromJsonTests::Utf8TooShort >();
             add< FromJsonTests::DBRefConstructor >();
             add< FromJsonTests::DBRefConstructorCapitals >();
-            add< FromJsonTests::DBRefObjectIDString >();
+            add< FromJsonTests::DBRefNumberId >();
+            add< FromJsonTests::DBRefStringId >();
             add< FromJsonTests::DBRefObjectIDObject >();
             add< FromJsonTests::DBRefObjectIDConstructor >();
             add< FromJsonTests::Oid >();
@@ -1556,7 +1648,12 @@ namespace JsonTests {
             add< FromJsonTests::BinDataTypeBadChars >();
             add< FromJsonTests::Date >();
             add< FromJsonTests::DateNonzero >();
+            add< FromJsonTests::DateStrictTooLong >();
             add< FromJsonTests::DateTooLong >();
+            add< FromJsonTests::DateStrictMaxUnsigned >();
+            add< FromJsonTests::DateMaxUnsigned >();
+            add< FromJsonTests::DateStrictNegative >();
+            add< FromJsonTests::DateNegative >();
             add< FromJsonTests::Timestamp >();
             add< FromJsonTests::TimestampNoIncrement >();
             add< FromJsonTests::TimestampNegativeSeconds >();
