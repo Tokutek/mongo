@@ -1149,7 +1149,7 @@ namespace UpdateTests {
             void run() {
                 BSONObj querySpec = BSONObj();
                 BSONObj modSpec = BSON( "$set" << BSON( "a.$" << 1 ) );
-                ModSet modSet( modSpec, IndexPathSet(), true );
+                ModSet modSet( modSpec, IndexPathSet() );
 
                 // No positional operator validation is performed if a ModSet is 'forReplication'.
                 modSet.prepare( querySpec ); // Does not throw.
@@ -1161,7 +1161,7 @@ namespace UpdateTests {
             void run() {
                 BSONObj querySpec = BSONObj( BSON( "a.b" << 1 ) );
                 BSONObj modSpec = BSON( "$set" << BSON( "a.$.b.$" << 1 ) );
-                ModSet modSet( modSpec, IndexPathSet(), true );
+                ModSet modSet( modSpec, IndexPathSet() );
 
                 // Attempt to fix the positional operator fields.
                 scoped_ptr<ModSet> fixedMods( modSet.fixDynamicArray( "0" ) );
