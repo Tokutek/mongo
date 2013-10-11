@@ -20,7 +20,6 @@
 #include "mongo/pch.h"
 
 #include "mongo/bson/bson_builder_base.h"
-#include "mongo/db/index_set.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/matcher.h"
@@ -31,6 +30,12 @@ namespace mongo {
 
     class ModState;
     class ModSetState;
+
+    /**
+     * a.$ -> a
+     * @return true if out is set and we made a change
+     */
+    bool getCanonicalIndexField( const string& fullName, string* out );
 
     /* Used for modifiers such as $inc, $set, $push, ...
      * stores the info about a single operation
@@ -117,6 +122,47 @@ namespace mongo {
             default:
                 return false;
             }
+        }
+
+        static bool isIndexed( const string& fullName , const set<string>& idxKeys ) {
+            const char * fieldName = fullName.c_str();
+            // check if there is an index key that is a parent of mod
+            for( const char* dot = strchr( fieldName, '.' ); dot; dot = strchr( dot + 1, '.' ) )
+                if ( idxKeys.count( string( fieldName, dot - fieldName ) ) )
+                    return true;
+
+            // check if there is an index key equal to mod
+            if ( idxKeys.count(fullName) )
+                return true;
+
+            // check if there is an index key that is a child of mod
+            set< string >::const_iterator j = idxKeys.upper_bound( fullName );
+            if ( j != idxKeys.end() && j->find( fullName ) == 0 && (*j)[fullName.size()] == '.' )
+                return true;
+
+            return false;
+        }
+
+        /**
+         * checks if mod is in the index by inspecting fieldName, and removing
+         * .$ or .### substrings (#=digit) with any number of digits.
+         *
+         * @return true iff the mod is indexed
+         */
+        bool isIndexed( const set<string>& idxKeys ) const {
+            string myFieldName = fieldName;
+
+            // first, check if full name is in idxKeys
+            if ( isIndexed( myFieldName , idxKeys ) )
+                return true;
+
+            string x;
+            if ( getCanonicalIndexField( myFieldName, &x ) ) {
+                if ( isIndexed( x, idxKeys ) )
+                    return true;
+            }
+
+            return false;
         }
 
         void apply( BSONBuilderBase& b , BSONElement in , ModState& ms ) const;
@@ -251,8 +297,9 @@ namespace mongo {
 
         ModSet() {}
 
-        void updateIsIndexed( const Mod& m, const IndexPathSet& idxKeys ) {
-            if ( idxKeys.mightBeIndexed( m.fieldName ) ) {
+        void updateIsIndexed( const Mod& m, const set<string>& idxKeys, const set<string>* backgroundKeys ) {
+            if ( m.isIndexed( idxKeys ) ||
+                    (backgroundKeys && m.isIndexed(*backgroundKeys)) ) {
                 _isIndexed++;
             }
         }
@@ -260,13 +307,14 @@ namespace mongo {
     public:
 
         ModSet( const BSONObj& from,
-                const IndexPathSet& idxKeys = IndexPathSet(),
+                const set<string>& idxKeys = set<string>(),
+                const set<string>* backgroundKeys = 0,
                 bool forReplication = false );
 
         /**
          * re-check if this mod is impacted by indexes
          */
-        void updateIsIndexed( const IndexPathSet& idxKeys );
+        void updateIsIndexed( const set<string>& idxKeys, const set<string>* backgroundKeys );
 
 
 

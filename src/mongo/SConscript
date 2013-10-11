@@ -118,9 +118,6 @@ env.CppUnitTest('bson_field_test', ['bson/bson_field_test.cpp'],
 env.CppUnitTest('bson_validate_test', ['bson/bson_validate_test.cpp'],
                 LIBDEPS=['bson'])
 
-env.CppUnitTest('index_set_test', ['db/index_set_test.cpp'],
-                LIBDEPS=['bson','index_set'])
-
 env.CppUnitTest('bson_extract_test', ['bson/util/bson_extract_test.cpp'], LIBDEPS=['bson'])
 
 env.CppUnitTest('descriptive_stats_test',
@@ -346,8 +343,7 @@ coreServerFiles.append( systemInfoPlatformFile )
 if has_option( "asio" ):
     coreServerFiles += [ "util/net/message_server_asio.cpp" ]
 
-env.StaticLibrary('index_set', [ 'db/index_set.cpp' ] )
-
+# TokuMX: Commented out files have been deleted - they were used to implement the old storage/durability layer.
 # mongod files - also files used in tools. present in dbtests, but not in mongos and not in client libs.
 serverOnlyFiles = [ "db/curop.cpp",
                     "db/kill_current_op.cpp",
@@ -531,8 +527,7 @@ env.StaticLibrary("serveronly", serverOnlyFiles,
                            "db/auth/authmongod",
                            "db/common",
                            "dbcmdline",
-                           "defaultversion",
-                           "index_set"])
+                           "defaultversion"])
 
 # These files go into mongos and mongod only, not into the shell or any tools.
 mongodAndMongosFiles = [

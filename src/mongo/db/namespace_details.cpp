@@ -1033,15 +1033,10 @@ namespace mongo {
     }
 
     void NamespaceDetails::computeIndexKeys() {
-        _indexedPaths.clear();
-
-        for (int i = 0; i < nIndexesBeingBuilt(); i++) {
-            const BSONObj &key = _indexes[i]->keyPattern();
-            BSONObjIterator o( key );
-            while ( o.more() ) {
-                const BSONElement e = o.next();
-                _indexedPaths.addPath( e.fieldName() );
-            }
+        _indexKeys.clear();
+        NamespaceDetails::IndexIterator i = ii();
+        while ( i.more() ) {
+            i.next().keyPattern().getFieldNames(_indexKeys);
         }
     }
 

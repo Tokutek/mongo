@@ -181,7 +181,14 @@ namespace mongo {
         const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
 
         if ( isOperatorUpdate ) {
-            mods.reset( new ModSet(updateobj, d->indexKeys()) );
+            if ( d->indexBuildInProgress() ) {
+                set<string> bgKeys;
+                d->inProgIdx().keyPattern().getFieldNames(bgKeys);
+                mods.reset( new ModSet(updateobj, d->indexKeys(), &bgKeys) );
+            }
+            else {
+                mods.reset( new ModSet(updateobj, d->indexKeys()) );
+            }
         }
 
         int idIdxNo = -1;
