@@ -47,14 +47,14 @@ namespace mongo {
     struct ProcPsinfo {
         ProcPsinfo() {
             FILE* f = fopen("/proc/self/psinfo", "r");
-            massert(16846,
+            massert(17028,
                     mongoutils::str::stream() << "couldn't open \"/proc/self/psinfo\": "
                                               << errnoWithDescription(), 
                     f);
             size_t num = fread(&psinfo, sizeof(psinfo), 1, f);
             int err = errno;
             fclose(f);
-            massert(16847,
+            massert(17029,
                     mongoutils::str::stream() << "couldn't read from \"/proc/self/psinfo\": "
                                               << errnoWithDescription(err), 
                     num == 1);
@@ -65,14 +65,14 @@ namespace mongo {
     struct ProcUsage {
         ProcUsage() {
             FILE* f = fopen("/proc/self/usage", "r");
-            massert(16848,
+            massert(17030,
                     mongoutils::str::stream() << "couldn't open \"/proc/self/usage\": "
                                               << errnoWithDescription(), 
                     f);
             size_t num = fread(&prusage, sizeof(prusage), 1, f);
             int err = errno;
             fclose(f);
-            massert(16849,
+            massert(17031,
                     mongoutils::str::stream() << "couldn't read from \"/proc/self/usage\": "
                                               << errnoWithDescription(err), 
                     num == 1);
