@@ -1158,6 +1158,32 @@ namespace mongo {
         }
     } cmdListDatabases;
 
+    class CmdCloseAllDatabases : public FileopsCommand {
+    public:
+        CmdCloseAllDatabases() : FileopsCommand( "closeAllDatabases" ) {}
+        virtual bool adminOnly() const { return true; }
+        virtual bool requiresAuth() { return true; }
+        virtual bool lockGlobally() const { return true; }
+        virtual bool slaveOk() const { return false; }
+        virtual bool logTheOp() { return false; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::closeAllDatabases);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
+        virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            try {
+                dbHolderW().closeDatabases(dbpath);
+                return true;
+            } catch (DBException &e) {
+                log() << "Caught exception while closing all databases: " << e.what();
+                return false;
+            }
+        }
+    } cmdCloseAllDatabases;
+
     class CmdFileMD5 : public QueryCommand {
     public:
         CmdFileMD5() : QueryCommand( "filemd5" ) {}

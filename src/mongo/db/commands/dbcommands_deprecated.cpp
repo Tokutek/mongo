@@ -130,9 +130,4 @@ namespace mongo {
         CmdGetOpTime() : DeprecatedCommand("getoptime") {}
     } cmdgetoptime;
 
-    class CmdCloseAllDatabases : public DeprecatedCommand {
-    public:
-        CmdCloseAllDatabases() : DeprecatedCommand( "closeAllDatabases" ) {}
-    } cmdCloseAllDatabases;
-
 }// namespace mongo
