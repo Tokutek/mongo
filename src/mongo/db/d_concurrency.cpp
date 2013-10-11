@@ -190,8 +190,8 @@ namespace mongo {
         b.append("admin", nestableLocks[Lock::admin]->stats.report());
         b.append("local", nestableLocks[Lock::local]->stats.report());
         {
-            mapsf<string,WrapperForRWLock*>::ref r(dblocks);
-            for( unordered_map<string,WrapperForRWLock*>::const_iterator i = r.r.begin(); i != r.r.end(); i++ ) {
+            DBLocksMap::ref r(dblocks);
+            for( DBLocksMap::const_iterator i = r.r.begin(); i != r.r.end(); ++i ) {
                 b.append(i->first, i->second->stats.report());
             }
         }
