@@ -55,7 +55,7 @@ namespace mongo {
 
     string Command::parseNsFullyQualified(const string& dbname, const BSONObj& cmdObj) const { 
         string s = cmdObj.firstElement().valuestr();
-        StringData dbstr = nsToDatabaseSubstring(s)
+        StringData dbstr = nsToDatabaseSubstring(s);
         // these are for security, do not remove:
         massert(15962, "need to specify namespace" , !dbstr.empty() );
         massert(15966, str::stream() << "dbname not ok in Command::parseNsFullyQualified: " << dbname , dbname == dbstr || dbname == "admin" );
