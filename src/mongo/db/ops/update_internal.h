@@ -47,19 +47,13 @@ namespace mongo {
         const char* fieldName;
         const char* shortFieldName;
 
-        // Determines if this mod must absoluetly be applied. In some replication scenarios, a
-        // failed apply of a mod does not constitute an error. In those cases, setting strict
-        // to off would not throw errors.
-        bool strictApply;
-
         BSONElement elt; // x:5 note: this is the actual element from the updateobj
         boost::shared_ptr<Matcher> matcher;
         bool matcherOnPrimitive;
 
-        void init( Op o , BSONElement& e , bool forReplication ) {
+        void init( Op o , BSONElement& e ) {
             op = o;
             elt = e;
-            strictApply = !forReplication;
             if ( op == PULL && e.type() == Object ) {
                 BSONObj t = e.embeddedObject();
                 if ( t.firstElement().getGtLtOp() == 0 ) {
@@ -260,8 +254,7 @@ namespace mongo {
     public:
 
         ModSet( const BSONObj& from,
-                const IndexPathSet& idxKeys = IndexPathSet(),
-                bool forReplication = false );
+                const IndexPathSet& idxKeys = IndexPathSet() );
 
         /**
          * re-check if this mod is impacted by indexes

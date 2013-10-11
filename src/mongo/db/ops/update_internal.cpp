@@ -734,34 +734,9 @@ namespace mongo {
             switch ( cmp ) {
 
             case LEFT_SUBFIELD: { // Mod is embedded under this element
-
-                // SERVER-4781
-                bool isObjOrArr = e.type() == Object || e.type() == Array;
-                if ( ! isObjOrArr ) {
-                    if (m->second->m->strictApply) {
-                        uasserted( 10145,
-                                   str::stream() << "LEFT_SUBFIELD only supports Object: " << field
-                                   << " not: " << e.type() );
-                    }
-                    else {
-                        // Since we're not applying the mod, we keep what was there before
-                        builder.append( e );
-
-                        // Skip both as we're not applying this mod. Note that we'll advance
-                        // the iterator on the mod side for all the mods that are under the
-                        // root we are now.
-                        e = es.next();
-                        m++;
-                        while ( m != mend &&
-                                ( compareDottedFieldNames( m->second->m->fieldName,
-                                                           field,
-                                                           lexNumCmp ) == LEFT_SUBFIELD ) ) {
-                            m++;
-                        }
-                        continue;
-                    }
-                }
-
+                uassert( 10145,
+                         str::stream() << "LEFT_SUBFIELD only supports Object: " << field
+                         << " not: " << e.type() , e.type() == Object || e.type() == Array );
                 if ( onedownseen.count( e.fieldName() ) == 0 ) {
                     onedownseen.insert( e.fieldName() );
                     if ( e.type() == Object ) {
@@ -897,8 +872,7 @@ namespace mongo {
     */
     ModSet::ModSet(
         const BSONObj& from ,
-        const IndexPathSet& idxKeys,
-        bool forReplication)
+        const IndexPathSet& idxKeys)
         : _isIndexed(0) , _hasDynamicArray( false ) {
 
         BSONObjIterator it(from);
@@ -987,13 +961,13 @@ namespace mongo {
                              strstr( target , ".$" ) == 0 );
 
                     Mod from;
-                    from.init( Mod::RENAME_FROM, f, forReplication );
+                    from.init( Mod::RENAME_FROM, f );
                     from.setFieldName( fieldName );
                     updateIsIndexed( from, idxKeys );
                     _mods[ from.fieldName ] = from;
 
                     Mod to;
-                    to.init( Mod::RENAME_TO, f, forReplication );
+                    to.init( Mod::RENAME_TO, f );
                     to.setFieldName( target );
                     updateIsIndexed( to, idxKeys );
                     _mods[ to.fieldName ] = to;
@@ -1005,7 +979,7 @@ namespace mongo {
                 _hasDynamicArray = _hasDynamicArray || strstr( fieldName , ".$" ) > 0;
 
                 Mod m;
-                m.init( op , f, forReplication );
+                m.init( op , f );
                 m.setFieldName( f.fieldName() );
                 updateIsIndexed( m, idxKeys );
                 _mods[m.fieldName] = m;
