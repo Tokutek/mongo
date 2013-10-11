@@ -84,22 +84,23 @@ namespace mongo {
         bool ok = true;
         errmsg = "";
         for ( size_t i=0; i<_conns.size(); i++ ) {
-            BSONObj res;
+            string singleErr;
             try {
-                if ( _conns[i]->simpleCommand( "admin" , &res , "fsync" ) )
+                // this is fsync=true
+                // which with journalling on is a journal commit
+                // without journalling, is a full fsync
+                _conns[i]->simpleCommand( "admin", NULL, "resetError" );
+                singleErr = _conns[i]->getLastError( true );
+
+                if ( singleErr.size() == 0 )
                     continue;
+
             }
             catch ( DBException& e ) {
-                errmsg += e.toString();
-            }
-            catch ( std::exception& e ) {
-                errmsg += e.what();
-            }
-            catch ( ... ) {
-                warning() << "unknown exception in SyncClusterConnection::fsync" << endl;
+                singleErr = e.toString();
             }
             ok = false;
-            errmsg += " " + _conns[i]->toString() + ":" + res.toString();
+            errmsg += " " + _conns[i]->toString() + ":" + singleErr;
         }
         return ok;
     }
@@ -181,7 +182,7 @@ namespace mongo {
             if (_requiresSync(cmdName)) { // write $cmd
                 string errmsg;
                 if ( ! prepare( errmsg ) )
-                    throw UserException( 13104 , (string)"SyncClusterConnection::findOne prepare failed: " + errmsg );
+                    throw UserException( PrepareConfigsFailedCode , (string)"SyncClusterConnection::findOne prepare failed: " + errmsg );
 
                 vector<BSONObj> all;
                 for ( size_t i=0; i<_conns.size(); i++ ) {
@@ -320,7 +321,7 @@ namespace mongo {
                 log() << "query failed to: " << _conns[i]->toString() << " exception" << endl;
             }
         }
-        throw UserException( 8002 , "all servers down!" );
+        throw UserException( 8002 , str::stream() << "all servers down/unreachable when querying: " << _address );
     }
 
     auto_ptr<DBClientCursor> SyncClusterConnection::getMore( const string &ns, long long cursorId, int nToReturn, int options ) {
@@ -347,7 +348,36 @@ namespace mongo {
     }
 
     void SyncClusterConnection::insert( const string &ns, const vector< BSONObj >& v , int flags) {
-        uassert( 10023 , "SyncClusterConnection bulk insert not implemented" , 0);
+        if (v.size() == 1){
+            insert(ns, v[0], flags);
+            return;
+        }
+
+        for (vector<BSONObj>::const_iterator it = v.begin(); it != v.end(); ++it ) {
+            BSONObj obj = *it;
+            if ( obj["_id"].type() == EOO ) {
+                string assertMsg = "SyncClusterConnection::insert (batched) obj misses an _id: ";
+                uasserted( 17020, assertMsg + obj.jsonString() );
+            }
+        }
+
+        // fsync all connections before starting the batch.
+        string errmsg;
+        if ( ! prepare( errmsg ) ) {
+            string assertMsg = "SyncClusterConnection::insert (batched) prepare failed: ";
+            throw UserException( 16744, assertMsg + errmsg );
+        }
+
+        // We still want one getlasterror per document, even if they're batched.
+        for ( size_t i=0; i<_conns.size(); i++ ) {
+            for ( vector<BSONObj>::const_iterator it = v.begin(); it != v.end(); ++it ) {
+                _conns[i]->insert( ns, *it, flags );
+                _conns[i]->getLastErrorDetailed();
+            }
+        }
+
+        // We issue a final getlasterror, but this time with an fsync.
+        _checkLast();
     }
 
     void SyncClusterConnection::remove( const string &ns , Query query, int flags ) {
@@ -434,7 +464,7 @@ namespace mongo {
                 log() << "call failed to: " << _conns[i]->toString() << " exception" << endl;
             }
         }
-        throw UserException( 8008 , "all servers down!" );
+        throw UserException( 8008 , str::stream() << "all servers down/unreachable: " << _address );
     }
 
     void SyncClusterConnection::say( Message &toSend, bool isRetry , string * actualServer ) {

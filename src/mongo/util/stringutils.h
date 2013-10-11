@@ -33,7 +33,7 @@ namespace mongo {
 
     void joinStringDelim( const std::vector<std::string>& strs , std::string* res , char delim );
 
-    inline std::string tolowerString( const std::string& input ) {
+    inline std::string tolowerString( StringData input ) {
         std::string::size_type sz = input.size();
 
         boost::scoped_array<char> line(new char[sz+1]);
@@ -65,4 +65,8 @@ namespace mongo {
         bool _lexOnly;
     };
     
+    // TODO: Sane-ify core string functionality
+    // For now, this needs to be near the LexNumCmp or else
+    int versionCmp(const StringData rhs, const StringData lhs);
+
 } // namespace mongo

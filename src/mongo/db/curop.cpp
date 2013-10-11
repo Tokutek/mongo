@@ -15,9 +15,10 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "curop.h"
-#include "database.h"
+#include "mongo/pch.h"
+
+#include "mongo/db/curop.h"
+#include "mongo/db/database.h"
 
 namespace mongo {
 
@@ -67,13 +68,17 @@ namespace mongo {
         _op = op;
     }
         
-    ProgressMeter& CurOp::setMessage( const char * msg , unsigned long long progressMeterTotal , int secondsBetween ) {
+    ProgressMeter& CurOp::setMessage(const char *msg,
+                                     const std::string &name,
+                                     unsigned long long progressMeterTotal,
+                                     int secondsBetween) {
         if ( progressMeterTotal ) {
             if ( _progressMeter.isActive() ) {
                 cout << "about to assert, old _message: " << _message << " new message:" << msg << endl;
                 verify( ! _progressMeter.isActive() );
             }
             _progressMeter.reset( progressMeterTotal , secondsBetween );
+            _progressMeter.setName(name);
         }
         else {
             _progressMeter.finished();
@@ -164,42 +169,6 @@ namespace mongo {
 
         return b.obj();
     }
-
-    void KillCurrentOp::checkForInterrupt() {
-        return _checkForInterrupt( cc() );
-    }
-
-    void KillCurrentOp::checkForInterrupt( Client &c ) {
-        return _checkForInterrupt( c );
-    }
-
-    void KillCurrentOp::_checkForInterrupt( Client &c ) {
-        if (_killForTransition > 0) {
-            uasserted(16809, "interrupted due to state transition");
-        }
-        if( _globalKill )
-            uasserted(11600,"interrupted at shutdown");
-        if( c.curop()->killed() ) {
-            uasserted(11601,"operation was interrupted");
-        }
-    }
-    
-    const char * KillCurrentOp::checkForInterruptNoAssert() {
-        Client& c = cc();
-        return checkForInterruptNoAssert(c);
-    }
-
-    const char * KillCurrentOp::checkForInterruptNoAssert(Client &c) {
-        if (_killForTransition > 0) {
-            return "interrupted due to state transition";
-        }
-        if( _globalKill )
-            return "interrupted at shutdown";
-        if( c.curop()->killed() )
-            return "interrupted";
-        return "";
-    }
-
 
     AtomicUInt CurOp::_nextOpNum;
 

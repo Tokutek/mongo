@@ -42,8 +42,11 @@
 #include "mongo/util/timer.h"
 
 #include "mongo/s/chunk.h" // for static genID only
+#include "mongo/s/chunk_version.h"
 #include "mongo/s/config.h"
 #include "mongo/s/d_logic.h"
+#include "mongo/s/type_chunk.h"
+#include "mongo/util/timer.h"
 
 namespace mongo {
 
@@ -113,13 +116,14 @@ namespace mongo {
                 return false;
             }
             // extend min to get (min, MinKey, MinKey, ....)
-            min = Helpers::modifiedRangeBound( min , idx->keyPattern() , -1 );
+            KeyPattern kp( idx->keyPattern() );
+            min = Helpers::toKeyFormat( kp.extendRangeBound( min, false ) );
             if  ( max.isEmpty() ) {
                 // if max not specified, make it (MaxKey, Maxkey, MaxKey...)
-                max = Helpers::modifiedRangeBound( max , idx->keyPattern() , 1 );
+                max = Helpers::toKeyFormat( kp.extendRangeBound( max, true ) );
             } else {
                 // otherwise make it (max,MinKey,MinKey...) so that bound is non-inclusive
-                max = Helpers::modifiedRangeBound( max , idx->keyPattern() , -1 );
+                max = Helpers::toKeyFormat( kp.extendRangeBound( max, false ) );
             }
 
             shared_ptr<IndexCursor> c( IndexCursor::make( d , *idx , min , max , false , 1 ) );
@@ -129,14 +133,18 @@ namespace mongo {
                 return true;
             }
 
+            // Find the 'missingField' value used to represent a missing document field in a key of
+            // this index.
+            const BSONElement missingField = idx->missingField();
+            
             // for now, the only check is that all shard keys are filled
-            // null is ok, 
+            // a 'missingField' valued index key is ok if the field is present in the document,
             // TODO if $exist for nulls were picking the index, it could be used instead efficiently
             int keyPatternLength = keyPattern.nFields();
             while ( cc->ok() ) {
                 BSONObj currKey = c->currKey();
                 
-                //check that current key contains non-null elements for all fields in keyPattern
+                //check that current key contains non missing elements for all fields in keyPattern
                 BSONObjIterator i( currKey );
                 for( int k = 0; k < keyPatternLength ; k++ ) {
                     if( ! i.more() ) {
@@ -145,8 +153,8 @@ namespace mongo {
                         return false;
                     }
                     BSONElement currKeyElt = i.next();
-
-                    if ( currKeyElt.type() && currKeyElt.type() != jstNULL )
+                    
+                    if ( !currKeyElt.eoo() && !currKeyElt.valuesEqual( missingField ) )
                         continue;
 
                     BSONObj obj = c->current();
@@ -161,7 +169,7 @@ namespace mongo {
                         continue;
                     
                     ostringstream os;
-                    os << "found null value in key " << c->prettyKey( currKey ) << " for doc: "
+                    os << "found missing value in key " << c->prettyKey( currKey ) << " for doc: "
                        << ( obj.hasField( "_id" ) ? obj.toString() : obj["_id"].toString() );
                     log() << "checkShardingIndex for '" << ns << "' failed: " << os.str() << endl;
                     
@@ -247,7 +255,8 @@ namespace mongo {
             // query, and in BSONObj form to pass it back.
             _lastSplitKey = splitKey.getOwned();
             _splitPoints.push_back(_lastSplitKey);
-            BSONObj modSplitKey = Helpers::modifiedRangeBound(_lastSplitKey, _idx.keyPattern(), -1);
+            KeyPattern kp(_idx.keyPattern());
+            BSONObj modSplitKey = Helpers::toKeyFormat(kp.extendRangeBound(_lastSplitKey, false));
             _chunkMin.reset(modSplitKey, _idx.isIdIndex() ? NULL : &minKey);
         }
 
@@ -270,7 +279,8 @@ namespace mongo {
                         }
                         _lastSplitKey = splitKey.getOwned();
                         _splitPoints.push_back(_lastSplitKey);
-                        BSONObj modSplitKey = Helpers::modifiedRangeBound(_lastSplitKey, _idx.keyPattern(), -1);
+                        KeyPattern kp(_idx.keyPattern());
+                        BSONObj modSplitKey = Helpers::toKeyFormat(kp.extendRangeBound(_lastSplitKey, false));
                         _chunkMin.reset(modSplitKey, _idx.isIdIndex() ? NULL : &minKey);
                         return;
                     }
@@ -424,25 +434,26 @@ namespace mongo {
                 return false;
             }
             // extend min to get (min, MinKey, MinKey, ....)
-            min = Helpers::modifiedRangeBound( min , idx->keyPattern() , -1 );
+            KeyPattern kp( idx->keyPattern() );
+            min = Helpers::toKeyFormat( kp.extendRangeBound( min, false ) );
             if  ( max.isEmpty() ) {
                 // if max not specified, make it (MaxKey, Maxkey, MaxKey...)
-                max = Helpers::modifiedRangeBound( max , idx->keyPattern() , 1 );
+                max = Helpers::toKeyFormat( kp.extendRangeBound( max, true ) );
             } else {
                 // otherwise make it (max,MinKey,MinKey...) so that bound is non-inclusive
-                max = Helpers::modifiedRangeBound( max , idx->keyPattern() , -1 );
+                max = Helpers::toKeyFormat( kp.extendRangeBound( max, false ) );
             }
 
             // 'force'-ing a split is equivalent to having maxChunkSize be the size of the current chunk, i.e., the
             // logic below will split that chunk in half
             long long maxChunkSize = 0;
-            bool force = false;
+            bool forceMedianSplit = false;
             {
                 BSONElement maxSizeElem = jsobj[ "maxChunkSize" ];
                 BSONElement forceElem = jsobj[ "force" ];
 
                 if ( forceElem.trueValue() ) {
-                    force = true;
+                    forceMedianSplit = true;
                 }
                 else if ( maxSizeElem.isNumber() ) {
                     maxChunkSize = maxSizeElem.numberLong() * 1<<20;
@@ -454,26 +465,26 @@ namespace mongo {
                     }
                 }
 
-                if ( !force && maxChunkSize <= 0 ) {
+                if ( !forceMedianSplit && maxChunkSize <= 0 ) {
                     errmsg = "need to specify the desired max chunk size (maxChunkSize or maxChunkSizeBytes)";
                     return false;
                 }
             }
 
-            if (!force && idx->clustering()) {
+            if (!forceMedianSplit && idx->clustering()) {
                 SplitVectorFinder finder(d, *idx, keyPattern, min, max, splitKeys);
                 finder.find(maxChunkSize, maxSplitPoints);
             } else {
                 // Haven't implemented a better version using get_key_after_bytes yet, do the slow thing
-                NamespaceDetailsAccStats stats;
-                BSONObjBuilder statsResult;
-                d->fillCollectionStats(&stats, &statsResult, 1);
+                NamespaceDetails::Stats stats;
+                d->fillCollectionStats(stats, NULL, 1);
                 const long long recCount = stats.count;
                 const long long dataSize = stats.size;
 
                 // 'force'-ing a split is equivalent to having maxChunkSize be the size of the current chunk, i.e., the
                 // logic below will split that chunk in half
-                if (force) {
+                if (forceMedianSplit) {
+                    // This chunk size is effectively ignored
                     maxChunkSize = dataSize;
                 }
 
@@ -518,7 +529,7 @@ namespace mongo {
                             currCount++;
 
                             // we want ~half-full chunks
-                            if (2 * currSize >= maxChunkSize) {
+                            if (2 * currSize > maxChunkSize && !forceMedianSplit) {
                                 BSONObj currKey = c->prettyKey(c->currKey()).extractFields(keyPattern);
                                 // Do not use this split key if it is the same used in the previous split point.
                                 if (currKey.woCompare(splitKeys.back()) == 0) {
@@ -545,12 +556,18 @@ namespace mongo {
                             }
                         }
 
-                        if (splitKeys.size() > 1 || !force) {
+                        if (!forceMedianSplit) {
                             break;
                         }
 
-                        force = false;
+                        //
+                        // If we're forcing a split at the halfway point, then the first pass was just
+                        // to count the keys, and we still need a second pass.
+                        //
+
+                        forceMedianSplit = false;
                         maxChunkSize = currSize;
+                        currSize = 0;
                         currCount = 0;
                         LOG(0) << "splitVector doing another cycle because of force, maxChunkSize now: " << maxChunkSize << endl;
 
@@ -580,13 +597,14 @@ namespace mongo {
                                   << endl;
                     }
                 }
+
+                result.append( "timeMillis", timer.millis() );
             }
 
             // Warning: we are sending back an array of keys but are currently limited to
             // 4MB work of 'result' size. This should be okay for now.
 
             result.append( "splitKeys" , splitKeys );
-
             return true;
         }
     } cmdSplitVector;
@@ -598,25 +616,25 @@ namespace mongo {
     struct ChunkInfo {
         BSONObj min;
         BSONObj max;
-        ShardChunkVersion lastmod;
+        ChunkVersion lastmod;
 
         ChunkInfo() { }
-        ChunkInfo( BSONObj aMin , BSONObj aMax , ShardChunkVersion aVersion ) : min(aMin) , max(aMax) , lastmod(aVersion) {}
+        ChunkInfo( BSONObj aMin , BSONObj aMax , ChunkVersion aVersion ) : min(aMin) , max(aMax) , lastmod(aVersion) {}
         void appendShortVersion( const char* name, BSONObjBuilder& b ) const;
         string toString() const;
     };
 
     void ChunkInfo::appendShortVersion( const char * name , BSONObjBuilder& b ) const {
         BSONObjBuilder bb( b.subobjStart( name ) );
-        bb.append( "min" , min );
-        bb.append( "max" , max );
-        lastmod.addToBSON( bb, "lastmod" );
+        bb.append(ChunkType::min(), min);
+        bb.append(ChunkType::max(), max);
+        lastmod.addToBSON(bb, ChunkType::DEPRECATED_lastmod());
         bb.done();
     }
 
     string ChunkInfo::toString() const {
         ostringstream os;
-        os << "lastmod: " << lastmod.toString() << " min: " << min << " max: " << endl;
+        os << "lastmod: " << lastmod.toString() << " min: " << min << " max: " << max << endl;
         return os.str();
     }
     // ** end temporary **
@@ -739,29 +757,32 @@ namespace mongo {
 
             // TODO This is a check migrate does to the letter. Factor it out and share. 2010-10-22
 
-            ShardChunkVersion maxVersion;
+            ChunkVersion maxVersion;
             string shard;
             ChunkInfo origChunk;
             {
                 scoped_ptr<ScopedDbConnection> conn(
                         ScopedDbConnection::getInternalScopedDbConnection(
-                                shardingState.getConfigServer() ) );
+                                shardingState.getConfigServer(), 30));
 
-                BSONObj x = conn->get()->findOne( ShardNS::chunk,
-                                                  Query( BSON( "ns" << ns ) )
-                                                      .sort( BSON( "lastmod" << -1 ) ) );
-                maxVersion = ShardChunkVersion::fromBSON( x, "lastmod" );
+                BSONObj x = conn->get()->findOne(ChunkType::ConfigNS,
+                                                 Query(BSON(ChunkType::ns(ns)))
+                                                     .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
 
-                BSONObj currChunk = conn->get()->findOne( ShardNS::chunk , shardId.wrap( "_id" ) )
-                    .getOwned();
-                verify( currChunk["shard"].type() );
-                verify( currChunk["min"].type() );
-                verify( currChunk["max"].type() );
-                shard = currChunk["shard"].String();
+                maxVersion = ChunkVersion::fromBSON(x, ChunkType::DEPRECATED_lastmod());
+
+                BSONObj currChunk =
+                    conn->get()->findOne(ChunkType::ConfigNS,
+                                         shardId.wrap(ChunkType::name().c_str())).getOwned();
+
+                verify(currChunk[ChunkType::shard()].type());
+                verify(currChunk[ChunkType::min()].type());
+                verify(currChunk[ChunkType::max()].type());
+                shard = currChunk[ChunkType::shard()].String();
                 conn->done();
 
-                BSONObj currMin = currChunk["min"].Obj();
-                BSONObj currMax = currChunk["max"].Obj();
+                BSONObj currMin = currChunk[ChunkType::min()].Obj();
+                BSONObj currMax = currChunk[ChunkType::max()].Obj();
                 if ( currMin.woCompare( min ) || currMax.woCompare( max ) ) {
                     errmsg = "chunk boundaries are outdated (likely a split occurred)";
                     result.append( "currMin" , currMin );
@@ -796,11 +817,11 @@ namespace mongo {
 
                 origChunk.min = currMin.getOwned();
                 origChunk.max = currMax.getOwned();
-                origChunk.lastmod = ShardChunkVersion::fromBSON( currChunk["lastmod"] );
+                origChunk.lastmod = ChunkVersion::fromBSON(currChunk[ChunkType::DEPRECATED_lastmod()]);
 
                 // since this could be the first call that enable sharding we also make sure to have the chunk manager up to date
                 shardingState.gotShardName( shard );
-                ShardChunkVersion shardVersion;
+                ChunkVersion shardVersion;
                 shardingState.trySetVersion( ns , shardVersion /* will return updated */ );
 
                 log() << "splitChunk accepted at version " << shardVersion << endl;
@@ -817,25 +838,25 @@ namespace mongo {
             vector<ChunkInfo> newChunks;
 
             try {
-                scoped_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer()));
+                scoped_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer(), 30));
                 RemoteTransaction txn(conn->conn(), "serializable");
 
                 // Check the precondition
                 BSONObjBuilder b;
-                b.appendTimestamp("lastmod", maxVersion.toLong());
-                BSONObj expect = b.obj();
+                b.appendTimestamp(ChunkType::DEPRECATED_lastmod(), maxVersion.toLong());
+                BSONObj expect = b.done();
                 Matcher m(expect);
 
-                BSONObj found = conn->get()->findOne(ShardNS::chunk, QUERY("ns" << ns).sort("lastmod", -1));
+                BSONObj found = conn->get()->findOne(ChunkType::ConfigNS, QUERY(ChunkType::ns(ns)).sort(ChunkType::DEPRECATED_lastmod(), -1));
                 if (!m.matches(found)) {
                     // TODO(leif): Make sure that this means the sharding algorithm is broken and we should bounce the server.
-                    error() << "splitChunk commit failed: " << ShardChunkVersion::fromBSON(found["lastmod"])
+                    error() << "splitChunk commit failed: " << ChunkVersion::fromBSON(found[ChunkType::DEPRECATED_lastmod()])
                             << " instead of " << maxVersion << endl;
                     error() << "TERMINATING" << endl;
                     dbexit(EXIT_SHARDING_ERROR);
                 }
 
-                ShardChunkVersion myVersion = maxVersion;
+                ChunkVersion myVersion = maxVersion;
                 BSONObj startKey = min;
                 splitKeys.push_back( max ); // makes it easier to have 'max' in the next loop. remove later.
 
@@ -847,13 +868,13 @@ namespace mongo {
 
                     try {
                         BSONObjBuilder n;
-                        n.append( "_id" , Chunk::genID( ns , startKey ) );
-                        myVersion.addToBSON( n, "lastmod" );
-                        n.append( "ns" , ns );
-                        n.append( "min" , startKey );
-                        n.append( "max" , endKey );
-                        n.append( "shard" , shard );
-                        conn->get()->update(ShardNS::chunk, QUERY("_id" << Chunk::genID(ns, startKey)), n.obj(), true);
+                        n.append(ChunkType::name(), Chunk::genID(ns, startKey));
+                        myVersion.addToBSON(n, ChunkType::DEPRECATED_lastmod());
+                        n.append(ChunkType::ns(), ns);
+                        n.append(ChunkType::min(), startKey);
+                        n.append(ChunkType::max(), endKey);
+                        n.append(ChunkType::shard(), shard);
+                        conn->get()->update(ChunkType::ConfigNS, QUERY(ChunkType::name() << Chunk::genID(ns, startKey)), n.done(), true);
                     }
                     catch (DBException &e) {
                         warning() << e << endl;
@@ -915,7 +936,7 @@ namespace mongo {
                 // If one of the chunks has only one object in it we should move it
                 for (int i=1; i >= 0 ; i--){ // high chunk more likely to have only one obj
 
-                    NamespaceDetails *d = nsdetails( ns.c_str() );
+                    NamespaceDetails *d = nsdetails(ns);
 
                     const IndexDetails *idx = d->findIndexByPrefix( keyPattern ,
                                                                     true ); /* exclude multikeys */
@@ -924,8 +945,9 @@ namespace mongo {
                     }
 
                     ChunkInfo chunk = newChunks[i];
-                    BSONObj newmin = Helpers::modifiedRangeBound(chunk.min, idx->keyPattern(), -1);
-                    BSONObj newmax = Helpers::modifiedRangeBound(chunk.max , idx->keyPattern(), -1);
+                    KeyPattern kp( idx->keyPattern() );
+                    BSONObj newmin = Helpers::toKeyFormat( kp.extendRangeBound( chunk.min, false) );
+                    BSONObj newmax = Helpers::toKeyFormat( kp.extendRangeBound( chunk.max, false) );
 
                     shared_ptr<Cursor> c( IndexCursor::make( d , *idx ,
                                                              newmin , /* lower */

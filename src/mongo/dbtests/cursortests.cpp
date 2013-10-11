@@ -383,7 +383,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
                     Client::ReadContext ctx( ns() );
-                    shared_ptr<Cursor> c =
+                    boost::shared_ptr<Cursor> c =
                             getOptimizedCursor( ns(),
                                                                   query,
                                                                   BSONObj(),
@@ -431,7 +431,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
                     Client::ReadContext ctx( ns() );
-                    shared_ptr<Cursor> c =
+                    boost::shared_ptr<Cursor> c =
                             getOptimizedCursor( ns(),
                                                                   BSON( "a" << GT << 0 << LT << 5 ),
                                                                   BSONObj(),
@@ -471,7 +471,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
                     Client::ReadContext ctx( ns() );
-                    shared_ptr<Cursor> c =
+                    boost::shared_ptr<Cursor> c =
                             getOptimizedCursor( ns(),
                                                                   BSON( "a.b" << 2 << "a.c" << 2 ),
                                                                   BSONObj(),
@@ -505,7 +505,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
                     Client::ReadContext ctx( ns() );
-                    shared_ptr<Cursor> c =
+                    boost::shared_ptr<Cursor> c =
                             getOptimizedCursor( ns(),
                                                                   BSON( "a" << GTE << "" ),
                                                                   BSONObj(),
@@ -538,7 +538,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
                     Client::ReadContext ctx( ns() );
-                    shared_ptr<Cursor> c =
+                    boost::shared_ptr<Cursor> c =
                             getOptimizedCursor( ns(),
                                                                   BSON( "a" << LTE << Date_t( 1 ) ),
                                                                   BSONObj(),

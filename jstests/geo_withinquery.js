@@ -5,7 +5,7 @@ t.drop();
 num = 0;
 for ( x=0; x<=20; x++ ){
     for ( y=0; y<=20; y++ ){
-        o = { _id : num++ , loc : [ x , y ] } 
+        o = { _id : num++ , loc : [ x , y ] }
         t.save( o )
     }
 }

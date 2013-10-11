@@ -67,7 +67,8 @@ namespace mongo {
             _hashedField(_keyPattern.firstElement().fieldName()),
             // Default seed/version to 0 if not specified or not an integer.
             _seed(_info["seed"].numberInt()),
-            _hashVersion(_info["hashVersion"].numberInt()) {
+            _hashVersion(_info["hashVersion"].numberInt()),
+            _hashedNullObj(BSON("" << HashKeyGenerator::makeSingleKey(nullElt, _seed, _hashVersion))) {
 
             // change these if single-field limitation lifted later
             uassert( 16241, "Currently only single field hashed index supported.",
@@ -77,6 +78,7 @@ namespace mongo {
 
             // Create a descriptor with hashed = true and the appropriate hash seed.
             _descriptor.reset(new Descriptor(_keyPattern, true, _seed, _sparse, _clustering));
+
         }
 
         // @return the "special" name for this index.
@@ -149,12 +151,18 @@ namespace mongo {
             return cursor;
         }
 
+        // A missing field is represented by a hashed null element.
+        virtual BSONElement missingField() const {
+            return _hashedNullObj.firstElement();
+        }
+
     private:
         const string _hashedField;
         const HashSeed _seed;
         // In case we have hashed indexes based on other hash functions in
         // the future, we store a hashVersion number.
         const HashVersion _hashVersion;
+        const BSONObj _hashedNullObj;
     };
 
     static string findSpecialIndexName(const BSONObj &keyPattern) {
@@ -422,28 +430,34 @@ namespace mongo {
         }
     }
 
-    IndexStats::IndexStats(const IndexDetails &idx)
-            : _name(idx.indexName()),
-              _compressionMethod(idx.getCompressionMethod()),
-              _readPageSize(idx.getReadPageSize()),
-              _pageSize(idx.getPageSize()),
-              _accessStats(idx.getAccessStats()) {
-        idx.getStat64(&_stats);
+    IndexDetails::Stats IndexDetails::getStats() const {
+        DB_BTREE_STAT64 st;
+        getStat64(&st);
+        Stats stats;
+        stats.name = indexName();
+        stats.count = st.bt_nkeys;
+        stats.dataSize = st.bt_dsize;
+        stats.storageSize = st.bt_fsize;
+        stats.pageSize = getPageSize();
+        stats.readPageSize = getReadPageSize();
+        stats.compressionMethod = getCompressionMethod();
+        stats.queries = _accessStats.queries.load();
+        stats.nscanned = _accessStats.nscanned.load();
+        stats.nscannedObjects = _accessStats.nscannedObjects.load();
+        stats.inserts = _accessStats.inserts.load();
+        stats.deletes = _accessStats.deletes.load();
+        return stats;
     }
-    
-    BSONObj IndexStats::obj(int scale) const {
-        BSONObjBuilder b;
-        b.append("name", _name);
-        b.appendNumber("count", (long long) _stats.bt_nkeys);
-        b.appendNumber("size", (long long) _stats.bt_dsize/scale);
-        b.appendNumber("avgObjSize", (_stats.bt_nkeys == 0
-                                      ? 0.0
-                                      : ((double)_stats.bt_dsize/_stats.bt_nkeys)));
-        b.appendNumber("storageSize", (long long) _stats.bt_fsize / scale);
-        b.append("pageSize", _pageSize / scale);
-        b.append("readPageSize", _readPageSize / scale);
-        // fill compression
-        switch(_compressionMethod) {
+
+    void IndexDetails::Stats::appendInfo(BSONObjBuilder &b, int scale) const {
+        b.append("name", name);
+        b.appendNumber("count", (long long) count);
+        b.appendNumber("size", (long long) dataSize / scale);
+        b.appendNumber("avgObjSize", count == 0 ? 0.0 : double(dataSize) / double(count));
+        b.appendNumber("storageSize", (long long) storageSize / scale);
+        b.append("pageSize", pageSize / scale);
+        b.append("readPageSize", readPageSize / scale);
+        switch(compressionMethod) {
         case TOKU_NO_COMPRESSION:
             b.append("compression", "uncompressed");
             break;
@@ -472,12 +486,11 @@ namespace mongo {
             b.append("compression", "unknown");
             break;
         }
-        b.appendNumber("queries", _accessStats.queries.load());
-        b.appendNumber("nscanned", _accessStats.nscanned.load());
-        b.appendNumber("nscannedObjects", _accessStats.nscannedObjects.load());
-        b.appendNumber("inserts", _accessStats.inserts.load());
-        b.appendNumber("deletes", _accessStats.deletes.load());
-        return b.obj();
+        b.appendNumber("queries", queries);
+        b.appendNumber("nscanned", nscanned);
+        b.appendNumber("nscannedObjects", nscannedObjects);
+        b.appendNumber("inserts", inserts);
+        b.appendNumber("deletes", deletes);
         // TODO: (Zardosht) Need to figure out how to display these dates
         /*
         Date_t create_date(_stats.bt_create_time_sec);

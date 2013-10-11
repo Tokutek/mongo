@@ -167,6 +167,13 @@ namespace mongo {
             tokulog() << db_errpfx << ": " << buffer << endl;
         }
 
+        // Called by the ydb to determine how long a txn should sleep on a lock.
+        // For now, it's always the command-line specified timeout, but we could
+        // make it a per-thread variable in the future.
+        static uint64_t get_lock_timeout_callback(uint64_t default_timeout) {
+            return cmdLine.lockTimeout;
+        }
+
         static void lock_not_granted_callback(DB *db, uint64_t requesting_txnid,
                                               const DBT *left_key, const DBT *right_key,
                                               uint64_t blocking_txnid);
@@ -212,7 +219,7 @@ namespace mongo {
             TOKULOG(1) << "locktree max memory set to " << lock_memory << " bytes." << endl;
 
             const uint64_t lock_timeout = cmdLine.lockTimeout;
-            r = env->set_lock_timeout(env, lock_timeout);
+            r = env->set_lock_timeout(env, lock_timeout, get_lock_timeout_callback);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
@@ -631,11 +638,8 @@ namespace mongo {
         }
 
         void set_lock_timeout(uint64_t timeout_ms) {
+            // This is sufficient. See get_lock_timeout_callback()
             cmdLine.lockTimeout = timeout_ms;
-            int r = env->set_lock_timeout(env, timeout_ms);
-            if (r != 0) {
-                handle_ydb_error_fatal(r);
-            }
             TOKULOG(1) << "lock timeout set to " << timeout_ms << " milliseconds." << endl;
         }
 

@@ -35,6 +35,11 @@ namespace mongo {
         return conn;
     }
 
+    ScopedDbConnection* ScopedDbConnection::getScopedDbConnection(const ConnectionString& host,
+                                                                  double socketTimeout) {
+        return getScopedDbConnection(host.toString());
+    }
+
 
     ScopedDbConnection* ScopedDbConnection::getInternalScopedDbConnection() {
         ScopedDbConnection* conn = new ScopedDbConnection();
@@ -45,6 +50,11 @@ namespace mongo {
                                                                           double socketTimeout) {
         ScopedDbConnection* conn = new ScopedDbConnection(host, socketTimeout);
         return conn;
+    }
+
+    ScopedDbConnection* ScopedDbConnection::getInternalScopedDbConnection(const ConnectionString& host,
+                                                                          double socketTimeout) {
+        return getInternalScopedDbConnection(host.toString());
     }
 
 }

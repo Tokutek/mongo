@@ -127,7 +127,8 @@ public:
         FilePtr f (fopen(outputFile.string().c_str(), "wb"));
         uassert(10262, errnoWithPrefix("couldn't open file"), f);
 
-        ProgressMeter m( conn( true ).count( coll.c_str() , BSONObj() , QueryOption_SlaveOk ) );
+        ProgressMeter m(conn(true).count(coll.c_str(), BSONObj(), QueryOption_SlaveOk));
+        m.setName("Collection File Writing Progress");
         m.setUnits("objects");
 
         doCollection(coll, f, &m);
@@ -219,8 +220,10 @@ public:
               continue;
             }
             
-            // Don't dump indexes
             if (nsToCollectionSubstring(name) == "system.indexes") {
+              // Create system.indexes.bson for compatibility with pre 2.2 mongorestore
+              writeCollectionFile( name.c_str() , outdir / ( filename + ".bson" ) );
+              // Don't dump indexes as *.metadata.json
               continue;
             }
             
@@ -324,6 +327,11 @@ public:
         string db = _db;
 
         if ( db == "" ) {
+            if ( _coll != "" ) {
+                error() << "--db must be specified with --collection" << endl;
+                return -1;
+            }
+
             log() << "all dbs" << endl;
 
             BSONObj res = conn( true ).findOne( "admin.$cmd" , BSON( "listDatabases" << 1 ) );

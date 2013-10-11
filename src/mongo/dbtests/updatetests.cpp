@@ -1105,6 +1105,77 @@ namespace UpdateTests {
             }
         };
 
+        class PositionalWithoutElemMatchKey {
+        public:
+            void run() {
+                BSONObj querySpec = BSONObj();
+                BSONObj modSpec = BSON( "$set" << BSON( "a.$" << 1 ) );
+                ModSet modSet( modSpec );
+
+                // A positional operator must be replaced with an array index before calling
+                // prepare().
+                ASSERT_THROWS( modSet.prepare( querySpec ), UserException );
+            }
+        };
+
+        class PositionalWithoutNestedElemMatchKey {
+        public:
+            void run() {
+                BSONObj querySpec = BSONObj();
+                BSONObj modSpec = BSON( "$set" << BSON( "a.b.c.$.e.f" << 1 ) );
+                ModSet modSet( modSpec );
+
+                // A positional operator must be replaced with an array index before calling
+                // prepare().
+                ASSERT_THROWS( modSet.prepare( querySpec ), UserException );
+            }
+        };
+
+        class DbrefPassesPositionalValidation {
+        public:
+            void run() {
+                BSONObj querySpec = BSONObj();
+                BSONObj modSpec = BSON( "$set" << BSON( "a.$ref" << "foo" << "a.$id" << 0 ) );
+                ModSet modSet( modSpec );
+
+                // A positional operator must be replaced with an array index before calling
+                // prepare(), but $ prefixed fields encoding dbrefs are allowed.
+                modSet.prepare( querySpec ); // Does not throw.
+            }
+        };
+
+        class NoPositionalValidationOnReplication {
+        public:
+            void run() {
+                BSONObj querySpec = BSONObj();
+                BSONObj modSpec = BSON( "$set" << BSON( "a.$" << 1 ) );
+                ModSet modSet( modSpec, IndexPathSet(), true );
+
+                // No positional operator validation is performed if a ModSet is 'forReplication'.
+                modSet.prepare( querySpec ); // Does not throw.
+            }
+        };
+
+        class NoPositionalValidationOnPartialFixedArrayReplication {
+        public:
+            void run() {
+                BSONObj querySpec = BSONObj( BSON( "a.b" << 1 ) );
+                BSONObj modSpec = BSON( "$set" << BSON( "a.$.b.$" << 1 ) );
+                ModSet modSet( modSpec, IndexPathSet(), true );
+
+                // Attempt to fix the positional operator fields.
+                scoped_ptr<ModSet> fixedMods( modSet.fixDynamicArray( "0" ) );
+
+                // The first positional field is replaced, but the second is not (until SERVER-831
+                // is implemented).
+                ASSERT( fixedMods->haveModForField( "a.0.b.$" ) );
+
+                // No positional operator validation is performed if a ModSet is 'forReplication',
+                // even after an attempt to fix the positional operator fields.
+                fixedMods->prepare( querySpec ); // Does not throw.
+            }
+        };
+
         class CreateNewFromQueryExcludeNot {
         public:
             void run() {
@@ -1320,35 +1391,6 @@ namespace UpdateTests {
 
     };
 
-    class IndexFieldNameTest {
-    public:
-        void run() {
-            string x;
-
-            ASSERT_FALSE( getCanonicalIndexField( "a", &x ) );
-            ASSERT_FALSE( getCanonicalIndexField( "aaa", &x ) );
-            ASSERT_FALSE( getCanonicalIndexField( "a.b", &x ) );
-
-            ASSERT_TRUE( getCanonicalIndexField( "a.$", &x ) );
-            ASSERT_EQUALS( x, "a" );
-            ASSERT_TRUE( getCanonicalIndexField( "a.0", &x ) );
-            ASSERT_EQUALS( x, "a" );
-            ASSERT_TRUE( getCanonicalIndexField( "a.123", &x ) );
-            ASSERT_EQUALS( x, "a" );
-
-            ASSERT_TRUE( getCanonicalIndexField( "a.$.b", &x ) );
-            ASSERT_EQUALS( x, "a.b" );
-            ASSERT_TRUE( getCanonicalIndexField( "a.0.b", &x ) );
-            ASSERT_EQUALS( x, "a.b" );
-            ASSERT_TRUE( getCanonicalIndexField( "a.123.b", &x ) );
-            ASSERT_EQUALS( x, "a.b" );
-
-            ASSERT_FALSE( getCanonicalIndexField( "a.123a", &x ) );
-            ASSERT_FALSE( getCanonicalIndexField( "a.a123", &x ) );
-            ASSERT_FALSE( getCanonicalIndexField( "a.123a.b", &x ) );
-            ASSERT_FALSE( getCanonicalIndexField( "a.a123.b", &x ) );
-        }
-    };
 
     class All : public Suite {
     public:
@@ -1449,6 +1491,11 @@ namespace UpdateTests {
             add< ModSetTests::SetIsNotRewritten >();
             add< ModSetTests::UnsetIsNotRewritten >();
             add< ModSetTests::MultiSets >();
+            add< ModSetTests::PositionalWithoutElemMatchKey >();
+            add< ModSetTests::PositionalWithoutNestedElemMatchKey >();
+            add< ModSetTests::DbrefPassesPositionalValidation >();
+            add< ModSetTests::NoPositionalValidationOnReplication >();
+            add< ModSetTests::NoPositionalValidationOnPartialFixedArrayReplication >();
 
             add< basic::inc1 >();
             add< basic::inc2 >();
@@ -1459,8 +1506,6 @@ namespace UpdateTests {
             add< basic::bit1 >();
             add< basic::unset >();
             add< basic::setswitchint >();
-
-            add< IndexFieldNameTest >();
         }
     } myall;
 

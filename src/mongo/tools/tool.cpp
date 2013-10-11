@@ -19,21 +19,20 @@
 
 #include "mongo/tools/tool.h"
 
+#include <boost/filesystem/operations.hpp>
 #include <fstream>
 #include <iostream>
 
 #include "pcrecpp.h"
 
 #include "mongo/client/dbclient_rs.h"
-#include "mongo/db/databaseholder.h"
 #include "mongo/client/sasl_client_authenticate.h"
-#include "mongo/db/namespace_details.h"
 #include "mongo/db/json.h"
+#include "mongo/db/namespace_details.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/platform/posix_fadvise.h"
 #include "mongo/util/password.h"
 #include "mongo/util/version.h"
-
-#include <boost/filesystem/operations.hpp>
 
 using namespace std;
 using namespace mongo;
@@ -81,7 +80,7 @@ namespace mongo {
              "files in the given path, instead of connecting to a mongod  "
              "server - needs to lock the data directory, so cannot be "
              "used if a mongod is currently accessing the same path" )
-            ("directoryperdb", "if dbpath specified, each db is in a separate directory" )
+            ("directoryperdb", "each db is in a separate directly (relevant only if dbpath specified)" )
             ;
 
         if ( access & SPECIFY_DBCOL )
@@ -235,8 +234,8 @@ namespace mongo {
                 cerr << endl << "If you are running a mongod on the same "
                      "path you should connect to that instead of direct data "
                      "file access" << endl << endl;
-                dbexit( EXIT_CLEAN );
-                ::_exit(-1);
+                dbexit( EXIT_FS );
+                ::_exit(EXIT_FAILURE);
             }
 
             // the last thing we do before initializing storage is to install the
@@ -265,7 +264,7 @@ namespace mongo {
 
         int ret = -1;
         try {
-            if (!useDirectClient)
+            if (!useDirectClient && !_noconnection)
                 auth();
             ret = run();
         }
@@ -273,33 +272,33 @@ namespace mongo {
             cerr << "assertion: " << e.toString() << endl;
             ret = -1;
         }
-	catch(const boost::filesystem::filesystem_error &fse) {
-	    /*
-	      https://jira.mongodb.org/browse/SERVER-2904
+        catch(const boost::filesystem::filesystem_error &fse) {
+            /*
+              https://jira.mongodb.org/browse/SERVER-2904
 
-	      Simple tools that don't access the database, such as
-	      bsondump, aren't throwing DBExceptions, but are throwing
-	      boost exceptions.
+              Simple tools that don't access the database, such as
+              bsondump, aren't throwing DBExceptions, but are throwing
+              boost exceptions.
 
-	      The currently available set of error codes don't seem to match
-	      boost documentation.  boost::filesystem::not_found_error
-	      (from http://www.boost.org/doc/libs/1_31_0/libs/filesystem/doc/exception.htm)
-	      doesn't seem to exist in our headers.  Also, fse.code() isn't
-	      boost::system::errc::no_such_file_or_directory when this
-	      happens, as you would expect.  And, determined from
-	      experimentation that the command-line argument gets turned into
-	      "\\?" instead of "/?" !!!
-	     */
+              The currently available set of error codes don't seem to match
+              boost documentation.  boost::filesystem::not_found_error
+              (from http://www.boost.org/doc/libs/1_31_0/libs/filesystem/doc/exception.htm)
+              doesn't seem to exist in our headers.  Also, fse.code() isn't
+              boost::system::errc::no_such_file_or_directory when this
+              happens, as you would expect.  And, determined from
+              experimentation that the command-line argument gets turned into
+              "\\?" instead of "/?" !!!
+             */
 #if defined(_WIN32)
-	    if (/*(fse.code() == boost::system::errc::no_such_file_or_directory) &&*/
-		(fse.path1() == "\\?"))
-		printHelp(cerr);
-	    else
+            if (/*(fse.code() == boost::system::errc::no_such_file_or_directory) &&*/
+                (fse.path1() == "\\?"))
+                printHelp(cerr);
+            else
 #endif // _WIN32
-		cerr << "error: " << fse.what() << endl;
+                cerr << "error: " << fse.what() << endl;
 
-	    ret = -1;
-	}
+            ret = -1;
+        }
 
         if ( currentClient.get() )
             currentClient.get()->shutdown();
@@ -314,8 +313,10 @@ namespace mongo {
 
     DBClientBase& Tool::conn( bool slaveIfPaired ) {
         if ( slaveIfPaired && _conn->type() == ConnectionString::SET ) {
-            if (!_slaveConn)
-                _slaveConn = &((DBClientReplicaSet*)_conn)->slaveConn();
+            if (!_slaveConn) {
+                DBClientReplicaSet* rs = static_cast<DBClientReplicaSet*>(_conn);
+                _slaveConn = &rs->slaveConn();
+            }
             return *_slaveConn;
         }
         return *_conn;
@@ -399,6 +400,18 @@ namespace mongo {
         throw UserException( 9998 , "you need to specify fields" );
     }
 
+    std::string Tool::getAuthenticationDatabase() {
+        if (!_authenticationDatabase.empty()) {
+            return _authenticationDatabase;
+        }
+
+        if (!_db.empty()) {
+            return _db;
+        }
+
+        return "admin";
+    }
+
     /**
      * Validate authentication on the server for the given dbname.
      */
@@ -415,17 +428,7 @@ namespace mongo {
             return;
         }
 
-        std::string userSource = _authenticationDatabase;
-        if ( userSource.empty() ) {
-            if ( !_db.empty() ) {
-                userSource = _db;
-            }
-            else {
-                userSource = "admin";
-            }
-        }
-
-        _conn->auth( BSON( saslCommandPrincipalSourceFieldName << userSource <<
+        _conn->auth( BSON( saslCommandPrincipalSourceFieldName << getAuthenticationDatabase() <<
                            saslCommandPrincipalFieldName << _username <<
                            saslCommandPasswordFieldName << _password  <<
                            saslCommandMechanismFieldName << _authenticationMechanism ) );
@@ -435,8 +438,8 @@ namespace mongo {
         : Tool( name , access , "" , "" , false ) , _objcheck( objcheck ) {
 
         add_options()
-        ("objcheck" , "validate object before inserting" )
-        ("noobjcheck" , "validate object before inserting" )
+        ("objcheck" , "validate object before inserting (default)" )
+        ("noobjcheck" , "don't validate object before inserting" )
         ("filter" , po::value<string>() , "filter to apply before inserting" )
         ;
     }
@@ -471,7 +474,7 @@ namespace mongo {
             return 0;
         }
 
-#if !defined(__sunos__) && defined(POSIX_FADV_SEQUENTIAL)
+#ifdef POSIX_FADV_SEQUENTIAL
         posix_fadvise(fileno(file), 0, fileLength, POSIX_FADV_SEQUENTIAL);
 #endif
 
@@ -536,7 +539,4 @@ namespace mongo {
         return processed;
     }
 
-
-
-    void setupSignals( bool inFork ) {}
 }

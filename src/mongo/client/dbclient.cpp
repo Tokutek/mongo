@@ -28,7 +28,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
-#include "mongo/s/util.h"
+#include "mongo/s/stale_exception.h"  // for RecvStaleConfigException
 #include "mongo/util/assert_util.h"
 #include "mongo/util/md5.hpp"
 
@@ -40,13 +40,6 @@
 namespace mongo {
 
     AtomicInt64 DBClientBase::ConnectionIdSequence;
-
-    bool hasReadPreference(const BSONObj& queryObj) {
-        const bool isQueryEmbedded = strcmp(queryObj.firstElement().fieldName(), "query") == 0;
-        const bool hasReadPrefOption = queryObj["$queryOptions"].isABSONObj() &&
-                        queryObj["$queryOptions"].Obj().hasField("$readPreference");
-        return (isQueryEmbedded && queryObj.hasField("$readPreference")) || hasReadPrefOption;
-    }
 
     void ConnectionString::_fillServers( string s ) {
         
@@ -120,7 +113,7 @@ namespace mongo {
             DBClientReplicaSet * set = new DBClientReplicaSet( _setName , _servers , socketTimeout );
             if( ! set->connect() ) {
                 delete set;
-                errmsg = "connect failed to set ";
+                errmsg = "connect failed to replica set ";
                 errmsg += toString();
                 return 0;
             }
@@ -245,6 +238,9 @@ namespace mongo {
         return "";
     }
 
+    const BSONField<BSONObj> Query::ReadPrefField("$readPreference");
+    const BSONField<string> Query::ReadPrefModeField("mode");
+    const BSONField<BSONArray> Query::ReadPrefTagsField("tags");
 
     Query::Query( const string &json ) : obj( fromjson( json ) ) {}
 
@@ -300,20 +296,66 @@ namespace mongo {
         return *this;
     }
 
-    bool Query::isComplex( bool * hasDollar ) const {
-        if ( obj.hasElement( "query" ) ) {
-            if ( hasDollar )
-                hasDollar[0] = false;
+    bool Query::isComplex(const BSONObj& obj, bool* hasDollar) {
+        if (obj.hasElement("query")) {
+            if (hasDollar) *hasDollar = false;
             return true;
         }
 
-        if ( obj.hasElement( "$query" ) ) {
-            if ( hasDollar )
-                hasDollar[0] = true;
+        if (obj.hasElement("$query")) {
+            if (hasDollar) *hasDollar = true;
             return true;
         }
 
         return false;
+    }
+
+    Query& Query::readPref(ReadPreference pref, const BSONArray& tags) {
+        string mode;
+
+        switch (pref) {
+        case ReadPreference_PrimaryOnly:
+            mode = "primary";
+            break;
+
+        case ReadPreference_PrimaryPreferred:
+            mode = "primaryPreferred";
+            break;
+
+        case ReadPreference_SecondaryOnly:
+            mode = "secondary";
+            break;
+
+        case ReadPreference_SecondaryPreferred:
+            mode = "secondaryPreferred";
+            break;
+
+        case ReadPreference_Nearest:
+            mode = "nearest";
+            break;
+        }
+
+        BSONObjBuilder readPrefDocBuilder;
+        readPrefDocBuilder << ReadPrefModeField(mode);
+
+        if (!tags.isEmpty()) {
+            readPrefDocBuilder << ReadPrefTagsField(tags);
+        }
+
+        appendComplex(ReadPrefField.name().c_str(), readPrefDocBuilder.done());
+        return *this;
+    }
+
+    bool Query::isComplex( bool * hasDollar ) const {
+        return isComplex(obj, hasDollar);
+    }
+
+    bool Query::hasReadPreference(const BSONObj& queryObj) {
+        const bool hasReadPrefOption = queryObj["$queryOptions"].isABSONObj() &&
+                        queryObj["$queryOptions"].Obj().hasField(ReadPrefField.name());
+        return (Query::isComplex(queryObj) &&
+                    queryObj.hasField(ReadPrefField.name())) ||
+                hasReadPrefOption;
     }
 
     BSONObj Query::getFilter() const {
@@ -923,7 +965,8 @@ namespace mongo {
         }
     }
 
-    const uint64_t DBClientBase::INVALID_SOCK_CREATION_TIME = 0xFFFFFFFFFFFFFFFF;
+    const uint64_t DBClientBase::INVALID_SOCK_CREATION_TIME =
+            static_cast<uint64_t>(0xFFFFFFFFFFFFFFFFULL);
 
     auto_ptr<DBClientCursor> DBClientBase::query(const string &ns, Query query, int nToReturn,
             int nToSkip, const BSONObj *fieldsToReturn, int queryOptions , int batchSize ) {
@@ -1201,7 +1244,15 @@ namespace mongo {
         return ss.str();
     }
 
-    bool DBClientWithCommands::ensureIndex( const string &ns , BSONObj keys , bool unique, bool clustering, const string & name , bool cache, bool background, int version ) {
+    bool DBClientWithCommands::ensureIndex( const string &ns,
+                                            BSONObj keys,
+                                            bool unique,
+                                            bool clustering,
+                                            const string & name,
+                                            bool cache,
+                                            bool background,
+                                            int version,
+                                            int ttl ) {
         BSONObjBuilder toSave;
         toSave.append( "ns" , ns );
         toSave.append( "key" , keys );
@@ -1237,6 +1288,9 @@ namespace mongo {
 
         if ( cache )
             _seenIndexes.insert( cacheKey );
+
+        if ( ttl > 0 )
+            toSave.append( "expireAfterSeconds", ttl );
 
         insert( getSisterNS( ns, "system.indexes" ).c_str() , toSave.obj() );
         return 1;

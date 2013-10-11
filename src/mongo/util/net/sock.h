@@ -29,6 +29,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <errno.h>
+#include <stdint.h>
 
 #ifdef __openbsd__
 # include <sys/uio.h>

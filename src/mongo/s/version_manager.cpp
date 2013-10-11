@@ -1,4 +1,4 @@
-// @file shard_version.cpp
+// @file version_manager.cpp
 
 /**
 *    Copyright (C) 2010 10gen Inc.
@@ -17,16 +17,15 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
+#include "mongo/s/version_manager.h"
 
-#include "chunk.h"
-#include "config.h"
-#include "grid.h"
-#include "util.h"
-#include "shard.h"
-#include "writeback_listener.h"
-
-#include "shard_version.h"
+#include "mongo/s/chunk.h"
+#include "mongo/s/chunk_version.h"
+#include "mongo/s/config.h"
+#include "mongo/s/grid.h"
+#include "mongo/s/shard.h"
+#include "mongo/s/stale_exception.h" // for SendStaleConfigException
+#include "mongo/s/writeback_listener.h"
 
 namespace mongo {
 
@@ -201,7 +200,7 @@ namespace mongo {
                         << conn_in->getServerAddress() << ")" );
 
             throw SendStaleConfigException( ns, msg,
-                    refManager->getVersion( shard ), ShardChunkVersion( 0, OID() ));
+                    refManager->getVersion( shard ), ChunkVersion( 0, OID() ));
         }
 
         // has the ChunkManager been reloaded since the last time we updated the connection-level version?
@@ -212,7 +211,7 @@ namespace mongo {
         }
 
 
-        ShardChunkVersion version = ShardChunkVersion( 0, OID() );
+        ChunkVersion version = ChunkVersion( 0, OID() );
         if ( isSharded && manager ) {
             version = manager->getVersion( Shard::make( conn->getServerAddress() ) );
         }
@@ -232,7 +231,7 @@ namespace mongo {
         const string versionableServerAddress(conn->getServerAddress());
 
         BSONObj result;
-        if ( setShardVersion( *conn , ns , version , authoritative , result ) ) {
+        if ( setShardVersion( *conn , ns , version , manager , authoritative , result ) ) {
             // success!
             LOG(1) << "      setShardVersion success: " << result << endl;
             connectionShardStatus.setSequence( conn , ns , officialSequenceNumber );

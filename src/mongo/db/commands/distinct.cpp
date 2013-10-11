@@ -29,6 +29,7 @@
 #include "mongo/db/curop.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/util/timer.h"
 
@@ -69,7 +70,7 @@ namespace mongo {
             long long n = 0; // matches
             MatchDetails md;
 
-            NamespaceDetails * d = nsdetails( ns.c_str() );
+            NamespaceDetails * d = nsdetails( ns );
 
             if ( ! d ) {
                 result.appendArray( "values" , BSONObj() );

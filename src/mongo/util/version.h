@@ -31,7 +31,6 @@ namespace mongo {
     extern const BSONArray versionArray;
     std::string fullVersionString();
     std::string mongodVersion();
-    int versionCmp(StringData rhs, StringData lhs); // like strcmp
 
     // Convert a version string into a numeric array
     BSONArray toVersionArray(const char* version);

@@ -63,7 +63,8 @@ namespace mongo {
                 return true;
             }
             else if( primary && 
-                GTID::cmp(primary->hbinfo().gtid, hopeful->hbinfo().gtid) >= 0) 
+                     hopeful->hbinfo().id() != primary->hbinfo().id() &&
+                     GTID::cmp(primary->hbinfo().gtid, hopeful->hbinfo().gtid) >= 0) 
             {
                 // other members might be aware of more up-to-date nodes
                 errmsg = str::stream() << hopeful->fullName() << " is trying to elect itself but " <<

@@ -864,8 +864,7 @@ namespace QueryOptimizerTests {
                 scoped_ptr<QueryPlan> plan( QueryPlan::make( nsd(), idx, frsp, FRSP2( query ),
                                                             query, BSONObj(),
                                                             shared_ptr<const ParsedQuery>(),
-                                                            BSONObj(), BSONObj(),
-                                                            frsp.getSpecial() ) );
+                                                            BSONObj(), BSONObj(), "2d"));
                 // A 'special' plan is not optimal.
                 ASSERT_EQUALS( QueryPlan::Helpful, plan->utility() );
             }

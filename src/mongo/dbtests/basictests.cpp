@@ -665,7 +665,6 @@ namespace BasicTests {
 
             add< ArrayTests::basic1 >();
 
-            add< DatabaseValidNames >();
             add< DatabaseOwnsNS >();
 
             add< NSValidNames >();
