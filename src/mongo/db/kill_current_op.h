@@ -61,6 +61,9 @@ namespace mongo {
             _killForTransition--;
         }
 
+        /** Reset the object to its initial state.  Only for testing. */
+        void reset();
+
     private:
         void interruptJs( AtomicUInt *op );
         void _checkForInterrupt( Client &c );

@@ -204,7 +204,7 @@ namespace mongo {
                     s << '"' << date().toString() << '"';
             }
             else
-                s << date();
+                s << date().asInt64();
             if ( format == Strict )
                 s << " }";
             else
@@ -245,12 +245,7 @@ namespace mongo {
             break;
 
         case Timestamp:
-            if ( format == TenGen ) {
-                s << "Timestamp( " << ( timestampTime() / 1000 ) << ", " << timestampInc() << " )";
-            }
-            else {
-                s << "{ \"$timestamp\" : { \"t\" : " << ( timestampTime() / 1000 ) << ", \"i\" : " << timestampInc() << " } }";
-            }
+            s << "{ \"t\" : " << timestampTime() << " , \"i\" : " << timestampInc() << " }";
             break;
 
         case MinKey:

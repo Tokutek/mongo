@@ -68,9 +68,6 @@ using mongo::DBClientConnection;
 using mongo::QueryResult;
 
 mongo::CmdLine mongo::cmdLine;
-namespace mongo {
-    void setupSignals( bool inFork ){}
-}
 
 #define SNAP_LEN 65535
 

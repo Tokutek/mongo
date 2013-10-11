@@ -173,11 +173,6 @@ namespace mongo {
         ReadPreference_Nearest,
     };
 
-    /**
-     * @return true if the query object contains a read preference specification object.
-     */
-    bool hasReadPreference(const BSONObj& queryObj);
-
     class DBClientBase;
     class DBClientConnection;
 
@@ -338,6 +333,10 @@ namespace mongo {
     */
     class Query {
     public:
+        static const BSONField<BSONObj> ReadPrefField;
+        static const BSONField<std::string> ReadPrefModeField;
+        static const BSONField<BSONArray> ReadPrefTagsField;
+
         BSONObj obj;
         Query() : obj(BSONObj()) { }
         Query(const BSONObj& b) : obj(b) { }
@@ -413,14 +412,28 @@ namespace mongo {
         Query& where(const string &jscode) { return where(jscode, BSONObj()); }
 
         /**
+         * Sets the read preference for this query.
+         *
+         * @param pref the read preference mode for this query.
+         * @param tags the set of tags to use for this query.
+         */
+        Query& readPref(ReadPreference pref, const BSONArray& tags);
+
+        /**
          * @return true if this query has an orderby, hint, or some other field
          */
         bool isComplex( bool * hasDollar = 0 ) const;
+        static bool isComplex(const BSONObj& obj, bool* hasDollar = 0);
 
         BSONObj getFilter() const;
         BSONObj getSort() const;
         BSONObj getHint() const;
         bool isExplain() const;
+
+        /**
+         * @return true if the query object contains a read preference specification object.
+         */
+        static bool hasReadPreference(const BSONObj& queryObj);
 
         string toString() const;
         operator string() const { return toString(); }

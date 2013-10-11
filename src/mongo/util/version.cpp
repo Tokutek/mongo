@@ -177,7 +177,7 @@ namespace mongo {
         result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
     }
 
-    Tee * startupWarningsLog = new RamLog("startupWarnings"); //intentionally leaked
+    Tee* const startupWarningsLog = new RamLog("startupWarnings"); //intentionally leaked
 
     //
     // system warnings
@@ -239,28 +239,26 @@ namespace mongo {
             // $ numactl --interleave=all cat /proc/self/numa_maps
             // 00400000 interleave:0-7 file=/bin/cat mapped=6 N4=6
 
-            File f;
-            f.open("/proc/self/numa_maps", /*read_only*/true);
-            if ( f.is_open() && ! f.bad() ) {
-                char line[100]; //we only need the first line
-                if (read(f.fd, line, sizeof(line)) < 0){
-                    warning() << "failed to read from /proc/self/numa_maps: " << errnoWithDescription() << startupWarningsLog;
+            std::ifstream f("/proc/self/numa_maps", std::ifstream::in);
+            if (f.is_open()) {
+                std::string line; //we only need the first line
+                std::getline(f, line);
+                if (f.fail()) {
+                    warning() << "failed to read from /proc/self/numa_maps: "
+                              << errnoWithDescription() << startupWarningsLog;
                     warned = true;
                 }
                 else {
-                    // just in case...
-                    line[98] = ' ';
-                    line[99] = '\0';
-                    
                     // skip over pointer
-                    const char* space = strchr(line, ' ');
-                    
-                    if ( ! space ) {
+                    std::string::size_type where = line.find(' ');
+                    if ( (where == std::string::npos) || (++where == line.size()) ) {
                         log() << startupWarningsLog;
-                        log() << "** WARNING: cannot parse numa_maps" << startupWarningsLog;
+                        log() << "** WARNING: cannot parse numa_maps line: '" << line << "'" << startupWarningsLog;
                         warned = true;
                     }
-                    else if ( ! startsWith(space+1, "interleave") ) {
+                    // if the text following the space doesn't begin with 'interleave', then
+                    // issue the warning.
+                    else if ( line.find("interleave", where) != where ) {
                         log() << startupWarningsLog;
                         log() << "** WARNING: You are running on a NUMA machine." << startupWarningsLog;
                         log() << "**          We suggest launching mongod like this to avoid performance problems:" << startupWarningsLog;

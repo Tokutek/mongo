@@ -44,7 +44,7 @@ namespace mongo {
         
         static std::vector<std::string> split( const std::string& big , const std::string& splitter );
 
-        static std::string join( std::vector<std::string>& l , const std::string& split );
+        static std::string join( const std::vector<std::string>& l , const std::string& split );
 
     private:
         const char * _big;
@@ -88,5 +88,14 @@ namespace mongo {
     };
 
 #endif // #if defined(_WIN32)
+
+    /**
+     * Construct a Windows command line string, UTF-8 encoded, from a vector of
+     * UTF-8 arguments, "argv".
+     *
+     * See "Parsing C++ Command-Line Arguments (C++)"
+     * http://msdn.microsoft.com/en-us/library/windows/desktop/17w5ykft(v=vs.85).aspx
+     */
+    std::string constructUtf8WindowsCommandLine(const std::vector<std::string>& argv);
 
 } // namespace mongo

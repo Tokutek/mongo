@@ -36,7 +36,18 @@ namespace mongo {
 
     extern const int32_t MaxBytesToReturnToClientAtOnce;
     
-    QueryResult* processGetMore(const char *ns, int ntoreturn, long long cursorid , CurOp& op, int pass, bool& exhaust);
+    /**
+     * Return a batch of results from a client OP_GET_MORE request.
+     * 'cursorid' - The id of the cursor producing results.
+     * 'isCursorAuthorized' - Set to true after a cursor with id 'cursorid' is authorized for use.
+     */
+    QueryResult* processGetMore(const char* ns,
+                                int ntoreturn,
+                                long long cursorid,
+                                CurOp& op,
+                                int pass,
+                                bool& exhaust,
+                                bool* isCursorAuthorized);
 
     string runQuery(Message& m, QueryMessage& q, CurOp& curop, Message &result);
 

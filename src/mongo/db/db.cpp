@@ -70,9 +70,9 @@ namespace mongo {
     extern int diagLogging;
     extern int lockFile;
 
-    void setupQuittingSignals();
-    void setupSignals( bool ignored );
+    static void setupSignalHandlers();
     void startReplication();
+    static void startSignalProcessingThread();
     void exitCleanly( ExitCode code );
 
 #ifdef _WIN32
@@ -343,7 +343,7 @@ namespace mongo {
         unsigned long long missingRepl = checkIfReplMissingFromCommandLine();
         if (missingRepl) {
             log() << startupWarningsLog;
-            log() << "** warning: mongod started without --replSet yet " << missingRepl
+            log() << "** WARNING: mongod started without --replSet yet " << missingRepl
                   << " documents are present in local.system.replset" << startupWarningsLog;
             log() << "**          Restart with --replSet unless you are doing maintenance and no"
                   << " other clients are connected." << startupWarningsLog;
@@ -372,11 +372,7 @@ namespace mongo {
         d.clientCursorMonitor.go();
         PeriodicTask::theRunner->go();
         if (missingRepl) {
-            log() << "** warning: not starting TTL monitor" << startupWarningsLog;
-            log() << "**          if this member is not part of a replica set and you want to use "
-                  << startupWarningsLog;
-            log() << "**          TTL collections, remove local.system.replset and restart"
-                  << startupWarningsLog;
+            // a warning was logged earlier
         }
         else {
             startTTLBackgroundJob();
@@ -967,8 +963,7 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
 
     getcurns = ourgetns;
 
-    setupCoreSignals();
-    setupQuittingSignals();
+    setupSignalHandlers();
 
     dbExecCommand = argv[0];
 
@@ -994,14 +989,16 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     if (!initializeServerGlobalState())
         ::_exit(EXIT_FAILURE);
 
+    // Per SERVER-7434, startSignalProcessingThread() must run after any forks
+    // (initializeServerGlobalState()) and before creation of any other threads.
+    startSignalProcessingThread();
+
 #if defined(_WIN32)
     if (ntservice::shouldStartService()) {
         ntservice::startService();
         // exits directly and so never reaches here either.
     }
 #endif
-
-    setupSignals( false );
 
     StartupTest::runTests();
     initAndListen(cmdLine.port);
@@ -1058,17 +1055,17 @@ namespace mongo {
     }
 
     sigset_t asyncSignals;
-    // The above signals will be processed by this thread only, in order to
+    // The signals in asyncSignals will be processed by this thread only, in order to
     // ensure the db and log mutexes aren't held.
-    void interruptThread() {
+    void signalProcessingThread() {
         while (true) {
             int actualSignal = 0;
             int status = sigwait( &asyncSignals, &actualSignal );
-            fassert(16854, status == 0);
+            fassert(17023, status == 0);
             switch (actualSignal) {
             case SIGUSR1:
                 // log rotate signal
-                fassert(16855, rotateLogs());
+                fassert(17024, rotateLogs());
                 break;
             default:
                 // interrupt/terminate signal
@@ -1098,7 +1095,9 @@ namespace mongo {
 
     void setupSignals_ignoreHelper( int signal ) {}
 
-    void setupQuittingSignals() {
+    void setupSignalHandlers() {
+        setupCoreSignals();
+
         struct sigaction addrSignals;
         memset( &addrSignals, 0, sizeof( struct sigaction ) );
         addrSignals.sa_sigaction = abruptQuitWithAddrSignal;
@@ -1116,19 +1115,23 @@ namespace mongo {
 
         setupSIGTRAPforGDB();
 
+        // asyncSignals is a global variable listing the signals that should be handled by the
+        // interrupt thread, once it is started via startSignalProcessingThread().
+        sigemptyset( &asyncSignals );
+        if (!cmdLine.debug) {
+            sigaddset( &asyncSignals, SIGHUP );
+            sigaddset( &asyncSignals, SIGINT );
+            sigaddset( &asyncSignals, SIGTERM );
+        }
+        sigaddset( &asyncSignals, SIGUSR1 );
+
         set_terminate( myterminate );
         set_new_handler( my_new_handler );
     }
 
-    void setupSignals( bool ignored ) {
-        sigemptyset( &asyncSignals );
-        if ( !cmdLine.debug ) {
-            sigaddset( &asyncSignals, SIGINT );
-            sigaddset( &asyncSignals, SIGTERM );
-            sigaddset( &asyncSignals, SIGUSR1 );
-            verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
-        }
-        boost::thread it( interruptThread );
+    void startSignalProcessingThread() {
+        verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
+        boost::thread it( signalProcessingThread );
     }
 
 #else   // WIN32
@@ -1194,9 +1197,7 @@ namespace mongo {
         mongoAbort("pure virtual");
     }
 
-    void setupSignals( bool inFork ) { }
-
-    void setupQuittingSignals() {
+    void setupSignalHandlers() {
         reportEventToSystem = reportEventToSystemImpl;
         setWindowsUnhandledExceptionFilter();
         massert(10297,
@@ -1204,6 +1205,8 @@ namespace mongo {
                 SetConsoleCtrlHandler(static_cast<PHANDLER_ROUTINE>(CtrlHandler), TRUE));
         _set_purecall_handler( myPurecallHandler );
     }
+
+    void startSignalProcessingThread() {}
 
 #endif  // if !defined(_WIN32)
 
