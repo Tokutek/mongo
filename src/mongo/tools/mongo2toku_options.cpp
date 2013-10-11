@@ -101,8 +101,8 @@ namespace mongo {
         }
 
         if (!hasParam("from")) {
-            log() << "need to specify --from" << std::endl;
-            ::_exit(-1);
+            std::cerr << "need to specify --from" << std::endl;
+            ::_exit(EXIT_BADOPTIONS);
         }
         else {
             mongo2TokuGlobalParams.from = getParam("from");
@@ -120,8 +120,8 @@ namespace mongo {
         if (params.count("ruser")) {
             mongo2TokuGlobalParams.ruser = params["ruser"].as<string>();
             if (!params.count("rpass")) {
-                log() << "if doing auth on source, must specify both --ruser and --rpass" << endl;
-                ::_exit(-1);
+                std::cerr << "if doing auth on source, must specify both --ruser and --rpass" << std::endl;
+                ::_exit(EXIT_BADOPTIONS);
             }
         }
         if (params.count("rpass")) {

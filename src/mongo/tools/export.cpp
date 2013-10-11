@@ -221,9 +221,7 @@ public:
         if (mongoExportGlobalParams.jsonArray)
             out << ']' << endl;
 
-        if (!toolGlobalParams.quiet) {
-            toolOutput() << "exported " << num << " records" << endl;
-        }
+        toolInfoOutput() << "exported " << num << " records" << endl;
 
         return 0;
     }

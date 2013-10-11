@@ -62,7 +62,7 @@ public:
         }
 
         if (isMongos() && toolGlobalParams.db == "" && exists(root / "config")) {
-            log() << "Cannot do a full restore on a sharded system" << endl;
+            toolError() << "Cannot do a full restore on a sharded system" << std::endl;
             return -1;
         }
 
@@ -78,14 +78,19 @@ public:
         drillDown(root, !toolGlobalParams.db.empty(), !toolGlobalParams.coll.empty(), true);
         string err = conn().getLastError(toolGlobalParams.db.empty() ? "admin" : toolGlobalParams.db);
         if (!err.empty()) {
-            error() << err;
+            toolError() << err << std::endl;
         }
 
         return EXIT_CLEAN;
     }
 
-    void drillDown( boost::filesystem::path root, bool use_db, bool use_coll, bool top_level=false ) {
-        LOG(2) << "drillDown: " << root.string() << endl;
+    void drillDown( boost::filesystem::path root,
+                    bool use_db,
+                    bool use_coll,
+                    bool top_level=false ) {
+        if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(2))) {
+            toolInfoLog() << "drillDown: " << root.string() << std::endl;
+        }
 
         // skip hidden files and directories
         if (root.leaf().string()[0] == '.' && root.leaf().string() != ".")
@@ -100,18 +105,23 @@ public:
 
                 if (use_db) {
                     if (boost::filesystem::is_directory(p)) {
-                        error() << "ERROR: root directory must be a dump of a single database" << endl;
-                        error() << "       when specifying a db name with --db" << endl;
-                        printHelp(cout);
+                        toolError() << "ERROR: root directory must be a dump of a single database"
+                                  << std::endl;
+                        toolError() << "       when specifying a db name with --db" << std::endl;
+                        toolError() << "       use the --help option for more information"
+                                  << std::endl;
                         return;
                     }
                 }
 
                 if (use_coll) {
                     if (boost::filesystem::is_directory(p) || i != end) {
-                        error() << "ERROR: root directory must be a dump of a single collection" << endl;
-                        error() << "       when specifying a collection name with --collection" << endl;
-                        printHelp(cout);
+                        toolError() << "ERROR: root directory must be a dump of a single collection"
+                                  << std::endl;
+                        toolError() << "       when specifying a collection name with --collection"
+                                  << std::endl;
+                        toolError() << "       use the --help option for more information"
+                                  << std::endl;
                         return;
                     }
                 }
@@ -136,14 +146,14 @@ public:
 
         if ( ! ( endsWith( root.string().c_str() , ".bson" ) ||
                  endsWith( root.string().c_str() , ".bin" ) ) ) {
-            error() << "don't know what to do with file [" << root.string() << "]" << endl;
+            toolError() << "don't know what to do with file [" << root.string() << "]" << std::endl;
             return;
         }
 
-        log() << root.string() << endl;
+        toolInfoLog() << root.string() << std::endl;
 
         if ( root.leaf() == "system.profile.bson" ) {
-            log() << "\t skipping" << endl;
+            toolInfoLog() << "\t skipping system.profile.bson" << std::endl;
             return;
         }
 
@@ -168,11 +178,11 @@ public:
             ns += "." + oldCollName;
         }
 
-        log() << "\tgoing into namespace [" << ns << "]" << endl;
+        toolInfoLog() << "\tgoing into namespace [" << ns << "]" << std::endl;
 
         if (mongoRestoreGlobalParams.drop) {
             if (root.leaf() != "system.users.bson" ) {
-                log() << "\t dropping" << endl;
+                toolInfoLog() << "\t dropping" << std::endl;
                 conn().dropCollection( ns );
             } else {
                 // Create map of the users currently in the DB
@@ -192,7 +202,7 @@ public:
                 // This is fine because dumps from before 2.1 won't have a metadata file, just print a warning.
                 // System collections shouldn't have metadata so don't warn if that file is missing.
                 if (!startsWith(metadataFile.leaf().string(), "system.")) {
-                    log() << metadataFile.string() << " not found. Skipping." << endl;
+                    toolInfoLog() << metadataFile.string() << " not found. Skipping." << std::endl;
                 }
             } else {
                 metadataObject = parseMetadataFile(metadataFile.string());
@@ -210,9 +220,9 @@ public:
                                                             Query(BSON("name" << ns))));
             if (cursor->more()) {
                 // collection already exists show warning
-                warning() << "Restoring to " << ns << " without dropping. Restored data "
-                             "will be inserted without raising errors; check your server log"
-                             << endl;
+                toolError() << "Restoring to " << ns << " without dropping. Restored data "
+                            << "will be inserted without raising errors; check your server log"
+                            << std::endl;
             }
         }
 
@@ -237,7 +247,7 @@ public:
             BSONObj res;
             bool ok = loader.commit(&res);
             if (!ok) {
-                error() << "Error committing load for " << _curdb << "." << _curcoll << ": " << res << endl;
+                toolError() << "Error committing load for " << _curdb << "." << _curcoll << ": " << res << std::endl;
             }
         } else {
             // No bulk load. Create collection and indexes manually.
@@ -278,7 +288,7 @@ public:
             if (mongoRestoreGlobalParams.w > 0) {
                 string err = conn().getLastError(_curdb, false, false, mongoRestoreGlobalParams.w);
                 if (!err.empty()) {
-                    error() << err << endl;
+                    toolError() << err << std::endl;
                 }
             }
         }
@@ -365,7 +375,8 @@ private:
             }
 
             if (e.type() == Undefined) {
-                log() << _curns << ": skipping undefined field: " << e.fieldName() << endl;
+                toolInfoLog() << _curns << ": skipping undefined field: " << e.fieldName()
+                              << std::endl;
                 continue;
             }
 
@@ -380,11 +391,15 @@ private:
         if (cursor->more()) {
             createColl = false;
             if (metadataObject["partitioned"].trueValue()) {
-                log() << "Collection " << _curns << " already exists, so we will not be creating the automatic partitions" << endl;
+                toolInfoLog() << "Collection " << _curns << " already exists, so we will not be creating the automatic partitions"
+                              << std::endl;
             }
             BSONObj nsObj = cursor->next();
             if (!nsObj.hasField("options") || !optionsSame(obj, nsObj["options"].Obj())) {
-                    log() << "WARNING: collection " << _curns << " exists with different options than are in the metadata.json file and not using --drop. Options in the metadata file will be ignored." << endl;
+                toolError() << "WARNING: collection " << _curns
+                            << " exists with different options than are in the metadata.json file and"
+                            << " not using --drop. Options in the metadata file will be ignored."
+                            << std::endl;
             }
         }
 
@@ -396,7 +411,8 @@ private:
         if (!conn().runCommand(_curdb, obj, info)) {
             uasserted(15936, "Creating collection " + _curns + " failed. Errmsg: " + info["errmsg"].String());
         } else {
-            log() << "\tCreated collection " << _curns << " with options: " << obj.jsonString() << endl;
+            toolInfoLog() << "\tCreated collection " << _curns << " with options: "
+                          << obj.jsonString() << std::endl;
             if (metadataObject["partitionInfo"].trueValue()) {
                 BSONObj res;
                 BSONObjBuilder b;
@@ -404,9 +420,13 @@ private:
                 BSONObj pInfo = metadataObject["partitionInfo"].Obj();
                 b.appendAs(pInfo["partitions"], "info");
                 BSONObj o = b.obj();
-                log() << "the obj, " << o << endl;
+                if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
+                    toolInfoLog() << "the obj, " << o << std::endl;
+                }
                 bool ok = conn().runCommand(_curdb, o, info);
-                log() << "ok: " << ok << "info: " << info << endl;
+                if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
+                    toolInfoLog() << "ok: " << ok << "info: " << info << std::endl;
+                }
             }
         }
     }
@@ -430,7 +450,9 @@ private:
     /* We must handle if the dbname or collection name is different at restore time than what was dumped.
      */
     void createIndex(BSONObj indexObj) {
-        LOG(0) << "\tCreating index: " << indexObj << endl;
+        if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(0))) {
+            toolInfoLog() << "\tCreating index: " << indexObj << std::endl;
+        }
         conn().insert( _curdb + ".system.indexes" ,  indexObj );
 
         // We're stricter about errors for indexes than for regular data
@@ -438,7 +460,7 @@ private:
 
         if (err.hasField("err") && !err["err"].isNull()) {
             if (err["err"].str() == "norepl" && mongoRestoreGlobalParams.w > 1) {
-                error() << "Cannot specify write concern for non-replicas" << endl;
+                toolError() << "Cannot specify write concern for non-replicas" << std::endl;
             }
             else {
                 string errCode;
@@ -447,8 +469,8 @@ private:
                     errCode = str::stream() << err["code"].numberInt();
                 }
 
-                error() << "Error creating index " << indexObj["ns"].String() << ": "
-                        << errCode << " " << err["err"] << endl;
+                toolError() << "Error creating index " << indexObj["ns"].String() << ": "
+                            << errCode << " " << err["err"] << std::endl;
             }
 
             ::abort();

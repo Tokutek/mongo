@@ -219,9 +219,7 @@ namespace mongo {
             }
         }
 
-        if ( hasParam("quiet") ) {
-            toolGlobalParams.quiet = true;
-        }
+        toolGlobalParams.quiet = params.count("quiet");
 
 #ifdef MONGO_SSL
         if (params.count("ssl")) {
@@ -241,7 +239,6 @@ namespace mongo {
         }
         toolGlobalParams.db = "test";
         toolGlobalParams.coll = "";
-        toolGlobalParams.quiet = false;
         toolGlobalParams.noconnection = false;
 
         if (params.count("db"))
