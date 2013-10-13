@@ -38,7 +38,7 @@ printjson(collUn.ensureIndex({ukey : 1}, {unique : true, clustering : true}));
 printjson(collDi.ensureIndex({ukey : 1}, {unique : true, clustering : true}));
 
 printjson(admin.runCommand({shardCollection : collSh + "",
-                            key : {ukey : 1}})
+                            key : {ukey : 1}}))
 printjson(admin.runCommand({split : collSh + "",
                             middle : {ukey : 0}}));
 printjson(admin.runCommand({moveChunk : collSh + "",
