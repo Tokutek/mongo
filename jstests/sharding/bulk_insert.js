@@ -65,7 +65,7 @@ var printPass = function(str)
 
 var isDupKeyError = function(err)
 {
-    return /dup key/.test(err + "");
+    return /dup(licate)? key/.test(err + "");
 }
 
 jsTest.log("Collections created.");
@@ -113,15 +113,15 @@ var inserts = [{ukey : 0},
 
 collSh.insert(inserts);
 assert.neq(null, printPass(collSh.getDB().getLastError()));
-assert.eq(1, collSh.find().itcount());
+assert.eq(0, collSh.find().itcount());
 
 collUn.insert(inserts);
 assert.neq(null, printPass(collUn.getDB().getLastError()));
-assert.eq(1, collUn.find().itcount());
+assert.eq(0, collUn.find().itcount());
 
 collDi.insert(inserts);
 assert.neq(null, printPass(collDi.getDB().getLastError()));
-assert.eq(1, collDi.find().itcount());
+assert.eq(0, collDi.find().itcount());
 
 jsTest.log("Bulk insert (no COE) with mongod and mongos error...")
 
@@ -135,19 +135,19 @@ collSh.insert(inserts);
 var err = printPass(collSh.getDB().getLastError());
 assert.neq(null, err);
 assert(isDupKeyError(err));
-assert.eq(1, collSh.find().itcount());
+assert.eq(0, collSh.find().itcount());
 
 collUn.insert(inserts);
 var err = printPass(collUn.getDB().getLastError());
 assert.neq(null, err);
 assert(isDupKeyError(err));
-assert.eq(1, collUn.find().itcount());
+assert.eq(0, collUn.find().itcount());
 
 collDi.insert(inserts);
 var err = printPass(collDi.getDB().getLastError());
 assert.neq(null, err);
 assert(isDupKeyError(err));
-assert.eq(1, collDi.find().itcount());
+assert.eq(0, collDi.find().itcount());
 
 jsTest.log("Bulk insert (no COE) on second shard...")
 
@@ -190,15 +190,15 @@ var inserts = [{ukey : 0},
 
 collSh.insert(inserts);
 assert.neq(null, printPass(collSh.getDB().getLastError()));
-assert.eq(4, collSh.find().itcount());
+assert.eq(2, collSh.find().itcount());
 
 collUn.insert(inserts);
 assert.neq(null, printPass(collUn.getDB().getLastError()));
-assert.eq(4, collUn.find().itcount());
+assert.eq(0, collUn.find().itcount());
 
 collDi.insert(inserts);
 assert.neq(null, printPass(collDi.getDB().getLastError()));
-assert.eq(4, collDi.find().itcount());
+assert.eq(0, collDi.find().itcount());
 
 jsTest
         .log("Bulk insert to third shard (no COE) with mongod and mongos error...")
@@ -216,19 +216,19 @@ collSh.insert(inserts);
 var err = printPass(collSh.getDB().getLastError());
 assert.neq(null, err);
 assert(isDupKeyError(err));
-assert.eq(5, collSh.find().itcount());
+assert.eq(4, collSh.find().itcount());
 
 collUn.insert(inserts);
 var err = printPass(collUn.getDB().getLastError());
 assert.neq(null, err);
 assert(isDupKeyError(err));
-assert.eq(5, collUn.find().itcount());
+assert.eq(0, collUn.find().itcount());
 
 collDi.insert(inserts);
 var err = printPass(collDi.getDB().getLastError());
 assert.neq(null, err);
 assert(isDupKeyError(err));
-assert.eq(5, collDi.find().itcount());
+assert.eq(0, collDi.find().itcount());
 
 //
 // CONTINUE-ON-ERROR
@@ -281,7 +281,7 @@ collSh.insert(inserts, 1);
 var err = printPass(collSh.getDB().getLastError());
 assert.neq(null, err);
 assert(!isDupKeyError(err));
-assert.eq(5, collSh.find().itcount());
+assert.eq(4, collSh.find().itcount());
 
 // Extra insert goes through, since mongos error "doesn't count"
 collUn.insert(inserts, 1);
@@ -313,20 +313,20 @@ collSh.insert(inserts, 1);
 var err = printPass(collSh.getDB().getLastError());
 assert.neq(null, err);
 assert(isDupKeyError(err));
-assert.eq(5, collSh.find().itcount());
+assert.eq(4, collSh.find().itcount());
 
 // Extra insert goes through, since mongos error "doesn't count"
 collUn.insert(inserts, 1);
 var err = printPass(collUn.getDB().getLastError());
 assert.neq(null, err);
 assert(isDupKeyError(err));
-assert.eq(6, collUn.find().itcount());
+assert.eq(0, collUn.find().itcount());
 
 collDi.insert(inserts, 1);
 var err = printPass(collDi.getDB().getLastError());
 assert.neq(null, err);
 assert(isDupKeyError(err));
-assert.eq(6, collDi.find().itcount());
+assert.eq(0, collDi.find().itcount());
 
 //
 // Test when WBL has to be invoked mid-insert
