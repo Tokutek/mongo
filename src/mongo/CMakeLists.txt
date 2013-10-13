@@ -627,6 +627,7 @@ foreach (tool
     stat
     top
     2toku
+    bridge
     files
     )
   add_executable(mongo${tool}
@@ -634,7 +635,6 @@ foreach (tool
     tools/mongo${tool}_options
     )
 endforeach ()
-add_executable(mongobridge tools/bridge)
 add_executable(bsondump
   tools/bsondump
   tools/bsondump_options
