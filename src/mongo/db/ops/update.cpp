@@ -72,13 +72,15 @@ namespace mongo {
     }
 
     static void updateUsingMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
-                                ModSetState &mss, const LogOpUpdateDetails &logDetails) {
+                                ModSetState &mss, const bool modsAreIndexed,
+                                const LogOpUpdateDetails &logDetails) {
 
         BSONObj newObj = mss.createNewFromMods();
         checkTooLarge( newObj );
         TOKULOG(3) << "updateUsingMods used mod set, transformed " << obj << " to " << newObj << endl;
 
-        updateOneObject( d, pk, obj, newObj, logDetails );
+        updateOneObject( d, pk, obj, newObj, logDetails,
+                         modsAreIndexed ? 0 : NamespaceDetails::INDEXES_UNAFFECTED_HINT );
     }
 
     static void updateNoMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
@@ -148,7 +150,7 @@ namespace mongo {
             auto_ptr<ModSetState> mss = mods->prepare( obj, false /* not an insertion */ );
 
             // mod set update, ie: $inc: 10 increments by 10.
-            updateUsingMods( d, pk, obj, *mss, logDetails );
+            updateUsingMods( d, pk, obj, *mss, mods->isIndexed() > 0, logDetails );
             return UpdateResult( 1 , 1 , 1 , BSONObj() );
 
         } // end $operator update
@@ -298,7 +300,7 @@ namespace mongo {
 
                     auto_ptr<ModSetState> mss = useMods->prepare( currentObj,
                                                                   false /* not an insertion */ );
-                    updateUsingMods( d, currPK, currentObj, *mss, logDetails );
+                    updateUsingMods( d, currPK, currentObj, *mss, useMods->isIndexed() > 0, logDetails );
 
                     numModded++;
                     if ( ! multi )
