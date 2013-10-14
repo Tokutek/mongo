@@ -62,4 +62,18 @@ namespace mongo {
         return Status::OK();
     }
 
+
+    void printMemInfo( const char * where ) {
+        cout << "mem info: ";
+        if ( where )
+            cout << where << " ";
+
+        ProcessInfo pi;
+        if ( ! pi.supported() ) {
+            cout << " not supported" << endl;
+            return;
+        }
+
+        cout << "vsize: " << pi.getVirtualMemorySize() << " resident: " << pi.getResidentSize() << endl;
+    }
 }

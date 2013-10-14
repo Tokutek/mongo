@@ -51,6 +51,7 @@
 #include "repl/connections.h"
 #include "ops/update.h"
 #include "pcrecpp.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/server_parameters.h"
@@ -91,13 +92,13 @@ namespace mongo {
                 result.append("secondary", false);
                 result.append("info", ReplSet::startupStatusMsg.get());
                 result.append( "isreplicaset" , true );
-                return;
             }
-
-            theReplSet->fillIsMaster(result);
+            else {
+                theReplSet->fillIsMaster(result);
+            }
             return;
         }
-
+        
         if ( replAllDead ) {
             result.append("ismaster", 0);
             string s = string("dead: ") + replAllDead;
@@ -107,6 +108,23 @@ namespace mongo {
             result.appendBool("ismaster", _isMaster() );
         }
     }
+    
+    class ReplicationInfoServerStatus : public ServerStatusSection {
+    public:
+        ReplicationInfoServerStatus() : ServerStatusSection( "repl" ){}
+        bool includeByDefault() const { return true; }
+        
+        BSONObj generateSection(const BSONElement& configElement) const {
+            if ( ! anyReplEnabled() )
+                return BSONObj();
+            
+            int level = configElement.numberInt();
+            
+            BSONObjBuilder result;
+            appendReplicationInfo( result, level );
+            return result.obj();
+        }
+    } replicationInfoServerStatus;
 
     class CmdIsMaster : public Command {
     public:
@@ -215,4 +233,7 @@ namespace mongo {
                     theReplSet && theReplSet->isSecondary() );
         }
     }
+
+    OpCounterServerStatusSection replOpCounterServerStatusSection( "opcountersRepl", &replOpCounters );
+
 } // namespace mongo
