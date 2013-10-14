@@ -1144,38 +1144,6 @@ namespace UpdateTests {
             }
         };
 
-        class NoPositionalValidationOnReplication {
-        public:
-            void run() {
-                BSONObj querySpec = BSONObj();
-                BSONObj modSpec = BSON( "$set" << BSON( "a.$" << 1 ) );
-                ModSet modSet( modSpec, IndexPathSet() );
-
-                // No positional operator validation is performed if a ModSet is 'forReplication'.
-                modSet.prepare( querySpec ); // Does not throw.
-            }
-        };
-
-        class NoPositionalValidationOnPartialFixedArrayReplication {
-        public:
-            void run() {
-                BSONObj querySpec = BSONObj( BSON( "a.b" << 1 ) );
-                BSONObj modSpec = BSON( "$set" << BSON( "a.$.b.$" << 1 ) );
-                ModSet modSet( modSpec, IndexPathSet() );
-
-                // Attempt to fix the positional operator fields.
-                scoped_ptr<ModSet> fixedMods( modSet.fixDynamicArray( "0" ) );
-
-                // The first positional field is replaced, but the second is not (until SERVER-831
-                // is implemented).
-                ASSERT( fixedMods->haveModForField( "a.0.b.$" ) );
-
-                // No positional operator validation is performed if a ModSet is 'forReplication',
-                // even after an attempt to fix the positional operator fields.
-                fixedMods->prepare( querySpec ); // Does not throw.
-            }
-        };
-
         class CreateNewFromQueryExcludeNot {
         public:
             void run() {
@@ -1494,8 +1462,6 @@ namespace UpdateTests {
             add< ModSetTests::PositionalWithoutElemMatchKey >();
             add< ModSetTests::PositionalWithoutNestedElemMatchKey >();
             add< ModSetTests::DbrefPassesPositionalValidation >();
-            add< ModSetTests::NoPositionalValidationOnReplication >();
-            add< ModSetTests::NoPositionalValidationOnPartialFixedArrayReplication >();
 
             add< basic::inc1 >();
             add< basic::inc2 >();
