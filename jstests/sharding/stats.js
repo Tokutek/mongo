@@ -70,7 +70,8 @@ function dbStatComp(stat_obj, stat_obj_scaled, scale) {
     statComp(stat_obj.dataSize, stat_obj_scaled.dataSize, scale);
     statComp(stat_obj.storageSize, stat_obj_scaled.storageSize, scale);
     statComp(stat_obj.indexSize, stat_obj_scaled.indexSize, scale);
-    statComp(stat_obj.fileSize, stat_obj_scaled.fileSize, scale);
+    // TokuMX doesn't report this
+    //statComp(stat_obj.fileSize, stat_obj_scaled.fileSize, scale);
     /* avgObjSize not scaled.  See SERVER-7347 */
     statComp(stat_obj.avgObjSize, stat_obj_scaled.avgObjSize, 1);
 }
