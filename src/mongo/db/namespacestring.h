@@ -110,6 +110,13 @@ namespace mongo {
             return ns.find('$') == string::npos;
         }
 
+        /**
+         * @return true if the ns is an oplog one, otherwise false.
+         */
+        static bool oplog(const StringData &ns) {
+            return ns == "local.oplog.rs" || ns == "local.oplog.refs";
+        }
+
         static bool special(const StringData &ns) {
             return !normal(ns) || isSystem(ns);
         }

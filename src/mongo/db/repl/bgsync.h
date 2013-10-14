@@ -88,15 +88,9 @@ namespace mongo {
         // variable that states if the applier thread is alive doing anything
         bool _applierInProgress;
 
-        struct QueueCounter {
-            QueueCounter();
-            unsigned long long waitTime;
-        } _queueCounter;
-
         BackgroundSync();
         BackgroundSync(const BackgroundSync& s);
         BackgroundSync operator=(const BackgroundSync& s);
-
 
         // Production thread
         uint32_t produce();

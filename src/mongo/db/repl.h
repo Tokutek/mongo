@@ -63,5 +63,5 @@ namespace mongo {
     extern ReplSettings replSettings;
 
     bool anyReplEnabled();
-    void appendReplicationInfo(BSONObjBuilder& result, int level = 0);
+
 } // namespace mongo

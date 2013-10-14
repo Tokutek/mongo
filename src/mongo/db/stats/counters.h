@@ -45,7 +45,7 @@ namespace mongo {
 
         void gotOp( int op , bool isCommand );
 
-        BSONObj getObj();
+        BSONObj getObj() const;
         
         // thse are used by snmp, and other things, do not remove
         const AtomicUInt * getInsert() const { return &_insert; }
@@ -56,7 +56,8 @@ namespace mongo {
         const AtomicUInt * getCommand() const { return &_command; }
 
     private:
-
+        void _checkWrap();
+        
         // todo: there will be a lot of cache line contention on these.  need to do something 
         //       else eventually.
         AtomicUInt _insert;
@@ -69,16 +70,6 @@ namespace mongo {
 
     extern OpCounters globalOpCounters;
     extern OpCounters replOpCounters;
-
-    class GenericCounter {
-    public:
-        GenericCounter() : _mutex("GenericCounter") { }
-        void hit( const string& name , int count=0 );
-        BSONObj getObj();
-    private:
-        map<string,long long> _counts; // TODO: replace with thread safe map
-        mongo::mutex _mutex;
-    };
 
     class NetworkCounter {
     public:

@@ -93,6 +93,12 @@ namespace mongo {
             return cursor->moreInCurrentBatch();
         }
 
+        int currentBatchMessageSize() {
+            if( NULL == cursor->getMessage() )
+                return 0;
+            return cursor->getMessage()->size();
+        }
+
         int getTailingQueryOptions() const { return _tailingQueryOptions; }
 
         void peek(vector<BSONObj>& v, int n) {

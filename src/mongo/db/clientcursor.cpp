@@ -39,6 +39,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/database.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/kill_current_op.h"
@@ -435,6 +436,20 @@ namespace mongo {
             return true;
         }
     } cmdCursorInfo;
+
+    class CursorServerStats : public ServerStatusSection {
+    public:
+
+        CursorServerStats() : ServerStatusSection( "cursors" ){}
+        virtual bool includeByDefault() const { return true; }
+
+        BSONObj generateSection(const BSONElement& configElement) const {
+            BSONObjBuilder b;
+            ClientCursor::appendStats( b );
+            return b.obj();
+        }
+
+    } cursorServerStats;
 
     /** thread for timing out old cursors */
     void ClientCursorMonitor::run() {

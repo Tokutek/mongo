@@ -29,7 +29,6 @@
 #include "request.h"
 #include "config.h"
 #include "chunk.h"
-#include "stats.h"
 #include "cursors.h"
 #include "grid.h"
 #include "client_info.h"
@@ -112,7 +111,6 @@ namespace mongo {
                << endl;
 
         Strategy * s = SHARDED;
-        _counter = &opsNonSharded;
 
         _d.markSet();
 
@@ -144,7 +142,6 @@ namespace mongo {
                << endl;
 
         globalOpCounters.gotOp( op , iscmd );
-        _counter->gotOp( op , iscmd );
     }
 
     bool Request::isCommand() const {
@@ -154,7 +151,6 @@ namespace mongo {
 
     void Request::gotInsert() {
         globalOpCounters.gotInsert();
-        _counter->gotInsert();
     }
 
     void Request::reply( Message & response , const string& fromServer ) {
