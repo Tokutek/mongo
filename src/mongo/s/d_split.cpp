@@ -34,12 +34,12 @@
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/namespace_details.h"
-#include "mongo/client/dbclientcursor.h"
+#include "mongo/db/namespacestring.h"
 
+#include "mongo/client/dbclientcursor.h"
 #include "mongo/client/connpool.h"
 #include "mongo/client/distlock.h"
 #include "mongo/client/remote_transaction.h"
-#include "mongo/util/timer.h"
 
 #include "mongo/s/chunk.h" // for static genID only
 #include "mongo/s/chunk_version.h"
@@ -396,6 +396,11 @@ namespace mongo {
             //
 
             const char* ns = jsobj.getStringField( "splitVector" );
+            if (nsToDatabaseSubstring(ns) != dbname) {
+                errmsg = mongoutils::str::stream() << "wrong database for splitVector: running in db "
+                                                   << dbname << " but splitting collection " << ns;
+                return false;
+            }
             BSONObj keyPattern = jsobj.getObjectField( "keyPattern" );
 
             if ( keyPattern.isEmpty() ) {
