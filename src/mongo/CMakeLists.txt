@@ -352,6 +352,7 @@ if (BUILD_TESTING)
       util/bson_extract_test
       bson_field_test
       bson_validate_test
+      bsonobjbuilder_test
       )
     string(REGEX REPLACE "^.*/" "" test ${test_source})
     add_executable(${test} bson/${test_source})
@@ -1000,6 +1001,7 @@ if (BUILD_TESTING)
       mutable_bson_algo_test
       bson_field_test
       bson_validate_test
+      bsonobjbuilder_test
       )
     add_mongo_test(bson ${test} ${test})
   endforeach ()
