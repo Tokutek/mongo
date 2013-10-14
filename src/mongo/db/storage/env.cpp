@@ -35,6 +35,7 @@
 #include "mongo/db/curop.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/descriptor.h"
 #include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/storage/dbt.h"
@@ -340,88 +341,249 @@ namespace mongo {
                            r == 0);
         }
 
-        void get_status(BSONObjBuilder &status) {
-            uint64_t num_rows;
-            uint64_t max_rows;
-            uint64_t panic;
-            size_t panic_string_len = 128;
-            char panic_string[panic_string_len];
-            fs_redzone_state redzone_state;
+        class FractalTreeEngineStatus {
+            uint64_t _num_rows;
+            uint64_t _max_rows;
+            uint64_t _panic;
+            static const size_t _panic_string_len = 128;
+            char _panic_string[_panic_string_len];
+            fs_redzone_state _redzone_state;
+            scoped_array<TOKU_ENGINE_STATUS_ROW_S> _rows;
 
-            int r = storage::env->get_engine_status_num_rows(storage::env, &max_rows);
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-            TOKU_ENGINE_STATUS_ROW_S mystat[max_rows];
-            r = env->get_engine_status(env, mystat, max_rows, &num_rows, &redzone_state, &panic, panic_string, panic_string_len, TOKU_ENGINE_STATUS);
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-            status.append( "panic code", (long long) panic );
-            status.append( "panic string", panic_string );
-            switch (redzone_state) {
-                case FS_GREEN:
-                    status.append( "filesystem status", "OK" );
-                    break;
-                case FS_YELLOW:
-                    status.append( "filesystem status", "Getting full..." );
-                    break;
-                case FS_RED:
-                    status.append( "filesystem status", "Critically full. Engine is read-only until space is freed." );
-                    break;
-                case FS_BLOCKED:
-                    status.append( "filesystem status", "Completely full. Free up some space now." );
-                    break;
-                default:
-                    {
-                        StringBuilder s;
-                        s << "Unknown. Code: " << (int) redzone_state;
-                        status.append( "filesystem status", s.str() );
-                    }
-            }
-            for (uint64_t i = 0; i < num_rows; i++) {
-                TOKU_ENGINE_STATUS_ROW row = &mystat[i];
-                switch (row->type) {
-                case FS_STATE:
-                case UINT64:
-                    status.appendNumber( row->keyname, (long long) row->value.num );
-                    break;
-                case CHARSTR:
-                    status.append( row->keyname, row->value.str );
-                    break;
-                case UNIXTIME:
-                    {
-                        time_t t = row->value.num;
-                        char tbuf[26];
-                        char *tstr = ctime_r(&t, tbuf);
-                        verify(tstr != NULL);
-                        // Remove any trailing newline.
-                        size_t len = strlen(tstr);
-                        if (len > 0 && tstr[len - 1] == '\n') {
-                            tstr[len - 1] = '\0';
-                        }
-                        status.append( row->keyname, tstr );
-                    }
-                    break;
-                case TOKUTIME:
-                    status.appendNumber( row->keyname, tokutime_to_seconds(row->value.num) );
-                    break;
-                case PARCOUNT:
-                    {
-                        uint64_t v = read_partitioned_counter(row->value.parcount);
-                        status.appendNumber( row->keyname, (long long) v );
-                    }
-                    break;
-                default:
-                    {
-                        StringBuilder s;
-                        s << "Unknown type. Code: " << (int) row->type;
-                        status.append( row->keyname, s.str() );
-                    }
-                    break;                
+          public:
+            FractalTreeEngineStatus()
+                    : _num_rows(0),
+                      _max_rows(0),
+                      _panic(0),
+                      _redzone_state(FS_GREEN),
+                      _rows(NULL) {}
+
+            void fetch() {
+                int r = storage::env->get_engine_status_num_rows(storage::env, &_max_rows);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                }
+                _rows.reset(new TOKU_ENGINE_STATUS_ROW_S[_max_rows]);
+                r = env->get_engine_status(env, _rows.get(), _max_rows, &_num_rows, &_redzone_state, &_panic, _panic_string, _panic_string_len, TOKU_ENGINE_STATUS);
+                if (r != 0) {
+                    handle_ydb_error(r);
                 }
             }
+
+            void appendPanic(BSONObjBuilder &result, bool evenIfEmpty) const {
+                if (_panic != 0 || evenIfEmpty) {
+                    result.append("panic code", (long long) _panic);
+                    result.append("panic string", _panic_string);
+                }
+            }
+
+            void appendFilesystem(BSONObjBuilder &result, bool evenIfGreen) const {
+                switch (_redzone_state) {
+                    case FS_GREEN:
+                        if (evenIfGreen) {
+                            result.append("filesystem status", "OK");
+                        }
+                        break;
+                    case FS_YELLOW:
+                        result.append("filesystem status", "Getting full...");
+                        break;
+                    case FS_RED:
+                        result.append("filesystem status", "Critically full. Engine is read-only until space is freed.");
+                        break;
+                    case FS_BLOCKED:
+                        result.append("filesystem status", "Completely full. Free up some space now.");
+                        break;
+                    default:
+                        {
+                            StringBuilder s;
+                            s << "Unknown. Code: " << (int) _redzone_state;
+                            result.append("filesystem status", s.str());
+                        }
+                }
+            }
+
+            static void appendRow(BSONObjBuilder &result, const StringData &field, TOKU_ENGINE_STATUS_ROW row, bool ifZero, int scale = 1) {
+                switch (row->type) {
+                    case FS_STATE:
+                    case UINT64:
+                        if (ifZero || row->value.num != 0) {
+                            result.appendNumber(field, (long long) row->value.num / scale);
+                        }
+                        break;
+                    case CHARSTR:
+                        {
+                            StringData s(row->value.str);
+                            if (ifZero || !s.empty()) {
+                                result.append(field, s);
+                            }
+                        }
+                        break;
+                    case UNIXTIME:
+                        {
+                            time_t t = row->value.num;
+                            char tbuf[26];
+                            char *tstr = ctime_r(&t, tbuf);
+                            verify(tstr != NULL);
+                            // Remove any trailing newline.
+                            size_t len = strlen(tstr);
+                            if (len > 0 && tstr[len - 1] == '\n') {
+                                tstr[len - 1] = '\0';
+                            }
+                            result.append(field, tstr);
+                        }
+                        break;
+                    case TOKUTIME:
+                        if (ifZero || row->value.num != 0) {
+                            result.appendNumber(field, tokutime_to_seconds(row->value.num));
+                        }
+                        break;
+                    case PARCOUNT:
+                        {
+                            uint64_t v = read_partitioned_counter(row->value.parcount);
+                            if (ifZero || v != 0) {
+                                result.appendNumber(field, (long long) v / scale);
+                            }
+                        }
+                        break;
+                    default:
+                        {
+                            StringBuilder s;
+                            s << "Unknown type. Code: " << (int) row->type;
+                            result.append(field, s.str());
+                        }
+                        break;                
+                }
+            }
+
+            void appendInfo(BSONObjBuilder &result) {
+                appendPanic(result, true);
+                appendFilesystem(result, true);
+                for (uint64_t i = 0; i < _num_rows; ++i) {
+                    appendRow(result, _rows[i].keyname, &_rows[i], true);
+                }
+            }
+
+            void appendInfo(BSONObjBuilder &result, const StringData &field, const StringData &key, bool ifZero, int scale = 1) const {
+                // well, this is annoying
+                for (uint64_t i = 0; i < _num_rows; ++i) {
+                    if (key == _rows[i].keyname) {
+                        appendRow(result, field, &_rows[i], ifZero, scale);
+                        break;
+                    }
+                }
+            }
+        };
+
+        void get_status(BSONObjBuilder &result) {
+            FractalTreeEngineStatus status;
+            status.fetch();
+            status.appendInfo(result);
         }
+
+        class FractalTreeSSS : public ServerStatusSection {
+          public:
+            FractalTreeSSS() : ServerStatusSection("ft") {}
+            virtual bool includeByDefault() const { return true; }
+
+            BSONObj generateSection(const BSONElement &configElement) const {
+                if (cmdLine.isMongos()) {
+                    return BSONObj();
+                }
+
+                int scale = 1;
+                if (configElement.isABSONObj()) {
+                    BSONObj o = configElement.Obj();
+                    BSONElement scaleElt = o["scale"];
+                    if (scaleElt.ok()) {
+                        scale = scaleElt.safeNumberLong();
+                    }
+                }
+
+                BSONObjBuilder result;
+
+                FractalTreeEngineStatus status;
+                status.fetch();
+
+                status.appendPanic(result, false);
+                status.appendFilesystem(result, false);
+                {
+                    BSONObjBuilder b(result.subobjStart("fsync"));
+                    status.appendInfo(b, "count", "FS_FSYNC_COUNT", true);
+                    status.appendInfo(b, "time", "FS_FSYNC_TIME", true);
+                    {
+                        BSONObjBuilder lwb;
+                        status.appendInfo(lwb, "count", "FS_LONG_FSYNC_COUNT", false);
+                        status.appendInfo(lwb, "time", "FS_LONG_FSYNC_TIME", false);
+                        BSONObj lw = lwb.done();
+                        if (!lw.isEmpty()) {
+                            b.append("longFsync", lw);
+                        }
+                    }
+                    b.doneFast();
+                }
+                {
+                    BSONObjBuilder b(result.subobjStart("log"));
+                    status.appendInfo(b, "bytesWritten", "LOGGER_BYTES_WRITTEN", true, scale);
+                    b.doneFast();
+                }
+                {
+                    BSONObjBuilder b(result.subobjStart("cachetable"));
+                    {
+                        BSONObjBuilder b2(b.subobjStart("size"));
+                        status.appendInfo(b2, "current", "CT_SIZE_CURRENT", true, scale);
+                        status.appendInfo(b2, "writing", "CT_SIZE_WRITING", true, scale);
+                        status.appendInfo(b2, "limit", "CT_SIZE_LIMIT", true, scale);
+                        b2.doneFast();
+                    }
+                    {
+                        BSONObjBuilder b2(b.subobjStart("miss"));
+                        status.appendInfo(b2, "count", "CT_MISS", true);
+                        status.appendInfo(b2, "time", "CT_MISSTIME", true);
+                        b2.doneFast();
+                    }
+                    {
+                        BSONObjBuilder lwb;
+                        status.appendInfo(lwb, "count", "CT_LONG_WAIT_PRESSURE_COUNT", false);
+                        status.appendInfo(lwb, "time", "CT_LONG_WAIT_PRESSURE_TIME", false);
+                        BSONObj lw = lwb.done();
+                        if (!lw.isEmpty()) {
+                            b.append("longWaitCachePressure", lw);
+                        }
+                    }
+                    b.doneFast();
+                }
+                {
+                    BSONObjBuilder b(result.subobjStart("locktree"));
+                    {
+                        BSONObjBuilder b2(b.subobjStart("size"));
+                        status.appendInfo(b2, "current", "LTM_SIZE_CURRENT", true, scale);
+                        status.appendInfo(b2, "limit", "LTM_SIZE_LIMIT", true, scale);
+                        b2.doneFast();
+                    }
+                    {
+                        BSONObjBuilder lwb;
+                        status.appendInfo(lwb, "count", "LTM_LONG_WAIT_COUNT", false);
+                        status.appendInfo(lwb, "time", "LTM_LONG_WAIT_TIME", false);
+                        BSONObj lw = lwb.done();
+                        if (!lw.isEmpty()) {
+                            b.append("longWait", lw);
+                        }
+                    }
+                    {
+                        BSONObjBuilder lwb;
+                        status.appendInfo(lwb, "count", "LTM_LONG_WAIT_ESCALATION_COUNT", false);
+                        status.appendInfo(lwb, "time", "LTM_LONG_WAIT_ESCALATION_TIME", false);
+                        BSONObj lw = lwb.done();
+                        if (!lw.isEmpty()) {
+                            b.append("longWaitEscalation", lw);
+                        }
+                    }
+                    b.doneFast();
+                }
+
+                return result.obj();
+            }
+        } essss;
 
         static BSONObj pretty_key(const DBT *key, DB *db) {
             BSONObjBuilder b;
