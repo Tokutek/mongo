@@ -963,8 +963,6 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
 
     getcurns = ourgetns;
 
-    setupSignalHandlers();
-
     dbExecCommand = argv[0];
 
     srand(curTimeMicros());
@@ -981,8 +979,9 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     if( argc == 1 )
         cout << dbExecCommand << " --help for help and startup options" << endl;
 
-
     processCommandLineOptions(std::vector<std::string>(argv, argv + argc));
+    setupSignalHandlers();
+
     mongo::runGlobalInitializersOrDie(argc, argv, envp);
     CmdLine::censor(argc, argv);
 
