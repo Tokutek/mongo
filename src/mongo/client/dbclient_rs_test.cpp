@@ -602,8 +602,6 @@ namespace {
 
         string dest;
         mongo::DBClientConnection& secConn = replConn.slaveConn();
-
-        // Note: IdentityNS contains the name of the server.
         auto_ptr<DBClientCursor> cursor = secConn.query(IdentityNS, Query());
         BSONObj doc = cursor->next();
         dest = doc[HostField.name()].str();

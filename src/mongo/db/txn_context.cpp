@@ -243,6 +243,7 @@ namespace mongo {
     }
 
     void TxnContext::commit(int flags) {
+        verify(!_retired);
         bool gotGTID = false;
         GTID gtid;
         // do this in case we are writing the first entry
@@ -327,6 +328,7 @@ namespace mongo {
     }
 
     void TxnContext::abort() {
+        verify(!_retired);
         _clientCursorRollback.preComplete();
         _nsIndexRollback.preAbort();
         _txnOps.abort();

@@ -39,7 +39,9 @@
 #include "mongo/db/replutil.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/s/d_logic.h"
+#include "mongo/util/net/sock.h"
 #include "mongo/db/query_optimizer.h"
+#include "mongo/db/kill_current_op.h"
 
 using namespace std;
 
@@ -431,21 +433,9 @@ namespace mongo {
         }
     }
 
-    ReplSetImpl::ReplSetImpl(ReplSetCmdline& replSetCmdline) : 
-        _replInfoUpdateRunning(false),
-        _replOplogPurgeRunning(false),
-        _replKeepOplogAliveRunning(false),
-        _keepOplogPeriodMillis(600*1000), // 10 minutes
-        _replOplogOptimizeRunning(false),
-        _replBackgroundShouldRun(true),
-        elect(this),
-        _forceSyncTarget(0),
-        _blockSync(false),
-        _hbmsgTime(0),
-        _self(0),
-        _maintenanceMode(0),
-        mgr( new Manager(this) ),
-        ghost( new GhostSync(this) ) {
+    void ReplSetImpl::init(ReplSetCmdline& replSetCmdline) {
+        mgr = new Manager(this);
+        ghost = new GhostSync(this);
 
         _cfg = 0;
         memset(_hbmsg, 0, sizeof(_hbmsg));
@@ -475,6 +465,12 @@ namespace mongo {
     }
 
     ReplSetImpl::ReplSetImpl() :
+        _replInfoUpdateRunning(false),
+        _replOplogPurgeRunning(false),
+        _replKeepOplogAliveRunning(false),
+        _keepOplogPeriodMillis(600*1000), // 10 minutes
+        _replOplogOptimizeRunning(false),
+        _replBackgroundShouldRun(true),
         elect(this),
         _forceSyncTarget(0),
         _blockSync(false),
@@ -486,8 +482,14 @@ namespace mongo {
         oplogVersion(0) {
     }
 
-    ReplSet::ReplSet(ReplSetCmdline& replSetCmdline) : ReplSetImpl(replSetCmdline) {}
-    ReplSet::ReplSet() : ReplSetImpl() {}
+    ReplSet::ReplSet() {
+    }
+
+    ReplSet* ReplSet::make(ReplSetCmdline& replSetCmdline) {
+        auto_ptr<ReplSet> ret(new ReplSet());
+        ret->init(replSetCmdline);
+        return ret.release();
+    }
 
     void ReplSetImpl::loadGTIDManager() {
         Lock::DBWrite lk(rsoplog);
@@ -810,18 +812,18 @@ namespace mongo {
     }
 
     // Our own config must be the first one.
-    bool ReplSetImpl::_loadConfigFinish(vector<ReplSetConfig>& cfgs) {
+    bool ReplSetImpl::_loadConfigFinish(vector<ReplSetConfig*>& cfgs) {
         int v = -1;
         ReplSetConfig *highest = 0;
         int myVersion = -2000;
         int n = 0;
-        for( vector<ReplSetConfig>::iterator i = cfgs.begin(); i != cfgs.end(); i++ ) {
-            ReplSetConfig& cfg = *i;
-            DEV LOG(1) << n+1 << " config shows version " << cfg.version << rsLog; 
-            if( ++n == 1 ) myVersion = cfg.version;
-            if( cfg.ok() && cfg.version > v ) {
-                highest = &cfg;
-                v = cfg.version;
+        for( vector<ReplSetConfig*>::iterator i = cfgs.begin(); i != cfgs.end(); i++ ) {
+            ReplSetConfig* cfg = *i;
+            DEV LOG(1) << n+1 << " config shows version " << cfg->version << rsLog;
+            if( ++n == 1 ) myVersion = cfg->version;
+            if( cfg->ok() && cfg->version > v ) {
+                highest = cfg;
+                v = cfg->version;
             }
         }
         verify( highest );
@@ -843,25 +845,16 @@ namespace mongo {
 
         while( 1 ) {
             try {
-                vector<ReplSetConfig> configs;
+                OwnedPointerVector<ReplSetConfig> configs;
                 try {
-                    DBDirectClient cli;
-                    BSONObj config = cli.findOne(rsConfigNs, Query()).getOwned();
-
-                    // Add local config
-                    if (config.isEmpty()) {
-                        configs.push_back(ReplSetConfig());
-                    }
-                    else {
-                        configs.push_back(ReplSetConfig(config, false));
-                    }
+                    configs.mutableVector().push_back(ReplSetConfig::makeDirect());
                 }
                 catch(DBException& e) {
                     log() << "replSet exception loading our local replset configuration object : " << e.toString() << rsLog;
                 }
                 for( vector<HostAndPort>::const_iterator i = _seeds->begin(); i != _seeds->end(); i++ ) {
                     try {
-                        configs.push_back( ReplSetConfig(*i) );
+                        configs.mutableVector().push_back( ReplSetConfig::make(*i) );
                     }
                     catch( DBException& e ) {
                         log() << "replSet exception trying to load config from " << *i << " : " << e.toString() << rsLog;
@@ -874,7 +867,7 @@ namespace mongo {
                              i != replSettings.discoveredSeeds.end(); 
                              i++) {
                             try {
-                                configs.push_back( ReplSetConfig(HostAndPort(*i)) );
+                                configs.mutableVector().push_back( ReplSetConfig::make(HostAndPort(*i)) );
                             }
                             catch( DBException& ) {
                                 LOG(1) << "replSet exception trying to load config from discovered seed " << *i << rsLog;
@@ -886,7 +879,8 @@ namespace mongo {
 
                 if (!replSettings.reconfig.isEmpty()) {
                     try {
-                        configs.push_back(ReplSetConfig(replSettings.reconfig, true));
+                        configs.mutableVector().push_back(ReplSetConfig::make(replSettings.reconfig,
+                                                                       true));
                     }
                     catch( DBException& re) {
                         log() << "replSet couldn't load reconfig: " << re.what() << rsLog;
@@ -896,15 +890,16 @@ namespace mongo {
 
                 int nok = 0;
                 int nempty = 0;
-                for( vector<ReplSetConfig>::iterator i = configs.begin(); i != configs.end(); i++ ) {
-                    if( i->ok() )
+                for( vector<ReplSetConfig*>::iterator i = configs.mutableVector().begin();
+                     i != configs.mutableVector().end(); i++ ) {
+                    if( (*i)->ok() )
                         nok++;
-                    if( i->empty() )
+                    if( (*i)->empty() )
                         nempty++;
                 }
                 if( nok == 0 ) {
 
-                    if( nempty == (int) configs.size() ) {
+                    if( nempty == (int) configs.mutableVector().size() ) {
                         startupStatus = EMPTYCONFIG;
                         startupStatusMsg.set("can't get " + rsConfigNs + " config from self or any seed (EMPTYCONFIG)");
                         log() << "replSet can't get " << rsConfigNs << " config from self or any seed (EMPTYCONFIG)" << rsLog;
@@ -926,7 +921,7 @@ namespace mongo {
                     continue;
                 }
 
-                if( !_loadConfigFinish(configs) ) {
+                if( !_loadConfigFinish(configs.mutableVector()) ) {
                     log() << "replSet info Couldn't load config yet. Sleeping 20sec and will try again." << rsLog;
                     sleepsecs(20);
                     continue;
@@ -993,12 +988,12 @@ namespace mongo {
 
     void Manager::msgReceivedNewConfig(BSONObj o) {
         log() << "replset msgReceivedNewConfig version: " << o["version"].toString() << rsLog;
-        ReplSetConfig c(o);
-        if( c.version > rs->config().version )
-            theReplSet->haveNewConfig(c, false);
+        scoped_ptr<ReplSetConfig> config(ReplSetConfig::make(o));
+        if( config->version > rs->config().version )
+            theReplSet->haveNewConfig(*config, false);
         else {
             log() << "replSet info msgReceivedNewConfig but version isn't higher " <<
-                  c.version << ' ' << rs->config().version << rsLog;
+                  config->version << ' ' << rs->config().version << rsLog;
         }
     }
 
@@ -1016,7 +1011,7 @@ namespace mongo {
                 return;
             }
             replLocalAuth();
-            (theReplSet = new ReplSet(*replSetCmdline))->go();
+            (theReplSet = ReplSet::make(*replSetCmdline))->go();
         }
         catch(std::exception& e) {
             log() << "replSet caught exception in startReplSets thread: " << e.what() << rsLog;
@@ -1070,6 +1065,7 @@ namespace mongo {
                 lastSeenGTID = curr;
             }
         }
+        cc().shutdown();
         _replKeepOplogAliveRunning = false;
     }
 
@@ -1224,6 +1220,7 @@ namespace mongo {
                 sleep(5);
             }
         }
+        cc().shutdown();
         _replOplogOptimizeRunning = false;
     }
 

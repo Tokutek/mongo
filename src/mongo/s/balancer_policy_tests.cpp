@@ -14,16 +14,16 @@
  *    limitations under the License.
  */
 
-#include "mongo/unittest/unittest.h"
-#include "mongo/s/config.h"
 #include "mongo/s/balancer_policy.h"
+#include "mongo/s/config.h"
+#include "mongo/s/type_chunk.h"
+#include "mongo/unittest/unittest.h"
 
 namespace mongo {
 
     // these are all crutch and hopefully will eventually go away
     CmdLine cmdLine;
     bool inShutdown() { return false; }
-    void setupSignals( bool inFork ) {}
     DBClientBase *createDirectClient() { return 0; }
     void dbexit( ExitCode rc, const char *why ){
         log()  << "dbexit called? :(" << endl;
@@ -45,10 +45,10 @@ namespace mongo {
             // 2 chunks and 0 chunk shards
             ShardToChunksMap chunkMap;
             vector<BSONObj> chunks;
-            chunks.push_back(BSON( "min" << BSON( "x" << BSON( "$minKey"<<1) ) <<
-                                   "max" << BSON( "x" << 49 )));
-            chunks.push_back(BSON( "min" << BSON( "x" << 49 ) <<
-                                   "max" << BSON( "x" << BSON( "$maxkey"<<1 ))));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << BSON("$minKey"<<1))) <<
+                                  ChunkType::max(BSON("x" << 49))));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << 49)) <<
+                                  ChunkType::max(BSON("x" << BSON("$maxkey"<<1)))));
             chunkMap["shard0"] = chunks;
             chunks.clear();
             chunkMap["shard1"] = chunks;
@@ -64,17 +64,53 @@ namespace mongo {
             ASSERT( c );
         }
 
+
+        TEST( BalancerPolicyTests , BalanceJumbo  ) {
+            // 2 chunks and 0 chunk shards
+            ShardToChunksMap chunkMap;
+            vector<BSONObj> chunks;
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << BSON("$minKey"<<1))) <<
+                                  ChunkType::max(BSON("x" << 10)) <<
+                                  ChunkType::jumbo(true)));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << 10)) <<
+                                  ChunkType::max(BSON("x" << 20)) <<
+                                  ChunkType::jumbo(true)));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << 20)) <<
+                                  ChunkType::max(BSON("x" << 30))));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << 30)) <<
+                                  ChunkType::max(BSON("x" << 40)) <<
+                                  ChunkType::jumbo(true)));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << 40)) <<
+                                  ChunkType::max(BSON("x" << BSON("$maxkey"<<1))) <<
+                                  ChunkType::jumbo(true)));
+            chunkMap["shard0"] = chunks;
+            chunks.clear();
+            chunkMap["shard1"] = chunks;
+
+            // no limits
+            ShardInfoMap info;
+            info["shard0"] = ShardInfo( 0, 2, false, false );
+            info["shard1"] = ShardInfo( 0, 0, false, false );
+
+            MigrateInfo* c = NULL;
+            DistributionStatus status( info, chunkMap );
+            c = BalancerPolicy::balance( "ns", status, 1 );
+            ASSERT( c );
+            ASSERT_EQUALS( 30, c->chunk.max["x"].numberInt() );
+        }
+
+
         TEST( BalanceNormalTests ,  BalanceDrainingTest ) {
             // one normal, one draining
             // 2 chunks and 0 chunk shards
             ShardToChunksMap chunkMap;
             vector<BSONObj> chunks;
-            chunks.push_back(BSON( "min" << BSON( "x" << BSON( "$minKey"<<1) ) <<
-                                   "max" << BSON( "x" << 49 )));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << BSON("$minKey"<<1))) <<
+                                  ChunkType::max(BSON("x" << 49))));
             chunkMap["shard0"] = chunks;
             chunks.clear();
-            chunks.push_back(BSON( "min" << BSON( "x" << 49 ) <<
-                                   "max" << BSON( "x" << BSON( "$maxkey"<<1 ))));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << 49))<<
+                                  ChunkType::max(BSON("x" << BSON("$maxkey"<<1)))));
             chunkMap["shard1"] = chunks;
 
             // shard0 is draining
@@ -94,10 +130,10 @@ namespace mongo {
             // 2 chunks and 0 chunk (drain completed) shards
             ShardToChunksMap chunkMap;
             vector<BSONObj> chunks;
-            chunks.push_back(BSON( "min" << BSON( "x" << BSON( "$minKey"<<1) ) <<
-                                   "max" << BSON( "x" << 49 )));
-            chunks.push_back(BSON( "min" << BSON( "x" << 49 ) <<
-                                   "max" << BSON( "x" << BSON( "$maxkey"<<1 ))));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << BSON("$minKey"<<1))) <<
+                                  ChunkType::max(BSON("x" << 49))));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << 49))<<
+                                  ChunkType::max(BSON("x" << BSON("$maxkey"<<1)))));
             chunkMap["shard0"] = chunks;
             chunks.clear();
             chunkMap["shard1"] = chunks;
@@ -117,12 +153,12 @@ namespace mongo {
             // 2 chunks and 0 chunk shards
             ShardToChunksMap chunkMap;
             vector<BSONObj> chunks;
-            chunks.push_back(BSON( "min" << BSON( "x" << BSON( "$minKey"<<1) ) <<
-                                   "max" << BSON( "x" << 49 )));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << BSON("$minKey"<<1))) <<
+                                  ChunkType::max(BSON("x" << 49))));
             chunkMap["shard0"] = chunks;
             chunks.clear();
-            chunks.push_back(BSON( "min" << BSON( "x" << 49 ) <<
-                                   "max" << BSON( "x" << BSON( "$maxkey"<<1 ))));
+            chunks.push_back(BSON(ChunkType::min(BSON("x" << 49)) <<
+                                  ChunkType::max(BSON("x" << BSON("$maxkey"<<1)))));
             chunkMap["shard1"] = chunks;
 
             // shard0 is draining, shard1 is maxed out, shard2 has writebacks pending
@@ -159,8 +195,8 @@ namespace mongo {
                     max = BSON( "x" << BSON( "$maxKey" << 1 ) );
                 else
                     max = BSON( "x" << 1 + total + i );
-                
-                chunks.push_back( BSON( "min" << min << "max" << max ) );
+
+                chunks.push_back( BSON(ChunkType::min(min) << ChunkType::max(max)));
             }
 
         }
@@ -168,7 +204,7 @@ namespace mongo {
         void moveChunk( ShardToChunksMap& map, MigrateInfo* m ) {
             vector<BSONObj>& chunks = map[m->from];
             for ( vector<BSONObj>::iterator i = chunks.begin(); i != chunks.end(); ++i ) {
-                if ( i->getField("min").Obj() == m->chunk.min ) {
+                if (i->getField(ChunkType::min()).Obj() == m->chunk.min) {
                     map[m->to].push_back( *i );
                     chunks.erase( i );
                     return;
@@ -280,15 +316,13 @@ namespace mongo {
             ASSERT( ! d.addTagRange( TagRange( BSON( "x" << 22 ), BSON( "x" << 28 ) , "c" ) ) );
             ASSERT( ! d.addTagRange( TagRange( BSON( "x" << 28 ), BSON( "x" << 33 ) , "c" ) ) );
 
-            ASSERT_EQUALS( "" , d.getTagForChunk( BSON( "min" << BSON( "x" << -4 ) ) ) );
-            ASSERT_EQUALS( "" , d.getTagForChunk( BSON( "min" << BSON( "x" << 0 ) ) ) );
-            ASSERT_EQUALS( "a" , d.getTagForChunk( BSON( "min" << BSON( "x" << 1 ) ) ) );
-            ASSERT_EQUALS( "b" , d.getTagForChunk( BSON( "min" << BSON( "x" << 10 ) ) ) );
-            ASSERT_EQUALS( "b" , d.getTagForChunk( BSON( "min" << BSON( "x" << 15 ) ) ) );
-            ASSERT_EQUALS( "c" , d.getTagForChunk( BSON( "min" << BSON( "x" << 25 ) ) ) );
-            ASSERT_EQUALS( "" , d.getTagForChunk( BSON( "min" << BSON( "x" << 35 ) ) ) );
-
-
+            ASSERT_EQUALS("", d.getTagForChunk(BSON(ChunkType::min(BSON("x" << -4)))));
+            ASSERT_EQUALS("", d.getTagForChunk(BSON(ChunkType::min(BSON("x" << 0)))));
+            ASSERT_EQUALS("a", d.getTagForChunk(BSON(ChunkType::min(BSON("x" << 1)))));
+            ASSERT_EQUALS("b", d.getTagForChunk(BSON(ChunkType::min(BSON("x" << 10)))));
+            ASSERT_EQUALS("b", d.getTagForChunk(BSON(ChunkType::min(BSON("x" << 15)))));
+            ASSERT_EQUALS("c", d.getTagForChunk(BSON(ChunkType::min(BSON("x" << 25)))));
+            ASSERT_EQUALS("", d.getTagForChunk(BSON(ChunkType::min(BSON("x" << 35)))));
         }
 
 

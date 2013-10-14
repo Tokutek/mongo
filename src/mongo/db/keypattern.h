@@ -19,7 +19,9 @@
 
 #pragma once
 
+#include "mongo/base/string_data.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/platform/unordered_set.h"
 #include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
@@ -47,7 +49,10 @@ namespace mongo {
      */
     class KeyPattern {
     public:
-        KeyPattern( const BSONObj& pattern ): _pattern( pattern ) {}
+        /*
+         * We are allowing implicit conversion from BSON
+         */
+        KeyPattern( const BSONObj& pattern );
 
         /*
          *  Returns a BSON representation of this KeyPattern.
@@ -55,10 +60,12 @@ namespace mongo {
         BSONObj toBSON() const { return _pattern; }
 
         /*
-         * Returns true if the given fieldname is the name of one element of the (potentially)
-         * compound key described by this KeyPattern.
+         * Returns true if the given fieldname is the (dotted prefix of the) name of one
+         * element of the (potentially) compound key described by this KeyPattern.
          */
-        bool hasField( const char* fieldname ) const { return _pattern.hasField( fieldname ); }
+        bool hasField( const StringData& fieldname ) const {
+            return _prefixes.find( fieldname ) != _prefixes.end();
+        }
 
         /*
          * Gets the element of this pattern corresponding to the given fieldname.
@@ -73,6 +80,31 @@ namespace mongo {
         bool isPrefixOf( const KeyPattern& other ) const {
             return _pattern.isPrefixOf( other.toBSON() );
         }
+
+        /* Takes a BSONObj whose field names are a prefix of the fields in this keyPattern, and
+         * outputs a new bound with MinKey values appended to match the fields in this keyPattern
+         * (or MaxKey values for descending -1 fields). This is useful in sharding for
+         * calculating chunk boundaries when tag ranges are specified on a prefix of the actual
+         * shard key, or for calculating index bounds when the shard key is a prefix of the actual
+         * index used.
+         *
+         * @param makeUpperInclusive If true, then MaxKeys instead of MinKeys will be appended, so
+         * that the output bound will compare *greater* than the bound being extended (note that
+         * -1's in the keyPattern will swap MinKey/MaxKey vals. See examples).
+         *
+         * Examples:
+         * If this keyPattern is {a : 1}
+         *   extendRangeBound( {a : 55}, false) --> {a : 55}
+         *
+         * If this keyPattern is {a : 1, b : 1}
+         *   extendRangeBound( {a : 55}, false) --> {a : 55, b : MinKey}
+         *   extendRangeBound( {a : 55}, true ) --> {a : 55, b : MaxKey}
+         *
+         * If this keyPattern is {a : 1, b : -1}
+         *   extendRangeBound( {a : 55}, false) --> {a : 55, b : MaxKey}
+         *   extendRangeBound( {a : 55}, true ) --> {a : 55, b : MinKey}
+         */
+        BSONObj extendRangeBound( const BSONObj& bound , bool makeUpperInclusive ) const;
 
         /**
          * Returns true if this KeyPattern contains any computed values, (e.g. {a : "hashed"}),
@@ -150,12 +182,33 @@ namespace mongo {
 
     private:
         BSONObj _pattern;
+
+        // Each field in the '_pattern' may be itself a dotted field. We store all the prefixes
+        // of each field here. For instance, if a pattern is { 'a.b.c': 1, x: 1 }, we'll store
+        // here 'a', 'a.b', 'a.b.c', and 'x'.
+        //
+        // Since we're indexing into '_pattern's field names, it must stay constant after
+        // constructed.
+        struct PrefixHasher {
+            size_t operator()( const StringData& strData ) const {
+                size_t result = 0;
+                const char* p = strData.rawData();
+                for (size_t len = strData.size(); len > 0; len-- ) {
+                    result = ( result * 131 ) + *p++;
+                }
+                return result;
+            }
+        };
+        unordered_set<StringData, PrefixHasher> _prefixes;
+
         bool isAscending( const BSONElement& fieldExpression ) const {
             return ( fieldExpression.isNumber()  && fieldExpression.numberInt() == 1 );
         }
+
         bool isDescending( const BSONElement& fieldExpression ) const {
             return ( fieldExpression.isNumber()  && fieldExpression.numberInt() == -1 );
         }
+
         bool isHashed( const BSONElement& fieldExpression ) const {
             return mongoutils::str::equals( fieldExpression.valuestrsafe() , "hashed" );
         }
@@ -168,6 +221,5 @@ namespace mongo {
                                          const BSONElement& field ) const;
 
     };
-
 
 } // namespace mongo

@@ -18,10 +18,13 @@
 // strategy_simple.cpp
 
 #include "pch.h"
-#include "request.h"
-#include "cursors.h"
-#include "../client/connpool.h"
-#include "../db/commands.h"
+
+#include "mongo/client/connpool.h"
+#include "mongo/client/dbclientinterface.h"
+#include "mongo/db/commands.h"
+#include "mongo/s/request.h"
+#include "mongo/s/cursors.h"
+#include "mongo/s/version_manager.h"
 
 namespace mongo {
 
@@ -53,7 +56,7 @@ namespace mongo {
                                                      : str::equals("query", e.fieldName()))) {
                             // Extract the embedded query object.
 
-                            if (cmdObj.hasField("$readPreference")) {
+                            if (cmdObj.hasField(Query::ReadPrefField.name())) {
                                 // The command has a read preference setting. We don't want
                                 // to lose this information so we copy this to a new field
                                 // called $queryOptions.$readPreference
@@ -62,7 +65,7 @@ namespace mongo {
 
                                 BSONObjBuilder queryOptionsBuilder(
                                         finalCmdObjBuilder.subobjStart("$queryOptions"));
-                                queryOptionsBuilder.append(cmdObj["$readPreference"]);
+                                queryOptionsBuilder.append(cmdObj[Query::ReadPrefField.name()]);
                                 queryOptionsBuilder.done();
 
                                 cmdObj = finalCmdObjBuilder.obj();
@@ -73,16 +76,10 @@ namespace mongo {
                         }
                     }
 
-                    bool commandFound = Command::runAgainstRegistered(q.ns,
-                                                                      cmdObj,
-                                                                      builder,
-                                                                      q.queryOptions);
-                    if (commandFound) {
-                        BSONObj x = builder.done();
-                        replyToQuery(0, r.p(), r.m(), x);
-                        return;
-                    }
-                    break;
+                    Command::runAgainstRegistered(q.ns, cmdObj, builder, q.queryOptions);
+                    BSONObj x = builder.done();
+                    replyToQuery(0, r.p(), r.m(), x);
+                    return;
                 }
                 catch ( StaleConfigException& e ) {
                     if ( loops <= 0 )
@@ -107,10 +104,6 @@ namespace mongo {
                     return;
                 }
             }
-
-            string commandName = q.query.firstElementFieldName();
-
-            uasserted(13390, "unrecognized command: " + commandName);
         }
 
         // Deprecated

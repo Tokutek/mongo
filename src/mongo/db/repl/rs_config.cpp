@@ -676,13 +676,19 @@ namespace mongo {
         version(EMPTYCONFIG),
         protocolVersion(CURRENT_PROTOCOL_VERSION),
         _ok(false),
+        _chainingAllowed(true),
         _majority(-1),
         _heartbeatTimeout(DEFAULT_HB_TIMEOUT) {
     }
 
-    ReplSetConfig::ReplSetConfig(BSONObj cfg, bool force) :
-        _ok(false),_chainingAllowed(true),_majority(-1)
-    {
+
+    ReplSetConfig* ReplSetConfig::make(BSONObj cfg, bool force) {
+        auto_ptr<ReplSetConfig> ret(new ReplSetConfig());
+        ret->init(cfg, force);
+        return ret.release();
+    }
+
+    void ReplSetConfig::init(BSONObj cfg, bool force) {
         _constructed = false;
         clear();
         from(cfg);
@@ -696,9 +702,25 @@ namespace mongo {
         _constructed = true;
     }
 
-    ReplSetConfig::ReplSetConfig(const HostAndPort& h) :
-        _ok(false),_chainingAllowed(true),_majority(-1)
-    {
+    ReplSetConfig* ReplSetConfig::make(const HostAndPort& h) {
+        auto_ptr<ReplSetConfig> ret(new ReplSetConfig());
+        ret->init(h);
+        return ret.release();
+    }
+
+    ReplSetConfig* ReplSetConfig::makeDirect() {
+        DBDirectClient cli;
+        BSONObj config = cli.findOne(rsConfigNs, Query()).getOwned();
+
+        // Check for no local config
+        if (config.isEmpty()) {
+            return new ReplSetConfig();
+        }
+
+        return make(config, false);
+    }
+
+    void ReplSetConfig::init(const HostAndPort& h) {
         LOG(2) << "ReplSetConfig load " << h.toString() << rsLog;
 
         _constructed = false;

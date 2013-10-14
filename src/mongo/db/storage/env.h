@@ -55,7 +55,7 @@ namespace mongo {
         public:
             virtual ~UpdateCallback() { }
             virtual BSONObj apply(const BSONObj &oldObj, const BSONObj &msg) {
-                msgasserted( 17020, "bug: update callback not properly installed" );
+                msgasserted( 17032, "bug: update callback not properly installed" );
             }
         };
 

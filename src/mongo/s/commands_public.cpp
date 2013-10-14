@@ -20,6 +20,8 @@
 #include "pch.h"
 
 #include "mongo/base/init.h"
+#include "mongo/client/connpool.h"
+#include "mongo/client/parallel.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
@@ -27,26 +29,23 @@
 #include "mongo/db/commands/find_and_modify.h"
 #include "mongo/db/commands/mr.h"
 #include "mongo/db/commands/rename_collection.h"
-#include "../util/net/message.h"
-#include "../db/dbmessage.h"
-#include "../client/connpool.h"
-#include "../client/parallel.h"
-#include "../db/commands.h"
-#include "../db/pipeline/pipeline.h"
-#include "../db/pipeline/document_source.h"
-#include "../db/pipeline/expression_context.h"
-#include "../db/queryutil.h"
-#include "s/interrupt_status_mongos.h"
-#include "../scripting/engine.h"
-#include "../util/timer.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/dbmessage.h"
 #include "mongo/db/lasterror.h"
-
-
-#include "config.h"
-#include "chunk.h"
-#include "strategy.h"
-#include "grid.h"
-#include "client_info.h"
+#include "mongo/db/pipeline/pipeline.h"
+#include "mongo/db/pipeline/document_source.h"
+#include "mongo/db/pipeline/expression_context.h"
+#include "mongo/db/queryutil.h"
+#include "mongo/s/client_info.h"
+#include "mongo/s/chunk.h"
+#include "mongo/s/config.h"
+#include "mongo/s/grid.h"
+#include "mongo/s/interrupt_status_mongos.h"
+#include "mongo/s/strategy.h"
+#include "mongo/s/version_manager.h"
+#include "mongo/scripting/engine.h"
+#include "mongo/util/net/message.h"
+#include "mongo/util/timer.h"
 
 namespace mongo {
 
@@ -289,6 +288,7 @@ namespace mongo {
 
             virtual void aggregateResults(const vector<BSONObj>& results, BSONObjBuilder& output) {
                 long long objects = 0;
+                long long unscaledDataSize = 0;
                 long long dataSize = 0;
                 long long storageSize = 0;
                 long long numExtents = 0;
@@ -299,6 +299,7 @@ namespace mongo {
                 for (vector<BSONObj>::const_iterator it(results.begin()), end(results.end()); it != end; ++it) {
                     const BSONObj& b = *it;
                     objects     += b["objects"].numberLong();
+                    unscaledDataSize    += b["avgObjSize"].numberLong() * b["objects"].numberLong();
                     dataSize    += b["dataSize"].numberLong();
                     storageSize += b["storageSize"].numberLong();
                     numExtents  += b["numExtents"].numberLong();
@@ -309,7 +310,10 @@ namespace mongo {
 
                 //result.appendNumber( "collections" , ncollections ); //TODO: need to find a good way to get this
                 output.appendNumber( "objects" , objects );
-                output.append      ( "avgObjSize" , double(dataSize) / double(objects) );
+                /* avgObjSize on mongod is not scaled based on the argument to db.stats(), so we use
+                 * unscaledDataSize here for consistency.  See SERVER-7347. */
+                output.append      ( "avgObjSize" , objects == 0 ? 0 : double(unscaledDataSize) /
+                                                                       double(objects) );
                 output.appendNumber( "dataSize" , dataSize );
                 output.appendNumber( "storageSize" , storageSize);
                 output.appendNumber( "numExtents" , numExtents );
@@ -485,12 +489,18 @@ namespace mongo {
         class CopyDBCmd : public PublicGridCommand {
         public:
             CopyDBCmd() : PublicGridCommand( "copydb" ) {}
+            virtual bool adminOnly() const {
+                return true;
+            }
             virtual void addRequiredPrivileges(const std::string& dbname,
                                                const BSONObj& cmdObj,
                                                std::vector<Privilege>* out) {
-                // Should never get here because this command shouldn't get registered when auth is
-                // enabled
-                verify(0);
+                // Note: privileges required are currently only granted to old-style users for
+                // backwards compatibility, since we can't properly handle auth checking for the
+                // read from the source DB.
+                ActionSet actions;
+                actions.addAction(ActionType::copyDBTarget);
+                out->push_back(Privilege(dbname, actions)); // NOTE: dbname is always admin
             }
             bool run(const string& dbName, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 string todb = cmdObj.getStringField("todb");
@@ -525,12 +535,9 @@ namespace mongo {
             }
         };
         MONGO_INITIALIZER(RegisterCopyDBCommand)(InitializerContext* context) {
-            if (noauth) {
-                // Leaked intentionally: a Command registers itself when constructed.
-                new CopyDBCmd();
-            } else {
-                new NotWithAuthCmd("copydb");
-            }
+            // Leaked intentionally: a Command registers itself when constructed.
+            // NOTE: this initializer block cannot be removed due to SERVER-9167
+            new CopyDBCmd();
             return Status::OK();
         }
 
@@ -552,6 +559,19 @@ namespace mongo {
                     BSONObjBuilder& result,
                     bool ){
 
+                long long skip = 0;
+                if( cmdObj["skip"].isNumber() ){
+                    skip = cmdObj["skip"].numberLong();
+                    if( skip < 0 ){
+                        errmsg = "skip value is negative in count query";
+                        return false;
+                    }
+                }
+                else if( cmdObj["skip"].ok() ){
+                    errmsg = "skip value is not a valid number";
+                    return false;
+                }
+
                 const string collection = cmdObj.firstElement().valuestrsafe();
                 const string fullns = dbName + "." + collection;
 
@@ -572,8 +592,6 @@ namespace mongo {
                      * apply it only once we have collected all counts.
                      */
                     if( limit != 0 && cmdObj["skip"].isNumber() ){
-                        long long skip = cmdObj["skip"].numberLong();
-                        uassert( 16260 , "skip has to be positive" , skip >= 0 );
                         if ( limit > 0 )
                             limit += skip;
                         else
@@ -831,7 +849,12 @@ namespace mongo {
                 BSONObj max = cmdObj.getObjectField( "max" );
                 BSONObj keyPattern = cmdObj.getObjectField( "keyPattern" );
 
-                uassert(13408,  "keyPattern must equal shard key", cm->getShardKey().key() == keyPattern);
+                uassert( 13408, "keyPattern must equal shard key",
+                         cm->getShardKey().key() == keyPattern );
+                uassert( 13405, str::stream() << "min value " << min << " does not have shard key",
+                         cm->hasShardKey(min) );
+                uassert( 13406, str::stream() << "max value " << max << " does not have shard key",
+                         cm->hasShardKey(max) );
 
                 // yes these are doubles...
                 double size = 0;
@@ -1180,9 +1203,11 @@ namespace mongo {
                 set<Shard> shards;
                 cm->getShardsForQuery(shards, query);
 
+                // We support both "num" and "limit" options to control limit
                 int limit = 100;
-                if (cmdObj["num"].isNumber())
-                    limit = cmdObj["num"].numberInt();
+                const char* limitName = cmdObj["num"].isNumber() ? "num" : "limit";
+                if (cmdObj[limitName].isNumber())
+                    limit = cmdObj[limitName].numberInt();
 
                 list< shared_ptr<Future::CommandResult> > futures;
                 BSONArrayBuilder shardArray;
@@ -1204,11 +1229,17 @@ namespace mongo {
                         return false;
                     }
 
-                    nearStr = res->result()["near"].String();
+                    if (res->result().hasField("near")) {
+                        nearStr = res->result()["near"].String();
+                    }
                     time += res->result()["stats"]["time"].Number();
-                    btreelocs += res->result()["stats"]["btreelocs"].Number();
+                    if (!res->result()["stats"]["btreelocs"].eoo()) {
+                        btreelocs += res->result()["stats"]["btreelocs"].Number();
+                    }
                     nscanned += res->result()["stats"]["nscanned"].Number();
-                    objectsLoaded += res->result()["stats"]["objectsLoaded"].Number();
+                    if (!res->result()["stats"]["objectsLoaded"].eoo()) {
+                        objectsLoaded += res->result()["stats"]["objectsLoaded"].Number();
+                    }
 
                     BSONForEach(obj, res->result()["results"].embeddedObject()) {
                         results.insert(make_pair(obj["dis"].Number(), obj.embeddedObject().getOwned()));
@@ -1759,7 +1790,7 @@ namespace mongo {
             */
             DBConfigPtr conf(grid.getDBConfig(dbName , false));
             if (!conf || !conf->isShardingEnabled() || !conf->isSharded(fullns))
-                return passthrough(conf, cmdObj, result);
+                return passthrough(conf, cmdObj, options, result);
 
             /* split the pipeline into pieces for mongods and this mongos */
             intrusive_ptr<Pipeline> pShardPipeline(
@@ -1803,22 +1834,26 @@ namespace mongo {
 
     } // namespace pub_grid_cmds
 
-    bool Command::runAgainstRegistered(const char *ns, BSONObj& jsobj, BSONObjBuilder& anObjBuilder,
+    void Command::runAgainstRegistered(const char *ns, BSONObj& jsobj, BSONObjBuilder& anObjBuilder,
                                        int queryOptions) {
-
-        if (!NamespaceString::isCommand(ns)) {
-            return false;
-        }
+        // It should be impossible for this uassert to fail since there should be no way to get into
+        // this function with any other collection name.
+        uassert(16618,
+                "Illegal attempt to run a command against a namespace other than $cmd.",
+                NamespaceString::isCommand(ns));
 
         BSONElement e = jsobj.firstElement();
-        Command* c = e.type() ? Command::findCommand(e.fieldName()) : NULL;
+        std::string commandName = e.fieldName();
+        Command* c = e.type() ? Command::findCommand(commandName) : NULL;
         if (!c) {
-            return false;
+            Command::appendCommandStatus(anObjBuilder,
+                                         false,
+                                         str::stream() << "no such cmd: " << commandName);
+            return;
         }
         ClientInfo *client = ClientInfo::get();
 
         execCommandClientBasic(c, *client, queryOptions, ns, jsobj, anObjBuilder, false);
-        return true;
     }
 
 } // namespace mongo

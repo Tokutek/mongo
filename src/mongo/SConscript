@@ -34,7 +34,9 @@ tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
 
 env.SConscript(['base/SConscript',
                 'db/auth/SConscript',
+                'db/SConscript',
                 'platform/SConscript',
+                's/SConscript',
                 'unittest/SConscript'])
 
 allPlugins = env.SConscript(['plugins/SConscript'])
@@ -48,7 +50,10 @@ env.StaticLibrary('foundation',
                   [ 'util/assert_util.cpp',
                     'util/concurrency/mutexdebugger.cpp',
                     'util/debug_util.cpp',
+                    'util/exception_filter_win32.cpp',
+                    'util/file.cpp',
                     'util/log.cpp',
+                    'util/platform_init.cpp',
                     'util/signal_handlers.cpp',
                     'util/text.cpp',
                     'util/time_support.cpp',
@@ -58,6 +63,8 @@ env.StaticLibrary('foundation',
                            '$BUILD_DIR/mongo/base/base',
                            '$BUILD_DIR/mongo/platform/platform',
                            '$BUILD_DIR/third_party/shim_boost'])
+
+env.CppUnitTest('text_test', 'util/text_test.cpp', LIBDEPS=['foundation'])
 
 env.StaticLibrary('stringutils', ['util/stringutils.cpp', 'util/base64.cpp',])
 
@@ -92,6 +99,11 @@ env.StaticLibrary('bson', [
 env.CppUnitTest('string_map_test', ['util/string_map_test.cpp'],
                 LIBDEPS=['bson','foundation'])
 
+env.CppUnitTest('partitioned_counter_test', ['util/concurrency/partitioned_counter_test.cpp'])
+
+env.CppUnitTest('builder_test', ['bson/util/builder_test.cpp'],
+                LIBDEPS=['bson'])
+
 env.CppUnitTest('mutable_bson_test', ['bson/mutable/mutable_bson_test.cpp'],
                  LIBDEPS=['bson'])
 
@@ -112,6 +124,9 @@ env.CppUnitTest('bson_field_test', ['bson/bson_field_test.cpp'],
 
 env.CppUnitTest('bson_validate_test', ['bson/bson_validate_test.cpp'],
                 LIBDEPS=['bson'])
+
+env.CppUnitTest('index_set_test', ['db/index_set_test.cpp'],
+                LIBDEPS=['bson','index_set'])
 
 env.CppUnitTest('bson_extract_test', ['bson/util/bson_extract_test.cpp'], LIBDEPS=['bson'])
 
@@ -162,7 +177,6 @@ commonFiles = [ "pch.cpp",
                 "client/remote_transaction.cpp",
                 'client/sasl_client_authenticate.cpp',
                 "client/syncclusterconnection.cpp",
-                "client/distlock.cpp",
                 "db/dbmessage.cpp"
                 ]
 
@@ -289,8 +303,10 @@ env.StaticLibrary("coredb", [
         "s/shardconnection.cpp",
         ],
                   LIBDEPS=['db/auth/serverauth',
+                           'db/common',
                            'plugins/plugins',
-                           'server_parameters'])
+                           'server_parameters',
+                           '$BUILD_DIR/mongo/foundation'])
 
 coreServerFiles = [ "db/client_basic.cpp",
                     "db/common.cpp",
@@ -299,7 +315,11 @@ coreServerFiles = [ "db/client_basic.cpp",
                     "db/stats/service_stats.cpp",
                     ]
 
-env.StaticLibrary('ntservice', ['util/ntservice.cpp'])
+env.StaticLibrary('ntservice', ['util/ntservice.cpp'], LIBDEPS=['foundation'])
+if windows:
+    env.CppUnitTest('ntservice_test', 'util/ntservice_test.cpp',
+                    LIBDEPS=['ntservice'],
+                    LIBS=['shell32', env['LIBS']])
 
 scripting_common_files = [ "scripting/engine.cpp",
                            "scripting/utils.cpp",
@@ -337,9 +357,11 @@ coreServerFiles.append( systemInfoPlatformFile )
 if has_option( "asio" ):
     coreServerFiles += [ "util/net/message_server_asio.cpp" ]
 
-# TokuMX: Commented out files have been deleted - they were used to implement the old storage/durability layer.
+env.StaticLibrary('index_set', [ 'db/index_set.cpp' ] )
+
 # mongod files - also files used in tools. present in dbtests, but not in mongos and not in client libs.
 serverOnlyFiles = [ "db/curop.cpp",
+                    "db/kill_current_op.cpp",
                     "db/interrupt_status_mongod.cpp",
                     "db/d_globals.cpp",
                     "db/ttl.cpp",
@@ -426,18 +448,22 @@ env.CppUnitTest('v8_deadline_monitor_test', 'scripting/v8_deadline_monitor_test.
 
 env.Library('stacktrace', 'util/stacktrace.cpp')
 
-env.Program('lame_stacktrace_test', 'util/lame_stacktrace_test.cpp',
-            LIBDEPS=['stacktrace',
-                     '$BUILD_DIR/mongo/base/base'])
+## lame_stacktrace_test won't link because stacktrace needs log.cpp
+## TODO: fix this and re-enable it
+#env.Program('lame_stacktrace_test', 'util/lame_stacktrace_test.cpp',
+#            LIBDEPS=['stacktrace',
+#                     '$BUILD_DIR/mongo/base/base'])
 
 serverOnlyFiles += [ "db/stats/snapshots.cpp" ]
 
-env.Library( "coreshard", [ "s/config.cpp",
-                            "s/grid.cpp",
-                            "s/chunk.cpp",
-                            "s/shard.cpp",
-                            "s/shardkey.cpp"] )
-
+env.Library('coreshard', ['client/distlock.cpp',
+                          's/config.cpp',
+                          's/grid.cpp',
+                          's/chunk.cpp',
+                          's/shard.cpp',
+                          's/shardkey.cpp'],
+            LIBDEPS=['s/base']);
+    
 mongosLibraryFiles = [
     "s/interrupt_status_mongos.cpp",
     "s/strategy.cpp",
@@ -448,20 +474,32 @@ mongosLibraryFiles = [
     "s/commands_deprecated.cpp",
     "s/request.cpp",
     "s/client_info.cpp",
+    "s/config_server_checker_service.cpp",
     "s/cursors.cpp",
-    "s/config_migrate.cpp",
     "s/s_only.cpp",
     "s/stats.cpp",
     "s/balance.cpp",
     "s/balancer_policy.cpp",
     "s/writeback_listener.cpp",
-    "s/shard_version.cpp",
+    "s/version_manager.cpp",
     ]
 
 env.Library( "mongoscore" , mongosLibraryFiles, LIBDEPS=['db/auth/authmongos'] )
 
 env.CppUnitTest( "balancer_policy_test" , [ "s/balancer_policy_tests.cpp" ] , LIBS=env['LIBS'] + tokulibs,
                  LIBDEPS=["mongoscore", "coreshard", "mongocommon","coreserver","coredb","dbcmdline","mongodandmongos"] ,
+                 NO_CRUTCH=True)
+
+env.CppUnitTest("dbclient_rs_test", [ "client/dbclient_rs_test.cpp" ], LIBS=env['LIBS'] + tokulibs,
+                 LIBDEPS=[
+                    "coredb",
+                    "coreserver",
+                    "coreshard",
+                    "dbcmdline",
+                    "mocklib",
+                    "mongocommon",
+                    "mongodandmongos",
+                    "mongoscore"],
                  NO_CRUTCH=True)
 
 env.CppUnitTest("scoped_db_conn_test", [ "client/scoped_db_conn_test.cpp" ], LIBS=env['LIBS'] + tokulibs,
@@ -516,8 +554,10 @@ env.StaticLibrary("defaultversion", "s/default_version.cpp")
 env.StaticLibrary("serveronly", serverOnlyFiles,
                   LIBDEPS=["coreshard",
                            "db/auth/authmongod",
+                           "db/common",
                            "dbcmdline",
-                           "defaultversion"])
+                           "defaultversion",
+                           "index_set"])
 
 # These files go into mongos and mongod only, not into the shell or any tools.
 mongodAndMongosFiles = [
@@ -580,7 +620,7 @@ env.Install( '#/', [
 mongos = env.Program(
     "mongos", [ "s/server.cpp"] ,
     LIBS=env['LIBS'] + tokulibs, LIBDEPS=["mongoscore", "coreserver", "coredb", "mongocommon", "coreshard", "dbcmdline", "ntservice",
-             "mongodandmongos"] + env['MODULE_LIBDEPS_MONGOS'])
+             "mongodandmongos", "s/upgrade"] + env['MODULE_LIBDEPS_MONGOS'])
 env.Install( '#/', mongos )
 
 env.Library("clientandshell", ["client/clientAndShell.cpp"],
@@ -615,6 +655,7 @@ test = testEnv.Install(
                        "testframework",
                        "gridfs",
                        "notmongodormongos",
+                       "s/upgrade",
                        "mocklib"]))
 
 if len(testEnv.subst('$PROGSUFFIX')):

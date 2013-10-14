@@ -291,14 +291,10 @@ namespace mongo {
          */
         bool runCommand( const string& db , const BSONObj& cmd , BSONObj& res );
 
+        static bool releaseConnectionsAfterResponse;
+
         /** checks all of my thread local connections for the version of this ns */
         static void checkMyConnectionVersions( const string & ns );
-
-        /**
-         * Whether or not we should release all connections after an operation with
-         * a response.
-         */
-        static bool releaseConnectionsAfterResponse;
 
         /**
          * Returns all the current sharded connections to the pool.
@@ -311,6 +307,11 @@ namespace mongo {
          * thread local storage pool of the current thread.
          */
         static void clearPool();
+
+        /**
+         * Forgets a namespace to prevent future versioning.
+         */
+        static void forgetNS( const string& ns );
 
     private:
         void _init();

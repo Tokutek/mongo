@@ -38,7 +38,6 @@ namespace mongo {
         // Protects _groups.
         static mongo::mutex groupMx;
     public:
-        ReplSetConfig();
         /**
          * This contacts the given host and tries to get a config from them.
          *
@@ -50,9 +49,15 @@ namespace mongo {
          * reasons.) If something is misconfigured, throws an exception. If the
          * host couldn't be queried or is just blank, ok() will be false.
          */
-        ReplSetConfig(const HostAndPort& h);
+        static ReplSetConfig* make(const HostAndPort& h);
 
-        ReplSetConfig(BSONObj cfg, bool force=false);
+        static ReplSetConfig* make(BSONObj cfg, bool force=false);
+
+        /**
+         * This uses DBDirectClient to check itself for a config.  This way we don't need to connect
+         * to ourselves over the network to fetch our own config.
+         */
+        static ReplSetConfig* makeDirect();
 
         bool ok() const { return _ok; }
 
@@ -180,6 +185,10 @@ namespace mongo {
         static const int DEFAULT_HB_TIMEOUT;
 
     private:
+        ReplSetConfig();
+        void init(const HostAndPort& h);
+        void init(BSONObj cfg, bool force);
+
         bool _ok;
 
         /**

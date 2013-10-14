@@ -244,8 +244,6 @@ namespace mongo {
         }
     }  // namespace dbtests
 
-    void setupSignals( bool inFork ) {}
-
 }  // namespace mongo
 
 void mongo::unittest::onCurrentTestNameChange( const std::string &testName ) {

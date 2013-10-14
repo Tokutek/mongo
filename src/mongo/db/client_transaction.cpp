@@ -40,14 +40,14 @@ namespace mongo {
         bool isRoot = _txns.empty();
         _txns.push(newTxn);
         if (isRoot) {
-            _rootTransactionId = newTxn->id64();
+            cc()._rootTransactionId = newTxn->id64();
         }
     }
 
     void Client::TransactionStack::pop() {
         _txns.pop();
         if (_txns.empty()) {
-            _rootTransactionId = 0;
+            cc()._rootTransactionId = 0;
         }
     }
 
@@ -144,10 +144,12 @@ namespace mongo {
     }
 
     Client::AlternateTransactionStack::AlternateTransactionStack() {
+        _savedRootTransactionId = cc().rootTransactionId();
         cc().swapTransactionStack(_saved);
     }
     Client::AlternateTransactionStack::~AlternateTransactionStack() {
         cc().swapTransactionStack(_saved);
+        cc()._rootTransactionId = _savedRootTransactionId;
     }
 
 } // namespace mongo

@@ -35,6 +35,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/json.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/module.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/rs.h"
@@ -48,6 +49,7 @@
 #include "mongo/scripting/engine.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/task.h"
+#include "mongo/util/exception_filter_win32.h"
 #include "mongo/util/net/message_server.h"
 #include "mongo/util/ntservice.h"
 #include "mongo/util/ramlog.h"
@@ -56,9 +58,7 @@
 #include "mongo/util/text.h"
 #include "mongo/util/version.h"
 
-#if defined(_WIN32)
-# include <DbgHelp.h>
-#else
+#if !defined(_WIN32)
 # include <sys/file.h>
 #endif
 
@@ -70,9 +70,9 @@ namespace mongo {
     extern int diagLogging;
     extern int lockFile;
 
-    void setupQuittingSignals();
-    void setupSignals( bool ignored );
+    static void setupSignalHandlers();
     void startReplication();
+    static void startSignalProcessingThread();
     void exitCleanly( ExitCode code );
 
 #ifdef _WIN32
@@ -346,10 +346,12 @@ namespace mongo {
         unsigned long long missingRepl = checkIfReplMissingFromCommandLine();
         if (missingRepl) {
             log() << startupWarningsLog;
-            log() << "** warning: mongod started without --replSet yet " << missingRepl
+            log() << "** WARNING: mongod started without --replSet yet " << missingRepl
                   << " documents are present in local.system.replset" << startupWarningsLog;
-            log() << "**          restart with --replSet unless you are doing maintenance and no"
-                  << " other clients are connected" << startupWarningsLog;
+            log() << "**          Restart with --replSet unless you are doing maintenance and no"
+                  << " other clients are connected." << startupWarningsLog;
+            log() << "**          The TTL collection monitor will not start because of this." << startupWarningsLog;
+            log() << "**          For more info see http://dochub.mongodb.org/core/ttlcollections" << startupWarningsLog;
             log() << startupWarningsLog;
         }
 
@@ -373,11 +375,7 @@ namespace mongo {
         d.clientCursorMonitor.go();
         PeriodicTask::theRunner->go();
         if (missingRepl) {
-            log() << "** warning: not starting TTL monitor" << startupWarningsLog;
-            log() << "**          if this member is not part of a replica set and you want to use "
-                  << startupWarningsLog;
-            log() << "**          TTL collections, remove local.system.replset and restart"
-                  << startupWarningsLog;
+            // a warning was logged earlier
         }
         else {
             startTTLBackgroundJob();
@@ -486,7 +484,7 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
     ("logDir", po::value<string>(), "directory to store transaction log files (default is --dbpath)")
     ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
-    ("gdb", "go into a debug-friendly mode, disabling TTL and SIGINT/TERM handlers (development use only).")
+    ("debug", "go into a debug-friendly mode (development use only).")
     ("gdbPath", po::value<string>(), "if specified, debugging information will be gathered on fatal error by launching gdb at the given path")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
@@ -972,8 +970,7 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
 
     getcurns = ourgetns;
 
-    setupCoreSignals();
-    setupQuittingSignals();
+    setupSignalHandlers();
 
     dbExecCommand = argv[0];
 
@@ -999,14 +996,16 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     if (!initializeServerGlobalState())
         ::_exit(EXIT_FAILURE);
 
+    // Per SERVER-7434, startSignalProcessingThread() must run after any forks
+    // (initializeServerGlobalState()) and before creation of any other threads.
+    startSignalProcessingThread();
+
 #if defined(_WIN32)
     if (ntservice::shouldStartService()) {
         ntservice::startService();
         // exits directly and so never reaches here either.
     }
 #endif
-
-    setupSignals( false );
 
     StartupTest::runTests();
     initAndListen(cmdLine.port);
@@ -1063,17 +1062,17 @@ namespace mongo {
     }
 
     sigset_t asyncSignals;
-    // The above signals will be processed by this thread only, in order to
+    // The signals in asyncSignals will be processed by this thread only, in order to
     // ensure the db and log mutexes aren't held.
-    void interruptThread() {
+    void signalProcessingThread() {
         while (true) {
             int actualSignal = 0;
             int status = sigwait( &asyncSignals, &actualSignal );
-            fassert(16854, status == 0);
+            fassert(17023, status == 0);
             switch (actualSignal) {
             case SIGUSR1:
                 // log rotate signal
-                fassert(16855, rotateLogs());
+                fassert(17024, rotateLogs());
                 break;
             default:
                 // interrupt/terminate signal
@@ -1103,7 +1102,9 @@ namespace mongo {
 
     void setupSignals_ignoreHelper( int signal ) {}
 
-    void setupQuittingSignals() {
+    void setupSignalHandlers() {
+        setupCoreSignals();
+
         struct sigaction addrSignals;
         memset( &addrSignals, 0, sizeof( struct sigaction ) );
         addrSignals.sa_sigaction = abruptQuitWithAddrSignal;
@@ -1121,19 +1122,23 @@ namespace mongo {
 
         setupSIGTRAPforGDB();
 
+        // asyncSignals is a global variable listing the signals that should be handled by the
+        // interrupt thread, once it is started via startSignalProcessingThread().
+        sigemptyset( &asyncSignals );
+        if (!cmdLine.debug) {
+            sigaddset( &asyncSignals, SIGHUP );
+            sigaddset( &asyncSignals, SIGINT );
+            sigaddset( &asyncSignals, SIGTERM );
+        }
+        sigaddset( &asyncSignals, SIGUSR1 );
+
         set_terminate( myterminate );
         set_new_handler( my_new_handler );
     }
 
-    void setupSignals( bool ignored ) {
-        sigemptyset( &asyncSignals );
-        if ( !cmdLine.gdb ) {
-            sigaddset( &asyncSignals, SIGINT );
-            sigaddset( &asyncSignals, SIGTERM );
-            sigaddset( &asyncSignals, SIGUSR1 );
-            verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
-        }
-        boost::thread it( interruptThread );
+    void startSignalProcessingThread() {
+        verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
+        boost::thread it( signalProcessingThread );
     }
 
 #else   // WIN32
@@ -1176,94 +1181,6 @@ namespace mongo {
         }
     }
 
-    LPTOP_LEVEL_EXCEPTION_FILTER filtLast = 0;
-
-    /* create a process dump.
-        To use, load up windbg.  Set your symbol and source path.
-        Open the crash dump file.  To see the crashing context, use .ecxr
-        */
-    void doMinidump(struct _EXCEPTION_POINTERS* exceptionInfo) {
-        LPCWSTR dumpFilename = L"mongo.dmp";
-        HANDLE hFile = CreateFileW(dumpFilename,
-            GENERIC_WRITE,
-            0,
-            NULL,
-            CREATE_ALWAYS,
-            FILE_ATTRIBUTE_NORMAL,
-            NULL);
-        if ( INVALID_HANDLE_VALUE == hFile ) {
-            DWORD lasterr = GetLastError();
-            log() << "failed to open minidump file " << toUtf8String(dumpFilename) << " : "
-                  << errnoWithDescription( lasterr ) << endl;
-            return;
-        }
-
-        MINIDUMP_EXCEPTION_INFORMATION aMiniDumpInfo;
-        aMiniDumpInfo.ThreadId = GetCurrentThreadId();
-        aMiniDumpInfo.ExceptionPointers = exceptionInfo;
-        aMiniDumpInfo.ClientPointers = TRUE;
-
-        log() << "writing minidump diagnostic file " << toUtf8String(dumpFilename) << endl;
-        BOOL bstatus = MiniDumpWriteDump(GetCurrentProcess(),
-            GetCurrentProcessId(),
-            hFile,
-            MiniDumpNormal,
-            &aMiniDumpInfo,
-            NULL,
-            NULL);
-        if ( FALSE == bstatus ) {
-            DWORD lasterr = GetLastError();
-            log() << "failed to create minidump : "
-                  << errnoWithDescription( lasterr ) << endl;
-        }
-
-        CloseHandle(hFile);
-    }
-
-    LONG WINAPI exceptionFilter( struct _EXCEPTION_POINTERS *excPointers ) {
-        char exceptionString[128];
-        sprintf_s( exceptionString, sizeof( exceptionString ),
-                ( excPointers->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION ) ?
-                "(access violation)" : "0x%08X", excPointers->ExceptionRecord->ExceptionCode );
-        char addressString[32];
-        sprintf_s( addressString, sizeof( addressString ), "0x%p",
-                 excPointers->ExceptionRecord->ExceptionAddress );
-        log() << "*** unhandled exception " << exceptionString <<
-                " at " << addressString << ", terminating" << endl;
-        if ( excPointers->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION ) {
-            ULONG acType = excPointers->ExceptionRecord->ExceptionInformation[0];
-            const char* acTypeString;
-            switch ( acType ) {
-            case 0:
-                acTypeString = "read from";
-                break;
-            case 1:
-                acTypeString = "write to";
-                break;
-            case 8:
-                acTypeString = "DEP violation at";
-                break;
-            default:
-                acTypeString = "unknown violation at";
-                break;
-            }
-            sprintf_s( addressString, sizeof( addressString ), " 0x%p",
-                     excPointers->ExceptionRecord->ExceptionInformation[1] );
-            log() << "*** access violation was a " << acTypeString << addressString << endl;
-        }
-
-        log() << "*** stack trace for unhandled exception:" << endl;
-        printWindowsStackTrace( *excPointers->ContextRecord );
-        doMinidump(excPointers);
-
-        // Don't go through normal shutdown procedure. It may make things worse.
-        log() << "*** immediate exit due to unhandled exception" << endl;
-        ::_exit(EXIT_ABRUPT);
-
-        // We won't reach here
-        return EXCEPTION_EXECUTE_HANDLER;
-    }
-
     // called by mongoAbort()
     extern void (*reportEventToSystem)(const char *msg);
     void reportEventToSystemImpl(const char *msg) {
@@ -1287,14 +1204,16 @@ namespace mongo {
         mongoAbort("pure virtual");
     }
 
-    void setupSignals( bool inFork ) { }
-
-    void setupQuittingSignals() {
+    void setupSignalHandlers() {
         reportEventToSystem = reportEventToSystemImpl;
-        filtLast = SetUnhandledExceptionFilter(exceptionFilter);
-        massert(10297 , "Couldn't register Windows Ctrl-C handler", SetConsoleCtrlHandler((PHANDLER_ROUTINE) CtrlHandler, TRUE));
+        setWindowsUnhandledExceptionFilter();
+        massert(10297,
+                "Couldn't register Windows Ctrl-C handler",
+                SetConsoleCtrlHandler(static_cast<PHANDLER_ROUTINE>(CtrlHandler), TRUE));
         _set_purecall_handler( myPurecallHandler );
     }
+
+    void startSignalProcessingThread() {}
 
 #endif  // if !defined(_WIN32)
 

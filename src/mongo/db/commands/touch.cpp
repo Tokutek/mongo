@@ -92,7 +92,7 @@ namespace mongo {
                     bool touch_indexes, 
                     BSONObjBuilder& result ) {
 
-            NamespaceDetails *nsd = nsdetails(ns.c_str());
+            NamespaceDetails *nsd = nsdetails(ns);
             if (!nsd) {
                 errmsg = "ns not found";
                 return false;

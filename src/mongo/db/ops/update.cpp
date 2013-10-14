@@ -87,13 +87,15 @@ namespace mongo {
     } _storageUpdateCallback; // installed as the ydb update callback in db.cpp via set_update_callback
 
     static void updateUsingMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
-                                ModSetState &mss, const LogOpUpdateDetails &logDetails) {
+                                ModSetState &mss, const bool modsAreIndexed,
+                                const LogOpUpdateDetails &logDetails) {
 
         BSONObj newObj = mss.createNewFromMods();
         checkTooLarge( newObj );
         TOKULOG(3) << "updateUsingMods used mod set, transformed " << obj << " to " << newObj << endl;
 
-        updateOneObject( d, pk, obj, newObj, logDetails );
+        updateOneObject( d, pk, obj, newObj, logDetails,
+                         modsAreIndexed ? 0 : NamespaceDetails::KEYS_UNAFFECTED_HINT );
     }
 
     static void updateNoMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
@@ -184,7 +186,7 @@ namespace mongo {
             auto_ptr<ModSetState> mss = mods->prepare( obj, false /* not an insertion */ );
 
             // mod set update, ie: $inc: 10 increments by 10.
-            updateUsingMods( d, pk, obj, *mss, logDetails );
+            updateUsingMods( d, pk, obj, *mss, mods->isIndexed() > 0, logDetails );
             return UpdateResult( 1 , 1 , 1 , BSONObj() );
 
         } // end $operator update
@@ -217,14 +219,7 @@ namespace mongo {
         const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
 
         if ( isOperatorUpdate ) {
-            if ( d->indexBuildInProgress() ) {
-                set<string> bgKeys;
-                d->inProgIdx().keyPattern().getFieldNames(bgKeys);
-                mods.reset( new ModSet(updateobj, d->indexKeys(), &bgKeys) );
-            }
-            else {
-                mods.reset( new ModSet(updateobj, d->indexKeys()) );
-            }
+            mods.reset( new ModSet(updateobj, d->indexKeys()) );
         }
 
         int idIdxNo = -1;
@@ -268,10 +263,6 @@ namespace mongo {
                 debug.nscanned++;
 
                 if ( mods.get() && mods->hasDynamicArray() ) {
-                    // The Cursor must have a Matcher to record an elemMatchKey.  But currently
-                    // a modifier on a dynamic array field may be applied even if there is no
-                    // elemMatchKey, so a matcher cannot be required.
-                    //verify( c->matcher() );
                     details.requestElemMatchKey();
                 }
 
@@ -344,7 +335,7 @@ namespace mongo {
 
                     auto_ptr<ModSetState> mss = useMods->prepare( currentObj,
                                                                   false /* not an insertion */ );
-                    updateUsingMods( d, currPK, currentObj, *mss, logDetails );
+                    updateUsingMods( d, currPK, currentObj, *mss, useMods->isIndexed() > 0, logDetails );
 
                     numModded++;
                     if ( ! multi )

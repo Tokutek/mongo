@@ -15,6 +15,9 @@ function rollback() {
 // a cursor that reads more than one batchSize() and also
 // does writes to the same and other collections.
 
+// Need to ensure that all open cursors are closed before starting this test.
+assert.commandWorked(db.getSisterDB('admin').runCommand('closeAllDatabases'));
+
 t = db.txncursor;
 
 function checkLiveCursors(n) {
@@ -23,7 +26,8 @@ function checkLiveCursors(n) {
 }
 
 function runTest(doCommit) {
-    db.dropDatabase();
+    t.drop();
+    db.unrelated.drop();
 
     for ( i = 0; i < 1500; i++ ) {
         t.insert({ _id: i });

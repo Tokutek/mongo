@@ -44,12 +44,14 @@
 #include "balance.h"
 #include "grid.h"
 #include "cursors.h"
-#include "shard_version.h"
 #include "../util/processinfo.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/plugins/loader.h"
+#include "mongo/s/config_server_checker_service.h"
+#include "mongo/s/config_upgrade.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/log.h"
+#include "mongo/util/exception_filter_win32.h"
 
 #if defined(_WIN32)
 # include "../util/ntservice.h"
@@ -165,35 +167,38 @@ namespace mongo {
         ::_exit(EXIT_ABRUPT);
     }
 
-#ifndef _WIN32
     sigset_t asyncSignals;
 
     void signalProcessingThread() {
         while (true) {
             int actualSignal = 0;
             int status = sigwait( &asyncSignals, &actualSignal );
-            fassert(16856, status == 0);
+            fassert(17025, status == 0);
             switch (actualSignal) {
             case SIGUSR1:
                 // log rotate signal
-                fassert(16857, rotateLogs());
+                fassert(17026, rotateLogs());
                 break;
             default:
                 // no one else should be here
-                fassertFailed(16858);
+                fassertFailed(17027);
                 break;
             }
         }
     }
 
     void startSignalProcessingThread() {
+#ifndef _WIN32
         verify( pthread_sigmask( SIG_SETMASK, &asyncSignals, 0 ) == 0 );
         boost::thread it( signalProcessingThread );
-    }
 #endif
+    }
 
-    void setupSignals( bool inFork ) {
-        if ( !cmdLine.gdb ) {
+    void setupSignalHandlers() {
+        setupSIGTRAPforGDB();
+        setupCoreSignals();
+
+        if (!cmdLine.debug) {
             signal(SIGTERM, sighandler);
             signal(SIGINT, sighandler);
 
@@ -216,13 +221,13 @@ namespace mongo {
         sigaddset( &asyncSignals, SIGUSR1 );
         startSignalProcessingThread();
 #endif
+
+        setWindowsUnhandledExceptionFilter();
         set_new_handler( my_new_handler );
     }
 
     void init() {
         serverID.init();
-        setupSIGTRAPforGDB();
-        setupCoreSignals();
 
         Logstream::get().addGlobalTee( new RamLog("global") );
     }
@@ -267,7 +272,7 @@ namespace mongo {
 using namespace mongo;
 
 static bool runMongosServer( bool doUpgrade ) {
-    setupSignals( false );
+    setupSignalHandlers();
     setThreadName( "mongosMain" );
     printShardingVersionInfo( false );
 
@@ -294,25 +299,24 @@ static bool runMongosServer( bool doUpgrade ) {
         return false;
     }
 
-    {
-        class CheckConfigServers : public task::Task {
-            virtual string name() const { return "CheckConfigServers"; }
-            virtual void doWork() { configServer.ok(true); }
-        };
+    startConfigServerChecker();
 
-        task::repeat(new CheckConfigServers, 60*1000);
-    }
+    VersionType initVersionInfo;
+    VersionType versionInfo;
+    string errMsg;
+    bool upgraded = checkAndUpgradeConfigVersion(ConnectionString(configServer.getPrimary()
+                                                         .getConnString()),
+                                                 doUpgrade,
+                                                 &initVersionInfo,
+                                                 &versionInfo,
+                                                 &errMsg);
 
-    int configError = configServer.checkConfigVersion( doUpgrade );
-    if ( configError ) {
-        if ( configError > 0 ) {
-            log() << "upgrade success!" << endl;
-        }
-        else {
-            log() << "config server error: " << configError << endl;
-        }
+    if (!upgraded) {
+        error() << "error upgrading config database to v" << CURRENT_CONFIG_VERSION
+                << causedBy(errMsg) << endl;
         return false;
     }
+
     configServer.reloadSettings();
 
     init();
@@ -358,7 +362,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
 
     general_options.add_options()
     ("nohttpinterface", "disable http interface")
-    ("gdb", "go into a debug-friendly mode, disabling SIGINT/TERM handlers");
+    ("debug", "go into a debug-friendly mode (development use only).");
 
     hidden_options.add_options()
     ("releaseConnectionsAfterResponse", "" )
@@ -421,7 +425,10 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             ::_exit(EXIT_FAILURE);
         }
 
-        Chunk::MaxChunkSize = csize * 1024 * 1024;
+        if ( !Chunk::setMaxChunkSizeSizeMB( csize ) ) {
+            out() << "MaxChunkSize invalid" << endl;
+            ::_exit(EXIT_FAILURE);
+        }
     }
 
     if ( params.count( "localThreshold" ) ) {

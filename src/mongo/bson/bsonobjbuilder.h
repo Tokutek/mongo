@@ -23,6 +23,7 @@
 #pragma once
 
 #include <boost/static_assert.hpp>
+#include <map>
 #include <cmath>
 #include <limits>
 
@@ -550,6 +551,13 @@ namespace mongo {
         BSONObjBuilder& append( const StringData& fieldName, const std::set< T >& vals );
 
         /**
+         * Append a map of values as a sub-object.
+         * Note: the keys of the map should be StringData-compatible (i.e. strings).
+         */
+        template < class K, class T >
+        BSONObjBuilder& append( const StringData& fieldName, const std::map< K, T >& vals );
+
+        /**
          * destructive
          * The returned BSONObj will free the buffer when it is finished.
          * @return owned BSONObj
@@ -588,14 +596,6 @@ namespace mongo {
             return temp;
         }
 
-        /* assume ownership of the buffer - you must then free it (with free()) */
-        char* decouple(int& l) {
-            char *x = _done();
-            verify( x );
-            l = _b.len();
-            _b.decouple();
-            return x;
-        }
         void decouple() {
             _b.decouple();    // post done() call version.  be sure jsobj frees...
         }
@@ -873,6 +873,17 @@ namespace mongo {
     inline BSONObjBuilder& BSONObjBuilder::append( const StringData& fieldName, const std::set< T >& vals ) {
         return _appendIt< std::set< T > >( *this, fieldName, vals );
     }
+
+    template < class K, class T >
+    inline BSONObjBuilder& BSONObjBuilder::append( const StringData& fieldName, const std::map< K, T >& vals ) {
+        BSONObjBuilder bob;
+        for( typename std::map<K,T>::const_iterator i = vals.begin(); i != vals.end(); ++i ){
+            bob.append(i->first, i->second);
+        }
+        append(fieldName, bob.obj());
+        return *this;
+    }
+
 
     template < class L >
     inline BSONArrayBuilder& _appendArrayIt( BSONArrayBuilder& _this, const L& vals ) {

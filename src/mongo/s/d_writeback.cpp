@@ -37,8 +37,6 @@
 #include "mongo/util/queue.h"
 #include "mongo/util/stacktrace.h"
 
-#include "d_writeback.h"
-
 using namespace std;
 
 namespace mongo {

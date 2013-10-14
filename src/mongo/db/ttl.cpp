@@ -83,7 +83,7 @@ namespace mongo {
 
                     Client::ReadContext ctx(ns);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    NamespaceDetails* nsd = nsdetails(ns.c_str());
+                    NamespaceDetails* nsd = nsdetails(ns);
                     if (!nsd) {
                         // collection was dropped
                         continue;
@@ -106,11 +106,6 @@ namespace mongo {
             while ( ! inShutdown() ) {
                 sleepsecs( 60 );
 
-                if ( cmdLine.gdb ) {
-                    // Disable TTL while debugging.
-                    continue;
-                }
-                
                 LOG(3) << "TTLMonitor thread awake" << endl;
                 
                 if ( lockedForWriting() ) {

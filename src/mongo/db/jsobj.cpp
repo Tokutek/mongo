@@ -204,7 +204,7 @@ namespace mongo {
                     s << '"' << date().toString() << '"';
             }
             else
-                s << date();
+                s << date().asInt64();
             if ( format == Strict )
                 s << " }";
             else
@@ -245,12 +245,7 @@ namespace mongo {
             break;
 
         case Timestamp:
-            if ( format == TenGen ) {
-                s << "Timestamp( " << ( timestampTime() / 1000 ) << ", " << timestampInc() << " )";
-            }
-            else {
-                s << "{ \"$timestamp\" : { \"t\" : " << ( timestampTime() / 1000 ) << ", \"i\" : " << timestampInc() << " } }";
-            }
+            s << "{ \"t\" : " << timestampTime() << " , \"i\" : " << timestampInc() << " }";
             break;
 
         case MinKey:
@@ -298,9 +293,9 @@ namespace mongo {
             }
             else if ( fn[1] == 't' && fn[2] == 'y' && fn[3] == 'p' && fn[4] == 'e' && fn[5] == 0 )
                 return BSONObj::opTYPE;
-            else if ( fn[1] == 'i' && fn[2] == 'n' && fn[3] == 0 )
+            else if ( fn[1] == 'i' && fn[2] == 'n' && fn[3] == 0) {
                 return BSONObj::opIN;
-            else if ( fn[1] == 'n' && fn[2] == 'i' && fn[3] == 'n' && fn[4] == 0 )
+            } else if ( fn[1] == 'n' && fn[2] == 'i' && fn[3] == 'n' && fn[4] == 0 )
                 return BSONObj::NIN;
             else if ( fn[1] == 'a' && fn[2] == 'l' && fn[3] == 'l' && fn[4] == 0 )
                 return BSONObj::opALL;
@@ -318,6 +313,8 @@ namespace mongo {
                 return BSONObj::opOPTIONS;
             else if ( fn[1] == 'w' && fn[2] == 'i' && fn[3] == 't' && fn[4] == 'h' && fn[5] == 'i' && fn[6] == 'n' && fn[7] == 0 )
                 return BSONObj::opWITHIN;
+            else if (mongoutils::str::equals(fn + 1, "geoIntersects"))
+                return BSONObj::opGEO_INTERSECTS;
         }
         return def;
     }

@@ -19,8 +19,9 @@
 
 #include "pch.h"
 
-#include "mongo/db/oplog.h"
+#include "mongo/db/field_ref.h"
 #include "mongo/db/jsobjmanipulator.h"
+#include "mongo/db/oplog.h"
 #include "mongo/util/mongoutils/str.h"
 
 #include "update_internal.h"
@@ -420,6 +421,19 @@ namespace mongo {
             ModState& ms = *mss->_mods[i->first];
 
             const Mod& m = i->second;
+
+            // Check for any positional operators that have not been replaced with a numeric field
+            // name (from a query match element).
+            FieldRef fieldRef;
+            fieldRef.parse( m.fieldName );
+            StringData positionalOpField( "$" );
+            for( size_t i = 0; i < fieldRef.numParts(); ++i ) {
+                 uassert( 16650,
+                          "Cannot apply the positional operator without a corresponding query "
+                          "field containing an array.",
+                          fieldRef.getPart( i ).compare( positionalOpField ) != 0 );
+            }
+
             BSONElement e = obj.getFieldDotted(m.fieldName);
 
             ms.m = &m;
@@ -733,34 +747,9 @@ namespace mongo {
             switch ( cmp ) {
 
             case LEFT_SUBFIELD: { // Mod is embedded under this element
-
-                // SERVER-4781
-                bool isObjOrArr = e.type() == Object || e.type() == Array;
-                if ( ! isObjOrArr ) {
-                    if (m->second->m->strictApply) {
-                        uasserted( 10145,
-                                   str::stream() << "LEFT_SUBFIELD only supports Object: " << field
-                                   << " not: " << e.type() );
-                    }
-                    else {
-                        // Since we're not applying the mod, we keep what was there before
-                        builder.append( e );
-
-                        // Skip both as we're not applying this mod. Note that we'll advance
-                        // the iterator on the mod side for all the mods that are under the
-                        // root we are now.
-                        e = es.next();
-                        m++;
-                        while ( m != mend &&
-                                ( compareDottedFieldNames( m->second->m->fieldName,
-                                                           field,
-                                                           lexNumCmp ) == LEFT_SUBFIELD ) ) {
-                            m++;
-                        }
-                        continue;
-                    }
-                }
-
+                uassert( 10145,
+                         str::stream() << "LEFT_SUBFIELD only supports Object: " << field
+                         << " not: " << e.type() , e.type() == Object || e.type() == Array );
                 if ( onedownseen.count( e.fieldName() ) == 0 ) {
                     onedownseen.insert( e.fieldName() );
                     if ( e.type() == Object ) {
@@ -896,9 +885,7 @@ namespace mongo {
     */
     ModSet::ModSet(
         const BSONObj& from ,
-        const set<string>& idxKeys,
-        const set<string>* backgroundKeys,
-        bool forReplication)
+        const IndexPathSet& idxKeys)
         : _isIndexed(0) , _hasDynamicArray( false ) {
 
         BSONObjIterator it(from);
@@ -987,15 +974,15 @@ namespace mongo {
                              strstr( target , ".$" ) == 0 );
 
                     Mod from;
-                    from.init( Mod::RENAME_FROM, f , forReplication );
+                    from.init( Mod::RENAME_FROM, f );
                     from.setFieldName( fieldName );
-                    updateIsIndexed( from, idxKeys, backgroundKeys );
+                    updateIsIndexed( from, idxKeys );
                     _mods[ from.fieldName ] = from;
 
                     Mod to;
-                    to.init( Mod::RENAME_TO, f , forReplication );
+                    to.init( Mod::RENAME_TO, f );
                     to.setFieldName( target );
-                    updateIsIndexed( to, idxKeys, backgroundKeys );
+                    updateIsIndexed( to, idxKeys );
                     _mods[ to.fieldName ] = to;
 
                     DEBUGUPDATE( "\t\t " << fieldName << "\t" << from.fieldName << "\t" << to.fieldName );
@@ -1005,9 +992,9 @@ namespace mongo {
                 _hasDynamicArray = _hasDynamicArray || strstr( fieldName , ".$" ) > 0;
 
                 Mod m;
-                m.init( op , f , forReplication );
+                m.init( op , f );
                 m.setFieldName( f.fieldName() );
-                updateIsIndexed( m, idxKeys, backgroundKeys );
+                updateIsIndexed( m, idxKeys );
                 _mods[m.fieldName] = m;
 
                 DEBUGUPDATE( "\t\t " << fieldName << "\t" << m.fieldName << "\t" << _hasDynamicArray );
@@ -1038,59 +1025,9 @@ namespace mongo {
         return n;
     }
 
-    void ModSet::updateIsIndexed( const set<string>& idxKeys, const set<string>* backgroundKeys ) {
+    void ModSet::updateIsIndexed( const IndexPathSet& idxKeys ) {
         for ( ModHolder::const_iterator i = _mods.begin(); i != _mods.end(); ++i )
-            updateIsIndexed( i->second, idxKeys , backgroundKeys );
+            updateIsIndexed( i->second, idxKeys );
     }
-
-    bool getCanonicalIndexField( const string& fullName, string* out ) {
-        // check if fieldName contains ".$" or ".###" substrings (#=digit) and skip them
-        if ( fullName.find( '.' ) == string::npos )
-            return false;
-
-        bool modified = false;
-
-        StringBuilder buf;
-        for ( size_t i=0; i<fullName.size(); i++ ) {
-
-            char c = fullName[i];
-
-            if ( c != '.' ) {
-                buf << c;
-                continue;
-            }
-
-            // check for ".$", skip if present
-            if ( fullName[i+1] == '$' ) {
-                i++;
-                modified = true;
-                continue;
-            }
-
-            // check for ".###" for any number of digits (no letters)
-            if ( isdigit( fullName[i+1] ) ) {
-                size_t j = i;
-                // skip digits
-                while ( j+1 < fullName.size() && isdigit( fullName[j+1] ) )
-                    j++;
-
-                if ( j+1 == fullName.size() || fullName[j+1] == '.' ) {
-                    // only digits found, skip forward
-                    i = j;
-                    modified = true;
-                    continue;
-                }
-            }
-
-            buf << c;
-        }
-
-        if ( !modified )
-            return false;
-
-        *out = buf.str();
-        return true;
-    }
-
 
 } // namespace mongo

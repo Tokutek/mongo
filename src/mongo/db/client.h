@@ -127,11 +127,10 @@ namespace mongo {
         class TransactionStack : boost::noncopyable {
             // If we had emplace we wouldn't need a shared_ptr...
             std::stack<shared_ptr<TxnContext> > _txns;
-            long long _rootTransactionId;
             void push(shared_ptr<TxnContext> &newTxn);
             void pop();
           public:
-            TransactionStack() : _txns(), _rootTransactionId(0) {}
+            TransactionStack() : _txns() {}
             ~TransactionStack() {
                 // This ensures that things get destroyed in the right order, I don't know if std::stack gives that guarantee.
                 while (hasLiveTxn()) {
@@ -147,7 +146,6 @@ namespace mongo {
             /** Abort the innermost transaction. */
             void abortTxn();
             uint32_t numLiveTxns();
-            long long rootTransactionId() const { return _rootTransactionId; }
 
             /** @return true iff this transaction stack has a live txn. */
             bool hasLiveTxn() const;
@@ -161,6 +159,7 @@ namespace mongo {
          * Swaps back the old one when it gets destroyed.
          */
         class AlternateTransactionStack : boost::noncopyable {
+            long long _savedRootTransactionId;
             shared_ptr<TransactionStack> _saved;
           public:
             AlternateTransactionStack();
@@ -192,11 +191,7 @@ namespace mongo {
         }
 
         long long rootTransactionId() const {
-            shared_ptr<TransactionStack> stack = txnStack();
-            if (!stack) {
-                return 0;
-            }
-            return stack->rootTransactionId();
+            return _rootTransactionId;
         }
 
         const shared_ptr<TransactionStack> &txnStack() const {
@@ -304,6 +299,7 @@ namespace mongo {
         string _threadId; // "" on non support systems
         CurOp * _curOp;
         Context * _context;
+        long long _rootTransactionId;
         shared_ptr<TransactionStack> _transactions;
         shared_ptr<LoadInfo> _loadInfo; // the txn and ns currently under-going bulk load by this client
         bool _shutdown; // to track if Client::shutdown() gets called
