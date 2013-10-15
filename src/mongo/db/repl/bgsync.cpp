@@ -144,7 +144,7 @@ namespace mongo {
                     // wait until we know an item has been produced
                     while (_deque.size() == 0 && !_applierShouldExit) {
                         _queueDone.notify_all();
-                        _queueCond.wait(_mutex);
+                        _queueCond.wait(lck);
                     }
                     if (_deque.size() == 0 && _applierShouldExit) {
                         return; 

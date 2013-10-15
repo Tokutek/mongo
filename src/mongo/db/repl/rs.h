@@ -368,13 +368,13 @@ namespace mongo {
         // for oplog purge thread
         bool _replOplogPurgeRunning;
         boost::mutex _purgeMutex;
-        boost::condition _purgeCond;
+        boost::condition_variable _purgeCond;
         GTID _lastPurgedGTID;
         // for keepOplogAlive
         bool _replKeepOplogAliveRunning;
         uint64_t _keepOplogPeriodMillis;
         boost::mutex _keepOplogAliveMutex;
-        boost::condition _keepOplogAliveCond;
+        boost::condition_variable _keepOplogAliveCond;
         // for optimize oplog thread, uses same _purgeMutex
         bool _replOplogOptimizeRunning;
 

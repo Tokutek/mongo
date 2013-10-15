@@ -315,7 +315,7 @@ namespace mongo {
         dassert(GTID::cmp(last, _minLiveGTID) <= 0);
         if (GTID::cmp(last, _minLiveGTID) == 0) {
             // wait on cond
-            _minLiveCond.timed_wait(_lock, boost::posix_time::milliseconds(millis));
+            _minLiveCond.timed_wait(lock, boost::posix_time::milliseconds(millis));
         }
     }
 
