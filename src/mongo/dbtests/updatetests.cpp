@@ -987,7 +987,6 @@ namespace UpdateTests {
             //          the each array         each array       field to sort   size
             setParams( BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 ), BSON_ARRAY( "b" ), 2 );
 
-<<<<<<< HEAD
             // Generates the four variations below (but for now we're only using negative slice).
             // TOPK_ASC:     $push: { x: { $each: [ {a:2,b:2} ], $slice:-2, $sort: { b:1 } } }
             // TOPK_DESC:    $push: { x: { $each: [ {a:2,b:2} ], $slice:-2, $sort: { b:-1 } } }
@@ -995,15 +994,6 @@ namespace UpdateTests {
             // BOTTOMK_DESC: $push: { x: { $each: [ {a:2,b:2} ], $slice:2, $sort: { b:-1 } } }
 
             for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
-=======
-            // Generates the four variations below
-            // TOPK_ASC:     $push: { x: { $each: [ {a:2,b:2} ], $trimTo:2, $sort: { b:1 } } }
-            // TOPK_DESC:    $push: { x: { $each: [ {a:2,b:2} ], $trimTo:2, $sort: { b:-1 } } }
-            // BOTTOMK_ASC:  $push: { x: { $each: [ {a:2,b:2} ], $trimTo:-2, $sort: { b:1 } } }
-            // BOTTOMK_DESC: $push: { x: { $each: [ {a:2,b:2} ], $trimTo:-2, $sort: { b:-1 } } }
-
-            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have negative $trimTo
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                 client().dropCollection( ns() );
                 client().insert( ns(), fromjson( "{'_id':0,x:[{a:1,b:1},{a:3,b:3}]}" ) );
 
@@ -1041,7 +1031,6 @@ namespace UpdateTests {
             //          the each array        each array      field to sort      size
             setParams( BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 ), BSON_ARRAY( "b" ), 0 );
 
-<<<<<<< HEAD
             // Generates the four variations below (but for now we're only using negative slice).
             // TOPK_ASC:     $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:1 } } }
             // TOPK_DESC:    $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:-1 } } }
@@ -1049,15 +1038,6 @@ namespace UpdateTests {
             // BOTTOMK_DESC: $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:-1 } } }
 
             for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
-=======
-            // Generates the four variations below
-            // TOPK_ASC:     $push: { x: { $each: [ {a:2,b:2} ], $trimTo:0, $sort: { b:1 } } }
-            // TOPK_DESC:    $push: { x: { $each: [ {a:2,b:2} ], $trimTo:0, $sort: { b:-1 } } }
-            // BOTTOMK_ASC:  $push: { x: { $each: [ {a:2,b:2} ], $trimTo:0, $sort: { b:1 } } }
-            // BOTTOMK_DESC: $push: { x: { $each: [ {a:2,b:2} ], $trimTo:0, $sort: { b:-1 } } }
-
-            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have negative $trimTo
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                 client().dropCollection( ns() );
                 client().insert( ns(), fromjson( "{'_id':0,x:[{a:1,b:1},{a:3,b:3}]}" ) );
 
@@ -1083,7 +1063,6 @@ namespace UpdateTests {
             //          the each array        each array      field to sort       size
             setParams( BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 ), BSON_ARRAY( "b" ), 0 );
 
-<<<<<<< HEAD
             // Generates the four variations below (but for now we're only using negative slice).
             // TOPK_ASC:     $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:1 } } }
             // TOPK_DESC:    $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:-1 } } }
@@ -1091,15 +1070,6 @@ namespace UpdateTests {
             // BOTTOMK_DESC: $push: { x: { $each: [ {a:2,b:2} ], $slice:0, $sort: { b:-1 } } }
 
             for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
-=======
-            // Generates the four variations below
-            // TOPK_ASC:     $push: { x: { $each: [ {a:2,b:2} ], $trimTo:0, $sort: { b:1 } } }
-            // TOPK_DESC:    $push: { x: { $each: [ {a:2,b:2} ], $trimTo:0, $sort: { b:-1 } } }
-            // BOTTOMK_ASC:  $push: { x: { $each: [ {a:2,b:2} ], $trimTo:0, $sort: { b:1 } } }
-            // BOTTOMK_DESC: $push: { x: { $each: [ {a:2,b:2} ], $trimTo:0, $sort: { b:-1 } } }
-
-            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have negative $trimTo
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                 client().dropCollection( ns() );
                 client().insert( ns(), fromjson( "{'_id':0}" ) );
 
@@ -1125,7 +1095,6 @@ namespace UpdateTests {
             //          the each array        each array            field to sort     size
             setParams(BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 << 1 ), BSON_ARRAY( "b" ), 2 );
 
-<<<<<<< HEAD
             // Generates the four variations below (but for now we're only using negative slice).
             // <genarr> = [ {a:2,b:2}, {a:1,b:1} ]
             // Generates the four variations below
@@ -1135,17 +1104,6 @@ namespace UpdateTests {
             // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:-1 } } }
 
             for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
-=======
-            // Generates the four variations below
-            // <genarr> = [ {a:2,b:2}, {a:1,b:1} ]
-            // Generates the four variations below
-            // TOPK_ASC:     $push: { x: { $each: [ <genarray> ], $trimTo:2, $sort: { b:1 } } }
-            // TOPK_DESC:    $push: { x: { $each: [ <genarray> ], $trimTo:2, $sort: { b:-1 } } }
-            // BOTTOMK_ASC:  $push: { x: { $each: [ <genarray> ], $trimTo:-2, $sort: { b:1 } } }
-            // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $trimTo:-2, $sort: { b:-1 } } }
-
-            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have negative $trimTo
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                 client().dropCollection( ns() );
                 client().insert( ns(), fromjson( "{'_id':0}" ) );
 
@@ -1172,11 +1130,7 @@ namespace UpdateTests {
         }
     };
 
-<<<<<<< HEAD
     class PushSortLongerThanSliceFromNothing : public PushSortBase {
-=======
-    class PushSortLongerThanTrimFromNothing : public PushSortBase {
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
     public:
         void run() {
             // With the following parameters
@@ -1184,7 +1138,6 @@ namespace UpdateTests {
             //          the each array        each array                field to sort     size
             setParams(BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 << 1 << 3), BSON_ARRAY( "b" ), 2 );
 
-<<<<<<< HEAD
             // Generates the four variations below (but for now we're only using negative slice).
             // <genarr> = [ {a:2,b:2}, {a:1,b:1}, {a:3,b:3} ]
             // TOPK_ASC:     $push: { x: { $each: [ <genarray> ], $slice:-2, $sort: { b:1 } } }
@@ -1193,16 +1146,6 @@ namespace UpdateTests {
             // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:-1 } } }
 
             for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
-=======
-            // Generates the four variations below
-            // <genarr> = [ {a:2,b:2}, {a:1,b:1}, {a:3,b:3} ]
-            // TOPK_ASC:     $push: { x: { $each: [ <genarray> ], $trimTo:2, $sort: { b:1 } } }
-            // TOPK_DESC:    $push: { x: { $each: [ <genarray> ], $trimTo:2, $sort: { b:-1 } } }
-            // BOTTOMK_ASC:  $push: { x: { $each: [ <genarray> ], $trimTo:-2, $sort: { b:1 } } }
-            // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $trimTo:-2, $sort: { b:-1 } } }
-
-            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have negative $trimTo
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                 client().dropCollection( ns() );
                 client().insert( ns(), fromjson( "{'_id':0}" ) );
 
@@ -1240,7 +1183,6 @@ namespace UpdateTests {
             //          the each array        each array            field to sort     size
             setParams(BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 << 1 ), BSON_ARRAY( "b" ), 2 );
 
-<<<<<<< HEAD
             // Generates the four variations below (but for now we're only using negative slice).
             // <genarr> = [ {a:2,b:2}, {a:1,b:1} ]
             // TOPK_ASC:     $push: { x: { $each: [ <genarray> ], $slice:-2, $sort: { b:1 } } }
@@ -1249,16 +1191,6 @@ namespace UpdateTests {
             // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:-1 } } }
 
             for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
-=======
-            // Generates the four variations below
-            // <genarr> = [ {a:2,b:2}, {a:1,b:1} ]
-            // TOPK_ASC:     $push: { x: { $each: [ <genarray> ], $trimTo:2, $sort: { b:1 } } }
-            // TOPK_DESC:    $push: { x: { $each: [ <genarray> ], $trimTo:2, $sort: { b:-1 } } }
-            // BOTTOMK_ASC:  $push: { x: { $each: [ <genarray> ], $trimTo:-2, $sort: { b:1 } } }
-            // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $trimTo:-2, $sort: { b:-1 } } }
-
-            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have negative $trimTo
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                 client().dropCollection( ns() );
                 client().insert( ns(), fromjson( "{'_id':0,x:[]}" ) );
 
@@ -1285,11 +1217,7 @@ namespace UpdateTests {
         }
     };
 
-<<<<<<< HEAD
     class PushSortLongerThanSliceFromEmpty : public PushSortBase {
-=======
-    class PushSortLongerThanTrimFromEmpty : public PushSortBase {
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
     public:
         void run() {
             // With the following parameters
@@ -1297,7 +1225,6 @@ namespace UpdateTests {
             //          the each array        each array                 field to sort   size
             setParams(BSON_ARRAY( "a"<<"b" ), BSON_ARRAY( 2 << 1 << 3), BSON_ARRAY( "b" ), 2 );
 
-<<<<<<< HEAD
             // Generates the four variations below (but for now we're only using negative slice).
             // <genarr> = [ {a:2,b:2}, {a:1,b:1}, {a:3,b:3} ]
             // TOPK_ASC:     $push: { x: { $each: [ <genarray> ], $slice:-2, $sort: { b:1 } } }
@@ -1306,16 +1233,6 @@ namespace UpdateTests {
             // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $slice:2, $sort: { b:-1 } } }
 
             for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have positive $slice
-=======
-            // Generates the four variations below
-            // <genarr> = [ {a:2,b:2}, {a:1,b:1}, {a:3,b:3} ]
-            // TOPK_ASC:     $push: { x: { $each: [ <genarray> ], $trimTo:2, $sort: { b:1 } } }
-            // TOPK_DESC:    $push: { x: { $each: [ <genarray> ], $trimTo:2, $sort: { b:-1 } } }
-            // BOTTOMK_ASC:  $push: { x: { $each: [ <genarray> ], $trimTo:-2, $sort: { b:1 } } }
-            // BOTTOMK_DESC: $push: { x: { $each: [ <genarray> ], $trimTo:-2, $sort: { b:-1 } } }
-
-            for ( int i = 0; i < 2; i++ ) {  // i < 4 when we have negative $trimTo
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                 client().dropCollection( ns() );
                 client().insert( ns(), fromjson( "{'_id':0,x:[]}" ) );
 
@@ -1349,15 +1266,9 @@ namespace UpdateTests {
     public:
         void run() {
             BSONObj objs[3];
-<<<<<<< HEAD
             objs[0] = fromjson( "{a:1, b:1}" );
             objs[1] = fromjson( "{a:3, b:1}" );
             objs[2] = fromjson( "{a:2, b:3}" );
-=======
-            objs[0] = fromjson ( "{a:1, b:1}" );
-            objs[1] = fromjson ( "{a:3, b:1}" );
-            objs[2] = fromjson ( "{a:2, b:3}" );
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
 
             vector<BSONObj> workArea;
             for ( int i = 0; i < 3; i++ ) {
@@ -1376,15 +1287,9 @@ namespace UpdateTests {
     public:
         void run() {
             BSONObj objs[3];
-<<<<<<< HEAD
             objs[0] = fromjson( "{b:1, a:1}" );
             objs[1] = fromjson( "{a:3, b:2}" );
             objs[2] = fromjson( "{b:3, a:2}" );
-=======
-            objs[0] = fromjson ( "{b:1, a:1}" );
-            objs[1] = fromjson ( "{a:3, b:2}" );
-            objs[2] = fromjson ( "{b:3, a:2}" );
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
 
             vector<BSONObj> workArea;
             for ( int i = 0; i < 3; i++ ) {
@@ -1403,15 +1308,9 @@ namespace UpdateTests {
     public:
         void run() {
             BSONObj objs[3];
-<<<<<<< HEAD
             objs[0] = fromjson( "{b:1, c:2, a:1}" );
             objs[1] = fromjson( "{c:1, a:3, b:2}" );
             objs[2] = fromjson( "{b:3, a:2}" );
-=======
-            objs[0] = fromjson ( "{b:1, c:2, a:1}" );
-            objs[1] = fromjson ( "{c:1, a:3, b:2}" );
-            objs[2] = fromjson ( "{b:3, a:2}" );
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
 
             vector<BSONObj> workArea;
             for ( int i = 0; i < 3; i++ ) {
@@ -1430,15 +1329,9 @@ namespace UpdateTests {
     public:
         void run() {
             BSONObj objs[3];
-<<<<<<< HEAD
             objs[0] = fromjson( "{a:2, b:2}" );
             objs[1] = fromjson( "{a:1}" );
             objs[2] = fromjson( "{a:3, b:3, c:3}" );
-=======
-            objs[0] = fromjson ( "{a:2, b:2}" );
-            objs[1] = fromjson ( "{a:1}" );
-            objs[2] = fromjson ( "{a:3, b:3, c:3}" );
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
 
             vector<BSONObj> workArea;
             for ( int i = 0; i < 3; i++ ) {
@@ -1453,7 +1346,6 @@ namespace UpdateTests {
         }
     };
 
-<<<<<<< HEAD
     class PushSortSortNestedFields {
     public:
         void run() {
@@ -1534,22 +1426,14 @@ namespace UpdateTests {
         }
     };
 
-=======
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
     class PushSortInvalidEachType : public SetBase {
     public:
         void run() {
             BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
             client().insert( ns(), expected );
-<<<<<<< HEAD
             // { $push : { x : { $each : [ 3 ], $slice:-2, $sort : {a:1} } } }
             BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 3 ) <<
                                     "$slice" << -2 <<
-=======
-            // { $push : { x : { $each : [ 3 ], $trimTo:2, $sort : {a:1} } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( 3 ) <<
-                                    "$trimTo" << 2 <<
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                                     "$sort" << BSON( "a" << 1 ) );
             client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
             BSONObj result = client().findOne( ns(), Query() );
@@ -1562,15 +1446,9 @@ namespace UpdateTests {
         void run() {
             BSONObj expected = fromjson( "{'_id':0,x:[1,2]}" );
             client().insert( ns(), expected );
-<<<<<<< HEAD
             // { $push : { x : { $each : [ {a:3} ], $slice:-2, $sort : {a:1} } } }
             BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
                                     "$slice" << -2 <<
-=======
-            // { $push : { x : { $each : [ {a:3} ], $trimTo:2, $sort : {a:1} } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
-                                    "$trimTo" << 2 <<
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                                     "$sort" << BSON( "a" << 1 ) );
             client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
             BSONObj result = client().findOne( ns(), Query() );
@@ -1583,15 +1461,9 @@ namespace UpdateTests {
         void run() {
             BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
             client().insert( ns(), expected );
-<<<<<<< HEAD
             // { $push : { x : { $each : [ {a:3} ], $slice:-2, $sort : 2} } }
             BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
                                     "$slice" << -2 <<
-=======
-            // { $push : { x : { $each : [ {a:3} ], $trimTo:2, $sort : 2} } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
-                                    "$trimTo" << 2 <<
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                                     "$sort" << 2 );
             client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
             BSONObj result = client().findOne( ns(), Query() );
@@ -1604,15 +1476,9 @@ namespace UpdateTests {
         void run() {
             BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
             client().insert( ns(), expected );
-<<<<<<< HEAD
             // { $push : { x : { $each : [ {a:3} ], $slice:2, $sort : {a:1} } } }
             BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
                                     "$slice" << 2 <<
-=======
-            // { $push : { x : { $each : [ {a:3} ], $trimTo: -2, $sort : {a:1} } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
-                                    "$trimTo" << -2 <<
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                                     "$sort" << BSON( "a" << 1 ) );
             client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
             BSONObj result = client().findOne( ns(), Query() );
@@ -1625,15 +1491,9 @@ namespace UpdateTests {
         void run() {
             BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
             client().insert( ns(), expected );
-<<<<<<< HEAD
             // { $push : { x : { $each : [ {a:3} ], $slice:-2.1, $sort : {a:1} } } }
             BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
                                     "$slice" << -2.1 <<
-=======
-            // { $push : { x : { $each : [ {a:3} ], $trimTo: 2.1, $sort : {a:1} } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
-                                    "$trimTo" << 2.1 <<
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                                     "$sort" << BSON( "a" << 1 ) );
             client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
             BSONObj result = client().findOne( ns(), Query() );
@@ -1645,15 +1505,9 @@ namespace UpdateTests {
     public:
         void run() {
             client().insert( ns(), fromjson( "{'_id':0,x:[{a:1},{a:2}]}" ) );
-<<<<<<< HEAD
             // { $push : { x : { $each : [ {a:3} ], $slice:-2.0, $sort : {a:1} } } }
             BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
                                     "$slice" << -2.0 <<
-=======
-            // { $push : { x : { $each : [ {a:3} ], $trimTo: 2.0, $sort : {a:1} } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
-                                    "$trimTo" << 2.0 <<
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                                     "$sort" << BSON( "a" << 1 ) );
             client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
             BSONObj expected = fromjson( "{'_id':0,x:[{a:2},{a:3}]}" );
@@ -1667,15 +1521,9 @@ namespace UpdateTests {
         void run() {
             BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
             client().insert( ns(), expected );
-<<<<<<< HEAD
             // { $push : { x : { $each : [ {a:3} ], $slice:-2.0, $sort : [2, 1] } } }
             BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
                                     "$slice" << -2.0 <<
-=======
-            // { $push : { x : { $each : [ {a:3} ], $trimTo: 2.0, $sort : [2, 1] } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
-                                    "$trimTo" << 2.0 <<
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                                     "$sort" << BSON_ARRAY( 2 << 1 ) );
             client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
             BSONObj result = client().findOne( ns(), Query() );
@@ -1688,15 +1536,9 @@ namespace UpdateTests {
         void run() {
             BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:2}]}" );
             client().insert( ns(), expected );
-<<<<<<< HEAD
             // { $push : { x : { $each : [ {a:3} ], $slice:-2, $sort : {a:10} } } }
             BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
                                     "$slice" << -2 <<
-=======
-            // { $push : { x : { $each : [ {a:3} ], $trimTo:2, $sort : {a:10} } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
-                                    "$trimTo" << 2 <<
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                                     "$sort" << BSON( "a" << 10 ) );
             client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
             BSONObj result = client().findOne( ns(), Query() );
@@ -1704,7 +1546,6 @@ namespace UpdateTests {
         }
     };
 
-<<<<<<< HEAD
     class PushSortInvertedSortAndSlice : public SetBase {
     public:
         void run() {
@@ -1713,16 +1554,6 @@ namespace UpdateTests {
             BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 2 ) ) <<
                                     "$sort" << BSON( "a" << 1 ) <<
                                     "$slice" << -2.0 );
-=======
-    class PushSortInvertedSortAndTrim : public SetBase {
-    public:
-        void run() {
-            client().insert( ns(), fromjson( "{'_id':0,x:[{a:1},{a:3}]}" ) );
-            // { $push : { x : { $each : [ {a:2} ], $sort: {a:1}, $trimTo: 2 } } }
-            BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 2 ) ) <<
-                                    "$sort" << BSON( "a" << 1 ) <<
-                                    "$trimTo" << 2.0 );
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
             client().update( ns(), Query(), BSON( "$push" << BSON( "x" << pushObj ) ) );
             BSONObj expected = fromjson( "{'_id':0,x:[{a:2},{a:3}]}" );
             BSONObj result = client().findOne( ns(), Query() );
@@ -1747,11 +1578,7 @@ namespace UpdateTests {
         }
     };
 
-<<<<<<< HEAD
     class PushSortInvalidMissingSliceTo : public SetBase {
-=======
-    class PushSortInvalidMissingTrimTo : public SetBase {
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
     public:
         void run() {
             BSONObj expected = fromjson( "{'_id':0,x:[{a:1},{a:3}]}" );
@@ -2041,7 +1868,6 @@ namespace UpdateTests {
                 BSONObj mod = BSON( "$push" << BSON( "a" << pushObj ) );
                 ModSet modSet( mod );
                 auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
-                ASSERT_FALSE( modSetState->canApplyInPlace() );
                 modSetState->createNewFromMods();
                 ASSERT_EQUALS( BSON( "$set" << BSON( "a" <<  BSON_ARRAY( 2 << 3 ) ) ),
                                      modSetState->getOpLogRewrite() );
@@ -2060,28 +1886,6 @@ namespace UpdateTests {
                 BSONObj mod = BSON( "$push" << BSON( "x" << pushObj ) );
                 ModSet modSet( mod );
                 auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
-                ASSERT_FALSE( modSetState->canApplyInPlace() );
-                modSetState->createNewFromMods();
-                ASSERT_EQUALS( BSON( "$set" << BSON( "x" <<
-                                                     BSON_ARRAY( BSON( "a" << 2 ) <<
-                                                                 BSON( "a" << 3 ) ) ) ),
-                                     modSetState->getOpLogRewrite() );
-            }
-        };
-
-        class PushSortRewriteExistingField {
-        public:
-            void run() {
-                BSONObj obj = BSON( "x" << BSON_ARRAY( BSON( "a" << 1 ) <<
-                                                       BSON( "a" << 2 ) ) );
-                // { $push : { a : { $each : [ {a:3} ], $trimTo:2, $sort : {a:1} } } }
-                BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 3 ) ) <<
-                                        "$trimTo" << 2 <<
-                                        "$sort" << BSON( "a" << 1 ) );
-                BSONObj mod = BSON( "$push" << BSON( "x" << pushObj ) );
-                ModSet modSet( mod );
-                auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
-                ASSERT_FALSE( modSetState->canApplyInPlace() );
                 modSetState->createNewFromMods();
                 ASSERT_EQUALS( BSON( "$set" << BSON( "x" <<
                                                      BSON_ARRAY( BSON( "a" << 2 ) <<
@@ -2112,7 +1916,6 @@ namespace UpdateTests {
                 BSONObj mod = BSON( "$push" << BSON( "a" << pushObj ) );
                 ModSet modSet( mod );
                 auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
-                ASSERT_FALSE( modSetState->canApplyInPlace() );
                 modSetState->createNewFromMods();
                 ASSERT_EQUALS( BSON( "$set" << BSON( "a" << BSON_ARRAY( 1 << 2 ) ) ),
                                      modSetState->getOpLogRewrite() );
@@ -2126,7 +1929,6 @@ namespace UpdateTests {
                 BSONObj mod = fromjson( "{ $push: { 'a.b': { $each: [3] , $slice:-2 } } }" );
                 ModSet modSet( mod );
                 auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
-                ASSERT_FALSE( modSetState->canApplyInPlace() );
                 modSetState->createNewFromMods();
                 ASSERT_EQUALS( BSON( "$set" << BSON( "a.b" << BSON_ARRAY( 2 << 3 ) ) ),
                                modSetState->getOpLogRewrite() );
@@ -2137,22 +1939,14 @@ namespace UpdateTests {
         public:
             void run() {
                 BSONObj obj = BSON( "b" << 1 );
-<<<<<<< HEAD
                 // { $push : { x : { $each : [ {a:1},{a:2} ], $slice:-2,  $sort : {a:1} } } }
                 BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 1 ) <<
                                                                BSON( "a" << 2 ) ) <<
                                         "$slice" << -2 <<
-=======
-                // { $push : { x : { $each : [ {a:1},{a:2} ], $trimTo:2,  $sort : {a:1} } } }
-                BSONObj pushObj = BSON( "$each" << BSON_ARRAY( BSON( "a" << 1 ) <<
-                                                               BSON( "a" << 2 ) ) <<
-                                        "$trimTo" << 2 <<
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
                                         "$sort" << BSON( "a" << 1 ) );
                 BSONObj mod = BSON( "$push" << BSON( "x" << pushObj ) );
                 ModSet modSet( mod );
                 auto_ptr<ModSetState> modSetState = modSet.prepare( obj );
-                ASSERT_FALSE( modSetState->canApplyInPlace() );
                 modSetState->createNewFromMods();
                 ASSERT_EQUALS( BSON( "$set" << BSON( "x" << BSON_ARRAY( BSON( "a" << 1 ) <<
                                                                         BSON( "a" << 2 ) ) ) ),
@@ -2741,12 +2535,8 @@ namespace UpdateTests {
             add< CantPushTwice >();
             add< SetEncapsulationConflictsWithExistingType >();
             add< CantPushToParent >();
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
             add< PushEachSimple >();
             add< PushEachFromEmpty >();
->>>>>>> 2b94e0e... SERVER-8303 Fix $push with a single $each clause behavior.
             add< PushSliceBelowFull >();
             add< PushSliceReachedFullExact >();
             add< PushSliceReachedFullWithEach >();
@@ -2767,52 +2557,21 @@ namespace UpdateTests {
             add< PushSliceInvalidSliceDouble >();
             add< PushSliceValidSliceDouble >();
             add< PushSliceInvalidSlice >();
-=======
-            add< PushTrimBelowFull >();
-            add< PushTrimReachedFullExact >();
-            add< PushTrimReachedFullWithEach >();
-            add< PushTrimReachedFullWithBoth >();
-            add< PushTrimToZero >();
-            add< PushTrimToZeroFromNothing >();
-            add< PushTrimFromNothing >();
-            add< PushTrimLongerThanTrimFromNothing >();
-            add< PushTrimFromEmpty >();
-            add< PushTrimLongerThanTrimFromEmpty >();
-            add< PushTrimTwoFields >();
-            add< PushTrimAndNormal >();
-            add< PushTrimTwoFieldsConflict >();
-            add< PushTrimAndNormalConflict >();
-            add< PushTrimInvalidEachType >();
-            add< PushTrimInvalidTrimType >();
-            add< PushTrimInvalidTrimValue >();
-            add< PushTrimInvalidTrimDouble >();
-            add< PushTrimValidTrimDouble >();
-            add< PushTrimInvalidTrim >();
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
             add< PushSortBelowFull >();
             add< PushSortReachedFullExact >();
             add< PushSortReachedFullWithBoth >();
             add< PushSortToZero >();
             add< PushSortToZeroFromNothing >();
             add< PushSortFromNothing >();
-<<<<<<< HEAD
             add< PushSortLongerThanSliceFromNothing >();
             add< PushSortFromEmpty >();
             add< PushSortLongerThanSliceFromEmpty >();
-=======
-            add< PushSortLongerThanTrimFromNothing >();
-            add< PushSortFromEmpty >();
-            add< PushSortLongerThanTrimFromEmpty >();
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
             add< PushSortSortMixed >();
             add< PushSortSortOutOfOrderFields >();
             add< PushSortSortExtraFields >();
             add< PushSortSortMissingFields >();
-<<<<<<< HEAD
             add< PushSortSortNestedFields >();
             add< PushSortInvalidSortPattern >();
-=======
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
             add< PushSortInvalidEachType >();
             add< PushSortInvalidBaseArray >();
             add< PushSortInvalidSortType >();
@@ -2821,15 +2580,9 @@ namespace UpdateTests {
             add< PushSortValidSortDouble >();
             add< PushSortInvalidSortSort >();
             add< PushSortInvalidSortSortOrder >();
-<<<<<<< HEAD
             add< PushSortInvertedSortAndSlice >();
             add< PushSortInvalidDuplicatedSort >();
             add< PushSortInvalidMissingSliceTo >();
-=======
-            add< PushSortInvertedSortAndTrim >();
-            add< PushSortInvalidDuplicatedSort >();
-            add< PushSortInvalidMissingTrimTo >();
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
             add< CantIncParent >();
             add< DontDropEmpty >();
             add< InsertInEmpty >();
@@ -2853,19 +2606,11 @@ namespace UpdateTests {
             add< ModSetTests::IncRewriteNonExistingField >();
             add< ModSetTests::SetOnInsertRewriteExistingField >();
             add< ModSetTests::PushRewriteExistingField >();
-<<<<<<< HEAD
             add< ModSetTests::PushSliceRewriteExistingField >();
             add< ModSetTests::PushSortRewriteExistingField >();
             add< ModSetTests::PushRewriteNonExistingField >();
             add< ModSetTests::PushSliceRewriteNonExistingField >();
             add< ModSetTests::PushSliceRewriteNested >();
-=======
-            add< ModSetTests::PushTrimRewriteExistingField >();
-            add< ModSetTests::PushSortRewriteExistingField >();
-            add< ModSetTests::PushRewriteNonExistingField >();
-            add< ModSetTests::PushTrimRewriteNonExistingField >();
-            add< ModSetTests::PushTrimRewriteNested >();
->>>>>>> e561ddf... Server-8008 Allowed to sort the result of a $push array when using $trimTo.
             add< ModSetTests::PushSortRewriteNonExistingField >();
             add< ModSetTests::PushAllRewriteExistingField >();
             add< ModSetTests::PushAllRewriteNonExistingField >();
@@ -2892,6 +2637,7 @@ namespace UpdateTests {
             add< ModSetTests::PositionalWithoutElemMatchKey >();
             add< ModSetTests::PositionalWithoutNestedElemMatchKey >();
             add< ModSetTests::DbrefPassesPositionalValidation >();
+            add< ModSetTests::CreateNewFromQueryExcludeNot >();
 
             add< basic::inc1 >();
             add< basic::inc2 >();
