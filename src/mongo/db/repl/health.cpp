@@ -20,7 +20,7 @@
 #include "health.h"
 #include "mongo/util/background.h"
 #include "mongo/client/connpool.h"
-#include "mongo/dbcommands.h"
+#include "mongo/db/commands.h"
 #include "mongo/util/concurrency/value.h"
 #include "mongo/util/concurrency/task.h"
 #include "mongo/util/mongoutils/html.h"
@@ -28,7 +28,7 @@
 #include "mongo/util/ramlog.h"
 #include "connections.h"
 #include "mongo/util/startup_test.h"
-#include "mongo/dbdbhelpers.h"
+#include "mongo/db/dbhelpers.h"
 #include "mongo/db/repl/bgsync.h"
 
 namespace mongo {
