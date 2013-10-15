@@ -160,7 +160,7 @@ namespace mongo {
                 minUnapplied,
                 result
                 );
-            const Member *syncTarget = replset::BackgroundSync::get()->getSyncTarget();
+            const Member *syncTarget = BackgroundSync::get()->getSyncTarget();
             if (syncTarget) {
                 result.append("syncingTo", syncTarget->fullName());
             }
