@@ -172,7 +172,7 @@ namespace mongo {
                  sslGlobalParams.sslWeakCertificateValidation ||
                  sslGlobalParams.sslFIPSMode) {
             return Status(ErrorCodes::BadValue,
-                          "need to enable SSL via the sslMode flag when"
+                          "need to enable SSL via the sslMode flag when "
                           "using SSL configuration parameters");
         }
         if (serverGlobalParams.clusterAuthMode == "sendKeyfile" ||
