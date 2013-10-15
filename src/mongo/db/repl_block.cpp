@@ -167,14 +167,14 @@ namespace mongo {
             return numSlaves <= 0;
         }
 
-        std::vector<std::BSONObj> getHostsAtOp(GTID gtid) {
-            std::vector<std::BSONObj> result;
+        std::vector<BSONObj> getHostsAtOp(GTID gtid) {
+            std::vector<BSONObj> result;
             if (theReplSet) {
                 result.push_back(theReplSet->myConfig().asBson());
             }
 
             scoped_lock mylk(_mutex);
-            for (map<Ident,OpTime>::iterator i = _slaves.begin(); i != _slaves.end(); i++) {
+            for (map<Ident,GTID>::iterator i = _slaves.begin(); i != _slaves.end(); i++) {
                 GTID replicatedTo = i->second;
 				if (GTID::cmp(gtid, replicatedTo) <= 0) {
                     result.push_back(i->first.obj["config"].Obj());
@@ -242,7 +242,7 @@ namespace mongo {
     }
 
     vector<BSONObj> getHostsWrittenTo(GTID gtid) {
-        return slaveTracking.gethostsAtOp(gtid);
+        return slaveTracking.getHostsAtOp(gtid);
     }
 
     void resetSlaveCache() {

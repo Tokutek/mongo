@@ -248,7 +248,7 @@ namespace mongo {
                             result.append( "wtimeout" , true );
                             errmsg = "timed out waiting for slaves";
                             result.append( "waited" , timer.millis() );
-							result.append("replicatedTo", getHostsWrittenTo(gtid));
+							result.append("writtenTo", getHostsWrittenTo(gtid));
                             result.append( "err" , "timeout" );
                             return true;
                         }
