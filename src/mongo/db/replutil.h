@@ -67,7 +67,7 @@ namespace mongo {
     }
 
     inline void notMasterUnless(bool expr) {
-        uassert( 10107 , "not master" , expr );
+        uassert( NotMaster , "not master" , expr );
     }
 
     class ParsedQuery;
