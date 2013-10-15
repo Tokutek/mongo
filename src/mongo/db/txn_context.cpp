@@ -17,11 +17,13 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/base/counter.h"
 #include "mongo/bson/bsonobjiterator.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/txn_context.h"
+#include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/stacktrace.h"
 
@@ -461,7 +463,7 @@ namespace mongo {
         _cursorIds.insert(id);
     }
 
-    TxnOplog::TxnOplog(TxnOplog *parent) : _parent(parent), _spilled(false), _mem_size(0), _mem_limit(cmdLine.txnMemLimit) {
+    TxnOplog::TxnOplog(TxnOplog *parent) : _parent(parent), _spilled(false), _mem_size(0), _mem_limit(cmdLine.txnMemLimit), _refsSize(0) {
         // This is initialized to 1 so that the query in applyRefOp in
         // oplog.cpp can
         _seq = 1;
@@ -521,7 +523,11 @@ namespace mongo {
 
             // insert it
             dassert(_logOpsToOplogRef);
-            _logOpsToOplogRef(b.obj());
+
+            BSONObj obj = b.obj();
+            TimerHolder timer(&_refsTimer);
+            _refsSize += obj.objsize();
+            _logOpsToOplogRef(obj);
         }
         else {
             // just a sanity check
@@ -553,9 +559,15 @@ namespace mongo {
         _logTxnToOplog(gtid, timestamp, hash, a);
     }
 
+    // oplog.cpp has these
+    extern TimerStats oplogInsertStats;
+    extern Counter64 oplogInsertBytesStats;
+
     void TxnOplog::writeTxnRefToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {
         dassert(logTxnOpsForReplication());
         dassert(_logTxnOpsRef);
+        oplogInsertStats.recordMillis(_refsTimer.millis());
+        oplogInsertBytesStats.increment(_refsSize);
         // log ref
         _logTxnOpsRef(gtid, timestamp, hash, _oid);
     }
