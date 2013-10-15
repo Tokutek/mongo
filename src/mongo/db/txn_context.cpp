@@ -566,7 +566,7 @@ namespace mongo {
     void TxnOplog::writeTxnRefToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {
         dassert(logTxnOpsForReplication());
         dassert(_logTxnOpsRef);
-        oplogInsertStats.addStats(_refsTimer);
+        oplogInsertStats.recordMillis(_refsTimer.millis());
         oplogInsertBytesStats.increment(_refsSize);
         // log ref
         _logTxnOpsRef(gtid, timestamp, hash, _oid);

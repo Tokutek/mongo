@@ -39,9 +39,9 @@ namespace mongo {
         int record( const Timer& timer );
 
         /**
-         * add another TimerStats' value to this one
+         * @return number of millis
          */
-        void addStats( const TimerStats& ts );
+        long long millis() const { return _totalMillis; }
 
         BSONObj getReport() const;
         operator BSONObj() const { return getReport(); }

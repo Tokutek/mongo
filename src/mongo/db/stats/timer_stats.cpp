@@ -40,12 +40,6 @@ namespace mongo {
         _totalMillis += millis;
     }
 
-    void TimerStats::addStats( const TimerStats& ts ) {
-        scoped_spinlock lk( _lock );
-        _num += ts._num;
-        _totalMillis += ts._totalMillis;
-    }
-
     int TimerStats::record( const Timer& timer ) {
         int millis = timer.millis();
         recordMillis( millis );
