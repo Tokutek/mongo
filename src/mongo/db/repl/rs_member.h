@@ -89,12 +89,12 @@ namespace mongo {
         // This is the last time we got a heartbeat request from a given member.
         time_t lastHeartbeatRecv;
         DiagStr lastHeartbeatMsg;
+        DiagStr syncingTo;
         uint64_t opTime;
         GTID gtid;
         GTID lastUnappliedGTID;
         GTID minLiveGTID;
         GTID minUnappliedGTID;
-        DiagStr syncingTo;
         int skew;
         bool authIssue;
         unsigned int ping; // milliseconds
