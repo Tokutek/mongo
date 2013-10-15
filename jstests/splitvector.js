@@ -277,12 +277,24 @@ f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
 case4();
 
 f.drop();
+f.ensureIndex( { x: 1, y: -1 , z : 1 }, {clustering:cl} );
+case4();
+
+f.drop();
 f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
 case5();
 
 if (0) {
 f.drop();
+f.ensureIndex( { x: 1, y: -1 , z : 1 }, {clustering:cl} );
+case5();
+
+f.drop();
 f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
+case6();
+
+f.drop();
+f.ensureIndex( { x: 1, y: -1 , z : 1 }, {clustering:cl} );
 case6();
 }
 
@@ -291,7 +303,15 @@ f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
 case7();
 
 f.drop();
+f.ensureIndex( { x: 1, y: -1 , z : 1 }, {clustering:cl} );
+case7();
+
+f.drop();
 f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
+case8();
+
+f.drop();
+f.ensureIndex( { x: 1, y: -1 , z : 1 }, {clustering:cl} );
 case8();
 
 // Since we're going to allow approximate points for "halfway" we should test a few different sizes.

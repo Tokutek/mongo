@@ -753,6 +753,7 @@ suiteGlobalConfig = {"js": ("[!_]*.js", True),
                      "tool": ("tool/*.js", False),
                      "aggregation": ("aggregation/*.js", True),
                      "multiVersion": ("multiVersion/*.js", True),
+                     "failPoint": ("fail_point/*.js", False),
                      "ssl": ("ssl/*.js", True)
                      }
 

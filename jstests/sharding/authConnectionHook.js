@@ -23,12 +23,11 @@ adminDB.runCommand({split: "test.foo", middle: {x:50}});
 var curShard = st.getShard("test.foo", {x:75});
 var otherShard = st.getOther(curShard).name;
 adminDB.runCommand({moveChunk: "test.foo", find: {x:25}, to: otherShard});
-assert.soon( function() { return !st.isAnyBalanceInFlight(); });
 
 st.printShardingStatus();
 
 MongoRunner.stopMongod(st.shard0);
-st.shard0 = MongoRunner.runMongod({restart : st.shard0});
+st.shard0 = MongoRunner.runMongod({restart: st.shard0});
 
 // May fail the first couple times due to socket exceptions
 assert.soon( function() {

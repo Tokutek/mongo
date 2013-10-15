@@ -2,7 +2,7 @@ t = db.jstests_drop2;
 t.drop();
 
 function debug( x ) {
-    //printjson( x );
+    printjson( x );
 }
 
 t.save( {} );

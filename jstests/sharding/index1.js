@@ -11,6 +11,7 @@ for ( var i = 0; i < 19; i++ ) {
 	for ( var j = 0; j < 300; j++ ) {
 		coll.insert( { num : j, x : 1 } )
 	}
+    assert.eq( null, coll.getDB().getLastError() );
 
 	if(i == 0) s.adminCommand( { enablesharding : "" + coll._db } );
 
@@ -166,7 +167,7 @@ for ( var i = 0; i < 19; i++ ) {
 
 		// Unique index exists on a different field as well
 		coll.ensureIndex( { num : 1 }, { unique : true , clustering: true } )
-		coll.ensureIndex( { x : 1 }, { unique : true , clustering: true} )
+		coll.ensureIndex( { x : 1 }, { clustering: true } )
 
         passed = false
 		try {

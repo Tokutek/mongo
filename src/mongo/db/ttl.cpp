@@ -33,10 +33,10 @@
 namespace mongo {
 
     Counter64 ttlPasses;
-    Counter64 ttlDocDeletes;
+    Counter64 ttlDeletedDocuments;
 
     ServerStatusMetricField<Counter64> ttlPassesDisplay("ttl.passes", &ttlPasses);
-    ServerStatusMetricField<Counter64> ttlDocDeletesDisplay("ttl.deletedDocuments", &ttlDocDeletes);
+    ServerStatusMetricField<Counter64> ttlDeletedDocumentsDisplay("ttl.deletedDocuments", &ttlDeletedDocuments);
 
 
     
@@ -50,6 +50,10 @@ namespace mongo {
         static string secondsExpireField;
         
         void doTTLForDB( const string& dbName ) {
+
+            //check isMaster before becoming god
+            bool isMaster = isMasterNs( dbName.c_str() );
+
             Client::GodScope god;
 
             vector<BSONObj> indexes;
@@ -100,12 +104,12 @@ namespace mongo {
                         continue;
                     }
                     // only do deletes if on master
-                    if (!isMasterNs(dbName.c_str())) {
+                    if ( ! isMaster ) {
                         continue;
                     }
                     n = deleteObjects(ns.c_str(), query, false, true);
                     transaction.commit();
-                    ttlDocDeletes.increment( n );
+                    ttlDeletedDocuments.increment( n );
                 }
 
                 LOG(1) << "\tTTL deleted: " << n << endl;
