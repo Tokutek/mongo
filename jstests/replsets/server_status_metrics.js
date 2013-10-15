@@ -45,16 +45,16 @@ var primary = rt.getPrimary();
 var testDB = primary.getDB("test");
 
 //add test docs
-for(x=0;x<10000;x++){ testDB.a.insert({}) }
+for(x=0;x<100000;x++){ testDB.a.insert({}) }
 
-testPrimaryMetrics(primary, 10000);
+testPrimaryMetrics(primary, 100000);
 testDB.getLastError(2);
 
-testSecondaryMetrics(secondary, 10000);
+testSecondaryMetrics(secondary, 100000);
 
 testDB.a.update({}, {$set:{d:new Date()}},true, true)
 testDB.getLastError(2);
 
-testSecondaryMetrics(secondary, 20000);
+testSecondaryMetrics(secondary, 100001);
 
 rt.stopSet();
