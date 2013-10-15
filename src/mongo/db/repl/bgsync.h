@@ -42,16 +42,16 @@ namespace mongo {
         boost::mutex _mutex;
         // condition variable to signal changes in whether
         // opsync thread  is running.
-        boost::condition _opSyncRunningCondVar;
+        boost::condition_variable _opSyncRunningCondVar;
         // condition variable to signal changes in permission
         // of opsync thread running.
-        boost::condition _opSyncCanRunCondVar;
+        boost::condition_variable _opSyncCanRunCondVar;
 
         // signals events related to the elements in the queue
-        boost::condition _queueCond;
+        boost::condition_variable _queueCond;
 
         // signals when the applier has nothing to do
-        boost::condition _queueDone;
+        boost::condition_variable _queueDone;
 
         // boolean that states whether we should actively be 
         // trying to read data from another machine and apply it
