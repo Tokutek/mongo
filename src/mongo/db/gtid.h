@@ -58,7 +58,7 @@ namespace mongo {
         boost::mutex _lock;
 
         // notified when the min live GTID changes
-        boost::condition _minLiveCond;
+        boost::condition_variable _minLiveCond;
 
         // when a machine newly assumes primary, we want to
         // increment the primary sequence number of the GTIDs
