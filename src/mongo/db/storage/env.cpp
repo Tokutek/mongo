@@ -449,15 +449,7 @@ namespace mongo {
                     case UNIXTIME:
                         {
                             time_t t = row->value.num;
-                            char tbuf[26];
-                            char *tstr = ctime_r(&t, tbuf);
-                            verify(tstr != NULL);
-                            // Remove any trailing newline.
-                            size_t len = strlen(tstr);
-                            if (len > 0 && tstr[len - 1] == '\n') {
-                                tstr[len - 1] = '\0';
-                            }
-                            result.append(field, tstr);
+                            result.appendTimeT(field, t);
                         }
                         break;
                     case TOKUTIME:
