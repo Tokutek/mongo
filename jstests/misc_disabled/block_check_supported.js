@@ -1,3 +1,5 @@
+// these fields don't exist in tokumx
+
 // Test that serverStatus() features dependent on the ProcessInfo::blockCheckSupported() routine
 // work correctly.  These features are db.serverStatus({workingSet:1}).workingSet and
 // db.serverStatus().indexCounters.
