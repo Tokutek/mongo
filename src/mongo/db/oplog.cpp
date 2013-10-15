@@ -83,16 +83,6 @@ namespace mongo {
         }
     }
     
-    //The oplog entries inserted
-    TimerStats oplogInsertStats;
-    static ServerStatusMetricField<TimerStats> displayInsertedOplogEntries(
-                                                    "repl.oplog.insert",
-                                                    &oplogInsertStats );
-    Counter64 oplogInsertBytesStats;
-    static ServerStatusMetricField<Counter64> displayInsertedOplogEntryBytes(
-                                                    "repl.oplog.insertBytes",
-                                                    &oplogInsertBytesStats );
-
     static void _logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
         Lock::DBRead lk1("local");
 

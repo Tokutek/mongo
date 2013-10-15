@@ -47,6 +47,8 @@ namespace mongo {
     static void (*_startObjForMigrateLog)(BSONObjBuilder &b) = NULL;
     static void (*_writeObjToMigrateLog)(BSONObj &) = NULL;
     static void (*_writeObjToMigrateLogRef)(BSONObj &) = NULL;
+    static TimerStats *_oplogInsertStats;
+    static Counter64 *_oplogInsertBytesStats;
 
     static GTIDManager* txnGTIDManager = NULL;
 
@@ -70,6 +72,11 @@ namespace mongo {
 
     void setLogOpsToOplogRef(void (*f)(BSONObj o)) {
         _logOpsToOplogRef = f;
+    }
+
+    void setOplogInsertStats(TimerStats *oplogInsertStats, Counter64 *oplogInsertBytesStats) {
+        _oplogInsertStats = oplogInsertStats;
+        _oplogInsertBytesStats = oplogInsertBytesStats;
     }
 
     void setTxnGTIDManager(GTIDManager* m) {
@@ -559,15 +566,13 @@ namespace mongo {
         _logTxnToOplog(gtid, timestamp, hash, a);
     }
 
-    // oplog.cpp has these
-    extern TimerStats oplogInsertStats;
-    extern Counter64 oplogInsertBytesStats;
-
     void TxnOplog::writeTxnRefToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {
         dassert(logTxnOpsForReplication());
         dassert(_logTxnOpsRef);
-        oplogInsertStats.recordMillis(_refsTimer.millis());
-        oplogInsertBytesStats.increment(_refsSize);
+        dassert(_oplogInsertStats);
+        dassert(_oplogInsertBytesStats);
+        _oplogInsertStats->recordMillis(_refsTimer.millis());
+        _oplogInsertBytesStats->increment(_refsSize);
         // log ref
         _logTxnOpsRef(gtid, timestamp, hash, _oid);
     }

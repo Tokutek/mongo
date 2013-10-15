@@ -27,8 +27,10 @@
 
 namespace mongo {
 
+    class Counter64;
     class GTID;
     class GTIDManager;
+    class TimerStats;
 
     void setLogTxnOpsForReplication(bool val);
     bool logTxnOpsForReplication();
@@ -43,6 +45,7 @@ namespace mongo {
     void setLogTxnToOplog(void (*)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo));
     void setLogTxnRefToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid));
     void setLogOpsToOplogRef(void (*f)(BSONObj o));
+    void setOplogInsertStats(TimerStats *oplogInsertStats, Counter64 *oplogInsertBytesStats);
     void setTxnGTIDManager(GTIDManager* m);
 
     class TxnCompleteHooks {
