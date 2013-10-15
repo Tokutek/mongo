@@ -292,11 +292,11 @@ case5();
 f.drop();
 f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
 case6();
-}
 
 f.drop();
 f.ensureIndex( { x: 1, y: -1 , z : 1 }, {clustering:cl} );
 case6();
+}
 
 f.drop();
 f.ensureIndex( { x: 1, y: 1 }, {clustering:cl} );
