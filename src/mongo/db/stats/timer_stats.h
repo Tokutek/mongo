@@ -38,6 +38,11 @@ namespace mongo {
          */
         int record( const Timer& timer );
 
+        /**
+         * add another TimerStats' value to this one
+         */
+        void addStats( const TimerStats& ts );
+
         BSONObj getReport() const;
         operator BSONObj() const { return getReport(); }
 

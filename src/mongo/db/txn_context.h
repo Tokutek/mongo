@@ -22,6 +22,7 @@
 #include <db.h>
 
 #include "mongo/db/jsobj.h"
+#include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/txn.h"
 
 namespace mongo {
@@ -253,6 +254,8 @@ namespace mongo {
         deque<BSONObj> _m;
         OID _oid;
         long long _seq;
+        size_t _refsSize;
+        TimerStats _refsTimer;
     };
 
     // class to wrap operations surrounding a storage::Txn.

@@ -84,11 +84,11 @@ namespace mongo {
     }
     
     //The oplog entries inserted
-    static TimerStats oplogInsertStats;
+    TimerStats oplogInsertStats;
     static ServerStatusMetricField<TimerStats> displayInsertedOplogEntries(
                                                     "repl.oplog.insert",
                                                     &oplogInsertStats );
-    static Counter64 oplogInsertBytesStats;
+    Counter64 oplogInsertBytesStats;
     static ServerStatusMetricField<Counter64> displayInsertedOplogEntryBytes(
                                                     "repl.oplog.insertBytes",
                                                     &oplogInsertBytesStats );
