@@ -38,6 +38,11 @@ namespace mongo {
          */
         int record( const Timer& timer );
 
+        /**
+         * @return number of millis
+         */
+        long long millis() const { return _totalMillis; }
+
         BSONObj getReport() const;
         operator BSONObj() const { return getReport(); }
 

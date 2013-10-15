@@ -22,12 +22,15 @@
 #include <db.h>
 
 #include "mongo/db/jsobj.h"
+#include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/txn.h"
 
 namespace mongo {
 
+    class Counter64;
     class GTID;
     class GTIDManager;
+    class TimerStats;
 
     void setLogTxnOpsForReplication(bool val);
     bool logTxnOpsForReplication();
@@ -42,6 +45,7 @@ namespace mongo {
     void setLogTxnToOplog(void (*)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo));
     void setLogTxnRefToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid));
     void setLogOpsToOplogRef(void (*f)(BSONObj o));
+    void setOplogInsertStats(TimerStats *oplogInsertStats, Counter64 *oplogInsertBytesStats);
     void setTxnGTIDManager(GTIDManager* m);
 
     class TxnCompleteHooks {
@@ -253,6 +257,8 @@ namespace mongo {
         deque<BSONObj> _m;
         OID _oid;
         long long _seq;
+        size_t _refsSize;
+        TimerStats _refsTimer;
     };
 
     // class to wrap operations surrounding a storage::Txn.

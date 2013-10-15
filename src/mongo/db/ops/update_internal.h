@@ -152,6 +152,84 @@ namespace mongo {
             }
         }
 
+        bool isSliceOnly() const {
+            if ( elt.type() != Object )
+                return false;
+            BSONObj obj = elt.embeddedObject();
+            if ( obj.nFields() != 2 )
+                return false;
+            BSONObjIterator i( obj );
+            i.next();
+            BSONElement elemSlice = i.next();
+            return strcmp( elemSlice.fieldName(), "$slice" ) == 0;
+        }
+
+        long long getSlice() const {
+            // The $slice may be the second or the third element in the field object.
+            // { <field name>: { $each: [<each array>], $slice: -N, $sort: <pattern> } }
+            // 'elt' here is the BSONElement above.
+            BSONObj obj = elt.embeddedObject();
+            BSONObjIterator i( obj );
+            i.next();
+            BSONElement elem = i.next();
+            if ( ! str::equals( elem.fieldName(), "$slice" ) ) {
+                elem = i.next();
+            }
+            dassert( elem.isNumber() );
+
+            // For now, we're only supporting slicing from the back of the array, i.e.
+            // negative slice. But the code now is wired in the opposite way: trimming from the
+            // back of the array is positive.
+            // TODO: fix this.
+            return -elem.numberLong();
+        }
+
+        bool isSliceAndSort() const {
+            if ( elt.type() != Object )
+                return false;
+            BSONObj obj = elt.embeddedObject();
+            if ( obj.nFields() != 3 )
+                return false;
+            BSONObjIterator i( obj );
+            i.next();
+
+            // Slice and sort may be switched.
+            bool seenSlice = false;
+            bool seenSort = false;
+            while ( i.more() ) {
+                BSONElement elem = i.next();
+                if ( str::equals( elem.fieldName(), "$slice" ) ) {
+                    if ( seenSlice ) return false;
+                    seenSlice = true;
+                }
+                else if ( str::equals( elem.fieldName(), "$sort" ) ) {
+                    if ( seenSort ) return false;
+                    seenSort = true;
+                    if ( elem.type() != Object ) return false;
+                }
+                else {
+                    return false;
+                }
+            }
+
+            // If present, the $sort element would have been checked during ModSet construction.
+            return seenSlice && seenSort;
+        }
+
+        BSONObj getSort() const {
+            // The $sort may be the second or the third element in the field object.
+            // { <field name>: { $each: [<each array>], $slice: -N, $sort: <pattern> } }
+            // 'elt' here is the BSONElement above.
+            BSONObj obj = elt.embeddedObject();
+            BSONObjIterator i( obj );
+            i.next();
+            BSONElement elem = i.next();
+            if ( ! str::equals( elem.fieldName(), "$sort" ) ) {
+                elem = i.next();
+            }
+            return elem.embeddedObject();
+        }
+
         const char* renameFrom() const {
             massert( 13492, "mod must be RENAME_TO type", op == Mod::RENAME_TO );
             return elt.fieldName();
@@ -315,6 +393,22 @@ namespace mongo {
     };
 
     /**
+     * Comparator between two BSONObjects that takes in consideration only the keys and
+     * direction described in the sort pattern.
+     */
+    struct ProjectKeyCmp {
+        BSONObj sortPattern;
+
+        ProjectKeyCmp( BSONObj pattern ) : sortPattern( pattern) {}
+
+        int operator()( const BSONObj& left, const BSONObj& right ) const {
+            BSONObj keyLeft = left.extractFields( sortPattern, true );
+            BSONObj keyRight = right.extractFields( sortPattern, true );
+            return keyLeft.woCompare( keyRight, sortPattern ) < 0;
+        }
+    };
+
+    /**
      * stores any information about a single Mod operating on a single Object
      */
     class ModState : boost::noncopyable {
@@ -445,12 +539,70 @@ namespace mongo {
                 ms.fixedOpName = "$set";
                 if ( m.isEach() ) {
                     BSONObj arr = m.getEach();
-                    b.appendArray( m.shortFieldName, arr );
-                    ms.forceEmptyArray = true;
-                    ms.fixedArray = BSONArray(arr.getOwned());
-                } else {
+                    if ( !m.isSliceOnly() && !m.isSliceAndSort() ) {
+                        b.appendArray( m.shortFieldName, arr );
+
+                        ms.forceEmptyArray = true;
+                        ms.fixedArray = BSONArray( arr.getOwned() );
+                    }
+                    else if ( m.isSliceOnly() && ( m.getSlice() >= arr.nFields() ) ) {
+                        b.appendArray( m.shortFieldName, arr );
+
+                        ms.forceEmptyArray = true;
+                        ms.fixedArray = BSONArray( arr.getOwned() );
+                    }
+                    else if ( m.isSliceOnly() ) {
+                        BSONArrayBuilder arrBuilder( b.subarrayStart( m.shortFieldName ) );
+                        long long skip = arr.nFields() - m.getSlice();
+                        BSONObjIterator j( arr );
+                        while ( j.more() ) {
+                            if ( skip-- > 0 ) {
+                                j.next();
+                                continue;
+                            }
+                            arrBuilder.append( j.next() );
+                        }
+
+                        ms.forceEmptyArray = true;
+                        ms.fixedArray = BSONArray( arrBuilder.done().getOwned() );
+                    }
+                    else if ( m.isSliceAndSort() ) {
+                        long long slice = m.getSlice();
+
+                        // Sort the $each array over sortPattern.
+                        vector<BSONObj> workArea;
+                        BSONObjIterator j( arr );
+                        while ( j.more() ) {
+                            workArea.push_back( j.next().Obj() );
+                        }
+                        ProjectKeyCmp cmp( m.getSort() );
+                        sort( workArea.begin(), workArea.end(), cmp );
+
+                        // Slice to the appropriate size. If slice is zero, that's equivalent
+                        // to resetting the array, ie, a no-op.
+                        BSONArrayBuilder arrBuilder( b.subarrayStart( m.shortFieldName ) );
+                        if (slice > 0) {
+                            long long skip = std::max( 0LL,
+                                                       (long long)workArea.size() - slice );
+                            for (vector<BSONObj>::iterator it = workArea.begin();
+                                 it != workArea.end();
+                                 ++it ) {
+                                if ( skip-- > 0 ) {
+                                    continue;
+                                }
+                                arrBuilder.append( *it );
+                            }
+                        }
+
+                        // Log the full resulting array.
+                        ms.forceEmptyArray = true;
+                        ms.fixedArray = BSONArray( arrBuilder.done().getOwned() );
+                    }
+                }
+                else {
                     BSONObjBuilder arr( b.subarrayStart( m.shortFieldName ) );
                     arr.appendAs( m.elt, "0" );
+
                     ms.forceEmptyArray = true;
                     ms.fixedArray = BSONArray(arr.done().getOwned());
                 }

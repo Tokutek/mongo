@@ -56,6 +56,8 @@
 #include "mongo/db/queryutil.h"
 #include "mongo/db/server_parameters.h"
 #include "mongo/db/parsed_query.h"
+#include "mongo/db/stats/timer_stats.h"
+#include "mongo/base/counter.h"
 
 namespace mongo {
 
@@ -71,6 +73,16 @@ namespace mongo {
     const char *replAllDead = 0;
 
     time_t lastForcedResync = 0;
+
+    //The oplog entries inserted
+    TimerStats oplogInsertStats;
+    static ServerStatusMetricField<TimerStats> displayInsertedOplogEntries(
+                                                    "repl.oplog.insert",
+                                                    &oplogInsertStats );
+    Counter64 oplogInsertBytesStats;
+    static ServerStatusMetricField<Counter64> displayInsertedOplogEntryBytes(
+                                                    "repl.oplog.insertBytes",
+                                                    &oplogInsertBytesStats );
 
 } // namespace mongo
 
@@ -208,6 +220,7 @@ namespace mongo {
             setLogTxnToOplog(logTransactionOps);
             setLogTxnRefToOplog(logTransactionOpsRef);
             setLogOpsToOplogRef(logOpsToOplogRef);
+            setOplogInsertStats(&oplogInsertStats, &oplogInsertBytesStats);
             ReplSetCmdline *replSetCmdline = new ReplSetCmdline(cmdLine._replSet);
             boost::thread t( boost::bind( &startReplSets, replSetCmdline) );
 

@@ -196,6 +196,11 @@ namespace mongo {
             return cmdLine.lockTimeout;
         }
 
+        static uint64_t get_loader_memory_size_callback(void) {
+            return cmdLine.loaderMaxMemory > 0 ?
+                (uint64_t) cmdLine.loaderMaxMemory : 100 * 1024 * 1024;
+        }
+
         static void lock_not_granted_callback(DB *db, uint64_t requesting_txnid,
                                               const DBT *left_key, const DBT *right_key,
                                               uint64_t blocking_txnid);
@@ -254,10 +259,8 @@ namespace mongo {
             }
             TOKULOG(1) << "lock timeout set to " << lock_timeout << " milliseconds." << endl;
 
-            const uint64_t loader_memory = cmdLine.loaderMaxMemory > 0 ?
-                                           (uint64_t) cmdLine.loaderMaxMemory : 100 * 1024 * 1024;
-            env->set_loader_memory_size(env, loader_memory);
-            TOKULOG(1) << "loader memory size set to " << loader_memory << " bytes." << endl;
+            env->set_loader_memory_size(env, get_loader_memory_size_callback);
+            TOKULOG(1) << "loader memory size set to " << get_loader_memory_size_callback() << " bytes." << endl;
 
             r = env->set_default_bt_compare(env, dbt_key_compare);
             if (r != 0) {
@@ -827,7 +830,6 @@ namespace mongo {
 
         void set_loader_max_memory(uint64_t bytes) {
             cmdLine.loaderMaxMemory = bytes;
-            env->set_loader_memory_size(env, bytes);
             TOKULOG(1) << "loader max memory set to " << bytes << "." << endl;
         }
 

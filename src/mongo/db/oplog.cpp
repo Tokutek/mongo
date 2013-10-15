@@ -21,13 +21,16 @@
 
 #include <vector>
 
+#include "mongo/base/counter.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/stats/counters.h"
+#include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/update.h"
@@ -201,12 +204,20 @@ namespace mongo {
 
     void writeEntryToOplog(BSONObj entry) {
         verify(rsOplogDetails);
+
+        TimerHolder insertTimer(&oplogInsertStats);
+        oplogInsertBytesStats.increment(entry.objsize());
+
         uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         rsOplogDetails->insertObject(entry, flags);
     }
 
     void writeEntryToOplogRefs(BSONObj o) {
         verify(rsOplogRefsDetails);
+
+        TimerHolder insertTimer(&oplogInsertStats);
+        oplogInsertBytesStats.increment(o.objsize());
+
         uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         rsOplogRefsDetails->insertObject(o, flags);
     }
