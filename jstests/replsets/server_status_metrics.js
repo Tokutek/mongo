@@ -13,12 +13,13 @@ function testSecondaryMetrics(secondary, opCount) {
 
     assert(ss.metrics.repl.buffer.count >= 0, "buffer count missing")
     assert(ss.metrics.repl.buffer.sizeBytes >= 0, "size (bytes)] missing")
-    assert(ss.metrics.repl.buffer.maxSizeBytes >= 0, "maxSize (bytes) missing")
+    // doesn't exist in tokumx
+    //assert(ss.metrics.repl.buffer.maxSizeBytes >= 0, "maxSize (bytes) missing")
 
-    assert(ss.metrics.repl.preload.docs.num >= 0, "preload.docs num  missing")
-    assert(ss.metrics.repl.preload.docs.totalMillis  >= 0, "preload.docs time missing")
-    assert(ss.metrics.repl.preload.docs.num >= 0, "preload.indexes num missing")
-    assert(ss.metrics.repl.preload.indexes.totalMillis >= 0, "preload.indexes time missing")
+    //assert(ss.metrics.repl.preload.docs.num >= 0, "preload.docs num  missing")
+    //assert(ss.metrics.repl.preload.docs.totalMillis  >= 0, "preload.docs time missing")
+    //assert(ss.metrics.repl.preload.docs.num >= 0, "preload.indexes num missing")
+    //assert(ss.metrics.repl.preload.indexes.totalMillis >= 0, "preload.indexes time missing")
 
     assert(ss.metrics.repl.apply.batches.num > 0, "no batches")
     assert(ss.metrics.repl.apply.batches.totalMillis > 0, "no batch time")
