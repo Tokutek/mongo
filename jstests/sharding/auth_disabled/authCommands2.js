@@ -28,7 +28,7 @@ try {
 } catch (e) {} // expected b/c of SERVER-6101.  TODO: remove try/catch once SERVER-6101 is fixed.
 
 assert( adminDB.auth( rwUser, password ) );
-adminDB.addUser( roUser, password, true, st.rs0.numNodes );
+adminDB.addUser( roUser, password, true );
 testDB.addUser( rwUser, password, false, st.rs0.numNodes );
 testDB.addUser( roUser, password, true, st.rs0.numNodes );
 
@@ -71,7 +71,12 @@ assert.soon( function() {
     var x = st.chunkDiff( "foo", "test" );
     print( "chunk diff: " + x );
     return x < 2 && configDB.locks.findOne({ _id : 'test.foo' }).state == 0;
-}, "no balance happened", 60000 );
+}, "no balance happened", 5 * 60 * 1000 );
+
+assert.soon( function(){
+    print( "Waiting for migration cleanup to occur..." )
+    return testDB.foo.find().itcount() == testDB.foo.count();
+})
 
 var map = function() { emit (this.i, this.j) };
 var reduce = function( key, values ) {

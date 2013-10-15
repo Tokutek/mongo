@@ -190,7 +190,8 @@ assert.eq(result.errmsg, "primaries don't sync");
  * - Check who 2 is syncing from, it should be someone other than three after ~30 seconds
  */
 print("check sync target re-evaluation");
-config = replTest.getReplSetConfig();
+master = replTest.getMaster();
+config = master.getDB("local").system.replset.findOne();
 config.members[3].slaveDelay = 40;
 config.members[3].priority = 0;
 config.version++;
@@ -198,17 +199,20 @@ try {
     replTest.getMaster().getDB("admin").runCommand({replSetReconfig:config});
 } catch (x) { /* expected */ }
 
+replTest.awaitReplication(60000);
+printjson(replTest.status());
+
 print("force 2 to sync from 3");
-replTest.nodes[2].getDB("admin").runCommand({replSetSyncFrom: replTest.host+":"+replTest.ports[3]});
-assert.soon(function() {
-    return checkSyncingFrom(nodes[2], replTest.host+":"+replTest.ports[3]);
-});
+// This briefly causes 2 to sync from 3, but members have a strong prefrence for not syncing from
+// a slave delayed node so it may switch to another sync source quickly.
+result = replTest.nodes[2].getDB("admin")
+    .runCommand({replSetSyncFrom: replTest.host+":"+replTest.ports[3]});
+printjson(result);
+assert.eq(1, result.ok);
 
-print("do a write");
-replTest.getMaster().getDB("foo").bar.insert({x:1});
-
-print("check that 2 changes sync targets");
+print("do writes and check that 2 changes sync targets");
 assert.soon(function() {
+    replTest.getMaster().getDB("foo").bar.insert({x:1});
     return !checkSyncingFrom(nodes[2], replTest.host+":"+replTest.ports[3]);
 }, 'failed to change sync target', 60000);
  

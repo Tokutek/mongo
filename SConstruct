@@ -16,7 +16,6 @@
 # adding a comment for zardosht
 
 import buildscripts
-import buildscripts.bb
 import datetime
 import imp
 import os

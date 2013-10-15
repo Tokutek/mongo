@@ -28,7 +28,8 @@ for ( j=0; j<30; j++ ){
     
 }
 assert.eq( i , j * 100 , "setup" );
-s.adminCommand( "connpoolsync" );
+// Until SERVER-9715 is fixed, the sync command must be run on a diff connection
+new Mongo( s.s.host ).adminCommand( "connpoolsync" );
 db.getLastError();
 
 print( "done inserting data" );
@@ -47,10 +48,15 @@ function doCountsGlobal(){
     return counta + countb;
 }
 
-doCountsGlobal()
+// Wait for the chunks to distribute
+assert.soon( function(){
+    doCountsGlobal()
 
-assert( counta > 0 , "diff1" );
-assert( countb > 0 , "diff2" );
+    print( "Counts: " + counta + countb)
+    
+    return counta > 0 && countb > 0
+})
+
 
 print( "checkpoint B" )
 
@@ -125,6 +131,13 @@ print( "checkpoint E")
 x = db.runCommand( "connPoolStats" );
 printjson( x )
 for ( host in x.hosts ){
+    
+    // Ignore all non-shard connections in this check for used sharded
+    // connections, only check those with 0 timeout.
+    if (!/.*::0$/.test(host)) continue;
+
+    // Connection pooling may change in the near future
+    // TODO: Refactor / remove this test to make sure it stays relevant
     var foo = x.hosts[host];
     assert.lt( 0 , foo.available , "pool: " + host );
 }

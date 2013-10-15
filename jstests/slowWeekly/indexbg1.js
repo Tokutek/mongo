@@ -27,12 +27,7 @@ waitParallel = function() {
     assert.soon( function() { return doneParallel(); }, "parallel did not finish in time", 300000, 1000 );
 }
 
-// waiting on SERVER-620
-
-print( "indexbg1.js host:" );
-print( db.getMongo().host );
-
-size = 300000;
+size = 500000;
 while( 1 ) { // if indexing finishes before we can run checks, try indexing w/ more data
     print( "size: " + size );
     baseName = "jstests_indexbg1";
@@ -42,9 +37,6 @@ while( 1 ) { // if indexing finishes before we can run checks, try indexing w/ m
 
     for( i = 0; i < size; ++i ) {
         db.jstests_indexbg1.save( {i:i} );
-        if (i > 0 && i % 50000 == 0) {
-            print(" inserted " + i + " docs...");
-        }
     }
     db.getLastError();
     assert.eq( size, t.count() );
@@ -73,6 +65,9 @@ while( 1 ) { // if indexing finishes before we can run checks, try indexing w/ m
         t.update( {_id:id}, {i:-2} );
         t.save( {i:-50} );
         t.save( {i:size+2} );
+        assert( !db.getLastError() );
+
+        assert.eq( size + 1, t.count() );
         assert( !db.getLastError() );
 
     } catch( e ) {
