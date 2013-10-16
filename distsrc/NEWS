@@ -113,6 +113,9 @@ Bug fixes
       for a `shardCollection` command with a hashed shard key would fail
       on clusters of 32 or more shards.  (#649)
 
+    - Fixed the logging of "lock not granted" errors that happen on the
+      ydb directory.  (#652)
+
 
 tokumx 1.2.1
 ------------
