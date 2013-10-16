@@ -662,6 +662,10 @@ namespace mongo {
                         // gives you a good runway of around 8GB per shard before you should expect
                         // to start having to split much.
                         numChunks = 256 * numShards;  // default number of initial chunks
+                        // multiSplit has a max of (non-inclusive) 8192 split points.
+                        if (numChunks > 4096) {
+                            numChunks = 4096;
+                        }
                     }
 
                     // hashes are signed, 64-bit ints. So we divide the range (-MIN long, +MAX long)
