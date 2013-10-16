@@ -160,6 +160,11 @@ namespace mongo {
                 minUnapplied,
                 result
                 );
+            const Member *syncTarget = BackgroundSync::get()->getSyncTarget();
+            if (syncTarget) {
+                result.append("syncingTo", syncTarget->fullName());
+            }
+
             int v = theReplSet->config().version;
             result.append("v", v);
             if( v > cmdObj["v"].Int() )
@@ -279,11 +284,13 @@ namespace mongo {
                     down(mem, info.getStringField("errmsg"));
                 }
             }
-            catch(DBException& e) {
+            catch (const DBException& e) {
+                log() << "replSet health poll task caught a DBException: " << e.what();
                 down(mem, e.what());
             }
-            catch(...) {
-                down(mem, "replSet unexpected exception in ReplSetHealthPollTask");
+            catch (const std::exception& e) {
+                log() << "replSet health poll task caught an exception: " << e.what();
+                down(mem, e.what());
             }
             m = mem;
 
@@ -402,9 +409,9 @@ namespace mongo {
             // change its state to down (if it's already down, leave it down since we don't have
             // any info about it other than it's heartbeating us)
             if (m.lastHeartbeatRecv+2 >= time(0)) {
-                LOG(1) << "replset info " << h.toString()
-                       << " just heartbeated us, but our heartbeat failed: " << msg
-                       << ", not changing state" << rsLog;
+                log() << "replset info " << h.toString()
+                      << " just heartbeated us, but our heartbeat failed: " << msg
+                      << ", not changing state" << rsLog;
                 // we don't update any of the heartbeat info, though, since we didn't get any info
                 // other than "not down" from having it heartbeat us
                 return;
@@ -433,6 +440,9 @@ namespace mongo {
             }
             mem.health = 1.0;
             mem.lastHeartbeatMsg = info["hbmsg"].String();
+            if (info.hasElement("syncingTo")) {
+                mem.syncingTo = info["syncingTo"].String();
+            }
             if( info.hasElement("opTime") ) {
                 mem.opTime = info["opTime"].Date();
             }
