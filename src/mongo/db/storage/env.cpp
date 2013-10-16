@@ -633,7 +633,12 @@ namespace mongo {
                     b.appendAs(pk.firstElement(), "$primaryKey");
                 }
             } else {
-                b.append("$key", string(reinterpret_cast<const char *>(key->data), key->size));
+                const char *data = reinterpret_cast<const char *>(key->data);
+                size_t size = key->size;
+                while (data[size - 1] == '\0' && size > 0) {
+                    --size;
+                }
+                b.append("$key", string(data, size));
             }
             return b.obj();
         }
