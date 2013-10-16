@@ -29,6 +29,7 @@
 
 #include "mongo/tools/tool.h"
 
+#include "mongo/base/initializer.h"
 #include "mongo/base/string_data.h"
 #include "mongo/client/connpool.h"
 #include "mongo/db/jsobj.h"
@@ -413,12 +414,8 @@ public:
                 auto_ptr<DBClientCursor> cursor(_rconn->conn().query(_oplogns, query, 0, 0, &res, tailingQueryOptions));
 
                 if (!cursor->more()) {
-                    log() << "oplog query returned no results, sleeping";
-                    for (int i = 0; running && i < 10; ++i) {
-                        log() << '.';
-                        Logstream::get().flush();
-                        sleepsecs(1);
-                    }
+                    log() << "oplog query returned no results, sleeping 10 seconds..." << endl;
+                    sleepsecs(10);
                     log() << "retrying" << endl;
                     continue;
                 }
@@ -524,7 +521,8 @@ namespace proc_mgmt {
 
 }
 
-int main( int argc , char** argv ) {
+int main( int argc , char** argv, char **envp ) {
+    mongo::runGlobalInitializersOrDie(argc, argv, envp);
     OplogTool t;
     t.running = true;
     proc_mgmt::theTool = &t;
