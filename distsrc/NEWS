@@ -109,6 +109,10 @@ Bug fixes
 
     - Fixed a locking issue with the `replSetExpireOplog` command.  (#642)
 
+    - Fixed an issue where the initial splitting of an empty collection
+      for a `shardCollection` command with a hashed shard key would fail
+      on clusters of 32 or more shards.  (#649)
+
 
 tokumx 1.2.1
 ------------
