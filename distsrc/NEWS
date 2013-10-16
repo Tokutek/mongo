@@ -8,7 +8,8 @@ Release date: 2013-10-18
 General
 ~~~~~~~
 
-    - This release brings TokuMX full compatibility with MongoDB v2.4.
+    - This release brings TokuMX full compatibility with MongoDB v2.4,
+      except for full text search and geo indexes (2d and 2dsphere).
 
       For a full set of changes, confer with https://jira.mongodb.org and
       MongoDB's marketing materials.  Some major features are called out
@@ -105,6 +106,8 @@ Bug fixes
 
     - The date fields in `db.engineStatus()` are now stored as true BSON
       Date objects, rather than formatted strings.  (#630)
+
+    - Fixed a locking issue with the `replSetExpireOplog` command.  (#642)
 
 
 tokumx 1.2.1
