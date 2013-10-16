@@ -621,6 +621,10 @@ namespace mongo {
                     LOG( logLvl ) << "inserting initial doc in " << LocksType::ConfigNS << " for lock " << _name << endl;
                     conn->insert( LocksType::ConfigNS , BSON( LocksType::name(_name) << LocksType::state(0) << LocksType::who("") ) );
                 }
+                catch (storage::RetryableException) {
+                    conn.done();
+                    return false;
+                }
                 catch ( UserException& e ) {
                     warning() << "could not insert initial doc for distributed lock " << _name << causedBy( e ) << endl;
                 }
