@@ -29,6 +29,7 @@
 
 #include "mongo/tools/tool.h"
 
+#include "mongo/base/initializer.h"
 #include "mongo/base/string_data.h"
 #include "mongo/client/connpool.h"
 #include "mongo/db/jsobj.h"
@@ -524,7 +525,8 @@ namespace proc_mgmt {
 
 }
 
-int main( int argc , char** argv ) {
+int main( int argc , char** argv, char **envp ) {
+    mongo::runGlobalInitializersOrDie(argc, argv, envp);
     OplogTool t;
     t.running = true;
     proc_mgmt::theTool = &t;
