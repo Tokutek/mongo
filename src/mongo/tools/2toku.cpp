@@ -414,12 +414,8 @@ public:
                 auto_ptr<DBClientCursor> cursor(_rconn->conn().query(_oplogns, query, 0, 0, &res, tailingQueryOptions));
 
                 if (!cursor->more()) {
-                    log() << "oplog query returned no results, sleeping";
-                    for (int i = 0; running && i < 10; ++i) {
-                        log() << '.';
-                        Logstream::get().flush();
-                        sleepsecs(1);
-                    }
+                    log() << "oplog query returned no results, sleeping 10 seconds..." << endl;
+                    sleepsecs(10);
                     log() << "retrying" << endl;
                     continue;
                 }
