@@ -1,3 +1,5 @@
+// godinsert is deprecated, need to find another way to test this behavior
+if (0) {
 /** Test TTL docs are not deleted from secondaries directly
  */
 
@@ -50,3 +52,4 @@ assert.eq(false, foundError, "found error in this line: " + errorString);
 
 // finish up
 rt.stopSet();
+}
