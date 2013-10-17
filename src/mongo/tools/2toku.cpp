@@ -289,8 +289,8 @@ public:
                 tsFile.close();
                 log() << "Saved timestamp to file "
                       << (boost::filesystem::current_path() / _tsFilename).string() << "." << endl;
-                log() << "I'll automatically use this value next time if you don't pass --ts "
-                      << "and run from this directory." << endl;
+                log() << "I'll automatically use this value next time if you run from this directory "
+                      << "and don't pass --ts." << endl;
             }
             catch (std::exception &e) {
                 warning() << "Error saving timestamp to file " << _tsFilename << ": " << e.what() << endl;
