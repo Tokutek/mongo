@@ -44,6 +44,7 @@
 #include "mongo/db/stats/snapshots.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/ttl.h"
+#include "mongo/db/txn_complete_hooks.h"
 #include "mongo/plugins/loader.h"
 #include "mongo/s/d_writeback.h"
 #include "mongo/scripting/engine.h"
@@ -336,7 +337,6 @@ namespace mongo {
 
         // the last thing we do before initializing storage is to install the
         // txn complete hooks, which live in namespace_details.cpp
-        extern TxnCompleteHooks _txnCompleteHooks;
         setTxnCompleteHooks(&_txnCompleteHooks);
         storage::startup();
 

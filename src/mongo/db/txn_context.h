@@ -22,6 +22,7 @@
 #include <db.h>
 
 #include "mongo/db/jsobj.h"
+#include "mongo/db/txn_complete_hooks.h"
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/txn.h"
 
@@ -47,27 +48,6 @@ namespace mongo {
     void setLogOpsToOplogRef(void (*f)(BSONObj o));
     void setOplogInsertStats(TimerStats *oplogInsertStats, Counter64 *oplogInsertBytesStats);
     void setTxnGTIDManager(GTIDManager* m);
-
-    class TxnCompleteHooks {
-    public:
-        virtual ~TxnCompleteHooks() { }
-        virtual void noteTxnCompletedInserts(const string &ns, const BSONObj &minPK,
-                                             long long nDelta, long long sizeDelta,
-                                             bool committed) {
-            assertNotImplemented();
-        }
-        virtual void noteTxnAbortedFileOps(const set<string> &namespaces, const set<string> &dbs) {
-            assertNotImplemented();
-        }
-        virtual void noteTxnCompletedCursors(const set<long long> &cursorIds) {
-            assertNotImplemented();
-        }
-    private:
-        void assertNotImplemented() {
-            msgasserted(16778, "bug: TxnCompleteHooks not set");
-        }
-    };
-
     void setTxnCompleteHooks(TxnCompleteHooks *hooks);
 
     // Class to handle rollback of in-memory stats for capped collections.
