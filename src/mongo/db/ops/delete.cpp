@@ -42,6 +42,18 @@ namespace mongo {
 
         uassert( 10101 ,  "can't remove from a capped collection" , ! d->isCapped() );
 
+        // Fast-path for simple _id deletes.
+        if ( d->mayFindById() && isSimpleIdQuery(pattern) ) {
+            cc().curop()->debug().idhack = true;
+            BSONObj obj;
+            BSONObj pk = pattern["_id"].wrap();
+            if (d->findByPK(pk, obj)) {
+                deleteOneObject(d, pk, obj);
+                return 1;
+            }
+            return 0;
+        }
+
         shared_ptr< Cursor > c = getOptimizedCursor( ns, pattern );
         if ( !c->ok() ) {
             return 0;
