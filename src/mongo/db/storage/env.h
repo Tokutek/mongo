@@ -24,12 +24,13 @@
 namespace mongo {
 
     class Descriptor;
+    class TxnCompleteHooks;
 
     namespace storage {
 
         extern DB_ENV *env;
 
-        void startup(void);
+        void startup(TxnCompleteHooks *hooks);
         void shutdown(void);
 
         void db_remove(const string &name);

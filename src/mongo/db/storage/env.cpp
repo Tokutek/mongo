@@ -210,9 +210,10 @@ namespace mongo {
             ~InStartup() { _inStartup = false; }
         };
 
-        void startup(void) {
+        void startup(TxnCompleteHooks *hooks) {
             InStartup is;
 
+            setTxnCompleteHooks(hooks);
             tokulog() << "startup" << endl;
 
             db_env_set_direct_io(cmdLine.directio);

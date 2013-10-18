@@ -335,10 +335,7 @@ namespace mongo {
 
         acquirePathLock();
 
-        // the last thing we do before initializing storage is to install the
-        // txn complete hooks, which live in namespace_details.cpp
-        setTxnCompleteHooks(&_txnCompleteHooks);
-        storage::startup();
+        storage::startup(&_txnCompleteHooks);
 
         unsigned long long missingRepl = checkIfReplMissingFromCommandLine();
         if (missingRepl) {
