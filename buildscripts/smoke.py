@@ -189,13 +189,17 @@ class mongod(object):
         return False
 
     def setup_admin_user(self, port=mongod_port):
+        db = Connection( "localhost" , int(port) ).admin
         try:
-            Connection( "localhost" , int(port) ).admin.add_user("admin","password")
+            db.authenticate("admin","password")
         except OperationFailure, e:
-            if e.message == 'need to login':
-                pass # SERVER-4225
-            else:
-                raise e
+            try:
+                db.add_user("admin","password")
+            except OperationFailure, e:
+                if e.message == 'need to login':
+                    pass # SERVER-4225
+                else:
+                    raise e
 
     def start(self):
         global mongod_port
