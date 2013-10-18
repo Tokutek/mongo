@@ -1742,7 +1742,9 @@ namespace mongo {
     Value ExpressionMillisecond::evaluate(const Document& document) const {
         checkArgCount(1);
         Value date(vpOperand[0]->evaluate(document));
-        return Value::createInt(extractMillisPortion(date.coerceToDate()));
+        const int ms = date.coerceToDate() % 1000LL;
+        // adding 1000 since dates before 1970 would have negative ms
+        return Value::createInt(ms >= 0 ? ms : 1000 + ms);
     }
 
     const char *ExpressionMillisecond::getOpName() const {
