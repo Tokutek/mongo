@@ -269,8 +269,12 @@ class mongod(object):
         if not self.did_mongod_start(self.port):
             raise Exception("Failed to start mongod")
 
-        if "true" == check_output([shell_executable, '--port', str(self.port), '--quiet', '--eval',
-                                   'print(db.runCommand("buildInfo").debug)']).strip():
+        run_mongo_cmd = [shell_executable, '--port', str(self.port), '--quiet']
+        if self.kwargs.get('use_ssl'):
+            run_mongo_cmd += ['--ssl',
+                              '--sslPEMKeyFile', 'jstests/libs/server.pem',
+                              '--sslCAFile', 'jstests/libs/ca.pem']
+        if "true" == check_output(run_mongo_cmd + ['--eval', 'print(db.runCommand("buildInfo").debug)']).strip():
             _debug = True
 
         if self.auth:
