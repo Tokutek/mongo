@@ -59,12 +59,12 @@ namespace mongo {
         *out << std::flush;
     }
 
-    Status handlePreValidationBSONDumpOptions(const moe::Environment& params) {
+    bool handlePreValidationBSONDumpOptions(const moe::Environment& params) {
         if (params.count("help")) {
             printBSONDumpHelp(&std::cout);
-            ::_exit(0);
+            return true;
         }
-        return Status::OK();
+        return false;
     }
 
     Status storeBSONDumpOptions(const moe::Environment& params,
@@ -98,11 +98,10 @@ namespace mongo {
     }
 
     MONGO_STARTUP_OPTIONS_VALIDATE(BSONDumpOptions)(InitializerContext* context) {
-        Status ret = handlePreValidationBSONDumpOptions(moe::startupOptionsParsed);
-        if (!ret.isOK()) {
-            return ret;
+        if (handlePreValidationBSONDumpOptions(moe::startupOptionsParsed)) {
+            ::_exit(EXIT_SUCCESS);
         }
-        ret = moe::startupOptionsParsed.validate();
+        Status ret = moe::startupOptionsParsed.validate();
         if (!ret.isOK()) {
             return ret;
         }
@@ -110,6 +109,13 @@ namespace mongo {
     }
 
     MONGO_STARTUP_OPTIONS_STORE(BSONDumpOptions)(InitializerContext* context) {
-        return storeBSONDumpOptions(moe::startupOptionsParsed, context->args());
+        Status ret = storeBSONDumpOptions(moe::startupOptionsParsed, context->args());
+        if (!ret.isOK()) {
+            std::cerr << ret.toString() << std::endl;
+            std::cerr << "try '" << context->args()[0] << " --help' for more information"
+                      << std::endl;
+            ::_exit(EXIT_BADOPTIONS);
+        }
+        return Status::OK();
     }
 }

@@ -42,7 +42,7 @@ namespace mongo {
 
     void printMongo2TokuHelp(std::ostream* out);
 
-    Status handlePreValidationMongo2TokuOptions(const moe::Environment& params);
+    bool handlePreValidationMongo2TokuOptions(const moe::Environment& params);
 
     Status storeMongo2TokuOptions(const moe::Environment& params,
                                   const std::vector<std::string>& args);

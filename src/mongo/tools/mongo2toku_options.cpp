@@ -112,13 +112,13 @@ namespace mongo {
         *out << std::flush;
     }
 
-    Status handlePreValidationMongo2TokuOptions(const moe::Environment& params) {
+    bool handlePreValidationMongo2TokuOptions(const moe::Environment& params) {
         if (params.count("help")) {
             printMongo2TokuHelp(&std::cout);
-            ::_exit(0);
+            return true;
         }
 
-        return Status::OK();
+        return false;
     }
 
     Status storeMongo2TokuOptions(const moe::Environment& params,
@@ -173,11 +173,10 @@ namespace mongo {
     }
 
     MONGO_STARTUP_OPTIONS_VALIDATE(Mongo2TokuOptions)(InitializerContext* context) {
-        Status ret = handlePreValidationMongo2TokuOptions(moe::startupOptionsParsed);
-        if (!ret.isOK()) {
-            return ret;
+        if (handlePreValidationMongo2TokuOptions(moe::startupOptionsParsed)) {
+            ::_exit(EXIT_SUCCESS);
         }
-        ret = moe::startupOptionsParsed.validate();
+        Status ret = moe::startupOptionsParsed.validate();
         if (!ret.isOK()) {
             return ret;
         }
@@ -186,6 +185,13 @@ namespace mongo {
     }
 
     MONGO_STARTUP_OPTIONS_STORE(Mongo2TokuOptions)(InitializerContext* context) {
-        return storeMongo2TokuOptions(moe::startupOptionsParsed, context->args());
+        Status ret = storeMongo2TokuOptions(moe::startupOptionsParsed, context->args());
+        if (!ret.isOK()) {
+            std::cerr << ret.toString() << std::endl;
+            std::cerr << "try '" << context->args()[0] << " --help' for more information"
+                      << std::endl;
+            ::_exit(EXIT_BADOPTIONS);
+        }
+        return Status::OK();
     }
 }

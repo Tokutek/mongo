@@ -356,12 +356,12 @@ namespace mongo {
         }
 
         if (params.count("enableExperimentalIndexStatsCmd")) {
-            std::cerr << "enableExperimentalIndexStatsCmd is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "enableExperimentalIndexStatsCmd is deprecated in TokuMX");
         }
         if (params.count("enableExperimentalStorageDetailsCmd")) {
-            std::cerr << "enableExperimentalStorageDetailsCmd is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "enableExperimentalStorageDetailsCmd is deprecated in TokuMX");
         }
 
         if (params.count("port")) {

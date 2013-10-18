@@ -228,12 +228,12 @@ namespace mongo {
         out << std::endl;
     }
 
-    Status handlePreValidationGeneralToolOptions(const moe::Environment& params) {
+    bool handlePreValidationGeneralToolOptions(const moe::Environment& params) {
         if (moe::startupOptionsParsed.count("version")) {
             printToolVersionString(std::cout);
-            ::_exit(0);
+            return true;
         }
-        return Status::OK();
+        return false;
     }
 
     extern bool directoryperdb;
@@ -313,8 +313,8 @@ namespace mongo {
         toolGlobalParams.dbpath = getParam("dbpath");
         toolGlobalParams.useDirectClient = hasParam("dbpath");
         if (toolGlobalParams.useDirectClient && params.count("journal")) {
-            std::cerr << "journal is deprecated" << std::cerr;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "journal is deprecated in TokuMX");
         }
 
         if (!toolGlobalParams.useDirectClient) {
@@ -333,8 +333,8 @@ namespace mongo {
         }
         else {
             if (params.count("directoryperdb")) {
-                std::cerr << "directoryperdb is deprecated" << std::cerr;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue,
+                              "directoryperdb is deprecated in TokuMX");
             }
 
             toolGlobalParams.connectionString = "DIRECT";

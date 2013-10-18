@@ -495,24 +495,24 @@ namespace mongo {
         }
     } // namespace
 
-    Status handlePreValidationMongodOptions(const moe::Environment& params,
+    bool handlePreValidationMongodOptions(const moe::Environment& params,
                                             const std::vector<std::string>& args) {
         if (params.count("help")) {
             printMongodHelp(moe::startupOptions);
-            ::_exit(EXIT_SUCCESS);
+            return true;
         }
         if (params.count("version")) {
             cout << mongodVersion() << endl;
             printGitVersion();
             printOpenSSLVersion();
-            ::_exit(EXIT_SUCCESS);
+            return true;
         }
         if (params.count("sysinfo")) {
             sysRuntimeInfo();
-            ::_exit(EXIT_SUCCESS);
+            return true;
         }
 
-        return Status::OK();
+        return false;
     }
 
     Status storeMongodOptions(const moe::Environment& params,
@@ -520,8 +520,7 @@ namespace mongo {
 
         Status ret = storeServerOptions(params, args);
         if (!ret.isOK()) {
-            std::cerr << "Error storing command line: " << ret.toString() << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return ret;
         }
 
         if (params.count("dbpath")) {
@@ -552,8 +551,8 @@ namespace mongo {
         }
 
         if (params.count("directoryperdb")) {
-            std::cerr << "directoryperdb is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "directoryperdb is deprecated in TokuMX");
         }
         if (params.count("cpu")) {
             serverGlobalParams.cpu = true;
@@ -573,39 +572,39 @@ namespace mongo {
         }
         if ((params.count("nodur") || params.count("nojournal")) &&
             (params.count("dur") || params.count("journal"))) {
-            std::cerr << "Can't specify both --journal and --nojournal options." << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "Can't specify both --journal and --nojournal options.");
         }
 
         if (params.count("nodur") || params.count("nojournal")) {
-            std::cerr << "nodur and nojournal are deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "nodur and nojournal are deprecated in TokuMX");
         }
 
         if (params.count("dur") || params.count("journal")) {
-            std::cerr << "dur and journal are deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "dur and journal are deprecated in TokuMX");
         }
 
         if (params.count("durOptions")) {
-            std::cerr << "durOptions is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "durOptions is deprecated in TokuMX");
         }
         if (params.count("journalOptions")) {
-            std::cerr << "journalOptions is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "journalOptions is deprecated in TokuMX");
         }
         if (params.count("nohints")) {
             storageGlobalParams.useHints = false;
         }
         if (params.count("nopreallocj")) {
-            std::cerr << "nopreallocj is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "nopreallocj is deprecated in TokuMX");
         }
         if (params.count("httpinterface")) {
             if (params.count("nohttpinterface")) {
-                std::cerr << "can't have both --httpinterface and --nohttpinterface" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue,
+                              "can't have both --httpinterface and --nohttpinterface");
             }
             serverGlobalParams.isHttpInterfaceEnabled = true;
         }
@@ -640,45 +639,44 @@ namespace mongo {
             mongodGlobalParams.scriptingEnabled = false;
         }
         if (params.count("noprealloc")) {
-            std::cerr << "noprealloc is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "noprealloc is deprecated in TokuMX");
         }
         if (params.count("smallfiles")) {
-            std::cerr << "smallfiles is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "smallfiles is deprecated in TokuMX");
         }
         if (params.count("diaglog")) {
             int x = params["diaglog"].as<int>();
             if ( x < 0 || x > 7 ) {
-                std::cerr << "can't interpret --diaglog setting" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue, "can't interpret --diaglog setting");
             }
             _diaglog.setLevel(x);
         }
 
         if ((params.count("dur") || params.count("journal")) && params.count("repair")) {
-            std::cerr << "Can't specify both --journal and --repair options." << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "Can't specify both --journal and --repair options.");
         }
 
         if (params.count("repair")) {
-            std::cerr << "repair is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "repair is deprecated in TokuMX");
         }
         if (params.count("upgrade")) {
-            std::cerr << "upgrade is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "upgrade is deprecated in TokuMX");
         }
         if (params.count("notablescan")) {
             storageGlobalParams.noTableScan = true;
         }
         if (params.count("master")) {
-            std::cerr << "master is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "master is deprecated in TokuMX");
         }
         if (params.count("slave")) {
-            std::cerr << "slave is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "slave is deprecated in TokuMX");
         }
         if (params.count("slavedelay")) {
             replSettings.slavedelay = params["slavedelay"].as<int>();
@@ -692,60 +690,55 @@ namespace mongo {
         if (params.count("autoresync")) {
             replSettings.autoresync = true;
             if( params.count("replSet") ) {
-                std::cerr << "--autoresync is not used with --replSet\nsee "
-                    << "http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember"
-                    << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue,
+                              "--autoresync is not used with --replSet\nsee "
+                              "http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember");
             }
         }
         if (params.count("source")) {
-            std::cerr << "source is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "source is deprecated in TokuMX");
         }
         if( params.count("pretouch") ) {
-            std::cerr << "pretouch is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "pretouch is deprecated in TokuMX");
         }
         if (params.count("replSet")) {
             if (params.count("slavedelay")) {
-                std::cerr << "--slavedelay cannot be used with --replSet" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue, "--slavedelay cannot be used with --replSet");
             }
             else if (params.count("only")) {
-                std::cerr << "--only cannot be used with --replSet" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue, "--only cannot be used with --replSet");
             }
             /* seed list of hosts for the repl set */
             replSettings.replSet = params["replSet"].as<string>().c_str();
         }
         if (params.count("replIndexPrefetch")) {
-            std::cerr << "replIndexPrefetch is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "replIndexPrefetch is deprecated in TokuMX");
         }
         if (params.count("noIndexBuildRetry")) {
-            std::cerr << "noIndexBuildRetry is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "noIndexBuildRetry is deprecated in TokuMX");
         }
         if (params.count("only")) {
-            std::cerr << "only is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "only is deprecated in TokuMX");
         }
         if( params.count("nssize") ) {
-            std::cerr << "nssize is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "nssize is deprecated in TokuMX");
         }
         if (params.count("oplogSize")) {
-            std::cerr << "oplogSize is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "oplogSize is deprecated in TokuMX");
         }
         if (params.count("cacheSize")) {
             long x = params["cacheSize"].as<long>();
             if (x <= 0) {
-                std::cerr << "bad --cacheSize arg" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue, "bad --cacheSize arg");
             }
-            std::cerr << "--cacheSize option not currently supported" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue, "--cacheSize option not currently supported");
         }
         if (!params.count("port")) {
             if( params.count("configsvr") ) {
@@ -753,24 +746,22 @@ namespace mongo {
             }
             if( params.count("shardsvr") ) {
                 if( params.count("configsvr") ) {
-                    std::cerr << "can't do --shardsvr and --configsvr at the same time"
-                              << std::endl;
-                    ::_exit(EXIT_BADOPTIONS);
+                    return Status(ErrorCodes::BadValue,
+                                  "can't do --shardsvr and --configsvr at the same time");
                 }
                 serverGlobalParams.port = ServerGlobalParams::ShardServerPort;
             }
         }
         else {
             if (serverGlobalParams.port <= 0 || serverGlobalParams.port > 65535) {
-                std::cerr << "bad --port number" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue, "bad --port number");
             }
         }
         if ( params.count("configsvr" ) ) {
             serverGlobalParams.configsvr = true;
             if (replSettings.usingReplSets()) {
-                std::cerr << "replication should not be enabled on a config server" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue,
+                              "replication should not be enabled on a config server");
             }
             if (!params.count("dbpath"))
                 storageGlobalParams.dbpath = "/data/configdb";
@@ -783,43 +774,42 @@ namespace mongo {
         }
 
         if (params.count("noMoveParanoia") && params.count("moveParanoia")) {
-            std::cerr << "The moveParanoia and noMoveParanoia flags cannot both be set; "
-                << "please use only one of them." << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "The moveParanoia and noMoveParanoia flags cannot both be set");
         }
 
         if (params.count("noMoveParanoia")) {
-            std::cerr << "noMoveParanoia is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "noMoveParanoia is deprecated in TokuMX");
         }
 
         if (params.count("moveParanoia")) {
-            std::cerr << "moveParanoia is deprecated" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "moveParanoia is deprecated in TokuMX");
         }
 
         if (params.count("pairwith") || params.count("arbiter") || params.count("opIdMem")) {
-            std::cerr << "****\n"
-                << "Replica Pairs have been deprecated. Invalid options: --pairwith, "
-                << "--arbiter, and/or --opIdMem\n"
-                << "<http://dochub.mongodb.org/core/replicapairs>\n"
-                << "****" << std::endl;
-            ::_exit(EXIT_BADOPTIONS);
+            return Status(ErrorCodes::BadValue,
+                          "****\n"
+                          "Replica Pairs have been deprecated. Invalid options: "
+                              "--pairwith, --arbiter, and/or --opIdMem\n"
+                          "<http://dochub.mongodb.org/core/replicapairs>\n"
+                          "****");
         }
 
         if (params.count("journalCommitInterval")) {
             log() << "--journalCommitInterval deprecated, treating as --logFlushPeriod" << startupWarningsLog;
             storageGlobalParams.logFlushPeriod = params["journalCommitInterval"].as<unsigned>();
             if (storageGlobalParams.logFlushPeriod > 300) {
-                std::cerr << "--logFlushPeriod out of allowed range (0-300ms)" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue,
+                              "--logFlushPeriod out of allowed range (0-300ms)");
             }
         }
         if (params.count("logFlushPeriod")) {
             storageGlobalParams.logFlushPeriod = params["logFlushPeriod"].as<unsigned>();
             if (storageGlobalParams.logFlushPeriod > 300) {
-                std::cerr << "--logFlushPeriod out of allowed range (0-300ms)" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue,
+                              "--logFlushPeriod out of allowed range (0-300ms)");
             }
         }
         if (!(params.count("expireOplogHours") || params.count("expireOplogDays")) && params.count("replSet")) {
@@ -864,8 +854,8 @@ namespace mongo {
         if (params.count("fsRedzone")) {
             storageGlobalParams.fsRedzone = params["fsRedzone"].as<int>();
             if (storageGlobalParams.fsRedzone < 1 || storageGlobalParams.fsRedzone > 99) {
-                std::cerr << "--fsRedzone must be between 1 and 99." << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue,
+                              "--fsRedzone must be between 1 and 99.");
             }
         }
         if (params.count("logDir")) {
@@ -891,24 +881,24 @@ namespace mongo {
         if (params.count("txnMemLimit")) {
             unsigned long long limit = params["txnMemLimit"].as<unsigned long long>();
             if (limit > (2ULL << 20)) {
-                std::cerr << "--txnMemLimit cannot be greater than 2MB" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue,
+                              "--txnMemLimit cannot be greater than 2MB");
             }
             storageGlobalParams.txnMemLimit = limit;
         }
         if (params.count("loaderMaxMemory")) {
             unsigned long long x = params["loaderMaxMemory"].as<unsigned long long>();
             if (x < (32ULL << 20)) {
-                std::cerr << "bad --loaderMaxMemory arg (should never be less than 32mb)" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue,
+                              "bad --loaderMaxMemory arg (should never be less than 32mb)");
             }
             storageGlobalParams.loaderMaxMemory = x;
         }
         if (params.count("locktreeMaxMemory")) {
             unsigned long long x = params["locktreeMaxMemory"].as<unsigned long long>();
             if (x < (64ULL << 10)) {
-                std::cerr << "bad --locktreeMaxMemory arg (should never be less than 64kb)" << std::endl;
-                ::_exit(EXIT_BADOPTIONS);
+                return Status(ErrorCodes::BadValue,
+                              "bad --locktreeMaxMemory arg (should never be less than 64kb)");
             }
             storageGlobalParams.locktreeMaxMemory = x;
         }
@@ -929,11 +919,10 @@ namespace mongo {
     }
 
     MONGO_STARTUP_OPTIONS_VALIDATE(MongodOptions)(InitializerContext* context) {
-        Status ret = handlePreValidationMongodOptions(moe::startupOptionsParsed, context->args());
-        if (!ret.isOK()) {
-            return ret;
+        if (handlePreValidationMongodOptions(moe::startupOptionsParsed, context->args())) {
+            ::_exit(EXIT_SUCCESS);
         }
-        ret = moe::startupOptionsParsed.validate();
+        Status ret = moe::startupOptionsParsed.validate();
         if (!ret.isOK()) {
             return ret;
         }
@@ -944,7 +933,14 @@ namespace mongo {
                               ("BeginStartupOptionStorage"),
                               ("EndStartupOptionStorage"))
                              (InitializerContext* context) {
-        return storeMongodOptions(moe::startupOptionsParsed, context->args());
+        Status ret = storeMongodOptions(moe::startupOptionsParsed, context->args());
+        if (!ret.isOK()) {
+            std::cerr << ret.toString() << std::endl;
+            std::cerr << "try '" << context->args()[0] << " --help' for more information"
+                      << std::endl;
+            ::_exit(EXIT_BADOPTIONS);
+        }
+        return Status::OK();
     }
 
     Status addModuleOptions(moe::OptionSection* options) {
