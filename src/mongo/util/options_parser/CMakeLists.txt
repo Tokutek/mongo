@@ -3,6 +3,7 @@ add_library(options_parser STATIC
   value
   constraints
   option_section
+  option_description
   options_parser
   startup_option_init
   startup_options
