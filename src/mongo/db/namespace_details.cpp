@@ -1081,8 +1081,8 @@ namespace mongo {
         try {
             if (key != NULL) {
                 struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
-                BSONObj obj(reinterpret_cast<char *>(value->data));
-                info->obj = obj.getOwned();
+                info->obj = BSONObj(reinterpret_cast<char *>(value->data));
+                info->obj.getOwned();
             }
             return 0;
         } catch (std::exception &e) {
