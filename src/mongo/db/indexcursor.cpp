@@ -421,21 +421,18 @@ namespace mongo {
     }
 
     int IndexCursor::cursor_flags() {
-        if (_prelock) {
-            QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
-            switch ( mode ) {
-                // These flags determine the type of lock. Serializable
-                // gets you a read lock. Both serializable and rmw gets
-                // you a write lock.
-                case WRITE_LOCK_CURSOR:
-                    return DB_SERIALIZABLE | DB_RMW;
-                case READ_LOCK_CURSOR:
-                    return DB_SERIALIZABLE;
-                default:
-                    return 0;
-            }
+        QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
+        switch ( mode ) {
+            // These flags determine the type of lock. Serializable
+            // gets you a read lock. Both serializable and rmw gets
+            // you a write lock.
+            case WRITE_LOCK_CURSOR:
+                return DB_SERIALIZABLE | DB_RMW;
+            case READ_LOCK_CURSOR:
+                return DB_SERIALIZABLE;
+            default:
+                return 0;
         }
-        return 0;
     }
 
     int IndexCursor::getf_flags() {
