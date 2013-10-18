@@ -95,6 +95,7 @@ namespace {
     MONGO_INITIALIZER(AuthorizationSystemRoles)(InitializerContext* context) {
         // Read role
         readRoleActions.addAction(ActionType::cloneCollectionLocalSource);
+        readRoleActions.addAction(ActionType::collectionsExist);
         readRoleActions.addAction(ActionType::collStats);
         readRoleActions.addAction(ActionType::dbHash);
         readRoleActions.addAction(ActionType::dbStats);
@@ -233,7 +234,6 @@ namespace {
 
         // Internal commands
         internalActions.addAction(ActionType::clone);
-        internalActions.addAction(ActionType::collectionsExist);
         internalActions.addAction(ActionType::handshake);
         internalActions.addAction(ActionType::mapReduceShardedFinish);
         internalActions.addAction(ActionType::replSetElect);
