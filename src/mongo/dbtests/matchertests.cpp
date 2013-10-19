@@ -3,7 +3,6 @@
 
 /**
  *    Copyright (C) 2008 10gen Inc.
- *    Copyright (C) 2013 Tokutek Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -18,15 +17,14 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pch.h"
-
-#include "mongo/db/matcher.h"
+#include "mongo/pch.h"
 
 #include "mongo/db/cursor.h"
 #include "mongo/db/json.h"
+#include "mongo/db/matcher.h"
+#include "mongo/db/matcher/matcher.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/query_optimizer.h"
-#include "mongo/db/matcher/matcher.h"
 #include "mongo/dbtests/dbtests.h"
 #include "mongo/util/timer.h"
 
@@ -58,36 +56,40 @@ namespace MatcherTests {
         }
     };
 
+    template <typename M>
     class DoubleEqual {
     public:
         void run() {
             BSONObj query = fromjson( "{\"a\":5}" );
-            Matcher m( query );
+            M m( query );
             ASSERT( m.matches( fromjson( "{\"a\":5}" ) ) );
         }
     };
 
+    template <typename M>
     class MixedNumericEqual {
     public:
         void run() {
             BSONObjBuilder query;
             query.append( "a", 5 );
-            Matcher m( query.done() );
+            M m( query.done() );
             ASSERT( m.matches( fromjson( "{\"a\":5}" ) ) );
         }
     };
 
+    template <typename M>
     class MixedNumericGt {
     public:
         void run() {
             BSONObj query = fromjson( "{\"a\":{\"$gt\":4}}" );
-            Matcher m( query );
+            M m( query );
             BSONObjBuilder b;
             b.append( "a", 5 );
             ASSERT( m.matches( b.done() ) );
         }
     };
 
+    template <typename M>
     class MixedNumericIN {
     public:
         void run() {
@@ -95,7 +97,7 @@ namespace MatcherTests {
             ASSERT_EQUALS( 4 , query["a"].embeddedObject()["$in"].embeddedObject()["0"].number() );
             ASSERT_EQUALS( NumberInt , query["a"].embeddedObject()["$in"].embeddedObject()["0"].type() );
 
-            Matcher m( query );
+            M m( query );
 
             {
                 BSONObjBuilder b;
@@ -119,19 +121,21 @@ namespace MatcherTests {
         }
     };
 
+    template <typename M>
     class MixedNumericEmbedded {
     public:
         void run() {
-            Matcher m( BSON( "a" << BSON( "x" << 1 ) ) );
+            M m( BSON( "a" << BSON( "x" << 1 ) ) );
             ASSERT( m.matches( BSON( "a" << BSON( "x" << 1 ) ) ) );
             ASSERT( m.matches( BSON( "a" << BSON( "x" << 1.0 ) ) ) );
         }
     };
 
+    template <typename M>
     class Size {
     public:
         void run() {
-            Matcher m( fromjson( "{a:{$size:4}}" ) );
+            M m( fromjson( "{a:{$size:4}}" ) );
             ASSERT( m.matches( fromjson( "{a:[1,2,3,4]}" ) ) );
             ASSERT( !m.matches( fromjson( "{a:[1,2,3]}" ) ) );
             ASSERT( !m.matches( fromjson( "{a:[1,2,3,'a','b']}" ) ) );
@@ -181,10 +185,11 @@ namespace MatcherTests {
     };
 
     /** Test that MatchDetails::elemMatchKey() is set correctly after a match. */
+    template <typename M>
     class ElemMatchKey {
     public:
         void run() {
-            Matcher matcher( BSON( "a.b" << 1 ) );
+            M matcher( BSON( "a.b" << 1 ) );
             MatchDetails details;
             details.requestElemMatchKey();
             ASSERT( !details.hasElemMatchKey() );
@@ -289,30 +294,40 @@ namespace MatcherTests {
                 transaction.commit();
             }
         };
-        
+
     } // namespace Covered
-    
+
+
+    template< typename M >
     class TimingBase {
     public:
-        long time( const BSONObj& patt , const BSONObj& obj ) {
-            Matcher m( patt );
+        long dotime( const BSONObj& patt , const BSONObj& obj ) {
+            M m( patt );
             Timer t;
-            for ( int i=0; i<10000; i++ ) {
-                ASSERT( m.matches( obj ) );
+            for ( int i=0; i<900000; i++ ) {
+                if ( !m.matches( obj ) ) {
+                    ASSERT( 0 );
+                }
             }
             return t.millis();
         }
     };
 
-    class AllTiming : public TimingBase {
+    template< typename M >
+    class AllTiming : public TimingBase<M> {
     public:
         void run() {
-            long normal = time( BSON( "x" << 5 ) , BSON( "x" << 5 ) );
-            long all = time( BSON( "x" << BSON( "$all" << BSON_ARRAY( 5 ) ) ) , BSON( "x" << 5 ) );
+            long normal = TimingBase<M>::dotime( BSON( "x" << 5 ),
+                                                 BSON( "x" << 5 ) );
 
-            cerr << "normal: " << normal << " all: " << all << endl;
+            long all = TimingBase<M>::dotime( BSON( "x" << BSON( "$all" << BSON_ARRAY( 5 ) ) ),
+                                              BSON( "x" << 5 ) );
+
+            cout << "AllTiming " << demangleName(typeid(M))
+                 << " normal: " << normal << " all: " << all << endl;
         }
     };
+
 
     template <typename M>
       class AtomicMatchTest {
@@ -439,7 +454,6 @@ namespace MatcherTests {
         }
 
 #define ADD_BOTH(TEST) \
-        add< TEST<MatcherOld> >(); \
         add< TEST<Matcher2> >();
 
         void setupTests() {

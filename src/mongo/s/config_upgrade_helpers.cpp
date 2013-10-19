@@ -127,16 +127,10 @@ namespace mongo {
         NamespaceString nssA(nsA);
 
         try {
-<<<<<<< HEAD
             connPtr.reset(ScopedDbConnection::getInternalScopedDbConnection(configLoc, 30));
             ScopedDbConnection& conn = *connPtr;
 
-            resultOk = conn->runCommand(nssA.db, BSON("dbHash" << true), result);
-=======
-            ScopedDbConnection conn(configLoc, 30);
-            resultOk = conn->runCommand(nssA.db().toString(), BSON("dbHash" << true), result);
-            conn.done();
->>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
+            resultOk = conn->runCommand(nssA.db(), BSON("dbHash" << true), result);
         }
         catch (const DBException& e) {
             return e.toStatus();
@@ -165,16 +159,10 @@ namespace mongo {
         NamespaceString nssB(nsB);
 
         try {
-<<<<<<< HEAD
             connPtr.reset(ScopedDbConnection::getInternalScopedDbConnection(configLoc, 30));
             ScopedDbConnection& conn = *connPtr;
 
-            resultOk = conn->runCommand(nssB.db, BSON("dbHash" << true), result);
-=======
-            ScopedDbConnection conn(configLoc, 30);
-            resultOk = conn->runCommand(nssB.db().toString(), BSON("dbHash" << true), result);
-            conn.done();
->>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
+            resultOk = conn->runCommand(nssB.db(), BSON("dbHash" << true), result);
         }
         catch (const DBException& e) {
             return e.toStatus();
@@ -242,7 +230,7 @@ namespace mongo {
             verify(fromNSS.isValid());
 
             // TODO: EnsureIndex at some point, if it becomes easier?
-            string indexesNS = fromNSS.db().toString() + ".system.indexes";
+            string indexesNS = fromNSS.db() + ".system.indexes";
             scoped_ptr<DBClientCursor> cursor(_safeCursor(conn->query(indexesNS,
                                                                       BSON("ns" << fromNS))));
 
@@ -254,7 +242,7 @@ namespace mongo {
                 newIndexDesc.append("ns", toNS);
                 newIndexDesc.appendElementsUnique(next);
 
-                conn->insert(toNSS.db().toString() + ".system.indexes", newIndexDesc.done());
+                conn->insert(toNSS.db() + ".system.indexes", newIndexDesc.done());
                 _checkGLE(conn);
             }
         }
@@ -327,8 +315,8 @@ namespace mongo {
 
         // Verify indices haven't changed
         Status indexStatus = checkIdsTheSame(configLoc,
-                                             fromNSS.db().toString() + ".system.indexes",
-                                             toNSS.db().toString() + ".system.indexes");
+                                             fromNSS.db() + ".system.indexes",
+                                             toNSS.db() + ".system.indexes");
 
         if (!indexStatus.isOK()) {
             return indexStatus;
