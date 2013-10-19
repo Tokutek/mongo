@@ -20,11 +20,8 @@
 
 #include <string>
 
-<<<<<<< HEAD
 #include "mongo/bson/util/builder.h"
-=======
 #include "mongo/base/string_data.h"
->>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
 #include "mongo/util/assert_util.h"
 
 namespace mongo {

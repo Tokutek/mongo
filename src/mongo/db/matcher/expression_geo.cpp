@@ -80,8 +80,6 @@ namespace mongo {
         return next;
     }
 
-<<<<<<< HEAD
-=======
     //
     // Parse-only geo expressions: geoNear (formerly known as near).
     //
@@ -128,5 +126,4 @@ namespace mongo {
         return next;
     }
 
->>>>>>> 399c4e2... SERVER-10026 SERVER-10471 begin more sustainable planning approach
 }

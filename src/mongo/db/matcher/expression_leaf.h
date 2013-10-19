@@ -260,32 +260,6 @@ namespace mongo {
         virtual bool equivalent( const MatchExpression* other ) const;
     };
 
-<<<<<<< HEAD
-    class TypeMatchExpression : public MatchExpression {
-    public:
-        TypeMatchExpression() : MatchExpression( TYPE_OPERATOR ){}
-
-        Status init( const StringData& path, int type );
-
-        virtual bool matchesSingleElement( const BSONElement& e ) const;
-
-        virtual bool matches( const MatchableDocument* doc, MatchDetails* details = 0 ) const;
-
-        virtual void debugString( StringBuilder& debug, int level ) const;
-
-        virtual bool equivalent( const MatchExpression* other ) const;
-    private:
-        bool _matches( const StringData& path,
-                       const MatchableDocument* doc,
-                       MatchDetails* details = 0 ) const;
-
-        StringData _path;
-        ElementPath _elementPath;
-        int _type;
-    };
-
-=======
->>>>>>> 399c4e2... SERVER-10026 SERVER-10471 begin more sustainable planning approach
     /**
      * INTERNAL
      * terrible name
@@ -347,10 +321,6 @@ namespace mongo {
         ArrayFilterEntries _arrayEntries;
     };
 
-<<<<<<< HEAD
-
-}
-=======
     //
     // The odd duck out, TYPE_OPERATOR.
     //
@@ -402,4 +372,3 @@ namespace mongo {
     };
 
 }  // namespace mongo
->>>>>>> 399c4e2... SERVER-10026 SERVER-10471 begin more sustainable planning approach

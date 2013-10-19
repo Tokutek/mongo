@@ -1,7 +1,5 @@
 // server_parameters_test.cpp
 
-<<<<<<< HEAD
-=======
 /**
 *    Copyright (C) 2012 10gen Inc.
 *
@@ -30,7 +28,6 @@
 *    it in the license file.
 */
 
->>>>>>> 66379f8... SERVER-8886 Add OpenSSL exception to files in src/mongo/db
 #include "mongo/unittest/unittest.h"
 
 #include "mongo/db/server_parameters.h"
