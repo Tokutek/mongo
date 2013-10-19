@@ -81,12 +81,20 @@ namespace mongo {
         // If we could sync from this member.  This doesn't tell us anything about the quality of
         // this member, just if they are a possible sync target.
         bool syncable() const;
+        void recvHeartbeat() {
+            _lastHeartbeatRecv = time(0);
+        }
+        time_t getLastRecvHeartbeat() {
+            return _lastHeartbeatRecv;
+        }
 
     private:
         friend class ReplSetImpl;
         ReplSetConfig::MemberCfg _config;
         const HostAndPort _h;
         HeartbeatInfo _hbinfo;
+        // This is the last time we got a heartbeat request from a given member.
+        time_t _lastHeartbeatRecv;
     };
 
     class Manager : public task::Server {
@@ -679,7 +687,7 @@ namespace mongo {
     /** inlines ----------------- */
 
     inline Member::Member(HostAndPort h, unsigned ord, const ReplSetConfig::MemberCfg *c, bool self) :
-        _config(*c), _h(h), _hbinfo(ord) {
+        _config(*c), _h(h), _hbinfo(ord), _lastHeartbeatRecv(0){
         verify(c);
         if( self )
             _hbinfo.health = 1.0;

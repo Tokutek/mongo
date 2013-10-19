@@ -456,7 +456,7 @@ namespace mongo {
                 bb.append("minUnappliedGTID", m->hbinfo().minUnappliedGTID.toString());
             }
             bb.appendTimeT("lastHeartbeat", m->hbinfo().lastHeartbeat);
-            bb.appendTimeT("lastHeartbeatRecv", m->hbinfo().lastHeartbeatRecv);
+            bb.appendTimeT("lastHeartbeatRecv", m->getLastRecvHeartbeat());
             bb.append("pingMs", m->hbinfo().ping);
             string s = m->lhb();
             if( !s.empty() )
