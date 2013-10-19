@@ -53,8 +53,6 @@ namespace mongo {
 #include "mongo/db/matcher/matcher.h"
 
 namespace mongo {
-
-    //typedef MatcherOld Matcher;
     typedef Matcher2 Matcher;
 }
 

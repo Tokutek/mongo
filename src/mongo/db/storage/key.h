@@ -78,6 +78,8 @@ namespace mongo {
             /** @return size of data() */
             int dataSize() const;
 
+            /** only used by geo, which always has bson keys */
+            BSONElement _firstElement() const { return bson().firstElement(); }
             bool isCompactFormat() const { return *_keyData != IsBSON; }
 
             bool isValid() const { return _keyData > (const unsigned char*)1; }
