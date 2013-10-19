@@ -70,7 +70,7 @@ namespace mongo {
         }
 
         if ( mongoutils::str::equals( "$geoIntersects", e.fieldName() ) ) {
-            return expressionParserGeoCallback( name, context );
+            verify(false); // TODO: Geo cleanup
         }
 
         int x = e.getGtLtOp(-1);

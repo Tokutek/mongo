@@ -32,7 +32,6 @@
 
 #pragma once
 
-#include "mongo/db/geo/geoquery.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/matcher/match_details.h"
