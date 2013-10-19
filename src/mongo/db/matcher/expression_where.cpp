@@ -94,7 +94,7 @@ namespace mongo {
         //const string userToken = ClientBasic::getCurrent()->getAuthorizationSession()
         //                                                  ->getAuthenticatedUserNamesToken();
         const string userToken = "";
-        verify(false); // what do we do about userToken?
+        //verify(false); // what do we do about userToken?
         _scope = globalScriptEngine->getPooledScope( nswrapper.db(),
                                                      "where" + userToken );
         _func = _scope->createFunction( _code.c_str() );

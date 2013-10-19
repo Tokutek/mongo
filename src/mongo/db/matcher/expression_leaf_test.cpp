@@ -167,56 +167,6 @@ namespace mongo {
         ASSERT( !eq1.equivalent( &eq3 ) );
     }
 
-    /**
-       TEST( EqOp, MatchesIndexKeyScalar ) {
-       BSONObj operand = BSON( "a" << 6 );
-       EqualityMatchExpression eq;
-       ASSERT( eq.init( "a", operand[ "a" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       eq.matchesIndexKey( BSON( "" << 6 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       eq.matchesIndexKey( BSON( "" << 4 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       eq.matchesIndexKey( BSON( "" << BSON_ARRAY( 6 ) ), indexSpec ) );
-       }
-
-       TEST( EqOp, MatchesIndexKeyMissing ) {
-       BSONObj operand = BSON( "a" << 6 );
-       EqualityMatchExpression eq;
-       ASSERT( eq.init( "a", operand[ "a" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "b" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       eq.matchesIndexKey( BSON( "" << 6 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       eq.matchesIndexKey( BSON( "" << 4 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       eq.matchesIndexKey( BSON( "" << BSON_ARRAY( 8 << 6 ) ), indexSpec ) );
-       }
-
-       TEST( EqOp, MatchesIndexKeyArray ) {
-       BSONObj operand = BSON( "a" << BSON_ARRAY( 4 << 5 ) );
-       ComparisonMatchExpression eq
-       ASSERT( eq.init( "a", operand[ "a" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       eq.matchesIndexKey( BSON( "" << 4 ), indexSpec ) );
-       }
-
-       TEST( EqOp, MatchesIndexKeyArrayValue ) {
-       BSONObj operand = BSON( "a" << 6 );
-       ComparisonMatchExpression eq
-       ASSERT( eq.init( "a", operand[ "a" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "loc" << "mockarrayvalue" << "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       eq.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 6 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       eq.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 4 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       eq.matchesIndexKey( BSON( "" << "dummygeohash" <<
-       "" << BSON_ARRAY( 8 << 6 ) ), indexSpec ) );
-       }
-    */
     TEST( LtOp, MatchesElement ) {
         BSONObj operand = BSON( "$lt" << 5 );
         BSONObj match = BSON( "a" << 4.5 );
@@ -311,56 +261,6 @@ namespace mongo {
         ASSERT_EQUALS( "1", details.elemMatchKey() );
     }
 
-    /**
-       TEST( LtOp, MatchesIndexKeyScalar ) {
-       BSONObj operand = BSON( "$lt" << 6 );
-       LtOp lt;
-       ASSERT( lt.init( "a", operand[ "$lt" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       lt.matchesIndexKey( BSON( "" << 3 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       lt.matchesIndexKey( BSON( "" << 6 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       lt.matchesIndexKey( BSON( "" << BSON_ARRAY( 5 ) ), indexSpec ) );
-       }
-
-       TEST( LtOp, MatchesIndexKeyMissing ) {
-       BSONObj operand = BSON( "$lt" << 6 );
-       LtOp lt;
-       ASSERT( lt.init( "a", operand[ "$lt" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "b" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       lt.matchesIndexKey( BSON( "" << 6 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       lt.matchesIndexKey( BSON( "" << 4 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       lt.matchesIndexKey( BSON( "" << BSON_ARRAY( 8 << 6 ) ), indexSpec ) );
-       }
-
-       TEST( LtOp, MatchesIndexKeyArray ) {
-       BSONObj operand = BSON( "$lt" << BSON_ARRAY( 4 << 5 ) );
-       LtOp lt;
-       ASSERT( lt.init( "a", operand[ "$lt" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       lt.matchesIndexKey( BSON( "" << 3 ), indexSpec ) );
-       }
-    
-       TEST( LtOp, MatchesIndexKeyArrayValue ) {
-       BSONObj operand = BSON( "$lt" << 6 );
-       LtOp lt;
-       ASSERT( lt.init( "a", operand[ "$lt" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "loc" << "mockarrayvalue" << "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       lt.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 3 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       lt.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 6 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       lt.matchesIndexKey( BSON( "" << "dummygeohash" <<
-       "" << BSON_ARRAY( 8 << 6 << 4 ) ), indexSpec ) );
-       }
-    */
     TEST( LteOp, MatchesElement ) {
         BSONObj operand = BSON( "$lte" << 5 );
         BSONObj match = BSON( "a" << 4.5 );
@@ -448,71 +348,6 @@ namespace mongo {
         ASSERT_EQUALS( "1", details.elemMatchKey() );
     }
 
-    /**
-       TEST( LteOp, MatchesIndexKeyScalar ) {
-       BSONObj operand = BSON( "$lte" << 6 );
-       LteOp lte;
-       ASSERT( lte.init( "a", operand[ "$lte" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       lte.matchesIndexKey( BSON( "" << 6 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       lte.matchesIndexKey( BSON( "" << 7 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       lte.matchesIndexKey( BSON( "" << BSON_ARRAY( 5 ) ), indexSpec ) );
-       }
-
-       TEST( LteOp, MatchesIndexKeyMissing ) {
-       BSONObj operand = BSON( "$lte" << 6 );
-       LteOp lte;
-       ASSERT( lte.init( "a", operand[ "$lte" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "b" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       lte.matchesIndexKey( BSON( "" << 7 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       lte.matchesIndexKey( BSON( "" << 4 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       lte.matchesIndexKey( BSON( "" << BSON_ARRAY( 8 << 6 ) ), indexSpec ) );
-       }
-
-       TEST( LteOp, MatchesIndexKeyArray ) {
-       BSONObj operand = BSON( "$lte" << BSON_ARRAY( 4 << 5 ) );
-       LteOp lte;
-       ASSERT( lte.init( "a", operand[ "$lte" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       lte.matchesIndexKey( BSON( "" << 3 ), indexSpec ) );
-       }
-
-       TEST( LteOp, MatchesIndexKeyArrayValue ) {
-       BSONObj operand = BSON( "$lte" << 6 );
-       LteOp lte;
-       ASSERT( lte.init( "a", operand[ "$lte" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "loc" << "mockarrayvalue" << "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       lte.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 3 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       lte.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 7 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       lte.matchesIndexKey( BSON( "" << "dummygeohash" <<
-       "" << BSON_ARRAY( 8 << 6 << 4 ) ), indexSpec ) );
-       }
-
-       TEST( GtOp, MatchesElement ) {
-       BSONObj operand = BSON( "$gt" << 5 );
-       BSONObj match = BSON( "a" << 5.5 );
-       BSONObj notMatch = BSON( "a" << 4 );
-       BSONObj notMatchEqual = BSON( "a" << 5 );
-       BSONObj notMatchWrongType = BSON( "a" << "foo" );
-       GtOp gt;
-       ASSERT( gt.init( "", operand[ "$gt" ] ).isOK() );
-       ASSERT( gt.matchesSingleElement( match.firstElement() ) );
-       ASSERT( !gt.matchesSingleElement( notMatch.firstElement() ) );
-       ASSERT( !gt.matchesSingleElement( notMatchEqual.firstElement() ) );
-       ASSERT( !gt.matchesSingleElement( notMatchWrongType.firstElement() ) );
-       }
-    */
-
     TEST( GtOp, InvalidEooOperand ) {
         BSONObj operand;
         GTMatchExpression gt;
@@ -584,57 +419,6 @@ namespace mongo {
         ASSERT( details.hasElemMatchKey() );
         ASSERT_EQUALS( "1", details.elemMatchKey() );
     }
-
-    /**
-       TEST( GtOp, MatchesIndexKeyScalar ) {
-       BSONObj operand = BSON( "$gt" << 6 );
-       GtOp gt;
-       ASSERT( gt.init( "a", operand[ "$gt" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       gt.matchesIndexKey( BSON( "" << 7 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       gt.matchesIndexKey( BSON( "" << 6 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       gt.matchesIndexKey( BSON( "" << BSON_ARRAY( 9 ) ), indexSpec ) );
-       }
-
-       TEST( GtOp, MatchesIndexKeyMissing ) {
-       BSONObj operand = BSON( "$gt" << 6 );
-       GtOp gt;
-       ASSERT( gt.init( "a", operand[ "$gt" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "b" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       gt.matchesIndexKey( BSON( "" << 7 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       gt.matchesIndexKey( BSON( "" << 4 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       gt.matchesIndexKey( BSON( "" << BSON_ARRAY( 8 << 6 ) ), indexSpec ) );
-       }
-
-       TEST( GtOp, MatchesIndexKeyArray ) {
-       BSONObj operand = BSON( "$gt" << BSON_ARRAY( 4 << 5 ) );
-       GtOp gt;
-       ASSERT( gt.init( "a", operand[ "$gt" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       gt.matchesIndexKey( BSON( "" << 8 ), indexSpec ) );
-       }
-    
-       TEST( GtOp, MatchesIndexKeyArrayValue ) {
-       BSONObj operand = BSON( "$gt" << 6 );
-       GtOp gt;
-       ASSERT( gt.init( "a", operand[ "$gt" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "loc" << "mockarrayvalue" << "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       gt.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 7 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       gt.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 3 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       gt.matchesIndexKey( BSON( "" << "dummygeohash" <<
-       "" << BSON_ARRAY( 8 << 6 << 4 ) ), indexSpec ) );
-       }
-    */
 
     TEST( ComparisonMatchExpression, MatchesElement ) {
         BSONObj operand = BSON( "$gte" << 5 );
@@ -721,57 +505,6 @@ namespace mongo {
         ASSERT( details.hasElemMatchKey() );
         ASSERT_EQUALS( "1", details.elemMatchKey() );
     }
-
-    /**
-       TEST( GteOp, MatchesIndexKeyScalar ) {
-       BSONObj operand = BSON( "$gte" << 6 );
-       GteOp gte;
-       ASSERT( gte.init( "a", operand[ "$gte" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       gte.matchesIndexKey( BSON( "" << 6 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       gte.matchesIndexKey( BSON( "" << 5 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       gte.matchesIndexKey( BSON( "" << BSON_ARRAY( 7 ) ), indexSpec ) );
-       }
-
-       TEST( GteOp, MatchesIndexKeyMissing ) {
-       BSONObj operand = BSON( "$gte" << 6 );
-       GteOp gte;
-       ASSERT( gte.init( "a", operand[ "$gte" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "b" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       gte.matchesIndexKey( BSON( "" << 6 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       gte.matchesIndexKey( BSON( "" << 4 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       gte.matchesIndexKey( BSON( "" << BSON_ARRAY( 8 << 6 ) ), indexSpec ) );
-       }
-
-       TEST( GteOp, MatchesIndexKeyArray ) {
-       BSONObj operand = BSON( "$gte" << BSON_ARRAY( 4 << 5 ) );
-       GteOp gte;
-       ASSERT( gte.init( "a", operand[ "$gte" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       gte.matchesIndexKey( BSON( "" << 6 ), indexSpec ) );
-       }
-
-       TEST( GteOp, MatchesIndexKeyArrayValue ) {
-       BSONObj operand = BSON( "$gte" << 6 );
-       GteOp gte;
-       ASSERT( gte.init( "a", operand[ "$gte" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "loc" << "mockarrayvalue" << "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       gte.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 6 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       gte.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 3 ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       gte.matchesIndexKey( BSON( "" << "dummygeohash" <<
-       "" << BSON_ARRAY( 8 << 6 << 4 ) ), indexSpec ) );
-       }
-    */
 
     TEST( RegexMatchExpression, MatchesElementExact ) {
         BSONObj match = BSON( "a" << "b" );
@@ -969,45 +702,6 @@ namespace mongo {
         ASSERT( !r1.equivalent( &r4 ) );
     }
 
-    /**
-       TEST( RegexMatchExpression, MatchesIndexKeyScalar ) {
-       RegexMatchExpression regex;
-       ASSERT( regex.init( "a", "xyz", "" ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       regex.matchesIndexKey( BSON( "" << "z xyz" ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       regex.matchesIndexKey( BSON( "" << "xy" ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       regex.matchesIndexKey( BSON( "" << BSON_ARRAY( "xyz" ) ), indexSpec ) );
-       }
-
-       TEST( RegexMatchExpression, MatchesIndexKeyMissing ) {
-       RegexMatchExpression regex;
-       ASSERT( regex.init( "a", "xyz", "" ).isOK() );
-       IndexSpec indexSpec( BSON( "b" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       regex.matchesIndexKey( BSON( "" << "z xyz" ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       regex.matchesIndexKey( BSON( "" << "xy" ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       regex.matchesIndexKey( BSON( "" << BSON_ARRAY( 8 << "xyz" ) ), indexSpec ) );
-       }
-
-       TEST( RegexMatchExpression, MatchesIndexKeyArrayValue ) {
-       RegexMatchExpression regex;
-       ASSERT( regex.init( "a", "xyz", "" ).isOK() );
-       IndexSpec indexSpec( BSON( "loc" << "mockarrayvalue" << "a" << 1 ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       regex.matchesIndexKey( BSON( "" << "dummygeohash" << "" << "xyz" ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-       regex.matchesIndexKey( BSON( "" << "dummygeohash" << "" << "z" ), indexSpec ) );
-       ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-       regex.matchesIndexKey( BSON( "" << "dummygeohash" <<
-       "" << BSON_ARRAY( "r" << 6 << "xyz" ) ), indexSpec ) );
-       }
-    */
-
     TEST( ModMatchExpression, MatchesElement ) {
         BSONObj match = BSON( "a" << 1 );
         BSONObj largerMatch = BSON( "a" << 4.0 );
@@ -1080,18 +774,6 @@ namespace mongo {
         ASSERT( !m1.equivalent( &m4 ) );
     }
 
-    /**
-       TEST( ModMatchExpression, MatchesIndexKey ) {
-       BSONObj operand = BSON( "$mod" << BSON_ARRAY( 2 << 1 ) );
-       ModMatchExpression mod;
-       ASSERT( mod.init( "a", operand[ "$mod" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       BSONObj indexKey = BSON( "" << 1 );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       mod.matchesIndexKey( indexKey, indexSpec ) );
-       }
-    */
-
     TEST( ExistsMatchExpression, MatchesElement ) {
         BSONObj existsInt = BSON( "a" << 5 );
         BSONObj existsNull = BSON( "a" << BSONNULL );
@@ -1149,20 +831,6 @@ namespace mongo {
         ASSERT( e1.equivalent( &e1 ) );
         ASSERT( !e1.equivalent( &e2 ) );
     }
-
-    /**
-       TEST( ExistsMatchExpression, MatchesIndexKey ) {
-       BSONObj operand = BSON( "$exists" << true );
-       ExistsMatchExpression exists;
-       ASSERT( exists.init( "a", operand[ "$exists" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       BSONObj indexKey = BSON( "" << 1 );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       exists.matchesIndexKey( indexKey, indexSpec ) );
-       }
-    */
-
-
 
     TEST( TypeMatchExpression, MatchesElementStringType ) {
         BSONObj match = BSON( "a" << "abc" );
@@ -1260,20 +928,6 @@ namespace mongo {
         ASSERT( !e1.equivalent( &e2 ) );
         ASSERT( !e1.equivalent( &e3 ) );
     }
-
-
-    /**
-       TEST( TypeMatchExpression, MatchesIndexKey ) {
-       BSONObj operand = BSON( "$type" << 2 );
-       TypeMatchExpression type;
-       ASSERT( type.init( "a", operand[ "$type" ] ).isOK() );
-       IndexSpec indexSpec( BSON( "a" << 1 ) );
-       BSONObj indexKey = BSON( "" << "q" );
-       ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-       type.matchesIndexKey( indexKey, indexSpec ) );
-       }
-    */
-
 
     TEST( InMatchExpression, MatchesElementSingle ) {
         BSONArray operand = BSON_ARRAY( 1 );
@@ -1400,80 +1054,5 @@ namespace mongo {
         ASSERT( details.hasElemMatchKey() );
         ASSERT_EQUALS( "1", details.elemMatchKey() );
     }
-
-    /**
-    TEST( InMatchExpression, MatchesIndexKeyScalar ) {
-        BSONObj operand = BSON( "$in" << BSON_ARRAY( 6 << 5 ) );
-        InMatchExpression in;
-        ASSERT( in.init( "a", operand[ "$in" ] ).isOK() );
-        IndexSpec indexSpec( BSON( "a" << 1 ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-                in.matchesIndexKey( BSON( "" << 6 ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-                in.matchesIndexKey( BSON( "" << 5 ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-                in.matchesIndexKey( BSON( "" << 4 ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-                in.matchesIndexKey( BSON( "" << BSON_ARRAY( 6 ) ), indexSpec ) );
-    }
-
-    TEST( InMatchExpression, MatchesIndexKeyMissing ) {
-        BSONObj operand = BSON( "$in" << BSON_ARRAY( 6 ) );
-        ComparisonMatchExpression eq
-            ASSERT( eq.init( "a", operand[ "$in" ] ).isOK() );
-        IndexSpec indexSpec( BSON( "b" << 1 ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-                eq.matchesIndexKey( BSON( "" << 6 ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-                eq.matchesIndexKey( BSON( "" << 4 ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-                eq.matchesIndexKey( BSON( "" << BSON_ARRAY( 8 << 6 ) ), indexSpec ) );
-    }
-
-    TEST( InMatchExpression, MatchesIndexKeyArray ) {
-        BSONObj operand = BSON( "$in" << BSON_ARRAY( 4 << BSON_ARRAY( 5 ) ) );
-        InMatchExpression in;
-        ASSERT( in.init( "a", operand[ "$in" ] ).isOK() );
-        IndexSpec indexSpec( BSON( "a" << 1 ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-                in.matchesIndexKey( BSON( "" << 4 ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
-                in.matchesIndexKey( BSON( "" << 5 ), indexSpec ) );
-    }
-    
-    TEST( InMatchExpression, MatchesIndexKeyArrayValue ) {
-        BSONObjBuilder inArray;
-        inArray.append( "0", 4 ).append( "1", 5 ).appendRegex( "2", "abc", "" );
-        BSONObj operand = BSONObjBuilder().appendArray( "$in", inArray.obj() ).obj();
-        InMatchExpression in;
-        ASSERT( in.init( "a", operand[ "$in" ] ).isOK() );
-        IndexSpec indexSpec( BSON( "loc" << "mockarrayvalue" << "a" << 1 ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-                in.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 4 ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-                in.matchesIndexKey( BSON( "" << "dummygeohash" << "" << 6 ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-                in.matchesIndexKey( BSON( "" << "dummygeohash" << "" << "abcd" ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-                in.matchesIndexKey( BSONObjBuilder()
-                                    .append( "", "dummygeohash" )
-                                    .appendRegex( "", "abc", "" ).obj(),
-                                    indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-                in.matchesIndexKey( BSON( "" << "dummygeohash" << "" << "ab" ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-                in.matchesIndexKey( BSON( "" << "dummygeohash" <<
-                                          "" << BSON_ARRAY( 8 << 5 ) ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-                in.matchesIndexKey( BSON( "" << "dummygeohash" <<
-                                          "" << BSON_ARRAY( 8 << 9 ) ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_True ==
-                in.matchesIndexKey( BSON( "" << "dummygeohash" <<
-                                          "" << BSON_ARRAY( 8 << "abc" ) ), indexSpec ) );
-        ASSERT( MatchMatchExpression::PartialMatchResult_False ==
-                in.matchesIndexKey( BSON( "" << "dummygeohash" <<
-                                          "" << BSON_ARRAY( 8 << "ac" ) ), indexSpec ) );
-    }
-    */
 
 }
