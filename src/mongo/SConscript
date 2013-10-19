@@ -153,11 +153,6 @@ env.StaticLibrary('expressions',
                            '$BUILD_DIR/third_party/pcrecpp'
                            ] )
 
-env.StaticLibrary('expressions_text',
-                  ['db/matcher/expression_text.cpp',
-                   'db/matcher/expression_parser_text.cpp'],
-                  LIBDEPS=['expressions','db/fts/base'] )
-
 env.StaticLibrary('expressions_where',
                   ['db/matcher/expression_where.cpp'],
                   LIBDEPS=['expressions'] )
