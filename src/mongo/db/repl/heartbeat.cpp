@@ -182,7 +182,7 @@ namespace mongo {
             }
 
             // note that we got a heartbeat from this node
-            from->get_hbinfo().recvHeartbeat();
+            from->recvHeartbeat();
 
             return true;
         }
@@ -408,6 +408,13 @@ namespace mongo {
             // if we've received a heartbeat from this member within the last two seconds, don't
             // change its state to down (if it's already down, leave it down since we don't have
             // any info about it other than it's heartbeating us)
+
+            // This code is essentially a no-op in vanilla MongoDB thanks to
+            // SERVER-11280. I (Zardosht) am reluctant to fix it because
+            // I don't know what impact it may have on elections and failover.
+            // For now, commenting out because we are moving lastHeartbeatRecv
+            // out of HeartbeatInfo and into Member
+            /*
             if (m.lastHeartbeatRecv+2 >= time(0)) {
                 log() << "replset info " << h.toString()
                       << " just heartbeated us, but our heartbeat failed: " << msg
@@ -416,6 +423,7 @@ namespace mongo {
                 // other than "not down" from having it heartbeat us
                 return;
             }
+            */
 
             mem.authIssue = false;
             mem.health = 0.0;
@@ -496,9 +504,6 @@ namespace mongo {
         time_t _timeout;
     };
 
-    void HeartbeatInfo::recvHeartbeat() {
-        lastHeartbeatRecv = time(0);
-    }
 
     int ReplSetHealthPollTask::s_try_offset = 0;
 
