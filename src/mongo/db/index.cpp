@@ -438,7 +438,7 @@ namespace mongo {
         DBT right = rightSKey.dbt();
         const int r = db()->hot_optimize(db(), &left, &right, hot_opt_callback, &iter);
         if (r != 0) {
-            uassert(16810, mongoutils::str::stream() << "reIndex query killed ", false);
+            uassert(17199, mongoutils::str::stream() << "reIndex query killed ", false);
         }
     }
 

@@ -33,6 +33,7 @@
 
 #include "mongo/db/jsobj.h"
 #include "mongo/db/matcher.h"
+#include "mongo/db/matcher_covered.h"
 #include "mongo/db/projection.h"
 #include "mongo/db/client.h"
 #include "mongo/db/index.h"
@@ -41,7 +42,6 @@
 namespace mongo {
 
     class NamespaceDetails;
-    class CoveredIndexMatcher;
 
     /**
      * Query cursors, base class.  This is for our internal cursors.  "ClientCursor" is a separate

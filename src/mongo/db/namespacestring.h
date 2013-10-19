@@ -21,7 +21,6 @@
 #include <string>
 
 #include "mongo/bson/util/builder.h"
-#include "mongo/base/string_data.h"
 #include "mongo/util/assert_util.h"
 
 namespace mongo {
@@ -60,19 +59,23 @@ namespace mongo {
        cout << ns.coll; // "orders"
     */
     class NamespaceString {
+        string _db;
+        string _coll; // note collection names can have periods in them for organizing purposes (e.g. "system.indexes")
     public:
-        NamespaceString( const StringData& ns );
 
-        StringData db() const;
-        StringData coll() const;
+        const string &db() const { return _db; }
+        const string &coll() const { return _coll; } // note collection names can have periods in them for organizing purposes (e.g. "system.indexes")
 
-        const string& ns() const { return _ns; }
+        NamespaceString( const char * ns ) { init(ns); }
+        NamespaceString( const string& ns ) { init(ns.c_str()); }
 
-        bool isSystem() const { return strncmp(coll.c_str(), "system.", 7) == 0; }
+        string ns() const { return _db + '.' + _coll; }
+
+        bool isSystem() const { return strncmp(_coll.c_str(), "system.", 7) == 0; }
         static bool isSystem(const StringData &ns) {
             return nsToCollectionSubstring(ns).startsWith("system.");
         }
-        bool isCommand() const { return coll == "$cmd"; }
+        bool isCommand() const { return _coll == "$cmd"; }
         static bool isCommand(const StringData &ns) {
             return nsToCollectionSubstring(ns) == "$cmd";
         }
@@ -81,7 +84,7 @@ namespace mongo {
          * @return true if the namespace is valid. Special namespaces for internal use are considered as valid.
          */
         bool isValid() const {
-            return validDBName( db ) && !coll.empty();
+            return validDBName( _db ) && !_coll.empty();
         }
         static bool isValid(const StringData &ns) {
             return validDBName(nsToDatabaseSubstring(ns)) && !nsToCollectionSubstring(ns).empty();
@@ -89,11 +92,17 @@ namespace mongo {
 
         operator string() const { return ns(); }
 
-        bool operator==( const string& nsIn ) const { return nsIn == _ns; }
-        bool operator==( const NamespaceString& nsIn ) const { return nsIn._ns == _ns; }
+        bool operator==( const string& nsIn ) const { return nsIn == ns(); }
+        bool operator==( const char* nsIn ) const { return (string)nsIn == ns(); }
+        bool operator==( const NamespaceString& nsIn ) const { return nsIn._db == _db && nsIn._coll == _coll; }
 
-        bool operator!=( const string& nsIn ) const { return nsIn != _ns; }
-        bool operator!=( const NamespaceString& nsIn ) const { return nsIn._ns != _ns; }
+        bool operator!=( const string& nsIn ) const { return nsIn != ns(); }
+        bool operator!=( const char* nsIn ) const { return (string)nsIn != ns(); }
+        bool operator!=( const NamespaceString& nsIn ) const { return nsIn._db != _db || nsIn._coll != _coll; }
+
+        size_t size() const { return ns().size(); }
+
+        string toString() const { return ns(); }
 
         /**
          * @return true if ns is 'normal'.  $ used for collections holding index data, which do not contain BSON objects in their records.
@@ -157,11 +166,13 @@ namespace mongo {
         }
 
     private:
-
-        string _ns;
-        size_t _dotIndex;
+        void init(const char *ns) {
+            const char *p = strchr(ns, '.');
+            if( p == 0 ) return;
+            _db = string(ns, p - ns);
+            _coll = p + 1;
+        }
     };
-
 
     // "database.a.b.c" -> "database"
     inline void nsToDatabase(const StringData& ns, char *database) {
@@ -200,6 +211,3 @@ namespace mongo {
     }
 
 }
-
-
-#include "mongo/db/namespacestring-inl.h"

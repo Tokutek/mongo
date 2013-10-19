@@ -51,7 +51,7 @@ namespace mongo {
             TOKULOG(1) << "Closing NamespaceIndex " << _database << endl;
             const int r = _nsdb->close();
             if (r != 0) {
-                msgasserted(16920, mongoutils::str::stream() << "failed to close nsdb for NamespaceIndex " << _database);
+                msgasserted(17198, mongoutils::str::stream() << "failed to close nsdb for NamespaceIndex " << _database);
             }
         }
     }

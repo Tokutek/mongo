@@ -141,8 +141,8 @@ namespace mongo {
             if (!cursorPartOfMultiStatementTxn) {
                 // For simplicity, prevent multi-statement transactions from
                 // reading cursors it didn't create.
-                uassert(16813, "Cannot getMore() on a cursor not created by this multi-statement transaction",
-                           !cc().hasTxn());
+                uassert(17200, "Cannot getMore() on a cursor not created by this multi-statement transaction",
+                               !cc().hasTxn());
                 wts.reset(new Client::WithTxnStack(client_cursor->transactions)); 
             }
 
@@ -1010,7 +1010,7 @@ namespace mongo {
                 const bool inMultiStatementTxn = cc().hasTxn();
                 if (tailable) {
                     // Because it's easier to disable this. It shouldn't be happening in a normal system.
-                    uassert(16812, "May not perform a tailable query in a multi-statement transaction.",
+                    uassert(17201, "May not perform a tailable query in a multi-statement transaction.",
                                    !inMultiStatementTxn);
                 }
 

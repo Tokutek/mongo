@@ -53,7 +53,6 @@ namespace mongo {
     class ExpressionFieldPath;
     class ExpressionObject;
     class DocumentSourceLimit;
-    class Matcher;
 
     class DocumentSource :
         public IntrusiveCounterUnsigned,

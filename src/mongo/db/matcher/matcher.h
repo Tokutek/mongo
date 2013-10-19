@@ -37,7 +37,6 @@
 #include "mongo/bson/bsonobj.h"
 #include "mongo/db/matcher/expression.h"
 #include "mongo/db/matcher/match_details.h"
-#include "mongo/db/exec/working_set.h"
 
 namespace mongo {
 
@@ -64,7 +63,6 @@ namespace mongo {
 
 
         bool matches(const BSONObj& doc, MatchDetails* details = NULL ) const;
-        bool matches(WorkingSetMember* wsm, MatchDetails* details = NULL ) const;
 
         bool atomic() const;
 
