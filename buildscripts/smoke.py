@@ -594,17 +594,17 @@ def runTest(test, testnum):
                 vlog.write(line)
             vlog.flush()
 
-        if quiet:
-            if r == 0:
-                qlog.write('ok %d %s\n' % (testnum, os.path.basename(path)))
-            else:
-                qlog.write('not ok %d %s # exit %d\n' % (testnum, os.path.basename(path), r))
-            qlog.flush()
-            if r != 0:
-                tempfile.seek(0)
-                for line in tempfile:
-                    tlog.write(line)
-                tlog.flush()
+            if quiet:
+                if r == 0:
+                    qlog.write('ok %d %s\n' % (testnum, os.path.basename(path)))
+                else:
+                    qlog.write('not ok %d %s # exit %d\n' % (testnum, os.path.basename(path), r))
+                qlog.flush()
+                if r != 0:
+                    tempfile.seek(0)
+                    for line in tempfile:
+                        tlog.write(line)
+                    tlog.flush()
         if r != 0:
             raise TestExitFailure(path, r)
     finally:
