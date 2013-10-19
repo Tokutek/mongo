@@ -31,11 +31,11 @@
 *    it in the license file.
 */
 
-#include "pch.h"
-
-#include "mongo/db/matcher.h"
+#include "mongo/pch.h"
 
 #include "mongo/db/cursor.h"
+#include "mongo/db/matcher.h"
+#include "mongo/db/matcher_covered.h"
 #include "mongo/db/queryutil.h"
 
 namespace mongo {
@@ -66,11 +66,19 @@ namespace mongo {
     }
 
     bool CoveredIndexMatcher::matchesCurrent( Cursor * cursor , MatchDetails * details ) const {
-        const bool keyUsable = !cursor->indexKeyPattern().isEmpty() && !cursor->isMultiKey();
+        bool keyUsable = true;
+        if ( cursor->indexKeyPattern().isEmpty() ) { // unindexed cursor
+            keyUsable = false;
+        }
+        else if ( cursor->isMultiKey() ) {
+            keyUsable =
+                _keyMatcher.singleSimpleCriterion() &&
+                ( ! _docMatcher || _docMatcher->singleSimpleCriterion() );
+        }
         const BSONObj key = cursor->currKey();
-        dassert( key.isValid() );
+        LOG(5) << "CoveredIndexMatcher::matches() " << key.toString() << ' ' << recLoc.toString() << ' ' << keyUsable << endl;
 
-        LOG(5) << "CoveredIndexMatcher::matches() " << key.toString() << ", keyUsable " << keyUsable << endl;
+        dassert( key.isValid() );
 
         if ( details )
             details->resetOutput();
@@ -85,16 +93,18 @@ namespace mongo {
             }
         }
 
+        BSONObj obj = cursor->current();
+        bool res =
+            _docMatcher->matches( obj, details ) &&
+            !isOrClauseDup( obj );
+
         if ( details )
             details->setLoadedRecord( true );
 
-        // Couldn't match off key, need to read full document.
-        const BSONObj obj = cursor->current();
-        bool res = _docMatcher->matches( obj, details ) && !isOrClauseDup( obj );
         LOG(5) << "CoveredIndexMatcher _docMatcher->matches() returns " << res << endl;
         return res;
     }
-
+    
     bool CoveredIndexMatcher::isOrClauseDup( const BSONObj &obj ) const {
         for( vector<shared_ptr<FieldRangeVector> >::const_iterator i = _orDedupConstraints.begin();
             i != _orDedupConstraints.end(); ++i ) {
