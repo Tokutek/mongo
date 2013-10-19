@@ -242,28 +242,6 @@ namespace mongo {
                         error() << "error: exception cloning object in " << from_collection << ' ' << e.what() << " obj:" << js.toString() << '\n';
                         throw;
                     }
-<<<<<<< HEAD
-=======
-                    out() << ss.str() << endl;
-                    continue;
-                }
-
-                ++n;
-
-                BSONObj js = tmp;
-                if ( isindex ) {
-                    verify(nsToCollectionSubstring(from_collection) == "system.indexes");
-                    js = fixindex(tmp);
-                    storedForLater->push_back( js.getOwned() );
-                    continue;
-                }
-
-                try {
-                    DiskLoc loc = theDataFileMgr.insertWithObjMod(to_collection, js);
-                    loc.assertOk();
-                    if ( logForRepl )
-                        logOp("i", to_collection, js);
->>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
 
                     RARELY if ( time( 0 ) - saveLast > 60 ) {
                         log() << n << " objects cloned so far from collection " << from_collection << endl;
