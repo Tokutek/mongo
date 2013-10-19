@@ -76,7 +76,7 @@ namespace mongo {
                 ( ! _docMatcher || _docMatcher->singleSimpleCriterion() );
         }
         const BSONObj key = cursor->currKey();
-        LOG(5) << "CoveredIndexMatcher::matches() " << key.toString() << ' ' << recLoc.toString() << ' ' << keyUsable << endl;
+        LOG(5) << "CoveredIndexMatcher::matches() " << key.toString() << ", usable = " << keyUsable << endl;
 
         dassert( key.isValid() );
 

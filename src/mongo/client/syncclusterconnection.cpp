@@ -333,11 +333,7 @@ namespace mongo {
     void SyncClusterConnection::insert( const string &ns, BSONObj obj , int flags) {
 
         uassert(13119,
-<<<<<<< HEAD
-                (string)"SyncClusterConnection::insert obj has to have an _id: " + obj.jsonString(),
-=======
                 str::stream() << "SyncClusterConnection::insert obj has to have an _id: " << obj,
->>>>>>> 692f185... clean NamespaceString so that it can be the thing passed around
                 nsToCollectionSubstring(ns) == "system.indexes" || obj["_id"].type());
 
         string errmsg;

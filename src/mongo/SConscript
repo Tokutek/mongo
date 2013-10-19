@@ -169,10 +169,6 @@ env.CppUnitTest('expression_test',
                  'db/matcher/expression_array_test.cpp'],
                 LIBDEPS=['expressions'] )
 
-env.CppUnitTest('expression_text_test',
-                ['db/matcher/expression_parser_text_test.cpp'],
-                LIBDEPS=['expressions_text'] )
-
 env.CppUnitTest('expression_parser_test',
                 ['db/matcher/expression_parser_test.cpp',
                  'db/matcher/expression_parser_array_test.cpp',
@@ -363,7 +359,6 @@ env.StaticLibrary("coredb", [
                            'server_parameters',
                            'expressions',
                            'expressions_where',
-                           'expressions_text',
                            '$BUILD_DIR/mongo/foundation'])
 
 coreServerFiles = [ "db/client_basic.cpp",
