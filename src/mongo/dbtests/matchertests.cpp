@@ -143,47 +143,6 @@ namespace MatcherTests {
         }
     };
 
-    template <typename M>
-    class WithinBox {
-    public:
-        void run() {
-            M m(fromjson("{loc:{$within:{$box:[{x: 4, y:4},[6,6]]}}}"));
-            ASSERT(!m.matches(fromjson("{loc: [3,4]}")));
-            ASSERT(m.matches(fromjson("{loc: [4,4]}")));
-            ASSERT(m.matches(fromjson("{loc: [5,5]}")));
-            ASSERT(m.matches(fromjson("{loc: [5,5.1]}")));
-            ASSERT(m.matches(fromjson("{loc: {x: 5, y:5.1}}")));
-        }
-    };
-
-    template <typename M>
-    class WithinPolygon {
-    public:
-        void run() {
-            M m(fromjson("{loc:{$within:{$polygon:[{x:0,y:0},[0,5],[5,5],[5,0]]}}}"));
-            ASSERT(m.matches(fromjson("{loc: [3,4]}")));
-            ASSERT(m.matches(fromjson("{loc: [4,4]}")));
-            ASSERT(m.matches(fromjson("{loc: {x:5,y:5}}")));
-            ASSERT(!m.matches(fromjson("{loc: [5,5.1]}")));
-            ASSERT(!m.matches(fromjson("{loc: {}}")));
-        }
-    };
-
-    template <typename M>
-    class WithinCenter {
-    public:
-        void run() {
-            M m(fromjson("{loc:{$within:{$center:[{x:30,y:30},10]}}}"));
-            ASSERT(!m.matches(fromjson("{loc: [3,4]}")));
-            ASSERT(m.matches(fromjson("{loc: {x:30,y:30}}")));
-            ASSERT(m.matches(fromjson("{loc: [20,30]}")));
-            ASSERT(m.matches(fromjson("{loc: [30,20]}")));
-            ASSERT(m.matches(fromjson("{loc: [40,30]}")));
-            ASSERT(m.matches(fromjson("{loc: [30,40]}")));
-            ASSERT(!m.matches(fromjson("{loc: [31,40]}")));
-        }
-    };
-
     /** Test that MatchDetails::elemMatchKey() is set correctly after a match. */
     template <typename M>
     class ElemMatchKey {
@@ -470,9 +429,6 @@ namespace MatcherTests {
             add<Covered::ElemMatchKeyIndexed>();
             add<Covered::ElemMatchKeyIndexedSingleKey>();
             ADD_BOTH(AllTiming);
-            ADD_BOTH(WithinBox);
-            ADD_BOTH(WithinCenter);
-            ADD_BOTH(WithinPolygon);
             ADD_BOTH(AtomicMatchTest);
             ADD_BOTH(SingleSimpleCriterion);
             ADD_BOTH(IndexPortion1);
