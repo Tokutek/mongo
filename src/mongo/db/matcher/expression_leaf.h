@@ -94,6 +94,8 @@ namespace mongo {
 
         virtual bool equivalent( const MatchExpression* other ) const;
 
+        const BSONElement& getData() const { return _rhs; }
+
     protected:
         BSONElement _rhs;
     };
@@ -204,6 +206,9 @@ namespace mongo {
 
         virtual bool equivalent( const MatchExpression* other ) const;
 
+        const string& getString() const { return _regex; }
+        const string& getFlags() const { return _flags; }
+
     private:
         std::string _regex;
         std::string _flags;
@@ -230,6 +235,9 @@ namespace mongo {
         virtual void debugString( StringBuilder& debug, int level ) const;
 
         virtual bool equivalent( const MatchExpression* other ) const;
+
+        int getDivisor() const { return _divisor; }
+        int getRemainder() const { return _remainder; }
 
     private:
         int _divisor;
@@ -287,6 +295,7 @@ namespace mongo {
         bool equivalent( const ArrayFilterEntries& other ) const;
 
         void copyTo( ArrayFilterEntries& toFillIn ) const;
+
     private:
         bool _hasNull; // if _equalities has a jstNULL element in it
         bool _hasEmptyArray;
@@ -313,6 +322,8 @@ namespace mongo {
         virtual bool equivalent( const MatchExpression* other ) const;
 
         void copyTo( InMatchExpression* toFillIn ) const;
+
+        const ArrayFilterEntries& getData() const { return _arrayEntries; }
 
     private:
         bool _matchesRealElement( const BSONElement& e ) const;

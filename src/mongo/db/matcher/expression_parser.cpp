@@ -582,15 +582,15 @@ namespace mongo {
 
             BSONObjIterator i( arr );
             while ( i.more() ) {
-                BSONElement hopefullyElemMatchElemennt = i.next();
+                BSONElement hopefullyElemMatchElement = i.next();
 
-                if ( hopefullyElemMatchElemennt.type() != Object ) {
+                if ( hopefullyElemMatchElement.type() != Object ) {
                     // $all : [ { $elemMatch : ... }, 5 ]
                     return StatusWithMatchExpression( ErrorCodes::BadValue,
                                                  "$all/$elemMatch has to be consistent" );
                 }
 
-                BSONObj hopefullyElemMatchObj = hopefullyElemMatchElemennt.Obj();
+                BSONObj hopefullyElemMatchObj = hopefullyElemMatchElement.Obj();
                 if ( !mongoutils::str::equals( "$elemMatch",
                                                hopefullyElemMatchObj.firstElement().fieldName() ) ) {
                     // $all : [ { $elemMatch : ... }, { x : 5 } ]
@@ -640,6 +640,7 @@ namespace mongo {
 
     // Geo
     StatusWithMatchExpression expressionParserGeoCallbackDefault( const char* name,
+                                                                  int type,
                                                                   const BSONObj& section ) {
         return StatusWithMatchExpression( ErrorCodes::BadValue, "geo not linked in" );
     }

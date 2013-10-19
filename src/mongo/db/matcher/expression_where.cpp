@@ -30,8 +30,8 @@
 
 #include "mongo/pch.h"
 #include "mongo/base/init.h"
-#include "mongo/db/namespacestring.h"
 #include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/client.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/matcher/expression.h"

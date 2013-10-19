@@ -247,4 +247,5 @@ namespace mongo {
             return other->matchType() == ALWAYS_FALSE;
         }
     };
+
 }
