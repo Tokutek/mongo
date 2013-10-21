@@ -413,7 +413,7 @@ namespace mongo {
     }
 
     void IndexDetails::optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
-                                const bool sendOptimizeMessage) {
+                                const bool sendOptimizeMessage, uint64_t* loops_run) {
         if (sendOptimizeMessage) {
             const int r = db()->optimize(db());
             if (r != 0) {
@@ -424,7 +424,7 @@ namespace mongo {
         uint64_t iter = 0;
         DBT left = leftSKey.dbt();
         DBT right = rightSKey.dbt();
-        const int r = db()->hot_optimize(db(), &left, &right, hot_opt_callback, &iter);
+        const int r = db()->hot_optimize(db(), &left, &right, hot_opt_callback, &iter, loops_run);
         if (r != 0) {
             uassert(16810, mongoutils::str::stream() << "reIndex query killed ", false);
         }
