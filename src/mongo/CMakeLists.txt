@@ -599,7 +599,7 @@ endif ()
 add_executable(mongod
   db/db
   db/commands/touch
-  db/mongod_options
+  db/mongod_options_init
   )
 add_dependencies(mongod generate_error_codes generate_action_types install_tdb_h)
 
@@ -616,6 +616,7 @@ link_recursive_deps(mongod
   coreserver
   mongodandmongos
   serveronly
+  mongod_options
   ${TOKUMX_SSL_LIBRARIES}
   )
 
@@ -632,13 +633,34 @@ foreach (tool
     )
   add_executable(mongo${tool}
     tools/${tool}
-    tools/mongo${tool}_options
+    tools/mongo${tool}_options_init
     )
 endforeach ()
 add_executable(bsondump
   tools/bsondump
   tools/bsondump_options
   )
+foreach (tool
+    mongodump
+    mongorestore
+    mongoexport
+    mongoimport
+    mongostat
+    mongotop
+    mongo2toku
+    mongofiles
+    mongobridge
+    bsondump
+    )
+  add_library(${tool}_options STATIC
+    tools/${tool}_options
+    )
+  add_dependencies(${tool}_options generate_error_codes generate_action_types)
+  target_link_libraries(${tool}_options LINK_PUBLIC
+    tool_options
+    options_parser
+    )
+endforeach ()
 foreach (tool
     mongodump
     mongorestore
@@ -661,6 +683,9 @@ foreach (tool
     alltools
     ${TOKUMX_SSL_LIBRARIES}
     )
+  target_link_libraries(${tool} LINK_PUBLIC
+    ${tool}_options
+    )
 endforeach ()
 add_dependencies(mongobridge generate_error_codes generate_action_types install_tdb_h)
 if (NOT APPLE)
@@ -673,6 +698,7 @@ link_recursive_deps(mongobridge
   serveronly
   coreserver
   coredb
+  mongobridge_options
   ${TOKUMX_SSL_LIBRARIES}
   )
 install_executables(tokumx_tools
@@ -690,7 +716,7 @@ target_link_libraries(mongofiles gridfs)
 
 add_executable(mongos
   s/server
-  s/mongos_options
+  s/mongos_options_init
   )
 add_dependencies(mongos generate_error_codes generate_action_types)
 if (NOT APPLE)
@@ -706,6 +732,7 @@ link_recursive_deps(mongos
   coreshard
   mongodandmongos
   s_upgrade
+  mongos_options
   ${TOKUMX_SSL_LIBRARIES}
   )
 
@@ -735,26 +762,14 @@ endif ()
 
 remove_as_needed(mongod mongos)
 
-set_source_files_properties(
-  "${CMAKE_CURRENT_BINARY_DIR}/shell/mongo-server.cpp"
-  PROPERTIES GENERATED TRUE)
 add_executable(mongo
   shell/dbshell
-  shell/shell_utils
-  shell/shell_utils_extended
-  shell/shell_utils_launcher
-  "${CMAKE_CURRENT_BINARY_DIR}/shell/mongo-server.cpp"
-  shell/linenoise
-  shell/linenoise_utf8
-  shell/mk_wcwidth
-  shell/shell_options
   )
-add_dependencies(mongo generate_mongo_server_cpp generate_error_codes generate_action_types)
+add_dependencies(mongo generate_error_codes generate_action_types)
 link_recursive_deps(mongo
-  clientandshell
-  mongocommon
-  scripting
   options_parser
+  shell_options
+  shell_core
   ${PCRE_LIBRARIES}
   ${TOKUMX_SSL_LIBRARIES}
   )

@@ -19,11 +19,25 @@ add_dependencies(index_set generate_error_codes generate_action_types)
 add_library(server_options STATIC
   server_options
   )
+add_dependencies(server_options generate_error_codes generate_action_types)
 target_link_libraries(server_options LINK_PUBLIC
   bson
   server_parameters
   options_parser
   cmdline_utils
+  )
+
+add_library(mongod_options STATIC
+  mongod_options
+  )
+add_dependencies(mongod_options generate_error_codes generate_action_types)
+target_link_libraries(mongod_options LINK_PUBLIC
+  server_options
+  mongocommon
+  serveronly
+  coreserver
+  coredb
+  options_parser
   )
 
 add_library(db_common STATIC

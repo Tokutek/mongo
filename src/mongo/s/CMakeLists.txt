@@ -86,3 +86,16 @@ target_link_libraries(mongoscore LINK_PUBLIC
   authmongos
   client_parallel
   )
+
+add_library(mongos_options STATIC
+  mongos_options
+  )
+add_dependencies(mongos_options generate_error_codes generate_action_types)
+target_link_libraries(mongos_options LINK_PUBLIC
+  mongoscore
+  coreshard
+  mongocommon
+  coreserver
+  coredb
+  options_parser
+  )

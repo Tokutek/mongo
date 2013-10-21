@@ -47,3 +47,31 @@ add_custom_target(generate_mongo_server_cpp DEPENDS
   "${CMAKE_CURRENT_BINARY_DIR}/mongo-server.cpp"
   )
 
+set_source_files_properties(
+  "${CMAKE_CURRENT_BINARY_DIR}/shell/mongo-server.cpp"
+  PROPERTIES GENERATED TRUE)
+
+add_library(shell_core STATIC
+  shell_utils
+  shell_utils_extended
+  shell_utils_launcher
+  "${CMAKE_CURRENT_BINARY_DIR}/mongo-server.cpp"
+  linenoise
+  linenoise_utf8
+  mk_wcwidth
+  shell_options_init
+  )
+add_dependencies(shell_core generate_mongo_server_cpp generate_error_codes generate_action_types)
+target_link_libraries(shell_core LINK_PUBLIC
+  clientandshell
+  scripting
+  mongocommon
+  )
+
+add_library(shell_options STATIC
+  shell_options
+  )
+add_dependencies(shell_options generate_error_codes generate_action_types)
+target_link_libraries(shell_options LINK_PUBLIC
+  options_parser
+  )
