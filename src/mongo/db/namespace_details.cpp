@@ -825,7 +825,7 @@ namespace mongo {
         void optimizeAll() {
             uasserted( 16895, "Cannot optimize a collection under-going bulk load." );
         }
-        void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK) {
+        void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK, uint64_t* loops_run) {
             uasserted( 16921, "Cannot optimize a collection under-going bulk load." );
         }
         bool dropIndexes(const StringData& ns, const StringData& name, string &errmsg,
@@ -1520,15 +1520,16 @@ namespace mongo {
                                   isPK ? NULL : &minKey);
             storage::Key rightSKey(ascending ? maxKey : minKey,
                                    isPK ? NULL : &maxKey);
-            idx.optimize(rightSKey, leftSKey, true);
+            uint64_t loops_run;
+            idx.optimize(rightSKey, leftSKey, true, &loops_run);
         }
     }
 
-    void NamespaceDetails::optimizePK(const BSONObj &leftKey, const BSONObj &rightKey) {
+    void NamespaceDetails::optimizePK(const BSONObj &leftKey, const BSONObj &rightKey, uint64_t* loops_run) {
         IndexDetails &idx = getPKIndex();
         storage::Key leftSKey(leftKey, NULL);
         storage::Key rightSKey(rightKey, NULL);
-        idx.optimize(leftSKey, rightSKey, false);
+        idx.optimize(leftSKey, rightSKey, false, loops_run);
     }
 
     void NamespaceDetails::fillCollectionStats(

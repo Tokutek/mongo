@@ -1221,7 +1221,9 @@ namespace mongo {
                     gtid = _lastPurgedGTID;
                 }
                 if (!gtid.isInitial()) {
-                    hotOptimizeOplogTo(gtid);
+                    uint64_t loops_run = 0;
+                    hotOptimizeOplogTo(gtid, &loops_run);
+                    LOG(2) << "hotOptimizeOplog completed running " << loops_run << " loops." << rsLog;
                 }
                 {
                     boost::unique_lock<boost::mutex> lock(_purgeMutex);
