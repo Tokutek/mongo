@@ -467,6 +467,7 @@ namespace mongo {
     ReplSetImpl::ReplSetImpl() :
         _replInfoUpdateRunning(false),
         _replOplogPurgeRunning(false),
+        _lastPurgedTS(0),
         _replKeepOplogAliveRunning(false),
         _keepOplogPeriodMillis(600*1000), // 10 minutes
         _replOplogOptimizeRunning(false),
@@ -1071,6 +1072,14 @@ namespace mongo {
         _replKeepOplogAliveRunning = false;
     }
 
+    GTID ReplSetImpl::getLastPurgedGTID() {
+        return _lastPurgedGTID;
+    }
+
+    uint64_t ReplSetImpl::getLastPurgedTS() {
+        return _lastPurgedTS;
+    }
+
     void ReplSetImpl::changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours) {
         {
             boost::unique_lock<boost::mutex> lock(_purgeMutex);
@@ -1138,6 +1147,7 @@ namespace mongo {
                                     // delete a bunch of entries in bulk
                                     boost::unique_lock<boost::mutex> lock(_purgeMutex);
                                     _lastPurgedGTID = getGTIDFromBSON("_id", curr);
+                                    _lastPurgedTS = ts;
                                     millisToWait = ts - minTime + 1000;
                                 }
                                 break;
@@ -1160,6 +1170,7 @@ namespace mongo {
                         {
                             boost::unique_lock<boost::mutex> lock(_purgeMutex);
                             _lastPurgedGTID = getGTIDFromBSON("_id", docs.back());
+                            _lastPurgedTS = docs.back()["ts"]._numberLong();
                         }
                     }
                     transaction.commit(DB_TXN_NOSYNC);
