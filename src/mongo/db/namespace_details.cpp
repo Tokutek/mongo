@@ -300,10 +300,9 @@ namespace mongo {
     };
 
     BSONObj oldSystemUsersKeyPattern;
+    BSONObj extendedSystemUsersKeyPattern;
+    std::string extendedSystemUsersIndexName;
     namespace {
-        BSONObj extendedSystemUsersKeyPattern;
-        std::string extendedSystemUsersIndexName;
-
         MONGO_INITIALIZER(AuthIndexKeyPatterns)(InitializerContext*) {
             oldSystemUsersKeyPattern = BSON(AuthorizationManager::USER_NAME_FIELD_NAME << 1);
             extendedSystemUsersKeyPattern = BSON(AuthorizationManager::USER_NAME_FIELD_NAME << 1 <<

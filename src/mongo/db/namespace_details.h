@@ -79,8 +79,11 @@ namespace mongo {
     void commitBulkLoad(const StringData &ns);
     void abortBulkLoad(const StringData &ns);
 
-    // Because of #672 we need to detect if we're missing this index and to ignore that error.
+    // Because of #673 we need to detect if we're missing this index and to ignore that error.
     extern BSONObj oldSystemUsersKeyPattern;
+    // These are just exposed for tests.
+    extern BSONObj extendedSystemUsersKeyPattern;
+    extern std::string extendedSystemUsersIndexName;
 
     bool isSystemCatalog(const StringData &ns);
     bool isProfileCollection(const StringData &ns);
