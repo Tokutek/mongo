@@ -675,11 +675,26 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
                 dbexit( EXIT_BADOPTIONS );
             }
         }
-        if( params.count("expireOplogDays") ) {
-            cmdLine.expireOplogDays = params["expireOplogDays"].as<uint32_t>();
+        if ( !(params.count("expireOplogHours") || params.count("expireOplogDays")) && params.count("replSet") ) {
+            warning() << "*****************************" << endl;
+            warning() << "No value set for expireOplogDays, using default of " << cmdLine.expireOplogDays << " days." << endl;
+            warning() << "*****************************" << endl;
         }
         if( params.count("expireOplogHours") ) {
             cmdLine.expireOplogHours = params["expireOplogHours"].as<uint32_t>();
+            // if expireOplogHours is set, we don't want to use the default
+            // value of expireOplogDays. We want to use 0. If the user
+            // sets the value of expireOplogDays as well, next if-clause
+            // below will catch it
+            if( !params.count("expireOplogDays") ) {
+                cmdLine.expireOplogDays = 0;
+                warning() << "*****************************" << endl;
+                warning() << "No value set for expireOplogDays, only for expireOplogHours. Having at least 1 day set for expireOplogDays is recommended." << endl;
+                warning() << "*****************************" << endl;
+            }
+        }
+        if( params.count("expireOplogDays") ) {
+            cmdLine.expireOplogDays = params["expireOplogDays"].as<uint32_t>();
         }
         if (params.count("journalOptions")) {
             out() << "journalOptions deprecated" <<endl;
