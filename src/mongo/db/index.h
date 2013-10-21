@@ -333,7 +333,7 @@ namespace mongo {
         // using _descriptor, which is set by subclass constructors.
         //
         // Only IndexDetails::make() calls the constructor / open.
-        void open(const bool may_create);
+        bool open(const bool may_create);
 
         friend class NamespaceDetails;
         friend class BulkLoadedCollection;

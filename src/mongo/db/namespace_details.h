@@ -79,6 +79,14 @@ namespace mongo {
     void commitBulkLoad(const StringData &ns);
     void abortBulkLoad(const StringData &ns);
 
+    // Because of #672 we need to detect if we're missing this index and to ignore that error.
+    extern BSONObj oldSystemUsersKeyPattern;
+
+    bool isSystemCatalog(const StringData &ns);
+    bool isProfileCollection(const StringData &ns);
+    bool isOplogCollection(const StringData &ns);
+    bool isSystemUsersCollection(const StringData &ns);
+
     /* NamespaceDetails : this is the "header" for a namespace that has all its details.
        It is stored in the NamespaceIndex (a TokuMX dictionary named foo.ns, for Database foo).
     */

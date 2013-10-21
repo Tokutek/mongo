@@ -80,6 +80,13 @@ namespace mongo {
         return _creatingSystemUsers == d->name();
     }
 
+    Client::UpgradingSystemUsersScope::UpgradingSystemUsersScope() {
+        cc()._upgradingSystemUsers = true;
+    }
+    Client::UpgradingSystemUsersScope::~UpgradingSystemUsersScope() {
+        cc()._upgradingSystemUsers = false;
+    }
+
     /* each thread which does db operations has a Client object in TLS.
        call this when your thread starts.
     */
@@ -98,7 +105,9 @@ namespace mongo {
         _rootTransactionId(0),
         _shutdown(false),
         _desc(desc),
-        _god(0)
+        _god(0),
+        _creatingSystemUsers(""),
+        _upgradingSystemUsers(false)
     {
         _connectionId = p ? p->connectionId() : 0;
         

@@ -299,8 +299,8 @@ namespace mongo {
         }
     };
 
+    BSONObj oldSystemUsersKeyPattern;
     namespace {
-        BSONObj oldSystemUsersKeyPattern;
         BSONObj extendedSystemUsersKeyPattern;
         std::string extendedSystemUsersIndexName;
 
@@ -890,18 +890,18 @@ namespace mongo {
         return b.obj();
     }
 
-    static bool isSystemCatalog(const StringData &ns) {
+    bool isSystemCatalog(const StringData &ns) {
         StringData coll = nsToCollectionSubstring(ns);
         return coll == "system.indexes" || coll == "system.namespaces";
     }
-    static bool isProfileCollection(const StringData &ns) {
+    bool isProfileCollection(const StringData &ns) {
         StringData coll = nsToCollectionSubstring(ns);
         return coll == "system.profile";
     }
-    static bool isOplogCollection(const StringData &ns) {
+    bool isOplogCollection(const StringData &ns) {
         return ns == rsoplog;
     }
-    static bool isSystemUsersCollection(const StringData &ns) {
+    bool isSystemUsersCollection(const StringData &ns) {
         StringData coll = nsToCollectionSubstring(ns);
         return coll == "system.users";
     }
@@ -968,10 +968,29 @@ namespace mongo {
         _multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())),
         _qcWriteCount(0) {
 
+        bool reserialize = false;
         std::vector<BSONElement> index_array = serialized["indexes"].Array();
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
-            shared_ptr<IndexDetails> idx(IndexDetails::make(it->Obj(), false));
+            const BSONObj &info = it->Obj();
+            shared_ptr<IndexDetails> idx(IndexDetails::make(info, false));
+            if (!idx && cc().upgradingSystemUsers() && isSystemUsersCollection(_ns) &&
+                oldSystemUsersKeyPattern == info["key"].Obj()) {
+                // This was already dropped, but because of #673 we held on to the info.
+                // To fix it, just drop the index info on the floor.
+                LOG(0) << "Incomplete upgrade of " << _ns << " indexes detected.  Repairing." << endl;
+                reserialize = true;
+                size_t idxNum = it - index_array.begin();
+                // Removes the nth bit, and shifts any bits higher than it down a slot.
+                _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << idxNum) - 1)) |
+                                      ((_multiKeyIndexBits >> (idxNum + 1)) << idxNum));
+                _nIndexes--;
+                continue;
+            }
             _indexes.push_back(idx);
+        }
+        if (reserialize) {
+            // Write a clean version of this collection's info to the namespace index, now that we've rectified it.
+            nsindex(_ns)->update_ns(_ns, serialize(), true);
         }
         computeIndexKeys();
     }
@@ -1454,6 +1473,8 @@ namespace mongo {
         _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << idxNum) - 1)) |
                              ((_multiKeyIndexBits >> (idxNum + 1)) << idxNum));
         resetTransient();
+        // Updated whatever in memory structures are necessary, now update the nsindex.
+        nsindex(_ns)->update_ns(_ns, serialize(), true);
     }
 
     // Normally, we cannot drop the _id_ index.
@@ -1505,8 +1526,6 @@ namespace mongo {
             }
         }
 
-        // Updated whatever in memory structures are necessary, now update the nsindex.
-        nsindex(ns)->update_ns(ns, serialize(), true);
         return true;
     }
 
