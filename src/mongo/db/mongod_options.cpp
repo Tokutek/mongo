@@ -72,241 +72,215 @@ namespace mongo {
         moe::OptionSection replication_options("Replication options");
         moe::OptionSection sharding_options("Sharding options");
 
-        ret = general_options.addOption(OD("auth", "auth", moe::Switch, "run with security", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("cacheSize", "cacheSize", moe::UnsignedLongLong,
-                    "tokumx cache size (in bytes) for data and indexes", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("checkpointPeriod", "checkpointPeriod", moe::Unsigned,
-                    "tokumx time between checkpoints, 0 means never checkpoint", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("cleanerIterations", "cleanerIterations", moe::Unsigned,
-                    "tokumx number of iterations per cleaner thread operation, 0 means never run", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("cleanerPeriod", "cleanerPeriod", moe::Unsigned,
-                    "tokumx time between cleaner thread operations, 0 means never run", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("cpu", "cpu", moe::Switch,
-                    "periodically show cpu and iowait utilization", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        general_options.addOptionChaining("auth", "auth", moe::Switch, "run with security");
+
+        general_options.addOptionChaining("cacheSize", "cacheSize", moe::UnsignedLongLong,
+                "tokumx cache size (in bytes) for data and indexes");
+
+        general_options.addOptionChaining("checkpointPeriod", "checkpointPeriod", moe::Unsigned,
+                "tokumx time between checkpoints, 0 means never checkpoint");
+
+        general_options.addOptionChaining("cleanerIterations", "cleanerIterations", moe::Unsigned,
+                "tokumx number of iterations per cleaner thread operation, 0 means never run");
+
+        general_options.addOptionChaining("cleanerPeriod", "cleanerPeriod", moe::Unsigned,
+                "tokumx time between cleaner thread operations, 0 means never run");
+
+        general_options.addOptionChaining("cpu", "cpu", moe::Switch,
+                "periodically show cpu and iowait utilization");
+
 #ifdef _WIN32
-        ret = general_options.addOption(OD("dbpath", "dbpath", moe::String,
-                    "directory for datafiles - defaults to \\data\\db\\",
-                    true, moe::Value(std::string("\\data\\db\\"))));
+        general_options.addOptionChaining("dbpath", "dbpath", moe::String,
+                "directory for datafiles - defaults to \\data\\db\\")
+                                         .setDefault(moe::Value(std::string("\\data\\db\\")));
+
 #else
-        ret = general_options.addOption(OD("dbpath", "dbpath", moe::String,
-                    "directory for datafiles - defaults to /data/db/",
-                    true, moe::Value(std::string("/data/db"))));
+        general_options.addOptionChaining("dbpath", "dbpath", moe::String,
+                "directory for datafiles - defaults to /data/db/")
+                                         .setDefault(moe::Value(std::string("/data/db")));
+
 #endif
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("diaglog", "diaglog", moe::Int,
-                    "0=off 1=W 2=R 3=both 7=W+some reads", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("directio", "directio", moe::Switch,
-                    "use direct I/O in tokumx", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("fsRedzone", "fsRedzone", moe::Int,
-                    "percentage of free-space left on device before the system goes read-only", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("logDir", "logDir", moe::String,
-                    "directory to store transaction log files (default is --dbpath)", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("tmpDir", "tmpDir", moe::String,
-                    "directory to store temporary bulk loader files (default is --dbpath)", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("ipv6", "ipv6", moe::Switch,
-                    "enable IPv6 support (disabled by default)", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("logFlushPeriod", "logFlushPeriod",
-                    moe::Unsigned, "how often to fsync recovery log (ms)", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("jsonp", "jsonp", moe::Switch,
-                    "allow JSONP access via http (has security implications)", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("lockTimeout", "lockTimeout", moe::UnsignedLongLong,
-                    "tokumx row lock wait timeout (in ms), 0 means wait as long as necessary", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("locktreeMaxMemory", "locktreeMaxMemory", moe::UnsignedLongLong,
-                    "tokumx memory limit (in bytes) for storing transactions' row locks", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("loaderMaxMemory", "loaderMaxMemory", moe::UnsignedLongLong,
-                    "tokumx memory limit (in bytes) for a single bulk loader to use. the bulk loader is used to build foreground indexes and is also utilized by mongorestore/import", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("loaderCompressTmp", "loaderCompressTmp", moe::Switch,
-                    "the bulk loader (used for mongoimport/mongorestore and non-background index builds) will compress intermediate files (see tmpDir) when writing them to disk", true, moe::Value(true)));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("noauth", "noauth", moe::Switch, "run without security",
-                    true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("noIndexBuildRetry", "noIndexBuildRetry", moe::Switch,
-                    "don't retry any index builds that were interrupted by shutdown", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("noscripting", "noscripting", moe::Switch,
-                    "disable scripting engine", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("notablescan", "notablescan", moe::Switch,
-                    "do not allow table scans", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("profile", "profile", moe::Int, "0=off 1=slow, 2=all",
-                    true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("rest", "rest", moe::Switch, "turn on simple rest api",
-                    true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        general_options.addOptionChaining("diaglog", "diaglog", moe::Int,
+                "0=off 1=W 2=R 3=both 7=W+some reads");
+
+        general_options.addOptionChaining("directio", "directio", moe::Switch,
+                "use direct I/O in tokumx");
+
+        general_options.addOptionChaining("fsRedzone", "fsRedzone", moe::Int,
+                "percentage of free-space left on device before the system goes read-only");
+
+        general_options.addOptionChaining("logDir", "logDir", moe::String,
+                "directory to store transaction log files (default is --dbpath)");
+
+        general_options.addOptionChaining("tmpDir", "tmpDir", moe::String,
+                "directory to store temporary bulk loader files (default is --dbpath)");
+
+        general_options.addOptionChaining("directoryperdb", "directoryperdb", moe::Switch,
+                "each database will be stored in a separate directory")
+                                         .hidden();
+
+        general_options.addOptionChaining("ipv6", "ipv6", moe::Switch,
+                "enable IPv6 support (disabled by default)");
+
+        general_options.addOptionChaining("journal", "journal", moe::Switch, "enable journaling")
+                                         .hidden();
+
+        general_options.addOptionChaining("journalCommitInterval", "journalCommitInterval",
+                moe::Unsigned, "how often to group/batch commit (ms)")
+                                         .hidden();
+
+        general_options.addOptionChaining("journalOptions", "journalOptions", moe::Int,
+                "journal diagnostic options")
+                                         .hidden();
+
+        general_options.addOptionChaining("logFlushPeriod", "logFlushPeriod",
+                moe::Unsigned, "how often to fsync recovery log (ms)");
+
+        general_options.addOptionChaining("jsonp", "jsonp", moe::Switch,
+                "allow JSONP access via http (has security implications)");
+
+        general_options.addOptionChaining("lockTimeout", "lockTimeout", moe::UnsignedLongLong,
+                "tokumx row lock wait timeout (in ms), 0 means wait as long as necessary");
+
+        general_options.addOptionChaining("locktreeMaxMemory", "locktreeMaxMemory", moe::UnsignedLongLong,
+                "tokumx memory limit (in bytes) for storing transactions' row locks");
+
+        general_options.addOptionChaining("loaderMaxMemory", "loaderMaxMemory", moe::UnsignedLongLong,
+                "tokumx memory limit (in bytes) for a single bulk loader to use. the bulk loader is used to build foreground indexes and is also utilized by mongorestore/import");
+
+        general_options.addOptionChaining("loaderCompressTmp", "loaderCompressTmp", moe::Switch,
+                "the bulk loader (used for mongoimport/mongorestore and non-background index builds) will compress intermediate files (see tmpDir) when writing them to disk")
+                                         .setDefault(moe::Value(true));
+
+        general_options.addOptionChaining("noauth", "noauth", moe::Switch, "run without security");
+
+        general_options.addOptionChaining("noIndexBuildRetry", "noIndexBuildRetry", moe::Switch,
+                "don't retry any index builds that were interrupted by shutdown")
+                                         .hidden();
+
+        general_options.addOptionChaining("nojournal", "nojournal", moe::Switch,
+                "disable journaling (journaling is on by default for 64 bit)")
+                                         .hidden();
+
+        general_options.addOptionChaining("noprealloc", "noprealloc", moe::Switch,
+                "disable data file preallocation - will often hurt performance")
+                                         .hidden();
+
+        general_options.addOptionChaining("noscripting", "noscripting", moe::Switch,
+                "disable scripting engine");
+
+        general_options.addOptionChaining("notablescan", "notablescan", moe::Switch,
+                "do not allow table scans");
+
+        general_options.addOptionChaining("nssize", "nssize", moe::Int,
+                ".ns file size (in MB) for new databases")
+                                         .hidden();
+
+        general_options.addOptionChaining("profile", "profile", moe::Int, "0=off 1=slow, 2=all");
+
+        general_options.addOptionChaining("quota", "quota", moe::Switch,
+                "limits each database to a certain number of files (8 default)");
+
+        general_options.addOptionChaining("quotaFiles", "quotaFiles", moe::Int,
+                "number of files allowed per db, requires --quota");
+
+        general_options.addOptionChaining("repair", "repair", moe::Switch, "run repair on all dbs")
+                                         .hidden();
+
+        general_options.addOptionChaining("repairpath", "repairpath", moe::String,
+                "root directory for repair files - defaults to dbpath")
+                                         .hidden();
+
+        general_options.addOptionChaining("rest", "rest", moe::Switch, "turn on simple rest api");
+
 #if defined(__linux__)
-        ret = general_options.addOption(OD("shutdown", "shutdown", moe::Switch,
-                    "kill a running server (for init scripts)", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        general_options.addOptionChaining("shutdown", "shutdown", moe::Switch,
+                "kill a running server (for init scripts)");
+
 #endif
-        ret = general_options.addOption(OD("slowms", "slowms", moe::Int,
-                    "value of slow for profile and console log" , true, moe::Value(100)));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("sysinfo", "sysinfo", moe::Switch,
-                    "print some diagnostic system information", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = general_options.addOption(OD("upgrade", "upgrade", moe::Switch,
-                    "upgrade db if needed", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        general_options.addOptionChaining("slowms", "slowms", moe::Int,
+                "value of slow for profile and console log")
+                                         .setDefault(moe::Value(100));
 
-        ret = replication_options.addOption(OD("expireOplogDays", "expireOplogDays",
-                    moe::Unsigned, "how many days of oplog data to keep", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = replication_options.addOption(OD("expireOplogHours", "expireOplogHours",
-                    moe::Unsigned, "how many hours, in addition to expireOplogDays, of oplog data to keep", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = replication_options.addOption(OD("txnMemLimit", "txnMemLimit", moe::UnsignedLongLong,
-                    "limit of the size of a transaction's operation", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        general_options.addOptionChaining("smallfiles", "smallfiles", moe::Switch,
+                "use a smaller default file size")
+                                         .hidden();
 
-        // TokuMX deprecates the master/slave options
-        ret = ms_options.addOption(OD("master", "master", moe::Switch, "master mode", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = ms_options.addOption(OD("slave", "slave", moe::Switch, "slave mode", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = ms_options.addOption(OD("source", "source", moe::String,
-                    "when slave: specify master as <server:port>", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = ms_options.addOption(OD("only", "only", moe::String,
-                    "when slave: specify a single database to replicate", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = ms_options.addOption(OD("autoresync", "autoresync", moe::Switch,
-                    "automatically resync if slave data is stale", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        general_options.addOptionChaining("syncdelay", "syncdelay", moe::Double,
+                "seconds between disk syncs (0=never, but not recommended)")
+                                         .setDefault(moe::Value(60.0))
+                                         .hidden();
 
-        ret = rs_options.addOption(OD("replSet", "replSet", moe::String,
-                    "arg is <setname>[/<optionalseedhostlist>]", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = rs_options.addOption(OD("replIndexPrefetch", "replIndexPrefetch", moe::String,
-                    "specify index prefetching behavior (if secondary) [none|_id_only|all]", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = rs_options.addOption(OD("slavedelay", "slavedelay", moe::Int,
-                    "specify delay (in seconds) to be used when applying master ops to slave",
-                    true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        general_options.addOptionChaining("sysinfo", "sysinfo", moe::Switch,
+                "print some diagnostic system information");
 
-        ret = sharding_options.addOption(OD("configsvr", "configsvr", moe::Switch,
-                    "declare this is a config db of a cluster; default port 27019; "
-                    "default dir /data/configdb", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = sharding_options.addOption(OD("shardsvr", "shardsvr", moe::Switch,
-                    "declare this is a shard db of a cluster; default port 27018", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        general_options.addOptionChaining("upgrade", "upgrade", moe::Switch,
+                "upgrade db if needed")
+                                         .hidden();
 
-        ret = sharding_options.addOption(OD("noMoveParanoia", "noMoveParanoia", moe::Switch,
-                    "turn off paranoid saving of data for the moveChunk command; default", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = sharding_options.addOption(OD("moveParanoia", "moveParanoia", moe::Switch,
-                    "turn on paranoid saving of data during the moveChunk command "
-                    "(used for internal system diagnostics)", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
+
+        replication_options.addOptionChaining("oplogSize", "oplogSize", moe::Int,
+                "size to use (in MB) for replication op log. default is 5% of disk space "
+                "(i.e. large is good)")
+                                         .hidden();
+
+        replication_options.addOptionChaining("expireOplogDays", "expireOplogDays",
+                moe::Unsigned, "how many days of oplog data to keep");
+
+        replication_options.addOptionChaining("expireOplogHours", "expireOplogHours",
+                moe::Unsigned, "how many hours, in addition to expireOplogDays, of oplog data to keep");
+
+        replication_options.addOptionChaining("txnMemLimit", "txnMemLimit", moe::UnsignedLongLong,
+                "limit of the size of a transaction's operation");
+
+
+        ms_options.addOptionChaining("master", "master", moe::Switch, "master mode")
+                                         .hidden();
+
+        ms_options.addOptionChaining("slave", "slave", moe::Switch, "slave mode")
+                                         .hidden();
+
+        ms_options.addOptionChaining("source", "source", moe::String,
+                "when slave: specify master as <server:port>")
+                                         .hidden();
+
+        ms_options.addOptionChaining("only", "only", moe::String,
+                "when slave: specify a single database to replicate")
+                                         .hidden();
+
+        ms_options.addOptionChaining("slavedelay", "slavedelay", moe::Int,
+                "specify delay (in seconds) to be used when applying master ops to slave");
+
+        ms_options.addOptionChaining("autoresync", "autoresync", moe::Switch,
+                "automatically resync if slave data is stale")
+                                    .hidden();
+
+
+        rs_options.addOptionChaining("replSet", "replSet", moe::String,
+                "arg is <setname>[/<optionalseedhostlist>]");
+
+        rs_options.addOptionChaining("replIndexPrefetch", "replIndexPrefetch", moe::String,
+                "specify index prefetching behavior (if secondary) [none|_id_only|all]")
+                                         .hidden();
+
+
+        sharding_options.addOptionChaining("configsvr", "configsvr", moe::Switch,
+                "declare this is a config db of a cluster; default port 27019; "
+                "default dir /data/configdb");
+
+        sharding_options.addOptionChaining("shardsvr", "shardsvr", moe::Switch,
+                "declare this is a shard db of a cluster; default port 27018");
+
+
+        sharding_options.addOptionChaining("noMoveParanoia", "noMoveParanoia", moe::Switch,
+                "turn off paranoid saving of data for the moveChunk command; default")
+                                          .hidden();
+
+        sharding_options.addOptionChaining("moveParanoia", "moveParanoia", moe::Switch,
+                "turn on paranoid saving of data during the moveChunk command "
+                "(used for internal system diagnostics)")
+                                          .hidden();
+
         options->addSection(general_options);
 #if defined(_WIN32)
         options->addSection(windows_scm_options);
@@ -319,148 +293,55 @@ namespace mongo {
         options->addSection(ssl_options);
 #endif
 
-        ret = options->addOption(OD("fastsync", "fastsync", moe::Switch,
-                    "indicate that this instance is starting from a "
-                    "dbpath snapshot of the repl peer", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("pretouch", "pretouch", moe::Int,
-                    "n pretouch threads for applying master/slave operations", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("command", "command", moe::StringVector, "command", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("cacheSize", "cacheSize", moe::Long,
-                    "cache size (in MB) for rec store", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("nodur", "nodur", moe::Switch, "disable journaling", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("fastsync", "fastsync", moe::Switch,
+                "indicate that this instance is starting from a dbpath snapshot of the repl peer")
+                                  .hidden();
+
+        options->addOptionChaining("pretouch", "pretouch", moe::Int,
+                "n pretouch threads for applying master/slave operations")
+                                  .hidden();
+
+        options->addOptionChaining("command", "command", moe::StringVector, "command")
+                                  .hidden();
+
+        options->addOptionChaining("nodur", "nodur", moe::Switch, "disable journaling")
+                                  .hidden();
+
         // things we don't want people to use
-        ret = options->addOption(OD("nohints", "nohints", moe::Switch, "ignore query hints",
-                    false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("nopreallocj", "nopreallocj", moe::Switch,
-                    "don't preallocate journal files", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("dur", "dur", moe::Switch, "enable journaling", false));
-        if (!ret.isOK()) {
-            return ret;
-        } // old name for --journal
-        ret = options->addOption(OD("durOptions", "durOptions", moe::Int,
-                    "durability diagnostic options", false));
-        if (!ret.isOK()) {
-            return ret;
-        } // deprecated name
+        options->addOptionChaining("nohints", "nohints", moe::Switch, "ignore query hints")
+                                  .hidden();
+
+        options->addOptionChaining("nopreallocj", "nopreallocj", moe::Switch,
+                "don't preallocate journal files")
+                                  .hidden();
+
+        options->addOptionChaining("dur", "dur", moe::Switch, "enable journaling")
+                                  .hidden();
+
+        options->addOptionChaining("durOptions", "durOptions", moe::Int,
+                "durability diagnostic options")
+                                  .hidden();
+
         // deprecated pairing command line options
-        ret = options->addOption(OD("pairwith", "pairwith", moe::Switch, "DEPRECATED", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("arbiter", "arbiter", moe::Switch, "DEPRECATED", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("opIdMem", "opIdMem", moe::Switch, "DEPRECATED", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("pairwith", "pairwith", moe::Switch, "DEPRECATED")
+                                  .hidden();
+
+        options->addOptionChaining("arbiter", "arbiter", moe::Switch, "DEPRECATED")
+                                  .hidden();
+
+        options->addOptionChaining("opIdMem", "opIdMem", moe::Switch, "DEPRECATED")
+                                  .hidden();
+
 
         // TokuMX unreleased options
-        ret = options->addOption(OD("fastupdates", "fastupdates", moe::Switch,
-                    "internal only", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("fastupdatesIgnoreErrors", "fastupdatesIgnoreErrors", moe::Switch,
-                    "silently ignore all fastupdate errors. NOT RECOMMENDED FOR PRODUCTION, unless failed updates are expected and/or acceptable.", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("fastupdates", "fastupdates", moe::Switch,
+                "internal only")
+                                  .hidden();
 
-        // TokuMX deprecated options
-        ret = options->addOption(OD("directoryperdb", "directoryperdb", moe::Switch,
-                    "each database will be stored in a separate directory", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("journal", "journal", moe::Switch, "enable journaling",
-                    false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("journalCommitInterval", "journalCommitInterval",
-                    moe::Unsigned, "how often to group/batch commit (ms)", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("journalOptions", "journalOptions", moe::Int,
-                    "journal diagnostic options", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("nojournal", "nojournal", moe::Switch,
-                    "disable journaling (journaling is on by default for 64 bit)", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("noprealloc", "noprealloc", moe::Switch,
-                    "disable data file preallocation - will often hurt performance", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("nssize", "nssize", moe::Int,
-                    ".ns file size (in MB) for new databases", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("quota", "quota", moe::Switch,
-                    "limits each database to a certain number of files (8 default)", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("quotaFiles", "quotaFiles", moe::Int,
-                    "number of files allowed per db, requires --quota", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("repair", "repair", moe::Switch, "run repair on all dbs",
-                    false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("repairpath", "repairpath", moe::String,
-                    "root directory for repair files - defaults to dbpath" , false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("smallfiles", "smallfiles", moe::Switch,
-                    "use a smaller default file size", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("syncdelay", "syncdelay", moe::Double,
-                    "seconds between disk syncs (0=never, but not recommended)", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("oplogSize", "oplogSize", moe::Int,
-                    "size to use (in MB) for replication op log. default is 5% of disk space "
-                    "(i.e. large is good)", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("fastupdatesIgnoreErrors", "fastupdatesIgnoreErrors", moe::Switch,
+                "silently ignore all fastupdate errors. NOT RECOMMENDED FOR PRODUCTION, unless failed updates are expected and/or acceptable.")
+                                  .hidden();
+
 
         ret = options->addPositionalOption(POD("command", moe::String, 3));
         if (!ret.isOK()) {

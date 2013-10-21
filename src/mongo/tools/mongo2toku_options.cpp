@@ -44,35 +44,19 @@ namespace mongo {
             return ret;
         }
 
-        ret = options->addOption(OD("ts", "ts", moe::String,
-                    "max OpTime already applied (secs:inc)", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("ts", "ts", moe::String, "max OpTime already applied (secs:inc)");
 
-        ret = options->addOption(OD("from", "from", moe::String,
-                    "host to pull from", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("from", "from", moe::String, "host to pull from");
 
-        ret = options->addOption(OD("oplogns", "oplogns", moe::String,
-                    "ns to pull from", true, moe::Value(std::string("local.oplog.rs"))));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("oplogns", "oplogns", moe::String, "ns to pull from")
+                                  .setDefault(moe::Value(std::string("local.oplog.rs")));
 
-        ret = options->addOption(OD("reportingPeriod", "reportingPeriod", moe::Int,
-                    "seconds between progress reports", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("reportingPeriod", "reportingPeriod", moe::Int,
+                "seconds between progress reports");
 
 
-        ret = options->addOption(OD("ruser", "ruser", moe::String, "username on source host", true));
-        if(!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("ruser", "ruser", moe::String, "username on source host");
+
         // We ask a user for a password if they pass in an empty string or pass --password with no
         // argument.  This must be handled when the password value is checked.
         //
@@ -83,24 +67,16 @@ namespace mongo {
         // --username test --password "" // Continue with username "test" and prompt for password
         //
         // To do this we pass moe::Value(std::string("")) as the "implicit value" of this option
-        ret = options->addOption(OD("rpass", "rpass", moe::String,
-                    "password on source host", true, moe::Value(), moe::Value(std::string(""))));
-        if(!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("rauthenticationDatabase", "rauthenticationDatabase", moe::String,
-                    "user source on source host (defaults to admin)", true,
-                    moe::Value(std::string("admin"))));
-        if(!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("rauthenticationMechanism", "rauthenticationMechanism",
-                    moe::String,
-                    "authentication mechanism on remote host", true,
-                    moe::Value(std::string("MONGODB-CR"))));
-        if(!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("rpass", "rpass", moe::String, "password on source host")
+                                  .setImplicit(moe::Value(std::string("")));
+
+        options->addOptionChaining("rauthenticationDatabase", "rauthenticationDatabase", moe::String,
+                "user source on source host (defaults to admin)")
+                                  .setDefault(moe::Value(std::string("admin")));
+
+        options->addOptionChaining("rauthenticationMechanism", "rauthenticationMechanism", moe::String,
+                "authentication mechanism on remote host")
+                                  .setDefault(moe::Value(std::string("MONGODB-CR")));
 
         return Status::OK();
     }
