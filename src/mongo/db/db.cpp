@@ -388,6 +388,24 @@ namespace mongo {
             Client::WriteContext c("admin", dbpath);
         }
 
+        {
+            // Upgrade any system.users collections if they need it.
+            Lock::GlobalWrite lk;
+            Client::UpgradingSystemUsersScope usus;
+            Client::Transaction txn(DB_SERIALIZABLE);
+
+            vector<string> databases;
+            getDatabaseNames(databases);
+            for (vector<string>::const_iterator it = databases.begin(); it != databases.end(); ++it) {
+                string ns = getSisterNS(*it, "system.users");
+                Client::Context ctx(ns);
+                // Just by calling nsdetails, if a collection that needed upgrade is opened, it'll
+                // get upgraded.  This fixes #674.
+                nsdetails(ns);
+            }
+            txn.commit();
+        }
+
         listen(listenPort);
 
         // listen() will return when exit code closes its socket.
