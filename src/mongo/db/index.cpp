@@ -189,7 +189,11 @@ namespace mongo {
             }
             idx.reset(new IndexDetails(info));
         }
-        idx->open(may_create);
+        bool ok = idx->open(may_create);
+        if (!ok) {
+            // This signals NamespaceDetails::make that we got ENOENT due to #673
+            return shared_ptr<IndexDetails>();
+        }
         return idx;
     }
 
@@ -205,7 +209,7 @@ namespace mongo {
     }
 
     // Open the dictionary. Creates it if necessary.
-    void IndexDetails::open(const bool may_create) {
+    bool IndexDetails::open(const bool may_create) {
         const string dname = indexNamespace();
         if (may_create) {
             addNewNamespaceToCatalog(dname);
@@ -215,7 +219,16 @@ namespace mongo {
         try {
             _db.reset(new storage::Dictionary(dname, _info, *_descriptor, may_create,
                                               _info["background"].trueValue()));
+            return true;
         } catch (storage::Dictionary::NeedsCreate) {
+            if (cc().upgradingSystemUsers() &&
+                isSystemUsersCollection(parentNS()) &&
+                keyPattern() == oldSystemUsersKeyPattern) {
+                // We're upgrading the system.users collection, and we are missing the old index.
+                // That's ok, we'll signal the caller about this by returning a NULL pointer from
+                // IndexDetails::make.  See #673
+                return false;
+            }
             // Unlike for NamespaceIndex, this dictionary must exist on disk if we think it should
             // exist.  This error only gets thrown if may_create is false, which happens when we're
             // trying to open a collection for which we have serialized info.  Therefore, this is a
