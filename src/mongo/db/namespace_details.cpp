@@ -349,8 +349,7 @@ namespace mongo {
             IndexedCollection(serialized) {
             int idx = findIndexByKeyPattern(extendedSystemUsersKeyPattern);
             if (idx < 0) {
-                const StringData ns = serialized["ns"].Stringdata();
-                BSONObj info = extendedSystemUsersIndexInfo(ns);
+                BSONObj info = extendedSystemUsersIndexInfo(_ns);
                 createIndex(info);
                 addIndexToCatalog(info);
             }
@@ -1485,7 +1484,6 @@ namespace mongo {
         Lock::assertWriteLocked(ns);
         TOKULOG(1) << "dropIndexes " << name << endl;
 
-        NamespaceDetails *d = nsdetails(ns);
         ClientCursor::invalidate(ns);
 
         const int idxNum = findIndexByName(name);
@@ -1498,7 +1496,7 @@ namespace mongo {
             result.append("nIndexesWas", (double) _nIndexes);
             for (int i = 0; i < _nIndexes; ) {
                 IndexDetails &idx = *_indexes[i];
-                if (mayDeleteIdIndex || (!idx.isIdIndex() && !d->isPKIndex(idx))) {
+                if (mayDeleteIdIndex || (!idx.isIdIndex() && !isPKIndex(idx))) {
                     dropIndex(i);
                 } else {
                     i++;
@@ -1514,7 +1512,7 @@ namespace mongo {
                 result.append("nIndexesWas", (double) _nIndexes);
                 IndexVector::iterator it = _indexes.begin() + idxNum;
                 IndexDetails *idx = it->get();
-                if ( !mayDeleteIdIndex && (idx->isIdIndex() || d->isPKIndex(*idx)) ) {
+                if ( !mayDeleteIdIndex && (idx->isIdIndex() || isPKIndex(*idx)) ) {
                     errmsg = "may not delete _id or $_ index";
                     return false;
                 }
