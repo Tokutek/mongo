@@ -11,6 +11,7 @@ Import("env")
 Import("shellEnv")
 Import("testEnv")
 Import("has_option")
+Import("get_option")
 Import("usev8")
 Import("installSetup")
 Import("darwin windows solaris linux nix")
@@ -310,6 +311,10 @@ env.CppUnitTest(
     ]
 )
 
+tcmallocServerStatus = []
+if get_option('allocator') == 'tcmalloc':
+    tcmallocServerStatus.append("util/tcmalloc_server_status_section.cpp")
+
 env.StaticLibrary("coredb", [
         "client/parallel.cpp",
         "db/client_transaction.cpp",
@@ -376,7 +381,9 @@ env.StaticLibrary("coredb", [
         "db/storage/env.cpp",
         "db/storage/key.cpp",
         "s/shardconnection.cpp",
-        ],
+        ]
+        + tcmallocServerStatus
+        ,
                   LIBDEPS=['db/auth/serverauth',
                            'db/common',
                            'plugins/plugins',
