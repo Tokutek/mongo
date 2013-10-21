@@ -56,7 +56,7 @@ namespace mongo {
     uint64_t expireOplogMilliseconds();
 
     // hot optimize oplog up to gtid, used by purge thread to vacuum stale entries
-    void hotOptimizeOplogTo(GTID gtid);
+    void hotOptimizeOplogTo(GTID gtid, uint64_t* loops_run);
     
     /** puts obj in the oplog as a comment (a no-op).  Just for diags.
         convention is

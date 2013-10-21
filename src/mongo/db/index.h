@@ -192,7 +192,7 @@ namespace mongo {
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
         void optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
-                      const bool sendOptimizeMessage);
+                      const bool sendOptimizeMessage, uint64_t* loops_run);
         void acquireTableLock();
 
         struct UniqueCheckExtra : public ExceptionSaver {
