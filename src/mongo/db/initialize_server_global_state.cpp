@@ -287,7 +287,7 @@ namespace mongo {
         }
  
         // Auto-enable auth except if clusterAuthMode is not set.
-        // clusterAuthMode is automatically set if a --keyfile parameter is provided.
+        // clusterAuthMode is automatically set if a --keyFile parameter is provided.
         if (!serverGlobalParams.clusterAuthMode.empty()) {
             AuthorizationManager::setAuthEnabled(true);
         }
