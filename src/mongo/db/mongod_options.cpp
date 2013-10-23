@@ -33,9 +33,6 @@
 
 namespace mongo {
 
-    typedef moe::OptionDescription OD;
-    typedef moe::PositionalOptionDescription POD;
-
     MongodGlobalParams mongodGlobalParams;
 
     extern DiagLog _diaglog;
@@ -301,8 +298,13 @@ namespace mongo {
                 "n pretouch threads for applying master/slave operations")
                                   .hidden();
 
+        // This is a deprecated option that we are supporting for backwards compatibility
+        // The first value for this option can be either 'dbpath' or 'run'.
+        // If it is 'dbpath', mongod prints the dbpath and exits.  Any extra values are ignored.
+        // If it is 'run', mongod runs normally.  Providing extra values is an error.
         options->addOptionChaining("command", "command", moe::StringVector, "command")
-                                  .hidden();
+                                  .hidden()
+                                  .positional(1, 3);
 
         options->addOptionChaining("nodur", "nodur", moe::Switch, "disable journaling")
                                   .hidden();
@@ -342,11 +344,6 @@ namespace mongo {
                 "silently ignore all fastupdate errors. NOT RECOMMENDED FOR PRODUCTION, unless failed updates are expected and/or acceptable.")
                                   .hidden();
 
-
-        ret = options->addPositionalOption(POD("command", moe::String, 3));
-        if (!ret.isOK()) {
-            return ret;
-        }
 
         return Status::OK();
     }

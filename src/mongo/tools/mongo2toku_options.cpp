@@ -25,9 +25,6 @@ namespace mongo {
 
     Mongo2TokuGlobalParams mongo2TokuGlobalParams;
 
-    typedef moe::OptionDescription OD;
-    typedef moe::PositionalOptionDescription POD;
-
     Status addMongo2TokuOptions(moe::OptionSection* options) {
         Status ret = addGeneralToolOptions(options);
         if (!ret.isOK()) {
