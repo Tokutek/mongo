@@ -48,3 +48,4 @@ master.getDB( 'db' ).c.save( big );
 // Restart old master
 replTest.restart( 0 );
 replTest.awaitReplication();
+replTest.stopSet();
