@@ -46,11 +46,12 @@ namespace mongo {
         if ( d->mayFindById() && isSimpleIdQuery(pattern) ) {
             cc().curop()->debug().idhack = true;
             BSONObj obj;
-            if (d->findById(pattern, obj)) {
+            BSONObj pk = pattern["_id"].wrap("");
+            if (d->findByPK(pk, obj)) {
                 if ( logop ) {
                     OpLogHelpers::logDelete(ns, obj, false, &cc().txn());
                 }
-                deleteOneObject(d, pattern["_id"].wrap(), obj);
+                deleteOneObject(d, pk, obj);
                 return 1;
             }
             return 0;
