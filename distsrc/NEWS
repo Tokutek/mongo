@@ -1,6 +1,64 @@
 tokumx news
 ===========
 
+tokumx 1.3.1
+------------
+Release date: 2013-10-25
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.3.0.
+
+    - Please take careful note of the changed default of expireOplogDays.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - TokuMX now reports progress related to the purging of expired
+      entries from the oplog.  (#645)
+
+    - The default value of expireOplogDays has been changed to 14 (entries
+      expire after 2 weeks), from 0 (no expiration or purging occurs).
+
+      Therefore, if you haven't set expireOplogDays on the command line or
+      in a config file and you've been running a TokuMX replica set for
+      more than 14 days, when you upgrade, you may see a lot of oplog
+      purging activity initially as it adjusts to the new default.  If you
+      have set expireOplogDays, nothing will change when you upgrade.
+
+      See the user's guide for a description of expireOplogDays and
+      guidelines for how to choose a good value.
+
+    - Optimized deletes that specify just the `_id` field.  (#669)
+
+    - TokuMX now warns you if you have `cacheSize` set to <1GB, as
+      performance may suffer.  (#678)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Incorporated the fix for
+      http://jira.mongodb.org/browse/SERVER-9283[SERVER-9283]
+      (lastHeartbeatRecv flaps between invalid and valid dates).  (#660)
+
+    - Fixed an authentication error that prevented manual `copydb` and
+      `cloneCollection` commands from succeeding.  (#666)
+
+    - Fixed a problem where setting `lockTimeout` with `setParameter`
+      would succeed but claim that it had failed.  It now succeeds and
+      reports success.  (#667)
+
+    - Fixed an isolation bug with multi-statement transactions.  (#668)
+
+    - Fixed the upgrading of the `system.users` collection to the MongoDB
+      v2.4 format.  Also, version 1.3.1 repairs damage that was possible
+      to do to the `system.users` collection in rare cases with version
+      1.3.0.  (#673, #674)
+
+
 tokumx 1.3.0
 ------------
 Release date: 2013-10-18
