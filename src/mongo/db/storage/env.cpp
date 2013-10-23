@@ -233,7 +233,7 @@ namespace mongo {
             const uint64_t cachesize = (cmdLine.cacheSize > 0
                                         ? (uint64_t) cmdLine.cacheSize
                                         : calculate_cachesize());
-            if (cachesize < 1<<30) {
+            if (cachesize < 1ULL<<30) {
                 warning() << "*****************************" << endl;
                 warning() << "cacheSize set to less than 1 GB: " << cachesize << " bytes. " << endl;
                 warning() << "This value may be too low to achieve good performance." << endl;
