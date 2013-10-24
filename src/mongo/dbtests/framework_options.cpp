@@ -94,7 +94,7 @@ namespace mongo {
                                                    const std::vector<std::string>& args) {
         if (params.count("help")) {
             std::cout << getTestFrameworkHelp(args[0], moe::startupOptions) << std::endl;
-            return true;
+            return false;
         }
 
         if (params.count("list")) {
@@ -104,10 +104,10 @@ namespace mongo {
 
                 std::cout << *i << std::endl;
             }
-            return true;
+            return false;
         }
 
-        return false;
+        return true;
     }
 
     Status storeTestFrameworkOptions(const moe::Environment& params,

@@ -25,7 +25,7 @@ namespace mongo {
     }
 
     MONGO_STARTUP_OPTIONS_VALIDATE(Mongo2TokuOptions)(InitializerContext* context) {
-        if (handlePreValidationMongo2TokuOptions(moe::startupOptionsParsed)) {
+        if (!handlePreValidationMongo2TokuOptions(moe::startupOptionsParsed)) {
             ::_exit(EXIT_SUCCESS);
         }
         Status ret = moe::startupOptionsParsed.validate();

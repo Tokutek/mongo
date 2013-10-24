@@ -121,13 +121,13 @@ namespace mongo {
                                                 const std::vector<std::string>& args) {
         if (params.count("help")) {
             std::cout << getMongoShellHelp(args[0], moe::startupOptions) << std::endl;
-            return true;
+            return false;
         }
         if (params.count("version")) {
             cout << "TokuMX mongo shell v" << mongo::fullVersionString() << endl;
-            return true;
+            return false;
         }
-        return false;
+        return true;
     }
 
     Status storeMongoShellOptions(const moe::Environment& params,

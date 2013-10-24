@@ -42,6 +42,11 @@ namespace mongo {
 
     void printMongo2TokuHelp(std::ostream* out);
 
+    /**
+     * Handle options that should come before validation, such as "help".
+     *
+     * Returns false if an option was found that implies we should prematurely exit with success.
+     */
     bool handlePreValidationMongo2TokuOptions(const moe::Environment& params);
 
     Status storeMongo2TokuOptions(const moe::Environment& params,

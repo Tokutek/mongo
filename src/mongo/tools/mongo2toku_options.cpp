@@ -87,10 +87,10 @@ namespace mongo {
     bool handlePreValidationMongo2TokuOptions(const moe::Environment& params) {
         if (params.count("help")) {
             printMongo2TokuHelp(&std::cout);
-            return true;
+            return false;
         }
 
-        return false;
+        return true;
     }
 
     Status storeMongo2TokuOptions(const moe::Environment& params,
