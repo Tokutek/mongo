@@ -53,6 +53,7 @@ for (var i = 0; i < 100; i++)
 // do testing
 //
 
+if (false) { // haven't yet implemented aggregation cursors in tokumx (2.6 feature)
 // successfully handles results > 16MB (bigArray.length * bytes in bigStr * t.count() == 100MB)
 var cursor = aggCursor([{$unwind:'$bigArray'}]); // default settings
 assert.eq(cursor.itcount(), bigArray.length * t.count());
@@ -86,3 +87,4 @@ var cursor = aggCursor([{$unwind:'$bigArray'}]);
 t.drop();
 assert.throws(function() { cursor.itcount(); });
 // DON'T ADD NEW TEST TO THIS FILE AFTER THIS ONE (unless you reseed the data)
+}
