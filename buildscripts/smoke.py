@@ -477,7 +477,11 @@ def runTest(test, testnum):
     # so, we won't mess with the output
     is_test_binary = False
     if skipTest(path):
-        print "skipping " + path
+        if quiet:
+            sys.stdout.write("skip %d %s\n" % (testnum, os.path.basename(path)))
+            sys.stdout.flush()
+        else:
+            print "skipping " + path
         return
     if file_of_commands_mode:
         # smoke.py was invoked like "--mode files --from-file foo",
