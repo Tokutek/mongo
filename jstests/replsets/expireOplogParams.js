@@ -12,7 +12,10 @@ doTest = function( signal ) {
 
   var master = replTest.getMaster().getDB("admin");
   var x = master.runCommand({replGetExpireOplog:1});
-  assert.eq(x.expireOplogDays, 0);
+  // These values represent the default of the system.
+  // Should the defaults ever change, these values will
+  // need to be updated
+  assert.eq(x.expireOplogDays, 14);
   assert.eq(x.expireOplogHours, 0);
 
   master.runCommand({replSetExpireOplog:1, expireOplogDays:2, expireOplogHours:4});
