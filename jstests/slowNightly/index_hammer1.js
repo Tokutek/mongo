@@ -16,7 +16,13 @@ ops[20] = { op : "createIndex" , ns : t.getFullName() , key : { y : 1 } }
 ops[30] = { op : "dropIndex" , ns : t.getFullName() , key : { x : 1 } }
 ops[40] = { op : "dropIndex" , ns : t.getFullName() , key : { y : 1 } }
 
-res = benchRun( { ops : ops , parallel : 5 , seconds : 20 , host : db.getMongo().host } )
+benchArgs = { ops : ops , parallel : 5 , seconds : 20 , host : db.getMongo().host };
+if (jsTest.options().auth) {
+    benchArgs['db'] = 'admin';
+    benchArgs['username'] = jsTest.options().adminUser;
+    benchArgs['password'] = jsTest.options().adminPassword;
+}
+res = benchRun( benchArgs );
 printjson( res )
 
 assert.eq( 10000 , t.count() );
