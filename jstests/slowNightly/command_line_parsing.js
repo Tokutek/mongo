@@ -14,9 +14,13 @@ var m2 = startMongod( "--port", port+2, "--dbpath", "/data/db/" + baseName +"2",
 var m2expected = {
     "parsed" : {
         "config" : "jstests/libs/testconfig",
-        "dbpath" : "/data/db/jstests_slowNightly_command_line_parsing2",
         "fastsync" : true,
-        "port" : 31002,
+        "storage" : {
+            "dbPath" : MongoRunner.dataDir + "/jstests_slowNightly_command_line_parsing2",
+        },
+        "net" : {
+            "port" : 31002
+        },
         "setParameter" : [
             "enableTestCommands=1"
             ]
@@ -35,9 +39,13 @@ var m3 = startMongod("--port", port+4, "--dbpath", "/data/db/" + baseName +"2",
 var m3expected = {
     "parsed" : {
         "config" : "jstests/libs/testconfig",
-        "dbpath" : "/data/db/jstests_slowNightly_command_line_parsing2",
         "fastsync" : true,
-        "port" : 31004,
+        "storage" : {
+            "dbPath" : MongoRunner.dataDir + "/jstests_slowNightly_command_line_parsing4",
+        },
+        "net" : {
+            "port" : 31004
+        }
     }
 };
 var m3result = m3.getDB("admin").runCommand( "getCmdLineOpts" );
