@@ -251,7 +251,7 @@ function assertErrorCode(coll, pipe, code, errmsg) {
     assert.eq(res.code, code);
 
     // Test with cursors
-    if (coll.getDB().isMaster().msg !== "isdbgrid") {
+    if (false && coll.getDB().isMaster().msg !== "isdbgrid") {
         // agg cursors not supported sharded yet
 
         var cmd = {pipeline: pipe};
