@@ -1,4 +1,6 @@
+#!/usr/bin/env python
 
+import re
 import sys
 import os, os.path
 import utils
@@ -6,15 +8,8 @@ import time
 import exceptions
 from optparse import OptionParser
 
-# set cwd to the root mongo dir, one level up from this
-# file's location (if we're not already running from there)
-cwd = os.getcwd()
-if os.path.basename(cwd) == 'buildscripts':
-    cwd = os.path.dirname(cwd)
+def shouldKill( c, root=None ):
 
-print( "cwd [" + cwd + "]" )
-
-def shouldKill( c ):
     if "smoke.py" in c:
         return False
 
@@ -33,7 +28,10 @@ def shouldKill( c ):
     if "vim" in c:
         return False
 
-    if c.find( cwd ) >= 0:
+    # if root directory is provided, see if command line matches mongod process running
+    # with the same data directory
+
+    if root and re.compile("(\W|^)mongod(.exe)?\s+.*--dbpath(\s+|=)%s(\s+|$)" % root).search( c ):
         return True
 
     if ( c.find( "buildbot" ) >= 0 or c.find( "slave" ) >= 0 ) and c.find( "/mongo/" ) >= 0:
@@ -44,7 +42,7 @@ def shouldKill( c ):
 
     return False
 
-def killprocs( signal="" ):
+def killprocs( signal="", root=None ):
     killed = 0
 
     if sys.platform == 'win32':
@@ -61,7 +59,7 @@ def killprocs( signal="" ):
 
     for x in l:
         x = x.lstrip()
-        if not shouldKill( x ):
+        if not shouldKill( x, root=root ):
             continue
 
         pid = x.split( " " )[0]
@@ -76,9 +74,9 @@ def cleanup( root , nokill ):
     if nokill:
         print "nokill requested, not killing anybody"
     else:
-        if killprocs() > 0:
+        if killprocs( root=root ) > 0:
             time.sleep(3)
-            killprocs("-9")
+            killprocs( "-9", root=root )
 
     # delete all regular files, directories can stay
     # NOTE: if we delete directories later, we can't delete diskfulltest
