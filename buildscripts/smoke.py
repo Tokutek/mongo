@@ -88,6 +88,7 @@ file_of_commands_mode = False
 start_mongod = True
 valgrind = False
 drd = False
+temp_path = None
 
 tests = []
 winners = []
@@ -602,8 +603,11 @@ def runTest(test, testnum, result):
 
         argv = argv + [ '--eval', evalString]
 
-    if argv[0].endswith( 'test' ) and no_preallocj :
-        argv = argv + [ '--nopreallocj' ]
+    if argv[0].endswith( 'test' ) or argv[0].endswith( 'test.exe' ):
+        if no_preallocj :
+            argv = argv + [ '--nopreallocj' ]
+        if temp_path:
+            argv = argv + [ '--tempPath', temp_path ]
 
     vlog.write("      Command : %s\n" % ' '.join(argv))
     vlog.write("         Date : %s\n" % datetime.now().ctime())
@@ -905,6 +909,7 @@ def set_globals(options, tests):
     global file_of_commands_mode
     global valgrind, drd
     global report_file
+    global temp_path
     start_mongod = options.start_mongod
     if hasattr(options, 'use_ssl'):
         use_ssl = options.use_ssl
@@ -952,6 +957,7 @@ def set_globals(options, tests):
     file_of_commands_mode = options.File and options.mode == 'files'
     # generate json report
     report_file = options.report_file
+    temp_path = options.temp_path
 
     quiet = options.quiet
     if options.tests_log_file is not None and len(options.tests_log_file) > 0:
@@ -1133,6 +1139,8 @@ def main():
                       help='Run mongo shell and mongod instances with SSL encryption')
     parser.add_option('--set-parameters', dest='set_parameters', default="",
                       help='Adds --setParameter for each passed in items in the csv list - ex. "param1=1,param2=foo" ')
+    parser.add_option('--temp-path', dest='temp_path', default=None,
+                      help='If present, passed as --tempPath to unittests and dbtests')
     # Buildlogger invocation from command line
     parser.add_option('--buildlogger-builder', dest='buildlogger_builder', default=None,
                       action="store", help='Set the "builder name" for buildlogger')
