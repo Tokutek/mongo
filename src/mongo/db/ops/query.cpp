@@ -729,7 +729,12 @@ namespace mongo {
         if (pq.hasOption( QueryOption_OplogReplay )) {
             options |= QueryOption_OplogReplay;
         }
-        ClientCursor::Holder ccPointer( new ClientCursor( options, cursor, ns ) );
+        // create a client cursor that does not create a cursorID.
+        // The cursor ID will be created if and only if we save
+        // the client cursor further below
+        ClientCursor::Holder ccPointer(
+            new ClientCursor( options, cursor, ns, BSONObj(), false, false )
+            );
 
         // for oplog cursors, we check if we are reading data that is too old and might
         // be stale.

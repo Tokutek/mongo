@@ -173,10 +173,27 @@ namespace mongo {
         delete cc;
         _i = clientCursorsById.upper_bound( id );
     }
+
+    void ClientCursor::initCursorID() {
+        {
+            recursive_scoped_lock lock(ccmutex);
+            _cursorid = allocCursorId_inlock();
+            clientCursorsById.insert( make_pair(_cursorid, this) );
+        }
+        
+        if (_partOfMultiStatementTxn) {
+            transactions = cc().txnStack();
+            // This cursor is now part of a multi-statement transaction and must be
+            // closed before that txn commits or aborts. Note it in the rollback.
+            ClientCursorRollback &rollback = cc().txn().clientCursorRollback();
+            rollback.noteClientCursor(_cursorid);
+        }
+    }
+
     
     ClientCursor::ClientCursor(int queryOptions, const shared_ptr<Cursor>& c, const string& ns,
-                               BSONObj query, const bool inMultiStatementTxn ) :
-        _ns(ns), _db( cc().database() ),
+                               BSONObj query, const bool inMultiStatementTxn, bool createCursorID ) :
+        _cursorid(INVALID_CURSOR_ID), _ns(ns), _db( cc().database() ),
         _c(c), _pos(0),
         _query(query),  _queryOptions(queryOptions),
         _slaveReadTillTS(0),
@@ -189,18 +206,7 @@ namespace mongo {
         verify( str::startsWith(_ns, _db->name()) );
         if( queryOptions & QueryOption_NoCursorTimeout )
             noTimeout();
-        recursive_scoped_lock lock(ccmutex);
-        _cursorid = allocCursorId_inlock();
-        clientCursorsById.insert( make_pair(_cursorid, this) );
-
-        if (_partOfMultiStatementTxn) {
-            transactions = cc().txnStack();
-            // This cursor is now part of a multi-statement transaction and must be
-            // closed before that txn commits or aborts. Note it in the rollback.
-            ClientCursorRollback &rollback = cc().txn().clientCursorRollback();
-            rollback.noteClientCursor(_cursorid);
-        }
-
+        
         if ( ! _c->modifiedKeys() ) {
             // store index information so we can decide if we can
             // get something out of the index key rather than full object
@@ -216,7 +222,9 @@ namespace mongo {
                 x++;
             }
         }
-
+        if (createCursorID) {
+            initCursorID();
+        }
     }
 
     ClientCursor::~ClientCursor() {
@@ -226,7 +234,7 @@ namespace mongo {
             return;
         }
 
-        {
+        if (_cursorid != INVALID_CURSOR_ID) {
             recursive_scoped_lock lock(ccmutex);
 
             clientCursorsById.erase(_cursorid);
