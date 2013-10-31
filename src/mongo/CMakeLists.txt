@@ -551,6 +551,7 @@ if (BUILD_TESTING)
 
   foreach (test_source
       concurrency/partitioned_counter_test
+      concurrency/spin_lock_test
       descriptive_stats_test
       fail_point_test
       processinfo_test
@@ -571,6 +572,7 @@ if (BUILD_TESTING)
       )
   endforeach ()
 
+  target_link_libraries(spin_lock_test spin_lock)
   target_link_libraries(descriptive_stats_test bson)
   target_link_libraries(fail_point_test fail_point)
   target_link_libraries(processinfo_test processinfo)
@@ -898,6 +900,7 @@ if (BUILD_TESTING)
 
   foreach (test
       partitioned_counter_test
+      spin_lock_test
       descriptive_stats_test
       fail_point_test
       md5_test

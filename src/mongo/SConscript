@@ -164,6 +164,10 @@ env.StaticLibrary( 'mongohasher', [ "db/hasher.cpp" ] )
 
 env.StaticLibrary('synchronization', [ 'util/concurrency/synchronization.cpp' ])
 
+env.StaticLibrary('spin_lock', ["util/concurrency/spin_lock.cpp"])
+env.CppUnitTest('spin_lock_test', ['util/concurrency/spin_lock_test.cpp'],
+                LIBDEPS=['spin_lock', '$BUILD_DIR/third_party/shim_boost'])
+
 commonFiles = [ "pch.cpp",
                 "buildinfo.cpp",
                 "db/lasterror.cpp",
@@ -179,7 +183,6 @@ commonFiles = [ "pch.cpp",
                 "util/password.cpp",
                 "util/concurrency/rwlockimpl.cpp",
                 "util/histogram.cpp",
-                "util/concurrency/spin_lock.cpp",
                 "util/text_startuptest.cpp",
                 "util/stack_introspect.cpp",
                 "util/net/sock.cpp",
@@ -258,6 +261,7 @@ env.StaticLibrary('mongocommon', commonFiles,
                            'stacktrace',
                            'stringutils',
                            'fail_point',
+                           'spin_lock',
                            'util/concurrency/thread_name',
                            '$BUILD_DIR/third_party/pcrecpp',
                            '$BUILD_DIR/third_party/murmurhash3/murmurhash3',

@@ -47,7 +47,6 @@ add_library(mongocommon_util STATIC
   password
   concurrency/rwlockimpl
   histogram
-  concurrency/spin_lock
   text_startuptest
   stack_introspect
   net/sock
@@ -72,6 +71,7 @@ target_link_libraries(mongocommon_util LINK_PUBLIC
   stacktrace
   stringutils
   fail_point
+  spin_lock
   thread_name
   options_parser
   ${PCRE_LIBRARIES}
