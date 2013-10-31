@@ -53,7 +53,7 @@ def printit(stats, es, sleeptime):
 
 def main():
     parser = optparse.OptionParser(usage="usage: %prog [options] <host:port>\n\n" + __doc__)
-    parser.add_option("-s", "--sleeptime", dest="sleeptime", default=10,
+    parser.add_option("-s", "--sleeptime", dest="sleeptime", default=10, type=int,
                       help="duration to sleep between reports [default: %default]", metavar="TIME")
     (opts, args) = parser.parse_args()
     if len(args) > 1:
