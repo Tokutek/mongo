@@ -1,21 +1,19 @@
 #!/usr/bin/env python2
 
+"""tokumxstat.py watches the engineStatus of a TokuMX instance and periodically
+prints when any variables changed, and by how much.  It is typically used for
+monitoring a system.
+"""
+
+import collections
+import logging
+import re
 import sys
 import time
-import re
-import collections
+import optparse
+
 import pymongo
-from pymongo import MongoClient
 
-
-
-def usage():
-    print "diff the tokumx engine status"
-    print "--host=HOSTNAME (default: localhost)"
-    print "--port=PORT (default: 27017)"
-    print "--sleeptime=SLEEPTIME (default: 10 seconds)"
-
-    return 1
 
 def convert(v):
     if type(v) == type('str'):
@@ -26,13 +24,10 @@ def convert(v):
     return v
 
 def printit(stats, es, sleeptime):
-    # print es
-
+    logging.info(time.strftime('%c'))
     od = collections.OrderedDict(sorted(es.items()))
     
     for k, v in od.iteritems():
-        #print k, v
-    
         try:
             v = convert(v)
         except:
@@ -57,52 +52,50 @@ def printit(stats, es, sleeptime):
     print
 
 def main():
-    host = 'localhost'
-    port = 27017
-    sleeptime = 10
+    parser = optparse.OptionParser(usage="usage: %prog [options] <host:port>\n\n" + __doc__)
+    parser.add_option("-s", "--sleeptime", dest="sleeptime", default=10,
+                      help="duration to sleep between reports [default: %default]", metavar="TIME")
+    (opts, args) = parser.parse_args()
+    if len(args) > 1:
+        parser.error("too many arguments")
+    if opts.sleeptime < 1:
+        parser.error("invalid --sleeptime: %d" % opts.sleeptime)
 
-    for a in sys.argv[1:]:
-        if a == "-h" or a == "-?" or a == "--help":
-            return usage()
-        match = re.match("--(.*)=(.*)", a)
-        if match:
-            exec "%s='%s'" % (match.group(1),match.group(2))
-            continue
-        return usage()
+    logging.basicConfig(level=logging.INFO)
 
-    connect_parameters = {}
-    if host is not None:
-        if host[0] == '/':
-            connect_parameters['unix_socket'] = host
-        else:
-            connect_parameters['host'] = host
-            if port is not None:
-                connect_parameters['port'] = int(port)
+    host = "localhost:27017"
+    if len(args) == 1:
+        host = args[0]
 
     try:
-        client = MongoClient(host,port)
+        logging.debug('connecting to %s...', host)
+        client = pymongo.MongoClient(host)
         db = client['test']
     except:
-        print sys.exc_info()
+        logging.exception('error connecting to %s', host)
         return 1
 
-    print "connected"
+    logging.info('connected to %s', host)
 
     stats = {}
-    while 1:
-        try:
-            es = db.command('engineStatus')
-        except:
-            print "db", sys.exc_info()
-            return 2
+    try:
+        while 1:
+            try:
+                es = db.command('engineStatus')
+            except:
+                logging.exception('error running engineStatus command')
+                return 2
 
-        try:
-            printit(stats, es, int(sleeptime))
-        except:
-            print "printit", sys.exc_info()
-            return 3
+            try:
+                printit(stats, es, int(opts.sleeptime))
+            except:
+                logging.exception('error printing info')
+                return 3
 
-        time.sleep(int(sleeptime))
+            time.sleep(int(opts.sleeptime))
+
+    except KeyboardInterrupt:
+        logging.info('disconnecting')
 
     return 0
 
