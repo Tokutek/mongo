@@ -124,6 +124,7 @@ set(client_sources
   client/dbclient_rs.cpp
   client/dbclientcursor.cpp
   client/gridfs.cpp
+  client/init.cpp
   client/remote_loader.cpp
   client/remote_transaction.cpp
   client/sasl_client_authenticate.cpp
@@ -583,6 +584,14 @@ if (BUILD_TESTING)
     ${TOKUMX_SSL_LIBRARIES}
     )
 
+  add_executable(background_job_test util/background_job_test)
+  add_dependencies(background_job_test generate_error_codes generate_action_types)
+  link_recursive_deps(background_job_test
+    unittest_main
+    mongocommon
+    ${TOKUMX_SSL_LIBRARIES}
+    )
+
   add_executable(md5_test util/md5_test util/md5main)
   add_dependencies(md5_test generate_error_codes generate_action_types)
   link_recursive_deps(md5_test
@@ -915,6 +924,7 @@ if (BUILD_TESTING)
   foreach (test
       partitioned_counter_test
       spin_lock_test
+      background_job_test
       descriptive_stats_test
       fail_point_test
       md5_test

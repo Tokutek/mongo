@@ -42,6 +42,7 @@ clientSourceBasic = [
     'mongo/client/dbclient_rs.cpp',
     'mongo/client/dbclientcursor.cpp',
     'mongo/client/gridfs.cpp',
+    'mongo/client/init.cpp',
     'mongo/client/remote_loader.cpp',
     'mongo/client/remote_transaction.cpp',
     'mongo/client/sasl_client_authenticate.cpp',

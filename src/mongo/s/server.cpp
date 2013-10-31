@@ -243,7 +243,7 @@ namespace mongo {
     void start( const MessageServer::Options& opts ) {
         balancer.go();
         cursorCache.startTimeoutThread();
-        PeriodicTask::theRunner->go();
+        PeriodicTask::startRunningPeriodicTasks();
 
         ShardedMessageHandler handler;
         MessageServer * server = createServer( opts , &handler );
