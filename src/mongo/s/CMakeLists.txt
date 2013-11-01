@@ -38,8 +38,8 @@ add_library(s_metadata STATIC
 add_dependencies(s_metadata generate_error_codes generate_action_types)
 target_link_libraries(s_metadata LINK_PUBLIC
   s_base
-  clientandshell
   base
+  clientdriver
   bson
   )
 

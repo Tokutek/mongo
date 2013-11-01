@@ -77,7 +77,6 @@ add_library(mongocommon STATIC
   "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
   db/lasterror
   "${CMAKE_CURRENT_BINARY_DIR}/shell/mongo.cpp"
-  db/dbmessage
   )
 add_dependencies(mongocommon generate_mongo_cpp generate_action_types)
 target_link_libraries(mongocommon LINK_PUBLIC
@@ -376,12 +375,27 @@ if (BUILD_TESTING)
 
   foreach (test
       dbclient_rs_test
-      scoped_db_conn_test
       )
     add_executable(${test} client/${test})
     add_dependencies(${test} generate_error_codes generate_action_types)
     link_recursive_deps(${test}
       COMBINED_LIBNAME client_rs_unittest_deps
+      unittest_main
+      clientdriver
+      mocklib
+      unittest_crutch
+      ${TokuKV_LIBRARIES}
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
+      scoped_db_conn_test
+      )
+    add_executable(${test} client/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME scoped_db_conn_unittest_deps
       unittest_main
       coredb
       coreserver
@@ -393,9 +407,6 @@ if (BUILD_TESTING)
       ${TOKUMX_SSL_LIBRARIES}
       )
   endforeach ()
-  target_link_libraries(dbclient_rs_test
-    mocklib
-    )
 
   foreach (test
       index_set_test
@@ -487,7 +498,6 @@ if (BUILD_TESTING)
 
   target_link_libraries(mongo_version_range_test bson)
 
-  # no crutch
   foreach (test
       chunk_diff_test
       collection_manager_test
@@ -498,9 +508,9 @@ if (BUILD_TESTING)
     link_recursive_deps(${test}
       COMBINED_LIBNAME sharding_nocrutch_unittest_deps
       unittest_main
-      mongocommon
       s_metadata
       db_common
+      unittest_crutch
       ${TOKUMX_SSL_LIBRARIES}
       )
   endforeach ()

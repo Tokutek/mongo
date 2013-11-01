@@ -64,17 +64,17 @@ add_library(mongocommon_util STATIC
 add_dependencies(mongocommon_util generate_error_codes generate_action_types)
 target_link_libraries(mongocommon_util LINK_PUBLIC
   bson
+  background_job
+  fail_point
   foundation
-  mongohasher
   md5
+  mongohasher
+  network
   processinfo
-  synchronization
+  spin_lock
   stacktrace
   stringutils
-  fail_point
-  spin_lock
-  network
-  background_job
+  synchronization
   thread_name
   options_parser
   ${PCRE_LIBRARIES}

@@ -144,6 +144,7 @@ target_link_libraries(coredb LINK_PUBLIC
   server_options
   storage_global_params_impl
   cmdline_utils
+  clientdriver
   ${TokuKV_LIBRARIES}
   )
 

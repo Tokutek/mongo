@@ -99,24 +99,22 @@ env.StaticLibrary('metadata', ['collection_manager.cpp',
                   LIBDEPS=['base',
                            '$BUILD_DIR/mongo/clientandshell',
                            '$BUILD_DIR/mongo/base/base',
+                           '$BUILD_DIR/mongo/clientdriver',
                            '$BUILD_DIR/mongo/bson'])
 
 env.CppUnitTest('chunk_diff_test',
                 'chunk_diff_test.cpp',
                 LIBDEPS=['metadata',
-                         '$BUILD_DIR/mongo/db/common'],
-                NO_CRUTCH=True)
+                         '$BUILD_DIR/mongo/db/common'])
 
 env.CppUnitTest('collection_manager_test',
                 'collection_manager_test.cpp',
                 LIBDEPS=['metadata',
                          '$BUILD_DIR/mongo/mocklib',
-                         '$BUILD_DIR/mongo/db/common'],
-                NO_CRUTCH=True)
+                         '$BUILD_DIR/mongo/db/common'])
 
 env.CppUnitTest('metadata_loader_test',
                 'metadata_loader_test.cpp',
                 LIBDEPS=['metadata',
                          '$BUILD_DIR/mongo/mocklib',
-                         '$BUILD_DIR/mongo/db/common'],
-                NO_CRUTCH=True)
+                         '$BUILD_DIR/mongo/db/common'])

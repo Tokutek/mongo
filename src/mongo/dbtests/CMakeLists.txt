@@ -26,7 +26,7 @@ add_library(mocklib STATIC
   )
 add_dependencies(mocklib generate_error_codes generate_action_types)
 target_link_libraries(mocklib LINK_PUBLIC
-  mongocommon
+  clientdriver
   )
 
 file(GLOB testfiles *.cpp)
