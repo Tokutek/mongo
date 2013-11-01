@@ -341,11 +341,13 @@ namespace mongo {
     public:
         SystemUsersCollection(const StringData &ns, const BSONObj &options) :
             IndexedCollection(ns, options) {
+            Client::CreatingSystemUsersScope scope;
             BSONObj info = extendedSystemUsersIndexInfo(ns);
             createIndex(info);
         }
         SystemUsersCollection(const BSONObj &serialized) :
             IndexedCollection(serialized) {
+            Client::CreatingSystemUsersScope scope;
             int idx = findIndexByKeyPattern(extendedSystemUsersKeyPattern);
             if (idx < 0) {
                 BSONObj info = extendedSystemUsersIndexInfo(_ns);
@@ -940,7 +942,6 @@ namespace mongo {
         } else if (isSystemCatalog(ns)) {
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(ns, options));
         } else if (isSystemUsersCollection(ns)) {
-            Client::CreatingSystemUsersScope scope;
             return shared_ptr<NamespaceDetails>(new SystemUsersCollection(ns, options));
         } else if (isProfileCollection(ns)) {
             // TokuMX doesn't _necessarily_ need the profile to be capped, but vanilla does.
