@@ -13,20 +13,3 @@ target_link_libraries(options_parser LINK_PUBLIC
   bson
   ${YAML_LIBRARIES}
   )
-
-if (BUILD_TESTING)
-  foreach (test
-      options_parser_test
-      environment_test
-      )
-    add_executable(${test} ${test})
-    add_dependencies(${test} generate_error_codes generate_action_types)
-    link_recursive_deps(${test}
-      COMBINED_LIBNAME options_parser_unittest_deps
-      options_parser
-      unittest_main
-      unittest_crutch
-      ${TOKUMX_SSL_LIBRARIES}
-      )
-  endforeach ()
-endif ()

@@ -75,7 +75,6 @@ set_source_files_properties(
 add_library(mongocommon STATIC
   pch
   "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
-  db/lasterror
   "${CMAKE_CURRENT_BINARY_DIR}/shell/mongo.cpp"
   )
 add_dependencies(mongocommon generate_mongo_cpp generate_action_types)
@@ -84,6 +83,7 @@ target_link_libraries(mongocommon LINK_PUBLIC
   mongocommon_util
   bson
   foundation
+  lasterror
   stringutils
   fail_point
   ${Boost_LIBRARIES}
@@ -422,7 +422,7 @@ if (BUILD_TESTING)
       )
   endforeach ()
 
-  target_link_whole_libraries(index_set_test bson index_set)
+  target_link_whole_libraries(index_set_test index_set)
   target_link_whole_libraries(server_parameters_test server_parameters)
 
   foreach (test
@@ -609,9 +609,86 @@ if (BUILD_TESTING)
     unittest_crutch
     ${TOKUMX_SSL_LIBRARIES}
     )
-  target_link_whole_libraries(md5_test
-    md5
-    )
+
+  foreach (test
+      censor_cmdline_test
+      )
+    add_executable(${test} util/cmdline_utils/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME cmdline_utils_unittest_deps
+      cmdline_utils
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
+      options_parser_test
+      environment_test
+      )
+    add_executable(${test} util/options_parser/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME options_parser_unittest_deps
+      options_parser
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
+      unittest_test
+      fixture_test
+      )
+    add_executable(${test} unittest/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME basic_unittest_deps
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
+      action_set_test
+      principal_set_test
+      privilege_set_test
+      role_graph_test
+      ## TODO: re-enable after bringing in new matcher
+      #authorization_manager_test
+      #authorization_session_test
+      )
+    add_executable(${test} db/auth/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME auth_unittest_deps
+      unittest_main
+      authcore
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+  #target_link_libraries(authorization_manager_test authmocks)
+  #target_link_libraries(authorization_session_test authmocks)
+
+  foreach (test
+      log_test
+      rotatable_file_writer_test
+      )
+    add_executable(${test} logger/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME logger_unittest_deps
+      logger
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
 endif ()
 
 add_executable(mongod

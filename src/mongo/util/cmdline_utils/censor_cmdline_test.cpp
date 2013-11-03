@@ -25,14 +25,6 @@
 
 namespace mongo {
 
-
-#ifdef MONGO_SSL
-        Status storeSSLServerOptions(const optionenvironment::Environment& params) {
-            return Status(ErrorCodes::InternalError,
-                          "This is a storeSSLServerOptions stub and should not be called");
-        }
-#endif // ifdef MONGO_SSL
-
 namespace {
 
     namespace moe = mongo::optionenvironment;

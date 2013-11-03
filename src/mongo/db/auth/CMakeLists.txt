@@ -85,30 +85,6 @@ target_link_libraries(authmocks
   coredb
   )
 
-if (BUILD_TESTING)
-  foreach (test
-      action_set_test
-      principal_set_test
-      privilege_set_test
-      role_graph_test
-      ## TODO: re-enable after bringing in new matcher
-      #authorization_manager_test
-      #authorization_session_test
-      )
-    add_executable(${test} ${test})
-    add_dependencies(${test} generate_error_codes generate_action_types)
-    link_recursive_deps(${test}
-      COMBINED_LIBNAME auth_unittest_deps
-      authcore
-      unittest_main
-      unittest_crutch
-      ${TOKUMX_SSL_LIBRARIES}
-      )
-  endforeach ()
-  #target_link_libraries(authorization_manager_test authmocks)
-  #target_link_libraries(authorization_session_test authmocks)
-endif ()
-
 install(FILES generate_action_types.py action_types.txt
   DESTINATION src/mongo/db/auth
   COMPONENT tokumx_client_sources

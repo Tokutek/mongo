@@ -16,6 +16,15 @@ add_library(index_set STATIC
   )
 add_dependencies(index_set generate_error_codes generate_action_types)
 
+add_library(lasterror STATIC
+  lasterror
+  )
+add_dependencies(lasterror generate_error_codes generate_action_types)
+target_link_libraries(lasterror LINK_PUBLIC
+  network
+  foundation
+  )
+
 # This library exists because some libraries, such as our networking library, need access to server
 # options, but not to the helpers to set them from the command line.  libserver_options_core.a just
 # has the structure for storing the server options, while libserver_options.a has the code to set

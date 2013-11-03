@@ -16,20 +16,3 @@ target_link_libraries(logger LINK_PUBLIC
   foundation
   thread_name
   )
-
-if (BUILD_TESTING)
-  foreach (test
-      log_test
-      rotatable_file_writer_test
-      )
-    add_executable(${test} ${test})
-    add_dependencies(${test} generate_error_codes generate_action_types)
-    link_recursive_deps(${test}
-      COMBINED_LIBNAME logger_unittest_deps
-      logger
-      unittest_main
-      unittest_crutch
-      ${TOKUMX_SSL_LIBRARIES}
-      )
-  endforeach ()
-endif ()

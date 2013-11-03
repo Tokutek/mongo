@@ -32,6 +32,5 @@ namespace mongo {
     StartupTest::StartupTest() {}
     StartupTest::~StartupTest() {}
     bool inShutdown() { return false; }
-    void setLastError(int code, const char* msg) {}
     bool StaticObserver::_destroyingStatics = false;
 }  // namespace mongo
