@@ -20,6 +20,8 @@ add_library(foundation STATIC
   text
   time_support
   timer
+  util
+  startup_test
   )
 add_dependencies(foundation generate_error_codes generate_action_types)
 target_link_libraries(foundation LINK_PUBLIC
@@ -46,7 +48,6 @@ target_link_libraries(background_job LINK_PUBLIC
 
 add_library(mongocommon_util STATIC
   intrusive_counter
-  util
   trace
   paths
   progress_meter
@@ -58,7 +59,6 @@ add_library(mongocommon_util STATIC
   histogram
   text_startuptest
   stack_introspect
-  startup_test
   version
   )
 add_dependencies(mongocommon_util generate_error_codes generate_action_types)

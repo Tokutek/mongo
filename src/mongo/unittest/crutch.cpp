@@ -29,8 +29,5 @@
 #include "mongo/util/startup_test.h"
 
 namespace mongo {
-    StartupTest::StartupTest() {}
-    StartupTest::~StartupTest() {}
     bool inShutdown() { return false; }
-    bool StaticObserver::_destroyingStatics = false;
 }  // namespace mongo
