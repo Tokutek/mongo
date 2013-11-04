@@ -1637,7 +1637,6 @@ namespace QueryTests {
             add< FindingStartPartiallyFull >();
             add< FindingStartStale >();
             add< WhatsMyUri >();
-            add< Exhaust >();
             add< QueryCursorTimeout >();
             add< QueryReadsAll >();
             add< KillPinnedCursor >();
