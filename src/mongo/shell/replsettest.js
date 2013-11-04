@@ -580,6 +580,34 @@ ReplSetTest.prototype.getHashes = function( db ){
     return res;
 }
 
+ReplSetTest.prototype.getDefaults = function ( n, useReplSet ){
+    if (useReplSet) {
+        var defaults = { useHostName : this.useHostName,
+                     oplogSize : this.oplogSize, 
+                     keyFile : this.keyFile, 
+                     port : this.getPort( n ),
+                     noprealloc : "",
+                     smallfiles : "",
+                     rest : "",
+                     replSet : this.useSeedList ? this.getURL() : this.name,
+                     txnMemLimit : this.txnMemLimit,
+                     dbpath : "$set-$node" }
+        return defaults
+    }
+    else {
+        var defaults = { useHostName : this.useHostName,
+                     oplogSize : this.oplogSize, 
+                     keyFile : this.keyFile, 
+                     port : this.getPort( n ),
+                     noprealloc : "",
+                     smallfiles : "",
+                     rest : "",
+                     txnMemLimit : this.txnMemLimit,
+                     dbpath : "$set-$node" }
+        return defaults
+    }
+}
+
 /**
  * Starts up a server.  Options are saved by default for subsequent starts.
  * 
@@ -595,7 +623,7 @@ ReplSetTest.prototype.getHashes = function( db ){
  *   before the server starts.  Default: false.
  * 
  */
-ReplSetTest.prototype.start = function( n , options , restart , wait ){
+ReplSetTest.prototype.startWithReplOption = function( n , options , restart , wait, useReplset ){
     
     if( n.length ){
         
@@ -614,16 +642,7 @@ ReplSetTest.prototype.start = function( n , options , restart , wait ){
     
     print( "ReplSetTest n is : " + n )
     
-    defaults = { useHostName : this.useHostName,
-                 oplogSize : this.oplogSize, 
-                 keyFile : this.keyFile, 
-                 port : this.getPort( n ),
-                 noprealloc : "",
-                 smallfiles : "",
-                 rest : "",
-                 replSet : this.useSeedList ? this.getURL() : this.name,
-                 txnMemLimit : this.txnMemLimit,
-                 dbpath : "$set-$node" }
+    defaults = this.getDefaults(n, useReplset)
     
     defaults = Object.merge( defaults, ReplSetTest.nodeOptions || {} )
 
@@ -680,6 +699,14 @@ ReplSetTest.prototype.start = function( n , options , restart , wait ){
     
 }
 
+ReplSetTest.prototype.start = function( n , options , restart , wait ){
+    return this.startWithReplOption(n , options , restart , wait, true)
+}
+
+ReplSetTest.prototype.startWithoutRepl = function( n , options , restart , wait ){
+    return this.startWithReplOption(n , options , restart , wait, false)
+}
+
 
 /**
  * Restarts a db without clearing the data directory by default.  If the server is not
@@ -713,6 +740,40 @@ ReplSetTest.prototype.restart = function( n , options, signal, wait ){
     }
     return started;
 }
+
+/**
+ * Restarts a db without clearing the data directory by default.  If the server is not
+ * stopped first, this function will not work.  
+ * 
+ * Option { startClean : true } forces clearing the data directory.
+ * Option { auth : Object } object that contains the auth details for admin credentials.
+ *   Should contain the fields 'user' and 'pwd'
+ * 
+ * @param {int|conn|[int|conn]} n array or single server number (0, 1, 2, ...) or conn
+ */
+ReplSetTest.prototype.restartWithoutReplset = function( n , options, signal, wait ){
+    // Can specify wait as third parameter, if using default signal
+    if( signal == true || signal == false ){
+        wait = signal
+        signal = undefined
+    }
+    
+    this.stop( n, signal, wait && wait.toFixed ? wait : true, options )
+    started = this.startWithoutRepl( n , options , true, wait );
+
+    if (jsTestOptions().keyFile && !this.keyFile) {
+        if (started.length) {
+             // if n was an array of conns, start will return an array of connections
+            for (var i = 0; i < started.length; i++) {
+                jsTest.authenticate(started[i]);
+            }
+        } else {
+            jsTest.authenticate(started);
+        }
+    }
+    return started;
+}
+
 
 ReplSetTest.prototype.stopMaster = function( signal , wait, opts ) {
     var master = this.getMaster();

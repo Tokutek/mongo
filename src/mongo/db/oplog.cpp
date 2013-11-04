@@ -64,6 +64,10 @@ namespace mongo {
         dropCollection(rsReplInfo, errmsg, out);
     }
 
+    bool oplogFilesOpen() {
+        return (rsOplogDetails != NULL && rsOplogRefsDetails != NULL && replInfoDetails != NULL);
+    }
+
     void openOplogFiles() {
         const char *logns = rsoplog;
         if (rsOplogDetails == NULL) {
@@ -361,27 +365,41 @@ namespace mongo {
         LOG(3) << "rollback ref " << entry << " oid " << oid << endl;
         long long seq = LLONG_MAX;
         while (1) {
-            BSONObj entry;
+            BSONObj currEntry;
             {
                 Client::ReadContext ctx(rsOplogRefs);
-                // TODO: Should this be using rsOplogRefsDetails, verifying non-null?
-                NamespaceDetails *d = nsdetails(rsOplogRefs);
-                if (d == NULL || !d->findOne(BSON("_id" << BSON("$lt" << BSON("oid" << oid << "seq" << seq))), entry, true)) {
+                verify(rsOplogRefsDetails != NULL);
+                shared_ptr<IndexCursor> c(
+                    IndexCursor::make(
+                        rsOplogRefsDetails,
+                        rsOplogRefsDetails->getPKIndex(),
+                        Helpers::toKeyFormat(BSON( "_id" << BSON("oid" << oid << "seq" << seq))), // right endpoint
+                        Helpers::toKeyFormat(BSON( "_id" << BSON("oid" << oid << "seq" << 0))), // left endpoint
+                        false,
+                        -1 // direction
+                        )
+                    );
+                if (c->ok()) {
+                    currEntry = c->current().copy();
+                }
+                else {
                     break;
                 }
             }
-            BSONElement e = entry.getFieldDotted("_id.seq");
+            BSONElement e = currEntry.getFieldDotted("_id.seq");
             seq = e.Long();
-            BSONElement eOID = entry.getFieldDotted("_id.oid");
+            BSONElement eOID = currEntry.getFieldDotted("_id.oid");
             if (oid != eOID.OID()) {
                 break;
             }
-            LOG(3) << "apply " << entry << " seq=" << seq << endl;
-            rollbackOps(entry["ops"].Array());
+            LOG(3) << "apply " << currEntry << " seq=" << seq << endl;
+            rollbackOps(currEntry["ops"].Array());
+            // decrement seq so next query gets the next value
+            seq--;
         }
     }
 
-    void rollbackTransactionFromOplog(BSONObj entry) {
+    void rollbackTransactionFromOplog(BSONObj entry, bool purgeEntry) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         Client::Transaction transaction(DB_SERIALIZABLE);
         if (transactionAlreadyApplied) {
@@ -395,7 +413,15 @@ namespace mongo {
         }
         {
             Lock::DBRead lk1("local");
-            purgeEntryFromOplog(entry);
+            if (purgeEntry) {
+                purgeEntryFromOplog(entry);
+            }
+            else {
+                // set the applied bool to false, to let the oplog know that
+                // this entry has not been applied to collections
+                BSONElementManipulator(entry["a"]).setBool(false);
+                writeEntryToOplog(entry);
+            }
         }
         transaction.commit(DB_TXN_NOSYNC);
     }
@@ -406,8 +432,8 @@ namespace mongo {
             OID oid = entry["ref"].OID();
             Helpers::removeRange(
                 rsOplogRefs,
-                BSON("_id" << BSON("oid" << oid << "seq" << minKey)),
-                BSON("_id" << BSON("oid" << oid << "seq" << maxKey)),
+                BSON("_id" << BSON("oid" << oid << "seq" << 0)),
+                BSON("_id" << BSON("oid" << oid << "seq" << LLONG_MAX)),
                 BSON("_id" << 1),
                 true,
                 false
