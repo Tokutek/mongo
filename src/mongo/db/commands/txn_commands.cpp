@@ -26,13 +26,6 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
-            ActionSet actions;
-            actions.addAction(ActionType::transactionCommands);
-            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
-        }
         virtual LockType locktype() const { return OPLOCK; }
         virtual void help( stringstream& help ) const {
             help << "begin transaction\n"
@@ -90,13 +83,6 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
-            ActionSet actions;
-            actions.addAction(ActionType::transactionCommands);
-            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
-        }
         virtual LockType locktype() const { return OPLOCK; }
         virtual void help( stringstream& help ) const {
             help << "commit transaction\n"
@@ -127,13 +113,6 @@ namespace mongo {
     public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
-            ActionSet actions;
-            actions.addAction(ActionType::transactionCommands);
-            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
-        }
         virtual LockType locktype() const { return OPLOCK; }
         virtual void help( stringstream& help ) const {
             help << "rollback transaction\n"
