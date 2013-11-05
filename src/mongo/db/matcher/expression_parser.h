@@ -51,6 +51,8 @@ namespace mongo {
          */
         static bool _isExpressionDocument( const BSONElement& e );
 
+        static bool _isDBRefDocument( const BSONObj& obj );
+
         static StatusWithMatchExpression _parse( const BSONObj& obj, bool topLevel );
 
         /**
