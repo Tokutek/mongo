@@ -31,7 +31,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::transactionCommands);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
         }
         virtual LockType locktype() const { return OPLOCK; }
         virtual void help( stringstream& help ) const {
@@ -95,7 +95,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::transactionCommands);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
         }
         virtual LockType locktype() const { return OPLOCK; }
         virtual void help( stringstream& help ) const {
@@ -132,7 +132,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::transactionCommands);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
         }
         virtual LockType locktype() const { return OPLOCK; }
         virtual void help( stringstream& help ) const {
