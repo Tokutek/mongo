@@ -845,6 +845,15 @@ namespace mongo {
             TOKULOG(1) << "loader max memory set to " << bytes << "." << endl;
         }
 
+        __attribute__((noreturn))
+        static void handle_filesystem_error_nicely(int error) {
+            stringstream ss;
+            ss << "Error " << error << ": " << strerror(error);
+            warning() << "Got the following error from the filesystem:" << endl;
+            warning() << ss.str() << endl;
+            uasserted(17035, ss.str());
+        }
+
         void handle_ydb_error(int error) {
             switch (error) {
                 case ENOENT:
@@ -857,6 +866,14 @@ namespace mongo {
                 case ASSERT_IDS::CannotHashArrays:
                     uasserted( storage::ASSERT_IDS::CannotHashArrays,
                                "Error: hashed indexes do not currently support array values" );
+                case EACCES:
+                case EMFILE:
+                case ENOSPC:
+                case EPERM:
+                case EROFS: {
+                    handle_filesystem_error_nicely(error);
+                    verify(false);  // should not reach this point
+                }
                 default:
                     // fall through
                     ;
