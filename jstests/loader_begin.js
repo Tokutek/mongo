@@ -20,9 +20,9 @@ var testNSProvisionallyExists = function() {
     t = db.loadnsprovexists;
     t.drop();
     begin();
-    s = startParallelShell('db.runCommand({ beginTransaction: 1 });' +
+    s = startParallelShell('db.beginTransaction();' +
                            'db.loadnsprovexists.insert({ prov: 1 });' +
-                           'sleep(2000); db.runCommand({ commitTransaction: 1 })');
+                           'sleep(2000); db.commitTransaction()');
     sleep(1000);
     beginLoadShouldFail('loadnsprovexists', [ ], { });
     commit();
@@ -34,9 +34,9 @@ var testNSProvisionallyDropped = function() {
     t.drop();
     t.insert({ prov: 1 });
     begin();
-    s = startParallelShell('db.runCommand({ beginTransaction: 1 });' +
+    s = startParallelShell('db.beginTransaction();' +
                            'db.loadnsprovdropped.drop(); ' +
-                           'sleep(2000); db.runCommand({ abortTransaction: 1 })');
+                           'sleep(2000); db.rollbackTransaction()');
     sleep(500);
     beginLoadShouldFail('loadnsprovdropped', [ ], { });
     commit();

@@ -129,7 +129,7 @@ namespace mongo {
                 "If running a multi statement transaction, rollback transaction, no-op otherwise .\n"
                 "{ rollbackTransaction }";
         }
-        RollbackTransactionCmd() : TransactionCommand("rollbackTransaction") {}
+        RollbackTransactionCmd() : TransactionCommand("rollbackTransaction", false, "abortTransaction") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
