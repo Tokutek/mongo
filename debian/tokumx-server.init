@@ -110,7 +110,7 @@ running() {
 }
 
 start_server() {
-# Start the process using the wrapper
+        # Start the process using the wrapper
         if [ -f /sys/kernel/mm/transparent_hugepage/enabled ]; then
             if grep -q "\[always\]" /sys/kernel/mm/transparent_hugepage/enabled; then
                 echo never > /sys/kernel/mm/transparent_hugepage/enabled
@@ -121,6 +121,16 @@ start_server() {
             fi
         fi
 		
+        # Recommended ulimit values for mongod or mongos
+        # See http://docs.mongodb.org/manual/reference/ulimit/#recommended-settings
+        #
+        ulimit -f unlimited
+        ulimit -t unlimited
+        ulimit -v unlimited
+        ulimit -n 64000
+        ulimit -m unlimited
+        ulimit -u 32000
+
         start-stop-daemon --background --start --quiet --pidfile $PIDFILE \
                 --make-pidfile --chuid $DAEMONUSER \
                 --exec $DAEMON -- $DAEMON_OPTS

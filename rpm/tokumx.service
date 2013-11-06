@@ -9,5 +9,15 @@ PIDFile=/var/run/tokumx/tokumx.pid
 EnvironmentFile=/etc/sysconfig/tokumx
 ExecStart=/usr/bin/mongod $OPTIONS run
 
+# Recommended ulimit values for mongod or mongos
+# See http://docs.mongodb.org/manual/reference/ulimit/#recommended-settings
+#
+LimitFSIZE=infinity
+LimitCPU=infinity
+LimitAS=infinity
+LimitNOFILE=64000
+LimitRSS=infinity
+LimitNPROC=32000
+
 [Install]
 WantedBy=multi-user.target

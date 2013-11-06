@@ -108,6 +108,17 @@ start() {
         fi
     done
     [ -x $exec ] || exit 5
+
+    # Recommended ulimit values for mongod or mongos
+    # See http://docs.mongodb.org/manual/reference/ulimit/#recommended-settings
+    #
+    ulimit -f unlimited
+    ulimit -t unlimited
+    ulimit -v unlimited
+    ulimit -n 64000
+    ulimit -m unlimited
+    ulimit -u 32000
+
     echo -n $"Starting $prog: "
     daemon --pidfile=${pidfile} --user tokumx "$exec --quiet $options run >> $logfile 2>&1 &"
     retval=$?
