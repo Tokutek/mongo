@@ -198,11 +198,7 @@ namespace OpLogHelpers{
         }
     }
 
-    static void runColdIndexFromOplog(
-        const char* ns,
-        BSONObj row
-        )
-    {
+    static void runColdIndexFromOplog(const char* ns, BSONObj row) {
         Client::WriteContext ctx(ns);
         NamespaceDetails* nsd = nsdetails(ns);
         const string &coll = row["ns"].String();
@@ -218,11 +214,8 @@ namespace OpLogHelpers{
         }
         insertOneObject(nsd, row, NamespaceDetails::NO_UNIQUE_CHECKS);
     }
-    static void runHotIndexFromOplog(
-        const char* ns,
-        BSONObj row
-        )
-    {
+
+    static void runHotIndexFromOplog(const char* ns, BSONObj row) {
         // The context and lock must outlive the indexer so that
         // the indexer destructor gets called in a write locked.
         // These MUST NOT be reordered, the context must destruct
@@ -259,16 +252,7 @@ namespace OpLogHelpers{
             indexer->commit();
         }
     }
-    static void runNonSystemInsertFromOplogWithLock(
-        const char* ns, 
-        BSONObj row
-        ) 
-    {
-        NamespaceDetails* nsd = nsdetails(ns);
-        // overwrite set to true because we are running on a secondary
-        uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
-        insertOneObject(nsd, row, flags);
-    }
+
     static void runInsertFromOplog(const char* ns, BSONObj op) {
         BSONObj row = op[KEY_STR_ROW].Obj();
         // handle add index case
@@ -283,64 +267,42 @@ namespace OpLogHelpers{
             }
         }
         else {
-            try {
-                Client::ReadContext ctx(ns);
-                runNonSystemInsertFromOplogWithLock(ns, row);
-            }
-            catch (RetryWithWriteLock &e) {
-                Client::WriteContext ctx(ns);
-                runNonSystemInsertFromOplogWithLock(ns, row);
-            }
+            Client::ReadContext ctx(ns);
+            NamespaceDetails* nsd = nsdetails(ns);
+
+            // overwrite set to true because we are running on a secondary
+            uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
+            insertOneObject(nsd, row, flags);
         }
     }
 
-    static void runCappedInsertFromOplogWithLock(
-        const char* ns, 
-        BSONObj& pk,
-        BSONObj& row
-        ) 
-    {
+    static void runCappedInsertFromOplog(const char* ns, BSONObj op) {
+        BSONObj pk = op[KEY_STR_PK].Obj();
+        BSONObj row = op[KEY_STR_ROW].Obj();
+
+        Client::ReadContext ctx(ns);
         NamespaceDetails *nsd = nsdetails(ns);
+
         // overwrite set to true because we are running on a secondary
         const uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
         nsd->insertObjectIntoCappedWithPK(pk, row, flags);
         nsd->notifyOfWriteOp();
     }
-    
-    static void runCappedInsertFromOplog(const char* ns, BSONObj op) {
-        BSONObj pk = op[KEY_STR_PK].Obj();
-        BSONObj row = op[KEY_STR_ROW].Obj();
-        try {
-            Client::ReadContext ctx(ns);
-            runCappedInsertFromOplogWithLock(ns, pk, row);
-        }
-        catch (RetryWithWriteLock &e) {
-            Client::WriteContext ctx(ns);
-            runCappedInsertFromOplogWithLock(ns, pk, row);
-        }
-    }
 
-    static void runDeleteFromOplogWithLock(const char* ns, BSONObj op) {
+    static void runDeleteFromOplog(const char* ns, BSONObj op) {
+        Client::ReadContext ctx(ns);
         NamespaceDetails* nsd = nsdetails(ns);
+
         BSONObj row = op[KEY_STR_ROW].Obj();
         BSONObj pk = row["_id"].wrap("");
         uint64_t flags = NamespaceDetails::NO_LOCKTREE;
         deleteOneObject(nsd, pk, row, flags);
     }
-
-    static void runDeleteFromOplog(const char* ns, BSONObj op) {
-        try {
-            Client::ReadContext ctx(ns);
-            runDeleteFromOplogWithLock(ns, op);
-        }
-        catch (RetryWithWriteLock &e) {
-            Client::WriteContext ctx(ns);
-            runDeleteFromOplogWithLock(ns, op);
-        }        
-    }
-
-    static void runCappedDeleteFromOplogWithLock(const char* ns, BSONObj op) {
+    
+    static void runCappedDeleteFromOplog(const char* ns, BSONObj op) {
+        Client::ReadContext ctx(ns);
         NamespaceDetails* nsd = nsdetails(ns);
+
         BSONObj row = op[KEY_STR_ROW].Obj();
         BSONObj pk = op[KEY_STR_PK].Obj();
 
@@ -348,20 +310,11 @@ namespace OpLogHelpers{
         nsd->deleteObjectFromCappedWithPK(pk, row, flags);
         nsd->notifyOfWriteOp();
     }
-    
-    static void runCappedDeleteFromOplog(const char* ns, BSONObj op) {
-        try {
-            Client::ReadContext ctx(ns);
-            runCappedDeleteFromOplogWithLock(ns, op);
-        }
-        catch (RetryWithWriteLock &e) {
-            Client::WriteContext ctx(ns);
-            runCappedDeleteFromOplogWithLock(ns, op);
-        }
-    }
 
-    static void runUpdateFromOplogWithLock(const char* ns, BSONObj op, bool isRollback) {
+    static void runUpdateFromOplog(const char* ns, BSONObj op, bool isRollback) {
+        Client::ReadContext ctx(ns);
         NamespaceDetails* nsd = nsdetails(ns);
+
         const char *names[] = {
             KEY_STR_PK,
             KEY_STR_OLD_ROW, 
@@ -386,16 +339,6 @@ namespace OpLogHelpers{
             // normal replication case
             updateOneObject(nsd, pk, oldRow, newRow, LogOpUpdateDetails(), flags);
         }
-    }
-    static void runUpdateFromOplog(const char* ns, BSONObj op, bool isRollback) {
-        try {
-            Client::ReadContext ctx(ns);
-            runUpdateFromOplogWithLock(ns, op, isRollback);
-        }
-        catch (RetryWithWriteLock &e) {
-            Client::WriteContext ctx(ns);
-            runUpdateFromOplogWithLock(ns, op, isRollback);
-        }        
     }
 
     static void runCommandFromOplog(const char* ns, BSONObj op) {
