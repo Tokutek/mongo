@@ -111,7 +111,6 @@ namespace mongo {
         _wantMore = true;
         _explain = false;
         _returnKey = false;
-        _showDiskLoc = false;
         _maxScan = 0;
     }
 
@@ -172,8 +171,6 @@ namespace mongo {
                     _returnKey = e.trueValue();
                 else if ( strcmp( "maxScan" , name ) == 0 )
                     _maxScan = e.numberInt();
-                else if ( strcmp( "showDiskLoc" , name ) == 0 )
-                    _showDiskLoc = e.trueValue();
                 else if ( strcmp( "comment" , name ) == 0 ) {
                     ; // no-op
                 }

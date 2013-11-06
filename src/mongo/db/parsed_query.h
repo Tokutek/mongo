@@ -57,7 +57,6 @@ namespace mongo {
         
         bool isExplain() const { return _explain; }
         bool returnKey() const { return _returnKey; }
-        bool showDiskLoc() const { return _showDiskLoc; }
         
         const BSONObj& getMin() const { return _min; }
         const BSONObj& getMax() const { return _max; }
@@ -101,7 +100,6 @@ namespace mongo {
         bool _wantMore;
         bool _explain;
         bool _returnKey;
-        bool _showDiskLoc;
         bool _hasReadPref;
         BSONObj _min;
         BSONObj _max;
