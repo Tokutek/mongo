@@ -96,7 +96,7 @@ namespace mongo {
         BSONObj bb = b.done();
         // write it to oplog
         LOG(3) << "writing " << bb.toString(false, true) << " to master " << endl;
-        writeEntryToOplog(bb);
+        writeEntryToOplog(bb, true);
     }
 
     // assumes it is locked on entry
@@ -130,7 +130,7 @@ namespace mongo {
         b.append("a", true);
         b.append("ref", oid);
         BSONObj bb = b.done();
-        writeEntryToOplog(bb);
+        writeEntryToOplog(bb, true);
     }
 
     void logOpsToOplogRef(BSONObj o) {
@@ -202,14 +202,21 @@ namespace mongo {
         return found;
     }
 
-    void writeEntryToOplog(BSONObj entry) {
+    static void _writeEntryToOplog(BSONObj entry) {
         verify(rsOplogDetails);
-
-        TimerHolder insertTimer(&oplogInsertStats);
-        oplogInsertBytesStats.increment(entry.objsize());
 
         uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         rsOplogDetails->insertObject(entry, flags);
+    }
+
+    void writeEntryToOplog(BSONObj entry, bool recordStats) {
+        if (recordStats) {
+            TimerHolder insertTimer(&oplogInsertStats);
+            oplogInsertBytesStats.increment(entry.objsize());
+            _writeEntryToOplog(entry);
+        } else {
+            _writeEntryToOplog(entry);
+        }
     }
 
     void writeEntryToOplogRefs(BSONObj o) {
@@ -227,7 +234,7 @@ namespace mongo {
         // set the applied bool to false, to let the oplog know that
         // this entry has not been applied to collections
         BSONElementManipulator(op["a"]).setBool(false);
-        writeEntryToOplog(op);
+        writeEntryToOplog(op, true);
     }
 
     // Copy a range of documents to the local oplog.refs collection
@@ -315,12 +322,12 @@ namespace mongo {
             } else {
                 verify(0);
             }
-            // set the applied bool to false, to let the oplog know that
-            // this entry has not been applied to collections
+            // set the applied bool to true, to let the oplog know that
+            // this entry has been applied to collections
             BSONElementManipulator(entry["a"]).setBool(true);
             {
                 Lock::DBRead lk1("local");
-                writeEntryToOplog(entry);
+                writeEntryToOplog(entry, false);
             }
             // If this code fails, it is impossible to recover from
             // because we don't know if the transaction successfully committed
