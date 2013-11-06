@@ -355,7 +355,6 @@ namespace mongo {
         }
         
         addStandardPlans( d );
-        warnOnCappedIdTableScan();
     }
     
     void QueryPlanGenerator::addFallbackPlans() {
@@ -595,26 +594,6 @@ namespace mongo {
         _qps.setSinglePlan( plan );
     }
 
-    void QueryPlanGenerator::warnOnCappedIdTableScan() const {
-        // if we are doing a table scan on _id
-        // and it's a capped collection
-        // we warn as it's a common user error
-        // .system. and local collections are exempt
-        StringData ns = _qps.frsp().ns();
-        NamespaceDetails* d = nsdetails( ns );
-        if ( d &&
-             d->isCapped() &&
-             _qps.nPlans() == 1 &&
-             ( _qps.firstPlan()->utility() != QueryPlan::Impossible ) &&
-             !_qps.firstPlan()->indexed() &&
-             !_qps.firstPlan()->multikeyFrs().range( "_id" ).universal() ) {
-            if (!NamespaceString::isSystem(ns) && nsToDatabaseSubstring(ns) != "local") {
-                warning() << "unindexed _id query on capped collection, "
-                          << "performance will be poor collection: " << ns << endl;
-            }
-        }
-    }
-    
     QueryPlanSet* QueryPlanSet::make( const char* ns,
                                       auto_ptr<FieldRangeSetPair> frsp,
                                       auto_ptr<FieldRangeSetPair> originalFrsp,

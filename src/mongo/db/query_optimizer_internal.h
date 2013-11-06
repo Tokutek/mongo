@@ -320,8 +320,6 @@ namespace mongo {
 
         void validateAndSetHintedPlan( const shared_ptr<QueryPlan>& plan );
 
-        void warnOnCappedIdTableScan() const;
-
         QueryPlanSet& _qps;
         auto_ptr<FieldRangeSetPair> _originalFrsp;
         shared_ptr<const ParsedQuery> _parsedQuery;
