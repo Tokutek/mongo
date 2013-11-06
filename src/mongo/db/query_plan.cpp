@@ -286,17 +286,6 @@ doneCheckOrder:
                                                       _direction >= 0 ? 1 : -1 ) );
     }
 
-    shared_ptr<Cursor> QueryPlan::newReverseCursor() const {
-        if ( willScanTable() ) {
-            const int orderSpec = _order.getIntField( "$natural" );
-            const int direction = orderSpec == INT_MIN ? -1 : -orderSpec;
-            NamespaceDetails *d = nsdetails( _frs.ns() );
-            return shared_ptr<Cursor>( BasicCursor::make( d, direction ) );
-        }
-        massert( 10364, "newReverseCursor() not implemented for indexed plans", false );
-        return shared_ptr<Cursor>();
-    }
-
     BSONObj QueryPlan::indexKey() const {
         if ( !_index )
             return BSON( "$natural" << 1 );
