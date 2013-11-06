@@ -66,7 +66,7 @@ namespace mongo {
             uassert( 16883, "The indexes field must be an array of index objects.",
                             cmdObj["indexes"].type() == mongo::Array );
             uassert( 16884, "The options field must be an object.",
-                            !cmdObj["options"].ok() || cmdObj["options"].type() == mongo::Object );
+                            cmdObj["options"].type() == mongo::Object );
             LOG(0) << "Beginning bulk load, cmd: " << cmdObj << endl;
 
             const string ns = db + "." + cmdObj["ns"].String();
