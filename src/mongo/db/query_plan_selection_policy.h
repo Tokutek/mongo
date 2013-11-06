@@ -51,20 +51,12 @@ namespace mongo {
 
         /** Prevent unindexed collection scans. */
         static const QueryPlanSelectionPolicy& indexOnly();
-
-        /**
-         * Generally hints to use the _id plan, falling back to the $natural plan.  However, the
-         * $natural plan will always be used if optimal for the query.
-         */
-        static const QueryPlanSelectionPolicy& idElseNatural();
         
     private:
         class Any;
         static Any __any;
         class IndexOnly;
         static IndexOnly __indexOnly;
-        class IdElseNatural;
-        static IdElseNatural __idElseNatural;
     };
 
     class QueryPlanSelectionPolicy::Any : public QueryPlanSelectionPolicy {
@@ -79,11 +71,4 @@ namespace mongo {
         virtual bool permitPlan( const QueryPlan& plan ) const;
     };
 
-    class QueryPlanSelectionPolicy::IdElseNatural : public QueryPlanSelectionPolicy {
-    public:
-        virtual string name() const { return "idElseNatural"; }
-        virtual bool permitPlan( const QueryPlan& plan ) const;
-        virtual BSONObj planHint( const StringData& ns ) const;
-    };
-    
 } // namespace mongo
