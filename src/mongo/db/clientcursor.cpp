@@ -69,17 +69,6 @@ namespace mongo {
     boost::recursive_mutex& ClientCursor::ccmutex( *(new boost::recursive_mutex()) );
     long long ClientCursor::numberTimedOut = 0;
 
-    /*static*/ void ClientCursor::assertNoCursors() {
-        recursive_scoped_lock lock(ccmutex);
-        if( clientCursorsById.size() ) {
-            log() << "ERROR clientcursors exist but should not at this point" << endl;
-            ClientCursor *cc = clientCursorsById.begin()->second;
-            log() << "first one: " << cc->_cursorid << ' ' << cc->_ns << endl;
-            clientCursorsById.clear();
-            verify(false);
-        }
-    }
-
     void ClientCursor::invalidateAllCursors() {
         verify(Lock::isW());
         for( LockedIterator i; i.ok(); ) {
