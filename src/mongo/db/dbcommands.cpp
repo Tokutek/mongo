@@ -1743,7 +1743,7 @@ namespace mongo {
             retval = _execCommand(c, dbname, cmdObj, queryOptions, errmsg, result, fromRepl);
 
             if ( retval && c->logTheOp() && ! fromRepl ) {
-                OpLogHelpers::logCommand(cmdns, cmdObj, &cc().txn());
+                OpLogHelpers::logCommand(cmdns, cmdObj);
             }
 
             if (retval && txn) {
@@ -1777,7 +1777,7 @@ namespace mongo {
             client.curop()->ensureStarted();
             retval = _execCommand(c, dbname, cmdObj, queryOptions, errmsg, result, fromRepl);
             if ( retval && c->logTheOp() && ! fromRepl ) {
-                OpLogHelpers::logCommand(cmdns, cmdObj, &cc().txn());
+                OpLogHelpers::logCommand(cmdns, cmdObj);
             }
 
             if (retval && transaction) {
@@ -1797,11 +1797,11 @@ namespace mongo {
 
        returns true if ran a cmd
     */
-    bool _runCommands(const char *ns, BSONObj& _cmdobj, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions) {
+    bool _runCommands(const char *ns, const BSONObj &cmdobj, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions) {
         string dbname = nsToDatabase( ns );
 
         if( logLevel >= 1 )
-            log() << "run command " << ns << ' ' << _cmdobj << endl;
+            log() << "run command " << ns << ' ' << cmdobj << endl;
 
         const char *p = strchr(ns, '.');
         if ( !p ) return false;
@@ -1809,7 +1809,7 @@ namespace mongo {
 
         BSONObj jsobj;
         {
-            BSONElement e = _cmdobj.firstElement();
+            BSONElement e = cmdobj.firstElement();
             if ( e.type() == Object && (e.fieldName()[0] == '$'
                                          ? str::equals("query", e.fieldName()+1)
                                          : str::equals("query", e.fieldName())))
@@ -1817,13 +1817,13 @@ namespace mongo {
                 jsobj = e.embeddedObject();
             }
             else {
-                jsobj = _cmdobj;
+                jsobj = cmdobj;
             }
         }
 
         // Treat the command the same as if it has slaveOk bit on if it has a read
         // preference setting. This is to allow these commands to run on a secondary.
-        if (Query::hasReadPreference(_cmdobj)) {
+        if (Query::hasReadPreference(cmdobj)) {
             queryOptions |= QueryOption_SlaveOk;
         }
 
@@ -1840,7 +1840,7 @@ namespace mongo {
             Command::appendCommandStatus(anObjBuilder,
                                          false,
                                          str::stream() << "no such cmd: " << e.fieldName());
-            anObjBuilder.append("bad cmd" , _cmdobj );
+            anObjBuilder.append("bad cmd" , cmdobj );
         }
 
         BSONObj x = anObjBuilder.done();

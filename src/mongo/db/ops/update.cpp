@@ -50,8 +50,7 @@ namespace mongo {
                 pk,
                 oldObj,
                 newObjModified,
-                logDetails.fromMigrate,
-                &cc().txn()
+                logDetails.fromMigrate
                 );
         }
         d->notifyOfWriteOp();
@@ -111,7 +110,7 @@ namespace mongo {
         checkBulkLoad(ns);
         insertOneObject(d, newObj);
         if (logop) {
-            OpLogHelpers::logInsert(ns, newObj, &cc().txn());
+            OpLogHelpers::logInsert(ns, newObj);
         }
     }
 

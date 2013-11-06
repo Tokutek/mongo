@@ -52,6 +52,7 @@ namespace mongo {
     class LockCollectionForReading;
     class DBClientConnection;
     class ReplSet;
+    class TxnContext;
 
     extern ReplSet *theReplSet;
     extern RWLockRecursive operationLock;

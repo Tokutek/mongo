@@ -49,7 +49,7 @@ namespace mongo {
             BSONObj pk = pattern["_id"].wrap("");
             if (d->findByPK(pk, obj)) {
                 if ( logop ) {
-                    OpLogHelpers::logDelete(ns, obj, false, &cc().txn());
+                    OpLogHelpers::logDelete(ns, obj, false);
                 }
                 deleteOneObject(d, pk, obj);
                 return 1;
@@ -89,7 +89,7 @@ namespace mongo {
             TOKULOG(4) << "_deleteObjects iteration: pk " << pk << ", obj " << obj << endl;
 
             if ( logop ) {
-                OpLogHelpers::logDelete(ns, obj, false, &cc().txn());
+                OpLogHelpers::logDelete(ns, obj, false);
             }
 
             deleteOneObject(d, pk, obj);

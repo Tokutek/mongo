@@ -380,15 +380,15 @@ namespace mongo {
             msgasserted( 16757, "bug: noted an abort, but it wasn't implemented" );
         }
 
-        virtual void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
+        virtual void insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags) {
             msgasserted( 16775, "bug: should not call insertObjectIntoCappedAndLogOps into non-capped collection" );
         }
 
-        virtual void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        virtual void insertObjectIntoCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             msgasserted( 16772, "bug: should not call insertObjectIntoCappedWithPK into non-capped collection" );
         }
         
-        virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        virtual void deleteObjectFromCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             msgasserted( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection" );
         }
 

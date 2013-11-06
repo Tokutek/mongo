@@ -452,7 +452,7 @@ namespace mongo {
 
         // run an insertion where the PK is specified
         // Can come from the applier thread on a slave or a cloner 
-        void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        void insertObjectIntoCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             SimpleMutex::scoped_lock lk(_mutex);
             long long pkVal = pk[""].Long();
             if (pkVal >= _nextPK.load()) {
@@ -468,14 +468,14 @@ namespace mongo {
 
         }
 
-        void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
-            obj = addIdField(obj);
+        void insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags) {
+            const BSONObj objWithId = addIdField(obj);
             uassert( 16774 , str::stream() << "document is larger than capped size "
-                     << obj.objsize() << " > " << _maxSize, obj.objsize() <= _maxSize );
+                     << objWithId.objsize() << " > " << _maxSize, objWithId.objsize() <= _maxSize );
 
             const BSONObj pk = getNextPK();
-            checkUniqueAndInsert(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
-            OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, obj, &cc().txn());
+            checkUniqueAndInsert(pk, objWithId, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
+            OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, objWithId);
             checkGorged(obj, true);
         }
 
@@ -491,7 +491,7 @@ namespace mongo {
 
         // run a deletion where the PK is specified
         // Can come from the applier thread on a slave
-        void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        void deleteObjectFromCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             _deleteObject(pk, obj, flags);
             // just make it easy and invalidate this
             _lastDeletedPK = BSONObj();
@@ -657,7 +657,7 @@ namespace mongo {
                     trimmedBytes += oldestPK.objsize();
                     
                     if (logop) {
-                        OpLogHelpers::logDeleteForCapped(_ns.c_str(), oldestPK, oldestObj, &cc().txn());
+                        OpLogHelpers::logDeleteForCapped(_ns.c_str(), oldestPK, oldestObj);
                     }
                     
                     // Delete the object, reload the current objects/size
@@ -710,11 +710,11 @@ namespace mongo {
             CappedCollection(serialized) {
         }
 
-        void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        void insertObjectIntoCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             msgasserted( 16847, "bug: The profile collection should not have replicated inserts." );
         }
 
-        void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
+        void insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags) {
             msgasserted( 16848, "bug: The profile collection should not not log inserts." );
         }
 
@@ -722,7 +722,7 @@ namespace mongo {
             _insertObject(obj, flags);
         }
 
-        void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        void deleteObjectFromCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             msgasserted( 16849, "bug: The profile collection should not have replicated deletes." );
         }
 
@@ -1675,7 +1675,7 @@ namespace mongo {
                 options = b.obj();
             }
             string logNs = cl.toString() + ".$cmd";
-            OpLogHelpers::logCommand(logNs.c_str(), options, &cc().txn());
+            OpLogHelpers::logCommand(logNs.c_str(), options);
         }
         // TODO: Identify error paths for this function
         return true;
