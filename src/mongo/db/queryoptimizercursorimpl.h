@@ -124,8 +124,6 @@ namespace mongo {
         // TODO fix
         virtual bool modifiedKeys() const { return true; }
 
-        virtual bool capped() const;
-
         virtual long long nscanned() const;
 
         virtual CoveredIndexMatcher *matcher() const;

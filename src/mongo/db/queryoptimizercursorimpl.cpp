@@ -103,12 +103,6 @@ namespace mongo {
         return _currRunner->cursor()->isMultiKey();
     }
         
-    bool QueryOptimizerCursorImpl::capped() const {
-        // Initial capped wrapping cases (before takeover) are handled internally by a component
-        // ClientCursor.
-        return _takeover ? _takeover->capped() : false;
-    }
-
     long long QueryOptimizerCursorImpl::nscanned() const {
         return _takeover ? _takeover->nscanned() : _nscanned;
     }

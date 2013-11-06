@@ -224,7 +224,6 @@ namespace mongo {
         CachedMatchCounter _matchCounter;
         bool _countingMatches;
         bool _mustAdvance;
-        bool _capped;
         shared_ptr<Cursor> _c;
         ClientCursor::Holder _cc;
         const QueryPlanSelectionPolicy& _selectionPolicy;
@@ -692,8 +691,6 @@ namespace mongo {
 
         virtual CoveredIndexMatcher* matcher() const { return _matcher.get(); }
 
-        virtual bool capped() const { return _c->capped(); }
-        
         virtual long long nscanned() const { return _nscanned + _c->nscanned(); }
         
         void noteIterate( bool match, bool loadedRecord );

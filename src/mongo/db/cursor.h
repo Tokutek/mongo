@@ -91,11 +91,6 @@ namespace mongo {
 
         virtual BSONObj prettyIndexBounds() const { return BSONArray(); }
 
-        /**
-         * If true, this is an unindexed cursor over a capped collection.
-         */
-        virtual bool capped() const { return false; }
-
         virtual long long nscanned() const = 0;
 
         // The implementation may return different matchers depending on the
