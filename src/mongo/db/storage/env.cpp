@@ -867,6 +867,7 @@ namespace mongo {
                                "Error: hashed indexes do not currently support array values" );
                 case EACCES:
                 case EMFILE:
+                case ENFILE:
                 case ENOSPC:
                 case EPERM:
                 case EROFS: {
