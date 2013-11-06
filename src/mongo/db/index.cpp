@@ -334,15 +334,6 @@ namespace mongo {
     }
 
     void IndexDetails::uniqueCheck(const BSONObj &key, const BSONObj *pk) const {
-        BSONObjIterator it(key);
-        while (it.more()) {
-            BSONElement id = it.next();
-            if (!id.ok()) {
-                // If one of the key fields is null, we just insert it.
-                return;
-            }
-        }
-
         IndexDetails::Cursor c(*this, DB_SERIALIZABLE);
         DBC *cursor = c.dbc();
 
