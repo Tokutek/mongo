@@ -362,9 +362,6 @@ namespace mongo {
             */
             Context(const StringData &ns , Database * db);
 
-            // used by ReadContext
-            Context(const StringData &path, const StringData &ns, Database *db);
-
             ~Context();
             Client* getClient() const { return _client; }
             Database* db() const { return _db; }

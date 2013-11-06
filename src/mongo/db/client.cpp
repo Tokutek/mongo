@@ -243,21 +243,6 @@ namespace mongo {
         }
     }
 
-    // invoked from ReadContext
-    Client::Context::Context(const StringData& path, const StringData& ns, Database *db) :
-        _client( currentClient.get() ), 
-        _oldContext( _client->_context ),
-        _path( path.toString() ),
-        _doVersion( true ),
-        _ns( ns.toString() ),
-        _db(db)
-    {
-        verify(_db);
-        checkNotStale();
-        _client->_context = this;
-        _client->_curOp->enter( this );
-    }
-
     void Client::Context::_finishInit() {
         dassert( Lock::isLocked() );
         _db = dbHolderUnchecked().getOrCreate( _ns , _path );
