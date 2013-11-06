@@ -56,7 +56,6 @@ namespace mongo {
         bool hasReadPref() const { return _hasReadPref; }
         
         bool isExplain() const { return _explain; }
-        bool isSnapshot() const { return _snapshot; }
         bool returnKey() const { return _returnKey; }
         bool showDiskLoc() const { return _showDiskLoc; }
         
@@ -101,7 +100,6 @@ namespace mongo {
         shared_ptr<Projection> _fields;
         bool _wantMore;
         bool _explain;
-        bool _snapshot;
         bool _returnKey;
         bool _showDiskLoc;
         bool _hasReadPref;

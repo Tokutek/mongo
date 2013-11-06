@@ -221,7 +221,6 @@ namespace mongo {
         shared_ptr<Cursor> generate();
         
     private:
-        bool snapshot() const { return _parsedQuery && _parsedQuery->isSnapshot(); }
         bool explain() const { return _parsedQuery && _parsedQuery->isExplain(); }
         BSONObj min() const { return _parsedQuery ? _parsedQuery->getMin() : BSONObj(); }
         BSONObj max() const { return _parsedQuery ? _parsedQuery->getMax() : BSONObj(); }

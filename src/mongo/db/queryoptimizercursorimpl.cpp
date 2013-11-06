@@ -317,25 +317,6 @@ namespace mongo {
         if ( useHints && _parsedQuery ) {
             _argumentsHint = _parsedQuery->getHint();
         }
-        
-        if ( snapshot() ) {
-            NamespaceDetails *d = nsdetails( _ns );
-            if ( d ) {
-                int i = d->findIdIndex();
-                if( i < 0 ) {
-                    if ( !NamespaceString::isSystem(_ns) ) {
-                        log() << "warning: no _id index on $snapshot query, ns:" << _ns << endl;
-                    }
-                }
-                else {
-                    /* [dm] the name of an _id index tends to vary, so we build the hint the hard
-                     way here. probably need a better way to specify "use the _id index" as a hint.
-                     if someone is in the query optimizer please fix this then!
-                     */
-                    _argumentsHint = BSON( "$hint" << d->idx(i).indexName() );
-                }
-            }
-        }
     }
     
     shared_ptr<Cursor> CursorGenerator::shortcutCursor() const {

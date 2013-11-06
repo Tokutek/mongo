@@ -110,7 +110,6 @@ namespace mongo {
     void ParsedQuery::_reset() {
         _wantMore = true;
         _explain = false;
-        _snapshot = false;
         _returnKey = false;
         _showDiskLoc = false;
         _maxScan = 0;
@@ -163,8 +162,6 @@ namespace mongo {
                 name++;
                 if ( strcmp( "explain" , name ) == 0 )
                     _explain = e.trueValue();
-                else if ( strcmp( "snapshot" , name ) == 0 )
-                    _snapshot = e.trueValue();
                 else if ( strcmp( "min" , name ) == 0 )
                     _min = e.embeddedObject();
                 else if ( strcmp( "max" , name ) == 0 )
@@ -182,12 +179,6 @@ namespace mongo {
                 }
             }
         }
-        
-        if ( _snapshot ) {
-            uassert( 12001 , "E12001 can't sort with $snapshot", _order.isEmpty() );
-            uassert( 12002 , "E12002 can't use hint with $snapshot", _hint.isEmpty() );
-        }
-        
     }
 
     void ParsedQuery::initFields( const BSONObj& fields ) {

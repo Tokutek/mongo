@@ -51,7 +51,7 @@ public:
         ("query,q", po::value<string>() , "json query" )
         ("oplog", "Use oplog for point-in-time snapshotting" )
         ("repair", "try to recover a crashed database" )
-        ("forceTableScan", "force a table scan (do not use $snapshot)" )
+        ("forceTableScan", "deprecated" )
         ;
     }
 
@@ -97,10 +97,8 @@ public:
         Query q = _query;
 
         int queryOptions = QueryOption_SlaveOk | QueryOption_NoCursorTimeout;
-        if (startsWith(coll.c_str(), "local.oplog."))
+        if (startsWith(coll.c_str(), "local.oplog.")) {
             queryOptions |= QueryOption_OplogReplay;
-        else if ( _query.isEmpty() && !hasParam("dbpath") && !hasParam("forceTableScan") ) {
-            q.snapshot();
         }
         
         DBClientBase& connBase = conn(true);
