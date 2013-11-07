@@ -204,12 +204,6 @@ namespace mongo {
             if ( result.existing || ! upsert ) {
                 return result;
             }
-            else if ( upsert && ! isOperatorUpdate && ! logop) {
-                debug.upsert = true;
-                BSONObj objModified = updateobj;
-                insertAndLog( ns, d, objModified, logop, fromMigrate );
-                return UpdateResult( 0 , 0 , 1 , updateobj );
-            }
         }
 
         int numModded = 0;
