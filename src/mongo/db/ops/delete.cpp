@@ -36,19 +36,20 @@ namespace mongo {
     }
     
     long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
-        NamespaceDetails *d = nsdetails( ns );
-        if ( ! d )
+        NamespaceDetails *d = nsdetails(ns);
+        if (d == NULL) {
             return 0;
+        }
 
         uassert( 10101 ,  "can't remove from a capped collection" , ! d->isCapped() );
 
         // Fast-path for simple _id deletes.
-        if ( d->mayFindById() && isSimpleIdQuery(pattern) ) {
+        if (d->mayFindById() && isSimpleIdQuery(pattern)) {
             cc().curop()->debug().idhack = true;
             BSONObj obj;
             BSONObj pk = pattern["_id"].wrap("");
             if (d->findByPK(pk, obj)) {
-                if ( logop ) {
+                if (logop) {
                     OpLogHelpers::logDelete(ns, obj, false, &cc().txn());
                 }
                 deleteOneObject(d, pk, obj);
@@ -57,45 +58,42 @@ namespace mongo {
             return 0;
         }
 
-        shared_ptr< Cursor > c = getOptimizedCursor( ns, pattern );
-        if ( !c->ok() ) {
-            return 0;
-        }
-
-        shared_ptr< Cursor > cPtr = c;
-        auto_ptr<ClientCursor> ccc( new ClientCursor( QueryOption_NoCursorTimeout, cPtr, ns) );
-
         long long nDeleted = 0;
-        while ( ccc->ok() ) {
-
-            if ( ccc->currentIsDup() || !c->currentMatches() ) {
-                TOKULOG(4) << "_deleteObjects skipping " << ccc->currPK() << ", dup or doesn't match" << endl;
-                ccc->advance();
+        for (shared_ptr<Cursor> c = getOptimizedCursor(ns, pattern); c->ok(); ) {
+            BSONObj pk = c->currPK();
+            if (c->getsetdup(pk)) {
+                c->advance();
+                continue;
+            }
+            if (!c->currentMatches()) {
+                c->advance();
                 continue;
             }
 
-            BSONObj pk = ccc->currPK().copy();
-            BSONObj obj = ccc->current().copy();
+            BSONObj obj = c->current();
 
-            // Because the query optimizer cursor implementation records cursor
-            // matches on advance(), we must advance here before deleting, otherwise
-            // the cursor would appear to always point to something that doesn't
-            // match the query, ruining it's chances of getting chosen later for
-            // a similar query.
-            while ( ccc->ok() && ccc->currPK() == pk ) {
-                ccc->advance();
+            // justOne deletes do not intend to advance, so there's
+            // no reason to do so here and potentially overlock rows.
+            if (!justOne) {
+                // There may be interleaved query plans that utilize multiple
+                // cursors, some of which point to the same PK. We advance
+                // here while those cursors point the row to be deleted.
+                // 
+                // Make sure to get local copies of pk/obj before advancing.
+                pk = pk.getOwned();
+                obj = obj.getOwned();
+                while (c->ok() && c->currPK() == pk) {
+                    c->advance();
+                }
             }
 
-            TOKULOG(4) << "_deleteObjects iteration: pk " << pk << ", obj " << obj << endl;
-
-            if ( logop ) {
+            if (logop) {
                 OpLogHelpers::logDelete(ns, obj, false, &cc().txn());
             }
-
             deleteOneObject(d, pk, obj);
             nDeleted++;
 
-            if ( justOne ) {
+            if (justOne) {
                 break;
             }
         }
@@ -107,20 +105,20 @@ namespace mongo {
        justOne: stop after 1 match
     */
     long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
-        if ( NamespaceString::isSystem(ns) ) {
+        if (NamespaceString::isSystem(ns)) {
             /* note a delete from system.indexes would corrupt the db
                if done here, as there are pointers into those objects in
                NamespaceDetails.
             */
-            uassert(12050, "cannot delete from system namespace", legalClientSystemNS( ns , true ) );
+            uassert(12050, "cannot delete from system namespace",
+                    legalClientSystemNS(ns, true));
         }
-        if ( !NamespaceString::normal(ns) ) {
+
+        if (!NamespaceString::normal(ns)) {
             log() << "cannot delete from collection with reserved $ in name: " << ns << endl;
-            uasserted( 10100 ,  "cannot delete from collection with reserved $ in name" );
+            uasserted(10100, "cannot delete from collection with reserved $ in name");
         }
 
-        long long nDeleted = _deleteObjects(ns, pattern, justOne, logop);
-
-        return nDeleted;
+        return _deleteObjects(ns, pattern, justOne, logop);
     }
 }
