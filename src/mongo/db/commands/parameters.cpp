@@ -100,53 +100,6 @@ namespace mongo {
 
             // TODO: remove these manual things
 
-            if( cmdObj.hasElement("journalCommitInterval") ) {
-                int x = (int) cmdObj["journalCommitInterval"].Number();
-                verify( x > 1 && x < 500 );
-                storage::set_log_flush_interval(x);
-                log() << "setParameter logFlushPeriod=" << x << endl;
-                s++;
-            }
-            if( cmdObj.hasElement("logFlushPeriod") ) { 
-                int x = (int) cmdObj["logFlushPeriod"].Number();
-                verify( x > 1 && x < 500 );
-                storage::set_log_flush_interval(x);
-                log() << "setParameter logFlushPeriod=" << x << endl;
-                s++;
-            }
-            if( cmdObj.hasElement("checkpointPeriod") ) { 
-                int x = (int) cmdObj["checkpointPeriod"].Number();
-                storage::set_checkpoint_period(x);
-                log() << "setParameter checkpointPeriod=" << x << endl;
-                s++;
-            }
-            if( cmdObj.hasElement("cleanerPeriod") ) { 
-                int x = (int) cmdObj["cleanerPeriod"].Number();
-                storage::set_cleaner_period(x);
-                log() << "setParameter cleanerPeriod=" << x << endl;
-                s++;
-            }
-            if( cmdObj.hasElement("cleanerIterations") ) { 
-                int x = (int) cmdObj["cleanerIterations"].Number();
-                storage::set_cleaner_iterations(x);
-                log() << "setParameter cleanerIterations=" << x << endl;
-                s++;
-            }
-            if( cmdObj.hasElement("lockTimeout") ) {
-                long long x = (long long) cmdObj["lockTimeout"].Number();
-                storage::set_lock_timeout(x);
-                uassert(17018, "--lockTimeout must be >= 0", x >= 0 );
-                log() << "setParameter lockTimeout =" << x << endl;
-                s++;
-            }
-            if( cmdObj.hasElement("loaderMaxMemory") ) { 
-                long long x = BytesQuantity<long long>(cmdObj["loaderMaxMemory"]);
-                uassert(17019, "bad --loaderMaxMemory arg (should never be less than 32mb)",
-                                 x >= 32 * 1024 * 1024);
-                storage::set_loader_max_memory(x);
-                log() << "setParameter loaderMemory=" << x << endl;
-                s++;
-            }
             if( cmdObj.hasElement( "traceExceptions" ) ) {
                 if( s == 0 ) result.append( "was", DBException::traceExceptions );
                 DBException::traceExceptions = cmdObj["traceExceptions"].Bool();
@@ -174,6 +127,12 @@ namespace mongo {
             while ( i.more() ) {
                 BSONElement e = i.next();
                 ServerParameter::Map::const_iterator j = m.find( e.fieldName() );
+
+                if (StringData(e.fieldName()) == "journalCommitInterval") {
+                    LOG(0) << "journalCommitInterval is a synonym for logFlushPeriod" << endl;
+                    j = m.find("logFlushPeriod");
+                }
+
                 if ( j == m.end() )
                     continue;
 
