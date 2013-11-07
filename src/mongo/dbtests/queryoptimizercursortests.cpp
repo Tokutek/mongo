@@ -2776,50 +2776,6 @@ namespace QueryOptimizerCursorTests {
                 
         } // namespace RequireIndex
         
-        namespace IdElseNatural {
-
-            class Base : public GetCursor::Base {
-                const QueryPlanSelectionPolicy &planPolicy() const {
-                    return QueryPlanSelectionPolicy::idElseNatural();
-                }
-            };
-            
-            class AllowOptimalNaturalPlan : public Base {
-                string expectedType() const { return "BasicCursor"; }
-                void check( const shared_ptr<Cursor> &c ) {
-                    ASSERT( c->ok() );
-                    ASSERT( !c->matcher() );
-                    ASSERT_EQUALS( 5, c->current().getIntField( "_id" ) );
-                    ASSERT( !c->advance() );
-                }
-            };
-
-            class AllowOptimalIdPlan : public Base {
-                string expectedType() const { return "IndexCursor _id_"; }
-                BSONObj query() const { return BSON( "_id" << 5 ); }
-            };
-
-            class HintedIdForQuery : public Base {
-            public:
-                HintedIdForQuery( const BSONObj &query ) : _query( query ) {
-                    _cli.remove( ns(), BSONObj() );
-                    _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-                    _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 ) );
-                }
-                string expectedType() const { return "IndexCursor _id_"; }
-                BSONObj query() const { return _query; }
-                void check( const shared_ptr<Cursor> &c ) {
-                    ASSERT( c->ok() );
-                    ASSERT( c->currentMatches() );
-                    ASSERT_EQUALS( 1, c->current().getIntField( "_id" ) );
-                    ASSERT( !c->advance() );
-                }
-            private:
-                BSONObj _query;
-            };
-
-        } // namespace IdElseNatural
-        
         /**
          * Generating a cursor for an invalid query asserts, even if the collection is empty or
          * missing.
@@ -3573,15 +3529,6 @@ namespace QueryOptimizerCursorTests {
             add<GetCursor::RequireIndex::SecondOrClauseUnindexed>();
             add<GetCursor::RequireIndex::SecondOrClauseUnindexedUndetected>();
             add<GetCursor::RequireIndex::RecordedUnindexedPlan>();
-            add<GetCursor::IdElseNatural::AllowOptimalNaturalPlan>();
-            add<GetCursor::IdElseNatural::AllowOptimalIdPlan>();
-            add<GetCursor::IdElseNatural::HintedIdForQuery>( BSON( "_id" << 1 ) );
-            add<GetCursor::IdElseNatural::HintedIdForQuery>( BSON( "a" << 1 ) );
-            add<GetCursor::IdElseNatural::HintedIdForQuery>( BSON( "_id" << 1 << "a" << 1 ) );
-            // now capped collections have _id index by default, so skip these
-            //add<GetCursor::IdElseNatural::HintedNaturalForQuery>( BSON( "_id" << 1 ) );
-            //add<GetCursor::IdElseNatural::HintedNaturalForQuery>( BSON( "a" << 1 ) );
-            //add<GetCursor::IdElseNatural::HintedNaturalForQuery>( BSON( "_id" << 1 << "a" << 1 ) );
             // There's no more $atomic operator, so this test isn't useful anymore.
             //add<GetCursor::MatcherValidation>(); 
             add<GetCursor::MatcherSet>();
