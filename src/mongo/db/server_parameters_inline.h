@@ -55,11 +55,7 @@ namespace mongo {
 
     template<>
     inline Status ExportedServerParameter<BytesQuantity<uint64_t> >::setFromString( const string& str ) {
-        uint64_t val = strtoull(str.c_str(), NULL, 0);
-        if (val == ULLONG_MAX) {
-            return Status(ErrorCodes::BadValue, strerror(errno));
-        }
-        return set( atoi(str.c_str() ) );
+        return set(BytesQuantity<uint64_t>::fromString(str));
     }
 
     template<>
