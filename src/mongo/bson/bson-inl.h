@@ -1065,7 +1065,11 @@ dodouble:
 
     template<typename T> inline bool BSONElement::coerce( BytesQuantity<T>* out ) const {
         T val;
-        if (!coerce<T>(&val)) {
+        if (type() == mongo::String) {
+            if (!BytesQuantity<T>::fromString(Stringdata(), val).isOK()) {
+                return false;
+            }
+        } else if (!coerce<T>(&val)) {
             return false;
         }
         *out = val;
