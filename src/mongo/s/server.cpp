@@ -198,7 +198,7 @@ namespace mongo {
         setupSIGTRAPforGDB();
         setupCoreSignals();
 
-        if (!cmdLine.debug) {
+        if (!cmdLine.gdb) {
             signal(SIGTERM, sighandler);
             signal(SIGINT, sighandler);
 
@@ -362,7 +362,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
 
     general_options.add_options()
     ("nohttpinterface", "disable http interface")
-    ("debug", "go into a debug-friendly mode (development use only).");
+    ("gdb", "go into a gdb-friendly mode (development use only).");
 
     hidden_options.add_options()
     ("releaseConnectionsAfterResponse", "" )

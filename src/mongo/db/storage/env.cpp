@@ -214,6 +214,8 @@ namespace mongo {
             ~InStartup() { _inStartup = false; }
         };
 
+        MONGO_EXPORT_STARTUP_SERVER_PARAMETER(numCachetableBucketMutexes, uint32_t, 0);
+
         void startup(void) {
             InStartup is;
 
@@ -319,10 +321,10 @@ namespace mongo {
                 TOKULOG(1) << "temporary bulk loader directory set to " << tmpDir << endl;
             }
 
-            if (cmdLine.debug) {
+            if (numCachetableBucketMutexes > 0) {
                 // The default number of bucket mutexes is 1 million, which is a nightmare for
                 // valgrind's drd tool to keep track of.
-                db_env_set_num_bucket_mutexes(32);
+                db_env_set_num_bucket_mutexes(numCachetableBucketMutexes);
             }
 
             const int env_flags = DB_INIT_LOCK|DB_INIT_MPOOL|DB_INIT_TXN|DB_CREATE|DB_PRIVATE|DB_INIT_LOG|DB_RECOVER;
