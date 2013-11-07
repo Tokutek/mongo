@@ -992,6 +992,12 @@ dodouble:
         return ss.str();
     }
 
+    template<>
+    inline BSONObjBuilder& BSONObjBuilder::append(const StringData& fieldName, const BytesQuantity<uint64_t>& val) {
+        append(fieldName, (long long) val);
+        return *this;
+    }
+
     inline void BSONObjBuilder::appendKeys( const BSONObj& keyPattern , const BSONObj& values ) {
         BSONObjIterator i(keyPattern);
         BSONObjIterator j(values);
@@ -1040,6 +1046,35 @@ dodouble:
         if ( !isNumber() )
             return false;
         *out = numberInt();
+        return true;
+    }
+
+    template<> inline bool BSONElement::coerce<unsigned int>( unsigned int* out ) const {
+        if ( !isNumber() )
+            return false;
+        if ( numberInt() < 0) {
+            return false;
+        }
+        *out = numberInt();
+        return true;
+    }
+
+    template<> inline bool BSONElement::coerce<unsigned long>( unsigned long* out ) const {
+        if ( !isNumber() )
+            return false;
+        if ( numberInt() < 0) {
+            return false;
+        }
+        *out = numberInt();
+        return true;
+    }
+
+    template<typename T> inline bool BSONElement::coerce( BytesQuantity<T>* out ) const {
+        T val;
+        if (!coerce<T>(&val)) {
+            return false;
+        }
+        *out = val;
         return true;
     }
 
