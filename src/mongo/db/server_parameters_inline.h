@@ -96,6 +96,11 @@ namespace mongo {
         return set( v );
     }
 
+    template<>
+    inline void ExportedServerParameter<BytesQuantity<uint64_t> >::append( BSONObjBuilder& b, const string& name ) {
+        b.append( name, (long long) *_value );
+    }
+
 
 
 }
