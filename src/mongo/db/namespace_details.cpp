@@ -595,7 +595,7 @@ namespace mongo {
                     BSONObjSet keys;
                     idx.getKeysFromObject(obj, keys);
                     for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                        idx.uniqueCheck(*ki, &pk);
+                        idx.uniqueCheck(*ki, pk);
                     }
                 }
             }
@@ -1190,7 +1190,7 @@ namespace mongo {
                 idx.getKeysFromObject(obj, idxKeys);
                 if (idx.unique() && doUniqueChecks) {
                     for (BSONObjSet::const_iterator o = idxKeys.begin(); o != idxKeys.end(); ++o) {
-                        idx.uniqueCheck(*o, &pk);
+                        idx.uniqueCheck(*o, pk);
                     }
                 }
                 if (idxKeys.size() > 1) {
@@ -1366,7 +1366,7 @@ namespace mongo {
                     for (BSONObjSet::iterator o = newIdxKeys.begin(); o != newIdxKeys.end(); ++o) {
                         const BSONObj &k = *o;
                         if (!orderedSetContains(oldIdxKeys, k)) {
-                            idx.uniqueCheck(k, &pk);
+                            idx.uniqueCheck(k, pk);
                         }
                     }
                 }

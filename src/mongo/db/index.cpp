@@ -333,7 +333,7 @@ namespace mongo {
         return -1;
     }
 
-    void IndexDetails::uniqueCheck(const BSONObj &key, const BSONObj *pk) const {
+    void IndexDetails::uniqueCheck(const BSONObj &key, const BSONObj &pk) const {
         BSONObjIterator it(key);
         while (it.more()) {
             BSONElement id = it.next();
@@ -343,20 +343,27 @@ namespace mongo {
             }
         }
 
-        IndexDetails::Cursor c(*this, DB_SERIALIZABLE);
+        IndexDetails::Cursor c(*this, DB_SERIALIZABLE | DB_RMW);
         DBC *cursor = c.dbc();
 
-        const bool hasPK = pk != NULL;
-        storage::Key sKey(key, hasPK ? &minKey : NULL);
-        DBT kdbt = sKey.dbt();
+        // We need to check if a secondary key, 'key', exists. We'd like to only
+        // lock just the range of the index that may contain that secondary key,
+        // if it exists. That range is { key, minKey } -> { key, maxKey }, where
+        // the second part of the compound key is the appended primary key.
+        storage::Key leftSKey(key, &minKey);
+        storage::Key rightSKey(key, &maxKey);
+        DBT start = leftSKey.dbt();
+        DBT end = rightSKey.dbt();
+        int r = cursor->c_set_bounds(cursor, &start, &end, true, 0);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
 
         bool isUnique = true;
-        UniqueCheckExtra extra(sKey, *_descriptor, isUnique);
-        // If the key has a PK, we need to set range in order to find the first
-        // key greater than { key, minKey }. If there is no pk then there's
-        // just one component to the key, so we can just getf_set to that point.
-        const int r = hasPK ? cursor->c_getf_set_range(cursor, 0, &kdbt, uniqueCheckCallback, &extra) :
-                              cursor->c_getf_set(cursor, 0, &kdbt, uniqueCheckCallback, &extra);
+        UniqueCheckExtra extra(leftSKey, *_descriptor, isUnique);
+        const int flags = DB_PRELOCKED | DB_PRELOCKED_WRITE; // prelocked above
+        r = cursor->c_getf_set_range(cursor, flags, &start, uniqueCheckCallback, &extra);
+                              
         if (r != 0 && r != DB_NOTFOUND) {
             extra.throwException();
             storage::handle_ydb_error(r);
