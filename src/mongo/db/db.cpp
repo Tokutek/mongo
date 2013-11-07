@@ -499,7 +499,7 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
     ("logDir", po::value<string>(), "directory to store transaction log files (default is --dbpath)")
     ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
-    ("debug", "go into a debug-friendly mode (development use only).")
+    ("gdb", "go into a gdb-friendly mode (development use only).")
     ("gdbPath", po::value<string>(), "if specified, debugging information will be gathered on fatal error by launching gdb at the given path")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
@@ -1165,7 +1165,7 @@ namespace mongo {
         // asyncSignals is a global variable listing the signals that should be handled by the
         // interrupt thread, once it is started via startSignalProcessingThread().
         sigemptyset( &asyncSignals );
-        if (!cmdLine.debug) {
+        if (!cmdLine.gdb) {
             sigaddset( &asyncSignals, SIGHUP );
             sigaddset( &asyncSignals, SIGINT );
             sigaddset( &asyncSignals, SIGTERM );
