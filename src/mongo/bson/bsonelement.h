@@ -33,6 +33,7 @@ namespace mongo {
     class BSONObj;
     class BSONElement;
     class BSONObjBuilder;
+    template<typename T> class BytesQuantity;
 }
 
 namespace bson {
@@ -460,6 +461,7 @@ namespace mongo {
         OpTime _opTime() const;
 
         template<typename T> bool coerce( T* out ) const;
+        template<typename T> bool coerce( BytesQuantity<T>* out) const;
 
     private:
         const char *data;
