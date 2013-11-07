@@ -27,6 +27,7 @@
 #include <cmath>
 #include <limits>
 
+#include "mongo/base/units.h"
 #include "mongo/base/parse_number.h"
 #include "mongo/bson/bsonelement.h"
 #include "mongo/bson/bsonobj.h"
@@ -185,12 +186,21 @@ namespace mongo {
         BSONObjBuilder& append(const StringData& fieldName, unsigned n) {
             return append(fieldName, (int) n);
         }
+        BSONObjBuilder& append(const StringData& fieldName, unsigned long n) {
+            return append(fieldName, (int) n);
+        }
 
         /** Append a NumberLong */
         BSONObjBuilder& append(const StringData& fieldName, long long n) {
             _b.appendNum((char) NumberLong);
             _b.appendStr(fieldName);
             _b.appendNum(n);
+            return *this;
+        }
+
+        template<typename T>
+        BSONObjBuilder& append(const StringData& fieldName, const BytesQuantity<T>& val) {
+            append(fieldName, (T) val);
             return *this;
         }
 

@@ -804,13 +804,13 @@ namespace mongo {
             }
         }
 
-        class LogFlushPeriodParameter : public ExportedServerParameter<int> {
+        class LogFlushPeriodParameter : public ExportedServerParameter<uint32_t> {
           public:
-            LogFlushPeriodParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "logFlushPeriod", &cmdLine.logFlushPeriod, true, true) {}
+            LogFlushPeriodParameter() : ExportedServerParameter(ServerParameterSet::getGlobal(), "logFlushPeriod", &cmdLine.logFlushPeriod, true, true) {}
 
           protected:
-            virtual Status validate(const int& period) {
-                if (x < 0 || x > 500) {
+            virtual Status validate(const uint32_t& period) {
+                if (period < 0 || period > 500) {
                     return Status(ErrorCodes::BadValue, "logFlushPeriod must be between 0 and 500 ms");
                 }
                 env->change_fsync_log_period(env, period);
@@ -818,11 +818,11 @@ namespace mongo {
             }
         } logFlushPeriod;
 
-        class CheckpointPeriodParameter : public ExportedServerParameter<int> {
+        class CheckpointPeriodParameter : public ExportedServerParameter<uint32_t> {
           public:
-            CheckpointPeriodParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "checkpointPeriod", &cmdLine.checkpointPeriod, true, true) {}
+            CheckpointPeriodParameter() : ExportedServerParameter(ServerParameterSet::getGlobal(), "checkpointPeriod", &cmdLine.checkpointPeriod, true, true) {}
 
-            virtual Status validate(const int &period) {
+            virtual Status validate(const uint32_t &period) {
                 if (period < 0) {
                     return Status(ErrorCodes::BadValue, "checkpointPeriod must be greater than 0s");
                 }
@@ -835,11 +835,11 @@ namespace mongo {
             }
         } checkpointPeriodParameter;
 
-        class CleanerPeriodParameter : public ExportedServerParameter<int> {
+        class CleanerPeriodParameter : public ExportedServerParameter<uint32_t> {
           public:
-            CleanerPeriodParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "cleanerPeriod", &cmdLine.cleanerPeriod, true, true) {}
+            CleanerPeriodParameter() : ExportedServerParameter(ServerParameterSet::getGlobal(), "cleanerPeriod", &cmdLine.cleanerPeriod, true, true) {}
 
-            virtual Status validate(const int &period) {
+            virtual Status validate(const uint32_t &period) {
                 if (period < 0) {
                     return Status(ErrorCodes::BadValue, "cleanerPeriod must be greater than 0s");
                 }
@@ -852,11 +852,11 @@ namespace mongo {
             }
         } cleanerPeriodParameter;
 
-        class CleanerIterationsParameter : public ExportedServerParameter<int> {
+        class CleanerIterationsParameter : public ExportedServerParameter<uint32_t> {
           public:
-            CleanerIterationsParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "cleanerIterations", &cmdLine.cleanerIterations, true, true) {}
+            CleanerIterationsParameter() : ExportedServerParameter(ServerParameterSet::getGlobal(), "cleanerIterations", &cmdLine.cleanerIterations, true, true) {}
 
-            virtual Status validate(const int &iterations) {
+            virtual Status validate(const uint32_t &iterations) {
                 if (iterations < 0) {
                     return Status(ErrorCodes::BadValue, "cleanerIterations must be greater than 0");
                 }
@@ -869,8 +869,8 @@ namespace mongo {
             }
         } cleanerIterationsParameter;
 
-        ExportedServerParameter<int> lockTimeoutParameter(ServerParameterSet::getGlobal(), "lockTimeout", &cmdLine.lockTimeout, true, true);
-        ExportedServerParameter<int> loaderMaxMemoryParameter(ServerParameterSet::getGlobal(), "loaderMaxMemory", &cmdLine.loaderMaxMemory, true, true);
+        ExportedServerParameter<uint64_t> lockTimeoutParameter(ServerParameterSet::getGlobal(), "lockTimeout", &cmdLine.lockTimeout, true, true);
+        ExportedServerParameter<BytesQuantity<uint64_t> > loaderMaxMemoryParameter(ServerParameterSet::getGlobal(), "loaderMaxMemory", &cmdLine.loaderMaxMemory, true, true);
 
         __attribute__((noreturn))
         static void handle_filesystem_error_nicely(int error) {
