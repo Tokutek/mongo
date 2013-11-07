@@ -20,6 +20,9 @@
 
 #include <errno.h>
 #include <string>
+#include <string.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include <db.h>
 #include <toku_time.h>
@@ -851,6 +854,19 @@ namespace mongo {
             ss << "Error " << error << ": " << strerror(error);
             warning() << "Got the following error from the filesystem:" << endl;
             warning() << ss.str() << endl;
+#if defined(RLIMIT_NOFILE)
+            if (error == EMFILE) {
+                struct rlimit rlnofile;
+                int r = getrlimit(RLIMIT_NOFILE, &rlnofile);
+                if (r == 0) {
+                    warning() << "The current resource limit for this process allows only " << rlnofile.rlim_cur
+                              << " open files.  Consider raising this value." << endl;
+                } else {
+                    r = errno;
+                    warning() << "getrlimit error " << r << ": " << strerror(r) << endl;
+                }
+            }
+#endif
             uasserted(17035, ss.str());
         }
 
