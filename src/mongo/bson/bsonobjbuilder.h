@@ -27,7 +27,6 @@
 #include <cmath>
 #include <limits>
 
-#include "mongo/base/units.h"
 #include "mongo/base/parse_number.h"
 #include "mongo/bson/bsonelement.h"
 #include "mongo/bson/bsonobj.h"
