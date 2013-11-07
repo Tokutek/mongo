@@ -992,12 +992,6 @@ dodouble:
         return ss.str();
     }
 
-    template<>
-    inline BSONObjBuilder& BSONObjBuilder::append(const StringData& fieldName, const BytesQuantity<uint64_t>& val) {
-        append(fieldName, (long long) val);
-        return *this;
-    }
-
     inline void BSONObjBuilder::appendKeys( const BSONObj& keyPattern , const BSONObj& values ) {
         BSONObjIterator i(keyPattern);
         BSONObjIterator j(values);
