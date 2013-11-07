@@ -123,10 +123,6 @@ namespace mongo {
             while ( ! inShutdown() ) {
                 sleepsecs( 60 );
 
-                if ( cmdLine.debug ) {
-                    continue; // TTL is irritating when debugging
-                }
-
                 LOG(3) << "TTLMonitor thread awake" << endl;
 
                 if ( !ttlMonitorEnabled || cmdLine.gdb ) {
