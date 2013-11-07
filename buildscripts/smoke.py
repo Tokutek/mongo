@@ -206,6 +206,8 @@ class mongod(object):
         global mongod
         global shell_executable
         global _debug
+        global valgrind
+        global drd
         if self.proc:
             print >> sys.stderr, "probable bug: self.proc already set in start()"
             return
@@ -238,8 +240,8 @@ class mongod(object):
         argv = [mongod_executable, "--port", str(self.port), "--dbpath", dir_name]
         # This should always be set for tests
         argv += ['--setParameter', 'enableTestCommands=1']
-        # --debug puts mongod in a debugging-friendly mode
-        argv += ['--debug']
+        if valgrind or drd:
+            argv += ['--setParameter', 'numCachetableBucketMutexes=32']
         if self.kwargs.get('small_oplog'):
             argv += ["--master", "--oplogSize", "511"]
         if self.kwargs.get('small_oplog_rs'):
