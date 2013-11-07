@@ -40,6 +40,7 @@
 #include "mongo/db/cmdline.h"
 #include "mongo/db/commands/server_status.h"
 #include "mongo/db/descriptor.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/storage/dbt.h"
 #include "mongo/db/storage/exception.h"
@@ -804,49 +805,73 @@ namespace mongo {
             }
         }
 
-        void set_log_flush_interval(uint32_t period_ms) {
-            cmdLine.logFlushPeriod = period_ms;
-            env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
-            TOKULOG(1) << "fsync log period set to " << period_ms << " milliseconds." << endl;
-        }
+        class LogFlushPeriodParameter : public ExportedServerParameter<int> {
+          public:
+            LogFlushPeriodParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "logFlushPeriod", &cmdLine.logFlushPeriod, true, true) {}
 
-        void set_checkpoint_period(uint32_t period_seconds) {
-            cmdLine.checkpointPeriod = period_seconds;
-            int r = env->checkpointing_set_period(env, period_seconds);
-            if (r != 0) {
-                handle_ydb_error(r);
+          protected:
+            virtual Status validate(const int& period) {
+                if (x < 0 || x > 500) {
+                    return Status(ErrorCodes::BadValue, "logFlushPeriod must be between 0 and 500 ms");
+                }
+                env->change_fsync_log_period(env, period);
+                return Status::OK();
             }
-            TOKULOG(1) << "checkpoint period set to " << period_seconds << " seconds." << endl;
-        }
+        } logFlushPeriod;
 
-        void set_cleaner_period(uint32_t period_seconds) {
-            cmdLine.cleanerPeriod = period_seconds;
-            int r = env->cleaner_set_period(env, period_seconds);
-            if (r != 0) {
-                handle_ydb_error(r);
+        class CheckpointPeriodParameter : public ExportedServerParameter<int> {
+          public:
+            CheckpointPeriodParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "checkpointPeriod", &cmdLine.checkpointPeriod, true, true) {}
+
+            virtual Status validate(const int &period) {
+                if (period < 0) {
+                    return Status(ErrorCodes::BadValue, "checkpointPeriod must be greater than 0s");
+                }
+                int r = env->checkpointing_set_period(env, period);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                    return Status(ErrorCodes::InternalError, "error setting checkpointPeriod");
+                }
+                return Status::OK();
             }
-            TOKULOG(1) << "cleaner period set to " << period_seconds << " seconds." << endl;
-        }
+        } checkpointPeriodParameter;
 
-        void set_cleaner_iterations(uint32_t num_iterations) {
-            cmdLine.cleanerPeriod = num_iterations;
-            int r = env->cleaner_set_iterations(env, num_iterations);
-            if (r != 0) {
-                handle_ydb_error(r);
+        class CleanerPeriodParameter : public ExportedServerParameter<int> {
+          public:
+            CleanerPeriodParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "cleanerPeriod", &cmdLine.cleanerPeriod, true, true) {}
+
+            virtual Status validate(const int &period) {
+                if (period < 0) {
+                    return Status(ErrorCodes::BadValue, "cleanerPeriod must be greater than 0s");
+                }
+                int r = env->cleaner_set_period(env, period);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                    return Status(ErrorCodes::InternalError, "error setting cleanerPeriod");
+                }
+                return Status::OK();
             }
-            TOKULOG(1) << "cleaner iterations set to " << num_iterations << "." << endl;
-        }
+        } cleanerPeriodParameter;
 
-        void set_lock_timeout(uint64_t timeout_ms) {
-            // This is sufficient. See get_lock_timeout_callback()
-            cmdLine.lockTimeout = timeout_ms;
-            TOKULOG(1) << "lock timeout set to " << timeout_ms << " milliseconds." << endl;
-        }
+        class CleanerIterationsParameter : public ExportedServerParameter<int> {
+          public:
+            CleanerIterationsParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "cleanerIterations", &cmdLine.cleanerIterations, true, true) {}
 
-        void set_loader_max_memory(uint64_t bytes) {
-            cmdLine.loaderMaxMemory = bytes;
-            TOKULOG(1) << "loader max memory set to " << bytes << "." << endl;
-        }
+            virtual Status validate(const int &iterations) {
+                if (iterations < 0) {
+                    return Status(ErrorCodes::BadValue, "cleanerIterations must be greater than 0");
+                }
+                int r = env->cleaner_set_iterations(env, iterations);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                    return Status(ErrorCodes::InternalError, "error setting cleanerIterations");
+                }
+                return Status::OK();
+            }
+        } cleanerIterationsParameter;
+
+        ExportedServerParameter<int> lockTimeoutParameter(ServerParameterSet::getGlobal(), "lockTimeout", &cmdLine.lockTimeout, true, true);
+        ExportedServerParameter<int> loaderMaxMemoryParameter(ServerParameterSet::getGlobal(), "loaderMaxMemory", &cmdLine.loaderMaxMemory, true, true);
 
         __attribute__((noreturn))
         static void handle_filesystem_error_nicely(int error) {
