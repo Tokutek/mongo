@@ -2619,26 +2619,16 @@ namespace QueryOptimizerCursorTests {
             void check( const shared_ptr<Cursor> &c ) {}
         };
         
-        class Snapshot : public Base {
+        // $snapshot used to force the _id index (because that's how vanilla would
+        // guarantee a 'snapshot' of the data with no duplicate objects due to
+        // update/etc). TokuMX does not have this restriction so if you ask for
+        // a query on 'a' with an index, you get the right index.
+        class SnapshotOptionNoLongerNecessary : public Base {
         public:
-            Snapshot() {
+            SnapshotOptionNoLongerNecessary() {
                 _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             }
-            string expectedType() const { return "IndexCursor _id_"; }
-            BSONObj query() const {
-                return BSON( "$query" << BSON( "a" << 1 ) << "$snapshot" << true );
-            }
-            void check( const shared_ptr<Cursor> &c ) {}            
-        };
-        
-        class SnapshotCappedColl : public Base {
-        public:
-            SnapshotCappedColl() {
-                _cli.dropCollection( ns() );
-                _cli.createCollection( ns(), 1000, true );
-                _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-            }
-            string expectedType() const { return "IndexCursor _id_"; }
+            string expectedType() const { return "IndexCursor a_1"; }
             BSONObj query() const {
                 return BSON( "$query" << BSON( "a" << 1 ) << "$snapshot" << true );
             }
@@ -3517,8 +3507,7 @@ namespace QueryOptimizerCursorTests {
             add<GetCursor::BestSavedNotOptimal>();
             add<GetCursor::MultiIndex>();
             add<GetCursor::Hint>();
-            add<GetCursor::Snapshot>();
-            add<GetCursor::SnapshotCappedColl>();
+            add<GetCursor::SnapshotOptionNoLongerNecessary>();
             add<GetCursor::Min>();
             add<GetCursor::Max>();
             add<GetCursor::RequireIndex::NoConstraints>();
