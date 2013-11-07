@@ -140,8 +140,6 @@ namespace mongo {
             return UpdateResult( 0 , 0 , 0 , BSONObj() );
         }
 
-        d->notifyOfWriteOp();
-
         /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
            regular ones at the moment. */
         LogOpUpdateDetails logDetails(logop, fromMigrate);
@@ -221,7 +219,6 @@ namespace mongo {
         if( c->ok() ) {
             set<BSONObj> seenObjects;
             MatchDetails details;
-            auto_ptr<ClientCursor> cc;
             do {
 
                 debug.nscanned++;
@@ -242,23 +239,6 @@ namespace mongo {
                 }
 
                 BSONObj currentObj = c->current();
-                BSONObj pattern = patternOrig;
-
-                if ( logop ) {
-                    BSONObjBuilder idPattern;
-                    BSONElement id;
-                    // NOTE: If the matching object lacks an id, we'll log
-                    // with the original pattern.  This isn't replay-safe.
-                    // It might make sense to suppress the log instead
-                    // if there's no id.
-                    if ( currentObj.getObjectID( id ) ) {
-                        idPattern.append( id );
-                        pattern = idPattern.obj();
-                    }
-                    else {
-                        uassert( 10157 ,  "multi-update requires all modified objects to have an _id" , ! multi );
-                    }
-                }
 
                 /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
                    regular ones at the moment. */
@@ -268,14 +248,10 @@ namespace mongo {
                     if ( multi ) {
                         // Make our own copies of the currPK and currentObj before we invalidate
                         // them by advancing the cursor.
-                        currPK = currPK.copy();
-                        currentObj = currentObj.copy();
+                        currPK = currPK.getOwned();
+                        currentObj = currentObj.getOwned();
 
-                        // Advance past the document to be modified. This used to be because of SERVER-5198,
-                        // but TokuMX does it because we want to avoid needing to do manual deduplication
-                        // of this PK on the next iteration if the current update modifies the next
-                        // entry in the index. For example, an index scan over a:1 with mod {$inc: {a:1}}
-                        // would cause every other key read to be a duplicate if we didn't advance here.
+                        // Advance past the document to be modified - SERVER-5198,
                         while ( c->ok() && currPK == c->currPK() ) {
                             c->advance();
                         }
