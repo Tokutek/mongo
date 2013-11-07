@@ -205,7 +205,7 @@ namespace mongo {
             }
         };
         static int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra);
-        void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
+        void uniqueCheck(const BSONObj &key, const BSONObj &pk) const;
         void uassertedDupKey(const BSONObj &key) const;
 
         template<class Callback>
