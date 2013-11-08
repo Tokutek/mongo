@@ -597,5 +597,12 @@ void mongo::dbexit( ExitCode rc, const char *why ) {
           << " rc:" << rc
           << " " << ( why ? why : "" )
           << endl;
+#ifdef _COVERAGE
+    // Need to make sure coverage data is properly flushed before exit.
+    // It appears that ::_exit() does not do this.
+    log() << "calling regular ::exit() so coverage data may flush..." << endl;
+    ::exit(rc);
+#else
     ::_exit(rc);
+#endif
 }
