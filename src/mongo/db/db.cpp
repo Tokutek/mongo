@@ -1162,10 +1162,10 @@ namespace mongo {
         // asyncSignals is a global variable listing the signals that should be handled by the
         // interrupt thread, once it is started via startSignalProcessingThread().
         sigemptyset( &asyncSignals );
+        sigaddset( &asyncSignals, SIGTERM );
+        sigaddset( &asyncSignals, SIGHUP );
         if (!cmdLine.gdb) {
-            sigaddset( &asyncSignals, SIGHUP );
             sigaddset( &asyncSignals, SIGINT );
-            sigaddset( &asyncSignals, SIGTERM );
         }
         sigaddset( &asyncSignals, SIGUSR1 );
 
