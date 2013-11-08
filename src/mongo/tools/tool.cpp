@@ -308,7 +308,13 @@ namespace mongo {
 
         fflush(stdout);
         fflush(stderr);
+#ifdef _COVERAGE
+        // Need to make sure coverage data is properly flushed before exit.
+        // It appears that ::_exit() does not do this.
+        ::exit(ret);
+#else
         ::_exit(ret);
+#endif
     }
 
     DBClientBase& Tool::conn( bool slaveIfPaired ) {
