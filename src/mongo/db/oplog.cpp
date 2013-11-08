@@ -420,7 +420,7 @@ namespace mongo {
                 // set the applied bool to false, to let the oplog know that
                 // this entry has not been applied to collections
                 BSONElementManipulator(entry["a"]).setBool(false);
-                writeEntryToOplog(entry);
+                writeEntryToOplog(entry, false);
             }
         }
         transaction.commit(DB_TXN_NOSYNC);

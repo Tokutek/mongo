@@ -58,7 +58,7 @@ rollbackLastItem = function (conns, txnLimit) {
     assert.eq(0, conns[1].getDB("local").oplog.rs.find({_id:entryID}).count());
     if (txnLimit == 1) {
         var num = conns[1].getDB("local").oplog.refs.find({"_id.oid":refID}).count();
-        assert(num > 0);
+        assert.eq(0, num);
     }
 }
 
@@ -131,7 +131,7 @@ doTest = function (signal, txnLimit, startPort) {
     replTest.stopSet(signal);
 }
 
-doTest( 15, 1000000, 31000 );
 // if we ever change this, need to change rollbackLastItem, which uses the value of 1
 doTest( 15, 1, 41000 );
+doTest( 15, 1000000, 31000 );
 
