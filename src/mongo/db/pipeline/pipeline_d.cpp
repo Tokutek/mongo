@@ -169,7 +169,7 @@ namespace mongo {
             shared_ptr<Cursor> pSortedCursor(
                 pCursor = getOptimizedCursor(
                     fullName.c_str(), *pQueryObj, *pSortObj,
-                    QueryPlanSelectionPolicy::any(), true, pq));
+                    QueryPlanSelectionPolicy::any(), pq));
 
             if (pSortedCursor.get()) {
                 /* success:  remove the sort from the pipeline */
@@ -193,7 +193,7 @@ namespace mongo {
             shared_ptr<Cursor> pUnsortedCursor(
                 pCursor = getOptimizedCursor(
                     fullName.c_str(), *pQueryObj, BSONObj(),
-                    QueryPlanSelectionPolicy::any(), true, pq));
+                    QueryPlanSelectionPolicy::any(), pq));
 
             pCursor = pUnsortedCursor;
         }

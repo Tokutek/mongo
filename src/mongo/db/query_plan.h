@@ -90,7 +90,7 @@ namespace mongo {
         const string& special() const { return _special; }
                 
         /** @return a new cursor based on this QueryPlan's index and FieldRangeSet. */
-        shared_ptr<Cursor> newCursor() const;
+        shared_ptr<Cursor> newCursor(const bool requestCountingCursor = false) const;
 
         /** Register this plan as a winner for its QueryPattern, with specified 'nscanned'. */
         void registerSelf( long long nScanned, CandidatePlanCharacter candidatePlans ) const;

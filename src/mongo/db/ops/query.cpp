@@ -688,7 +688,7 @@ namespace mongo {
         }
         
         cursor = getOptimizedCursor( ns.c_str(), query, order, QueryPlanSelectionPolicy::any(),
-                                     true, pq_shared, false, &queryPlan );
+                                     pq_shared, false, &queryPlan );
         verify( cursor );
 
         // Tailable cursors must be marked as such before any use. This is so that

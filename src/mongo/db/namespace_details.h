@@ -220,6 +220,11 @@ namespace mongo {
         // @return offset in indexes[]
         int findIndexByKeyPattern(const BSONObj& keyPattern) const;
 
+        // @return the smallest (in terms of dataSize, which is key length + value length)
+        //         index in _indexes that is one-to-one with the primary key. specifically,
+        //         the returned index cannot be sparse or multikey.
+        IndexDetails &findSmallestOneToOneIndex() const;
+
         /* Returns the index entry for the first index whose prefix contains
          * 'keyPattern'. If 'requireSingleKey' is true, skip indices that contain
          * array attributes. Otherwise, returns NULL.
@@ -651,6 +656,26 @@ namespace mongo {
             }
         }
         return -1;
+    }
+
+    inline IndexDetails &NamespaceDetails::findSmallestOneToOneIndex() const {
+        // Default to choosing the primary key index (always at _indexes[0]);
+        int chosenIndex = 0;
+
+        // Check the secondary indexes. Any non-clustering secondary index is
+        // better than using the primary key, since there's no object stored
+        // and the key length can be at most the size of the object.
+        uint64_t smallestIndexSize = std::numeric_limits<uint64_t>::max();
+        for (int i = 1; i < _nIndexes; i++) {
+            const IndexDetails *index = _indexes[i].get();
+            IndexDetails::Stats st = index->getStats();
+            if (!index->sparse() && !isMultikey(i) && st.dataSize < smallestIndexSize) {
+                smallestIndexSize = st.dataSize;
+                chosenIndex = i;
+            }
+        }
+
+        return idx(chosenIndex);
     }
 
     inline const IndexDetails* NamespaceDetails::findIndexByPrefix( const BSONObj &keyPattern ,

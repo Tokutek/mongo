@@ -1069,7 +1069,7 @@ namespace QueryOptimizerCursorTests {
                                       BSON( "$query" << query << "$orderby" << order ),
                                       BSONObj() ) );
             return getOptimizedCursor( ns(), query, order,
-                                                        QueryPlanSelectionPolicy::any(), 0,
+                                                        QueryPlanSelectionPolicy ::any(),
                                                         parsedQuery, false );
         }
     };
@@ -1691,7 +1691,7 @@ namespace QueryOptimizerCursorTests {
                                       BSONObj() ) );
             shared_ptr<Cursor> cursor =
             getOptimizedCursor( ns(), query, order,
-                                                  QueryPlanSelectionPolicy::any(), 0, parsedQuery,
+                                                  QueryPlanSelectionPolicy::any(), parsedQuery,
                                                   false );
             shared_ptr<QueryOptimizerCursor> ret =
             dynamic_pointer_cast<QueryOptimizerCursor>( cursor );
@@ -1753,7 +1753,7 @@ namespace QueryOptimizerCursorTests {
                                           BSON( "b" << 1 ) ) );
                 shared_ptr<Cursor> cursor =
                 getOptimizedCursor( ns(), BSON( "a" << 4 ), BSONObj(),
-                                                      QueryPlanSelectionPolicy::any(), 0, parsedQuery,
+                                                      QueryPlanSelectionPolicy ::any(), parsedQuery,
                                                       false );
                 while( cursor->advance() );
                 // No plan recorded when a hint is used.
@@ -1767,7 +1767,7 @@ namespace QueryOptimizerCursorTests {
                 shared_ptr<Cursor> cursor2 =
                 getOptimizedCursor( ns(), BSON( "a" << 4 ),
                                                      BSON( "b" << 1 << "c" << 1 ),
-                                                     QueryPlanSelectionPolicy::any(), 0,
+                                                     QueryPlanSelectionPolicy ::any(),
                                                      parsedQuery2, false );
                 while( cursor2->advance() );
                 // Plan recorded was for a different query pattern (different sort spec).
@@ -2388,7 +2388,7 @@ namespace QueryOptimizerCursorTests {
                 }
                 shared_ptr<Cursor> c =
                 getOptimizedCursor( ns(), extractedQuery, order(), planPolicy(),
-                                                      true, _parsedQuery, false );
+                                                      _parsedQuery, false );
                 string type = c->toString().substr( 0, expectedType().length() );
                 ASSERT_EQUALS( expectedType(), type );
                 check( c );
@@ -2530,7 +2530,7 @@ namespace QueryOptimizerCursorTests {
                                           BSONObj() ) );
                 shared_ptr<Cursor> c =
                 getOptimizedCursor( ns(), BSONObj(), BSON( "a" << 1 ),
-                                                     QueryPlanSelectionPolicy::any(), 0,
+                                                     QueryPlanSelectionPolicy ::any(),
                                                      parsedQuery, false );
                 ASSERT( c );
                 transaction.commit();
@@ -2799,6 +2799,10 @@ namespace QueryOptimizerCursorTests {
             }
         };
 
+        class RequestMatcherFalse : public QueryPlanSelectionPolicy {
+            virtual string name() const { return "RequestMatcherFalse"; }
+            virtual bool requestMatcher() const { return false; }
+        } _requestMatcherFalse;
         /**
          * A Cursor returned by getOptimizedCursor() may or may not have a
          * matcher().  A Matcher will generally exist if required to match the provided query or
@@ -2829,12 +2833,12 @@ namespace QueryOptimizerCursorTests {
         private:
             bool hasMatcher( const BSONObj& query, bool requestMatcher ) {
                 Client::ReadContext ctx( ns() );
-                shared_ptr<Cursor> cursor =
-                        getOptimizedCursor( ns(),
-                                                              query,
-                                                              BSONObj(),
-                                                              QueryPlanSelectionPolicy::any(),
-                                                              requestMatcher );
+                shared_ptr<Cursor> cursor = getOptimizedCursor( ns(),
+                                                                query,
+                                                                BSONObj(),
+                                                                requestMatcher ?
+                                                                QueryPlanSelectionPolicy::any():
+                                                                _requestMatcherFalse );
                 return cursor->matcher();
             }
         };
@@ -2851,17 +2855,36 @@ namespace QueryOptimizerCursorTests {
                 {
                     // An assertion is triggered because { a:undefined } is an invalid query, even
                     // though no matcher is required.
-                    ASSERT_THROWS
-                            ( getOptimizedCursor( ns(),
-                                                                    fromjson( "{a:undefined}" ),
-                                                                    BSONObj(),
-                                                                    QueryPlanSelectionPolicy::any(),
-                                                                    /* requestMatcher */ false ),
-                              UserException );
+                    ASSERT_THROWS( getOptimizedCursor( ns(),
+                                                       fromjson( "{a:undefined}" ),
+                                                       BSONObj(),
+                                                       _requestMatcherFalse ),
+                                   UserException );
                 }
             }
         };
-        
+
+        class RequestCountingCursorTrue : public QueryPlanSelectionPolicy {
+            virtual string name() const { return "RequestCountingCursorTrue"; }
+            virtual bool requestCountingCursor() const { return true; }
+        } _requestCountCursorTrue;
+
+        /** An IndexCountCursor is selected when requested by a QueryPlanSelectionPolicy. */
+        class CountCursor : public Base {
+        public:
+            CountCursor() {
+                _cli.insert( ns(), BSON( "a" << 2 << "b" << 3 ) );
+                _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
+            }
+            void run() {
+                Client::ReadContext ctx( ns() );
+                shared_ptr<Cursor> cursor = getOptimizedCursor( ns(),
+                                                                BSON( "a" << 1 ),
+                                                                BSONObj(),
+                                                                _requestCountCursorTrue );
+                ASSERT_EQUALS( "IndexCountCursor", cursor->toString() );
+            }
+        };
     } // namespace GetCursor
     
     namespace Explain {
@@ -2885,8 +2908,12 @@ namespace QueryOptimizerCursorTests {
                             ( new ParsedQuery( ns(), 0, 0, 0,
                                               BSON( "$query" << query << "$explain" << true ),
                                               BSONObj() ) );
-                    c = getOptimizedCursor( ns(), query, BSONObj(), QueryPlanSelectionPolicy::any(), 0,
-                                                              parsedQuery, false );
+                    c = getOptimizedCursor( ns(),
+                                            query,
+                                            BSONObj(),
+                                            QueryPlanSelectionPolicy::any(),
+                                            parsedQuery,
+                                            false );
                     set<BSONObj> indexKeys;
                     while( c->ok() ) {
                         indexKeys.insert( c->indexKeyPattern() );
@@ -2913,7 +2940,7 @@ namespace QueryOptimizerCursorTests {
                                               fields() ) );
                     _cursor =
                     dynamic_pointer_cast<QueryOptimizerCursor>
-                    ( getOptimizedCursor( ns(), query(), BSONObj(), QueryPlanSelectionPolicy::any(), 0,
+                    ( getOptimizedCursor( ns(), query(), BSONObj(), QueryPlanSelectionPolicy ::any(),
                                                             parsedQuery, false ) );
                     ASSERT( _cursor );
                     

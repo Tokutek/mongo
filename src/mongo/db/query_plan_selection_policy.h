@@ -46,6 +46,14 @@ namespace mongo {
          */
         virtual bool requestMatcher() const { return true; }
 
+        /**
+         * @return true to request a cursor optimized for counts.  Does not provide valid
+         * results for currPK(), currKey(), or current(), because the internals are optimized
+         * for counting index rows, not interpretting them.  As such, cannot be used on
+         * multikey indexes for which manual deduplication is required.
+         */
+        virtual bool requestCountingCursor() const { return false; }
+
         /** Allow any query plan selection, permitting the query optimizer's default behavior. */
         static const QueryPlanSelectionPolicy& any();
 

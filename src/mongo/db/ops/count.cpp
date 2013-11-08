@@ -28,6 +28,29 @@
 
 namespace mongo {
 
+    /**
+     * Specialized Cursor creation rules that the count operator provides to the query
+     * processing system.  These rules limit the performance overhead when counting index keys
+     * matching simple predicates.  See SERVER-1752.
+     */
+    class CountPlanPolicies : public QueryPlanSelectionPolicy {
+
+        virtual string name() const { return "CountPlanPolicies"; }
+
+        virtual bool requestMatcher() const {
+            // Avoid using a Matcher when a Cursor will exactly match a query.
+            return false;
+        }
+
+        virtual bool requestCountingCursor() const {
+            // Request use of an IntervalBtreeCursor when the index bounds represent a single
+            // btree interval.  This Cursor implementation is optimized for performing counts
+            // between two endpoints.
+            return true;
+        }
+
+    } _countPlanPolicies;
+
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
         NamespaceDetails *d = nsdetails( ns );
         if ( !d ) {
@@ -57,12 +80,7 @@ namespace mongo {
 
         Lock::assertAtLeastReadLocked(ns);
         try {
-            for (shared_ptr<Cursor> cursor =
-                         getOptimizedCursor( ns, query, BSONObj(), QueryPlanSelectionPolicy::any(),
-                                             // Avoid using a Matcher when a Cursor can
-                                             // exactly match the query using a
-                                             // FieldRangeVector.  See SERVER-1752.
-                                             false /* requestMatcher */ ) ;
+            for (shared_ptr<Cursor> cursor = getOptimizedCursor( ns, query, BSONObj(), _countPlanPolicies );
                  cursor->ok() ; cursor->advance() ) {
                 if ( cursor->currentMatches() && !cursor->getsetdup( cursor->currPK() ) ) {
                     if ( skip > 0 ) {
