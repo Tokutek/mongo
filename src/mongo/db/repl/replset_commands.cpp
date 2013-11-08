@@ -561,4 +561,119 @@ namespace mongo {
             return true;
         }
     } cmdReplGetExpireOplog;
+
+    class CmdReplUndoOplogEntry : public ReplSetCommand {
+    public:
+        virtual void help( stringstream &help ) const {
+            help << "internal\n";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::replUndoOplogEntry);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
+
+        CmdReplUndoOplogEntry() : ReplSetCommand("replUndoOplogEntry") { }
+
+        // This command is not meant to be run in a concurrent manner. Assumes user is running this in
+        // a controlled setting.
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            if (!cmdObj.hasElement("GTID")) {
+                errmsg = "missing GTID";
+                return false;
+            }
+            // extract GTID that was passed in
+            GTID gtid = getGTIDFromBSON("GTID", cmdObj);
+            BSONObjBuilder q;
+            addGTIDToBSON("_id", gtid, q);
+            BSONObj oplogEntry;
+            bool foundLocally = false;
+            // now let's find the oplog entry
+            {
+                Client::ReadContext ctx(rsoplog);
+                Client::Transaction transaction(DB_TXN_READ_ONLY | DB_READ_UNCOMMITTED);
+                NamespaceDetails *d = nsdetails( rsoplog );
+                foundLocally = d != NULL && d->findOne( q.done(), oplogEntry);
+            }
+            if (!foundLocally) {
+                errmsg = "GTID not found in oplog";
+                return false;
+            }
+            try {
+                // This assumes the user is running this command
+                // after startup. We are not doing anything here to protect
+                // against possible races with starting up the machine
+                //
+                // Also, these pointers will remain set
+                // we are not protecting against the case where
+                // the user drops and recreates any oplog related
+                // files.
+                if (!oplogFilesOpen()) {
+                    Lock::DBRead lk("local");
+                    openOplogFiles();
+                }
+                bool purgeEntry = true;
+                if (cmdObj.hasElement("keepEntry")) {
+                    purgeEntry = false;
+                }
+                rollbackTransactionFromOplog(oplogEntry, purgeEntry);
+            }
+            catch (std::exception& e2) {
+                log() << "Caught std::exception during replUndoOplogEntry" << e2.what() << endl;
+                errmsg = "Caught exception, check logs";
+                return false;
+            }
+            return true;
+        }
+    } cmdReplUndoOplogEntry;
+
+    class CmdLogReplInfo : public ReplSetCommand {
+    public:
+        virtual void help( stringstream &help ) const {
+            help << "internal\n";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::logReplInfo);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
+
+        CmdLogReplInfo() : ReplSetCommand("logReplInfo") { }
+
+        // This command is not meant to be run in a concurrent manner. Assumes user is running this in
+        // a controlled setting.
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            if (!cmdObj.hasElement("minLiveGTID") || !cmdObj.hasElement("minUnappliedGTID")) {
+                errmsg = "missing either minLiveGTID or minUnappliedGTID";
+                return false;
+            }            
+            if( replSet ) {
+                errmsg = "This should only run without replset running";
+                return false;
+            }
+            // extract GTID that was passed in
+            GTID minLiveGTID = getGTIDFromBSON("minLiveGTID", cmdObj);
+            GTID minUnappliedGTID = getGTIDFromBSON("minUnappliedGTID", cmdObj);
+            if (GTID::cmp(minUnappliedGTID, minLiveGTID) > 0) {
+                errmsg = "minUnappliedGTID cannot be greater than minLiveGTID";
+                return false;
+            }
+
+            Lock::DBRead lk("local");
+            if (!oplogFilesOpen()) {
+                Lock::DBRead lk("local");
+                openOplogFiles();
+            }
+            Client::Transaction transaction(DB_SERIALIZABLE);
+            logToReplInfo(minLiveGTID, minUnappliedGTID);
+            transaction.commit();
+
+            return true;
+        }
+    } cmdLogReplInfo;
+
 }

@@ -40,6 +40,7 @@ namespace mongo {
     void logTransactionOpsRef(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid);
     void logOpsToOplogRef(BSONObj o);
     void deleteOplogFiles();
+    bool oplogFilesOpen();
     void openOplogFiles();
     
     GTID getGTIDFromOplogEntry(BSONObj o);
@@ -49,7 +50,7 @@ namespace mongo {
     void writeEntryToOplogRefs(BSONObj entry);
     void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn);
     void applyTransactionFromOplog(BSONObj entry);
-    void rollbackTransactionFromOplog(BSONObj entry);
+    void rollbackTransactionFromOplog(BSONObj entry, bool purgeEntry);
     void purgeEntryFromOplog(BSONObj entry);
 
     // @return the age, in milliseconds, when an oplog entry expires.

@@ -287,6 +287,7 @@ namespace mongo {
         isyncassert("could not get last oplog entry after clone", ret);
         
         GTID currEntry = minLiveGTID;
+        LOG(2) << "starting to fill gaps currEntry: " << currEntry.toString() << " lastEntry: " << lastEntry.toString() <<endl;
         // first, we need to fill in the "gaps" in the oplog
         while (GTID::cmp(currEntry, lastEntry) < 0) {
             r->tailingQueryGTE(rsoplog, currEntry);
@@ -303,6 +304,7 @@ namespace mongo {
                 // try inserting it into the oplog, if it does not
                 // already exist
                 if (!gtidExistsInOplog(currEntry)) {
+                    LOG(2) << "filling gap " << currEntry.toString() << endl;
                     bool bigTxn;
                     replicateFullTransactionToOplog(op, *r, &bigTxn);
                 }
@@ -351,6 +353,8 @@ namespace mongo {
                         BSONObj curr = c->current();                    
                         bool transactionAlreadyApplied = curr["a"].Bool();
                         if (!transactionAlreadyApplied) {
+                            GTID currEntry = getGTIDFromBSON("_id", curr);
+                            LOG(2) << "applying missing op gap " << currEntry.toString() << endl;
                             unappliedTransactions.push_back(curr.getOwned());
                         }
                     }

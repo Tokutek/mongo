@@ -1250,7 +1250,13 @@ namespace mongo {
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
             del_flags[i] = DB_DELETE_ANY | (prelocked ? DB_PRELOCKED_WRITE : 0);
-
+            DEV {
+                // for debug builds, remove the DB_DELETE_ANY flag
+                // so that debug builds do a query to make sure the
+                // row is there. It is a nice check to ensure correctness
+                // on debug builds.
+                del_flags[i] &= ~DB_DELETE_ANY;
+            }
             if (!isPK) {
                 BSONObjSet idxKeys;
                 idx.getKeysFromObject(obj, idxKeys);

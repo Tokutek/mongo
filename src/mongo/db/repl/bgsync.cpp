@@ -679,7 +679,7 @@ namespace mongo {
                     dassert(GTID::cmp(lastGTID, idToRollbackTo) == 0);
                     break;
                 }
-                rollbackTransactionFromOplog(o);
+                rollbackTransactionFromOplog(o, true);
             }
             theReplSet->leaveRollbackState();
         }
