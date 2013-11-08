@@ -197,6 +197,7 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::fsync);
         clusterAdminRoleWriteActions.addAction(ActionType::inprog);
         clusterAdminRoleWriteActions.addAction(ActionType::killop);
+        clusterAdminRoleWriteActions.addAction(ActionType::logReplInfo);
         clusterAdminRoleWriteActions.addAction(ActionType::moveChunk);
         clusterAdminRoleWriteActions.addAction(ActionType::movePrimary);
         clusterAdminRoleWriteActions.addAction(ActionType::removeShard);
@@ -204,6 +205,7 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::replSetExpireOplog);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetInitiate);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetReconfig);
+        clusterAdminRoleWriteActions.addAction(ActionType::replUndoOplogEntry);
         clusterAdminRoleWriteActions.addAction(ActionType::resync);
         clusterAdminRoleWriteActions.addAction(ActionType::shardCollection);
         clusterAdminRoleWriteActions.addAction(ActionType::shardingState);
