@@ -37,7 +37,7 @@ namespace mongo {
 
     template<>
     inline Status ExportedServerParameter<uint32_t>::setFromString( const string& str ) {
-        uint32_t val = strtoul(str.c_str(), NULL, 0);
+        unsigned long int val = strtoul(str.c_str(), NULL, 0);
         if (val == ULONG_MAX) {
             return Status(ErrorCodes::BadValue, strerror(errno));
         }
@@ -46,7 +46,7 @@ namespace mongo {
 
     template<>
     inline Status ExportedServerParameter<uint64_t>::setFromString( const string& str ) {
-        uint64_t val = strtoull(str.c_str(), NULL, 0);
+        unsigned long long int val = strtoull(str.c_str(), NULL, 0);
         if (val == ULLONG_MAX) {
             return Status(ErrorCodes::BadValue, strerror(errno));
         }
