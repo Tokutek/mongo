@@ -809,7 +809,7 @@ namespace mongo {
 
         class LogFlushPeriodParameter : public ExportedServerParameter<uint32_t> {
           public:
-            LogFlushPeriodParameter() : ExportedServerParameter(ServerParameterSet::getGlobal(), "logFlushPeriod", &cmdLine.logFlushPeriod, true, true) {}
+            LogFlushPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "logFlushPeriod", &cmdLine.logFlushPeriod, true, true) {}
 
           protected:
             virtual Status validate(const uint32_t& period) {
@@ -823,7 +823,7 @@ namespace mongo {
 
         class CheckpointPeriodParameter : public ExportedServerParameter<uint32_t> {
           public:
-            CheckpointPeriodParameter() : ExportedServerParameter(ServerParameterSet::getGlobal(), "checkpointPeriod", &cmdLine.checkpointPeriod, true, true) {}
+            CheckpointPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "checkpointPeriod", &cmdLine.checkpointPeriod, true, true) {}
 
             virtual Status validate(const uint32_t &period) {
                 if (period < 0) {
@@ -840,7 +840,7 @@ namespace mongo {
 
         class CleanerPeriodParameter : public ExportedServerParameter<uint32_t> {
           public:
-            CleanerPeriodParameter() : ExportedServerParameter(ServerParameterSet::getGlobal(), "cleanerPeriod", &cmdLine.cleanerPeriod, true, true) {}
+            CleanerPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "cleanerPeriod", &cmdLine.cleanerPeriod, true, true) {}
 
             virtual Status validate(const uint32_t &period) {
                 if (period < 0) {
@@ -857,7 +857,7 @@ namespace mongo {
 
         class CleanerIterationsParameter : public ExportedServerParameter<uint32_t> {
           public:
-            CleanerIterationsParameter() : ExportedServerParameter(ServerParameterSet::getGlobal(), "cleanerIterations", &cmdLine.cleanerIterations, true, true) {}
+            CleanerIterationsParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "cleanerIterations", &cmdLine.cleanerIterations, true, true) {}
 
             virtual Status validate(const uint32_t &iterations) {
                 if (iterations < 0) {
