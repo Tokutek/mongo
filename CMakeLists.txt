@@ -46,6 +46,7 @@ option(USE_SSL "Enable SSL" OFF)
 set(JS_ENGINE v8 CACHE STRING "Javascript engine (sm or v8)")
 option(USE_SYSTEM_V8 "use system version of v8 library" OFF)
 option(USE_SYSTEM_PCRE "use system version of pcre library" OFF)
+option(USE_SYSTEM_YAML "use system version of yaml library" OFF)
 option(USE_SYSTEM_BOOST "use system version of boost libraries" OFF)
 option(USE_SASL_CLIENT "Support SASL authentication in the client library" OFF)
 
@@ -379,6 +380,7 @@ add_subdirectory(src/third_party)
 include_directories(
   ${Boost_INCLUDE_DIRS}
   ${PCRE_INCLUDE_DIRS}
+  ${YAML_INCLUDE_DIRS}
   ${TokuKV_INCLUDE_DIRS}
   ${TokuBackup_INCLUDE_DIRS}
   )

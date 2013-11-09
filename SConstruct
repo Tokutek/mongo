@@ -227,6 +227,8 @@ add_option( "use-system-boost", "use system version of boost libraries", 0, True
 add_option( "use-system-sm", "use system version of spidermonkey library", 0, True )
 add_option( "use-system-v8", "use system version of v8 library", 0, True )
 
+add_option( "use-system-yaml", "use system version of yaml", 0, True )
+
 add_option( "use-system-all" , "use all system libraries", 0 , True )
 
 add_option("mongod-concurrency-level", "Concurrency level, \"global\" or \"db\"", 1, True,
@@ -1043,6 +1045,9 @@ def doConfigure(myenv):
     if use_system_version_of_library("pcre"):
         conf.FindSysLibDep("pcre", ["pcre"])
         conf.FindSysLibDep("pcrecpp", ["pcrecpp"])
+
+    if use_system_version_of_library("yaml"):
+        conf.FindSysLibDep("yaml", ["yaml"])
 
     if use_system_version_of_library("boost"):
         if not conf.CheckCXXHeader( "boost/filesystem/operations.hpp" ):

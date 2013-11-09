@@ -11,6 +11,7 @@ add_library(options_parser STATIC
 add_dependencies(options_parser generate_error_codes generate_action_types)
 target_link_libraries(options_parser LINK_PUBLIC
   bson
+  ${YAML_LIBRARIES}
   )
 
 if (BUILD_TESTING)
