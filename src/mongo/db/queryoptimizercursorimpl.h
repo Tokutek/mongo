@@ -112,8 +112,6 @@ namespace mongo {
         
         virtual BSONObj indexKeyPattern() const;
         
-        virtual bool supportGetMore() { return true; }
-
         virtual string toString() const { return "QueryOptimizerCursor"; }
         
         virtual bool getsetdup(const BSONObj &pk);

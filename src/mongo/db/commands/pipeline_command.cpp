@@ -137,7 +137,6 @@ namespace mongo {
 
         virtual bool shouldDestroyOnNSDeletion() { return false; }
 
-        virtual bool supportGetMore() { return true; }
         virtual bool getsetdup(const BSONObj &pk) { return false; } // we don't generate dups
         virtual bool isMultiKey() const { return false; }
         virtual bool modifiedKeys() const { return false; }

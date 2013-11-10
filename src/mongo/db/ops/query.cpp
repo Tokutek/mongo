@@ -743,7 +743,7 @@ namespace mongo {
                 }
             }
             
-            if ( !cursor->supportGetMore() || pq.isExplain() ) {
+            if ( pq.isExplain() ) {
                 if ( queryResponseBuilder->enoughTotalResults() ) {
                     break;
                 }

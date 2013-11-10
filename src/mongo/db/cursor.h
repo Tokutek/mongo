@@ -67,8 +67,6 @@ namespace mongo {
             return BSONObj();
         }
 
-        virtual bool supportGetMore() = 0;
-
         virtual string toString() const { return "abstract?"; }
 
         /* used for multikey index traversal to avoid sending back dups. see Matcher::matches().
@@ -204,7 +202,6 @@ namespace mongo {
 
         bool ok() { return _ok; }
         bool advance();
-        bool supportGetMore() { return true; }
 
         /**
          * used for multikey index traversal to avoid sending back dups. see Matcher::matches() and cursor.h
@@ -425,7 +422,6 @@ namespace mongo {
         virtual bool getsetdup(const BSONObj &pk) { return false; }
         virtual bool isMultiKey() const { return false; }
         virtual bool modifiedKeys() const { return false; }
-        virtual bool supportGetMore() { return true; }
         virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { }
         virtual void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) { }
         virtual long long nscanned() const { return 0; }
