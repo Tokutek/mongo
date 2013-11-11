@@ -817,8 +817,6 @@ again:      while ( !allInclusive && ok() ) {
     IndexCountCursor::IndexCountCursor( NamespaceDetails *d, const IndexDetails &idx,
                                         const BSONObj &startKey, const BSONObj &endKey,
                                         const bool endKeyInclusive ) :
-        // This will position the cursor correctly using bounds, which will do the right
-        // thing based on bounds->start/endKey() and bounds->start/endKeyInclusive()
         IndexCursor(d, idx, startKey, endKey, endKeyInclusive, 1, 0),
         _bufferedRowCount(0),
         _exhausted(false),
