@@ -356,6 +356,7 @@ namespace mongo {
             // we attempted a rollback and failed, we must go fatal.
             log() << "Caught a RollbackOplogException during rollback, going fatal" << rsLog;
             theReplSet->fatal();
+            return 2; // 2 is arbitrary, if we are going fatal, we are done
         }
 
         while (!_opSyncShouldExit) {
