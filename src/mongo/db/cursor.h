@@ -396,9 +396,8 @@ namespace mongo {
 
     /**
      * Cursor optimized for count operations.
-     *
-     * Does not track the current key/pk() and cannot produce a meaningful
-     * results for current().
+     * Does not track the current key or pk.
+     * Cannot produce a meaningful result for current().
      */
     class IndexCountCursor : public IndexCursor {
     public:
