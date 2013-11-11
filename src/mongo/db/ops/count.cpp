@@ -59,12 +59,6 @@ namespace mongo {
         }
         BSONObj query = cmd.getObjectField("query");
 
-        // count of all objects
-        if ( query.isEmpty() ) {
-            // TODO: TokuMX: call this with in-memory stats once we maintain them
-            //return applySkipLimit( d->stats.nrecords , cmd );
-        }
-
         long long count = 0;
         long long skip = cmd["skip"].numberLong();
         long long limit = cmd["limit"].numberLong();
