@@ -737,8 +737,8 @@ namespace mongo {
                 }
                 // check if data we are about to return may be too stale
                 if (!opChecked) {
-                    uint64_t ts = current["ts"]._numberLong();
-                    uassert(16785, "oplog cursor reading data that is too old", ts);
+                    ccPointer->storeOpForSlave(current);
+                    uassert(16785, "oplog cursor reading data that is too old", !ccPointer->lastOpForSlaveTooOld());
                     opChecked = true;
                 }
             }
