@@ -6,15 +6,19 @@ var runTest = function(multiUpdate, multiDelete, iso) {
     t.drop();
     t2.drop();
     t2.insert({}); // creates
-    t.insert({ a: 1, b: 0 });
-    t.insert({ a: 2, b: 0 });
-    t.insert({ a: 3, b: 0 });
-    t.ensureIndex({ a: 1, b: 1 }); // will cover a query on a, b so no locks in the _id index are taken on unmatched docs
-    // I hate the multi-plan scanner and the inability to hint an update -_-
-    assert.eq(2, t.find({ a: { $gte: 2 }, b: { $gte: 0 } }).itcount()); // should cache { a: 1, b: 1 } plan
+    t.insert({ _id: 0, b: 0 });
+    t.insert({ _id: 2, b: 0 });
     assert.commandWorked(db.beginTransaction(iso));
-    t.update({ a: { $gte: 2 }, b: { $gte: 1 } }, { $set: { x: 1 } }, { multi: multiUpdate }); // won't match anything, won't take _id locks
-    s1 = startParallelShell('db.txn_serializability.remove({ a: { $gte: 2 } }, ' +
+    // Work around the optimizer a bit...
+    t.find({ _id: { $gte: 1 } }).hint({ _id: 1 }).itcount();
+    assert.eq("IndexCursor _id_", t.find({ _id: { $gte: 1 } }).explain().cursor);
+    // Should lock the keyspace from { 1 -> maxKey } if multi, { 1 -> 2 } otherwise.
+    t.update({ _id: { $gte: 1 } }, { $set: { x: 1 } }, { multi: multiUpdate });
+    s1 = startParallelShell('db.txn_serializability.remove({ _id: 1 }, ' +
+                                '{ justOne: ' + (multiDelete ? 'false' : 'true') + '}); ' +
+                            // Should get lock not granted since a: 1 is locked
+                            'assert.neq(null, db.getLastError()); ' +
+                            'db.txn_serializability.remove({ _id: 2 }, ' +
                                 '{ justOne: ' + (multiDelete ? 'false' : 'true') + '}); ' +
                             // Should get lock not granted since a: 2 is locked
                             'assert.neq(null, db.getLastError()); ' +
