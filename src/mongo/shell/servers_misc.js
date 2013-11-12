@@ -171,6 +171,7 @@ ReplTest.prototype.getOptions = function( master , extra , putBinaryFirst, norep
         a.push( "--sslCAFile" )
         a.push( "jstests/libs/ca.pem" )
         a.push( "--sslWeakCertificateValidation" )
+        a.push( "--sslAllowInvalidCertificates" )
     }
     if( jsTestOptions().useX509 ) {
         a.push( "--clusterAuthMode" )
@@ -301,8 +302,16 @@ function startParallelShell( jsCode, port ){
     args.push("--eval", jsCode);
 
     if (typeof db == "object") {
-        // Must start connected to admin DB so auth works when running tests with auth.
-        args.push(db.getMongo().host + "/admin");
+        args.push(db.getMongo().host);
+    }
+
+    if( jsTestOptions().useSSL ) {
+        args.push( "--ssl" )
+        args.push( "--sslPEMKeyFile" )
+        args.push( "jstests/libs/client.pem" )
+        args.push( "--sslCAFile" )
+        args.push( "jstests/libs/ca.pem" )
+        args.push( "--sslAllowInvalidCertificates" )
     }
 
     x = startMongoProgramNoConnect.apply(null, args);

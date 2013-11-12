@@ -415,6 +415,7 @@ MongoRunner.mongoOptions = function( opts ){
         opts.sslPEMKeyFile = "jstests/libs/server.pem";
         opts.sslCAFile = "jstests/libs/ca.pem";
         opts.sslWeakCertificateValidation = "";
+        opts.sslAllowInvalidCertificates = "";
     }
 
     if ( jsTestOptions().useX509 ) {
@@ -479,6 +480,7 @@ MongoRunner.mongodOptions = function( opts ){
         opts.sslPEMKeyFile = "jstests/libs/server.pem";
         opts.sslCAFile = "jstests/libs/ca.pem";
         opts.sslWeakCertificateValidation = "";
+        opts.sslAllowInvalidCertificates = "";
     }
 
     if ( jsTestOptions().useX509 ) {
@@ -714,6 +716,7 @@ startMongodTest = function (port, dirname, restart, extraOptions ) {
         options["sslPEMKeyFile"] = "jstests/libs/server.pem";
         options["sslCAFile"] = "jstests/libs/ca.pem";
         options["sslWeakCertificateValidation"] = "";
+        options["sslAllowInvalidCertificates"] = "";
     }
 
     if ( jsTestOptions().useX509 ) {
