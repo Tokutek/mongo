@@ -2584,7 +2584,8 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "_id" << 1 << "q" << 1 ) );
                 _cli.ensureIndex( ns(), BSON( "q" << 1 ) );
                 // Record {_id:1} index for this query
-                ASSERT( _cli.query( ns(), QUERY( "q" << 1 << "_id" << 1 ) )->more() );
+                // Need to use a range on _id so that the queryByIdHack path is not taken.
+                ASSERT( _cli.query( ns(), QUERY( "q" << 1 << "_id" << GTE << 1 << LTE << 1 ) )->more() );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Lock::GlobalWrite lk;
                 Client::Context ctx( ns() );

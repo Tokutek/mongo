@@ -70,6 +70,14 @@ namespace mongo {
         bool chunkSkip;            // Did not belong to an owned chunk range.
     };
 
+    // Run a query on the _id portion of 'query'.
+    // @param idQuery, simple id query, a subset of 'query'
+    // @param query, the original query, used for matching
+    // @return true if the document found by idQuery matched 'query' and is in 'result', false otherwise.
+    bool queryByIdHack(NamespaceDetails *d,
+                       const BSONObj &idQuery, const BSONObj &query,
+                       BSONObj &result, ResultDetails *details = NULL);
+
     /** Interface for recording events that contribute to explain results. */
     class ExplainRecordingStrategy {
     public:

@@ -25,6 +25,7 @@
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/query.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/db/oplog_helpers.h"
 
@@ -44,18 +45,20 @@ namespace mongo {
         uassert( 10101 ,  "can't remove from a capped collection" , ! d->isCapped() );
 
         // Fast-path for simple _id deletes.
-        if (d->mayFindById() && isSimpleIdQuery(pattern)) {
-            cc().curop()->debug().idhack = true;
-            BSONObj obj;
-            BSONObj pk = pattern["_id"].wrap("");
-            if (d->findByPK(pk, obj)) {
-                if (logop) {
-                    OpLogHelpers::logDelete(ns, obj, false);
+        if (d->mayFindById()) {
+            const BSONObj idQuery = getSimpleIdQuery(pattern);
+            if (!idQuery.isEmpty()) {
+                BSONObj obj;
+                if (queryByIdHack(d, idQuery, pattern, obj)) {
+                    if (logop) {
+                        OpLogHelpers::logDelete(ns, obj, false);
+                    }
+                    const BSONObj &pk = idQuery.firstElement().wrap("");
+                    deleteOneObject(d, pk, obj);
+                    return 1;
                 }
-                deleteOneObject(d, pk, obj);
-                return 1;
+                return 0;
             }
-            return 0;
         }
 
         long long nDeleted = 0;

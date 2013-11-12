@@ -83,6 +83,31 @@ namespace mongo {
         return qr;
     }
 
+    bool queryByIdHack(NamespaceDetails *d, const BSONObj &idQuery,
+                       const BSONObj &query, BSONObj &result,
+                       ResultDetails *resDetails) {
+        verify(d->mayFindById()); // caller should have asserted d->mayFindById()
+
+        cc().curop()->debug().idhack = true;
+
+        BSONObj obj;
+        bool objMatches = true;
+        const bool found = d->findById(idQuery, obj);
+        if (found) {
+            // Only use a matcher for queries with more than just an _id
+            // component. The _id was already 'matched' by the find.
+            const bool singleQueryField = query.nFields() == 1; // TODO: Optimize?
+            if (!singleQueryField) {
+                Matcher matcher(query);
+                objMatches = matcher.matches(obj, &resDetails->matchDetails);
+            }
+        }
+
+        const bool ok = found && objMatches;
+        result = ok ? obj : BSONObj();
+        return ok;
+    }
+
     QueryResult* processGetMore(const char* ns,
                                 int ntoreturn,
                                 long long cursorid,
@@ -827,32 +852,20 @@ namespace mongo {
         return saveClientCursor;
     }
 
-    bool queryIdHack( const char* ns, const BSONObj& query, const ParsedQuery& pq, CurOp& curop, Message& result ) {
+    bool _tryQueryByIdHack(const char *ns, const BSONObj &idQuery, const BSONObj &query,
+                           const ParsedQuery &pq, CurOp &curop, Message &result) {
         int n = 0;
         auto_ptr< QueryResult > qr;
         BSONObj resObject;
 
         bool found = false;
-        {
-            OpSettings settings;
-            settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
-            settings.setCappedAppendPK(pq.hasOption(QueryOption_AddHiddenPK));
-            cc().setOpSettings(settings);
-            Client::ReadContext ctx(ns);
-            Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            replVerifyReadsOk(&pq);
-
-            NamespaceDetails *d = nsdetails(ns);
-            if (d != NULL) {
-                if (!d->mayFindById()) {
-                    // we have to resort to using the optimizer
-                    return false;
-                }
-                found = d->findById( query, resObject );
-                if (found) {
-                    transaction.commit();
-                }
+        NamespaceDetails *d = nsdetails(ns);
+        if (d != NULL) {
+            if (!d->mayFindById()) {
+                // we have to resort to using the optimizer
+                return false;
             }
+            found = queryByIdHack(d, idQuery, query, resObject);
         }
 
         if ( shardingState.needShardChunkManager( ns ) ) {
@@ -869,7 +882,6 @@ namespace mongo {
         BufBuilder bb(sizeof(QueryResult)+resObject.objsize()+32);
         bb.skip(sizeof(QueryResult));
 
-        curop.debug().idhack = true;
         if ( found ) {
             n = 1;
             fillQueryResultFromObj( bb , pq.getFields() , resObject );
@@ -959,14 +971,29 @@ namespace mongo {
             uassert( 10110 , "bad query object", false);
         }
 
+        // Tailable cursors need to read newly written entries from the tail
+        // of the collection. They manually arbitrate with the collection over
+        // what data is readable and when, so we choose read uncommited isolation.
+        OpSettings settings;
+        settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
+        settings.setBulkFetch(true);
+        settings.setCappedAppendPK(pq.hasOption(QueryOption_AddHiddenPK));
+        cc().setOpSettings(settings);
 
         // Run a simple id query.
 
         // - Don't do it for explains.
         // - Don't do it for tailable cursors.
-        if ( !explain && isSimpleIdQuery( query ) && !pq.hasOption( QueryOption_CursorTailable ) ) {
-            if ( queryIdHack( ns, query, pq, curop, result ) ) {
-                return "";
+        if ( !explain && !pq.hasOption( QueryOption_CursorTailable ) ) {
+            const BSONObj idQuery = getSimpleIdQuery(query);
+            if (!idQuery.isEmpty()) {
+                Client::ReadContext ctx(ns);
+                Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+                replVerifyReadsOk(&pq);
+                if ( _tryQueryByIdHack( ns, idQuery, query, pq, curop, result ) ) {
+                    transaction.commit();
+                    return "";
+                }
             }
         }
 
@@ -979,15 +1006,6 @@ namespace mongo {
         jsobj = jsobj.getOwned();
         query = query.getOwned();
         order = order.getOwned();
-
-        // Tailable cursors need to read newly written entries from the tail
-        // of the collection. They manually arbitrate with the collection over
-        // what data is readable and when, so we choose read uncommited isolation.
-        OpSettings settings;
-        settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
-        settings.setBulkFetch(true);
-        settings.setCappedAppendPK(pq.hasOption(QueryOption_AddHiddenPK));
-        cc().setOpSettings(settings);
 
         bool hasRetried = false;
         while ( 1 ) {

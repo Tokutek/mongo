@@ -19,13 +19,12 @@
 
 #include "pch.h"
 
-#include "mongo/client/dbclientinterface.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/insert.h"
-#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/query.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/update_internal.h"
 #include "mongo/db/oplog_helpers.h"
@@ -114,40 +113,45 @@ namespace mongo {
         }
     }
 
-    /* note: this is only (as-is) called for
-
-             - not multi
-             - not mods is indexed
-             - not upsert
-    */
-    static UpdateResult _updateById(const BSONObj &pk,
+    static UpdateResult _updateById(const BSONObj &idQuery,
                                     bool isOperatorUpdate,
                                     ModSet* mods,
                                     NamespaceDetails* d,
-                                    const char* ns,
                                     const BSONObj& updateobj,
                                     BSONObj patternOrig,
                                     bool logop,
-                                    OpDebug& debug,
                                     bool fromMigrate = false) {
 
-        dassert(pk == patternOrig["_id"].wrap(""));
-
         BSONObj obj;
-        const bool found = d->findById( patternOrig, obj );
+        ResultDetails queryResult;
+        if ( mods && mods->hasDynamicArray() ) {
+            queryResult.matchDetails.requestElemMatchKey();
+        }
+
+        const bool found = queryByIdHack(d, idQuery,
+                                         patternOrig, obj,
+                                         &queryResult);
         if ( !found ) {
             // no upsert support in _updateById yet, so we are done.
             return UpdateResult( 0 , 0 , 0 , BSONObj() );
         }
 
+        const BSONObj &pk = idQuery.firstElement().wrap("");
+
         /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
            regular ones at the moment. */
         LogOpUpdateDetails logDetails(logop, fromMigrate);
         if ( isOperatorUpdate ) {
-            auto_ptr<ModSetState> mss = mods->prepare( obj, false /* not an insertion */ );
+            ModSet* useMods = mods;
+            auto_ptr<ModSet> mymodset;
+            if ( queryResult.matchDetails.hasElemMatchKey() && mods->hasDynamicArray() ) {
+                useMods = mods->fixDynamicArray( queryResult.matchDetails.elemMatchKey() );
+                mymodset.reset( useMods );
+            }
 
             // mod set update, ie: $inc: 10 increments by 10.
-            updateUsingMods( d, pk, obj, *mss, mods->isIndexed() > 0, logDetails );
+            auto_ptr<ModSetState> mss = useMods->prepare( obj, false /* not an insertion */ );
+            updateUsingMods( d, pk, obj, *mss, useMods->isIndexed() > 0, logDetails );
             return UpdateResult( 1 , 1 , 1 , BSONObj() );
 
         } // end $operator update
@@ -183,26 +187,20 @@ namespace mongo {
             mods.reset( new ModSet(updateobj, d->indexKeys()) );
         }
 
-        int idIdxNo = -1;
-        if ( planPolicy.permitOptimalIdPlan() && !multi &&
-             (idIdxNo = d->findIdIndex()) >= 0 &&
-             d->mayFindById() && isSimpleIdQuery(patternOrig) ) {
-            debug.idhack = true;
-            IndexDetails &idx = d->idx(idIdxNo);
-            BSONObj pk = idx.getKeyFromQuery(patternOrig);
-            TOKULOG(3) << "_updateObjects using simple _id query, pattern " << patternOrig << ", pk " << pk << endl;
-            UpdateResult result = _updateById( pk,
-                                               isOperatorUpdate,
-                                               mods.get(),
-                                               d,
-                                               ns,
-                                               updateobj,
-                                               patternOrig,
-                                               logop,
-                                               debug,
-                                               fromMigrate);
-            if ( result.existing || ! upsert ) {
-                return result;
+        if (d->mayFindById()) {
+            const BSONObj idQuery = getSimpleIdQuery(patternOrig);
+            if (!idQuery.isEmpty()) {
+                UpdateResult result = _updateById( idQuery,
+                                                   isOperatorUpdate,
+                                                   mods.get(),
+                                                   d,
+                                                   updateobj,
+                                                   patternOrig,
+                                                   logop,
+                                                   fromMigrate);
+                if ( result.existing || ! upsert ) {
+                    return result;
+                }
             }
         }
 

@@ -778,6 +778,21 @@ namespace mongo {
         return false;
     }
 
+    inline BSONObj getSimpleIdQuery( const BSONObj &query ) {
+        for (BSONObjIterator i(query); i.more(); ) {
+            const BSONElement &e = i.next();
+            if (e.isSimpleType() && strcmp(e.fieldName(), "_id") == 0) {
+                if (e.type() == Object && e.Obj().firstElementFieldName()[0] == '$') {
+                    return BSONObj();
+                }
+                if (query.nFields() == 1) {
+                    return query;
+                }
+                return e.wrap();
+            }
+        }
+        return BSONObj();
+    }
     
     inline bool FieldInterval::equality() const {
         if ( _cachedEquality == -1 ) {
