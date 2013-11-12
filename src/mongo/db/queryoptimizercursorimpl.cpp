@@ -330,7 +330,7 @@ namespace mongo {
                 return shared_ptr<Cursor>( BasicCursor::make(d) );
             }
         }
-        if ( _planPolicy.permitOptimalIdPlan() && isSimpleIdQuery( _query ) ) {
+        if ( isSimpleIdQuery( _query ) ) {
             NamespaceDetails *d = nsdetails( _ns );
             if ( d ) {
                 int idxNo = d->findIdIndex();

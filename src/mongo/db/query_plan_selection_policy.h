@@ -31,7 +31,6 @@ namespace mongo {
         virtual ~QueryPlanSelectionPolicy() {}
         virtual string name() const = 0;
         virtual bool permitOptimalNaturalPlan() const { return true; }
-        virtual bool permitOptimalIdPlan() const { return true; }
         virtual bool permitPlan( const QueryPlan& plan ) const { return true; }
         virtual BSONObj planHint( const StringData& ns ) const { return BSONObj(); }
 
