@@ -15,6 +15,8 @@ if (doSharded) {
 
 testDB.user.insert({ x: 10 });
 testDB.runCommand({ getLastError: 1, w: NODES });
+sleep(2000); // wait for secondary application
+
 testDB.setSlaveOk(true);
 
 var secNode = st.rs0.getSecondary();

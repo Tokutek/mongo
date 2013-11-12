@@ -1148,6 +1148,17 @@ namespace mongo {
         }
     }
 
+    NOINLINE_DECL void realexit( ExitCode rc ) {
+#ifdef _COVERAGE
+        // Need to make sure coverage data is properly flushed before exit.
+        // It appears that ::_exit() does not do this.
+        log() << "calling regular ::exit() so coverage data may flush..." << endl;
+        ::exit( rc );
+#else
+        ::_exit( rc );
+#endif
+    }
+
     /* not using log() herein in case we are already locked */
     NOINLINE_DECL void dbexit( ExitCode rc, const char *why ) {
 
@@ -1157,13 +1168,13 @@ namespace mongo {
             if ( numExitCalls++ > 0 ) {
                 if ( numExitCalls > 5 ) {
                     // this means something horrible has happened
-                    ::_exit( rc );
+                    realexit( rc );
                 }
                 stringstream ss;
                 ss << "dbexit: " << why << "; exiting immediately";
                 tryToOutputFatal( ss.str() );
                 if ( c ) c->shutdown();
-                ::_exit( rc );
+                realexit( rc );
             }
         }
 
@@ -1198,7 +1209,7 @@ namespace mongo {
 #endif
         tryToOutputFatal( "dbexit: really exiting now" );
         if ( c ) c->shutdown();
-        ::_exit(rc);
+        realexit( rc );
     }
 
 #if !defined(__sunos__)

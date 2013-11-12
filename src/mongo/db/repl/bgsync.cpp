@@ -368,6 +368,7 @@ namespace mongo {
             // we attempted a rollback and failed, we must go fatal.
             log() << "Caught a RollbackOplogException during rollback, going fatal" << rsLog;
             theReplSet->fatal();
+            return 2; // 2 is arbitrary, if we are going fatal, we are done
         }
 
         while (!_opSyncShouldExit) {
@@ -691,7 +692,7 @@ namespace mongo {
                     dassert(GTID::cmp(lastGTID, idToRollbackTo) == 0);
                     break;
                 }
-                rollbackTransactionFromOplog(o);
+                rollbackTransactionFromOplog(o, true);
             }
             theReplSet->leaveRollbackState();
         }

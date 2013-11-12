@@ -206,6 +206,8 @@ class mongod(object):
         global mongod
         global shell_executable
         global _debug
+        global valgrind
+        global drd
         if self.proc:
             print >> sys.stderr, "probable bug: self.proc already set in start()"
             return
@@ -238,8 +240,8 @@ class mongod(object):
         argv = [mongod_executable, "--port", str(self.port), "--dbpath", dir_name]
         # This should always be set for tests
         argv += ['--setParameter', 'enableTestCommands=1']
-        # --debug puts mongod in a debugging-friendly mode
-        argv += ['--debug']
+        if valgrind or drd:
+            argv += ['--setParameter', 'numCachetableBucketMutexes=32']
         if self.kwargs.get('small_oplog'):
             argv += ["--master", "--oplogSize", "511"]
         if self.kwargs.get('small_oplog_rs'):
@@ -477,7 +479,11 @@ def runTest(test, testnum):
     # so, we won't mess with the output
     is_test_binary = False
     if skipTest(path):
-        print "skipping " + path
+        if quiet:
+            sys.stdout.write("skip %d %s\n" % (testnum, os.path.basename(path)))
+            sys.stdout.flush()
+        else:
+            print "skipping " + path
         return
     if file_of_commands_mode:
         # smoke.py was invoked like "--mode files --from-file foo",
@@ -594,17 +600,17 @@ def runTest(test, testnum):
                 vlog.write(line)
             vlog.flush()
 
-        if quiet:
-            if r == 0:
-                qlog.write('ok %d %s\n' % (testnum, os.path.basename(path)))
-            else:
-                qlog.write('not ok %d %s # exit %d\n' % (testnum, os.path.basename(path), r))
-            qlog.flush()
-            if r != 0:
-                tempfile.seek(0)
-                for line in tempfile:
-                    tlog.write(line)
-                tlog.flush()
+            if quiet:
+                if r == 0:
+                    qlog.write('ok %d %s\n' % (testnum, os.path.basename(path)))
+                else:
+                    qlog.write('not ok %d %s # exit %d\n' % (testnum, os.path.basename(path), r))
+                qlog.flush()
+                if r != 0:
+                    tempfile.seek(0)
+                    for line in tempfile:
+                        tlog.write(line)
+                    tlog.flush()
         if r != 0:
             raise TestExitFailure(path, r)
     finally:

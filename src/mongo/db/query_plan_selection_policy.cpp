@@ -42,19 +42,4 @@ namespace mongo {
     QueryPlanSelectionPolicy::IndexOnly QueryPlanSelectionPolicy::__indexOnly;
     const QueryPlanSelectionPolicy& QueryPlanSelectionPolicy::indexOnly() { return __indexOnly; }
     
-    bool QueryPlanSelectionPolicy::IdElseNatural::permitPlan( const QueryPlan& plan ) const {
-        return !plan.indexed() || plan.index()->isIdIndex();
-    }
-    BSONObj QueryPlanSelectionPolicy::IdElseNatural::planHint( const StringData& ns ) const {
-        NamespaceDetails* nsd = nsdetails( ns );
-        if ( !nsd || !nsd->hasIdIndex() ) {
-            return BSON( "$hint" << BSON( "$natural" << 1 ) );
-        }
-        return BSON( "$hint" << nsd->idx( nsd->findIdIndex() ).indexName() );
-    }
-    QueryPlanSelectionPolicy::IdElseNatural QueryPlanSelectionPolicy::__idElseNatural;
-    const QueryPlanSelectionPolicy& QueryPlanSelectionPolicy::idElseNatural() {
-        return __idElseNatural;
-    }
-
 } // namespace mongo

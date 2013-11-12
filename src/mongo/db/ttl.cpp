@@ -40,6 +40,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/replutil.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/util/background.h"
 
 namespace mongo {
@@ -50,7 +51,7 @@ namespace mongo {
     ServerStatusMetricField<Counter64> ttlPassesDisplay("ttl.passes", &ttlPasses);
     ServerStatusMetricField<Counter64> ttlDeletedDocumentsDisplay("ttl.deletedDocuments", &ttlDeletedDocuments);
 
-
+    MONGO_EXPORT_SERVER_PARAMETER( ttlMonitorEnabled, bool, true );
     
     class TTLMonitor : public BackgroundJob {
     public:
@@ -135,6 +136,11 @@ namespace mongo {
                 sleepsecs( 60 );
 
                 LOG(3) << "TTLMonitor thread awake" << endl;
+
+                if ( !ttlMonitorEnabled || cmdLine.gdb ) {
+                    LOG(1) << "TTLMonitor is disabled" << endl;
+                    continue;
+                }
                 
                 if ( lockedForWriting() ) {
                     // note: this is not perfect as you can go into fsync+lock between 

@@ -185,6 +185,9 @@ namespace mongo {
         BSONObjBuilder& append(const StringData& fieldName, unsigned n) {
             return append(fieldName, (int) n);
         }
+        BSONObjBuilder& append(const StringData& fieldName, unsigned long n) {
+            return append(fieldName, (int) n);
+        }
 
         /** Append a NumberLong */
         BSONObjBuilder& append(const StringData& fieldName, long long n) {

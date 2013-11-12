@@ -32,19 +32,19 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual bool logTheOp() { return true; }
         virtual bool slaveOk() const { return false; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::loaderCommands);
+            out->push_back(Privilege(dbname, actions));
+        }
     };
 
     class BeginLoadCmd : public LoaderCommand {
     public:
         BeginLoadCmd() : LoaderCommand("beginLoad") {}
 
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
-            ActionSet actions;
-            actions.addAction(ActionType::loaderCommands);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
-        }
         virtual void help( stringstream& help ) const {
             help << "begin load" << endl << 
                 "Begin a bulk load into a collection." << endl <<
@@ -66,7 +66,7 @@ namespace mongo {
             uassert( 16883, "The indexes field must be an array of index objects.",
                             cmdObj["indexes"].type() == mongo::Array );
             uassert( 16884, "The options field must be an object.",
-                            !cmdObj["options"].ok() || cmdObj["options"].type() == mongo::Object );
+                            cmdObj["options"].type() == mongo::Object );
             LOG(0) << "Beginning bulk load, cmd: " << cmdObj << endl;
 
             const string ns = db + "." + cmdObj["ns"].String();
@@ -92,13 +92,6 @@ namespace mongo {
     public:
         CommitLoadCmd() : LoaderCommand("commitLoad") {}
 
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
-            ActionSet actions;
-            actions.addAction(ActionType::loaderCommands);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
-        }
         virtual void help( stringstream& help ) const {
             help << "commit load" << endl <<
                 "Commits a load in progress." << endl <<
@@ -123,13 +116,6 @@ namespace mongo {
     public:
         AbortLoadCmd() : LoaderCommand("abortLoad") {}
 
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
-            ActionSet actions;
-            actions.addAction(ActionType::loaderCommands);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
-        }
         virtual void help( stringstream& help ) const {
             help << "abort load" << endl <<
                 "Aborts a load in progress." << endl <<

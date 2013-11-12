@@ -198,23 +198,23 @@ namespace mongo {
         setupSIGTRAPforGDB();
         setupCoreSignals();
 
-        if (!cmdLine.debug) {
-            signal(SIGTERM, sighandler);
+        signal(SIGTERM, sighandler);
+        if (!cmdLine.gdb) {
             signal(SIGINT, sighandler);
+        }
 
 #if defined(SIGQUIT)
-            signal( SIGQUIT , printStackAndExit );
+        signal( SIGQUIT , printStackAndExit );
 #endif
-            signal( SIGSEGV , printStackAndExit );
-            signal( SIGABRT , printStackAndExit );
-            signal( SIGFPE , printStackAndExit );
+        signal( SIGSEGV , printStackAndExit );
+        signal( SIGABRT , printStackAndExit );
+        signal( SIGFPE , printStackAndExit );
 #if defined(SIGBUS)
-            signal( SIGBUS , printStackAndExit );
+        signal( SIGBUS , printStackAndExit );
 #endif
 #if defined(SIGPIPE)
-            signal( SIGPIPE , SIG_IGN );
+        signal( SIGPIPE , SIG_IGN );
 #endif
-        }
 
 #ifndef _WIN32
         sigemptyset( &asyncSignals );
@@ -362,7 +362,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
 
     general_options.add_options()
     ("nohttpinterface", "disable http interface")
-    ("debug", "go into a debug-friendly mode (development use only).");
+    ("gdb", "go into a gdb-friendly mode (development use only).");
 
     hidden_options.add_options()
     ("releaseConnectionsAfterResponse", "" )
@@ -597,5 +597,12 @@ void mongo::dbexit( ExitCode rc, const char *why ) {
           << " rc:" << rc
           << " " << ( why ? why : "" )
           << endl;
+#ifdef _COVERAGE
+    // Need to make sure coverage data is properly flushed before exit.
+    // It appears that ::_exit() does not do this.
+    log() << "calling regular ::exit() so coverage data may flush..." << endl;
+    ::exit(rc);
+#else
     ::_exit(rc);
+#endif
 }

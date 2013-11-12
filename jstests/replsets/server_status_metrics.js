@@ -55,12 +55,12 @@ var secondaryBaseOplogInserts = ss.metrics.repl.oplog.insert.num;
 for(x=0;x<100000;x++){ testDB.a.insert({}) }
 
 testPrimaryMetrics(primary, 100000, primaryBaseOplogInserts);
-testDB.getLastError(2);
+rt.awaitReplication();
 
 testSecondaryMetrics(secondary, 100000, secondaryBaseOplogInserts);
 
 testDB.a.update({}, {$set:{d:new Date()}},true, true)
-testDB.getLastError(2);
+rt.awaitReplication();
 
 testSecondaryMetrics(secondary, 100001, secondaryBaseOplogInserts);
 

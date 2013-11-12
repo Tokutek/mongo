@@ -39,7 +39,6 @@ namespace mongo {
                                            const BSONObj& query,
                                            const BSONObj& order,
                                            const QueryPlanSelectionPolicy& planPolicy,
-                                           bool requestMatcher,
                                            const shared_ptr<const ParsedQuery>& parsedQuery,
                                            bool requireOrder,
                                            QueryPlanSummary* singlePlanSummary ) {
@@ -48,7 +47,6 @@ namespace mongo {
                                        query,
                                        order,
                                        planPolicy,
-                                       requestMatcher,
                                        parsedQuery,
                                        requireOrder,
                                        singlePlanSummary );

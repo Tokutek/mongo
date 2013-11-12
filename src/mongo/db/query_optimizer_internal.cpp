@@ -143,7 +143,6 @@ namespace mongo {
         _matchCounter( aggregateNscanned, cumulativeCount ),
         _countingMatches(),
         _mustAdvance(),
-        _capped(),
         _selectionPolicy( selectionPolicy ),
         _requireOrder( requireOrder ),
         _alwaysCountMatches( alwaysCountMatches ) {
@@ -238,8 +237,6 @@ namespace mongo {
         // of query validation that should occur as part of this class's init() if not handled
         // already.
         fassert( 16249, queryPlan().matcher() );
-        
-        _capped = _c->capped();
         
         // TODO This violates the current Cursor interface abstraction, but for now it's simpler to keep our own set of
         // dups rather than avoid poisoning the cursor's dup set with unreturned documents.  Deduping documents
@@ -355,7 +352,6 @@ namespace mongo {
         }
         
         addStandardPlans( d );
-        warnOnCappedIdTableScan();
     }
     
     void QueryPlanGenerator::addFallbackPlans() {
@@ -595,26 +591,6 @@ namespace mongo {
         _qps.setSinglePlan( plan );
     }
 
-    void QueryPlanGenerator::warnOnCappedIdTableScan() const {
-        // if we are doing a table scan on _id
-        // and it's a capped collection
-        // we warn as it's a common user error
-        // .system. and local collections are exempt
-        StringData ns = _qps.frsp().ns();
-        NamespaceDetails* d = nsdetails( ns );
-        if ( d &&
-             d->isCapped() &&
-             _qps.nPlans() == 1 &&
-             ( _qps.firstPlan()->utility() != QueryPlan::Impossible ) &&
-             !_qps.firstPlan()->indexed() &&
-             !_qps.firstPlan()->multikeyFrs().range( "_id" ).universal() ) {
-            if (!NamespaceString::isSystem(ns) && nsToDatabaseSubstring(ns) != "local") {
-                warning() << "unindexed _id query on capped collection, "
-                          << "performance will be poor collection: " << ns << endl;
-            }
-        }
-    }
-    
     QueryPlanSet* QueryPlanSet::make( const char* ns,
                                       auto_ptr<FieldRangeSetPair> frsp,
                                       auto_ptr<FieldRangeSetPair> originalFrsp,

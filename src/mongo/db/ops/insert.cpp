@@ -82,7 +82,7 @@ namespace mongo {
                 else {
                     insertOneObject(details, objModified, flags); // may add _id field
                     if (logop) {
-                        OpLogHelpers::logInsert(ns, objModified, &cc().txn());
+                        OpLogHelpers::logInsert(ns, objModified);
                     }
                 }
             } catch (const UserException &) {

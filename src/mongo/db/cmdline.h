@@ -138,7 +138,7 @@ namespace mongo {
         
         // TokuMX variables
         bool directio;
-        bool debug;
+        bool gdb;
         BytesQuantity<uint64_t> cacheSize;
         BytesQuantity<uint64_t> locktreeMaxMemory;
         BytesQuantity<uint64_t> loaderMaxMemory;
@@ -193,12 +193,12 @@ namespace mongo {
         noTableScan(false),
         configsvr(false), quota(false), quotaFiles(8), cpu(false),
         logFlushPeriod(100), // 0 means fsync every transaction, 100 means fsync log once every 100 ms
-        expireOplogDays(0), expireOplogHours(0), // default of 0 means never purge entries from oplog
+        expireOplogDays(14), expireOplogHours(0), // default of 14, two weeks
         objcheck(true), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), moveParanoia( false ),
         syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp"), maxConns(DEFAULT_MAX_CONN),
         logAppend(false), logWithSyslog(false),
-        directio(false), debug(false), cacheSize(0), locktreeMaxMemory(0), loaderMaxMemory(0), checkpointPeriod(60), cleanerPeriod(2),
+        directio(false), gdb(false), cacheSize(0), locktreeMaxMemory(0), loaderMaxMemory(0), checkpointPeriod(60), cleanerPeriod(2),
         cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""), gdbPath(""),
         txnMemLimit(1ULL<<20), pluginsDir(), plugins()
     {

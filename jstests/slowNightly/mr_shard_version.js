@@ -44,10 +44,16 @@ for( var i = 0; i < st._shardServers.length; i++ ){
     }
 }
 
-var bid = benchStart({ ops : ops,
-                       host : st.s.host,
-                       parallel : 1,
-                       handleErrors : false })
+var benchArgs = { ops : ops,
+                  host : st.s.host,
+                  parallel : 1,
+                  handleErrors : false };
+if (jsTest.options().auth) {
+    benchArgs['db'] = 'admin';
+    benchArgs['username'] = jsTest.options().adminUser;
+    benchArgs['password'] = jsTest.options().adminPassword;
+}
+var bid = benchStart(benchArgs)
 
 jsTest.log( "Starting m/r..." )
                        

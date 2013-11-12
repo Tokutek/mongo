@@ -61,8 +61,6 @@ namespace mongo {
     class ClientCursor : private boost::noncopyable {
         friend class CmdCursorInfo;
     public:
-        static void assertNoCursors();
-
         /* use this to assure we don't in the background time out cursor while it is under use.
            if you are using noTimeout() already, there is no risk anyway.
            Further, this mechanism guards against two getMore requests on the same cursor executing

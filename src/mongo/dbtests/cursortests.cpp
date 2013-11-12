@@ -355,6 +355,11 @@ namespace CursorTests {
             }
         };
 
+        class RequestMatcherFalse : public QueryPlanSelectionPolicy {
+            virtual string name() const { return "RequestMatcherFalse"; }
+            virtual bool requestMatcher() const { return false; }
+        } _requestMatcherFalse;
+
         /**
          * An IndexCursor typically moves from one index match to another when its advance() method
          * is called.  However, to prevent excessive iteration advance() may bail out early before
@@ -383,12 +388,10 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
                     Client::ReadContext ctx( ns() );
-                    boost::shared_ptr<Cursor> c =
-                            getOptimizedCursor( ns(),
-                                                                  query,
-                                                                  BSONObj(),
-                                                                  QueryPlanSelectionPolicy::any(),
-                                                                  /* requestMatcher */ false );
+                    boost::shared_ptr<Cursor> c = getOptimizedCursor( ns(),
+                                                                      query,
+                                                                      BSONObj(),
+                                                                      _requestMatcherFalse );
                     // The IndexCursor attempts to find each of the values 0, 1, 2, ... etc in the
                     // index.  Because the values 0.5, 1.5, etc are present in the index, the
                     // IndexCursor will explicitly look for all the values in the $in list during
@@ -433,10 +436,9 @@ namespace CursorTests {
                     Client::ReadContext ctx( ns() );
                     boost::shared_ptr<Cursor> c =
                             getOptimizedCursor( ns(),
-                                                                  BSON( "a" << GT << 0 << LT << 5 ),
-                                                                  BSONObj(),
-                                                                  QueryPlanSelectionPolicy::any(),
-                                                                  /* requestMatcher */ false );
+                                                BSON( "a" << GT << 0 << LT << 5 ),
+                                                BSONObj(),
+                                                _requestMatcherFalse );
                     while( c->ok() ) {
                         // A Matcher is provided even though 'requestMatcher' is false.
                         ASSERT( c->matcher() );
@@ -475,8 +477,7 @@ namespace CursorTests {
                             getOptimizedCursor( ns(),
                                                                   BSON( "a.b" << 2 << "a.c" << 2 ),
                                                                   BSONObj(),
-                                                                  QueryPlanSelectionPolicy::any(),
-                                                                  /* requestMatcher */ false );
+                                                                  _requestMatcherFalse );
                     while( c->ok() ) {
                         // A Matcher is provided even though 'requestMatcher' is false.
                         ASSERT( c->matcher() );
@@ -509,8 +510,7 @@ namespace CursorTests {
                             getOptimizedCursor( ns(),
                                                                   BSON( "a" << GTE << "" ),
                                                                   BSONObj(),
-                                                                  QueryPlanSelectionPolicy::any(),
-                                                                  /* requestMatcher */ false );
+                                                                  _requestMatcherFalse );
                     while( c->ok() ) {
                         ASSERT( !c->matcher() );
                         if ( c->currentMatches() ) {
@@ -542,8 +542,7 @@ namespace CursorTests {
                             getOptimizedCursor( ns(),
                                                                   BSON( "a" << LTE << Date_t( 1 ) ),
                                                                   BSONObj(),
-                                                                  QueryPlanSelectionPolicy::any(),
-                                                                  /* requestMatcher */ false );
+                                                                  _requestMatcherFalse );
                     while( c->ok() ) {
                         ASSERT( !c->matcher() );
                         if ( c->currentMatches() ) {

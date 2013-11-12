@@ -431,8 +431,8 @@ namespace {
             }
         }
 
-        if (params.count("debug")) {
-            cmdLine.debug = true;
+        if (params.count("gdb")) {
+            cmdLine.gdb = true;
         }
 
         cmdLine.logWithSyslog = params.count("syslog");

@@ -98,7 +98,7 @@ namespace mongo {
         for (shared_ptr<Cursor> c(IndexCursor::make(d, i, newMin, newMax, maxInclusive, 1)); c->ok(); c->advance()) {
             BSONObj pk = c->currPK();
             BSONObj obj = c->current();
-            OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate, &cc().txn());
+            OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate);
             deleteOneObject(d, pk, obj);
             numDeleted++;
         }

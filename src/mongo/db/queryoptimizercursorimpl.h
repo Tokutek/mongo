@@ -124,8 +124,6 @@ namespace mongo {
         
         virtual BSONObj indexKeyPattern() const;
         
-        virtual bool supportGetMore() { return true; }
-
         virtual string toString() const { return "QueryOptimizerCursor"; }
         
         virtual bool getsetdup(const BSONObj &pk);
@@ -135,8 +133,6 @@ namespace mongo {
         
         // TODO fix
         virtual bool modifiedKeys() const { return true; }
-
-        virtual bool capped() const;
 
         virtual long long nscanned() const;
 
@@ -225,7 +221,6 @@ namespace mongo {
                         const BSONObj &query,
                         const BSONObj &order,
                         const QueryPlanSelectionPolicy &planPolicy,
-                        bool requestMatcher,
                         const shared_ptr<const ParsedQuery> &parsedQuery,
                         bool requireOrder,
                         QueryPlanSummary *singlePlanSummary );
@@ -233,7 +228,6 @@ namespace mongo {
         shared_ptr<Cursor> generate();
         
     private:
-        bool snapshot() const { return _parsedQuery && _parsedQuery->isSnapshot(); }
         bool explain() const { return _parsedQuery && _parsedQuery->isExplain(); }
         BSONObj min() const { return _parsedQuery ? _parsedQuery->getMin() : BSONObj(); }
         BSONObj max() const { return _parsedQuery ? _parsedQuery->getMax() : BSONObj(); }
@@ -254,7 +248,6 @@ namespace mongo {
         BSONObj _query;
         BSONObj _order;
         const QueryPlanSelectionPolicy &_planPolicy;
-        bool _requestMatcher;
         shared_ptr<const ParsedQuery> _parsedQuery;
         bool _requireOrder;
         QueryPlanSummary *_singlePlanSummary;

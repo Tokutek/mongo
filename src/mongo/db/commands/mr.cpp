@@ -913,9 +913,6 @@ namespace mongo {
                 if ( o.woSortOrder( prev , sortKey ) == 0 ) {
                     // object is same as previous, add to array
                     all.push_back( o );
-                    if ( pm->hits() % 100 == 0 ) {
-                        killCurrentOp.checkForInterrupt();
-                    }
                     continue;
                 }
 
@@ -931,8 +928,6 @@ namespace mongo {
                 all.clear();
                 prev = o;
                 all.push_back( o );
-
-                killCurrentOp.checkForInterrupt();
             }
 
             // reduce and finalize last array

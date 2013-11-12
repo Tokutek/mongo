@@ -204,7 +204,7 @@ namespace mongo {
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
         void optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
-                      const bool sendOptimizeMessage);
+                      const bool sendOptimizeMessage, uint64_t* loops_run);
         void acquireTableLock();
 
         struct UniqueCheckExtra : public ExceptionSaver {
@@ -217,7 +217,7 @@ namespace mongo {
             }
         };
         static int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra);
-        void uniqueCheck(const BSONObj &key, const BSONObj *pk) const ;
+        void uniqueCheck(const BSONObj &key, const BSONObj &pk) const;
         void uassertedDupKey(const BSONObj &key) const;
 
         template<class Callback>
@@ -345,7 +345,7 @@ namespace mongo {
         // using _descriptor, which is set by subclass constructors.
         //
         // Only IndexDetails::make() calls the constructor / open.
-        void open(const bool may_create);
+        bool open(const bool may_create);
 
         friend class NamespaceDetails;
         friend class BulkLoadedCollection;

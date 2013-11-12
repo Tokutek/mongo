@@ -5,49 +5,8 @@
 //   mongo --nodb rollback2.js | tee out | grep -v ^m31
 //
 
-var debugging = 0;
-
-function ifReady(db, f) {
-    var stats = db.adminCommand({ replSetGetStatus: 1 });
-    
-
-    // only eval if state isn't recovery
-    if (stats && stats.myState != 3) {
-        return f();
-    }
-
-    return false;
-}
-
-function pause(s) {
-    print(s);
-    while (debugging) {
-        sleep(3000);
-        print(s);
-    }
-}
-
-function deb(obj) { 
-    if( debugging ) {
-        print("\n\n\n" + obj + "\n\n");
-    }  
-}
 
 w = 0;
-
-function wait(f) {
-    w++;
-    var n = 0;
-    while (!f()) {
-        if (n % 4 == 0)
-            print("rollback2.js waiting " + w);
-        if (++n == 4) {
-            print("" + f);
-        }
-        assert(n < 200, 'tried 200 times, giving up');
-        sleep(1000);
-    }
-}
 
 function dbs_match(a, b) {
     print("dbs_match");
@@ -152,36 +111,29 @@ function verify(db) {
 
 doTest = function (signal, txnMemLimit, startPort) {
 
-	var num = 3;
-	var host = getHostName();
-	var name = "rollback_simple";
-	var timeout = 60000;
+    var num = 3;
+    var host = getHostName();
+    var name = "rollback_simple";
+    var timeout = 60000;
 
-	var replTest = new ReplSetTest( {name: name, nodes: num, startPort:startPort, txnMemLimit: txnMemLimit} );
-	var conns = replTest.startSet();
-	var port = replTest.ports;
-	var config = {_id : name, members :
-	        [
-	         {_id:0, host : host+":"+port[0]},
-	         {_id:1, host : host+":"+port[1]},
-	         {_id:2, host : host+":"+port[2], arbiterOnly : true},
-	        ],
+    var replTest = new ReplSetTest( {name: name, nodes: num, startPort:startPort, txnMemLimit: txnMemLimit} );
+    var conns = replTest.startSet();
+    var port = replTest.ports;
+    var config = {_id : name, members :
+            [
+             {_id:0, host : host+":"+port[0], priority:10 },
+             {_id:1, host : host+":"+port[1]},
+             {_id:2, host : host+":"+port[2], arbiterOnly : true},
+            ],
              };
 
-	replTest.initiate(config);
-
-	replTest.awaitReplication();
-	replTest.bridge();
+    replTest.initiate(config);
+    replTest.awaitReplication();
+    assert.soon(function() { return conns[0].getDB("admin").isMaster().ismaster; });
 
     // Make sure we have a master
-    var master = replTest.getMaster();
-    a_conn = (master == conns[0]) ? conns[0] : conns[1];
-    A = a_conn.getDB("admin");
-    b_conn = (master == conns[0]) ? conns[1] : conns[0];
-    a_conn.setSlaveOk();
-    b_conn.setSlaveOk();
-    B = b_conn.getDB("admin");
-    assert(a_conn == master);
+    conns[0].setSlaveOk();
+    conns[0].setSlaveOk();
 
     //deb(master);
 
@@ -192,64 +144,47 @@ doTest = function (signal, txnMemLimit, startPort) {
     }, "Arbiter failed to initialize.");
 
     // Wait for initial replication
-    var a = a_conn.getDB("foo");
-    var b = b_conn.getDB("foo");
+    var a = conns[0].getDB("foo");
+    var b = conns[1].getDB("foo");
 
     doInitialWrites(a);
-	replTest.awaitReplication();
+    replTest.awaitReplication();
 
-    master = replTest.getMaster();
-	print("disconnect primary from everywhere");
-        if (master == conns[0]) {
-            replTest.partition(1,0,false);
-            replTest.partition(2,0,false);
-        }
-        else {
-            replTest.partition(0,1,false);
-            replTest.partition(2,1,false);
-            assert(master == conns[1]);
-        }
-	// do some writes to a before it realizes it can no longer be primary
-	print("do Items to Rollback");
-    doItemsToRollBack(a);
-	// wait for b to become master
-	print("wait for B to become master");
-    wait(function () { return B.isMaster().ismaster; });
-	// do some writes to b, as it is the new master
-	print("new writes on b");
-    doWritesToKeep2(b);
-	// now bring a back
-	print("connect A back");
-        if (master == conns[0]) {
-            replTest.unPartition(1,0,false);
-            replTest.unPartition(2,0,false);
-        }
-        else {
-            replTest.unPartition(0,1,false);
-            replTest.unPartition(2,1,false);
-            assert(master == conns[1]);
-        }
-    sleep(5000);
+    print("shutting down conn 0");
+    replTest.stop(0);
+    print("waiting for conn 1 to become master");
+    assert.soon(function() { return conns[1].getDB("admin").isMaster().ismaster; });
+
+    print("do Items to Rollback");
+    doItemsToRollBack(b);
+    print("shutting down conn1");
+    replTest.stop(1);
+
+
+    print("shutting down conn1");
+    replTest.stop(1);
+    print("restarting conn0");
+    replTest.restart(0);
+    print("waiting for conn 0 to become master");
+    assert.soon(function() { return conns[0].getDB("admin").isMaster().ismaster; });
+
+    doWritesToKeep2(conns[0].getDB("foo"));
+    for (i = 0; i < 1000; i++) {
+        conns[0].getDB("foo").foo.insert({_id:i});
+    }
+
+    print("restarting conn1");
+    replTest.restart(1);
+
+    a = conns[0].getDB("foo");
+    b = conns[1].getDB("foo");
 
     // everyone is up here...
     replTest.awaitReplication();
     assert( dbs_match(a,b), "server data sets do not match after rollback, something is wrong");
 
-    pause("rollback2.js SUCCESS");
+    print("rollback_simple.js SUCCESS");
     replTest.stopSet(signal);
-};
-
-var reconnect = function(a,b) {
-  wait(function() { 
-      try {
-        a.bar.stats();
-        b.bar.stats();
-        return true;
-      } catch(e) {
-        print(e);
-        return false;
-      }
-    });
 };
 
 print("rollback2.js");

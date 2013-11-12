@@ -20,6 +20,9 @@
 
 #include <errno.h>
 #include <string>
+#include <string.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include <db.h>
 #include <toku_time.h>
@@ -37,6 +40,7 @@
 #include "mongo/db/cmdline.h"
 #include "mongo/db/commands/server_status.h"
 #include "mongo/db/descriptor.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/storage/dbt.h"
 #include "mongo/db/storage/exception.h"
@@ -210,6 +214,8 @@ namespace mongo {
             ~InStartup() { _inStartup = false; }
         };
 
+        MONGO_EXPORT_STARTUP_SERVER_PARAMETER(numCachetableBucketMutexes, uint32_t, 0);
+
         void startup(TxnCompleteHooks *hooks) {
             InStartup is;
 
@@ -234,6 +240,12 @@ namespace mongo {
             const uint64_t cachesize = (cmdLine.cacheSize > 0
                                         ? (uint64_t) cmdLine.cacheSize
                                         : calculate_cachesize());
+            if (cachesize < 1ULL<<30) {
+                warning() << "*****************************" << endl;
+                warning() << "cacheSize set to less than 1 GB: " << cachesize << " bytes. " << endl;
+                warning() << "This value may be too low to achieve good performance." << endl;
+                warning() << "*****************************" << endl;
+            }
             const uint32_t bytes = cachesize % (1024L * 1024L * 1024L);
             const uint32_t gigabytes = cachesize >> 30;
             r = env->set_cachesize(env, gigabytes, bytes, 1);
@@ -310,10 +322,10 @@ namespace mongo {
                 TOKULOG(1) << "temporary bulk loader directory set to " << tmpDir << endl;
             }
 
-            if (cmdLine.debug) {
+            if (numCachetableBucketMutexes > 0) {
                 // The default number of bucket mutexes is 1 million, which is a nightmare for
                 // valgrind's drd tool to keep track of.
-                db_env_set_num_bucket_mutexes(32);
+                db_env_set_num_bucket_mutexes(numCachetableBucketMutexes);
             }
 
             const int env_flags = DB_INIT_LOCK|DB_INIT_MPOOL|DB_INIT_TXN|DB_CREATE|DB_PRIVATE|DB_INIT_LOG|DB_RECOVER;
@@ -795,48 +807,94 @@ namespace mongo {
             }
         }
 
-        void set_log_flush_interval(uint32_t period_ms) {
-            cmdLine.logFlushPeriod = period_ms;
-            env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
-            TOKULOG(1) << "fsync log period set to " << period_ms << " milliseconds." << endl;
-        }
+        class LogFlushPeriodParameter : public ExportedServerParameter<uint32_t> {
+          public:
+            LogFlushPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "logFlushPeriod", &cmdLine.logFlushPeriod, true, true) {}
 
-        void set_checkpoint_period(uint32_t period_seconds) {
-            cmdLine.checkpointPeriod = period_seconds;
-            int r = env->checkpointing_set_period(env, period_seconds);
-            if (r != 0) {
-                handle_ydb_error(r);
+          protected:
+            virtual Status validate(const uint32_t& period) {
+                if (period < 0 || period > 500) {
+                    return Status(ErrorCodes::BadValue, "logFlushPeriod must be between 0 and 500 ms");
+                }
+                env->change_fsync_log_period(env, period);
+                return Status::OK();
             }
-            TOKULOG(1) << "checkpoint period set to " << period_seconds << " seconds." << endl;
-        }
+        } logFlushPeriod;
 
-        void set_cleaner_period(uint32_t period_seconds) {
-            cmdLine.cleanerPeriod = period_seconds;
-            int r = env->cleaner_set_period(env, period_seconds);
-            if (r != 0) {
-                handle_ydb_error(r);
+        class CheckpointPeriodParameter : public ExportedServerParameter<uint32_t> {
+          public:
+            CheckpointPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "checkpointPeriod", &cmdLine.checkpointPeriod, true, true) {}
+
+            virtual Status validate(const uint32_t &period) {
+                if (period < 0) {
+                    return Status(ErrorCodes::BadValue, "checkpointPeriod must be greater than 0s");
+                }
+                int r = env->checkpointing_set_period(env, period);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                    return Status(ErrorCodes::InternalError, "error setting checkpointPeriod");
+                }
+                return Status::OK();
             }
-            TOKULOG(1) << "cleaner period set to " << period_seconds << " seconds." << endl;
-        }
+        } checkpointPeriodParameter;
 
-        void set_cleaner_iterations(uint32_t num_iterations) {
-            cmdLine.cleanerPeriod = num_iterations;
-            int r = env->cleaner_set_iterations(env, num_iterations);
-            if (r != 0) {
-                handle_ydb_error(r);
+        class CleanerPeriodParameter : public ExportedServerParameter<uint32_t> {
+          public:
+            CleanerPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "cleanerPeriod", &cmdLine.cleanerPeriod, true, true) {}
+
+            virtual Status validate(const uint32_t &period) {
+                if (period < 0) {
+                    return Status(ErrorCodes::BadValue, "cleanerPeriod must be greater than 0s");
+                }
+                int r = env->cleaner_set_period(env, period);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                    return Status(ErrorCodes::InternalError, "error setting cleanerPeriod");
+                }
+                return Status::OK();
             }
-            TOKULOG(1) << "cleaner iterations set to " << num_iterations << "." << endl;
-        }
+        } cleanerPeriodParameter;
 
-        void set_lock_timeout(uint64_t timeout_ms) {
-            // This is sufficient. See get_lock_timeout_callback()
-            cmdLine.lockTimeout = timeout_ms;
-            TOKULOG(1) << "lock timeout set to " << timeout_ms << " milliseconds." << endl;
-        }
+        class CleanerIterationsParameter : public ExportedServerParameter<uint32_t> {
+          public:
+            CleanerIterationsParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "cleanerIterations", &cmdLine.cleanerIterations, true, true) {}
 
-        void set_loader_max_memory(uint64_t bytes) {
-            cmdLine.loaderMaxMemory = bytes;
-            TOKULOG(1) << "loader max memory set to " << bytes << "." << endl;
+            virtual Status validate(const uint32_t &iterations) {
+                if (iterations < 0) {
+                    return Status(ErrorCodes::BadValue, "cleanerIterations must be greater than 0");
+                }
+                int r = env->cleaner_set_iterations(env, iterations);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                    return Status(ErrorCodes::InternalError, "error setting cleanerIterations");
+                }
+                return Status::OK();
+            }
+        } cleanerIterationsParameter;
+
+        ExportedServerParameter<uint64_t> lockTimeoutParameter(ServerParameterSet::getGlobal(), "lockTimeout", &cmdLine.lockTimeout, true, true);
+        ExportedServerParameter<BytesQuantity<uint64_t> > loaderMaxMemoryParameter(ServerParameterSet::getGlobal(), "loaderMaxMemory", &cmdLine.loaderMaxMemory, true, true);
+
+        __attribute__((noreturn))
+        static void handle_filesystem_error_nicely(int error) {
+            stringstream ss;
+            ss << "Error " << error << ": " << strerror(error);
+            warning() << "Got the following error from the filesystem:" << endl;
+            warning() << ss.str() << endl;
+#if defined(RLIMIT_NOFILE)
+            if (error == EMFILE) {
+                struct rlimit rlnofile;
+                int r = getrlimit(RLIMIT_NOFILE, &rlnofile);
+                if (r == 0) {
+                    warning() << "The current resource limit for this process allows only " << rlnofile.rlim_cur
+                              << " open files.  Consider raising this value." << endl;
+                } else {
+                    r = errno;
+                    warning() << "getrlimit error " << r << ": " << strerror(r) << endl;
+                }
+            }
+#endif
+            uasserted(17035, ss.str());
         }
 
         void handle_ydb_error(int error) {
@@ -851,6 +909,15 @@ namespace mongo {
                 case ASSERT_IDS::CannotHashArrays:
                     uasserted( storage::ASSERT_IDS::CannotHashArrays,
                                "Error: hashed indexes do not currently support array values" );
+                case EACCES:
+                case EMFILE:
+                case ENFILE:
+                case ENOSPC:
+                case EPERM:
+                case EROFS: {
+                    handle_filesystem_error_nicely(error);
+                    verify(false);  // should not reach this point
+                }
                 default:
                     // fall through
                     ;

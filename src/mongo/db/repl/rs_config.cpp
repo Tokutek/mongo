@@ -88,7 +88,7 @@ namespace mongo {
             BSONObj o = asBson();
             Helpers::putSingleton(rsConfigNs.c_str(), o);
             if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
-                OpLogHelpers::logComment(comment, &cc().txn());
+                OpLogHelpers::logComment(comment);
             }
             transaction.commit(0);
         }

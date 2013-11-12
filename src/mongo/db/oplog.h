@@ -40,23 +40,24 @@ namespace mongo {
     void logTransactionOpsRef(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid);
     void logOpsToOplogRef(BSONObj o);
     void deleteOplogFiles();
+    bool oplogFilesOpen();
     void openOplogFiles();
     
     GTID getGTIDFromOplogEntry(BSONObj o);
     bool getLastGTIDinOplog(GTID* gtid);
     bool gtidExistsInOplog(GTID gtid);
-    void writeEntryToOplog(BSONObj entry);
+    void writeEntryToOplog(BSONObj entry, bool recordStats);
     void writeEntryToOplogRefs(BSONObj entry);
     void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn);
     void applyTransactionFromOplog(BSONObj entry);
-    void rollbackTransactionFromOplog(BSONObj entry);
+    void rollbackTransactionFromOplog(BSONObj entry, bool purgeEntry);
     void purgeEntryFromOplog(BSONObj entry);
 
     // @return the age, in milliseconds, when an oplog entry expires.
     uint64_t expireOplogMilliseconds();
 
     // hot optimize oplog up to gtid, used by purge thread to vacuum stale entries
-    void hotOptimizeOplogTo(GTID gtid);
+    void hotOptimizeOplogTo(GTID gtid, uint64_t* loops_run);
     
     /** puts obj in the oplog as a comment (a no-op).  Just for diags.
         convention is

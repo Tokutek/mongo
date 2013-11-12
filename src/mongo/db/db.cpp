@@ -397,6 +397,24 @@ namespace mongo {
             Client::WriteContext c("admin", dbpath);
         }
 
+        {
+            // Upgrade any system.users collections if they need it.
+            Lock::GlobalWrite lk;
+            Client::UpgradingSystemUsersScope usus;
+            Client::Transaction txn(DB_SERIALIZABLE);
+
+            vector<string> databases;
+            getDatabaseNames(databases);
+            for (vector<string>::const_iterator it = databases.begin(); it != databases.end(); ++it) {
+                string ns = getSisterNS(*it, "system.users");
+                Client::Context ctx(ns);
+                // Just by calling nsdetails, if a collection that needed upgrade is opened, it'll
+                // get upgraded.  This fixes #674.
+                nsdetails(ns);
+            }
+            txn.commit();
+        }
+
         listen(listenPort);
 
         // listen() will return when exit code closes its socket.
@@ -490,7 +508,7 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
     ("logDir", po::value<string>(), "directory to store transaction log files (default is --dbpath)")
     ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
-    ("debug", "go into a debug-friendly mode (development use only).")
+    ("gdb", "go into a gdb-friendly mode (development use only).")
     ("gdbPath", po::value<string>(), "if specified, debugging information will be gathered on fatal error by launching gdb at the given path")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
@@ -684,11 +702,26 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
                 dbexit( EXIT_BADOPTIONS );
             }
         }
-        if( params.count("expireOplogDays") ) {
-            cmdLine.expireOplogDays = params["expireOplogDays"].as<uint32_t>();
+        if ( !(params.count("expireOplogHours") || params.count("expireOplogDays")) && params.count("replSet") ) {
+            warning() << "*****************************" << endl;
+            warning() << "No value set for expireOplogDays, using default of " << cmdLine.expireOplogDays << " days." << endl;
+            warning() << "*****************************" << endl;
         }
         if( params.count("expireOplogHours") ) {
             cmdLine.expireOplogHours = params["expireOplogHours"].as<uint32_t>();
+            // if expireOplogHours is set, we don't want to use the default
+            // value of expireOplogDays. We want to use 0. If the user
+            // sets the value of expireOplogDays as well, next if-clause
+            // below will catch it
+            if( !params.count("expireOplogDays") ) {
+                cmdLine.expireOplogDays = 0;
+                warning() << "*****************************" << endl;
+                warning() << "No value set for expireOplogDays, only for expireOplogHours. Having at least 1 day set for expireOplogDays is recommended." << endl;
+                warning() << "*****************************" << endl;
+            }
+        }
+        if( params.count("expireOplogDays") ) {
+            cmdLine.expireOplogDays = params["expireOplogDays"].as<uint32_t>();
         }
         if (params.count("journalOptions")) {
             out() << "journalOptions deprecated" <<endl;
@@ -1141,10 +1174,10 @@ namespace mongo {
         // asyncSignals is a global variable listing the signals that should be handled by the
         // interrupt thread, once it is started via startSignalProcessingThread().
         sigemptyset( &asyncSignals );
-        if (!cmdLine.debug) {
-            sigaddset( &asyncSignals, SIGHUP );
+        sigaddset( &asyncSignals, SIGTERM );
+        sigaddset( &asyncSignals, SIGHUP );
+        if (!cmdLine.gdb) {
             sigaddset( &asyncSignals, SIGINT );
-            sigaddset( &asyncSignals, SIGTERM );
         }
         sigaddset( &asyncSignals, SIGUSR1 );
 
