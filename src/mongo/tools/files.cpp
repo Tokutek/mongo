@@ -27,10 +27,12 @@
 #include <fstream>
 #include <iostream>
 
+#include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 
 using namespace mongo;
 
+namespace fs = boost::filesystem;
 namespace po = boost::program_options;
 
 class Files : public Tool {
@@ -130,18 +132,26 @@ public:
             const string& infile = getParam("local", filename);
             const string& type = getParam("type", "");
 
-            BSONObj file = g.storeFile(infile, filename, type);
-            cout << "added file: " << file << endl;
+            putFile(g, infile, filename, type);
 
-            if (hasParam("replace")) {
-                auto_ptr<DBClientCursor> cursor = conn().query(_db+".fs.files", BSON("filename" << filename << "_id" << NE << file["_id"] ));
-                while (cursor->more()) {
-                    BSONObj o = cursor->nextSafe();
-                    conn().remove(_db+".fs.files", BSON("_id" << o["_id"]));
-                    conn().remove(_db+".fs.chunks", BSON("_id" << o["_id"]));
-                    cout << "removed file: " << o << endl;
+            conn().getLastError();
+            cout << "done!" << endl;
+            return 0;
+        }
+
+        if ( cmd == "putdir" ) {
+            const fs::path path(getParam("local", filename));
+            const string& type = getParam("type", "");
+
+            const fs::recursive_directory_iterator end;
+            for (fs::recursive_directory_iterator it(path); it != end; ++it) {
+                if (fs::is_regular_file(it->status())) {
+                    bool ok = putFile(g, it->path(), it->path(), type);
+                    if (!ok) {
+                        cerr << "error putting file " << it->path().generic_string() << endl;
+                        return 1;
+                    }
                 }
-
             }
 
             conn().getLastError();
@@ -159,6 +169,24 @@ public:
         cerr << "ERROR: unknown command '" << cmd << "'" << endl << endl;
         printHelp(cout);
         return -1;
+    }
+
+  private:
+    bool putFile(GridFS &g, const fs::path& infile, const fs::path& filename, const string& type) {
+        BSONObj file = g.storeFile(infile.string(), filename.generic_string(), type);
+        cout << "added file: " << file << endl;
+
+        if (hasParam("replace")) {
+            auto_ptr<DBClientCursor> cursor = conn().query(_db+".fs.files", BSON("filename" << filename.generic_string() << "_id" << NE << file["_id"] ));
+            while (cursor->more()) {
+                BSONObj o = cursor->nextSafe();
+                conn().remove(_db+".fs.files", BSON("_id" << o["_id"]));
+                conn().remove(_db+".fs.chunks", BSON("_id" << o["_id"]));
+                cout << "removed file: " << o << endl;
+            }
+
+        }
+        return true;
     }
 };
 
