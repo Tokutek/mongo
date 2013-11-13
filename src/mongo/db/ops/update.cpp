@@ -31,27 +31,11 @@
 
 namespace mongo {
 
-    void updateOneObject(
-        NamespaceDetails *d, 
-        const BSONObj &pk, 
-        const BSONObj &oldObj, 
-        const BSONObj &newObj, 
-        const LogOpUpdateDetails &logDetails,
-        uint64_t flags
-        ) 
-    {
-        BSONObj newObjModified = newObj;
-        d->updateObject(pk, oldObj, newObjModified, flags);
-        if (logDetails.logop) {
-            const string &ns = d->ns();
-            OpLogHelpers::logUpdate(
-                ns.c_str(),
-                pk,
-                oldObj,
-                newObjModified,
-                logDetails.fromMigrate
-                );
-        }
+    void updateOneObject(NamespaceDetails *d, const BSONObj &pk, 
+                         const BSONObj &oldObj, const BSONObj &newObj, 
+                         const bool logop, const bool fromMigrate,
+                         uint64_t flags) {
+        d->updateObject(pk, oldObj, newObj, logop, fromMigrate, flags);
         d->notifyOfWriteOp();
     }
 
@@ -71,24 +55,22 @@ namespace mongo {
 
     static void updateUsingMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
                                 ModSetState &mss, const bool modsAreIndexed,
-                                const LogOpUpdateDetails &logDetails) {
-
+                                const bool logop, const bool fromMigrate) {
         BSONObj newObj = mss.createNewFromMods();
         checkTooLarge( newObj );
         TOKULOG(3) << "updateUsingMods used mod set, transformed " << obj << " to " << newObj << endl;
 
-        updateOneObject( d, pk, obj, newObj, logDetails,
+        updateOneObject( d, pk, obj, newObj, logop, fromMigrate,
                          modsAreIndexed ? 0 : NamespaceDetails::KEYS_UNAFFECTED_HINT );
     }
 
-    static void updateNoMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
-                             const BSONObj &updateobj, const LogOpUpdateDetails &logDetails) {
-
+    static void updateNoMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj, const BSONObj &updateobj,
+                             const bool logop, const bool fromMigrate) {
         BSONElementManipulator::lookForTimestamps( updateobj );
         checkNoMods( updateobj );
         TOKULOG(3) << "updateNoMods replacing pk " << pk << ", obj " << obj << " with updateobj " << updateobj << endl;
 
-        updateOneObject( d, pk, obj, updateobj, logDetails );
+        updateOneObject( d, pk, obj, updateobj, logop, fromMigrate );
     }
 
     static void checkBulkLoad(const StringData &ns) {
@@ -140,7 +122,6 @@ namespace mongo {
 
         /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
            regular ones at the moment. */
-        LogOpUpdateDetails logDetails(logop, fromMigrate);
         if ( isOperatorUpdate ) {
             ModSet* useMods = mods;
             auto_ptr<ModSet> mymodset;
@@ -151,13 +132,13 @@ namespace mongo {
 
             // mod set update, ie: $inc: 10 increments by 10.
             auto_ptr<ModSetState> mss = useMods->prepare( obj, false /* not an insertion */ );
-            updateUsingMods( d, pk, obj, *mss, useMods->isIndexed() > 0, logDetails );
+            updateUsingMods( d, pk, obj, *mss, useMods->isIndexed() > 0, logop, fromMigrate );
             return UpdateResult( 1 , 1 , 1 , BSONObj() );
 
         } // end $operator update
 
         // replace-style update
-        updateNoMods( d, pk, obj, updateobj, logDetails );
+        updateNoMods( d, pk, obj, updateobj, logop, fromMigrate );
         return UpdateResult( 1 , 0 , 1 , BSONObj() );
     }
 
@@ -234,7 +215,6 @@ namespace mongo {
 
                 /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
                    regular ones at the moment. */
-                LogOpUpdateDetails logDetails(logop, fromMigrate);
                 if ( isOperatorUpdate ) {
 
                     if ( multi ) {
@@ -267,7 +247,7 @@ namespace mongo {
 
                     auto_ptr<ModSetState> mss = useMods->prepare( currentObj,
                                                                   false /* not an insertion */ );
-                    updateUsingMods( d, currPK, currentObj, *mss, useMods->isIndexed() > 0, logDetails );
+                    updateUsingMods( d, currPK, currentObj, *mss, useMods->isIndexed() > 0, logop, fromMigrate );
 
                     numModded++;
                     if ( ! multi )
@@ -278,7 +258,7 @@ namespace mongo {
 
                 uassert( 10158 ,  "multi update only works with $ operators" , ! multi );
 
-                updateNoMods( d, currPK, currentObj, updateobj, logDetails );
+                updateNoMods( d, currPK, currentObj, updateobj, logop, fromMigrate );
 
                 return UpdateResult( 1 , 0 , 1 , BSONObj() );
             } while ( c->ok() );

@@ -61,12 +61,14 @@ namespace mongo {
                     // (scanning deep would be quite expensive)
                     uassert( 13511 , "document to insert can't have $ fields" , e.fieldName()[0] != '$' );
 
-                    // check no regexp for _id (SERVER-9502)
                     if (str::equals(e.fieldName(), "_id")) {
+                        // Note: Collections whose primary key is something other than _id will need to manually
+                        //       check for multikeys and regexes. See IndexedCollection::extractPrimaryKey()
+                        uassert(16440, "can't use an array for _id", e.type() != Array);
                         uassert(17033, "can't use a regex for _id", e.type() != RegEx);
+                        uassert(17211, "can't use undefined for _id", e.type() != Undefined);
                     }
                 }
-                uassert( 16440 ,  "_id cannot be an array", obj["_id"].type() != Array );
 
                 BSONObj objModified = obj;
                 BSONElementManipulator::lookForTimestamps(objModified);
