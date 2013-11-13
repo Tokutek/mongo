@@ -15,17 +15,16 @@
 */
 
 #include "mongo/pch.h"
-#include "oplog_helpers.h"
-#include "txn_context.h"
-#include "repl_block.h"
-#include "stats/counters.h"
+#include "mongo/db/oplog_helpers.h"
+#include "mongo/db/txn_context.h"
+#include "mongo/db/repl_block.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/repl/rs.h"
-
+#include "mongo/db/stats/counters.h"
 
 // BSON fields for oplog entries
 static const char *KEY_STR_OP_NAME = "op";
@@ -283,8 +282,8 @@ namespace mongo {
             NamespaceDetails* nsd = nsdetails(ns);
 
             const BSONObj row = op[KEY_STR_ROW].Obj();
-            const BSONObj pk = row["_id"].wrap("");
-            uint64_t flags = NamespaceDetails::NO_LOCKTREE;
+            const BSONObj pk = nsd->extractPrimaryKey(row);
+            const uint64_t flags = NamespaceDetails::NO_LOCKTREE;
             deleteOneObject(nsd, pk, row, flags);
         }
         
@@ -322,11 +321,11 @@ namespace mongo {
             if (isRollback) {
                 // if this is a rollback, then the newRow is what is in the
                 // collections, that we want to replace with oldRow
-                updateOneObject(nsd, pk, newRow, oldRow, LogOpUpdateDetails(), flags);
+                updateOneObject(nsd, pk, newRow, oldRow, false, false, flags);
             }
             else {
                 // normal replication case
-                updateOneObject(nsd, pk, oldRow, newRow, LogOpUpdateDetails(), flags);
+                updateOneObject(nsd, pk, oldRow, newRow, false, false, flags);
             }
         }
 

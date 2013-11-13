@@ -99,8 +99,9 @@ namespace mongo {
 
         // Flags for write operations. For performance reasons only. Use with caution.
         static const uint64_t NO_LOCKTREE = 1; // skip acquiring locktree row locks
-        static const uint64_t NO_UNIQUE_CHECKS = 2; // skip uniqueness checks
+        static const uint64_t NO_UNIQUE_CHECKS = 2; // skip uniqueness checks on all keys
         static const uint64_t KEYS_UNAFFECTED_HINT = 4; // an update did not update secondary indexes
+        static const uint64_t NO_PK_UNIQUE_CHECKS = 8; // skip uniqueness checks only on the primary key
 
         // Creates the appropriate NamespaceDetails implementation based on options.
         static shared_ptr<NamespaceDetails> make(const StringData &ns, const BSONObj &options);
@@ -263,6 +264,10 @@ namespace mongo {
             return _pk;
         }
 
+        // Extracts and returns an owned BSONObj representing
+        // the primary key portion of the given object.
+        BSONObj extractPrimaryKey(const BSONObj &obj) const;
+
         bool indexBuildInProgress() const {
             return _indexBuildInProgress;
         }
@@ -369,7 +374,11 @@ namespace mongo {
         virtual void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
 
         // update an object in the namespace by pk, replacing oldObj with newObj
-        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags = 0);
+        //
+        // handles logging
+        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
+                                  const bool logop, const bool fromMigrate,
+                                  uint64_t flags = 0);
 
         // remove everything from a collection
         virtual void empty();
@@ -483,7 +492,7 @@ namespace mongo {
         // The primary index pattern.
         const BSONObj _pk;
 
-        // Each index (including the _id) index has an IndexDetails that describes it.
+        // Every index has an IndexDetails that describes it.
         bool _indexBuildInProgress;
         int _nIndexes;
         typedef std::vector<shared_ptr<IndexDetails> > IndexVector;
@@ -491,7 +500,6 @@ namespace mongo {
 
         unsigned long long _multiKeyIndexBits;
 
-    protected:
         void dropIndex(const int idxNum);
 
     private:
