@@ -609,19 +609,63 @@ namespace mongo {
                 //    Only need to call ensureIndex on primary shard, since indexes get copied to
                 //    receiving shard whenever a migrate occurs.
                 else {
-                    BSONElement ce = cmdObj["clustering"];
-                    bool clustering = (ce.ok() ? ce.trueValue() : true);
-                    // call ensureIndex with cache=false, see SERVER-1691
-                    bool ensureSuccess = conn->get()->ensureIndex(ns,
-                                                                  proposedKey,
-                                                                  careAboutUnique,
-                                                                  clustering,
-                                                                  "",
-                                                                  false);
-                    if ( ! ensureSuccess ) {
-                        errmsg = "ensureIndex failed to create index on primary shard";
-                        conn->done();
-                        return false;
+                    bool collectionExists;
+                    {
+                        BSONObj res;
+                        BSONObjBuilder cmd;
+                        BSONArrayBuilder b(cmd.subarrayStart("_collectionsExist"));
+                        b.append(ns);
+                        b.doneFast();
+                        collectionExists = conn->get()->runCommand(config->getName(), cmd.done(), res);
+                    }
+                    bool onlyId = proposedKey.nFields() == 1 && proposedKey["_id"].isNumber();
+                    if (!collectionExists && !onlyId) {
+                        BSONObjBuilder cmd;
+                        cmd.append("create", ns);
+                        BSONObjBuilder pk(cmd.subobjStart("primaryKey"));
+                        pk.appendElements(proposedKey);
+                        bool containsId = false;
+                        for (BSONObjIterator it(proposedKey); it.more(); ) {
+                            BSONElement e = it.next();
+                            if (StringData(e.fieldName()) == "_id") {
+                                if (e.isNumber()) {
+                                    uassert(17212, "_id must be ascending or hashed, if present in shard key", e.numberLong() == 1);
+                                    uassert(17213, "_id:1 must be last field in shard key, if present", !it.more());
+                                    containsId = true;
+                                } else {
+                                    uassert(17214, "_id must be ascending or hashed, if present in shard key", e.type() == String && e.Stringdata() == "hashed");
+                                }
+                            }
+                        }
+                        if (!containsId) {
+                            pk.append("_id", 1);
+                        }
+                        BSONObj pkObj = pk.done();
+
+                        LOG(0) << "sharding non-existent collection, creating " << ns << " with a primary key on " << pkObj << endl;
+
+                        BSONObj res;
+                        bool createSuccess = conn->get()->runCommand(config->getName(), cmd.done(), res);
+                        if (!createSuccess) {
+                            errmsg = "create failed to create collection on primary shard: " + res["errmsg"].String();
+                            conn->done();
+                            return false;
+                        }
+                    } else {
+                        BSONElement ce = cmdObj["clustering"];
+                        bool clustering = (ce.ok() ? ce.trueValue() : true);
+                        // call ensureIndex with cache=false, see SERVER-1691
+                        bool ensureSuccess = conn->get()->ensureIndex(ns,
+                                                                      proposedKey,
+                                                                      careAboutUnique,
+                                                                      clustering,
+                                                                      "",
+                                                                      false);
+                        if ( ! ensureSuccess ) {
+                            errmsg = "ensureIndex failed to create index on primary shard";
+                            conn->done();
+                            return false;
+                        }
                     }
                 }
 
