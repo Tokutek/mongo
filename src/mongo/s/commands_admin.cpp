@@ -441,7 +441,7 @@ namespace mongo {
                     }
                 }
 
-                if ( ns.find( ".system." ) != string::npos ) {
+                if ( NamespaceString::isSystem(ns) ) {
                     errmsg = "can't shard system namespaces";
                     return false;
                 }
