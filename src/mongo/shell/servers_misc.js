@@ -164,12 +164,18 @@ ReplTest.prototype.getOptions = function( master , extra , putBinaryFirst, norep
     }
 
     if( jsTestOptions().useSSL ) {
-        a.push( "--sslMode" )
-        a.push( "sslOnly" )
-        a.push( "--sslPEMKeyFile" )
-        a.push( "jstests/libs/server.pem" )
-        a.push( "--sslCAFile" )
-        a.push( "jstests/libs/ca.pem" )
+        if (!a.contains("--sslMode")) {
+            a.push( "--sslMode" )
+            a.push( "requireSSL" )
+        }
+        if (!a.contains("--sslPEMKeyFile")) {
+            a.push( "--sslPEMKeyFile" )
+            a.push( "jstests/libs/server.pem" )
+        }
+        if (!a.contains("--sslCAFile")) {
+            a.push( "--sslCAFile" )
+            a.push( "jstests/libs/ca.pem" )
+        }
         a.push( "--sslWeakCertificateValidation" )
         a.push( "--sslAllowInvalidCertificates" )
     }
