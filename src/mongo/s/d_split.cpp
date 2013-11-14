@@ -950,6 +950,10 @@ namespace mongo {
                 for (int i=1; i >= 0 ; i--){ // high chunk more likely to have only one obj
 
                     NamespaceDetails *d = nsdetails(ns);
+                    if ( ! d ) {
+                        errmsg = "ns not found";
+                        return false;
+                    }
 
                     const IndexDetails *idx = d->findIndexByPrefix( keyPattern ,
                                                                     true ); /* exclude multikeys */

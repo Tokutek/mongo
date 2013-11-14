@@ -142,6 +142,7 @@ var testSystemCatalogOrProfileLoadFails = function() {
     beginLoadShouldFail('system.profile', [ ], { });
     beginLoadShouldFail('system.profile', [ { ns: 'test.system.profile', key: { "$_" : 1 } , name: "$_1" } ], { });
     beginLoadShouldFail('system.profile', [ { ns: 'test.system.profile', key: { "$_" : 1 } , name: "$_1" } ], { capped: true, size: 1024 });
+    commit();
 }();
 
 var testBadPrimaryKeyOptions = function() {
