@@ -197,8 +197,22 @@ namespace mongo {
         return idx;
     }
 
+    static BSONObj stripDropDups(const BSONObj &obj) {
+        BSONObjBuilder b;
+        for (BSONObjIterator it(obj); it.more(); ) {
+            BSONElement e = it.next();
+            if (StringData(e.fieldName()) == "dropDups") {
+                warning() << "dropDups is not supported because it deletes arbitrary data." << endl;
+                warning() << "We'll proceed without it but if there are duplicates, the index build will fail." << endl;
+            } else {
+                b.append(e);
+            }
+        }
+        return b.obj();
+    }
+
     IndexDetails::IndexDetails(const BSONObj &info) :
-        _info(info.copy()),
+        _info(stripDropDups(info)),
         _keyPattern(info["key"].Obj().copy()),
         _unique(info["unique"].trueValue()),
         _sparse(info["sparse"].trueValue()),
