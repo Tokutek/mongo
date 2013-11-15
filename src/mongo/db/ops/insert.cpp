@@ -30,18 +30,6 @@
 
 namespace mongo {
 
-    static bool handle_system_collection_insert(const char *ns, const BSONObj &obj, bool logop) {
-        // Trying to insert into a system collection.  Fancy side-effects go here:
-        if (nsToCollectionSubstring(ns) == "system.indexes") {
-            // Creating an index creates the collection if it doesn't already exist.
-            NamespaceDetails *d = getAndMaybeCreateNS(obj["ns"].Stringdata(), logop);
-            return d->ensureIndex(obj);
-        } else if (!legalClientSystemNS(ns, true)) {
-            uasserted(16459, str::stream() << "attempt to insert in system namespace '" << ns << "'");
-        }
-        return true;
-    }
-
     void insertOneObject(NamespaceDetails *details, BSONObj &obj, uint64_t flags) {
         details->insertObject(obj, flags);
         details->notifyOfWriteOp();
@@ -93,14 +81,45 @@ namespace mongo {
         }
     }
 
+    static BSONObj stripDropDups(const BSONObj &obj) {
+        BSONObjBuilder b;
+        for (BSONObjIterator it(obj); it.more(); ) {
+            BSONElement e = it.next();
+            if (StringData(e.fieldName()) == "dropDups") {
+                warning() << "dropDups is not supported because it deletes arbitrary data." << endl;
+                warning() << "We'll proceed without it but if there are duplicates, the index build will fail." << endl;
+            } else {
+                b.append(e);
+            }
+        }
+        return b.obj();
+    }
+
     void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
         StringData _ns(ns);
         if (NamespaceString::isSystem(_ns)) {
             massert(16748, "need transaction to run insertObjects", cc().txnStackSize() > 0);
             uassert(10095, "attempt to insert in reserved database name 'system'", nsToDatabaseSubstring(_ns) != "system");
             massert(16750, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
-            if (!handle_system_collection_insert(ns, objs[0], logop)) {
+
+            // Trying to insert into a system collection.  Fancy side-effects go here:
+            if (nsToCollectionSubstring(ns) == "system.indexes") {
+                BSONObj obj = stripDropDups(objs[0]);
+                NamespaceDetails *d = getAndMaybeCreateNS(obj["ns"].Stringdata(), logop);
+                bool ok = d->ensureIndex(obj);
+                if (!ok) {
+                    // Already had that index
+                    return;
+                }
+
+                // Now we have to actually insert that document into system.indexes, we may have
+                // modified it with stripDropDups.
+                vector<BSONObj> newObjs;
+                newObjs.push_back(obj);
+                _insertObjects(ns, newObjs, keepGoing, flags, logop);
                 return;
+            } else if (!legalClientSystemNS(ns, true)) {
+                uasserted(16459, str::stream() << "attempt to insert in system namespace '" << ns << "'");
             }
         }
         _insertObjects(ns, objs, keepGoing, flags, logop);
