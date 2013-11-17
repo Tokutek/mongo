@@ -97,25 +97,25 @@ doTest = function (signal, txnLimit, startPort) {
     // Make sure we have a master
     var master = replTest.getMaster();
 
-    print("inserting 10000 documents to master");
+    print("inserting 30 documents to master");
     var a = master.getDB("foo");
-    for (i=0; i < 10000; i++) {
+    for (i=0; i < 30; i++) {
         a.foo.insert({_id:i, a:1});
     }
     replTest.awaitReplication();
 
     undo_and_redo_entries(replTest, conns, txnLimit);
 
-    print("updating 10000 documents on master");
-    for (i=0; i < 10000; i++) {
+    print("updating 30 documents on master");
+    for (i=0; i < 30; i++) {
         a.foo.update({_id:i}, {b:1});
     }
     replTest.awaitReplication();
 
     undo_and_redo_entries(replTest, conns, txnLimit);
 
-    print("removing 10000 documents from master");
-    for (i=0; i < 10000; i++) {
+    print("removing 30 documents from master");
+    for (i=0; i < 30; i++) {
         a.foo.remove({_id:i});
     }
     replTest.awaitReplication();
