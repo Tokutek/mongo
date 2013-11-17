@@ -665,7 +665,6 @@ namespace mongo {
 
             Lock::DBRead lk("local");
             if (!oplogFilesOpen()) {
-                Lock::DBRead lk("local");
                 openOplogFiles();
             }
             Client::Transaction transaction(DB_SERIALIZABLE);
