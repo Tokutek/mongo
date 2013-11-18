@@ -1,3 +1,6 @@
+// Too slow on debug builds
+if (!db.runCommand('buildInfo').debug) {
+
 var col = db.memoryTest;
 
 // test creating many collections to make sure no internal cache goes OOM
@@ -40,3 +43,4 @@ col.findOne({$where: "var arr = []; for (var i = 0; i < 1000000; ++i) {arr.push(
 assert.throws(function() { col.findOne({$where: "var arr = []; for (var i = 0; i < 1000000000; ++i) {arr.push(0);}"}); });
 col.findOne({$where: "var arr = []; for (var i = 0; i < 1000000; ++i) {arr.push(0);}"});
 
+}
