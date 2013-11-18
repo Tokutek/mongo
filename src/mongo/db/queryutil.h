@@ -530,8 +530,8 @@ namespace mongo {
 
         const vector<FieldRange> &ranges() const { return _ranges; }
 
-        // True if each FieldRange in _ranges is a point interval set.
-        bool containsOnlyPointIntervals() const;
+        // True if the first FieldRange in _ranges is a point interval.
+        bool prefixedByPointInterval() const;
         
     private:
         int matchingLowElement( const BSONElement &e, int i, bool direction, bool &lowEquality ) const;

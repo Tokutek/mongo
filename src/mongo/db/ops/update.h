@@ -44,21 +44,14 @@ namespace mongo {
             }
         }
     };
-    
-    struct LogOpUpdateDetails {
-        LogOpUpdateDetails(bool log = false, bool m = false) :
-            logop(log), fromMigrate(m) {
-        }
-        const bool logop;
-        const bool fromMigrate;
-    };
 
     void updateOneObject(
         NamespaceDetails *d, 
         const BSONObj &pk, 
         const BSONObj &oldObj, 
         const BSONObj &newObj, 
-        const LogOpUpdateDetails &logDetails,
+        const bool logop,
+        const bool fromMigrate,
         uint64_t flags = 0
         );
 

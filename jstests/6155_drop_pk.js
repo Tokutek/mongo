@@ -7,3 +7,8 @@ assert.eq(0, g.ok);
 h = f.count()
 assert.eq(1, h);
 f.drop();
+
+// test that dropping a defined pk does not work
+assert.commandWorked(db.runCommand({ create: 'jstests_6155', primaryKey: { x: 1, _id: 1 } }));
+assert.eq(0, f.dropIndex({ x: 1,  _id: 1 }).ok);
+f.drop();

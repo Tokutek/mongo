@@ -168,6 +168,25 @@ var testIdIndexSpecified = function() {
     assert.eq(1, t.find().itcount());
 }();
 
+var testPKIndexSpecified = function() {
+    t = db.loadpk;
+    t.drop();
+    begin();
+    beginLoad('loadpk', [ ], { primaryKey: { a: 1, _id: 1 } });
+    t.insert({ _id: 0 });
+    t.insert({ a: 0 });
+    commitLoad();
+    commit();
+    assert.eq({ a: 1, _id: 1 }, t.getIndexes()[0].key);
+    assert.eq(true, t.getIndexes()[0].clustering ? true : false);
+    assert.eq({ _id: 1 }, t.getIndexes()[1].key);
+    assert.eq(false, t.getIndexes()[1].clustering ? true : false);
+    assert.eq(1, t.find({ _id: 0 }).hint({ _id: 1 }).itcount());
+    assert.eq(1, t.find({ a: 0 }).hint({ _id: 1 }).itcount());
+    assert.eq(1, t.find({ _id: 0 }).hint({ a: 1, _id: 1 }).itcount());
+    assert.eq(1, t.find({ a: 0 }).hint({ a: 1, _id: 1 }).itcount());
+}();
+
 var testSimpleInsert = function() {
     t = db.loadsimpleinsert;
     t.drop();
