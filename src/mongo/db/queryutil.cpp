@@ -1359,13 +1359,14 @@ namespace mongo {
         return b.obj();
     }
 
-    bool FieldRangeVector::containsOnlyPointIntervals() const {
-        for( vector<FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {
-            if (!i->isPointIntervalSet()) {
-                return false;
+    bool FieldRangeVector::prefixedByPointInterval() const {
+        if (_ranges.size() > 0) {
+            const FieldRange &range = *_ranges.begin();
+            if (range.isPointIntervalSet()) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
     
     FieldRange *FieldRangeSet::__universalRange = 0;

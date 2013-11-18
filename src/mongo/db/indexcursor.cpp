@@ -371,8 +371,8 @@ namespace mongo {
     // Until that happens, we'll only enable prefetching if we think its worth it.
     // For simple start/end key cursors, it's always worth it, because it's
     // just one call to prelock. For bounds-based cursors, it is _probably_
-    // worth it as long as the bounds vector doesn't soley contain point
-    // intervals ($in, $or with equality). Most secondary indexes have
+    // worth it as long as the bounds vector isn't prefixed by a point
+    // interval ($in, $or with equality). Most secondary indexes have
     // cardinality such that points (excluding appended PK) all fit in a
     // single basement node (64k of data, about), so prefetching wouldn't
     // have done anything. For non-points, we can't make any guess as to
@@ -380,7 +380,7 @@ namespace mongo {
     void IndexCursor::prelock() {
         if (cc().txn().serializable() ||
             cc().opSettings().getQueryCursorMode() != DEFAULT_LOCK_CURSOR ||
-            _bounds == NULL || !_bounds->containsOnlyPointIntervals()) {
+            _bounds == NULL || !_bounds->prefixedByPointInterval()) {
             if ( _bounds != NULL ) {
                 _prelockBounds();
             } else {
