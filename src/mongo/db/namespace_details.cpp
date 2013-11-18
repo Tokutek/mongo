@@ -1490,13 +1490,11 @@ namespace mongo {
         Lock::assertWriteLocked(ns);
         TOKULOG(1) << "dropIndexes " << name << endl;
 
-        ClientCursor::invalidate(ns);
-
         const int idxNum = findIndexByName(name);
-        if (_indexBuildInProgress &&
-            (name == "*" || idxNum == (int) _indexes.size() - 1)) {
-            uasserted( 16904, "Cannot drop index: build in progress." );
-        }
+        uassert( 16904, "Cannot drop indexes: a hot index build in progress.",
+                        !_indexBuildInProgress );
+
+        ClientCursor::invalidate(ns);
 
         if (name == "*") {
             result.append("nIndexesWas", (double) _nIndexes);
