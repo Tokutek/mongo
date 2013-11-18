@@ -55,17 +55,6 @@ namespace mongo {
          */
         bool setProfilingLevel( int newLevel , string& errmsg );
 
-        // TODO: This is dead code
-        /**
-         * @return true if ns is part of the database
-         *         ns=foo.bar, db=foo returns true
-         */
-        bool ownsNS( const StringData& ns ) const {
-            if (!ns.startsWith(_name))
-                return false;
-            return ns[_name.size()] == '.';
-        }
-
     private:
         const string _name;
         const string _path;
