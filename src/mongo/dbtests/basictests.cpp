@@ -646,8 +646,6 @@ namespace BasicTests {
 
             add< ArrayTests::basic1 >();
 
-            add< DatabaseOwnsNS >();
-
             add< NSValidNames >();
 
             add< PtrTests >();
