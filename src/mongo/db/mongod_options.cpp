@@ -151,7 +151,8 @@ namespace mongo {
                 "the bulk loader (used for mongoimport/mongorestore and non-background index builds) will compress intermediate files (see tmpDir) when writing them to disk")
                                          .setDefault(moe::Value(true));
 
-        general_options.addOptionChaining("noauth", "noauth", moe::Switch, "run without security");
+        general_options.addOptionChaining("noauth", "noauth", moe::Switch, "run without security")
+                                         .incompatibleWith("keyFile");
 
         general_options.addOptionChaining("noIndexBuildRetry", "noIndexBuildRetry", moe::Switch,
                 "don't retry any index builds that were interrupted by shutdown")

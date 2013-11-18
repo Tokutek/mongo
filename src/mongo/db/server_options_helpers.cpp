@@ -122,7 +122,8 @@ namespace mongo {
                 "full path to pidfile (if not set, no pidfile is created)");
 
         options->addOptionChaining("keyFile", "keyFile", moe::String,
-                "private key for cluster authentication");
+                "private key for cluster authentication")
+                                  .incompatibleWith("noauth");
 
         options->addOptionChaining("setParameter", "setParameter", moe::StringMap,
                 "Set a configurable parameter")
