@@ -335,8 +335,8 @@ namespace mongo {
 
         acquirePathLock();
 
-        set_update_callback(&_storageUpdateCallback);
-        storage::startup(&_txnCompleteHooks);
+        extern storage::UpdateCallback _storageUpdateCallback;
+        storage::startup(&_txnCompleteHooks, &_storageUpdateCallback);
 
         unsigned long long missingRepl = checkIfReplMissingFromCommandLine();
         if (missingRepl) {

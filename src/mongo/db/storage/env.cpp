@@ -59,9 +59,6 @@ namespace mongo {
         bool _inStartup;
 
         UpdateCallback *_updateCallback;
-        void set_update_callback(UpdateCallback *cb) {
-            _updateCallback = cb;
-        }
 
         static int dbt_key_compare(DB *db, const DBT *dbt1, const DBT *dbt2) {
             try {
@@ -245,10 +242,12 @@ namespace mongo {
 
         MONGO_EXPORT_STARTUP_SERVER_PARAMETER(numCachetableBucketMutexes, uint32_t, 0);
 
-        void startup(TxnCompleteHooks *hooks) {
+        void startup(TxnCompleteHooks *hooks, UpdateCallback *updateCallback) {
             InStartup is;
 
             setTxnCompleteHooks(hooks);
+            _updateCallback = updateCallback;
+
             tokulog() << "startup" << endl;
 
             db_env_set_direct_io(cmdLine.directio);

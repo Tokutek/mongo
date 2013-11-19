@@ -222,7 +222,8 @@ namespace mongo {
                 filter = params["filter"].as<string>();
             }
 
-            storage::startup(&_txnCompleteHooks);
+            extern storage::UpdateCallback _storageUpdateCallback;
+            storage::startup(&_txnCompleteHooks, &_storageUpdateCallback);
 
             TestWatchDog twd;
             twd.go();

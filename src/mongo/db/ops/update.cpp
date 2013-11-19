@@ -53,18 +53,23 @@ namespace mongo {
         uassert( 12522 , "$ operator made object too large" , newObj.objsize() <= BSONObjMaxUserSize );
     }
 
-    // Hack to apply an update message supplied by a NamespaceDetails to
+    // Apply an update message supplied by a NamespaceDetails to
     // some row in an in IndexDetails (for fast ydb updates).
-    // TODO: Make this interaction cleaner.
-    class ApplyUpdateMessage : storage::UpdateCallback {
-        BSONObj apply( const BSONObj &oldObj, const BSONObj &msg ) {
-            // The update message is simply an update object, supplied by the user.
-            const BSONObj &updateObj = msg;
-            ModSet mods( updateObj );
-            auto_ptr<ModSetState> mss = mods.prepare( oldObj );
-            BSONObj newObj = mss->createNewFromMods();
-            checkTooLarge( newObj );
-            return newObj;
+    class ApplyUpdateMessage : public storage::UpdateCallback {
+        BSONObj apply(const BSONObj &oldObj, const BSONObj &msg) {
+            try {
+                // The update message is simply an update object, supplied by the user.
+                const BSONObj &updateObj = msg;
+                ModSet mods( updateObj );
+                auto_ptr<ModSetState> mss = mods.prepare( oldObj );
+                BSONObj newObj = mss->createNewFromMods();
+                checkTooLarge( newObj );
+                return newObj;
+            } catch (...) {
+                // Applying an update message in this fashion _always_ ignores errors.
+                // That is the risk you take when using --fastupdates.
+                return oldObj;
+            }
         }
     } _storageUpdateCallback; // installed as the ydb update callback in db.cpp via set_update_callback
 
@@ -122,30 +127,25 @@ namespace mongo {
         return false;
     }
 
-    /* note: this is only (as-is) called for
-
-             - not multi
-             - not mods is indexed
-             - not upsert
-    */
     static UpdateResult _updateById(const BSONObj &idQuery,
                                     bool isOperatorUpdate,
                                     ModSet* mods,
                                     NamespaceDetails* d,
                                     const BSONObj& updateobj,
+                                    BSONObj patternOrig,
                                     bool logop,
                                     bool fromMigrate = false) {
 
-        if ( cmdLine.fastupdates && !mods->isIndexed() &&
-             !hasClusteringSecondaryKey(d) ) {
+        if (cmdLine.fastupdates && !mods->isIndexed() &&
+            !hasClusteringSecondaryKey(d)) {
             // Fast update path that skips the _id query.
-            // We know no indexes need to be updated so we
-            // don't need to read the full object.
+            // We know no indexes need to be updated so we don't read the full object.
+            const BSONObj &pk = idQuery.firstElement().wrap("");
             d->updateObjectMods(pk, updateobj);
             d->notifyOfWriteOp();
-            debug.fastmod = true;
+            cc().curop()->debug().fastmod = true;
             // TODO: Log this update for replication.
-            return UpdateResult( 0, 0, 0, BSONObj() );
+            return UpdateResult(0, 0, 1, BSONObj());
         }
 
         BSONObj obj;
@@ -159,13 +159,12 @@ namespace mongo {
                                          &queryResult);
         if ( !found ) {
             // no upsert support in _updateById yet, so we are done.
-            return UpdateResult( 0 , 0 , 1 , BSONObj() );
+            return UpdateResult( 0 , 0 , 0 , BSONObj() );
         }
-
-        const BSONObj &pk = idQuery.firstElement().wrap("");
 
         /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
            regular ones at the moment. */
+        const BSONObj &pk = idQuery.firstElement().wrap("");
         if ( isOperatorUpdate ) {
             ModSet* useMods = mods;
             auto_ptr<ModSet> mymodset;
