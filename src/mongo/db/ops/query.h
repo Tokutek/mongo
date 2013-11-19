@@ -20,13 +20,12 @@
 #pragma once
 
 #include "mongo/pch.h"
-#include "../../util/net/message.h"
-#include "../dbmessage.h"
-#include "../jsobj.h"
-#include "../explain.h"
-#include "../../s/d_chunk_manager.h"
 
-// struct QueryOptions, QueryResult, QueryResultFlags in:
+#include "mongo/db/dbmessage.h"
+#include "mongo/db/explain.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/s/d_chunk_manager.h"
+#include "mongo/util/net/message.h"
 
 namespace mongo {
 
