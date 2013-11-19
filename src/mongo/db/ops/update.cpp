@@ -64,18 +64,27 @@ namespace mongo {
         updateOneObject(d, pk, obj, updateobj, logop, fromMigrate);
     }
 
-    // May modify newObj to add an _id field by calling insertOneObject()
-    // This is important for upserts to properly return the upserted _id.
-    static void insertAndLog(const char *ns, NamespaceDetails *d, BSONObj &newObj,
-                             const bool logop, const bool fromMigrate) {
+    static UpdateResult upsertAndLog(NamespaceDetails *d, const BSONObj &patternOrig,
+                                     const BSONObj &updateobj, const bool isOperatorUpdate,
+                                     ModSet *mods, const bool logop) {
+        const string &ns = d->ns();
         uassert(16893, str::stream() << "Cannot update a collection under-going bulk load: " << ns,
                        ns != cc().bulkLoadNS());
+
+        BSONObj newObj = updateobj;
+        if (isOperatorUpdate) {
+            newObj = mods->createNewFromQuery(patternOrig);
+            cc().curop()->debug().fastmodinsert = true;
+        } else {
+            cc().curop()->debug().upsert = true;
+        }
 
         checkNoMods(newObj);
         insertOneObject(d, newObj);
         if (logop) {
-            OpLogHelpers::logInsert(ns, newObj);
+            OpLogHelpers::logInsert(ns.c_str(), newObj);
         }
+        return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }
 
     static UpdateResult _updateById(NamespaceDetails *d,
@@ -216,17 +225,11 @@ namespace mongo {
             return UpdateResult(0, isOperatorUpdate, numModded, BSONObj());
         }
 
-        // Upsert a new object
-        BSONObj newObj = updateobj;
-        if (isOperatorUpdate) {
-            newObj = mods->createNewFromQuery(patternOrig);
-            cc().curop()->debug().fastmodinsert = true;
-        } else {
+        if (!isOperatorUpdate) {
             uassert(10159, "multi update only works with $ operators", !multi);
-            cc().curop()->debug().upsert = true;
         }
-        insertAndLog(ns, d, newObj, logop, fromMigrate);
-        return UpdateResult(0, isOperatorUpdate, 1, newObj);
+        // Upsert a new object
+        return upsertAndLog(d, patternOrig, updateobj, isOperatorUpdate, mods.get(), logop);
     }
 
     UpdateResult updateObjects(const char *ns,
@@ -246,7 +249,6 @@ namespace mongo {
                                          upsert, multi, logop, fromMigrate);
 
         cc().curop()->debug().nupdated = ur.num;
-
         return ur;
     }
 
