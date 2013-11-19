@@ -41,9 +41,8 @@
 namespace mongo {
 
     void Helpers::putSingleton(const char *ns, BSONObj obj) {
-        OpDebug debug;
         Client::Context context(ns);
-        updateObjects(ns, obj, /*pattern=*/BSONObj(), /*upsert=*/true, /*multi=*/false , /*logtheop=*/true , debug );
+        updateObjects(ns, obj, /*pattern=*/BSONObj(), /*upsert=*/true, /*multi=*/false , /*logtheop=*/true);
         context.getClient()->curop()->done();
     }
 

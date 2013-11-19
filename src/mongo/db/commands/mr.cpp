@@ -504,7 +504,6 @@ namespace mongo {
                           /*upsert=*/ true,
                           /*multi=*/ false,
                           /*logtheop=*/ true,
-                          debug,
                           fromMigrate);
         }
 

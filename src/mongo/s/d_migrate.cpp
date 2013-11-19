@@ -1666,7 +1666,6 @@ namespace mongo {
                                       true,  // upsert
                                       false, // multi
                                       true,  // logop
-                                      debug,
                                       true   // fromMigrate
                                       );
 

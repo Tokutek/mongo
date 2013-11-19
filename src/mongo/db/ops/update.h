@@ -27,46 +27,35 @@ namespace mongo {
 
     class NamespaceDetails;
 
-    // ---------- public -------------
-
     struct UpdateResult {
         const bool existing; // if existing objects were modified
         const bool mod;      // was this a $ mod
         const long long num; // how many objects touched
-        OID upserted;  // if something was upserted, the new _id of the object
+        OID upserted;        // if something was upserted, the new _id of the object
 
-        UpdateResult( bool e, bool m, unsigned long long n , const BSONObj& upsertedObject )
-            : existing(e) , mod(m), num(n) {
+        UpdateResult(const bool e, const bool m,
+                     const unsigned long long n, const BSONObj &upsertedObj) :
+            existing(e), mod(m), num(n) {
             upserted.clear();
-            BSONElement id = upsertedObject["_id"];
-            if ( ! e && n == 1 && id.type() == jstOID ) {
+            const BSONElement id = upsertedObj["_id"];
+            if (!e && n == 1 && id.type() == jstOID) {
                 upserted = id.OID();
             }
         }
     };
 
-    void updateOneObject(
-        NamespaceDetails *d, 
-        const BSONObj &pk, 
-        const BSONObj &oldObj, 
-        const BSONObj &newObj, 
-        const bool logop,
-        const bool fromMigrate,
-        uint64_t flags = 0
-        );
+    void updateOneObject(NamespaceDetails *d, const BSONObj &pk, 
+                         const BSONObj &oldObj, const BSONObj &newObj, 
+                         const bool logop, const bool fromMigrate,
+                         uint64_t flags = 0);
 
     /* returns true if an existing object was updated, false if no existing object was found.
        multi - update multiple objects - mostly useful with things like $set
        su - allow access to system namespaces (super user)
     */
-    UpdateResult updateObjects(const char* ns,
-                               const BSONObj& updateobj,
-                               const BSONObj& pattern,
-                               bool upsert,
-                               bool multi,
-                               bool logop,
-                               OpDebug& debug,
-                               bool fromMigrate = false,
-                               const QueryPlanSelectionPolicy& planPolicy = QueryPlanSelectionPolicy::any());
+    UpdateResult updateObjects(const char *ns,
+                               const BSONObj &updateobj, const BSONObj &pattern,
+                               const bool upsert, const bool multi,
+                               const bool logop, const bool fromMigrate = false);
 
 }  // namespace mongo

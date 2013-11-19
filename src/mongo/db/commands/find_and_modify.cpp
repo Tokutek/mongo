@@ -217,7 +217,7 @@ namespace mongo {
                         _appendHelper( result , doc , found , fields );
                     }
 
-                    UpdateResult res = updateObjects( ns.c_str() , update , queryModified , upsert , false , true , cc().curop()->debug() );
+                    UpdateResult res = updateObjects( ns.c_str() , update , queryModified , upsert , false , true );
 
                     if ( returnNew ) {
                         if ( res.upserted.isSet() ) {

@@ -42,21 +42,15 @@ namespace mongo {
     static void checkNoMods(const BSONObj &obj) {
         for (BSONObjIterator i(obj); i.more(); ) {
             const BSONElement &e = i.next();
-            uassert(10154, "Modifiers and non-modifiers cannot be mixed",
-                           e.fieldName()[0] != '$');
+            uassert(10154, "Modifiers and non-modifiers cannot be mixed", e.fieldName()[0] != '$');
         }
-    }
-
-    static void checkTooLarge(const BSONObj &obj) {
-        uassert(12522, "$ operator made object too large",
-                       obj.objsize() <= BSONObjMaxUserSize);
     }
 
     static void updateUsingMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
                                 ModSetState &mss, const bool modsAreIndexed,
                                 const bool logop, const bool fromMigrate) {
         const BSONObj newObj = mss.createNewFromMods();
-        checkTooLarge(newObj);
+        uassert(12522, "$ operator made object too large", obj.objsize() <= BSONObjMaxUserSize);
         updateOneObject(d, pk, obj, newObj, logop, fromMigrate,
                         modsAreIndexed ? 0 : NamespaceDetails::KEYS_UNAFFECTED_HINT);
     }
@@ -70,21 +64,17 @@ namespace mongo {
         updateOneObject(d, pk, obj, updateobj, logop, fromMigrate);
     }
 
-    static void checkNoBulkLoad(const StringData &ns) {
+    // May modify newObj to add an _id field by calling insertOneObject()
+    // This is important for upserts to properly return the upserted _id.
+    static void insertAndLog(const char *ns, NamespaceDetails *d, BSONObj &newObj,
+                             const bool logop, const bool fromMigrate) {
         uassert(16893, str::stream() << "Cannot update a collection under-going bulk load: " << ns,
                        ns != cc().bulkLoadNS());
-    }
-
-    static void insertAndLog(const char *ns, NamespaceDetails *d, const BSONObj &newObj,
-                             const bool logop, const bool fromMigrate) {
 
         checkNoMods(newObj);
-        checkNoBulkLoad(ns);
-
-        BSONObj newObjModified = newObj;
-        insertOneObject(d, newObjModified);
+        insertOneObject(d, newObj);
         if (logop) {
-            OpLogHelpers::logInsert(ns, newObjModified);
+            OpLogHelpers::logInsert(ns, newObj);
         }
     }
 
@@ -105,11 +95,10 @@ namespace mongo {
             return UpdateResult(0, 0, 0, BSONObj());
         }
 
-        /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
-           regular ones at the moment. */
+        // operator-style update
         const BSONObj &pk = idQuery.firstElement().wrap("");
         if (isOperatorUpdate) {
-            ModSet* useMods = mods;
+            ModSet *useMods = mods;
             auto_ptr<ModSet> mymodset;
             if (queryResult.matchDetails.hasElemMatchKey() && mods->hasDynamicArray()) {
                 useMods = mods->fixDynamicArray( queryResult.matchDetails.elemMatchKey());
@@ -119,29 +108,22 @@ namespace mongo {
             updateUsingMods(d, pk, obj, *mss, useMods->isIndexed() > 0, logop, fromMigrate);
             return UpdateResult(1, 1, 1, BSONObj());
 
-        } // end $operator update
+        }
 
         // replace-style update
         updateNoMods(d, pk, obj, updateobj, logop, fromMigrate);
         return UpdateResult(1, 0, 1, BSONObj());
     }
 
-    UpdateResult _updateObjects( const char* ns,
-                                 const BSONObj& updateobj,
-                                 const BSONObj& patternOrig,
-                                 bool upsert,
-                                 bool multi,
-                                 bool logop ,
-                                 OpDebug& debug,
-                                 bool fromMigrate,
-                                 const QueryPlanSelectionPolicy& planPolicy ) {
-
+    static UpdateResult _updateObjects(const char *ns,
+                                       const BSONObj &updateobj,
+                                       const BSONObj &patternOrig,
+                                       const bool upsert, const bool multi,
+                                       const bool logop, const bool fromMigrate) {
         TOKULOG(2) << "update: " << ns
                    << " update: " << updateobj
                    << " query: " << patternOrig
                    << " upsert: " << upsert << " multi: " << multi << endl;
-
-        debug.updateobj = updateobj;
 
         NamespaceDetails *d = getAndMaybeCreateNS(ns, logop);
 
@@ -167,14 +149,14 @@ namespace mongo {
         // Run a regular update using the query optimizer.
 
         int numModded = 0;
-        debug.nscanned = 0;
+        cc().curop()->debug().nscanned = 0;
         set<BSONObj> seenObjects;
         MatchDetails details;
         if (mods.get() && mods->hasDynamicArray()) {
             details.requestElemMatchKey();
         }
-        for (shared_ptr<Cursor> c = getOptimizedCursor(ns, patternOrig, BSONObj(), planPolicy); c->ok(); ) {
-            debug.nscanned++;
+        for (shared_ptr<Cursor> c = getOptimizedCursor(ns, patternOrig); c->ok(); ) {
+            cc().curop()->debug().nscanned++;
             BSONObj currPK = c->currPK();
             if (c->getsetdup(currPK)) {
                 c->advance();
@@ -212,7 +194,7 @@ namespace mongo {
                 }
             }
 
-            ModSet* useMods = mods.get();
+            ModSet *useMods = mods.get();
             auto_ptr<ModSet> mymodset;
             if (details.hasElemMatchKey() && mods->hasDynamicArray()) {
                 useMods = mods->fixDynamicArray(details.elemMatchKey());
@@ -236,12 +218,12 @@ namespace mongo {
             if (updateobj.firstElementFieldName()[0] == '$') {
                 // upsert of an $operation. build a default object
                 newObj = mods->createNewFromQuery(patternOrig);
-                debug.fastmodinsert = true;
+                cc().curop()->debug().fastmodinsert = true;
                 insertAndLog(ns, d, newObj, logop, fromMigrate);
                 return UpdateResult(0 , 1 , 1 , newObj);
             }
             uassert(10159, "multi update only works with $ operators", !multi);
-            debug.upsert = true;
+            cc().curop()->debug().upsert = true;
             insertAndLog(ns, d, newObj, logop, fromMigrate);
             return UpdateResult(0, 0, 1, newObj);
         }
@@ -249,29 +231,24 @@ namespace mongo {
         return UpdateResult(0, isOperatorUpdate, 0, BSONObj());
     }
 
-    void validateUpdate(const char *ns, const BSONObj &updateobj, const BSONObj &patternOrig) {
+    UpdateResult updateObjects(const char *ns,
+                               const BSONObj &updateobj, const BSONObj &patternOrig,
+                               const bool upsert, const bool multi,
+                               const bool logop, const bool fromMigrate) {
         uassert(10155, "cannot update reserved $ collection", NamespaceString::normal(ns));
         if (NamespaceString::isSystem(ns)) {
             uassert(10156, str::stream() << "cannot update system collection: " << ns <<
                                             " q: " << patternOrig << " u: " << updateobj,
                            legalClientSystemNS(ns , true));
         }
-    }
 
-    UpdateResult updateObjects(const char *ns,
-                               const BSONObj &updateobj,
-                               const BSONObj &patternOrig,
-                               bool upsert,
-                               bool multi,
-                               bool logop ,
-                               OpDebug &debug,
-                               bool fromMigrate,
-                               const QueryPlanSelectionPolicy &planPolicy) {
-        validateUpdate(ns, updateobj, patternOrig);
+        cc().curop()->debug().updateobj = updateobj;
+
         UpdateResult ur = _updateObjects(ns, updateobj, patternOrig,
-                                         upsert, multi, logop,
-                                         debug, fromMigrate, planPolicy);
-        debug.nupdated = ur.num;
+                                         upsert, multi, logop, fromMigrate);
+
+        cc().curop()->debug().nupdated = ur.num;
+
         return ur;
     }
 
