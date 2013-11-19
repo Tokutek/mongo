@@ -95,9 +95,9 @@ namespace mongo {
             return UpdateResult(0, 0, 0, BSONObj());
         }
 
-        // operator-style update
         const BSONObj &pk = idQuery.firstElement().wrap("");
         if (isOperatorUpdate) {
+            // operator-style update
             ModSet *useMods = mods;
             auto_ptr<ModSet> mymodset;
             if (queryResult.matchDetails.hasElemMatchKey() && mods->hasDynamicArray()) {
@@ -106,13 +106,11 @@ namespace mongo {
             }
             auto_ptr<ModSetState> mss = useMods->prepare(obj, false /* not an insertion */);
             updateUsingMods(d, pk, obj, *mss, useMods->isIndexed() > 0, logop, fromMigrate);
-            return UpdateResult(1, 1, 1, BSONObj());
-
+        } else {
+            // replace-style update
+            updateNoMods(d, pk, obj, updateobj, logop, fromMigrate);
         }
-
-        // replace-style update
-        updateNoMods(d, pk, obj, updateobj, logop, fromMigrate);
-        return UpdateResult(1, 0, 1, BSONObj());
+        return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
     }
 
     static UpdateResult _updateObjects(const char *ns,
@@ -205,30 +203,30 @@ namespace mongo {
             numModded++;
 
             if (!multi) {
-                return UpdateResult(1, 1, numModded, BSONObj());
+                break;
             }
         }
 
         if (numModded) {
+            // We've modified something, so we're done.
             return UpdateResult(1, 1, numModded, BSONObj());
         }
-
-        if (upsert) {
-            BSONObj newObj = updateobj;
-            if (updateobj.firstElementFieldName()[0] == '$') {
-                // upsert of an $operation. build a default object
-                newObj = mods->createNewFromQuery(patternOrig);
-                cc().curop()->debug().fastmodinsert = true;
-                insertAndLog(ns, d, newObj, logop, fromMigrate);
-                return UpdateResult(0 , 1 , 1 , newObj);
-            }
-            uassert(10159, "multi update only works with $ operators", !multi);
-            cc().curop()->debug().upsert = true;
-            insertAndLog(ns, d, newObj, logop, fromMigrate);
-            return UpdateResult(0, 0, 1, newObj);
+        if (!upsert) {
+            // We haven't modified anything, but we're not trying to upsert, so we're done.
+            return UpdateResult(0, isOperatorUpdate, numModded, BSONObj());
         }
 
-        return UpdateResult(0, isOperatorUpdate, 0, BSONObj());
+        // Upsert a new object
+        BSONObj newObj = updateobj;
+        if (isOperatorUpdate) {
+            newObj = mods->createNewFromQuery(patternOrig);
+            cc().curop()->debug().fastmodinsert = true;
+        } else {
+            uassert(10159, "multi update only works with $ operators", !multi);
+            cc().curop()->debug().upsert = true;
+        }
+        insertAndLog(ns, d, newObj, logop, fromMigrate);
+        return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }
 
     UpdateResult updateObjects(const char *ns,

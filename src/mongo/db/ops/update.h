@@ -49,10 +49,6 @@ namespace mongo {
                          const bool logop, const bool fromMigrate,
                          uint64_t flags = 0);
 
-    /* returns true if an existing object was updated, false if no existing object was found.
-       multi - update multiple objects - mostly useful with things like $set
-       su - allow access to system namespaces (super user)
-    */
     UpdateResult updateObjects(const char *ns,
                                const BSONObj &updateobj, const BSONObj &pattern,
                                const bool upsert, const bool multi,
