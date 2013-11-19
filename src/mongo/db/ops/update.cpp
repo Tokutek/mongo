@@ -151,6 +151,7 @@ namespace mongo {
             mods.reset(new ModSet(updateobj, d->indexKeys()));
         }
 
+        // Attempt to take the fast path for updates by _id
         if (d->mayFindById()) {
             const BSONObj idQuery = getSimpleIdQuery(patternOrig);
             if (!idQuery.isEmpty()) {
@@ -163,75 +164,68 @@ namespace mongo {
             }
         }
 
+        // Run a regular update using the query optimizer.
+
         int numModded = 0;
         debug.nscanned = 0;
-        shared_ptr<Cursor> c = getOptimizedCursor( ns, patternOrig, BSONObj(), planPolicy );
-
-        if (c->ok()) {
-            set<BSONObj> seenObjects;
-            MatchDetails details;
-            if (mods.get() && mods->hasDynamicArray()) {
-                details.requestElemMatchKey();
+        set<BSONObj> seenObjects;
+        MatchDetails details;
+        if (mods.get() && mods->hasDynamicArray()) {
+            details.requestElemMatchKey();
+        }
+        for (shared_ptr<Cursor> c = getOptimizedCursor(ns, patternOrig, BSONObj(), planPolicy); c->ok(); ) {
+            debug.nscanned++;
+            BSONObj currPK = c->currPK();
+            if (c->getsetdup(currPK)) {
+                c->advance();
+                continue;
             }
-            do {
-                debug.nscanned++;
-                BSONObj currPK = c->currPK();
-                if (c->getsetdup(currPK)) {
-                    c->advance();
-                    continue;
-                }
-                if (!c->currentMatches(&details)) {
-                    c->advance();
-                    continue;
-                }
+            if (!c->currentMatches(&details)) {
+                c->advance();
+                continue;
+            }
 
-                BSONObj currentObj = c->current();
-
-                /* look for $inc etc. */
-                if (isOperatorUpdate) {
-                    if (multi) {
-                        // Make our own copies of the currPK and currentObj before we invalidate
-                        // them by advancing the cursor.
-                        currPK = currPK.getOwned();
-                        currentObj = currentObj.getOwned();
-
-                        // Advance past the document to be modified - SERVER-5198,
-                        while (c->ok() && currPK == c->currPK()) {
-                            c->advance();
-                        }
-
-                        // Multi updates need to do their own deduplication because updates may modify the
-                        // keys the cursor is in the process of scanning over.
-                        if ( seenObjects.count(currPK) ) {
-                            continue;
-                        } else {
-                            seenObjects.insert(currPK);
-                        }
-                    }
-
-                    ModSet* useMods = mods.get();
-                    auto_ptr<ModSet> mymodset;
-                    if (details.hasElemMatchKey() && mods->hasDynamicArray()) {
-                        useMods = mods->fixDynamicArray(details.elemMatchKey());
-                        mymodset.reset(useMods);
-                    }
-
-                    auto_ptr<ModSetState> mss = useMods->prepare(currentObj, false /* not an insertion */);
-                    updateUsingMods(d, currPK, currentObj, *mss, useMods->isIndexed() > 0, logop, fromMigrate);
-
-                    numModded++;
-                    if (!multi) {
-                        return UpdateResult(1, 1, numModded, BSONObj());
-                    }
-
-                    continue;
-                } // end if operator is update
-
+            BSONObj currentObj = c->current();
+            if (!isOperatorUpdate) {
+                // replace-style update only affects a single matching document
                 uassert(10158, "multi update only works with $ operators", !multi);
                 updateNoMods(d, currPK, currentObj, updateobj, logop, fromMigrate);
                 return UpdateResult(1, 0, 1, BSONObj());
-            } while (c->ok());
-        } // endif
+            }
+
+            // operator-style updates may affect many documents
+            if (multi) {
+                // Advance past the document to be modified - SERVER-5198,
+                // First, get owned copies of currPK/currObj, which live in the cursor.
+                currPK = currPK.getOwned();
+                currentObj = currentObj.getOwned();
+                while (c->ok() && currPK == c->currPK()) {
+                    c->advance();
+                }
+
+                // Multi updates need to do their own deduplication because updates may modify the
+                // keys the cursor is in the process of scanning over.
+                if ( seenObjects.count(currPK) ) {
+                    continue;
+                } else {
+                    seenObjects.insert(currPK);
+                }
+            }
+
+            ModSet* useMods = mods.get();
+            auto_ptr<ModSet> mymodset;
+            if (details.hasElemMatchKey() && mods->hasDynamicArray()) {
+                useMods = mods->fixDynamicArray(details.elemMatchKey());
+                mymodset.reset(useMods);
+            }
+            auto_ptr<ModSetState> mss = useMods->prepare(currentObj, false /* not an insertion */);
+            updateUsingMods(d, currPK, currentObj, *mss, useMods->isIndexed() > 0, logop, fromMigrate);
+            numModded++;
+
+            if (!multi) {
+                return UpdateResult(1, 1, numModded, BSONObj());
+            }
+        }
 
         if (numModded) {
             return UpdateResult(1, 1, numModded, BSONObj());
