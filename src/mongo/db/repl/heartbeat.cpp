@@ -402,6 +402,9 @@ namespace mongo {
         }
 
         void authIssue(HeartbeatInfo& mem) {
+            if (!mem.authIssue) {
+                log() << "replSet member " << h.toString() << " has an auth issue" << rsLog;
+            }
             mem.authIssue = true;
             mem.hbstate = MemberState::RS_UNKNOWN;
 
