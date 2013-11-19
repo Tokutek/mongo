@@ -327,21 +327,26 @@ namespace mongo {
                 continue;
             }
             if (nsToCollectionSubstring(ns) == "system.indexes") {
-                // Save .system.indexes collection for last, because dropCollection deletes from it.
+                // Save .system.indexes collection for last, because drop() deletes from it.
                 sysIndexesEntries.push_back(ns.toString());
             } else {
-                dropCollection(ns, errmsg, result, true);
+                NamespaceDetails *d = nsdetails(ns);
+                if (d != NULL) {
+                    d->drop(errmsg, result, true);
+                }
             }
         }
         if (sysNsd != NULL) {
             // The .system.namespaces collection does not include itself.
-            dropCollection(systemNamespacesNs, errmsg, result, true);
+            sysNsd->drop(errmsg, result, true);
         }
         // Now drop the system.indexes entries.
         for (vector<string>::const_iterator it = sysIndexesEntries.begin(); it != sysIndexesEntries.end(); it++) {
             // Need to close any existing handle before drop.
-            const string &ns = *it;
-            dropCollection(ns, errmsg, result, true);
+            NamespaceDetails *d = nsdetails(*it);
+            if (d != NULL) {
+                d->drop(errmsg, result, true);
+            }
         }
         // Everything that was open should have been closed due to drop.
         verify(_namespaces.empty());

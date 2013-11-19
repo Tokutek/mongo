@@ -152,11 +152,11 @@ namespace ReplSetTests {
             string errmsg;
             BSONObjBuilder result;
 
-            if (nsdetails(ns()) == NULL) {
+            NamespaceDetails *d = nsdetails(ns());
+            if (d != NULL) {
+                d->drop(errmsg, result);
                 return;
             }
-
-            dropCollection( string(ns()), errmsg, result );
         }
         void setup() {
             // setup background sync instance
@@ -191,10 +191,12 @@ namespace ReplSetTests {
 
         void dropCapped() {
             Client::Context c(_cappedNs);
-            if (nsdetails(_cappedNs) != NULL) {
+            NamespaceDetails *d = nsdetails(_cappedNs);
+            if (d != NULL) {
                 string errmsg;
                 BSONObjBuilder result;
-                dropCollection( string(_cappedNs), errmsg, result );
+                d->drop(errmsg, result);
+                return;
             }
         }
 

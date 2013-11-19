@@ -176,4 +176,21 @@ namespace mongo {
         return db;
     }
 
+    void dropDatabase(const StringData& name) {
+        TOKULOG(1) << "dropDatabase " << name << endl;
+        Lock::assertWriteLocked(name);
+        Database *d = cc().database();
+        verify(d != NULL);
+        verify(d->name() == name);
+
+        // Disable dropDatabase in a multi-statement transaction until
+        // we have the time/patience to test/debug it.
+        if (cc().txnStackSize() > 1) {
+            uasserted(16777, "Cannot dropDatabase in a multi-statement transaction.");
+        }
+
+        nsindex(name)->drop();
+        Database::closeDatabase(d->name().c_str(), d->path());
+    }
+
 } // namespace mongo

@@ -378,7 +378,10 @@ namespace mongo {
             try {
                 Client::WriteContext ctx(MIGRATE_LOG_NS);
                 Client::Transaction txn(DB_SERIALIZABLE);
-                dropCollection(MIGRATE_LOG_NS, err, res, false);
+                NamespaceDetails *d = nsdetails(MIGRATE_LOG_NS);
+                if (d != NULL) {
+                    d->drop(err, res, false);
+                }
                 _nextMigrateLogId.store(0);
                 _nextIdToTransfer = 0;
                 _nextRefSeqToTransfer = 0;
@@ -398,7 +401,10 @@ namespace mongo {
             try {
                 Client::WriteContext ctx(MIGRATE_LOG_REF_NS);
                 Client::Transaction txn(DB_SERIALIZABLE);
-                dropCollection(MIGRATE_LOG_REF_NS, err, res, false);
+                NamespaceDetails *d = nsdetails(MIGRATE_LOG_REF_NS);
+                if (d != NULL) {
+                    d->drop(err, res, false);
+                }
                 _migrateLogRefDetails = getAndMaybeCreateNS(MIGRATE_LOG_REF_NS, false);
                 verify(_migrateLogRefDetails != NULL);
                 txn.commit();
